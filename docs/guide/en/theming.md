@@ -89,6 +89,9 @@ void Root(ThemeChoice choice) {
 
 ## Dynamic color
 
+![Example-1](../../screenshots/dynamic-color-linux/d9.png)
+![Example-2](../../screenshots/dynamic-color-linux/d16_light.png)
+
 On Android 12 and later, the system derives a palette from the wallpaper ("Material You"). On Linux, Kompoz reads the desktop's accent color from the XDG desktop portal and turns it into a palette the same way. `dynamicLightColorScheme()` and `dynamicDarkColorScheme()` give the schemes, and update when the wallpaper or the accent color changes:
 
 ```cpp

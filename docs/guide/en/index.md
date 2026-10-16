@@ -63,3 +63,9 @@ Application kompoz::createApplication(int, char**) {
 - [API status](api.md): every Compose API and its status in Kompoz, and the build log.
 
 ![The Components screen in a wide window, with a navigation rail](../../screenshots/components-wide.png)
+
+![Dynamic 1](../../screenshots/dynamic-color-linux/d9.png)
+
+![Dynamic 1](../../screenshots/dynamic-color-linux/d16_light.png)
+
+To see [more](../../screenshots/dynamic-color-linux/)

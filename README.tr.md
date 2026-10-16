@@ -14,6 +14,9 @@ Sürüm 0.1.0, ilk açık yayın: API Compose'u yakından izliyor ama henüz de�
 <img src="docs/screenshots/material-dark.png" width="250" alt="Material ekranı, koyu tema">
 </p>
 <img src="docs/screenshots/components-wide.png" width="760" alt="Geniş pencerede, gezinme rayıyla Bileşenler ekranı">
+<img src="docs/screenshots/dynamic-color-linux/d9.png" width="760" alt="Dynamic Color implementation example 1">
+<img src="docs/screenshots/dynamic-color-linux/d4.png" width="760" alt="Dynamic Color implementation example 2">
+<img src="docs/screenshots/dynamic-color-linux/d16.png" width="760" alt="Dynamic Color implementation example 3">
 
 ```cpp
 #include <kompoz/kompoz.hpp>

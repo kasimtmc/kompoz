@@ -15,6 +15,9 @@ Licensed under the [Apache License 2.0](LICENSE).
 <img src="docs/screenshots/material-dark.png" width="250" alt="The Material screen, dark theme">
 </p>
 <img src="docs/screenshots/components-wide.png" width="760" alt="The components screen in a wide window, with a navigation rail">
+<img src="docs/screenshots/dynamic-color-linux/d9.png" width="760" alt="Dynamic Color implementation example 1">
+<img src="docs/screenshots/dynamic-color-linux/d4.png" width="760" alt="Dynamic Color implementation example 2">
+<img src="docs/screenshots/dynamic-color-linux/d16.png" width="760" alt="Dynamic Color implementation example 3">
 
 ```cpp
 #include <kompoz/kompoz.hpp>
