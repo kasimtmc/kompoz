@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lists and grids · Kompoz</title>
+<meta name="description" content="For a handful of items, a Column with verticalScroll is enough:">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{var t=localStorage.getItem('kompoz-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body class="page-lists">
+<header class="top">
+<button class="menu-button" type="button" aria-label="Menu" aria-expanded="false"><span></span></button>
+<a class="brand" href="index.html"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="8" fill="var(--primary)"/><path d="M11 9v14M11 16l8-7M13.5 14l6 9" stroke="var(--on-primary)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>Kompoz</span></a><span class="version">0.1.0</span>
+<div class="search"><input type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false"><kbd>/</kbd><div class="results" role="listbox"></div></div>
+<a class="language" href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+<button class="theme-button" type="button" aria-label="Switch theme" title="Switch theme"></button>
+</header>
+<div class="layout">
+<nav class="side" aria-label="Menu"><details open><summary>Get started</summary><a href="index.html">Kompoz documentation</a><a href="setup.html">Setup</a><a href="tutorial.html">Tutorial</a><a href="coming-from-compose.html">Coming from Compose</a></details><details open><summary>Foundation</summary><a href="thinking.html">Thinking in Kompoz</a><a href="state.html">State</a><a href="lifecycle.html">Lifecycle and identity</a><a href="side-effects.html">Side effects</a><a href="phases.html">Phases</a><a href="composition-local.html">CompositionLocal</a></details><details open><summary>Design</summary><a href="modifiers.html">Modifiers</a><a href="layouts.html">Layouts</a><a href="custom-layouts.html">Custom layouts</a><a href="lists.html" class=current aria-current=page>Lists and grids</a><a href="material.html">Material components</a><a href="theming.html">Theming</a><a href="text.html">Text</a><a href="graphics.html">Graphics</a><a href="animation.html">Animation</a><a href="gestures.html">Gestures and input</a></details><details open><summary>App</summary><a href="architecture.html">Architecture</a><a href="navigation.html">Navigation</a><a href="resources.html">Resources</a><a href="accessibility.html">Accessibility</a><a href="testing.html">Testing</a><a href="tools.html">Tools</a></details><details open><summary>Reference</summary><a href="api.html">Components and priorities</a></details></nav>
+<main>
+<div class="crumbs">Design</div>
+<article>
+<h1>Lists and grids</h1>
+
+<p>Lazy lists and grids compose only the items in view, so they scroll through thousands of items as smoothly as through ten. This page covers them, along with pagers, carousels, scroll modifiers, nested scrolling and pull to refresh.</p>
+<h2 id="scrolling-a-column"><a class="anchor" href="#scrolling-a-column" aria-hidden="true">#</a>Scrolling a column</h2>
+<p>For a handful of items, a <code>Column</code> with <code>verticalScroll</code> is enough:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Column</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>().<span class="call">verticalScroll</span>(<span class="call">rememberScrollState</span>()).<span class="call">padding</span>(<span class="num">16</span>), [&amp;] {
+<span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">0</span>; i &lt; <span class="num">20</span>; ++i) <span class="fn">Text</span>(<span class="str">&quot;Paragraph &quot;</span> + std::<span class="call">to_string</span>(i));
+});</code></pre></div>
+<p>It composes and lays out every child, whether it is on the screen or not. For long lists, and lists whose length you don't know, use a lazy list.</p>
+<h2 id="lazy-lists"><a class="anchor" href="#lazy-lists" aria-hidden="true">#</a>Lazy lists</h2>
+<p><code>LazyColumn</code> and <code>LazyRow</code> compose items as they come into view, plus a small margin, and drop the ones that leave it. Instead of content, they take a lambda that <em>describes</em> the items through a <code>LazyListScope</code>:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">struct</span> <span class="ty">Message</span> {
+<span class="kw">int</span> id;
+std::string author, body;
+};
+
+<span class="kw">void</span> <span class="fn">Conversation</span>(<span class="kw">const</span> std::vector&lt;<span class="ty">Message</span>&gt;&amp; messages) {
+<span class="fn">LazyColumn</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), [&amp;](<span class="ty">LazyListScope</span>&amp; list) {
+list.<span class="call">item</span>([] { <span class="fn">Text</span>(<span class="str">&quot;Today&quot;</span>, {.font = <span class="call">typography</span>().labelLarge}); });
+list.<span class="call">items</span>(messages, [](<span class="kw">const</span> <span class="ty">Message</span>&amp; m) { <span class="kw">return</span> m.id; }, [](<span class="kw">const</span> <span class="ty">Message</span>&amp; m) {
+<span class="fn">ListItem</span>({.headline = [&amp;] { <span class="fn">Text</span>(m.author); }, .supporting = [&amp;] { <span class="fn">Text</span>(m.body); }});
+});
+list.<span class="call">item</span>([] { <span class="fn">Text</span>(<span class="str">&quot;No more messages&quot;</span>); });
+});
+}</code></pre></div>
+<div class="table"><table><thead><tr><th>Call</th><th>Adds</th></tr></thead><tbody><tr><td><code>item(content)</code>, <code>item(key, content)</code></td><td>One item.</td></tr><tr><td><code>items(count, content)</code></td><td><code>count</code> items; <code>content</code> gets the index.</td></tr><tr><td><code>items(list, content)</code></td><td>One item per element; <code>content</code> gets the element.</td></tr><tr><td><code>items(list, key, content)</code></td><td>The same, with a key per element.</td></tr><tr><td><code>items(list, key, contentType, content)</code></td><td>The same, with a content type (reported in <code>layoutInfo()</code>).</td></tr><tr><td><code>itemsIndexed(list, content)</code></td><td>One item per element; <code>content</code> gets the index and the element.</td></tr><tr><td><code>stickyHeader(content)</code></td><td>A header that stays at the top while the items after it scroll under it.</td></tr></tbody></table></div>
+<p>Item content runs later, when the item comes into view, not while the scope lambda runs. Capture what the item needs by value, or use the arguments it is given: the <code>list</code> you pass is read by the items, so it must outlive the composition that uses it, as a state's value or a member of a <code>ViewModel</code> does.</p>
+<h3 id="keys"><a class="anchor" href="#keys" aria-hidden="true">#</a>Keys</h3>
+<p>Without keys, an item's state is tied to its position. Insert an item at the top, and every remembered value shifts down by one. Give items a stable, unique key, and their state follows them:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">LazyColumn</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), [&amp;](<span class="ty">LazyListScope</span>&amp; list) {
+list.<span class="call">items</span>(messages, [](<span class="kw">const</span> <span class="ty">Message</span>&amp; m) { <span class="kw">return</span> m.id; }, [](<span class="kw">const</span> <span class="ty">Message</span>&amp; m) {
+<span class="kw">auto</span> expanded = <span class="call">remember</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(<span class="kw">false</span>); });   <span class="com">// stays with the message</span>
+<span class="fn">Text</span>(m.body, <span class="fn">Modifier</span>().<span class="call">clickable</span>([expanded] { expanded.<span class="call">set</span>(!expanded.<span class="call">get</span>()); }),
+{.maxLines = expanded.<span class="call">get</span>() ? <span class="num">0</span> : <span class="num">1</span>});
+});
+});</code></pre></div>
+<p>A key can be anything hashable: an id, a string. Keys must be unique within the list.</p>
+<h3 id="options"><a class="anchor" href="#options" aria-hidden="true">#</a>Options</h3>
+<p>The options struct sets padding, spacing and direction:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">LazyColumn</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(),
+{.contentPadding = <span class="fn">PaddingValues</span>(<span class="num">16</span>), .spacing = <span class="num">8</span>},
+[&amp;](<span class="ty">LazyListScope</span>&amp; list) { list.<span class="call">items</span>(<span class="num">50</span>, [](<span class="kw">int</span> i) { <span class="fn">Text</span>(<span class="str">&quot;Item &quot;</span> + std::<span class="call">to_string</span>(i)); }); });</code></pre></div>
+<div class="table"><table><thead><tr><th>Option</th><th>What it does</th></tr></thead><tbody><tr><td><code>state</code></td><td>A <code>LazyListState</code> to read or control the scroll position.</td></tr><tr><td><code>contentPadding</code></td><td>Padding around the items, inside the scrolling area: items scroll into it.</td></tr><tr><td><code>spacing</code></td><td>Space between items.</td></tr><tr><td><code>arrangement</code></td><td>Instead of <code>spacing</code>: how items are arranged when they all fit (<code>Arrangement::Bottom</code>, <code>Center</code>…).</td></tr><tr><td><code>reverseLayout</code></td><td>Item 0 at the bottom (a <code>LazyRow</code>'s end), as in a chat.</td></tr><tr><td><code>flingBehavior</code></td><td>How a fling ends: <code>rememberSnapFlingBehavior(state)</code> snaps to an item.</td></tr><tr><td><code>userScrollEnabled</code></td><td><code>false</code>: scrolled only from code.</td></tr><tr><td><code>crossAxisBias</code></td><td>Where items narrower than the list sit: start (-1), center (0) or end (1).</td></tr></tbody></table></div>
+<h3 id="animating-items"><a class="anchor" href="#animating-items" aria-hidden="true">#</a>Animating items</h3>
+<p><code>Modifier().animateItem()</code> on an item's root animates it when it appears (fading in), moves to a new position, or goes away (fading out). It needs keys, so that Kompoz can tell which item moved:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">LazyColumn</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), [&amp;](<span class="ty">LazyListScope</span>&amp; list) {
+list.<span class="call">items</span>(names, [](<span class="kw">const</span> std::string&amp; n) { <span class="kw">return</span> n; }, [](<span class="kw">const</span> std::string&amp; n) {
+<span class="fn">Text</span>(n, <span class="fn">Modifier</span>().<span class="call">animateItem</span>().<span class="call">padding</span>(<span class="num">16</span>));
+});
+});</code></pre></div>
+<h2 id="controlling-the-scroll-position"><a class="anchor" href="#controlling-the-scroll-position" aria-hidden="true">#</a>Controlling the scroll position</h2>
+<p><code>rememberLazyListState()</code> gives a <code>LazyListState</code> to pass in the options. Read where the list is with <code>firstVisibleItemIndex()</code> (observable) and <code>layoutInfo()</code>; move it with <code>scrollToItem</code> or, in a coroutine, <code>animateScrollToItem</code>:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Messages</span>(<span class="kw">const</span> std::vector&lt;std::string&gt;&amp; messages) {
+<span class="kw">auto</span> list = <span class="call">rememberLazyListState</span>();
+<span class="kw">auto</span> scope = <span class="call">rememberCoroutineScope</span>();
+<span class="kw">auto</span> showTop = <span class="call">remember</span>([list] { <span class="kw">return</span> <span class="call">derivedStateOf</span>([list] { <span class="kw">return</span> list.<span class="call">firstVisibleItemIndex</span>() &gt; <span class="num">3</span>; }); });
+
+<span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), [&amp;] {
+<span class="fn">LazyColumn</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), {.state = list}, [&amp;](<span class="ty">LazyListScope</span>&amp; l) {
+l.<span class="call">items</span>(messages, [](<span class="kw">const</span> std::string&amp; m) { <span class="fn">Text</span>(m, <span class="fn">Modifier</span>().<span class="call">padding</span>(<span class="num">16</span>)); });
+});
+<span class="kw">if</span> (showTop.<span class="call">get</span>()) {
+<span class="fn">SmallFloatingActionButton</span>([scope, list] { scope.<span class="call">launch</span>([list]() -&gt; <span class="ty">Task</span> { <span class="kw">co_await</span> list.<span class="call">animateScrollToItem</span>(<span class="num">0</span>); }); },
+[] { <span class="fn">Icon</span>(<span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">KeyboardArrowUp</span>, <span class="str">&quot;Back to top&quot;</span>); },
+<span class="fn">Modifier</span>().<span class="call">align</span>(<span class="ty">Alignment</span>::<span class="ty">BottomEnd</span>).<span class="call">padding</span>(<span class="num">16</span>));
+}
+});
+}</code></pre></div>
+<p>The list's state is saveable: kept with <code>rememberSaveable</code>, or inside a navigation destination, the position comes back.</p>
+<p>To load more as the user nears the end, watch the last visible item:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">auto</span> list = <span class="call">rememberLazyListState</span>();
+<span class="kw">auto</span> nearEnd = <span class="call">remember</span>([list, total] { <span class="kw">return</span> <span class="call">derivedStateOf</span>([list, total] {
+<span class="kw">auto</span> visible = list.<span class="call">layoutInfo</span>().visibleItemsInfo;
+<span class="kw">return</span> !visible.<span class="call">empty</span>() &amp;&amp; visible.<span class="call">back</span>().index &gt;= total - <span class="num">5</span>;
+}); });
+<span class="fn">LaunchedEffect</span>(nearEnd.<span class="call">get</span>(), [nearEnd, loadMore]() -&gt; <span class="ty">Task</span> {
+<span class="kw">if</span> (nearEnd.<span class="call">get</span>()) <span class="call">loadMore</span>();
+<span class="kw">co_return</span>;
+});</code></pre></div>
+<h2 id="lazy-grids"><a class="anchor" href="#lazy-grids" aria-hidden="true">#</a>Lazy grids</h2>
+<p><code>LazyVerticalGrid</code> and <code>LazyHorizontalGrid</code> lay items out in a grid, composing rows (or columns) as they come into view:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">LazyVerticalGrid</span>(<span class="ty">GridCells</span>::<span class="fn">Adaptive</span>(<span class="num">120</span>), <span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(),
+{.contentPadding = <span class="fn">PaddingValues</span>(<span class="num">8</span>), .verticalSpacing = <span class="num">8</span>, .horizontalSpacing = <span class="num">8</span>},
+[&amp;](<span class="ty">LazyGridScope</span>&amp; grid) {
+grid.<span class="call">item</span>([] { <span class="fn">Text</span>(<span class="str">&quot;Photos&quot;</span>, {.font = <span class="call">typography</span>().titleLarge}); }, <span class="ty">LazyGridScope</span>::<span class="ty">FullLine</span>);
+grid.<span class="call">items</span>(photos, [](<span class="kw">const</span> <span class="ty">Photo</span>&amp; p) { <span class="kw">return</span> p.id; }, [](<span class="kw">const</span> <span class="ty">Photo</span>&amp; p) {
+<span class="fn">AsyncImage</span>(p.url, <span class="str">&quot;&quot;</span>, <span class="fn">Modifier</span>().<span class="call">aspectRatio</span>(<span class="num">1</span>), {.contentScale = <span class="ty">ContentScale</span>::<span class="ty">Crop</span>});
+});
+});</code></pre></div>
+<ul><li><code>GridCells::Fixed(3)</code> gives three columns; <code>GridCells::Adaptive(120)</code> as many columns of at least 120 dp as fit.</li><li>An item can span several cells: <code>item(content, span)</code>, with <code>LazyGridScope::FullLine</code> for a header across the grid.</li><li><code>rememberLazyGridState()</code> works like the list's state.</li></ul>
+<p><code>LazyVerticalStaggeredGrid</code> and <code>LazyHorizontalStaggeredGrid</code> place items of different sizes in columns (or rows) of their own, like a masonry layout: each item goes in the shortest column.</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">LazyVerticalStaggeredGrid</span>(<span class="ty">StaggeredGridCells</span>::<span class="fn">Fixed</span>(<span class="num">2</span>), <span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), {.verticalItemSpacing = <span class="num">8</span>},
+[&amp;](<span class="ty">LazyGridScope</span>&amp; grid) {
+grid.<span class="call">items</span>(notes, [](<span class="kw">const</span> std::string&amp; note) {
+<span class="fn">OutlinedCard</span>(<span class="fn">Modifier</span>().<span class="call">padding</span>(<span class="num">4</span>), [&amp;] { <span class="fn">Text</span>(note, <span class="fn">Modifier</span>().<span class="call">padding</span>(<span class="num">12</span>)); });
+});
+});</code></pre></div>
+<h2 id="pagers"><a class="anchor" href="#pagers" aria-hidden="true">#</a>Pagers</h2>
+<p><code>HorizontalPager</code> and <code>VerticalPager</code> show one page at a time and snap to pages as the user swipes, like Compose's pagers:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Onboarding</span>() {
+<span class="kw">auto</span> pager = <span class="call">rememberPagerState</span>(<span class="num">0</span>, [] { <span class="kw">return</span> <span class="num">3</span>; });
+<span class="kw">auto</span> scope = <span class="call">rememberCoroutineScope</span>();
+<span class="fn">Column</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), [&amp;] {
+<span class="fn">HorizontalPager</span>(pager, <span class="fn">Modifier</span>().<span class="call">weight</span>(<span class="num">1</span>), [](<span class="kw">int</span> page) {
+<span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), <span class="ty">Alignment</span>::<span class="ty">Center</span>, [&amp;] { <span class="fn">Text</span>(<span class="str">&quot;Page &quot;</span> + std::<span class="call">to_string</span>(page + <span class="num">1</span>)); });
+});
+<span class="fn">Button</span>([scope, pager] { scope.<span class="call">launch</span>([pager]() -&gt; <span class="ty">Task</span> { <span class="kw">co_await</span> pager.<span class="call">animateScrollToPage</span>(pager.<span class="call">currentPage</span>() + <span class="num">1</span>); }); },
+[] { <span class="fn">Text</span>(<span class="str">&quot;Next&quot;</span>); });
+});
+}</code></pre></div>
+<p><code>currentPage()</code>, <code>settledPage()</code> and <code>targetPage()</code> are observable. <code>getOffsetDistanceInPages(page)</code>, read while drawing, gives how far a page is from the center, for pages that shrink or fade as they move.</p>
+<h2 id="carousels"><a class="anchor" href="#carousels" aria-hidden="true">#</a>Carousels</h2>
+<p>Material 3's carousels show a row of items of changing sizes: <code>HorizontalMultiBrowseCarousel</code> (large items with smaller ones beside them), <code>HorizontalUncontainedCarousel</code> (items of one size) and <code>HorizontalCenteredHeroCarousel</code>:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">HorizontalMultiBrowseCarousel</span>(<span class="call">rememberCarouselState</span>(<span class="num">0</span>, [&amp;] { <span class="kw">return</span> <span class="kw">int</span>(images.<span class="call">size</span>()); }), <span class="num">186</span>, <span class="fn">Modifier</span>().<span class="call">height</span>(<span class="num">221</span>),
+{.itemSpacing = <span class="num">8</span>}, [&amp;](<span class="kw">int</span> i) {
+<span class="fn">AsyncImage</span>(images[<span class="kw">size_t</span>(i)], <span class="str">&quot;&quot;</span>, <span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), {.contentScale = <span class="ty">ContentScale</span>::<span class="ty">Crop</span>});
+});</code></pre></div>
+<h2 id="scrollbars"><a class="anchor" href="#scrollbars" aria-hidden="true">#</a>Scrollbars</h2>
+<p>On the desktop, show a scrollbar next to a scrolling container with <code>VerticalScrollbar</code> or <code>HorizontalScrollbar</code> and an adapter for its state:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">auto</span> scroll = <span class="call">rememberScrollState</span>();
+<span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), [&amp;] {
+<span class="fn">Column</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>().<span class="call">verticalScroll</span>(scroll), [&amp;] {
+<span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">0</span>; i &lt; <span class="num">100</span>; ++i) <span class="fn">Text</span>(<span class="str">&quot;Line &quot;</span> + std::<span class="call">to_string</span>(i));
+});
+<span class="fn">VerticalScrollbar</span>(<span class="call">rememberScrollbarAdapter</span>(scroll), <span class="fn">Modifier</span>().<span class="call">align</span>(<span class="ty">Alignment</span>::<span class="ty">CenterEnd</span>).<span class="call">fillMaxHeight</span>());
+});</code></pre></div>
+<p><code>rememberScrollbarAdapter</code> takes a <code>ScrollState</code> or a <code>LazyListState</code>. The thumb can be dragged, and clicking the track pages there.</p>
+<h2 id="nested-scrolling"><a class="anchor" href="#nested-scrolling" aria-hidden="true">#</a>Nested scrolling</h2>
+<p>A scrollable inside another, such as a list under a collapsing app bar, shares scroll deltas with its parents through <em>nested scrolling</em>. Most of the time it just works: a <code>LargeTopAppBar</code> with a scroll behavior collapses as the list under it scrolls:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">auto</span> behavior = <span class="ty">TopAppBarDefaults</span>::<span class="call">exitUntilCollapsedScrollBehavior</span>();
+<span class="fn">Scaffold</span>(<span class="fn">Modifier</span>().<span class="call">nestedScroll</span>(behavior.nestedScrollConnection),
+{.topBar = [&amp;] { <span class="fn">LargeTopAppBar</span>({.title = [] { <span class="fn">Text</span>(<span class="str">&quot;Inbox&quot;</span>); }, .scrollBehavior = behavior}); }},
+[&amp;](<span class="ty">PaddingValues</span> padding) {
+<span class="fn">LazyColumn</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), {.contentPadding = padding}, [](<span class="ty">LazyListScope</span>&amp; l) {
+l.<span class="call">items</span>(<span class="num">50</span>, [](<span class="kw">int</span> i) { <span class="fn">Text</span>(<span class="str">&quot;Message &quot;</span> + std::<span class="call">to_string</span>(i), <span class="fn">Modifier</span>().<span class="call">padding</span>(<span class="num">16</span>)); });
+});
+});</code></pre></div>
+<p>To take part yourself, give <code>Modifier().nestedScroll</code> a connection. Its <code>onPreScroll</code> sees each delta before the child scrolls and returns what it consumed; <code>onPostScroll</code> sees what the child left:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">CollapsingHeader</span>() {
+<span class="kw">auto</span> height = <span class="call">remember</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(<span class="num">160.f</span>); });
+<span class="kw">auto</span> connection = <span class="call">rememberNestedScrollConnection</span>({.onPreScroll = [height](<span class="ty">Offset</span> available, <span class="ty">NestedScrollSource</span>) {
+<span class="kw">float</span> next = std::<span class="call">clamp</span>(height.<span class="call">get</span>() + available.y, <span class="num">56.f</span>, <span class="num">160.f</span>);
+<span class="kw">float</span> used = next - height.<span class="call">get</span>();
+height.<span class="call">set</span>(next);
+<span class="kw">return</span> <span class="fn">Offset</span>{<span class="num">0</span>, used};
+}});
+<span class="fn">Column</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>().<span class="call">nestedScroll</span>(connection), [&amp;] {
+<span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxWidth</span>().<span class="call">height</span>(height.<span class="call">get</span>()).<span class="call">background</span>(<span class="call">colorScheme</span>().primaryContainer));
+<span class="fn">LazyColumn</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), [](<span class="ty">LazyListScope</span>&amp; l) {
+l.<span class="call">items</span>(<span class="num">50</span>, [](<span class="kw">int</span> i) { <span class="fn">Text</span>(<span class="str">&quot;Row &quot;</span> + std::<span class="call">to_string</span>(i), <span class="fn">Modifier</span>().<span class="call">padding</span>(<span class="num">16</span>)); });
+});
+});
+}</code></pre></div>
+<div class="callout note"><p><strong>Note:</strong> unlike Compose's, <code>onPreFling</code> and <code>onPostFling</code> don't suspend: a connection that animates a fling launches its own coroutine.</p></div>
+<h2 id="pull-to-refresh"><a class="anchor" href="#pull-to-refresh" aria-hidden="true">#</a>Pull to refresh</h2>
+<p><code>PullToRefreshBox</code> adds Material's pull-to-refresh indicator to a scrolling container:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">News</span>() {
+<span class="kw">auto</span> items = <span class="call">remember</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(std::vector&lt;std::string&gt;{<span class="str">&quot;First&quot;</span>}); });
+<span class="kw">auto</span> refreshing = <span class="call">remember</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(<span class="kw">false</span>); });
+<span class="kw">auto</span> scope = <span class="call">rememberCoroutineScope</span>();
+<span class="fn">PullToRefreshBox</span>(refreshing.<span class="call">get</span>(), [=] {
+refreshing.<span class="call">set</span>(<span class="kw">true</span>);
+scope.<span class="call">launch</span>([items, refreshing]() -&gt; <span class="ty">Task</span> {
+items.<span class="call">set</span>(<span class="kw">co_await</span> <span class="call">fetchNews</span>());
+refreshing.<span class="call">set</span>(<span class="kw">false</span>);
+});
+}, <span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), [&amp;] {
+<span class="fn">LazyColumn</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), [&amp;](<span class="ty">LazyListScope</span>&amp; l) {
+l.<span class="call">items</span>(items.<span class="call">get</span>(), [](<span class="kw">const</span> std::string&amp; s) { <span class="fn">Text</span>(s, <span class="fn">Modifier</span>().<span class="call">padding</span>(<span class="num">16</span>)); });
+});
+});
+}</code></pre></div>
+<h2 id="see-also"><a class="anchor" href="#see-also" aria-hidden="true">#</a>See also</h2>
+<ul><li><a href="layouts.html">Layouts</a>: <code>Column</code>, <code>Row</code> and the other non-lazy layouts.</li><li><a href="state.html">State</a>: <code>derivedStateOf</code> for values computed from the scroll position.</li><li><a href="gestures.html">Gestures</a>: <code>scrollable</code>, dragging and flinging of your own.</li></ul>
+</article>
+<nav class="pager"><a class="prev" href="custom-layouts.html"><span>Previous</span>Custom layouts</a><a class="next" href="material.html"><span>Next</span>Material components</a></nav>
+<footer>Kompoz is licensed under the Apache License 2.0. Code samples on this site are part of it.</footer>
+</main>
+<aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#scrolling-a-column">Scrolling a column</a><a class="l2" href="#lazy-lists">Lazy lists</a><a class="l3" href="#keys">Keys</a><a class="l3" href="#options">Options</a><a class="l3" href="#animating-items">Animating items</a><a class="l2" href="#controlling-the-scroll-position">Controlling the scroll position</a><a class="l2" href="#lazy-grids">Lazy grids</a><a class="l2" href="#pagers">Pagers</a><a class="l2" href="#carousels">Carousels</a><a class="l2" href="#scrollbars">Scrollbars</a><a class="l2" href="#nested-scrolling">Nested scrolling</a><a class="l2" href="#pull-to-refresh">Pull to refresh</a><a class="l2" href="#see-also">See also</a></aside>
+</div>
+<div class="scrim"></div>
+<script>window.KOMPOZ_UI={"noresults": "No results", "copy": "Copy", "copied": "Copied"};</script>
+<script src="../assets/search-en.js" defer></script>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

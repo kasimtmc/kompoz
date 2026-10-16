@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture · Kompoz</title>
+<meta name="description" content="State flows down, events flow up:">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{var t=localStorage.getItem('kompoz-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body class="page-architecture">
+<header class="top">
+<button class="menu-button" type="button" aria-label="Menu" aria-expanded="false"><span></span></button>
+<a class="brand" href="index.html"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="8" fill="var(--primary)"/><path d="M11 9v14M11 16l8-7M13.5 14l6 9" stroke="var(--on-primary)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>Kompoz</span></a><span class="version">0.1.0</span>
+<div class="search"><input type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false"><kbd>/</kbd><div class="results" role="listbox"></div></div>
+<a class="language" href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+<button class="theme-button" type="button" aria-label="Switch theme" title="Switch theme"></button>
+</header>
+<div class="layout">
+<nav class="side" aria-label="Menu"><details open><summary>Get started</summary><a href="index.html">Kompoz documentation</a><a href="setup.html">Setup</a><a href="tutorial.html">Tutorial</a><a href="coming-from-compose.html">Coming from Compose</a></details><details open><summary>Foundation</summary><a href="thinking.html">Thinking in Kompoz</a><a href="state.html">State</a><a href="lifecycle.html">Lifecycle and identity</a><a href="side-effects.html">Side effects</a><a href="phases.html">Phases</a><a href="composition-local.html">CompositionLocal</a></details><details open><summary>Design</summary><a href="modifiers.html">Modifiers</a><a href="layouts.html">Layouts</a><a href="custom-layouts.html">Custom layouts</a><a href="lists.html">Lists and grids</a><a href="material.html">Material components</a><a href="theming.html">Theming</a><a href="text.html">Text</a><a href="graphics.html">Graphics</a><a href="animation.html">Animation</a><a href="gestures.html">Gestures and input</a></details><details open><summary>App</summary><a href="architecture.html" class=current aria-current=page>Architecture</a><a href="navigation.html">Navigation</a><a href="resources.html">Resources</a><a href="accessibility.html">Accessibility</a><a href="testing.html">Testing</a><a href="tools.html">Tools</a></details><details open><summary>Reference</summary><a href="api.html">Components and priorities</a></details></nav>
+<main>
+<div class="crumbs">App</div>
+<article>
+<h1>Architecture</h1>
+
+<p>How to structure an app: unidirectional data flow, state holders, <code>ViewModel</code>s, flows, saved state and the lifecycle. The patterns are the ones Android recommends for Compose apps, in C++.</p>
+<h2 id="unidirectional-data-flow"><a class="anchor" href="#unidirectional-data-flow" aria-hidden="true">#</a>Unidirectional data flow</h2>
+<p>State flows down, events flow up:</p>
+<ul><li>The UI shows state it is given.</li><li>When the user does something, the UI reports an <em>event</em> (a callback) rather than changing the state itself.</li><li>Whoever owns the state decides how the event changes it, and the new state flows back down.</li></ul>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">struct</span> <span class="ty">TodoItem</span> {
+<span class="kw">int</span> id;
+std::string title;
+<span class="kw">bool</span> done;
+<span class="kw">friend</span> <span class="kw">bool</span> <span class="kw">operator</span>==(<span class="kw">const</span> <span class="ty">TodoItem</span>&amp;, <span class="kw">const</span> <span class="ty">TodoItem</span>&amp;) = <span class="kw">default</span>;
+};
+
+<span class="com">// Stateless: shows the items, reports what the user did.</span>
+<span class="kw">void</span> <span class="fn">TodoList</span>(<span class="kw">const</span> std::vector&lt;<span class="ty">TodoItem</span>&gt;&amp; items, std::function&lt;<span class="kw">void</span>(<span class="kw">int</span> id, <span class="kw">bool</span> done)&gt; onToggle) {
+<span class="fn">LazyColumn</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), [&amp;](<span class="ty">LazyListScope</span>&amp; list) {
+list.<span class="call">items</span>(items, [](<span class="kw">const</span> <span class="ty">TodoItem</span>&amp; t) { <span class="kw">return</span> t.id; }, [onToggle](<span class="kw">const</span> <span class="ty">TodoItem</span>&amp; t) {
+<span class="fn">ListItem</span>(t.done, [onToggle, id = t.id](<span class="kw">bool</span> done) { <span class="call">onToggle</span>(id, done); },
+{.headline = [&amp;] { <span class="fn">Text</span>(t.title); }, .leading = [&amp;] { <span class="fn">Checkbox</span>(t.done, {}); }});
+});
+});
+}</code></pre></div>
+<p>This makes composables easy to reuse, preview and test, and leaves one place where each piece of state changes.</p>
+<h2 id="where-state-lives"><a class="anchor" href="#where-state-lives" aria-hidden="true">#</a>Where state lives</h2>
+<div class="table"><table><thead><tr><th>Kind of state</th><th>Where</th></tr></thead><tbody><tr><td>UI element state that nothing else needs (is this menu open?)</td><td><code>remember</code> in the composable.</td></tr><tr><td>State several composables share</td><td>Hoisted to their lowest common ancestor (see <a href="state.html#state-hoisting">State</a>).</td></tr><tr><td>A screen's UI logic (form fields, what is selected)</td><td>A plain state holder class kept with <code>remember</code>.</td></tr><tr><td>Screen state that outlives the UI, and business logic</td><td>A <code>ViewModel</code>.</td></tr><tr><td>Data shared across screens (a repository, a cache)</td><td>Your own objects, passed to the <code>ViewModel</code>s that need them.</td></tr></tbody></table></div>
+<h2 id="viewmodel"><a class="anchor" href="#viewmodel" aria-hidden="true">#</a>ViewModel</h2>
+<p>A <code>ViewModel</code> holds a screen's state and does its work, as in Jetpack. It lives in the nearest owner: a navigation entry, cleared when the entry is popped for good, or else the app. So it survives the composables that show it coming and going.</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">class</span> <span class="ty">TodoViewModel</span> : <span class="kw">public</span> <span class="ty">ViewModel</span> {
+<span class="kw">public</span>:
+<span class="ty">MutableStateFlow</span>&lt;std::vector&lt;<span class="ty">TodoItem</span>&gt;&gt; items{std::vector&lt;<span class="ty">TodoItem</span>&gt;{{<span class="num">1</span>, <span class="str">&quot;Write docs&quot;</span>, <span class="kw">false</span>}, {<span class="num">2</span>, <span class="str">&quot;Ship&quot;</span>, <span class="kw">false</span>}}};
+
+<span class="kw">void</span> <span class="call">toggle</span>(<span class="kw">int</span> id, <span class="kw">bool</span> done) {
+items.<span class="call">update</span>([&amp;](<span class="kw">const</span> std::vector&lt;<span class="ty">TodoItem</span>&gt;&amp; list) {
+std::vector&lt;<span class="ty">TodoItem</span>&gt; next = list;
+<span class="kw">for</span> (<span class="ty">TodoItem</span>&amp; t : next)
+<span class="kw">if</span> (t.id == id) t.done = done;
+<span class="kw">return</span> next;
+});
+}
+
+<span class="kw">protected</span>:
+<span class="kw">void</span> <span class="call">onCleared</span>() <span class="kw">override</span> { <span class="com">/* cancel subscriptions, close files */</span> }
+};
+
+<span class="kw">void</span> <span class="fn">TodoScreen</span>() {
+<span class="kw">auto</span> vm = viewModel&lt;<span class="ty">TodoViewModel</span>&gt;();   <span class="com">// the same one while its owner lives</span>
+std::vector&lt;<span class="ty">TodoItem</span>&gt; items = vm-&gt;items.<span class="call">collectAsState</span>();
+<span class="fn">TodoList</span>(items, [vm](<span class="kw">int</span> id, <span class="kw">bool</span> done) { vm-&gt;<span class="call">toggle</span>(id, done); });
+}</code></pre></div>
+<ul><li><code>viewModel&lt;T&gt;()</code> returns a <code>std::shared_ptr&lt;T&gt;</code>, made the first time and the same one afterwards. Capture it by value in callbacks.</li><li><code>viewModelScope()</code> is a <code>CoroutineScope</code> cancelled when the <code>ViewModel</code> is cleared; launch its work there.</li><li><code>onCleared()</code> runs when its owner goes away.</li><li>Screens of a nested navigation graph can share one through the graph's entry: <code>viewModel&lt;T&gt;(*entry.parent())</code> (see <a href="navigation.html">Navigation</a>).</li></ul>
+<p>To give a <code>ViewModel</code> dependencies, use the overload that takes a factory: <code>viewModel&lt;T&gt;(key, [&amp;] { return std::make_shared&lt;T&gt;(repository); })</code>.</p>
+<h2 id="flows"><a class="anchor" href="#flows" aria-hidden="true">#</a>Flows</h2>
+<p>A <code>ViewModel</code> exposes its state as a <code>StateFlow</code>, and the UI reads it with <code>collectAsState()</code>, which recomposes when the value changes.</p>
+<ul><li><code>MutableStateFlow&lt;T&gt;</code> holds a value. <code>setValue(v)</code> and <code>update(f)</code> can be called from <strong>any thread</strong>, which makes it the bridge between worker threads and the UI.</li><li><code>value()</code> reads the current value; <code>collect(f)</code> follows it in a coroutine.</li><li>It is conflated, as in Kotlin: setting the value it already has does nothing.</li></ul>
+<p><code>Flow&lt;T&gt;</code> is a cold stream, produced by a coroutine for each collector, with Kotlin's operators: <code>map</code>, <code>filter</code>, <code>take</code>, <code>debounce</code>, <code>distinctUntilChanged</code>, <code>flatMapLatest</code>, <code>combine</code> and more. <code>stateIn</code> turns one into a <code>StateFlow</code> kept by a scope:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">class</span> <span class="ty">SearchViewModel</span> : <span class="kw">public</span> <span class="ty">ViewModel</span> {
+<span class="kw">public</span>:
+<span class="kw">explicit</span> <span class="fn">SearchViewModel</span>(<span class="ty">Repository</span>&amp; repo)
+: <span class="call">results</span>(query.<span class="call">debounce</span>(std::chrono::<span class="call">milliseconds</span>(<span class="num">300</span>))
+.<span class="call">flatMapLatest</span>([&amp;repo](<span class="kw">const</span> std::string&amp; q) { <span class="kw">return</span> repo.<span class="call">search</span>(q); })
+.<span class="call">stateIn</span>(<span class="call">viewModelScope</span>(), std::vector&lt;std::string&gt;{})) {}
+
+<span class="ty">MutableStateFlow</span>&lt;std::string&gt; query{std::<span class="call">string</span>()};
+<span class="ty">StateFlow</span>&lt;std::vector&lt;std::string&gt;&gt; results;
+};</code></pre></div>
+<p><code>MutableSharedFlow&lt;T&gt;</code> is a hot stream for one-off events (show a message, navigate), and <code>tryEmit</code> works from any thread. <code>shareIn</code> and <code>stateIn</code> take <code>SharingStarted::Eagerly</code>, <code>Lazily</code> or <code>WhileSubscribed(5000ms)</code>, which collects the upstream only while someone is collecting.</p>
+<p>Making a flow by hand:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="ty">Flow</span>&lt;<span class="kw">int</span>&gt; <span class="call">ticks</span>() {
+<span class="kw">return</span> flow&lt;<span class="kw">int</span>&gt;([](<span class="ty">FlowCollector</span>&lt;<span class="kw">int</span>&gt; emit) -&gt; <span class="ty">Task</span> {
+<span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">0</span>;; ++i) {
+<span class="kw">co_await</span> <span class="call">emit</span>(i);
+<span class="kw">co_await</span> <span class="call">delay</span>(std::chrono::<span class="call">seconds</span>(<span class="num">1</span>));
+}
+});
+}</code></pre></div>
+<p>Everything runs on the UI thread, in the collecting coroutine. Cancelling the coroutine stops the producer too.</p>
+<h2 id="saved-state"><a class="anchor" href="#saved-state" aria-hidden="true">#</a>Saved state</h2>
+<p>Android may end an app's process in the background and bring it back later, expecting it to look as it did. Two tools cover this:</p>
+<ul><li><code>rememberSaveable</code> in composables (see <a href="state.html#remembersaveable">State</a>).</li><li><code>SavedStateHandle</code> in <code>ViewModel</code>s: a <code>ViewModel</code> whose constructor takes one gets it, with the values it had, when it is made again.</li></ul>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">class</span> <span class="ty">SearchScreenViewModel</span> : <span class="kw">public</span> <span class="ty">ViewModel</span> {
+<span class="kw">public</span>:
+<span class="kw">explicit</span> <span class="fn">SearchScreenViewModel</span>(<span class="ty">SavedStateHandle</span> state) : <span class="call">state_</span>(state), <span class="call">query</span>(state.getStateFlow&lt;std::string&gt;(<span class="str">&quot;query&quot;</span>, <span class="str">&quot;&quot;</span>)) {}
+<span class="kw">void</span> <span class="call">setQuery</span>(<span class="kw">const</span> std::string&amp; q) { state_.<span class="call">set</span>(<span class="str">&quot;query&quot;</span>, q); }
+<span class="ty">StateFlow</span>&lt;std::string&gt; query;
+
+<span class="kw">private</span>:
+<span class="ty">SavedStateHandle</span> state_;
+};</code></pre></div>
+<p><code>viewModel&lt;SearchScreenViewModel&gt;()</code> passes the handle. Values must be saveable types. On the desktop, <code>KOMPOZ_STATE_FILE=file</code> saves and restores across runs, so you can try this without a phone.</p>
+<h2 id="lifecycle"><a class="anchor" href="#lifecycle" aria-hidden="true">#</a>Lifecycle</h2>
+<p>The app, and each navigation entry, has a <code>Lifecycle</code> that moves through <code>Created</code>, <code>Started</code> and <code>Resumed</code> as it comes to the front and back. Effects can follow it, as Jetpack's do:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Video</span>(std::shared_ptr&lt;<span class="ty">Player</span>&gt; player) {
+<span class="fn">LifecycleResumeEffect</span>(<span class="num">0</span>, [player] {
+player-&gt;<span class="call">play</span>();
+<span class="kw">return</span> [player] { player-&gt;<span class="call">pause</span>(); };   <span class="com">// when it is no longer resumed</span>
+});
+}</code></pre></div>
+<p><code>LifecycleStartEffect</code>, <code>LifecycleEventEffect(LifecycleEvent::OnStart, …)</code> and <code>currentLifecycleOwner()</code> exist too. <code>collectAsStateWithLifecycle(flow)</code> collects a flow only while the lifecycle is at least started, so in the background it stops counting as a subscriber.</p>
+<h2 id="see-also"><a class="anchor" href="#see-also" aria-hidden="true">#</a>See also</h2>
+<ul><li><a href="state.html">State</a>: local state and hoisting.</li><li><a href="side-effects.html">Side effects</a>: coroutines and effects.</li><li><a href="navigation.html">Navigation</a>: screens, each with its own <code>ViewModel</code>s.</li><li><a href="testing.html">Testing</a>: testing stateless composables and <code>ViewModel</code>s.</li></ul>
+</article>
+<nav class="pager"><a class="prev" href="gestures.html"><span>Previous</span>Gestures and input</a><a class="next" href="navigation.html"><span>Next</span>Navigation</a></nav>
+<footer>Kompoz is licensed under the Apache License 2.0. Code samples on this site are part of it.</footer>
+</main>
+<aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#unidirectional-data-flow">Unidirectional data flow</a><a class="l2" href="#where-state-lives">Where state lives</a><a class="l2" href="#viewmodel">ViewModel</a><a class="l2" href="#flows">Flows</a><a class="l2" href="#saved-state">Saved state</a><a class="l2" href="#lifecycle">Lifecycle</a><a class="l2" href="#see-also">See also</a></aside>
+</div>
+<div class="scrim"></div>
+<script>window.KOMPOZ_UI={"noresults": "No results", "copy": "Copy", "copied": "Copied"};</script>
+<script src="../assets/search-en.js" defer></script>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

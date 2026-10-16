@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phases · Kompoz</title>
+<meta name="description" content="Composition runs your composable functions and turns them into a tree of layout nodes, each with its modifiers.">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{var t=localStorage.getItem('kompoz-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body class="page-phases">
+<header class="top">
+<button class="menu-button" type="button" aria-label="Menu" aria-expanded="false"><span></span></button>
+<a class="brand" href="index.html"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="8" fill="var(--primary)"/><path d="M11 9v14M11 16l8-7M13.5 14l6 9" stroke="var(--on-primary)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>Kompoz</span></a><span class="version">0.1.0</span>
+<div class="search"><input type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false"><kbd>/</kbd><div class="results" role="listbox"></div></div>
+<a class="language" href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+<button class="theme-button" type="button" aria-label="Switch theme" title="Switch theme"></button>
+</header>
+<div class="layout">
+<nav class="side" aria-label="Menu"><details open><summary>Get started</summary><a href="index.html">Kompoz documentation</a><a href="setup.html">Setup</a><a href="tutorial.html">Tutorial</a><a href="coming-from-compose.html">Coming from Compose</a></details><details open><summary>Foundation</summary><a href="thinking.html">Thinking in Kompoz</a><a href="state.html">State</a><a href="lifecycle.html">Lifecycle and identity</a><a href="side-effects.html">Side effects</a><a href="phases.html" class=current aria-current=page>Phases</a><a href="composition-local.html">CompositionLocal</a></details><details open><summary>Design</summary><a href="modifiers.html">Modifiers</a><a href="layouts.html">Layouts</a><a href="custom-layouts.html">Custom layouts</a><a href="lists.html">Lists and grids</a><a href="material.html">Material components</a><a href="theming.html">Theming</a><a href="text.html">Text</a><a href="graphics.html">Graphics</a><a href="animation.html">Animation</a><a href="gestures.html">Gestures and input</a></details><details open><summary>App</summary><a href="architecture.html">Architecture</a><a href="navigation.html">Navigation</a><a href="resources.html">Resources</a><a href="accessibility.html">Accessibility</a><a href="testing.html">Testing</a><a href="tools.html">Tools</a></details><details open><summary>Reference</summary><a href="api.html">Components and priorities</a></details></nav>
+<main>
+<div class="crumbs">Foundation</div>
+<article>
+<h1>Phases</h1>
+
+<p>Each frame goes through three phases: composition decides <em>what</em> to show, layout decides <em>where</em>, drawing decides <em>how it looks</em>. Knowing which phase reads a state tells you how much work a change costs.</p>
+<h2 id="the-three-phases"><a class="anchor" href="#the-three-phases" aria-hidden="true">#</a>The three phases</h2>
+<ol><li><strong>Composition</strong> runs your composable functions and turns them into a tree of layout nodes, each with its modifiers.</li><li><strong>Layout</strong> measures each node with the constraints its parent gives it and places its children. A node is measured once per pass.</li><li><strong>Drawing</strong> draws each node, its modifiers' backgrounds, borders and custom drawing, in order.</li></ol>
+<p>Then the frame is presented. A frame in which nothing visible changed is neither drawn nor presented.</p>
+<p>The phases normally go in that order, but each can be skipped. When a state changes, Kompoz does only the phases that depend on it:</p>
+<div class="table"><table><thead><tr><th>Where the state was read</th><th>What runs again</th></tr></thead><tbody><tr><td>In a composable's body</td><td>Composition of the scopes that read it, then layout and drawing of what changed.</td></tr><tr><td>While measuring or placing (<code>Modifier().offset([] { … })</code>, a <code>Layout</code>'s measure policy)</td><td>Layout and drawing; no composition.</td></tr><tr><td>While drawing (<code>graphicsLayer([] (GraphicsLayerScope&amp;) { … })</code>, <code>drawBehind</code>, a <code>Canvas</code>)</td><td>Drawing; a layout pass looks, but measures nothing.</td></tr></tbody></table></div>
+<h2 id="deferring-state-reads"><a class="anchor" href="#deferring-state-reads" aria-hidden="true">#</a>Deferring state reads</h2>
+<p>The later the phase that reads a changing value, the less work each change costs. This matters for values that change every frame: animations, scroll positions, drags.</p>
+<p>Reading an animated value in composition recomposes on every frame:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Pulse</span>() {
+<span class="kw">auto</span> pulse = <span class="call">rememberInfiniteTransition</span>().<span class="call">animateFloatState</span>(<span class="num">0.8f</span>, <span class="num">1.f</span>, <span class="call">infiniteRepeatable</span>(<span class="call">tween</span>(<span class="num">600</span>), <span class="ty">RepeatMode</span>::<span class="ty">Reverse</span>));
+<span class="com">// read while drawing: only drawn again each frame, never recomposed or measured</span>
+<span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">48</span>).<span class="call">graphicsLayer</span>([pulse](<span class="ty">GraphicsLayerScope</span>&amp; l) { l.scaleX = l.scaleY = pulse.<span class="call">get</span>(); })
+.<span class="call">background</span>(<span class="call">colorScheme</span>().primary, <span class="ty">CircleShape</span>));
+}</code></pre></div>
+<p>The lambda form of <code>graphicsLayer</code> is evaluated while drawing, so the scale changes without composition or layout. The value form, <code>graphicsLayer({.alpha = 0.5f})</code>, is read in composition, which is fine for values that don't change often.</p>
+<p>The same goes for moving something. <code>offset(x, y)</code> takes values read in composition; <code>offset([] { … })</code> takes a lambda read during layout:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">DraggableBall</span>() {
+<span class="kw">auto</span> x = <span class="call">remember</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(<span class="num">0.f</span>); });
+<span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">offset</span>([x] { <span class="kw">return</span> <span class="fn">Offset</span>{x.<span class="call">get</span>(), <span class="num">0</span>}; })        <span class="com">// read during layout</span>
+.<span class="call">draggable</span>(<span class="call">rememberDraggableState</span>([x](<span class="kw">float</span> delta) { x.<span class="call">set</span>(x.<span class="call">get</span>() + delta); }), <span class="ty">Orientation</span>::<span class="ty">Horizontal</span>)
+.<span class="call">size</span>(<span class="num">56</span>)
+.<span class="call">background</span>(<span class="call">colorScheme</span>().tertiary, <span class="ty">CircleShape</span>));
+}</code></pre></div>
+<p>Dragging the ball changes <code>x</code> on every pointer move. Because only the layout phase read it, nothing recomposes: the ball is placed again and drawn.</p>
+<h2 id="incremental-layout"><a class="anchor" href="#incremental-layout" aria-hidden="true">#</a>Incremental layout</h2>
+<p>Layout in Kompoz is incremental, as in Compose. A node measured again with the same constraints as last time, with nothing changed in it or below it, keeps its size and its children's positions without measuring them. Only nodes that were composed again, or that read a state that changed while they were measured, are measured again, along with the parents whose size depends on them.</p>
+<p>You don't need to do anything for this. It does mean a change deep in a large tree costs little, as long as it doesn't change the size of what is around it.</p>
+<p><code>KOMPOZ_LAYOUT_CHECK=1</code> checks each incremental layout against a full one, and logs any difference; the tests always run with it.</p>
+<h2 id="drawing-only-what-changed"><a class="anchor" href="#drawing-only-what-changed" aria-hidden="true">#</a>Drawing only what changed</h2>
+<p>Kompoz records each frame as a list of drawing commands and compares it with the frame before. Only the parts of the screen that changed are drawn again; the rest of the pixels are kept. You can see this with <code>KOMPOZ_DAMAGE_SHOW=1</code>, which outlines what was redrawn. See <a href="tools.html#profiling-frames">Tools</a>.</p>
+<h2 id="performance-tips"><a class="anchor" href="#performance-tips" aria-hidden="true">#</a>Performance tips</h2>
+<h3 id="do-expensive-work-once"><a class="anchor" href="#do-expensive-work-once" aria-hidden="true">#</a>Do expensive work once</h3>
+<p>Anything a composable computes runs again on each recomposition. Compute it once with <code>remember</code>, keyed to its inputs:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Contacts</span>(<span class="kw">const</span> std::vector&lt;<span class="ty">Contact</span>&gt;&amp; contacts) {
+<span class="kw">auto</span> sorted = <span class="call">remember</span>(contacts, [&amp;] {   <span class="com">// sorted again only when the contacts change</span>
+std::vector&lt;<span class="ty">Contact</span>&gt; s = contacts;
+std::ranges::<span class="call">sort</span>(s, {}, &amp;<span class="ty">Contact</span>::name);
+<span class="kw">return</span> s;
+});
+<span class="fn">LazyColumn</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), [&amp;](<span class="ty">LazyListScope</span>&amp; list) {
+list.<span class="call">items</span>(sorted, [](<span class="kw">const</span> <span class="ty">Contact</span>&amp; c) { <span class="fn">Text</span>(c.name); });
+});
+}</code></pre></div>
+<p>Better still, keep the sorted list in state or in a <code>ViewModel</code>, so it is sorted when it changes, not when the UI recomposes.</p>
+<h3 id="use-keys-in-lazy-lists"><a class="anchor" href="#use-keys-in-lazy-lists" aria-hidden="true">#</a>Use keys in lazy lists</h3>
+<p>Without keys, a lazy list ties item state to positions, and inserting at the top recomposes every item. With keys, items that moved keep their composition. See <a href="lists.html">Lists and grids</a>.</p>
+<h3 id="use-derivedstateof-for-values-that-change-less-often-than-their-inputs"><a class="anchor" href="#use-derivedstateof-for-values-that-change-less-often-than-their-inputs" aria-hidden="true">#</a>Use derivedStateOf for values that change less often than their inputs</h3>
+<p>A scroll position changes on every frame of a scroll, but "is the list scrolled at all" changes once. Reading the position recomposes on every frame; reading a <code>derivedStateOf</code> recomposes once. See <a href="state.html#derivedstateof">State</a>.</p>
+<h3 id="let-skipping-work"><a class="anchor" href="#let-skipping-work" aria-hidden="true">#</a>Let skipping work</h3>
+<p>A scope is skipped only when its arguments compare equal. Pass values that compare cheaply and correctly: structs with <code>operator==</code>, states (which compare by identity) rather than copies of big containers. A composable that takes a <code>std::function</code> is never skipped.</p>
+<h3 id="dont-write-state-you-just-read"><a class="anchor" href="#dont-write-state-you-just-read" aria-hidden="true">#</a>Don't write state you just read</h3>
+<p>Writing, during composition, a state that this composition already read makes Kompoz compose again at once, and doing it on every pass never settles. Update state in callbacks and effects, or compute the value instead of storing it.</p>
+<h2 id="see-also"><a class="anchor" href="#see-also" aria-hidden="true">#</a>See also</h2>
+<ul><li><a href="lifecycle.html">Lifecycle and identity</a>: scopes and skipping.</li><li><a href="custom-layouts.html">Custom layouts</a>: measuring and placing yourself.</li><li><a href="graphics.html">Graphics</a>: drawing and <code>graphicsLayer</code>.</li><li><a href="tools.html">Tools</a>: the profiler and the recomposition highlighter.</li></ul>
+</article>
+<nav class="pager"><a class="prev" href="side-effects.html"><span>Previous</span>Side effects</a><a class="next" href="composition-local.html"><span>Next</span>CompositionLocal</a></nav>
+<footer>Kompoz is licensed under the Apache License 2.0. Code samples on this site are part of it.</footer>
+</main>
+<aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#the-three-phases">The three phases</a><a class="l2" href="#deferring-state-reads">Deferring state reads</a><a class="l2" href="#incremental-layout">Incremental layout</a><a class="l2" href="#drawing-only-what-changed">Drawing only what changed</a><a class="l2" href="#performance-tips">Performance tips</a><a class="l3" href="#do-expensive-work-once">Do expensive work once</a><a class="l3" href="#use-keys-in-lazy-lists">Use keys in lazy lists</a><a class="l3" href="#use-derivedstateof-for-values-that-change-less-often-than-their-inputs">Use derivedStateOf for values that change less often than their inputs</a><a class="l3" href="#let-skipping-work">Let skipping work</a><a class="l3" href="#dont-write-state-you-just-read">Don&#x27;t write state you just read</a><a class="l2" href="#see-also">See also</a></aside>
+</div>
+<div class="scrim"></div>
+<script>window.KOMPOZ_UI={"noresults": "No results", "copy": "Copy", "copied": "Copied"};</script>
+<script src="../assets/search-en.js" defer></script>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

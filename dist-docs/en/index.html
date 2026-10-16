@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kompoz</title>
+<meta name="description" content="If you know Compose, you know Kompoz: the same way of thinking (composable functions, state, recomposition, modifiers), the same names where C++ allows, and Material 3 components that look and behave like Compose&#x27;s. Version 0.1.0 is the first public release, licensed under the Apache License 2.0.">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{var t=localStorage.getItem('kompoz-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body class="page-index">
+<header class="top">
+<button class="menu-button" type="button" aria-label="Menu" aria-expanded="false"><span></span></button>
+<a class="brand" href="index.html"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="8" fill="var(--primary)"/><path d="M11 9v14M11 16l8-7M13.5 14l6 9" stroke="var(--on-primary)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>Kompoz</span></a><span class="version">0.1.0</span>
+<div class="search"><input type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false"><kbd>/</kbd><div class="results" role="listbox"></div></div>
+<a class="language" href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+<button class="theme-button" type="button" aria-label="Switch theme" title="Switch theme"></button>
+</header>
+<div class="layout">
+<nav class="side" aria-label="Menu"><details open><summary>Get started</summary><a href="index.html" class=current aria-current=page>Kompoz documentation</a><a href="setup.html">Setup</a><a href="tutorial.html">Tutorial</a><a href="coming-from-compose.html">Coming from Compose</a></details><details open><summary>Foundation</summary><a href="thinking.html">Thinking in Kompoz</a><a href="state.html">State</a><a href="lifecycle.html">Lifecycle and identity</a><a href="side-effects.html">Side effects</a><a href="phases.html">Phases</a><a href="composition-local.html">CompositionLocal</a></details><details open><summary>Design</summary><a href="modifiers.html">Modifiers</a><a href="layouts.html">Layouts</a><a href="custom-layouts.html">Custom layouts</a><a href="lists.html">Lists and grids</a><a href="material.html">Material components</a><a href="theming.html">Theming</a><a href="text.html">Text</a><a href="graphics.html">Graphics</a><a href="animation.html">Animation</a><a href="gestures.html">Gestures and input</a></details><details open><summary>App</summary><a href="architecture.html">Architecture</a><a href="navigation.html">Navigation</a><a href="resources.html">Resources</a><a href="accessibility.html">Accessibility</a><a href="testing.html">Testing</a><a href="tools.html">Tools</a></details><details open><summary>Reference</summary><a href="api.html">Components and priorities</a></details></nav>
+<main>
+<div class="crumbs">Get started</div>
+<article>
+<h1>Kompoz documentation</h1>
+
+<p>Kompoz is a declarative UI library for C++20 in the style of Jetpack Compose, with Material 3 components, running on Linux, Windows, Android and the web from one codebase.</p>
+<p>If you know Compose, you know Kompoz: the same way of thinking (composable functions, state, recomposition, modifiers), the same names where C++ allows, and Material 3 components that look and behave like Compose's. Version 0.1.0 is the first public release, licensed under the Apache License 2.0.</p>
+<figure><img src="../img/home.png" alt="The showcase&#x27;s home screen" loading="lazy"></figure>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Counter</span>() {
+<span class="kw">auto</span> count = <span class="call">remember</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(<span class="num">0</span>); });
+
+<span class="fn">Column</span>(<span class="fn">Modifier</span>().<span class="call">padding</span>(<span class="num">16</span>), {.verticalArrangement = <span class="ty">Arrangement</span>::<span class="call">spacedBy</span>(<span class="num">8</span>)}, [&amp;] {
+<span class="fn">Text</span>(<span class="str">&quot;Count: &quot;</span> + std::<span class="call">to_string</span>(count.<span class="call">get</span>()), {.font = <span class="call">typography</span>().titleLarge});
+<span class="fn">Button</span>([count] { count.<span class="call">set</span>(count.<span class="call">get</span>() + <span class="num">1</span>); }, [] { <span class="fn">Text</span>(<span class="str">&quot;Add&quot;</span>); });
+});
+}
+
+<span class="ty">Application</span> kompoz::<span class="call">createApplication</span>(<span class="kw">int</span>, <span class="kw">char</span>**) {
+<span class="kw">return</span> {.title = <span class="str">&quot;Demo&quot;</span>, .content = [] { <span class="fn">MaterialTheme</span>(<span class="call">lightColorScheme</span>(), <span class="ty">Counter</span>); }};
+}</code></pre></div>
+<h2 id="get-started"><a class="anchor" href="#get-started" aria-hidden="true">#</a>Get started</h2>
+<ul><li><a href="setup.html">Setup</a>: build Kompoz, add it to your CMake project, and run on each platform.</li><li><a href="tutorial.html">Tutorial</a>: build a first app step by step, from a line of text to a Material list.</li><li><a href="coming-from-compose.html">Coming from Compose</a>: how Kotlin's Compose maps to C++, at a glance.</li></ul>
+<h2 id="foundation"><a class="anchor" href="#foundation" aria-hidden="true">#</a>Foundation</h2>
+<ul><li><a href="thinking.html">Thinking in Kompoz</a>: declarative UI, composable functions and recomposition.</li><li><a href="state.html">State</a>: observable state, <code>remember</code>, <code>rememberSaveable</code>, hoisting and state holders.</li><li><a href="lifecycle.html">Lifecycle and identity</a>: how calls are identified without a compiler plugin, and what makes them skip.</li><li><a href="side-effects.html">Side effects</a>: coroutines, <code>LaunchedEffect</code>, <code>DisposableEffect</code> and the other effect APIs.</li><li><a href="phases.html">Phases</a>: composition, layout and drawing, and how to keep each one cheap.</li><li><a href="composition-local.html">CompositionLocal</a>: handing values down the tree, and the built-in locals.</li></ul>
+<h2 id="design"><a class="anchor" href="#design" aria-hidden="true">#</a>Design</h2>
+<ul><li><a href="modifiers.html">Modifiers</a>: decorating composables, why order matters, and writing your own.</li><li><a href="layouts.html">Layouts</a>: <code>Column</code>, <code>Row</code>, <code>Box</code>, flow layouts, <code>FlexBox</code>, <code>Grid</code> and adaptive layouts.</li><li><a href="custom-layouts.html">Custom layouts</a>: <code>Layout</code>, constraints, intrinsics and <code>SubcomposeLayout</code>.</li><li><a href="lists.html">Lists and grids</a>: lazy lists and grids, pagers, carousels and nested scrolling.</li><li><a href="material.html">Material components</a>: a tour of the Material 3 components.</li><li><a href="theming.html">Theming</a>: color schemes, dark theme, dynamic color, typography and design systems.</li><li><a href="text.html">Text</a>: styling text, fonts, selection and text fields.</li><li><a href="graphics.html">Graphics</a>: <code>Canvas</code>, brushes, paths, shapes, shadows, images and vectors.</li><li><a href="animation.html">Animation</a>: animated values, visibility, content, transitions and shared elements.</li><li><a href="gestures.html">Gestures and input</a>: clicks, drags, pinches, the keyboard, focus and drag and drop.</li></ul>
+<h2 id="app"><a class="anchor" href="#app" aria-hidden="true">#</a>App</h2>
+<ul><li><a href="architecture.html">Architecture</a>: unidirectional data flow, <code>ViewModel</code>s, flows and saved state.</li><li><a href="navigation.html">Navigation</a>: screens, the back stack, typed routes and deep links.</li><li><a href="resources.html">Resources</a>: assets, the library's texts in the system language, and platform services.</li><li><a href="accessibility.html">Accessibility</a>: semantics, screen readers, touch targets and the keyboard.</li><li><a href="testing.html">Testing</a>: headless UI tests with a virtual clock.</li><li><a href="tools.html">Tools</a>: previews, rebuilding on save, scripted screenshots and profiling.</li></ul>
+<h2 id="reference"><a class="anchor" href="#reference" aria-hidden="true">#</a>Reference</h2>
+<ul><li><a href="api.html">API status</a>: every Compose API and its status in Kompoz, and the build log.</li></ul>
+<figure><img src="../img/components-wide.png" alt="The Components screen in a wide window, with a navigation rail" loading="lazy"></figure>
+</article>
+<nav class="pager"><a class="next" href="setup.html"><span>Next</span>Setup</a></nav>
+<footer>Kompoz is licensed under the Apache License 2.0. Code samples on this site are part of it.</footer>
+</main>
+<aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#get-started">Get started</a><a class="l2" href="#foundation">Foundation</a><a class="l2" href="#design">Design</a><a class="l2" href="#app">App</a><a class="l2" href="#reference">Reference</a></aside>
+</div>
+<div class="scrim"></div>
+<script>window.KOMPOZ_UI={"noresults": "No results", "copy": "Copy", "copied": "Copied"};</script>
+<script src="../assets/search-en.js" defer></script>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

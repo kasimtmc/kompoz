@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Text · Kompoz</title>
+<meta name="description" content="Text shows a string with the current style (LocalTextStyle) in the current content color:">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{var t=localStorage.getItem('kompoz-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body class="page-text">
+<header class="top">
+<button class="menu-button" type="button" aria-label="Menu" aria-expanded="false"><span></span></button>
+<a class="brand" href="index.html"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="8" fill="var(--primary)"/><path d="M11 9v14M11 16l8-7M13.5 14l6 9" stroke="var(--on-primary)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>Kompoz</span></a><span class="version">0.1.0</span>
+<div class="search"><input type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false"><kbd>/</kbd><div class="results" role="listbox"></div></div>
+<a class="language" href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+<button class="theme-button" type="button" aria-label="Switch theme" title="Switch theme"></button>
+</header>
+<div class="layout">
+<nav class="side" aria-label="Menu"><details open><summary>Get started</summary><a href="index.html">Kompoz documentation</a><a href="setup.html">Setup</a><a href="tutorial.html">Tutorial</a><a href="coming-from-compose.html">Coming from Compose</a></details><details open><summary>Foundation</summary><a href="thinking.html">Thinking in Kompoz</a><a href="state.html">State</a><a href="lifecycle.html">Lifecycle and identity</a><a href="side-effects.html">Side effects</a><a href="phases.html">Phases</a><a href="composition-local.html">CompositionLocal</a></details><details open><summary>Design</summary><a href="modifiers.html">Modifiers</a><a href="layouts.html">Layouts</a><a href="custom-layouts.html">Custom layouts</a><a href="lists.html">Lists and grids</a><a href="material.html">Material components</a><a href="theming.html">Theming</a><a href="text.html" class=current aria-current=page>Text</a><a href="graphics.html">Graphics</a><a href="animation.html">Animation</a><a href="gestures.html">Gestures and input</a></details><details open><summary>App</summary><a href="architecture.html">Architecture</a><a href="navigation.html">Navigation</a><a href="resources.html">Resources</a><a href="accessibility.html">Accessibility</a><a href="testing.html">Testing</a><a href="tools.html">Tools</a></details><details open><summary>Reference</summary><a href="api.html">Components and priorities</a></details></nav>
+<main>
+<div class="crumbs">Design</div>
+<article>
+<h1>Text</h1>
+
+<p>Showing text, styling it, letting the user select it, and taking text input. Kompoz shapes text with HarfBuzz, lays out right-to-left scripts, and falls back to the system's fonts for characters the bundled font lacks.</p>
+<h2 id="showing-text"><a class="anchor" href="#showing-text" aria-hidden="true">#</a>Showing text</h2>
+<p><code>Text</code> shows a string with the current style (<code>LocalTextStyle</code>) in the current content color:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Text</span>(<span class="str">&quot;Hello, world&quot;</span>);
+<span class="fn">Text</span>(<span class="str">&quot;A title&quot;</span>, {.font = <span class="call">typography</span>().titleLarge});
+<span class="fn">Text</span>(<span class="str">&quot;A note&quot;</span>, <span class="fn">Modifier</span>().<span class="call">padding</span>(<span class="num">8</span>), {.color = <span class="call">colorScheme</span>().onSurfaceVariant});</code></pre></div>
+<p>Its overloads take the text, then optionally a <code>Modifier</code>, then a <code>TextStyle</code>. Text sizes are in sp, scaled by the system's font size.</p>
+<h2 id="styling-text"><a class="anchor" href="#styling-text" aria-hidden="true">#</a>Styling text</h2>
+<p><code>TextStyle</code>'s fields, in the order you write them:</p>
+<div class="table"><table><thead><tr><th>Field</th><th>What it does</th></tr></thead><tbody><tr><td><code>font</code></td><td>A whole <code>Font</code>: Material's type styles (<code>typography().bodyLarge</code>) are fonts.</td></tr><tr><td><code>fontSize</code></td><td>The size: a number of sp, or <code>TextUnit::em(1.2f)</code> relative to the current size.</td></tr><tr><td><code>fontWeight</code></td><td><code>FontWeight::Normal</code>, <code>Medium</code>, <code>Bold</code>, or <code>W100</code> … <code>W900</code>.</td></tr><tr><td><code>color</code></td><td>The color; unset, <code>LocalContentColor</code>.</td></tr><tr><td><code>textAlign</code></td><td><code>TextAlign::Start</code>, <code>Center</code>, <code>End</code>, <code>Justify</code>.</td></tr><tr><td><code>textDecoration</code></td><td><code>TextDecoration::Underline</code>, <code>LineThrough</code>.</td></tr><tr><td><code>maxLines</code>, <code>minLines</code></td><td>How many lines it may take (0: no limit), and at least.</td></tr><tr><td><code>fontStyle</code></td><td><code>FontStyle::Italic</code>.</td></tr><tr><td><code>fontFamily</code></td><td><code>FontFamily::Serif</code>, <code>Monospace</code>, or one made from files.</td></tr><tr><td><code>letterSpacing</code></td><td>Extra space after each character.</td></tr><tr><td><code>fontFeatureSettings</code></td><td>OpenType features as CSS writes them: <code>&quot;tnum&quot;</code>, <code>&quot;smcp&quot;</code>.</td></tr><tr><td><code>overflow</code></td><td>What the last line shows when cut off: <code>TextOverflow::Clip</code>, <code>Ellipsis</code>, <code>StartEllipsis</code>, <code>MiddleEllipsis</code>.</td></tr><tr><td><code>softWrap</code></td><td><code>false</code>: one line per paragraph.</td></tr><tr><td><code>autoSize</code></td><td>The font size that fits the space: <code>TextAutoSize::StepBased(12, 48)</code>.</td></tr><tr><td><code>lineHeight</code></td><td>sp from one baseline to the next.</td></tr></tbody></table></div>
+<p>Designated initializers go in this order; skip the ones you don't need.</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Text</span>(article, <span class="fn">Modifier</span>().<span class="call">fillMaxWidth</span>(), {.fontWeight = <span class="ty">FontWeight</span>::<span class="ty">Medium</span>, .textAlign = <span class="ty">TextAlign</span>::<span class="ty">Justify</span>,
+.maxLines = <span class="num">3</span>, .overflow = <span class="ty">TextOverflow</span>::<span class="ty">Ellipsis</span>});</code></pre></div>
+<h2 id="several-styles-in-one-text"><a class="anchor" href="#several-styles-in-one-text" aria-hidden="true">#</a>Several styles in one text</h2>
+<p>An <code>AnnotatedString</code> carries styles over parts of its text, as Compose's does. Build one with <code>buildAnnotatedString</code>:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Terms</span>() {
+<span class="fn">Text</span>(<span class="call">buildAnnotatedString</span>([](<span class="ty">AnnotatedString</span>::<span class="ty">Builder</span>&amp; b) {
+b.<span class="call">append</span>(<span class="str">&quot;By continuing you accept the &quot;</span>);
+b.<span class="call">withLink</span>([] { <span class="call">openTerms</span>(); }, [&amp;] { b.<span class="call">append</span>(<span class="str">&quot;terms&quot;</span>); });
+b.<span class="call">append</span>(<span class="str">&quot;. &quot;</span>);
+b.<span class="call">withStyle</span>({.fontWeight = <span class="ty">FontWeight</span>::<span class="ty">Bold</span>}, [&amp;] { b.<span class="call">append</span>(<span class="str">&quot;No refunds.&quot;</span>); });
+}));
+}</code></pre></div>
+<ul><li><code>withStyle(SpanStyle, content)</code> styles what <code>content</code> appends; spans nest, inner ones win. <code>SpanStyle</code> has <code>fontSize</code>, <code>fontWeight</code>, <code>fontStyle</code>, <code>fontFamily</code>, <code>color</code>, <code>textDecoration</code>, <code>background</code>, <code>letterSpacing</code>, <code>brush</code>…</li><li><code>withStyle(ParagraphStyle, content)</code> makes a paragraph with its own alignment, indent and line height.</li><li><code>withLink(onClick, content)</code> makes what <code>content</code> appends clickable, underlined in the primary color; <code>LinkAnnotation::Url(url)</code> opens a web address.</li><li><code>pushStyle</code>/<code>pop</code>, <code>addStyle(style, start, end)</code> and string annotations work as in Compose.</li></ul>
+<p><code>AnnotatedString::fromHtml</code> turns simple HTML (<code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>, <code>&lt;u&gt;</code>, <code>&lt;a href&gt;</code>, <code>&lt;br&gt;</code>, <code>&lt;p&gt;</code>, lists) into an annotated string.</p>
+<h2 id="fonts"><a class="anchor" href="#fonts" aria-hidden="true">#</a>Fonts</h2>
+<p>Kompoz bundles Noto Sans in three weights (regular, medium and bold) and uses the system's fonts for everything it lacks: symbols, emoji, CJK, other scripts. <code>FontFamily::Serif</code> and <code>FontFamily::Monospace</code> use the system's where it has them.</p>
+<p>Your own fonts are asset files:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Quote</span>(<span class="kw">const</span> std::string&amp; text) {
+<span class="kw">static</span> <span class="kw">const</span> <span class="ty">FontFamily</span> lora = <span class="ty">FontFamily</span>::<span class="call">fromFiles</span>({{<span class="str">&quot;fonts/Lora-Regular.ttf&quot;</span>},
+{<span class="str">&quot;fonts/Lora-Bold.ttf&quot;</span>, <span class="ty">FontWeight</span>::<span class="ty">Bold</span>}});
+<span class="fn">Text</span>(text, {.fontSize = <span class="num">20</span>, .fontStyle = <span class="ty">FontStyle</span>::<span class="ty">Italic</span>, .fontFamily = lora});
+}</code></pre></div>
+<p>A weight without a file of its own is made from the nearest one (bold ones emboldened); a missing italic is slanted. A variable font can be listed several times with <code>FontVariation</code> settings for each weight. See <a href="resources.html">Resources</a> for where asset files go.</p>
+<h2 id="selecting-text"><a class="anchor" href="#selecting-text" aria-hidden="true">#</a>Selecting text</h2>
+<p>Text isn't selectable by default. Inside a <code>SelectionContainer</code>, it is: one selection across all its texts, with handles on touch screens, a Copy action, mouse dragging and Ctrl+C:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">SelectionContainer</span>(<span class="fn">Modifier</span>(), [&amp;] {
+<span class="fn">Column</span>([&amp;] {
+<span class="fn">Text</span>(<span class="str">&quot;Order number&quot;</span>);
+<span class="fn">Text</span>(<span class="str">&quot;KMP-2026-0042&quot;</span>, {.fontWeight = <span class="ty">FontWeight</span>::<span class="ty">Bold</span>});
+<span class="fn">DisableSelection</span>([] { <span class="fn">Text</span>(<span class="str">&quot;(not selectable)&quot;</span>); });
+});
+});</code></pre></div>
+<h2 id="text-fields"><a class="anchor" href="#text-fields" aria-hidden="true">#</a>Text fields</h2>
+<p><code>TextField</code> (filled) and <code>OutlinedTextField</code> are Material's text fields. As in Compose, their text is either hoisted, with a value and a callback, or kept in a <code>TextFieldState</code>.</p>
+<h3 id="with-a-value-and-a-callback"><a class="anchor" href="#with-a-value-and-a-callback" aria-hidden="true">#</a>With a value and a callback</h3>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">EmailField</span>() {
+<span class="kw">auto</span> email = <span class="call">rememberSaveable</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(std::<span class="call">string</span>()); });
+<span class="fn">OutlinedTextField</span>(email.<span class="call">get</span>(), [email](std::string v) { email.<span class="call">set</span>(std::<span class="call">move</span>(v)); }, <span class="fn">Modifier</span>().<span class="call">fillMaxWidth</span>(),
+{.singleLine = <span class="kw">true</span>,
+.label = <span class="str">&quot;Email&quot;</span>,
+.supportingText = <span class="str">&quot;We never share it&quot;</span>,
+.keyboardOptions = {.keyboardType = <span class="ty">KeyboardType</span>::<span class="ty">Email</span>, .imeAction = <span class="ty">ImeAction</span>::<span class="ty">Next</span>}});
+}</code></pre></div>
+<h3 id="with-a-textfieldstate"><a class="anchor" href="#with-a-textfieldstate" aria-hidden="true">#</a>With a TextFieldState</h3>
+<p>A <code>TextFieldState</code> keeps the text and its selection, and an undo history:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Composer</span>() {
+<span class="kw">auto</span> message = <span class="call">rememberTextFieldState</span>();
+<span class="fn">Row</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxWidth</span>(), {.verticalAlignment = <span class="ty">Alignment</span>::<span class="ty">CenterVertically</span>}, [&amp;] {
+<span class="fn">OutlinedTextField</span>(message, <span class="fn">Modifier</span>().<span class="call">weight</span>(<span class="num">1</span>), {.maxLines = <span class="num">4</span>, .placeholder = <span class="str">&quot;Message&quot;</span>});
+<span class="fn">IconButton</span>([message] { <span class="call">send</span>(message.<span class="call">text</span>()); message.<span class="call">clearText</span>(); }, [] { <span class="fn">Icon</span>(<span class="ty">Icons</span>::<span class="ty">AutoMirrored</span>::<span class="ty">Filled</span>::<span class="ty">Send</span>, <span class="str">&quot;Send&quot;</span>); });
+});
+}</code></pre></div>
+<p><code>text()</code> and <code>selection()</code> are observable. <code>edit([](TextFieldBuffer&amp; b) { … })</code> changes both at once; <code>undoState().undo()</code> undoes, and the field also undoes with Ctrl+Z. <code>InputTransformation::maxLength(10)</code> limits what can be typed, and an <code>OutputTransformation</code> changes how the text is shown without changing it.</p>
+<h3 id="options"><a class="anchor" href="#options" aria-hidden="true">#</a>Options</h3>
+<div class="table"><table><thead><tr><th>Option</th><th>What it does</th></tr></thead><tbody><tr><td><code>singleLine</code>, <code>minLines</code>, <code>maxLines</code></td><td>One line (Enter runs the keyboard action), or how many lines it shows before scrolling.</td></tr><tr><td><code>label</code>, <code>placeholder</code></td><td>A label that floats above the text, and a hint shown while it is empty.</td></tr><tr><td><code>prefix</code>, <code>suffix</code></td><td>Text before and after the input, such as a currency or a unit.</td></tr><tr><td><code>leadingIcon</code>, <code>trailingIcon</code></td><td>Composables at the ends.</td></tr><tr><td><code>supportingText</code>, <code>isError</code></td><td>A line under the field, and the error colors.</td></tr><tr><td><code>keyboardOptions</code></td><td>The keyboard's type (<code>Email</code>, <code>Number</code>, <code>Password</code>…), its action key (<code>Next</code>, <code>Done</code>, <code>Search</code>…), capitalization and autocorrect.</td></tr><tr><td><code>keyboardActions</code>, <code>onSubmit</code></td><td>What the action key does.</td></tr><tr><td><code>visualTransformation</code></td><td><code>VisualTransformation::Password</code> shows dots.</td></tr><tr><td><code>enabled</code>, <code>readOnly</code></td><td>Disabled, or focusable and selectable but not editable.</td></tr></tbody></table></div>
+<p><code>BasicTextField</code> is a field with no decoration, for designs of your own; its <code>decorator</code> option draws around the text.</p>
+<p>On Android, the soft keyboard shows suggestions and autocorrects, and its type and action key follow <code>keyboardOptions</code>. On desktops, fields have the usual keyboard editing: Ctrl+arrows by word, Home and End, Shift to select, double click for a word.</p>
+<h3 id="focus"><a class="anchor" href="#focus" aria-hidden="true">#</a>Focus</h3>
+<p>A <code>FocusRequester</code> moves focus to a field from code, and <code>focusManager()</code> clears it:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Search</span>() {
+<span class="kw">auto</span> query = <span class="call">rememberTextFieldState</span>();
+<span class="kw">auto</span> focus = <span class="call">remember</span>([] { <span class="kw">return</span> <span class="fn">FocusRequester</span>(); });
+<span class="fn">LaunchedEffect</span>(<span class="num">0</span>, [focus]() -&gt; <span class="ty">Task</span> {
+focus.<span class="call">requestFocus</span>();   <span class="com">// focus the field when the screen opens</span>
+<span class="kw">co_return</span>;
+});
+<span class="fn">OutlinedTextField</span>(query, <span class="fn">Modifier</span>().<span class="call">fillMaxWidth</span>().<span class="call">focusRequester</span>(focus), {.singleLine = <span class="kw">true</span>, .label = <span class="str">&quot;Search&quot;</span>});
+}</code></pre></div>
+<h2 id="measuring-text"><a class="anchor" href="#measuring-text" aria-hidden="true">#</a>Measuring text</h2>
+<p>To draw text on a <code>Canvas</code>, or to know how a text was laid out, use a text measurer:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Gauge</span>(<span class="kw">int</span> percent) {
+<span class="kw">auto</span> measurer = <span class="call">rememberTextMeasurer</span>();
+<span class="fn">Canvas</span>(<span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">120</span>), [=](<span class="ty">DrawScope</span>&amp; d) {
+d.<span class="call">drawCircle</span>(<span class="call">colorScheme</span>().primary.<span class="call">copy</span>(<span class="num">0.2f</span>));
+<span class="ty">TextLayoutResult</span> label = measurer.<span class="call">measure</span>(std::<span class="call">to_string</span>(percent) + <span class="str">&quot;%&quot;</span>, {.fontSize = <span class="num">24</span>});
+d.<span class="call">drawText</span>(label, {d.<span class="call">center</span>().x - label.<span class="call">size</span>().width / <span class="num">2</span>, d.<span class="call">center</span>().y - label.<span class="call">size</span>().height / <span class="num">2</span>});
+});
+}</code></pre></div>
+<p><code>Text</code> can also tell you how it was laid out, through an <code>onTextLayout</code> callback: how many lines it took, whether it was cut off.</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Excerpt</span>(<span class="kw">const</span> std::string&amp; article) {
+<span class="kw">auto</span> cut = <span class="call">remember</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(<span class="kw">false</span>); });
+<span class="fn">Column</span>([&amp;] {
+<span class="fn">Text</span>(article, <span class="fn">Modifier</span>(), {.maxLines = <span class="num">3</span>, .overflow = <span class="ty">TextOverflow</span>::<span class="ty">Ellipsis</span>},
+[cut](<span class="kw">const</span> <span class="ty">TextLayoutResult</span>&amp; r) { cut.<span class="call">set</span>(r.<span class="call">hasVisualOverflow</span>()); });
+<span class="kw">if</span> (cut.<span class="call">get</span>()) <span class="fn">TextButton</span>([] {}, [] { <span class="fn">Text</span>(<span class="str">&quot;Read more&quot;</span>); });
+});
+}</code></pre></div>
+<p>Offsets into text are UTF-8 byte offsets everywhere in Kompoz.</p>
+<h2 id="right-to-left-and-mixed-text"><a class="anchor" href="#right-to-left-and-mixed-text" aria-hidden="true">#</a>Right-to-left and mixed text</h2>
+<p>Text in Arabic, Hebrew or Persian is laid out right to left, and mixed text is ordered by the Unicode bidirectional algorithm. A paragraph's direction comes from its first letter that has one; text without one (digits, punctuation) goes the layout's way.</p>
+<h2 id="see-also"><a class="anchor" href="#see-also" aria-hidden="true">#</a>See also</h2>
+<ul><li><a href="resources.html">Resources</a>: font files and the library's own texts.</li><li><a href="theming.html">Theming</a>: the type scale.</li><li><a href="accessibility.html">Accessibility</a>: how text is read out.</li></ul>
+</article>
+<nav class="pager"><a class="prev" href="theming.html"><span>Previous</span>Theming</a><a class="next" href="graphics.html"><span>Next</span>Graphics</a></nav>
+<footer>Kompoz is licensed under the Apache License 2.0. Code samples on this site are part of it.</footer>
+</main>
+<aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#showing-text">Showing text</a><a class="l2" href="#styling-text">Styling text</a><a class="l2" href="#several-styles-in-one-text">Several styles in one text</a><a class="l2" href="#fonts">Fonts</a><a class="l2" href="#selecting-text">Selecting text</a><a class="l2" href="#text-fields">Text fields</a><a class="l3" href="#with-a-value-and-a-callback">With a value and a callback</a><a class="l3" href="#with-a-textfieldstate">With a TextFieldState</a><a class="l3" href="#options">Options</a><a class="l3" href="#focus">Focus</a><a class="l2" href="#measuring-text">Measuring text</a><a class="l2" href="#right-to-left-and-mixed-text">Right-to-left and mixed text</a><a class="l2" href="#see-also">See also</a></aside>
+</div>
+<div class="scrim"></div>
+<script>window.KOMPOZ_UI={"noresults": "No results", "copy": "Copy", "copied": "Copied"};</script>
+<script src="../assets/search-en.js" defer></script>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

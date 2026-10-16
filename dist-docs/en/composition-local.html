@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CompositionLocal · Kompoz</title>
+<meta name="description" content="Every local has a value at every point in the tree: what the nearest provider above gives, or else its default. current() reads it:">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{var t=localStorage.getItem('kompoz-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body class="page-composition-local">
+<header class="top">
+<button class="menu-button" type="button" aria-label="Menu" aria-expanded="false"><span></span></button>
+<a class="brand" href="index.html"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="8" fill="var(--primary)"/><path d="M11 9v14M11 16l8-7M13.5 14l6 9" stroke="var(--on-primary)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>Kompoz</span></a><span class="version">0.1.0</span>
+<div class="search"><input type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false"><kbd>/</kbd><div class="results" role="listbox"></div></div>
+<a class="language" href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+<button class="theme-button" type="button" aria-label="Switch theme" title="Switch theme"></button>
+</header>
+<div class="layout">
+<nav class="side" aria-label="Menu"><details open><summary>Get started</summary><a href="index.html">Kompoz documentation</a><a href="setup.html">Setup</a><a href="tutorial.html">Tutorial</a><a href="coming-from-compose.html">Coming from Compose</a></details><details open><summary>Foundation</summary><a href="thinking.html">Thinking in Kompoz</a><a href="state.html">State</a><a href="lifecycle.html">Lifecycle and identity</a><a href="side-effects.html">Side effects</a><a href="phases.html">Phases</a><a href="composition-local.html" class=current aria-current=page>CompositionLocal</a></details><details open><summary>Design</summary><a href="modifiers.html">Modifiers</a><a href="layouts.html">Layouts</a><a href="custom-layouts.html">Custom layouts</a><a href="lists.html">Lists and grids</a><a href="material.html">Material components</a><a href="theming.html">Theming</a><a href="text.html">Text</a><a href="graphics.html">Graphics</a><a href="animation.html">Animation</a><a href="gestures.html">Gestures and input</a></details><details open><summary>App</summary><a href="architecture.html">Architecture</a><a href="navigation.html">Navigation</a><a href="resources.html">Resources</a><a href="accessibility.html">Accessibility</a><a href="testing.html">Testing</a><a href="tools.html">Tools</a></details><details open><summary>Reference</summary><a href="api.html">Components and priorities</a></details></nav>
+<main>
+<div class="crumbs">Foundation</div>
+<article>
+<h1>CompositionLocal</h1>
+
+<p>A <code>CompositionLocal</code> hands a value down the composition tree without passing it through every function in between. The theme's colors, the text style and the layout direction reach every component this way.</p>
+<h2 id="reading-a-local"><a class="anchor" href="#reading-a-local" aria-hidden="true">#</a>Reading a local</h2>
+<p>Every local has a value at every point in the tree: what the nearest provider above gives, or else its default. <code>current()</code> reads it:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Caption</span>(<span class="kw">const</span> std::string&amp; text) {
+<span class="ty">Color</span> color = <span class="ty">LocalContentColor</span>.<span class="call">current</span>();          <span class="com">// the color text and icons use here</span>
+<span class="fn">Text</span>(text, {.font = <span class="call">typography</span>().labelSmall, .color = color});
+}</code></pre></div>
+<p>Reading a local subscribes the running scope, like reading a state: when a provider above starts giving a different value, the scopes that read it recompose, even if everything between them was skipped.</p>
+<p>The theme accessors are locals underneath: <code>colorScheme()</code> is <code>LocalColorScheme.current()</code>, <code>typography()</code> is <code>LocalTypography.current()</code>, <code>isSystemInDarkTheme()</code> reads <code>LocalSystemDarkTheme</code>.</p>
+<h2 id="providing-a-value"><a class="anchor" href="#providing-a-value" aria-hidden="true">#</a>Providing a value</h2>
+<p><code>CompositionLocalProvider</code> gives one or more locals a value for everything inside its content:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Warning</span>(<span class="kw">const</span> std::string&amp; message) {
+<span class="fn">CompositionLocalProvider</span>({<span class="ty">LocalContentColor</span>.<span class="call">provides</span>(<span class="call">colorScheme</span>().error)}, [&amp;] {
+<span class="fn">Row</span>([&amp;] {
+<span class="fn">Icon</span>(<span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Info</span>, <span class="str">&quot;&quot;</span>);   <span class="com">// tinted with the error color</span>
+<span class="fn">Text</span>(message);                        <span class="com">// so is the text</span>
+});
+});
+}</code></pre></div>
+<p>The value only applies inside the content lambda; outside it, the local has its previous value. Providers nest: an inner one overrides an outer one for its own content.</p>
+<p><code>providesDefault(value)</code> gives a value only where no provider above has given one: a library's way of setting a default that an app can still override.</p>
+<h2 id="defining-your-own"><a class="anchor" href="#defining-your-own" aria-hidden="true">#</a>Defining your own</h2>
+<p>A local is identified by its address, so define it once, as a global, with its default:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">struct</span> <span class="ty">Spacing</span> {
+<span class="kw">float</span> small = <span class="num">4</span>, medium = <span class="num">8</span>, large = <span class="num">16</span>;
+<span class="kw">friend</span> <span class="kw">bool</span> <span class="kw">operator</span>==(<span class="kw">const</span> <span class="ty">Spacing</span>&amp;, <span class="kw">const</span> <span class="ty">Spacing</span>&amp;) = <span class="kw">default</span>;
+};
+
+<span class="kw">inline</span> <span class="kw">const</span> <span class="ty">CompositionLocal</span>&lt;<span class="ty">Spacing</span>&gt; <span class="fn">LocalSpacing</span>{<span class="fn">Spacing</span>{}};
+
+<span class="kw">void</span> <span class="fn">Card1</span>(<span class="kw">const</span> std::string&amp; title) {
+<span class="fn">Column</span>(<span class="fn">Modifier</span>().<span class="call">padding</span>(<span class="ty">LocalSpacing</span>.<span class="call">current</span>().large), [&amp;] { <span class="fn">Text</span>(title); });
+}
+
+<span class="kw">void</span> <span class="fn">Compact</span>(<span class="kw">const</span> <span class="ty">Content</span>&amp; content) {
+<span class="fn">CompositionLocalProvider</span>({<span class="ty">LocalSpacing</span>.<span class="call">provides</span>(<span class="fn">Spacing</span>{<span class="num">2</span>, <span class="num">4</span>, <span class="num">8</span>})}, content);
+}</code></pre></div>
+<p>When there is no sensible default, make the local with <code>compositionLocalOf</code>, whose default is made only when it is read without a provider; it can throw to say that the local must be provided:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">struct</span> <span class="ty">User</span> {
+std::string name;
+<span class="kw">friend</span> <span class="kw">bool</span> <span class="kw">operator</span>==(<span class="kw">const</span> <span class="ty">User</span>&amp;, <span class="kw">const</span> <span class="ty">User</span>&amp;) = <span class="kw">default</span>;
+};
+
+<span class="kw">inline</span> <span class="kw">const</span> <span class="kw">auto</span> <span class="ty">LocalUser</span> = compositionLocalOf&lt;<span class="ty">User</span>&gt;([]() -&gt; <span class="ty">User</span> { <span class="kw">throw</span> std::<span class="call">logic_error</span>(<span class="str">&quot;LocalUser was not provided&quot;</span>); });</code></pre></div>
+<p><code>staticCompositionLocalOf</code> exists for code coming from Compose; in Kompoz both kinds recompose only the scopes that read the local.</p>
+<p>Give a local's type <code>operator==</code>: when a provider gives an equal value, nothing recomposes.</p>
+<h2 id="built-in-locals"><a class="anchor" href="#built-in-locals" aria-hidden="true">#</a>Built-in locals</h2>
+<div class="table"><table><thead><tr><th>Local</th><th>What it holds</th></tr></thead><tbody><tr><td><code>LocalColorScheme</code>, <code>LocalTypography</code>, <code>LocalMotionScheme</code></td><td>The Material theme (read with <code>colorScheme()</code>, <code>typography()</code>, <code>motionScheme()</code>).</td></tr><tr><td><code>LocalContentColor</code></td><td>The color for text and icons here; Material containers set it to their content color.</td></tr><tr><td><code>LocalTextStyle</code></td><td>The font <code>Text</code> uses when none is given.</td></tr><tr><td><code>LocalLayoutDirection</code></td><td>Left to right or right to left; from the system language at the root.</td></tr><tr><td><code>LocalDensity</code></td><td>The screen's density and the system's font scale.</td></tr><tr><td><code>LocalWindowSize</code>, <code>LocalWindowInfo</code></td><td>The window's size in dp, and whether it has focus.</td></tr><tr><td><code>LocalSystemDarkTheme</code></td><td>Whether the system is in dark mode (read with <code>isSystemInDarkTheme()</code>).</td></tr><tr><td><code>LocalWindowInsets</code>, <code>LocalSystemInsets</code></td><td>The system bars', cutout's and keyboard's insets.</td></tr><tr><td><code>LocalViewConfiguration</code></td><td>Touch slop, long press timeout and the platform's other gesture thresholds.</td></tr><tr><td><code>LocalIndication</code></td><td>What clickables draw when pressed: Material's ripple by default.</td></tr><tr><td><code>LocalMinimumInteractiveComponentSize</code></td><td>The smallest touch target components keep (48 dp).</td></tr><tr><td><code>LocalTextSelectionColors</code></td><td>The colors of selected text and its handles.</td></tr><tr><td><code>LocalScrollbarStyle</code></td><td>How scrollbars look.</td></tr><tr><td><code>LocalStrings</code></td><td>The library's own texts, in English or Turkish (see <a href="resources.html">Resources</a>).</td></tr><tr><td><code>LocalUiMediaScope</code></td><td>The window's size, pointer and keyboard, for <code>mediaQuery</code>.</td></tr></tbody></table></div>
+<h2 id="when-to-use-one"><a class="anchor" href="#when-to-use-one" aria-hidden="true">#</a>When to use one</h2>
+<p>A local is implicit: a function that reads one depends on something its signature doesn't show. Use them sparingly:</p>
+<ul><li><strong>Good uses</strong> are values that much of the tree needs and that rarely change: a theme, a design system's tokens, a text direction, the current user's settings.</li><li><strong>Avoid them</strong> for data only a few composables need, and for state that changes often. Pass those as parameters, so the dependency is visible and the composable is easy to preview and test.</li></ul>
+<p>A local isn't a replacement for state hoisting: it hands values down, not events up.</p>
+<h2 id="passing-locals-to-another-composition"><a class="anchor" href="#passing-locals-to-another-composition" aria-hidden="true">#</a>Passing locals to another composition</h2>
+<p>Content composed elsewhere, such as in a popup, already gets the locals of the place it is called from. If you need to carry them by hand, <code>currentCompositionLocalContext()</code> captures the locals at a point and <code>CompositionLocalProvider</code> can provide them again.</p>
+<h2 id="see-also"><a class="anchor" href="#see-also" aria-hidden="true">#</a>See also</h2>
+<ul><li><a href="theming.html">Theming</a>: Material's theme is built on locals.</li><li><a href="state.html">State</a>: explicit data flow with parameters and hoisting.</li></ul>
+</article>
+<nav class="pager"><a class="prev" href="phases.html"><span>Previous</span>Phases</a><a class="next" href="modifiers.html"><span>Next</span>Modifiers</a></nav>
+<footer>Kompoz is licensed under the Apache License 2.0. Code samples on this site are part of it.</footer>
+</main>
+<aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#reading-a-local">Reading a local</a><a class="l2" href="#providing-a-value">Providing a value</a><a class="l2" href="#defining-your-own">Defining your own</a><a class="l2" href="#built-in-locals">Built-in locals</a><a class="l2" href="#when-to-use-one">When to use one</a><a class="l2" href="#passing-locals-to-another-composition">Passing locals to another composition</a><a class="l2" href="#see-also">See also</a></aside>
+</div>
+<div class="scrim"></div>
+<script>window.KOMPOZ_UI={"noresults": "No results", "copy": "Copy", "copied": "Copied"};</script>
+<script src="../assets/search-en.js" defer></script>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

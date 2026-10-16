@@ -2,7 +2,7 @@
 
 **English** · [Türkçe](README.tr.md)
 
-[Documentation](build-docs/index.html)
+[Documentation](dist-docs/index.html)
 
 A declarative, cross-platform UI library for C++20 in the style of Jetpack Compose: the same mental
 model (composable functions, state, recomposition, modifiers), the same names where C++ allows, and

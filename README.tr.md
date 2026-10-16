@@ -2,7 +2,7 @@
 
 [English](README.md) · **Türkçe**
 
-[Dokümantasyon](build-docs/index.html)
+[Dokümantasyon](dist-docs/index.html)
 
 C++20 için Jetpack Compose tarzı, deklaratif ve çok platformlu bir arayüz kütüphanesi: aynı düşünme biçimi
 (composable fonksiyonlar, durum, recomposition, modifier'lar), C++'ın izin verdiği yerde aynı isimler ve Compose'unkiler

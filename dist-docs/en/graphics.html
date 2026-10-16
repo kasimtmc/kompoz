@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graphics · Kompoz</title>
+<meta name="description" content="Canvas is a composable that draws whatever you tell it in a DrawScope. Give it a size with its modifier:">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{var t=localStorage.getItem('kompoz-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body class="page-graphics">
+<header class="top">
+<button class="menu-button" type="button" aria-label="Menu" aria-expanded="false"><span></span></button>
+<a class="brand" href="index.html"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="8" fill="var(--primary)"/><path d="M11 9v14M11 16l8-7M13.5 14l6 9" stroke="var(--on-primary)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>Kompoz</span></a><span class="version">0.1.0</span>
+<div class="search"><input type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false"><kbd>/</kbd><div class="results" role="listbox"></div></div>
+<a class="language" href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+<button class="theme-button" type="button" aria-label="Switch theme" title="Switch theme"></button>
+</header>
+<div class="layout">
+<nav class="side" aria-label="Menu"><details open><summary>Get started</summary><a href="index.html">Kompoz documentation</a><a href="setup.html">Setup</a><a href="tutorial.html">Tutorial</a><a href="coming-from-compose.html">Coming from Compose</a></details><details open><summary>Foundation</summary><a href="thinking.html">Thinking in Kompoz</a><a href="state.html">State</a><a href="lifecycle.html">Lifecycle and identity</a><a href="side-effects.html">Side effects</a><a href="phases.html">Phases</a><a href="composition-local.html">CompositionLocal</a></details><details open><summary>Design</summary><a href="modifiers.html">Modifiers</a><a href="layouts.html">Layouts</a><a href="custom-layouts.html">Custom layouts</a><a href="lists.html">Lists and grids</a><a href="material.html">Material components</a><a href="theming.html">Theming</a><a href="text.html">Text</a><a href="graphics.html" class=current aria-current=page>Graphics</a><a href="animation.html">Animation</a><a href="gestures.html">Gestures and input</a></details><details open><summary>App</summary><a href="architecture.html">Architecture</a><a href="navigation.html">Navigation</a><a href="resources.html">Resources</a><a href="accessibility.html">Accessibility</a><a href="testing.html">Testing</a><a href="tools.html">Tools</a></details><details open><summary>Reference</summary><a href="api.html">Components and priorities</a></details></nav>
+<main>
+<div class="crumbs">Design</div>
+<article>
+<h1>Graphics</h1>
+
+<p>Drawing your own graphics with <code>Canvas</code> and the drawing modifiers, brushes and paths, clipping and shadows, <code>graphicsLayer</code>, and showing images and vectors.</p>
+<h2 id="canvas"><a class="anchor" href="#canvas" aria-hidden="true">#</a>Canvas</h2>
+<p><code>Canvas</code> is a composable that draws whatever you tell it in a <code>DrawScope</code>. Give it a size with its modifier:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Target</span>() {
+<span class="ty">Color</span> ring = <span class="call">colorScheme</span>().primary, center = <span class="call">colorScheme</span>().error;
+<span class="fn">Canvas</span>(<span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">160</span>), [=](<span class="ty">DrawScope</span>&amp; d) {
+d.<span class="call">drawCircle</span>(ring.<span class="call">copy</span>(<span class="num">0.2f</span>));                              <span class="com">// fills the canvas</span>
+d.<span class="call">drawCircle</span>(ring, d.<span class="call">size</span>().width / <span class="num">3</span>, std::nullopt, <span class="fn">Stroke</span>(<span class="num">6</span>));
+d.<span class="call">drawCircle</span>(center, <span class="num">12</span>);                                   <span class="com">// at the center</span>
+});
+}</code></pre></div>
+<p>The draw lambda runs while drawing, not while composing. Read the colors you need from the theme in composition, as above, and capture them by value.</p>
+<h3 id="what-a-drawscope-can-draw"><a class="anchor" href="#what-a-drawscope-can-draw" aria-hidden="true">#</a>What a DrawScope can draw</h3>
+<div class="table"><table><thead><tr><th>Call</th><th>Draws</th></tr></thead><tbody><tr><td><code>drawRect</code>, <code>drawRoundRect</code>, <code>drawCircle</code>, <code>drawOval</code>, <code>drawArc</code></td><td>Shapes, filled or stroked, with a color or a brush.</td></tr><tr><td><code>drawLine(color, start, end, width)</code></td><td>A line; with a <code>StrokeCap</code> and a dash <code>PathEffect</code>.</td></tr><tr><td><code>drawPoints(points, mode, color, width)</code></td><td>Points, lines between pairs, or a polyline.</td></tr><tr><td><code>drawPath(path, color or brush, style)</code></td><td>Any path.</td></tr><tr><td><code>drawText(layout, topLeft)</code></td><td>Text measured with a text measurer (see <a href="text.html#measuring-text">Text</a>).</td></tr><tr><td><code>drawImage(image, topLeft, size)</code></td><td>A bitmap.</td></tr><tr><td><code>drawVector(vector, color, topLeft, size)</code></td><td>An <code>ImageVector</code>, tinted.</td></tr></tbody></table></div>
+<p><code>DrawStyle</code> is <code>Fill</code> (the default) or <code>Stroke(width, cap, join)</code>. Coordinates are in dp from the canvas's top-left corner; <code>d.size()</code> and <code>d.center()</code> give its size and center.</p>
+<h3 id="transforming"><a class="anchor" href="#transforming" aria-hidden="true">#</a>Transforming</h3>
+<p><code>translate</code>, <code>rotate</code>, <code>scale</code>, <code>inset</code>, <code>clipRect</code> and <code>clipPath</code> take a block: what the block draws is moved, turned, scaled or clipped. <code>withTransform</code> does several at once. Rotating and scaling go through an offscreen layer of the drawing's area.</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Clock</span>(<span class="kw">float</span> minutes) {
+<span class="ty">Color</span> hand = <span class="call">colorScheme</span>().onSurface;
+<span class="fn">Canvas</span>(<span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">120</span>), [=](<span class="ty">DrawScope</span>&amp; d) {
+d.<span class="call">drawCircle</span>(hand, std::nullopt, std::nullopt, <span class="fn">Stroke</span>(<span class="num">2</span>));
+d.<span class="call">rotate</span>(minutes * <span class="num">6</span>, [&amp;](<span class="ty">DrawScope</span>&amp; r) {          <span class="com">// 6° per minute, around the center</span>
+r.<span class="call">drawLine</span>(hand, r.<span class="call">center</span>(), {r.<span class="call">center</span>().x, <span class="num">12</span>}, <span class="num">3</span>, <span class="ty">StrokeCap</span>::<span class="ty">Round</span>);
+}, d.<span class="call">center</span>());
+});
+}</code></pre></div>
+<h2 id="drawing-modifiers"><a class="anchor" href="#drawing-modifiers" aria-hidden="true">#</a>Drawing modifiers</h2>
+<p>You don't need a <code>Canvas</code> to draw on an existing composable. These modifiers draw on its node:</p>
+<ul><li><code>drawBehind(onDraw)</code> draws behind the content.</li><li><code>drawWithContent(onDraw)</code> draws around it: call <code>drawContent()</code> where the content goes, and draw before or after it.</li><li><code>drawWithCache(build)</code> builds objects once per size (paths, brushes) and draws with them every frame.</li></ul>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Highlighted</span>(<span class="kw">const</span> std::string&amp; text) {
+<span class="ty">Color</span> marker = <span class="ty">Color</span>::<span class="call">hex</span>(0xFFEB3B, <span class="num">0.6f</span>);
+<span class="fn">Text</span>(text, <span class="fn">Modifier</span>().<span class="call">drawBehind</span>([marker](<span class="ty">DrawScope</span>&amp; d) {
+d.<span class="call">drawRect</span>(marker, {<span class="num">0</span>, d.<span class="call">size</span>().height * <span class="num">0.55f</span>}, <span class="fn">Size</span>{d.<span class="call">size</span>().width, d.<span class="call">size</span>().height * <span class="num">0.4f</span>});
+}));
+}
+
+<span class="kw">void</span> <span class="fn">Faded</span>(<span class="kw">const</span> <span class="ty">Content</span>&amp; content) {
+<span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">drawWithContent</span>([](<span class="ty">ContentDrawScope</span>&amp; d) {
+d.<span class="call">drawContent</span>();
+d.<span class="call">drawRect</span>(<span class="ty">Brush</span>::<span class="call">verticalGradient</span>({colors::<span class="ty">Transparent</span>, colors::<span class="ty">White</span>}));   <span class="com">// a fade over the bottom</span>
+}), content);
+}</code></pre></div>
+<h2 id="brushes"><a class="anchor" href="#brushes" aria-hidden="true">#</a>Brushes</h2>
+<p>A <code>Brush</code> paints with a solid color or a gradient, wherever a color would go: drawing calls, <code>background</code>, text.</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxWidth</span>().<span class="call">height</span>(<span class="num">120</span>).<span class="call">background</span>(
+<span class="ty">Brush</span>::<span class="call">linearGradient</span>({<span class="ty">Color</span>::<span class="call">hex</span>(0x6750A4), <span class="ty">Color</span>::<span class="call">hex</span>(0xB58392)}), <span class="fn">RoundedCornerShape</span>(<span class="num">16</span>)));</code></pre></div>
+<p><code>Brush::solid</code>, <code>linearGradient</code>, <code>horizontalGradient</code>, <code>verticalGradient</code>, <code>radialGradient</code> and <code>sweepGradient</code> are there, with color stops and tile modes.</p>
+<h2 id="paths"><a class="anchor" href="#paths" aria-hidden="true">#</a>Paths</h2>
+<p>A <code>Path</code> describes any outline with lines, curves and arcs:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="ty">Path</span> <span class="call">heart</span>(<span class="ty">Size</span> s) {
+<span class="ty">Path</span> p;
+<span class="kw">float</span> w = s.width, h = s.height;
+p.<span class="call">moveTo</span>(w / <span class="num">2</span>, h * <span class="num">0.9f</span>);
+p.<span class="call">cubicTo</span>(w * <span class="num">0.1f</span>, h * <span class="num">0.6f</span>, <span class="num">0</span>, h * <span class="num">0.25f</span>, w * <span class="num">0.25f</span>, h * <span class="num">0.1f</span>);
+p.<span class="call">cubicTo</span>(w * <span class="num">0.4f</span>, <span class="num">0</span>, w / <span class="num">2</span>, h * <span class="num">0.15f</span>, w / <span class="num">2</span>, h * <span class="num">0.25f</span>);
+p.<span class="call">cubicTo</span>(w / <span class="num">2</span>, h * <span class="num">0.15f</span>, w * <span class="num">0.6f</span>, <span class="num">0</span>, w * <span class="num">0.75f</span>, h * <span class="num">0.1f</span>);
+p.<span class="call">cubicTo</span>(w, h * <span class="num">0.25f</span>, w * <span class="num">0.9f</span>, h * <span class="num">0.6f</span>, w / <span class="num">2</span>, h * <span class="num">0.9f</span>);
+p.<span class="call">close</span>();
+<span class="kw">return</span> p;
+}
+
+<span class="kw">void</span> <span class="fn">Heart</span>() {
+<span class="ty">Color</span> red = <span class="ty">Color</span>::<span class="call">hex</span>(0xE53935);
+<span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">64</span>).<span class="call">drawWithCache</span>([red](<span class="ty">CacheDrawScope</span>&amp; cache) {
+<span class="ty">Path</span> path = <span class="call">heart</span>(cache.<span class="call">size</span>());   <span class="com">// built once per size</span>
+<span class="kw">return</span> cache.<span class="call">onDrawBehind</span>([path, red](<span class="ty">DrawScope</span>&amp; d) { d.<span class="call">drawPath</span>(path, red); });
+}));
+}</code></pre></div>
+<p><code>moveTo</code>, <code>lineTo</code>, <code>quadraticTo</code>, <code>cubicTo</code>, their <code>relative…</code> forms, <code>arcTo</code>, <code>addRect</code>, <code>addOval</code>, <code>addRoundRect</code> and <code>close</code> build it. <code>PathMeasure</code> measures its length and gives segments of it, for drawing a path progressively.</p>
+<h2 id="shapes-and-clipping"><a class="anchor" href="#shapes-and-clipping" aria-hidden="true">#</a>Shapes and clipping</h2>
+<p>A <code>Shape</code> is the outline used by backgrounds, borders, clips and shadows: <code>RectangleShape</code>, <code>CircleShape</code>, <code>RoundedCornerShape(16)</code> (or one radius per corner), <code>CutCornerShape(8)</code>, and Material 3 Expressive's shapes (<code>MaterialShapes::Cookie9Sided()</code> and others, with <code>toShape</code>).</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">96</span>).<span class="call">clip</span>(<span class="ty">CircleShape</span>).<span class="call">background</span>(<span class="call">colorScheme</span>().tertiaryContainer));
+<span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">96</span>).<span class="call">border</span>(<span class="num">2</span>, <span class="call">colorScheme</span>().outline, <span class="fn">RoundedCornerShape</span>(<span class="num">12</span>, <span class="num">12</span>, <span class="num">0</span>, <span class="num">0</span>)));</code></pre></div>
+<p><code>clip(shape)</code> clips the content to the shape; the content is drawn through a layer so the edge is smooth.</p>
+<h2 id="shadows"><a class="anchor" href="#shadows" aria-hidden="true">#</a>Shadows</h2>
+<p><code>shadow(elevation, shape)</code> draws a Material-style shadow under a node. <code>dropShadow(shape, Shadow{…})</code> and <code>innerShadow(shape, Shadow{…})</code> draw shadows with your own color, offset, blur radius and spread:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">120</span>)
+.<span class="call">dropShadow</span>(<span class="fn">RoundedCornerShape</span>(<span class="num">24</span>), <span class="fn">Shadow</span>{.color = <span class="ty">Color</span>::<span class="call">hex</span>(0x6750A4, <span class="num">0.4f</span>), .offset = {<span class="num">0</span>, <span class="num">8</span>}, .blurRadius = <span class="num">24</span>})
+.<span class="call">background</span>(<span class="call">colorScheme</span>().surface, <span class="fn">RoundedCornerShape</span>(<span class="num">24</span>)));</code></pre></div>
+<h2 id="graphicslayer"><a class="anchor" href="#graphicslayer" aria-hidden="true">#</a>graphicsLayer</h2>
+<p><code>graphicsLayer</code> draws the content scaled, rotated, moved or faded, through an offscreen layer, without changing its layout:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">80</span>).<span class="call">graphicsLayer</span>({.scaleX = <span class="num">1.2f</span>, .scaleY = <span class="num">1.2f</span>, .alpha = <span class="num">0.8f</span>, .rotationZ = <span class="num">15</span>})
+.<span class="call">background</span>(<span class="call">colorScheme</span>().primary, <span class="fn">RoundedCornerShape</span>(<span class="num">16</span>)));</code></pre></div>
+<p>The form that takes a lambda is evaluated while drawing, so animated values read there change without recomposing or laying out again. Use it for anything that changes every frame (see <a href="phases.html#deferring-state-reads">Phases</a>):</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Spinner</span>() {
+<span class="kw">auto</span> angle = <span class="call">rememberInfiniteTransition</span>().<span class="call">animateFloatState</span>(<span class="num">0</span>, <span class="num">360</span>, <span class="call">infiniteRepeatable</span>(<span class="call">tween</span>(<span class="num">1200</span>, <span class="num">0</span>, <span class="ty">LinearEasing</span>)));
+<span class="fn">Icon</span>(<span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Refresh</span>, <span class="str">&quot;Loading&quot;</span>, <span class="fn">Modifier</span>().<span class="call">graphicsLayer</span>([angle](<span class="ty">GraphicsLayerScope</span>&amp; l) { l.rotationZ = angle.<span class="call">get</span>(); }));
+}</code></pre></div>
+<p><code>alpha(a)</code>, <code>scale(s)</code> and <code>rotate(degrees)</code> are shorthands for the common cases, and <code>blur(radius)</code> blurs the content.</p>
+<h2 id="images"><a class="anchor" href="#images" aria-hidden="true">#</a>Images</h2>
+<p><code>Image</code> shows a bitmap; <code>imageResource(path)</code> loads one from the app's assets, once:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Image</span>(<span class="call">imageResource</span>(<span class="str">&quot;images/cover.jpg&quot;</span>), <span class="str">&quot;Album cover&quot;</span>, <span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">160</span>).<span class="call">clip</span>(<span class="fn">RoundedCornerShape</span>(<span class="num">12</span>)), <span class="ty">ContentScale</span>::<span class="ty">Crop</span>);</code></pre></div>
+<p><code>AsyncImage</code> loads an image from the assets or from the web (<code>http://</code>, <code>https://</code>), decodes it at the size it is shown at, and keeps downloads on disk. It shows a placeholder while loading and something else if it fails:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">AsyncImage</span>(<span class="str">&quot;https://example.com/photo.webp&quot;</span>, <span class="str">&quot;A photo&quot;</span>, <span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">200</span>),
+{.placeholder = [] { <span class="fn">CircularProgressIndicator</span>(); },
+.error = [] { <span class="fn">Icon</span>(<span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Info</span>, <span class="str">&quot;Couldn&#x27;t load&quot;</span>); },
+.contentScale = <span class="ty">ContentScale</span>::<span class="ty">Crop</span>,
+.crossfadeMillis = <span class="num">200</span>});</code></pre></div>
+<p>JPEG, PNG and WebP are supported. <code>ContentScale</code> fits the image into its box as Compose's does: <code>Fit</code>, <code>Crop</code>, <code>FillBounds</code>, <code>FillWidth</code>, <code>FillHeight</code>, <code>Inside</code>, <code>None</code>.</p>
+<h2 id="vectors-and-icons"><a class="anchor" href="#vectors-and-icons" aria-hidden="true">#</a>Vectors and icons</h2>
+<p><code>Icon</code> draws an <code>ImageVector</code> tinted with the content color, at 24 dp by default. Kompoz has Material icons under <code>Icons::Filled</code> and <code>Icons::AutoMirrored::Filled</code> (the latter mirror in right-to-left layouts):</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Icon</span>(<span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Favorite</span>, <span class="str">&quot;Favorite&quot;</span>, <span class="fn">Modifier</span>(), <span class="ty">Color</span>::<span class="call">hex</span>(0xE53935));</code></pre></div>
+<p>Your own vectors come from SVG path data, from Android vector drawable files, or built in code:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">const</span> <span class="ty">ImageVector</span>&amp; <span class="call">sparkle</span>() {
+<span class="kw">static</span> <span class="kw">const</span> <span class="ty">ImageVector</span> v = <span class="ty">ImageVector</span>::<span class="call">fromSvgPath</span>(<span class="str">&quot;M12,2l2.4,7.6L22,12l-7.6,2.4L12,22l-2.4-7.6L2,12l7.6-2.4z&quot;</span>);
+<span class="kw">return</span> v;
+}
+
+<span class="kw">void</span> <span class="fn">Sparkle</span>() {
+<span class="fn">Icon</span>(<span class="call">sparkle</span>(), <span class="str">&quot;&quot;</span>);
+<span class="fn">Image</span>(<span class="call">rememberVectorPainter</span>(<span class="call">vectorResource</span>(<span class="str">&quot;vectors/logo.xml&quot;</span>)), <span class="str">&quot;Logo&quot;</span>, <span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">48</span>));
+}</code></pre></div>
+<p><code>vectorResource</code> reads groups, paths, gradients and clip paths from an Android <code>&lt;vector&gt;</code> file, in its own colors when drawn with <code>Image</code>, or tinted with <code>Icon</code>.</p>
+<h2 id="see-also"><a class="anchor" href="#see-also" aria-hidden="true">#</a>See also</h2>
+<ul><li><a href="phases.html">Phases</a>: drawing without recomposing.</li><li><a href="animation.html">Animation</a>: animating what you draw.</li><li><a href="resources.html">Resources</a>: where image and vector files go.</li></ul>
+</article>
+<nav class="pager"><a class="prev" href="text.html"><span>Previous</span>Text</a><a class="next" href="animation.html"><span>Next</span>Animation</a></nav>
+<footer>Kompoz is licensed under the Apache License 2.0. Code samples on this site are part of it.</footer>
+</main>
+<aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#canvas">Canvas</a><a class="l3" href="#what-a-drawscope-can-draw">What a DrawScope can draw</a><a class="l3" href="#transforming">Transforming</a><a class="l2" href="#drawing-modifiers">Drawing modifiers</a><a class="l2" href="#brushes">Brushes</a><a class="l2" href="#paths">Paths</a><a class="l2" href="#shapes-and-clipping">Shapes and clipping</a><a class="l2" href="#shadows">Shadows</a><a class="l2" href="#graphicslayer">graphicsLayer</a><a class="l2" href="#images">Images</a><a class="l2" href="#vectors-and-icons">Vectors and icons</a><a class="l2" href="#see-also">See also</a></aside>
+</div>
+<div class="scrim"></div>
+<script>window.KOMPOZ_UI={"noresults": "No results", "copy": "Copy", "copied": "Copied"};</script>
+<script src="../assets/search-en.js" defer></script>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

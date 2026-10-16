@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thinking in Kompoz · Kompoz</title>
+<meta name="description" content="In an imperative toolkit you build a tree of widgets once and then change it as things happen: find the label, call setText, hide the button, add a row. Every change is code you write, and the more states a screen has, the easier it is to forget one transition and show something inconsistent.">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{var t=localStorage.getItem('kompoz-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body class="page-thinking">
+<header class="top">
+<button class="menu-button" type="button" aria-label="Menu" aria-expanded="false"><span></span></button>
+<a class="brand" href="index.html"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="8" fill="var(--primary)"/><path d="M11 9v14M11 16l8-7M13.5 14l6 9" stroke="var(--on-primary)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>Kompoz</span></a><span class="version">0.1.0</span>
+<div class="search"><input type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false"><kbd>/</kbd><div class="results" role="listbox"></div></div>
+<a class="language" href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+<button class="theme-button" type="button" aria-label="Switch theme" title="Switch theme"></button>
+</header>
+<div class="layout">
+<nav class="side" aria-label="Menu"><details open><summary>Get started</summary><a href="index.html">Kompoz documentation</a><a href="setup.html">Setup</a><a href="tutorial.html">Tutorial</a><a href="coming-from-compose.html">Coming from Compose</a></details><details open><summary>Foundation</summary><a href="thinking.html" class=current aria-current=page>Thinking in Kompoz</a><a href="state.html">State</a><a href="lifecycle.html">Lifecycle and identity</a><a href="side-effects.html">Side effects</a><a href="phases.html">Phases</a><a href="composition-local.html">CompositionLocal</a></details><details open><summary>Design</summary><a href="modifiers.html">Modifiers</a><a href="layouts.html">Layouts</a><a href="custom-layouts.html">Custom layouts</a><a href="lists.html">Lists and grids</a><a href="material.html">Material components</a><a href="theming.html">Theming</a><a href="text.html">Text</a><a href="graphics.html">Graphics</a><a href="animation.html">Animation</a><a href="gestures.html">Gestures and input</a></details><details open><summary>App</summary><a href="architecture.html">Architecture</a><a href="navigation.html">Navigation</a><a href="resources.html">Resources</a><a href="accessibility.html">Accessibility</a><a href="testing.html">Testing</a><a href="tools.html">Tools</a></details><details open><summary>Reference</summary><a href="api.html">Components and priorities</a></details></nav>
+<main>
+<div class="crumbs">Foundation</div>
+<article>
+<h1>Thinking in Kompoz</h1>
+
+<p>Kompoz is declarative: you describe what the UI should look like for the current data, and Kompoz updates the screen when the data changes. This page explains that model and the rules that come with it.</p>
+<h2 id="the-declarative-idea"><a class="anchor" href="#the-declarative-idea" aria-hidden="true">#</a>The declarative idea</h2>
+<p>In an imperative toolkit you build a tree of widgets once and then change it as things happen: find the label, call <code>setText</code>, hide the button, add a row. Every change is code you write, and the more states a screen has, the easier it is to forget one transition and show something inconsistent.</p>
+<p>In Kompoz you write functions that turn data into UI. When the data changes, the functions run again with the new data, and Kompoz works out what changed on the screen:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Inbox</span>(<span class="kw">int</span> unread) {
+<span class="kw">if</span> (unread == <span class="num">0</span>) {
+<span class="fn">Text</span>(<span class="str">&quot;No new messages&quot;</span>);
+} <span class="kw">else</span> {
+<span class="fn">Text</span>(std::<span class="call">to_string</span>(unread) + <span class="str">&quot; new messages&quot;</span>, {.fontWeight = <span class="ty">FontWeight</span>::<span class="ty">Bold</span>});
+}
+}</code></pre></div>
+<p>There is no step that "updates" the label: the function always describes the whole result, and the framework keeps the screen in step with it. This is the same model as Jetpack Compose, React or SwiftUI.</p>
+<h2 id="composable-functions"><a class="anchor" href="#composable-functions" aria-hidden="true">#</a>Composable functions</h2>
+<p>A composable function is a C++ function that emits UI by calling other composables:</p>
+<ul><li>It takes the data it shows as parameters.</li><li>It returns nothing: it <em>emits</em> UI by calling <code>Text</code>, <code>Row</code>, <code>Button</code> and so on.</li><li>It can be called from other composables, in loops and conditions, like any function.</li></ul>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">struct</span> <span class="ty">Contact</span> {
+std::string name, phone;
+};
+
+<span class="kw">void</span> <span class="fn">ContactList</span>(<span class="kw">const</span> std::vector&lt;<span class="ty">Contact</span>&gt;&amp; contacts) {
+<span class="fn">Column</span>([&amp;] {
+<span class="kw">for</span> (<span class="kw">const</span> <span class="ty">Contact</span>&amp; c : contacts) {
+<span class="fn">Text</span>(c.name, {.font = <span class="call">typography</span>().bodyLarge});
+<span class="fn">Text</span>(c.phone, {.color = <span class="call">colorScheme</span>().onSurfaceVariant});
+}
+});
+}</code></pre></div>
+<p>Composables run while Kompoz <em>composes</em>: when the app starts, and again when something they read changes. Calling one outside composition (from a click handler, say) does nothing useful; change state instead and let composition call it.</p>
+<h2 id="recomposition"><a class="anchor" href="#recomposition" aria-hidden="true">#</a>Recomposition</h2>
+<p>When data changes, Kompoz runs the composables that depend on it again: this is <em>recomposition</em>. It doesn't rebuild everything:</p>
+<ul><li>A state remembers who read it. When it changes, only the composables that read it run again, not their parents.</li><li>When a parent does run, a child whose arguments are equal to last time, and that read nothing that changed, is <em>skipped</em>: it doesn't run, and its part of the screen stays as it is.</li></ul>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">NameTag</span>(<span class="kw">const</span> std::string&amp; name, <span class="ty">CallSite</span> site = <span class="ty">CallSite</span>::<span class="call">current</span>()) {
+<span class="call">composable</span>(site, name, [=] {   <span class="com">// skipped while `name` stays the same</span>
+<span class="fn">Text</span>(<span class="str">&quot;Hello, &quot;</span> + name);
+});
+}
+
+<span class="kw">void</span> <span class="fn">Screen</span>() {
+<span class="kw">auto</span> clicks = <span class="call">remember</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(<span class="num">0</span>); });
+<span class="fn">Column</span>([&amp;] {
+<span class="fn">NameTag</span>(<span class="str">&quot;Ada&quot;</span>);                                   <span class="com">// not run again when clicks change</span>
+<span class="fn">Text</span>(<span class="str">&quot;Clicks: &quot;</span> + std::<span class="call">to_string</span>(clicks.<span class="call">get</span>()));  <span class="com">// Screen read clicks</span>
+<span class="fn">Button</span>([clicks] { clicks.<span class="call">set</span>(clicks.<span class="call">get</span>() + <span class="num">1</span>); }, [] { <span class="fn">Text</span>(<span class="str">&quot;Click&quot;</span>); });
+});
+}</code></pre></div>
+<p><code>Screen</code> read <code>clicks</code>, so it runs again on every click. <code>NameTag</code> is a scope of its own whose argument didn't change, so it is skipped. See <a href="lifecycle.html">Lifecycle and identity</a> for how scopes and skipping work in C++.</p>
+<h2 id="rules-that-follow"><a class="anchor" href="#rules-that-follow" aria-hidden="true">#</a>Rules that follow</h2>
+<p>Because Kompoz decides when and how often your composables run, a few rules keep the results right.</p>
+<h3 id="composables-can-run-often"><a class="anchor" href="#composables-can-run-often" aria-hidden="true">#</a>Composables can run often</h3>
+<p>A composable may run on every frame of an animation. Keep its body fast: no file reading, no network calls, no heavy computation. Do expensive work once with <code>remember</code>, or outside composition in a coroutine (see <a href="side-effects.html">Side effects</a>), and keep the result in state.</p>
+<h3 id="composables-should-be-free-of-side-effects"><a class="anchor" href="#composables-should-be-free-of-side-effects" aria-hidden="true">#</a>Composables should be free of side effects</h3>
+<p>Running a composable should only describe UI. Writing a file, sending a request or changing a variable from inside its body happens again every time it recomposes, and in an order you don't control.</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Bad</span>(<span class="kw">int</span>&amp; counter) {
+counter++;              <span class="com">// runs on every recomposition: don&#x27;t</span>
+<span class="fn">Text</span>(std::<span class="call">to_string</span>(counter));
+}</code></pre></div>
+<p>Effects belong in event handlers (<code>onClick</code> runs once per click) or in effect APIs such as <code>LaunchedEffect</code> and <code>DisposableEffect</code>, which run at defined times.</p>
+<h3 id="composables-can-be-skipped"><a class="anchor" href="#composables-can-be-skipped" aria-hidden="true">#</a>Composables can be skipped</h3>
+<p>Don't rely on a composable running because its parent did. If it read no state that changed and its arguments are equal, it won't. Anything that must happen belongs in state, events or effects.</p>
+<h3 id="composables-dont-run-in-a-fixed-order"><a class="anchor" href="#composables-dont-run-in-a-fixed-order" aria-hidden="true">#</a>Composables don't run in a fixed order</h3>
+<p>Write each composable so that it doesn't depend on another having run first. Sharing data through global variables written during composition breaks as soon as one of them is skipped.</p>
+<h2 id="state-drives-the-ui"><a class="anchor" href="#state-drives-the-ui" aria-hidden="true">#</a>State drives the UI</h2>
+<p>Since the UI is a function of data, changing the UI means changing data. Kompoz watches <em>state</em>, values made with <code>mutableStateOf</code> and the other state holders, and recomposes what read it:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Toggle</span>() {
+<span class="kw">auto</span> on = <span class="call">remember</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(<span class="kw">false</span>); });
+<span class="fn">Row</span>(<span class="fn">Modifier</span>(), {.verticalAlignment = <span class="ty">Alignment</span>::<span class="ty">CenterVertically</span>}, [&amp;] {
+<span class="fn">Switch</span>(on.<span class="call">get</span>(), [on](<span class="kw">bool</span> v) { on.<span class="call">set</span>(v); });
+<span class="fn">Text</span>(on.<span class="call">get</span>() ? <span class="str">&quot;On&quot;</span> : <span class="str">&quot;Off&quot;</span>);
+});
+}</code></pre></div>
+<p>The data flows down as arguments, and events flow up as callbacks: <code>Switch</code> doesn't change anything itself, it tells its caller what the user did, and the caller decides what the state becomes. This <em>unidirectional data flow</em> is the basis of how Kompoz apps are structured. See <a href="state.html">State</a> and <a href="architecture.html">Architecture</a>.</p>
+<h2 id="see-also"><a class="anchor" href="#see-also" aria-hidden="true">#</a>See also</h2>
+<ul><li><a href="state.html">State</a>: holding, remembering and hoisting state.</li><li><a href="lifecycle.html">Lifecycle and identity</a>: how composables enter and leave the composition, and what makes them skip.</li><li><a href="phases.html">Phases</a>: composition, layout and drawing.</li></ul>
+</article>
+<nav class="pager"><a class="prev" href="coming-from-compose.html"><span>Previous</span>Coming from Compose</a><a class="next" href="state.html"><span>Next</span>State</a></nav>
+<footer>Kompoz is licensed under the Apache License 2.0. Code samples on this site are part of it.</footer>
+</main>
+<aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#the-declarative-idea">The declarative idea</a><a class="l2" href="#composable-functions">Composable functions</a><a class="l2" href="#recomposition">Recomposition</a><a class="l2" href="#rules-that-follow">Rules that follow</a><a class="l3" href="#composables-can-run-often">Composables can run often</a><a class="l3" href="#composables-should-be-free-of-side-effects">Composables should be free of side effects</a><a class="l3" href="#composables-can-be-skipped">Composables can be skipped</a><a class="l3" href="#composables-dont-run-in-a-fixed-order">Composables don&#x27;t run in a fixed order</a><a class="l2" href="#state-drives-the-ui">State drives the UI</a><a class="l2" href="#see-also">See also</a></aside>
+</div>
+<div class="scrim"></div>
+<script>window.KOMPOZ_UI={"noresults": "No results", "copy": "Copy", "copied": "Copied"};</script>
+<script src="../assets/search-en.js" defer></script>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resources · Kompoz</title>
+<meta name="description" content="Kompoz has no Android-style resource compiler. An app&#x27;s files are assets: files kept next to the program and read by a relative path such as &amp;quot;images/cover.jpg&amp;quot;.">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{var t=localStorage.getItem('kompoz-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body class="page-resources">
+<header class="top">
+<button class="menu-button" type="button" aria-label="Menu" aria-expanded="false"><span></span></button>
+<a class="brand" href="index.html"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="8" fill="var(--primary)"/><path d="M11 9v14M11 16l8-7M13.5 14l6 9" stroke="var(--on-primary)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>Kompoz</span></a><span class="version">0.1.0</span>
+<div class="search"><input type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false"><kbd>/</kbd><div class="results" role="listbox"></div></div>
+<a class="language" href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+<button class="theme-button" type="button" aria-label="Switch theme" title="Switch theme"></button>
+</header>
+<div class="layout">
+<nav class="side" aria-label="Menu"><details open><summary>Get started</summary><a href="index.html">Kompoz documentation</a><a href="setup.html">Setup</a><a href="tutorial.html">Tutorial</a><a href="coming-from-compose.html">Coming from Compose</a></details><details open><summary>Foundation</summary><a href="thinking.html">Thinking in Kompoz</a><a href="state.html">State</a><a href="lifecycle.html">Lifecycle and identity</a><a href="side-effects.html">Side effects</a><a href="phases.html">Phases</a><a href="composition-local.html">CompositionLocal</a></details><details open><summary>Design</summary><a href="modifiers.html">Modifiers</a><a href="layouts.html">Layouts</a><a href="custom-layouts.html">Custom layouts</a><a href="lists.html">Lists and grids</a><a href="material.html">Material components</a><a href="theming.html">Theming</a><a href="text.html">Text</a><a href="graphics.html">Graphics</a><a href="animation.html">Animation</a><a href="gestures.html">Gestures and input</a></details><details open><summary>App</summary><a href="architecture.html">Architecture</a><a href="navigation.html">Navigation</a><a href="resources.html" class=current aria-current=page>Resources</a><a href="accessibility.html">Accessibility</a><a href="testing.html">Testing</a><a href="tools.html">Tools</a></details><details open><summary>Reference</summary><a href="api.html">Components and priorities</a></details></nav>
+<main>
+<div class="crumbs">App</div>
+<article>
+<h1>Resources</h1>
+
+<p>Files your app ships (fonts, images, vectors), the library's own texts and how they follow the system language, and the platform services an app uses: the clipboard, haptics and opening links.</p>
+<h2 id="assets"><a class="anchor" href="#assets" aria-hidden="true">#</a>Assets</h2>
+<p>Kompoz has no Android-style resource compiler. An app's files are <em>assets</em>: files kept next to the program and read by a relative path such as <code>&quot;images/cover.jpg&quot;</code>.</p>
+<p>Where they go depends on the platform:</p>
+<div class="table"><table><thead><tr><th>Platform</th><th>Where assets are</th></tr></thead><tbody><tr><td>Linux, Windows</td><td>Next to the executable. Copy them there in your CMake build.</td></tr><tr><td>Android</td><td>In the APK's <code>assets/</code>, from the folders your Gradle project lists.</td></tr><tr><td>Web</td><td>In the page's <code>.data</code> file, packed with Emscripten's <code>--preload-file</code>.</td></tr></tbody></table></div>
+<p>Kompoz's own assets, the bundled fonts and the licenses, come from its <code>assets/</code> folder; <code>kompoz_copy_assets(myapp)</code> copies them next to your desktop binary on every build (see <a href="setup.html">Setup</a>). Copy your app's own folder the same way:</p>
+<div class="code" data-lang="CMake"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">add_custom_command</span>(<span class="ty">TARGET</span> myapp <span class="ty">POST_BUILD</span>
+<span class="ty">COMMAND</span> ${<span class="ty">CMAKE_COMMAND</span>} -<span class="ty">E</span> copy_directory ${<span class="ty">CMAKE_CURRENT_SOURCE_DIR</span>}/assets $&lt;<span class="ty">TARGET_FILE_DIR</span>:myapp&gt;)</code></pre></div>
+<p>On Android, add both folders to the Gradle project's asset directories, as the showcase's <code>app/build.gradle.kts</code> does; for the web, add both to the <code>--preload-file</code> link options, as the showcase's <code>CMakeLists.txt</code> does.</p>
+<h2 id="images"><a class="anchor" href="#images" aria-hidden="true">#</a>Images</h2>
+<p><code>imageResource(&quot;images/cover.jpg&quot;)</code> loads an image asset once and keeps it; <code>painterResource</code> gives the same as a <code>Painter</code>. JPEG, PNG, WebP and BMP are read (on the web, PNG and BMP; use <code>AsyncImage</code> for the others there).</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Image</span>(<span class="call">imageResource</span>(<span class="str">&quot;images/cover.jpg&quot;</span>), <span class="str">&quot;Cover&quot;</span>, <span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">120</span>), <span class="ty">ContentScale</span>::<span class="ty">Crop</span>);</code></pre></div>
+<p><code>AsyncImage</code> loads assets and web images alike, at the size they are shown, off the UI thread. See <a href="graphics.html#images">Graphics</a>.</p>
+<h2 id="vectors"><a class="anchor" href="#vectors" aria-hidden="true">#</a>Vectors</h2>
+<p><code>vectorResource(&quot;vectors/logo.xml&quot;)</code> reads an Android vector drawable asset, so vectors exported for Android work as they are:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Icon</span>(<span class="call">vectorResource</span>(<span class="str">&quot;vectors/heart.xml&quot;</span>), <span class="str">&quot;Favorite&quot;</span>);                                         <span class="com">// tinted</span>
+<span class="fn">Image</span>(<span class="call">rememberVectorPainter</span>(<span class="call">vectorResource</span>(<span class="str">&quot;vectors/logo.xml&quot;</span>)), <span class="str">&quot;Logo&quot;</span>, <span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">64</span>));  <span class="com">// in its own colors</span></code></pre></div>
+<p>For a single path, <code>ImageVector::fromSvgPath(&quot;M12,2…&quot;)</code> takes SVG path data directly.</p>
+<h2 id="fonts"><a class="anchor" href="#fonts" aria-hidden="true">#</a>Fonts</h2>
+<p><code>FontFamily::fromFiles</code> makes a family from font assets; see <a href="text.html#fonts">Text</a>. The bundled Noto Sans and the licenses must ship with every app, which <code>kompoz_copy_assets</code> and the Android and web setups above take care of.</p>
+<h2 id="the-librarys-own-texts"><a class="anchor" href="#the-librarys-own-texts" aria-hidden="true">#</a>The library's own texts</h2>
+<p>Some components show or announce texts of their own: a text field's Cut, Copy and Paste, "More options" on an overflow button, the date picker's month names, "Selected" read out by screen readers. These are in <code>Strings</code>, which <code>LocalStrings</code> provides, like Compose's string resources.</p>
+<ul><li>Kompoz has them in English (<code>Strings::english()</code>, the default) and Turkish (<code>Strings::turkish()</code>).</li><li>The host picks them by the system's preferred language: Turkish on a Turkish system, English otherwise. <code>KOMPOZ_LANGUAGE=tr</code> or <code>en</code> decides instead.</li><li>An app provides its own, whole or changed, with <code>CompositionLocalProvider</code>:</li></ul>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Localized</span>() {
+<span class="ty">Strings</span> mine = <span class="ty">Strings</span>::<span class="call">english</span>();
+mine.copy = <span class="str">&quot;Duplicate&quot;</span>;
+mine.moreOptions = <span class="str">&quot;More&quot;</span>;
+<span class="fn">CompositionLocalProvider</span>({<span class="ty">LocalStrings</span>.<span class="call">provides</span>(mine)}, <span class="ty">App</span>);
+}</code></pre></div>
+<p>For another language, fill in a <code>Strings</code> of your own, including its <code>datePicker</code> names, and provide it the same way. <code>Strings::forLanguage(&quot;tr_TR.UTF-8&quot;)</code> returns the Turkish strings for any Turkish locale name and English for the rest.</p>
+<p><code>DatePickerOptions::strings</code> and <code>TimePickerOptions</code>' labels, when set, win over <code>LocalStrings</code>.</p>
+<h3 id="your-apps-own-texts"><a class="anchor" href="#your-apps-own-texts" aria-hidden="true">#</a>Your app's own texts</h3>
+<p>Kompoz doesn't translate your app's texts. A simple approach that fits the same model is a struct of your texts per language, provided through a <code>CompositionLocal</code> of your own and picked by <code>LocalStrings.current().language</code>:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">struct</span> <span class="ty">AppTexts</span> {
+std::string greeting, signIn;
+<span class="kw">friend</span> <span class="kw">bool</span> <span class="kw">operator</span>==(<span class="kw">const</span> <span class="ty">AppTexts</span>&amp;, <span class="kw">const</span> <span class="ty">AppTexts</span>&amp;) = <span class="kw">default</span>;
+};
+
+<span class="kw">const</span> <span class="ty">AppTexts</span>&amp; <span class="call">textsFor</span>(<span class="kw">const</span> std::string&amp; language) {
+<span class="kw">static</span> <span class="kw">const</span> <span class="ty">AppTexts</span> en{<span class="str">&quot;Welcome&quot;</span>, <span class="str">&quot;Sign in&quot;</span>}, tr{<span class="str">&quot;Hoş geldiniz&quot;</span>, <span class="str">&quot;Giriş yap&quot;</span>};
+<span class="kw">return</span> language == <span class="str">&quot;tr&quot;</span> ? tr : en;
+}
+
+<span class="kw">inline</span> <span class="kw">const</span> <span class="ty">CompositionLocal</span>&lt;<span class="ty">AppTexts</span>&gt; <span class="fn">LocalAppTexts</span>{<span class="fn">AppTexts</span>{}};
+
+<span class="kw">void</span> <span class="fn">Root</span>() {
+<span class="fn">CompositionLocalProvider</span>({<span class="ty">LocalAppTexts</span>.<span class="call">provides</span>(<span class="call">textsFor</span>(<span class="ty">LocalStrings</span>.<span class="call">current</span>().language))}, <span class="ty">App</span>);
+}</code></pre></div>
+<h2 id="platform-services"><a class="anchor" href="#platform-services" aria-hidden="true">#</a>Platform services</h2>
+<p>Services that composables get inside a composition and keep for callbacks, as Compose's <code>LocalUriHandler</code> and friends:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">ShareRow</span>(<span class="kw">const</span> std::string&amp; link) {
+<span class="ty">UriHandler</span> links = <span class="call">uriHandler</span>();
+<span class="ty">ClipboardManager</span> clip = <span class="call">clipboardManager</span>();
+<span class="ty">HapticFeedback</span> haptics = <span class="call">hapticFeedback</span>();
+<span class="fn">Row</span>([&amp;] {
+<span class="fn">TextButton</span>([links, link] { links.<span class="call">openUri</span>(link); }, [] { <span class="fn">Text</span>(<span class="str">&quot;Open&quot;</span>); });
+<span class="fn">TextButton</span>([clip, haptics, link] {
+clip.<span class="call">setText</span>(link);
+haptics.<span class="call">performHapticFeedback</span>(<span class="ty">HapticFeedbackType</span>::<span class="ty">Confirm</span>);
+}, [] { <span class="fn">Text</span>(<span class="str">&quot;Copy link&quot;</span>); });
+});
+}</code></pre></div>
+<div class="table"><table><thead><tr><th>Service</th><th>What it does</th></tr></thead><tbody><tr><td><code>uriHandler().openUri(uri)</code></td><td>Opens a link: one of the app's own deep links in the app, <code>http(s)</code> in the browser, others (<code>mailto:</code>, <code>tel:</code>) in the app that takes them.</td></tr><tr><td><code>clipboardManager().setText(text)</code>, <code>getText()</code></td><td>The system clipboard's text. <code>clipboard()</code> is Compose 1.8's coroutine version.</td></tr><tr><td><code>hapticFeedback().performHapticFeedback(type)</code></td><td>A short vibration, as the system does it: Android's, the browser's on the web, nothing on desktops.</td></tr><tr><td><code>softwareKeyboardController().hide()</code>, <code>show()</code></td><td>Hides or shows the focused field's soft keyboard.</td></tr><tr><td><code>focusManager().clearFocus()</code></td><td>Takes focus away (see <a href="gestures.html#focus">Gestures</a>).</td></tr></tbody></table></div>
+<h2 id="see-also"><a class="anchor" href="#see-also" aria-hidden="true">#</a>See also</h2>
+<ul><li><a href="graphics.html">Graphics</a>: images and vectors in depth.</li><li><a href="text.html">Text</a>: fonts and text styles.</li><li><a href="setup.html">Setup</a>: building and packaging with the assets.</li></ul>
+</article>
+<nav class="pager"><a class="prev" href="navigation.html"><span>Previous</span>Navigation</a><a class="next" href="accessibility.html"><span>Next</span>Accessibility</a></nav>
+<footer>Kompoz is licensed under the Apache License 2.0. Code samples on this site are part of it.</footer>
+</main>
+<aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#assets">Assets</a><a class="l2" href="#images">Images</a><a class="l2" href="#vectors">Vectors</a><a class="l2" href="#fonts">Fonts</a><a class="l2" href="#the-librarys-own-texts">The library&#x27;s own texts</a><a class="l3" href="#your-apps-own-texts">Your app&#x27;s own texts</a><a class="l2" href="#platform-services">Platform services</a><a class="l2" href="#see-also">See also</a></aside>
+</div>
+<div class="scrim"></div>
+<script>window.KOMPOZ_UI={"noresults": "No results", "copy": "Copy", "copied": "Copied"};</script>
+<script src="../assets/search-en.js" defer></script>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

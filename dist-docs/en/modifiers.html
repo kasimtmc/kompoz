@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Modifiers · Kompoz</title>
+<meta name="description" content="Most composables take a Modifier as a parameter. A chain starts from Modifier() and each call adds an element:">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{var t=localStorage.getItem('kompoz-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body class="page-modifiers">
+<header class="top">
+<button class="menu-button" type="button" aria-label="Menu" aria-expanded="false"><span></span></button>
+<a class="brand" href="index.html"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="8" fill="var(--primary)"/><path d="M11 9v14M11 16l8-7M13.5 14l6 9" stroke="var(--on-primary)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>Kompoz</span></a><span class="version">0.1.0</span>
+<div class="search"><input type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false"><kbd>/</kbd><div class="results" role="listbox"></div></div>
+<a class="language" href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+<button class="theme-button" type="button" aria-label="Switch theme" title="Switch theme"></button>
+</header>
+<div class="layout">
+<nav class="side" aria-label="Menu"><details open><summary>Get started</summary><a href="index.html">Kompoz documentation</a><a href="setup.html">Setup</a><a href="tutorial.html">Tutorial</a><a href="coming-from-compose.html">Coming from Compose</a></details><details open><summary>Foundation</summary><a href="thinking.html">Thinking in Kompoz</a><a href="state.html">State</a><a href="lifecycle.html">Lifecycle and identity</a><a href="side-effects.html">Side effects</a><a href="phases.html">Phases</a><a href="composition-local.html">CompositionLocal</a></details><details open><summary>Design</summary><a href="modifiers.html" class=current aria-current=page>Modifiers</a><a href="layouts.html">Layouts</a><a href="custom-layouts.html">Custom layouts</a><a href="lists.html">Lists and grids</a><a href="material.html">Material components</a><a href="theming.html">Theming</a><a href="text.html">Text</a><a href="graphics.html">Graphics</a><a href="animation.html">Animation</a><a href="gestures.html">Gestures and input</a></details><details open><summary>App</summary><a href="architecture.html">Architecture</a><a href="navigation.html">Navigation</a><a href="resources.html">Resources</a><a href="accessibility.html">Accessibility</a><a href="testing.html">Testing</a><a href="tools.html">Tools</a></details><details open><summary>Reference</summary><a href="api.html">Components and priorities</a></details></nav>
+<main>
+<div class="crumbs">Design</div>
+<article>
+<h1>Modifiers</h1>
+
+<p>A <code>Modifier</code> decorates or augments a composable: its size and padding, its background, what happens when it is clicked, what it tells accessibility services. Modifiers chain, and the order of the chain matters.</p>
+<h2 id="using-modifiers"><a class="anchor" href="#using-modifiers" aria-hidden="true">#</a>Using modifiers</h2>
+<p>Most composables take a <code>Modifier</code> as a parameter. A chain starts from <code>Modifier()</code> and each call adds an element:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">ArtistCard</span>(<span class="kw">const</span> std::string&amp; name) {
+<span class="fn">Row</span>(<span class="fn">Modifier</span>()
+.<span class="call">fillMaxWidth</span>()
+.<span class="call">clickable</span>([] { <span class="com">/* open the artist */</span> })
+.<span class="call">padding</span>(<span class="num">16</span>),
+[&amp;] {
+<span class="fn">Icon</span>(<span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Person</span>, <span class="str">&quot;&quot;</span>, <span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">40</span>));
+<span class="fn">Spacer</span>(<span class="fn">Modifier</span>().<span class="call">width</span>(<span class="num">12</span>));
+<span class="fn">Text</span>(name, {.font = <span class="call">typography</span>().titleMedium});
+});
+}</code></pre></div>
+<p>Modifiers are plain values: you can store them in variables, pass them around and build them conditionally.</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="ty">Modifier</span> base = <span class="fn">Modifier</span>().<span class="call">fillMaxWidth</span>().<span class="call">padding</span>(<span class="num">8</span>);
+<span class="fn">Box</span>(selected ? base.<span class="call">background</span>(<span class="call">colorScheme</span>().secondaryContainer, <span class="num">12</span>) : base);</code></pre></div>
+<h2 id="order-matters"><a class="anchor" href="#order-matters" aria-hidden="true">#</a>Order matters</h2>
+<p>Each element wraps everything after it in the chain. The first element is the outermost: it is measured first and draws around the rest. So the same elements in a different order give a different result:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="com">// The whole 72 dp area is clickable, and the padding is inside the click area.</span>
+<span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">clickable</span>([] {}).<span class="call">padding</span>(<span class="num">16</span>).<span class="call">size</span>(<span class="num">40</span>));
+
+<span class="com">// Only the 40 dp box is clickable; the padding is outside it.</span>
+<span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">padding</span>(<span class="num">16</span>).<span class="call">clickable</span>([] {}).<span class="call">size</span>(<span class="num">40</span>));</code></pre></div>
+<p>The same goes for backgrounds:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">background</span>(<span class="call">colorScheme</span>().primaryContainer).<span class="call">padding</span>(<span class="num">16</span>).<span class="call">size</span>(<span class="num">40</span>));   <span class="com">// padding is colored</span>
+<span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">padding</span>(<span class="num">16</span>).<span class="call">background</span>(<span class="call">colorScheme</span>().primaryContainer).<span class="call">size</span>(<span class="num">40</span>));   <span class="com">// padding is not</span></code></pre></div>
+<p>Read a chain from left to right as "from the outside in".</p>
+<h2 id="common-modifiers"><a class="anchor" href="#common-modifiers" aria-hidden="true">#</a>Common modifiers</h2>
+<h3 id="size"><a class="anchor" href="#size" aria-hidden="true">#</a>Size</h3>
+<div class="table"><table><thead><tr><th>Modifier</th><th>What it does</th></tr></thead><tbody><tr><td><code>size(s)</code>, <code>size(w, h)</code>, <code>width(w)</code>, <code>height(h)</code></td><td>A preferred size, within the parent's constraints.</td></tr><tr><td><code>requiredSize(…)</code>, <code>requiredWidth(w)</code>, <code>requiredHeight(h)</code></td><td>The size even if the parent's constraints say otherwise.</td></tr><tr><td><code>widthIn(min, max)</code>, <code>heightIn(min, max)</code>, <code>sizeIn(…)</code></td><td>Bounds on the size.</td></tr><tr><td><code>defaultMinSize(w, h)</code></td><td>A minimum the content may override.</td></tr><tr><td><code>fillMaxWidth(f)</code>, <code>fillMaxHeight(f)</code>, <code>fillMaxSize(f)</code></td><td>All of the space the parent offers (or a fraction of it).</td></tr><tr><td><code>wrapContentSize(align)</code>, <code>wrapContentWidth</code>, <code>wrapContentHeight</code></td><td>The content's own size, aligned in what the parent forces.</td></tr><tr><td><code>aspectRatio(r)</code></td><td>A width-to-height ratio within the constraints.</td></tr><tr><td><code>width(IntrinsicSize::Min)</code>, <code>height(IntrinsicSize::Max)</code></td><td>The content's intrinsic size (see <a href="custom-layouts.html">Custom layouts</a>).</td></tr></tbody></table></div>
+<p>All lengths are in dp.</p>
+<h3 id="padding-and-position"><a class="anchor" href="#padding-and-position" aria-hidden="true">#</a>Padding and position</h3>
+<div class="table"><table><thead><tr><th>Modifier</th><th>What it does</th></tr></thead><tbody><tr><td><code>padding(all)</code>, <code>padding(h, v)</code>, <code>padding(start, top, end, bottom)</code>, <code>padding(PaddingValues)</code></td><td>Space around the content. <code>start</code> and <code>end</code> swap in right-to-left layouts.</td></tr><tr><td><code>absolutePadding(left, top, right, bottom)</code></td><td>Padding that doesn't mirror.</td></tr><tr><td><code>offset(x, y)</code></td><td>Moves the content without changing its layout size.</td></tr><tr><td><code>offset([] { return Offset{…}; })</code></td><td>The same, read during layout: for offsets that change often (see <a href="phases.html">Phases</a>).</td></tr><tr><td><code>windowInsetsPadding(insets)</code>, <code>safeDrawingPadding()</code>, <code>systemBarsPadding()</code>, <code>imePadding()</code>…</td><td>Keeps content clear of the system bars, the display cutout or the keyboard.</td></tr></tbody></table></div>
+<h3 id="drawing"><a class="anchor" href="#drawing" aria-hidden="true">#</a>Drawing</h3>
+<div class="table"><table><thead><tr><th>Modifier</th><th>What it does</th></tr></thead><tbody><tr><td><code>background(color, shape)</code>, <code>background(brush, shape)</code></td><td>Fills behind the content.</td></tr><tr><td><code>border(width, color, shape)</code></td><td>Draws an outline.</td></tr><tr><td><code>clip(shape)</code></td><td>Clips the content to a shape.</td></tr><tr><td><code>shadow(elevation, shape)</code>, <code>dropShadow</code>, <code>innerShadow</code></td><td>Shadows.</td></tr><tr><td><code>alpha(a)</code>, <code>scale(s)</code>, <code>rotate(degrees)</code>, <code>graphicsLayer(…)</code>, <code>blur(r)</code></td><td>Changes how the content is drawn, not its layout.</td></tr><tr><td><code>drawBehind(…)</code>, <code>drawWithContent(…)</code>, <code>drawWithCache(…)</code></td><td>Your own drawing (see <a href="graphics.html">Graphics</a>).</td></tr></tbody></table></div>
+<h3 id="interaction"><a class="anchor" href="#interaction" aria-hidden="true">#</a>Interaction</h3>
+<div class="table"><table><thead><tr><th>Modifier</th><th>What it does</th></tr></thead><tbody><tr><td><code>clickable(onClick)</code>, <code>combinedClickable(onClick, onLongClick)</code></td><td>Clicks and taps, with a ripple, keyboard activation and accessibility.</td></tr><tr><td><code>selectable(selected, onClick, role)</code>, <code>toggleable(value, onChange, role)</code></td><td>Selection and toggling, for rows that act as a radio button or a checkbox.</td></tr><tr><td><code>draggable</code>, <code>anchoredDraggable</code>, <code>transformable</code>, <code>pointerInput</code></td><td>Gestures (see <a href="gestures.html">Gestures</a>).</td></tr><tr><td><code>verticalScroll(state)</code>, <code>horizontalScroll(state)</code>, <code>scrollable</code></td><td>Scrolling (see <a href="lists.html">Lists and grids</a>).</td></tr><tr><td><code>focusable()</code>, <code>focusRequester(r)</code>, <code>onKeyEvent(…)</code></td><td>Keyboard focus and keys.</td></tr><tr><td><code>pointerHoverIcon(PointerIcon::Hand)</code></td><td>The mouse cursor over it.</td></tr></tbody></table></div>
+<h3 id="accessibility-and-tests"><a class="anchor" href="#accessibility-and-tests" aria-hidden="true">#</a>Accessibility and tests</h3>
+<div class="table"><table><thead><tr><th>Modifier</th><th>What it does</th></tr></thead><tbody><tr><td><code>semantics({…})</code>, <code>clearAndSetSemantics({…})</code></td><td>What accessibility services are told (see <a href="accessibility.html">Accessibility</a>).</td></tr><tr><td><code>testTag(&quot;name&quot;)</code></td><td>A name tests can find the node by (see <a href="testing.html">Testing</a>).</td></tr></tbody></table></div>
+<h3 id="layout-callbacks"><a class="anchor" href="#layout-callbacks" aria-hidden="true">#</a>Layout callbacks</h3>
+<div class="table"><table><thead><tr><th>Modifier</th><th>What it does</th></tr></thead><tbody><tr><td><code>onSizeChanged([](Size s) { … })</code></td><td>Called when the node's size changes.</td></tr><tr><td><code>onGloballyPositioned([](const LayoutCoordinates&amp; c) { … })</code></td><td>Called when its position in the window changes.</td></tr><tr><td><code>onVisibilityChanged([](bool visible) { … })</code></td><td>Called when it becomes visible or stops being.</td></tr><tr><td><code>zIndex(z)</code></td><td>Draws it above or below its siblings.</td></tr></tbody></table></div>
+<h2 id="scope-modifiers"><a class="anchor" href="#scope-modifiers" aria-hidden="true">#</a>Scope modifiers</h2>
+<p>Some modifiers only make sense inside a particular parent, like Compose's scoped modifiers (<code>RowScope.weight</code>):</p>
+<div class="table"><table><thead><tr><th>Modifier</th><th>Inside</th><th>What it does</th></tr></thead><tbody><tr><td><code>weight(w)</code></td><td><code>Row</code>, <code>Column</code></td><td>Shares the space left over among weighted children.</td></tr><tr><td><code>align(Alignment::…)</code></td><td><code>Box</code></td><td>Aligns this child in the box.</td></tr><tr><td><code>align(Alignment::CenterHorizontally)</code></td><td><code>Column</code></td><td>Aligns this child across the column.</td></tr><tr><td><code>align(Alignment::CenterVertically)</code>, <code>alignByBaseline()</code></td><td><code>Row</code></td><td>Aligns this child across the row.</td></tr><tr><td><code>matchParentSize()</code></td><td><code>Box</code></td><td>As big as the box, without making it bigger.</td></tr><tr><td><code>fillParentMaxWidth()</code>, <code>fillParentMaxHeight()</code></td><td>Lazy list items</td><td>A share of the list's viewport.</td></tr><tr><td><code>animateItem()</code></td><td>Lazy list items</td><td>Animates the item when it appears, moves or goes away.</td></tr><tr><td><code>flex(config)</code></td><td><code>FlexBox</code></td><td>How the child grows and shrinks.</td></tr><tr><td><code>gridItem(row, column, …)</code></td><td><code>Grid</code></td><td>Where the child goes in the grid.</td></tr></tbody></table></div>
+<p>In C++ these are ordinary <code>Modifier</code> methods: the compiler won't stop you from using <code>weight</code> outside a <code>Row</code> or a <code>Column</code>, it just has no effect there.</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Row</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxWidth</span>(), [&amp;] {
+<span class="fn">Text</span>(<span class="str">&quot;Left&quot;</span>, <span class="fn">Modifier</span>().<span class="call">weight</span>(<span class="num">1</span>));
+<span class="fn">Text</span>(<span class="str">&quot;Right&quot;</span>);
+});</code></pre></div>
+<h2 id="writing-your-own"><a class="anchor" href="#writing-your-own" aria-hidden="true">#</a>Writing your own</h2>
+<h3 id="combining-modifiers"><a class="anchor" href="#combining-modifiers" aria-hidden="true">#</a>Combining modifiers</h3>
+<p>C++ has no extension functions, so a modifier of your own is a function that returns a chain. Join it to another chain with <code>then</code>:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="ty">Modifier</span> <span class="call">cardSurface</span>() {
+<span class="kw">return</span> <span class="fn">Modifier</span>().<span class="call">shadow</span>(<span class="num">2</span>, <span class="fn">RoundedCornerShape</span>(<span class="num">16</span>)).<span class="call">background</span>(<span class="call">colorScheme</span>().surfaceContainerLow, <span class="fn">RoundedCornerShape</span>(<span class="num">16</span>)).<span class="call">padding</span>(<span class="num">16</span>);
+}
+
+<span class="kw">void</span> <span class="fn">Note</span>(<span class="kw">const</span> std::string&amp; text) {
+<span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxWidth</span>().<span class="call">then</span>(<span class="call">cardSurface</span>()), [&amp;] { <span class="fn">Text</span>(text); });
+}</code></pre></div>
+<p>A function that takes the chain to extend reads naturally, too: <code>Modifier card(const Modifier&amp; m = {}) { return m.padding(…); }</code>.</p>
+<h3 id="changing-measurement"><a class="anchor" href="#changing-measurement" aria-hidden="true">#</a>Changing measurement</h3>
+<p><code>layout</code> measures the content through <code>measure</code> with the constraints you choose and returns this node's size; <code>placeAt</code> says where the content goes inside it:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="com">// The content centered in a square as big as its longer side.</span>
+<span class="ty">Modifier</span> <span class="call">squareAround</span>() {
+<span class="kw">return</span> <span class="fn">Modifier</span>().<span class="call">layout</span>([](<span class="kw">const</span> <span class="ty">MeasureNext</span>&amp; measure, <span class="kw">const</span> <span class="ty">Constraints</span>&amp; c, <span class="ty">Offset</span>&amp; placeAt) {
+<span class="ty">Size</span> content = <span class="call">measure</span>(c.<span class="call">loosen</span>());
+<span class="kw">float</span> side = std::<span class="call">max</span>(content.width, content.height);
+placeAt = {(side - content.width) / <span class="num">2</span>, (side - content.height) / <span class="num">2</span>};
+<span class="kw">return</span> c.<span class="call">constrain</span>(<span class="fn">Size</span>{side, side});
+});
+}</code></pre></div>
+<h3 id="custom-drawing"><a class="anchor" href="#custom-drawing" aria-hidden="true">#</a>Custom drawing</h3>
+<p><code>drawBehind</code> draws behind the content, <code>drawWithContent</code> around it. See <a href="graphics.html">Graphics</a>.</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="ty">Modifier</span> <span class="call">underline</span>(<span class="ty">Color</span> color) {
+<span class="kw">return</span> <span class="fn">Modifier</span>().<span class="call">drawBehind</span>([color](<span class="ty">DrawScope</span>&amp; d) {
+d.<span class="call">drawLine</span>(color, {<span class="num">0</span>, d.<span class="call">size</span>().height}, {d.<span class="call">size</span>().width, d.<span class="call">size</span>().height}, <span class="num">2</span>);
+});
+}</code></pre></div>
+<h3 id="modifier-elements"><a class="anchor" href="#modifier-elements" aria-hidden="true">#</a>Modifier elements</h3>
+<p>Underneath, a modifier is a list of <code>ModifierElement</code>s. An element can take part in measuring, drawing and input; <code>then(std::make_shared&lt;MyElement&gt;(…))</code> adds one. This is a lower-level API, used by the library's own modifiers; the functions above cover most needs. If you write an element, implement <code>equals</code> so that a composable called with an equal modifier can still be skipped.</p>
+<h2 id="see-also"><a class="anchor" href="#see-also" aria-hidden="true">#</a>See also</h2>
+<ul><li><a href="layouts.html">Layouts</a>: the parents scope modifiers work in.</li><li><a href="phases.html">Phases</a>: modifiers that read state while laying out or drawing.</li><li><a href="gestures.html">Gestures</a> and <a href="graphics.html">Graphics</a> for the interaction and drawing modifiers.</li></ul>
+</article>
+<nav class="pager"><a class="prev" href="composition-local.html"><span>Previous</span>CompositionLocal</a><a class="next" href="layouts.html"><span>Next</span>Layouts</a></nav>
+<footer>Kompoz is licensed under the Apache License 2.0. Code samples on this site are part of it.</footer>
+</main>
+<aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#using-modifiers">Using modifiers</a><a class="l2" href="#order-matters">Order matters</a><a class="l2" href="#common-modifiers">Common modifiers</a><a class="l3" href="#size">Size</a><a class="l3" href="#padding-and-position">Padding and position</a><a class="l3" href="#drawing">Drawing</a><a class="l3" href="#interaction">Interaction</a><a class="l3" href="#accessibility-and-tests">Accessibility and tests</a><a class="l3" href="#layout-callbacks">Layout callbacks</a><a class="l2" href="#scope-modifiers">Scope modifiers</a><a class="l2" href="#writing-your-own">Writing your own</a><a class="l3" href="#combining-modifiers">Combining modifiers</a><a class="l3" href="#changing-measurement">Changing measurement</a><a class="l3" href="#custom-drawing">Custom drawing</a><a class="l3" href="#modifier-elements">Modifier elements</a><a class="l2" href="#see-also">See also</a></aside>
+</div>
+<div class="scrim"></div>
+<script>window.KOMPOZ_UI={"noresults": "No results", "copy": "Copy", "copied": "Copied"};</script>
+<script src="../assets/search-en.js" defer></script>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

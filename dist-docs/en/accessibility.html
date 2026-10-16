@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accessibility · Kompoz</title>
+<meta name="description" content="Alongside the UI tree, Kompoz keeps a semantics tree: what each element means to someone who can&#x27;t see it. Material components fill it in for you: a Button is a button with its label, a Checkbox says whether it is checked, a Slider its value. TalkBack reads this tree on Android; tests find nodes in it.">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{var t=localStorage.getItem('kompoz-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body class="page-accessibility">
+<header class="top">
+<button class="menu-button" type="button" aria-label="Menu" aria-expanded="false"><span></span></button>
+<a class="brand" href="index.html"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="8" fill="var(--primary)"/><path d="M11 9v14M11 16l8-7M13.5 14l6 9" stroke="var(--on-primary)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>Kompoz</span></a><span class="version">0.1.0</span>
+<div class="search"><input type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false"><kbd>/</kbd><div class="results" role="listbox"></div></div>
+<a class="language" href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+<button class="theme-button" type="button" aria-label="Switch theme" title="Switch theme"></button>
+</header>
+<div class="layout">
+<nav class="side" aria-label="Menu"><details open><summary>Get started</summary><a href="index.html">Kompoz documentation</a><a href="setup.html">Setup</a><a href="tutorial.html">Tutorial</a><a href="coming-from-compose.html">Coming from Compose</a></details><details open><summary>Foundation</summary><a href="thinking.html">Thinking in Kompoz</a><a href="state.html">State</a><a href="lifecycle.html">Lifecycle and identity</a><a href="side-effects.html">Side effects</a><a href="phases.html">Phases</a><a href="composition-local.html">CompositionLocal</a></details><details open><summary>Design</summary><a href="modifiers.html">Modifiers</a><a href="layouts.html">Layouts</a><a href="custom-layouts.html">Custom layouts</a><a href="lists.html">Lists and grids</a><a href="material.html">Material components</a><a href="theming.html">Theming</a><a href="text.html">Text</a><a href="graphics.html">Graphics</a><a href="animation.html">Animation</a><a href="gestures.html">Gestures and input</a></details><details open><summary>App</summary><a href="architecture.html">Architecture</a><a href="navigation.html">Navigation</a><a href="resources.html">Resources</a><a href="accessibility.html" class=current aria-current=page>Accessibility</a><a href="testing.html">Testing</a><a href="tools.html">Tools</a></details><details open><summary>Reference</summary><a href="api.html">Components and priorities</a></details></nav>
+<main>
+<div class="crumbs">App</div>
+<article>
+<h1>Accessibility</h1>
+
+<p>Making your app usable with screen readers, keyboards and large text. Kompoz builds a semantics tree, as Compose does, that TalkBack reads on Android and tests query everywhere.</p>
+<h2 id="the-semantics-tree"><a class="anchor" href="#the-semantics-tree" aria-hidden="true">#</a>The semantics tree</h2>
+<p>Alongside the UI tree, Kompoz keeps a <em>semantics</em> tree: what each element means to someone who can't see it. Material components fill it in for you: a <code>Button</code> is a button with its label, a <code>Checkbox</code> says whether it is checked, a <code>Slider</code> its value. TalkBack reads this tree on Android; <a href="testing.html">tests</a> find nodes in it.</p>
+<p>You need to add to it where meaning isn't on the screen as text: icons, images, custom controls.</p>
+<h2 id="describing-images-and-icons"><a class="anchor" href="#describing-images-and-icons" aria-hidden="true">#</a>Describing images and icons</h2>
+<p>Give every icon and image that carries meaning a content description, and leave decorative ones empty:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">IconButton</span>([] {}, [] { <span class="fn">Icon</span>(<span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Share</span>, <span class="str">&quot;Share&quot;</span>); });     <span class="com">// announced as &quot;Share, button&quot;</span>
+<span class="fn">Icon</span>(<span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Star</span>, <span class="str">&quot;&quot;</span>);                                      <span class="com">// decorative: not announced</span>
+<span class="fn">Image</span>(<span class="call">imageResource</span>(<span class="str">&quot;images/chart.png&quot;</span>), <span class="str">&quot;Sales grew 20% in March&quot;</span>, <span class="fn">Modifier</span>().<span class="call">size</span>(<span class="num">200</span>));</code></pre></div>
+<p>An icon inside a button that also has a text label shouldn't repeat it: give the icon an empty description.</p>
+<h2 id="the-semantics-modifier"><a class="anchor" href="#the-semantics-modifier" aria-hidden="true">#</a>The semantics modifier</h2>
+<p><code>Modifier().semantics({…})</code> sets what a node means:</p>
+<div class="table"><table><thead><tr><th>Property</th><th>Use</th></tr></thead><tbody><tr><td><code>contentDescription</code></td><td>What it is, when that isn't its text.</td></tr><tr><td><code>role</code></td><td><code>SemanticsRole::Button</code>, <code>Checkbox</code>, <code>Switch</code>, <code>RadioButton</code>, <code>Tab</code>, <code>Image</code>, <code>Slider</code>.</td></tr><tr><td><code>checked</code></td><td>On or off, for toggles and selected tabs.</td></tr><tr><td><code>stateDescription</code></td><td>Its state in words: "Playing", "3 of 5".</td></tr><tr><td><code>heading</code></td><td>A heading, so screen reader users can jump between sections.</td></tr><tr><td><code>mergeDescendants</code></td><td>Read with everything inside it as one item.</td></tr><tr><td><code>liveRegion</code></td><td>Changes are announced: <code>LiveRegionMode::Polite</code> or <code>Assertive</code>.</td></tr><tr><td><code>customActions</code></td><td>Actions offered in TalkBack's actions menu.</td></tr><tr><td><code>progressBarRangeInfo</code>, <code>setProgress</code></td><td>A value in a range that services can read and set.</td></tr><tr><td><code>traversalIndex</code></td><td>The reading order among siblings, lower first.</td></tr></tbody></table></div>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Text</span>(<span class="str">&quot;Settings&quot;</span>, <span class="fn">Modifier</span>().<span class="call">semantics</span>({.heading = <span class="kw">true</span>}), {.font = <span class="call">typography</span>().headlineSmall});</code></pre></div>
+<p><code>Modifier().semantics(&quot;description&quot;)</code> is a shorthand for a content description alone.</p>
+<h2 id="merging"><a class="anchor" href="#merging" aria-hidden="true">#</a>Merging</h2>
+<p>A screen reader moves from item to item. A row of an icon and two texts should be one item, read together, not three. Clickables merge their content already; for other groups, set <code>mergeDescendants</code>:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Row</span>(<span class="fn">Modifier</span>().<span class="call">semantics</span>({.mergeDescendants = <span class="kw">true</span>}).<span class="call">padding</span>(<span class="num">16</span>), [&amp;] {
+<span class="fn">Icon</span>(<span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Person</span>, <span class="str">&quot;&quot;</span>);
+<span class="fn">Column</span>([&amp;] {
+<span class="fn">Text</span>(<span class="str">&quot;Ada Lovelace&quot;</span>);
+<span class="fn">Text</span>(<span class="str">&quot;Online&quot;</span>);
+});
+});   <span class="com">// read as &quot;Ada Lovelace, Online&quot;</span></code></pre></div>
+<p><code>Modifier().clearAndSetSemantics({…})</code> replaces what is inside with what you set: a rating drawn as five stars becomes "Rating: 4 of 5". <code>Modifier().hideFromAccessibility()</code> hides a node and what is inside it.</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Row</span>(<span class="fn">Modifier</span>().<span class="call">clearAndSetSemantics</span>({.contentDescription = <span class="str">&quot;Rating: 4 of 5&quot;</span>}), [&amp;] {
+<span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">0</span>; i &lt; <span class="num">5</span>; ++i) <span class="fn">Icon</span>(i &lt; <span class="num">4</span> ? <span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Star</span> : <span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">FavoriteBorder</span>, <span class="str">&quot;&quot;</span>);
+});</code></pre></div>
+<h2 id="custom-controls"><a class="anchor" href="#custom-controls" aria-hidden="true">#</a>Custom controls</h2>
+<p>A control you draw yourself must say what it is and how to use it. Prefer the modifiers that do this for you: <code>clickable</code>, <code>toggleable(value, onChange, role)</code>, <code>selectable(selected, onClick, role)</code> and <code>triStateToggleable</code> set the role, the state and the action:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">StarToggle</span>() {
+<span class="kw">auto</span> starred = <span class="call">remember</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(<span class="kw">false</span>); });
+<span class="fn">Icon</span>(starred.<span class="call">get</span>() ? <span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Star</span> : <span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">FavoriteBorder</span>, <span class="str">&quot;Starred&quot;</span>,
+<span class="fn">Modifier</span>().<span class="call">toggleable</span>(starred.<span class="call">get</span>(), [starred](<span class="kw">bool</span> v) { starred.<span class="call">set</span>(v); }, <span class="ty">SemanticsRole</span>::<span class="ty">Switch</span>).<span class="call">padding</span>(<span class="num">12</span>));
+}</code></pre></div>
+<p>For a row that acts as one control, put the modifier on the row and pass an empty callback to the control inside it, so the whole row is one touch target and one item:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">WifiRow</span>() {
+<span class="kw">auto</span> on = <span class="call">remember</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(<span class="kw">true</span>); });
+<span class="fn">Row</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxWidth</span>().<span class="call">toggleable</span>(on.<span class="call">get</span>(), [on](<span class="kw">bool</span> v) { on.<span class="call">set</span>(v); }, <span class="ty">SemanticsRole</span>::<span class="ty">Switch</span>).<span class="call">padding</span>(<span class="num">16</span>),
+{.verticalAlignment = <span class="ty">Alignment</span>::<span class="ty">CenterVertically</span>}, [&amp;] {
+<span class="fn">Text</span>(<span class="str">&quot;Wi-Fi&quot;</span>, <span class="fn">Modifier</span>().<span class="call">weight</span>(<span class="num">1</span>));
+<span class="fn">Switch</span>(on.<span class="call">get</span>(), {});
+});
+}</code></pre></div>
+<p>A group of radio-button rows goes inside <code>Modifier().selectableGroup()</code>, so services know they belong together.</p>
+<h3 id="actions-that-need-a-gesture"><a class="anchor" href="#actions-that-need-a-gesture" aria-hidden="true">#</a>Actions that need a gesture</h3>
+<p>Swipe-to-delete, long press menus and drag handles are hard to use with a screen reader. Offer the same actions as custom actions:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">semantics</span>({.customActions = {{<span class="str">&quot;Archive&quot;</span>, [archive] { <span class="call">archive</span>(); <span class="kw">return</span> <span class="kw">true</span>; }},
+{<span class="str">&quot;Delete&quot;</span>, [deleteItem] { <span class="call">deleteItem</span>(); <span class="kw">return</span> <span class="kw">true</span>; }}}}));</code></pre></div>
+<h3 id="values-in-a-range"><a class="anchor" href="#values-in-a-range" aria-hidden="true">#</a>Values in a range</h3>
+<p>A custom slider reports its value and lets services set it:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Box</span>(<span class="fn">Modifier</span>().<span class="call">semantics</span>({.contentDescription = <span class="str">&quot;Brightness&quot;</span>, .role = <span class="ty">SemanticsRole</span>::<span class="ty">Slider</span>,
+.progressBarRangeInfo = <span class="fn">ProgressBarRangeInfo</span>{level.<span class="call">get</span>(), <span class="num">0</span>, <span class="num">1</span>},
+.setProgress = [level](<span class="kw">float</span> v) { level.<span class="call">set</span>(v); <span class="kw">return</span> <span class="kw">true</span>; }}));</code></pre></div>
+<h2 id="announcing-changes"><a class="anchor" href="#announcing-changes" aria-hidden="true">#</a>Announcing changes</h2>
+<p>A message that appears without moving focus, such as "Saved" or an error under a field, should be announced. Mark it as a live region:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">if</span> (saved) <span class="fn">Text</span>(<span class="str">&quot;Saved&quot;</span>, <span class="fn">Modifier</span>().<span class="call">semantics</span>({.liveRegion = <span class="ty">LiveRegionMode</span>::<span class="ty">Polite</span>}));</code></pre></div>
+<h2 id="touch-targets"><a class="anchor" href="#touch-targets" aria-hidden="true">#</a>Touch targets</h2>
+<p>Material components keep a touch target of at least 48 dp even when they look smaller, as Compose's do (<code>LocalMinimumInteractiveComponentSize</code>). For your own small controls, add <code>Modifier().minimumInteractiveComponentSize()</code>.</p>
+<h2 id="text-size-and-contrast"><a class="anchor" href="#text-size-and-contrast" aria-hidden="true">#</a>Text size and contrast</h2>
+<p>Text sizes are in sp and follow the system's font size, also when it changes while the app runs. Let layouts grow with it: prefer a minimum height (<code>heightIn(56)</code>) over a fixed one for things with text. Material's color schemes give enough contrast between each <code>on…</code> color and its container; keep to those pairs.</p>
+<h2 id="keyboard"><a class="anchor" href="#keyboard" aria-hidden="true">#</a>Keyboard</h2>
+<p>Every clickable and text field can be reached with Tab and used with Enter or Space, and the arrow keys move between focusable items. Keep custom controls focusable (<code>clickable</code> and <code>toggleable</code> are) and make sure focus order follows reading order. See <a href="gestures.html#focus">Gestures</a>.</p>
+<h2 id="platforms"><a class="anchor" href="#platforms" aria-hidden="true">#</a>Platforms</h2>
+<p>On Android, TalkBack reads the semantics tree: labels, roles, states, actions, custom actions and live regions. The desktop platforms' accessibility APIs (AT-SPI on Linux, UI Automation on Windows) are not connected yet, so screen readers there don't see Kompoz apps.</p>
+<h2 id="see-also"><a class="anchor" href="#see-also" aria-hidden="true">#</a>See also</h2>
+<ul><li><a href="testing.html">Testing</a>: finding nodes by their semantics.</li><li><a href="material.html">Material components</a>: what they announce on their own.</li><li><a href="gestures.html">Gestures</a>: focus and keyboard input.</li></ul>
+</article>
+<nav class="pager"><a class="prev" href="resources.html"><span>Previous</span>Resources</a><a class="next" href="testing.html"><span>Next</span>Testing</a></nav>
+<footer>Kompoz is licensed under the Apache License 2.0. Code samples on this site are part of it.</footer>
+</main>
+<aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#the-semantics-tree">The semantics tree</a><a class="l2" href="#describing-images-and-icons">Describing images and icons</a><a class="l2" href="#the-semantics-modifier">The semantics modifier</a><a class="l2" href="#merging">Merging</a><a class="l2" href="#custom-controls">Custom controls</a><a class="l3" href="#actions-that-need-a-gesture">Actions that need a gesture</a><a class="l3" href="#values-in-a-range">Values in a range</a><a class="l2" href="#announcing-changes">Announcing changes</a><a class="l2" href="#touch-targets">Touch targets</a><a class="l2" href="#text-size-and-contrast">Text size and contrast</a><a class="l2" href="#keyboard">Keyboard</a><a class="l2" href="#platforms">Platforms</a><a class="l2" href="#see-also">See also</a></aside>
+</div>
+<div class="scrim"></div>
+<script>window.KOMPOZ_UI={"noresults": "No results", "copy": "Copy", "copied": "Copied"};</script>
+<script src="../assets/search-en.js" defer></script>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

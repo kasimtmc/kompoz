@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Material components · Kompoz</title>
+<meta name="description" content="Material components read their colors, type and motion from MaterialTheme, so wrap your app in one. See Theming.">
+<link rel="stylesheet" href="../assets/site.css">
+<script>try{var t=localStorage.getItem('kompoz-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body class="page-material">
+<header class="top">
+<button class="menu-button" type="button" aria-label="Menu" aria-expanded="false"><span></span></button>
+<a class="brand" href="index.html"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="8" fill="var(--primary)"/><path d="M11 9v14M11 16l8-7M13.5 14l6 9" stroke="var(--on-primary)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>Kompoz</span></a><span class="version">0.1.0</span>
+<div class="search"><input type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false"><kbd>/</kbd><div class="results" role="listbox"></div></div>
+<a class="language" href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+<button class="theme-button" type="button" aria-label="Switch theme" title="Switch theme"></button>
+</header>
+<div class="layout">
+<nav class="side" aria-label="Menu"><details open><summary>Get started</summary><a href="index.html">Kompoz documentation</a><a href="setup.html">Setup</a><a href="tutorial.html">Tutorial</a><a href="coming-from-compose.html">Coming from Compose</a></details><details open><summary>Foundation</summary><a href="thinking.html">Thinking in Kompoz</a><a href="state.html">State</a><a href="lifecycle.html">Lifecycle and identity</a><a href="side-effects.html">Side effects</a><a href="phases.html">Phases</a><a href="composition-local.html">CompositionLocal</a></details><details open><summary>Design</summary><a href="modifiers.html">Modifiers</a><a href="layouts.html">Layouts</a><a href="custom-layouts.html">Custom layouts</a><a href="lists.html">Lists and grids</a><a href="material.html" class=current aria-current=page>Material components</a><a href="theming.html">Theming</a><a href="text.html">Text</a><a href="graphics.html">Graphics</a><a href="animation.html">Animation</a><a href="gestures.html">Gestures and input</a></details><details open><summary>App</summary><a href="architecture.html">Architecture</a><a href="navigation.html">Navigation</a><a href="resources.html">Resources</a><a href="accessibility.html">Accessibility</a><a href="testing.html">Testing</a><a href="tools.html">Tools</a></details><details open><summary>Reference</summary><a href="api.html">Components and priorities</a></details></nav>
+<main>
+<div class="crumbs">Design</div>
+<article>
+<h1>Material components</h1>
+
+<p>Kompoz implements Material 3 as Compose Material 3 1.4 does, Expressive components included: the same components, the same measurements and the same defaults. This page is a tour of the main ones; <a href="api.html">the API page</a> lists them all with their status.</p>
+<figure><img src="../img/material-dark.png" alt="The showcase&#x27;s Material screen in the dark theme" loading="lazy"></figure>
+<p>Material components read their colors, type and motion from <code>MaterialTheme</code>, so wrap your app in one. See <a href="theming.html">Theming</a>.</p>
+<h2 id="scaffold-and-app-bars"><a class="anchor" href="#scaffold-and-app-bars" aria-hidden="true">#</a>Scaffold and app bars</h2>
+<p><code>Scaffold</code> lays out a screen: a top bar, a bottom bar, a floating action button and a snackbar host around the content. The content gets the padding that keeps it clear of the bars and the system's insets.</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Inbox</span>() {
+<span class="kw">auto</span> snackbars = <span class="call">rememberSnackbarHostState</span>();
+<span class="fn">Scaffold</span>(<span class="fn">Modifier</span>(),
+{.topBar = [] { <span class="fn">TopAppBar</span>({.title = [] { <span class="fn">Text</span>(<span class="str">&quot;Inbox&quot;</span>); },
+.navigationIcon = [] { <span class="fn">IconButton</span>([] {}, [] { <span class="fn">Icon</span>(<span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Menu</span>, <span class="str">&quot;Menu&quot;</span>); }); },
+.actions = [] { <span class="fn">IconButton</span>([] {}, [] { <span class="fn">Icon</span>(<span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Search</span>, <span class="str">&quot;Search&quot;</span>); }); }}); },
+.floatingActionButton = [snackbars] {
+<span class="fn">FloatingActionButton</span>([snackbars] { snackbars.<span class="call">showSnackbar</span>(<span class="str">&quot;Draft saved&quot;</span>); }, [] { <span class="fn">Icon</span>(<span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Edit</span>, <span class="str">&quot;Compose&quot;</span>); });
+},
+.snackbarHost = [snackbars] { <span class="fn">SnackbarHost</span>(snackbars); }},
+[](<span class="ty">PaddingValues</span> padding) {
+<span class="fn">LazyColumn</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxSize</span>(), {.contentPadding = padding}, [](<span class="ty">LazyListScope</span>&amp; l) {
+l.<span class="call">items</span>(<span class="num">30</span>, [](<span class="kw">int</span> i) { <span class="fn">ListItem</span>({.headline = [i] { <span class="fn">Text</span>(<span class="str">&quot;Message &quot;</span> + std::<span class="call">to_string</span>(i)); }}); });
+});
+});
+}</code></pre></div>
+<p>Top app bars come in the sizes Material defines: <code>TopAppBar</code>, <code>CenterAlignedTopAppBar</code>, <code>MediumTopAppBar</code> and <code>LargeTopAppBar</code>. With a scroll behavior (<code>TopAppBarDefaults::enterAlwaysScrollBehavior()</code>, <code>exitUntilCollapsedScrollBehavior()</code>, <code>pinnedScrollBehavior()</code>) and the behavior's <code>nestedScrollConnection</code> on the <code>Scaffold</code>, they collapse and change color as the content scrolls (see <a href="lists.html#nested-scrolling">Lists and grids</a>). <code>BottomAppBar</code> and <code>BottomSheetScaffold</code> exist too.</p>
+<h2 id="navigation"><a class="anchor" href="#navigation" aria-hidden="true">#</a>Navigation</h2>
+<div class="table"><table><thead><tr><th>Component</th><th>Use</th></tr></thead><tbody><tr><td><code>NavigationBar</code> + <code>NavigationBarItem</code></td><td>Three to five destinations at the bottom of a phone screen.</td></tr><tr><td><code>ShortNavigationBar</code></td><td>M3 Expressive's shorter bar.</td></tr><tr><td><code>NavigationRail</code>, <code>WideNavigationRail</code></td><td>Destinations at the side of a wider window.</td></tr><tr><td><code>ModalNavigationDrawer</code>, <code>DismissibleNavigationDrawer</code>, <code>PermanentNavigationDrawer</code></td><td>A drawer of destinations.</td></tr><tr><td><code>NavigationSuiteScaffold</code></td><td>Picks a bar, a rail or a drawer by the window's size.</td></tr><tr><td><code>PrimaryTabRow</code>, <code>SecondaryTabRow</code>, <code>PrimaryScrollableTabRow</code> + <code>Tab</code></td><td>Tabs.</td></tr></tbody></table></div>
+<p><code>NavigationSuiteScaffold</code> is usually the one you want: it shows a bar on a phone and a rail on a tablet or desktop window, as Compose's adaptive navigation suite does.</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">App</span>() {
+<span class="kw">auto</span> tab = <span class="call">rememberSaveable</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(<span class="num">0</span>); });
+<span class="fn">NavigationSuiteScaffold</span>([&amp;](<span class="ty">NavigationSuiteScope</span>&amp; nav) {
+nav.<span class="call">item</span>(tab.<span class="call">get</span>() == <span class="num">0</span>, [tab] { tab.<span class="call">set</span>(<span class="num">0</span>); }, <span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Home</span>, <span class="str">&quot;Home&quot;</span>);
+nav.<span class="call">item</span>(tab.<span class="call">get</span>() == <span class="num">1</span>, [tab] { tab.<span class="call">set</span>(<span class="num">1</span>); }, <span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Search</span>, <span class="str">&quot;Search&quot;</span>);
+nav.<span class="call">item</span>(tab.<span class="call">get</span>() == <span class="num">2</span>, [tab] { tab.<span class="call">set</span>(<span class="num">2</span>); }, <span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Settings</span>, <span class="str">&quot;Settings&quot;</span>);
+}, <span class="fn">Modifier</span>(), {}, [&amp;] {
+<span class="fn">Text</span>(<span class="str">&quot;Tab &quot;</span> + std::<span class="call">to_string</span>(tab.<span class="call">get</span>()));
+});
+}</code></pre></div>
+<p>For moving between screens with a back stack, see <a href="navigation.html">Navigation</a>.</p>
+<h2 id="buttons"><a class="anchor" href="#buttons" aria-hidden="true">#</a>Buttons</h2>
+<div class="table"><table><thead><tr><th>Component</th><th>Emphasis</th></tr></thead><tbody><tr><td><code>Button</code></td><td>Filled: the main action.</td></tr><tr><td><code>FilledTonalButton</code></td><td>Tonal: an important action that isn't the main one.</td></tr><tr><td><code>ElevatedButton</code>, <code>OutlinedButton</code></td><td>Medium emphasis.</td></tr><tr><td><code>TextButton</code></td><td>Low emphasis, in dialogs and cards.</td></tr><tr><td><code>IconButton</code>, <code>FilledIconButton</code>, <code>OutlinedIconButton</code>, <code>IconToggleButton</code>…</td><td>An icon on its own.</td></tr><tr><td><code>FloatingActionButton</code>, <code>SmallFloatingActionButton</code>, <code>LargeFloatingActionButton</code>, <code>ExtendedFloatingActionButton</code></td><td>The screen's primary action.</td></tr><tr><td><code>SingleChoiceSegmentedButtonRow</code> + <code>SegmentedButton</code></td><td>A choice among a few options.</td></tr><tr><td><code>ButtonGroup</code>, <code>SplitButtonLayout</code>, <code>ToggleButton</code></td><td>M3 Expressive's groups, split buttons and toggles.</td></tr></tbody></table></div>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">Row</span>(<span class="fn">Modifier</span>(), {.horizontalArrangement = <span class="ty">Arrangement</span>::<span class="call">spacedBy</span>(<span class="num">8</span>)}, [&amp;] {
+<span class="fn">Button</span>([] {}, [] { <span class="fn">Text</span>(<span class="str">&quot;Save&quot;</span>); });
+<span class="fn">OutlinedButton</span>([] {}, [] { <span class="fn">Text</span>(<span class="str">&quot;Cancel&quot;</span>); });
+<span class="fn">IconButton</span>([] {}, [] { <span class="fn">Icon</span>(<span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Favorite</span>, <span class="str">&quot;Like&quot;</span>); });
+});</code></pre></div>
+<h2 id="cards-and-lists"><a class="anchor" href="#cards-and-lists" aria-hidden="true">#</a>Cards and lists</h2>
+<p><code>Card</code>, <code>ElevatedCard</code> and <code>OutlinedCard</code> group related content; each also comes in a clickable form that takes <code>onClick</code> first. <code>ListItem</code> is a one-, two- or three-line row with optional leading and trailing content:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">OutlinedCard</span>(<span class="fn">Modifier</span>().<span class="call">fillMaxWidth</span>(), [&amp;] {
+<span class="fn">ListItem</span>({.headline = [] { <span class="fn">Text</span>(<span class="str">&quot;Wi-Fi&quot;</span>); },
+.supporting = [] { <span class="fn">Text</span>(<span class="str">&quot;Connected&quot;</span>); },
+.leading = [] { <span class="fn">Icon</span>(<span class="ty">Icons</span>::<span class="ty">Filled</span>::<span class="ty">Settings</span>, <span class="str">&quot;&quot;</span>); },
+.trailing = [] { <span class="fn">Switch</span>(<span class="kw">true</span>, [](<span class="kw">bool</span>) {}); }});
+});</code></pre></div>
+<h2 id="selection-controls"><a class="anchor" href="#selection-controls" aria-hidden="true">#</a>Selection controls</h2>
+<p><code>Checkbox</code>, <code>TriStateCheckbox</code>, <code>RadioButton</code>, <code>Switch</code>, <code>Slider</code> and <code>RangeSlider</code>. They are stateless: they show the value you pass and report changes through a callback.</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">Volume</span>() {
+<span class="kw">auto</span> volume = <span class="call">remember</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(<span class="num">0.5f</span>); });
+<span class="kw">auto</span> muted = <span class="call">remember</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(<span class="kw">false</span>); });
+<span class="fn">Column</span>([&amp;] {
+<span class="fn">Slider</span>(volume.<span class="call">get</span>(), [volume](<span class="kw">float</span> v) { volume.<span class="call">set</span>(v); });
+<span class="fn">Row</span>(<span class="fn">Modifier</span>().<span class="call">toggleable</span>(muted.<span class="call">get</span>(), [muted](<span class="kw">bool</span> v) { muted.<span class="call">set</span>(v); }, <span class="ty">SemanticsRole</span>::<span class="ty">Checkbox</span>),
+{.verticalAlignment = <span class="ty">Alignment</span>::<span class="ty">CenterVertically</span>}, [&amp;] {
+<span class="fn">Checkbox</span>(muted.<span class="call">get</span>(), {});   <span class="com">// the whole row toggles it</span>
+<span class="fn">Text</span>(<span class="str">&quot;Mute&quot;</span>);
+});
+});
+}</code></pre></div>
+<p>Pass an empty callback to a control inside a row that handles the click itself, as above, so that the row is one touch target and one item for accessibility.</p>
+<h2 id="chips"><a class="anchor" href="#chips" aria-hidden="true">#</a>Chips</h2>
+<p><code>AssistChip</code>, <code>FilterChip</code>, <code>InputChip</code> and <code>SuggestionChip</code>:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">FilterChip</span>(selected.<span class="call">get</span>(), [selected] { selected.<span class="call">set</span>(!selected.<span class="call">get</span>()); }, [] { <span class="fn">Text</span>(<span class="str">&quot;Unread&quot;</span>); });</code></pre></div>
+<h2 id="text-fields"><a class="anchor" href="#text-fields" aria-hidden="true">#</a>Text fields</h2>
+<p><code>TextField</code> and <code>OutlinedTextField</code>, with labels, placeholders, icons, prefixes, suffixes, supporting text and errors; <code>SearchBar</code> and <code>DockedSearchBar</code> for search. See <a href="text.html#text-fields">Text</a>.</p>
+<h2 id="dialogs-sheets-and-menus"><a class="anchor" href="#dialogs-sheets-and-menus" aria-hidden="true">#</a>Dialogs, sheets and menus</h2>
+<p>These show above the rest of the UI. Each is composed where you call it, so it keeps its state and composition locals, and Kompoz places it on top. Show one by calling it while a state says so:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">void</span> <span class="fn">DeleteButton</span>(std::function&lt;<span class="kw">void</span>()&gt; onDelete) {
+<span class="kw">auto</span> open = <span class="call">remember</span>([] { <span class="kw">return</span> <span class="call">mutableStateOf</span>(<span class="kw">false</span>); });
+<span class="fn">TextButton</span>([open] { open.<span class="call">set</span>(<span class="kw">true</span>); }, [] { <span class="fn">Text</span>(<span class="str">&quot;Delete&quot;</span>); });
+<span class="kw">if</span> (open.<span class="call">get</span>()) {
+<span class="fn">AlertDialog</span>([open] { open.<span class="call">set</span>(<span class="kw">false</span>); },
+{.confirmButton = [open, onDelete] { <span class="fn">TextButton</span>([open, onDelete] { open.<span class="call">set</span>(<span class="kw">false</span>); <span class="call">onDelete</span>(); }, [] { <span class="fn">Text</span>(<span class="str">&quot;Delete&quot;</span>); }); },
+.dismissButton = [open] { <span class="fn">TextButton</span>([open] { open.<span class="call">set</span>(<span class="kw">false</span>); }, [] { <span class="fn">Text</span>(<span class="str">&quot;Cancel&quot;</span>); }); },
+.title = [] { <span class="fn">Text</span>(<span class="str">&quot;Delete this message?&quot;</span>); },
+.text = [] { <span class="fn">Text</span>(<span class="str">&quot;It will be gone for good.&quot;</span>); }});
+}
+}</code></pre></div>
+<div class="table"><table><thead><tr><th>Component</th><th>Use</th></tr></thead><tbody><tr><td><code>AlertDialog</code>, <code>BasicAlertDialog</code>, <code>Dialog</code></td><td>Asks for a decision.</td></tr><tr><td><code>ModalBottomSheet</code></td><td>Content that slides up from the bottom, dismissed by dragging it down.</td></tr><tr><td><code>DropdownMenu</code> + <code>DropdownMenuItem</code></td><td>A menu anchored to what opened it.</td></tr><tr><td><code>ExposedDropdownMenuBox</code></td><td>A text field with a menu of choices.</td></tr><tr><td><code>DatePicker</code>, <code>DateRangePicker</code>, <code>TimePicker</code>, <code>TimeInput</code></td><td>Dates and times, alone or in <code>DatePickerDialog</code> / <code>TimePickerDialog</code>.</td></tr><tr><td><code>TooltipBox</code> + <code>PlainTooltip</code> / <code>RichTooltip</code></td><td>A hint on long press or hover.</td></tr></tbody></table></div>
+<h2 id="snackbars"><a class="anchor" href="#snackbars" aria-hidden="true">#</a>Snackbars</h2>
+<p>A <code>SnackbarHost</code> shows the messages of a <code>SnackbarHostState</code>. Show one from a callback with <code>showSnackbar</code>, or wait for how it went in a coroutine:</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="kw">auto</span> snackbars = <span class="call">rememberSnackbarHostState</span>();
+<span class="kw">auto</span> scope = <span class="call">rememberCoroutineScope</span>();
+<span class="fn">Button</span>([scope, snackbars, undo] {
+scope.<span class="call">launch</span>([snackbars, undo]() -&gt; <span class="ty">Task</span> {
+<span class="kw">if</span> (<span class="kw">co_await</span> snackbars.<span class="call">showSnackbarAsync</span>(<span class="str">&quot;Message deleted&quot;</span>, <span class="str">&quot;Undo&quot;</span>) == <span class="ty">SnackbarResult</span>::<span class="ty">ActionPerformed</span>) <span class="call">undo</span>();
+});
+}, [] { <span class="fn">Text</span>(<span class="str">&quot;Delete&quot;</span>); });
+<span class="fn">SnackbarHost</span>(snackbars);</code></pre></div>
+<h2 id="progress"><a class="anchor" href="#progress" aria-hidden="true">#</a>Progress</h2>
+<p><code>CircularProgressIndicator</code> and <code>LinearProgressIndicator</code>, with a progress value or without one (indeterminate); M3 Expressive's <code>LoadingIndicator</code>, <code>ContainedLoadingIndicator</code> and the wavy indicators. Indeterminate indicators animate in the draw phase, so they don't recompose anything.</p>
+<div class="code" data-lang="C++"><button class="copy" type="button" aria-label="Copy"></button><pre><code><span class="fn">CircularProgressIndicator</span>();               <span class="com">// indeterminate</span>
+<span class="fn">LinearProgressIndicator</span>(progress);          <span class="com">// 40 %</span></code></pre></div>
+<h2 id="other-components"><a class="anchor" href="#other-components" aria-hidden="true">#</a>Other components</h2>
+<p>Badges (<code>BadgedBox</code>, <code>Badge</code>), dividers (<code>HorizontalDivider</code>, <code>VerticalDivider</code>), carousels (see <a href="lists.html#carousels">Lists and grids</a>), pull to refresh, swipe to dismiss (<code>SwipeToDismissBox</code>), floating toolbars, and more. The <a href="api.html">API page</a> has the complete list.</p>
+<h2 id="see-also"><a class="anchor" href="#see-also" aria-hidden="true">#</a>See also</h2>
+<ul><li><a href="theming.html">Theming</a>: colors, typography and dark theme.</li><li><a href="navigation.html">Navigation</a>: screens and the back stack.</li><li><a href="text.html">Text</a>: text fields in depth.</li></ul>
+</article>
+<nav class="pager"><a class="prev" href="lists.html"><span>Previous</span>Lists and grids</a><a class="next" href="theming.html"><span>Next</span>Theming</a></nav>
+<footer>Kompoz is licensed under the Apache License 2.0. Code samples on this site are part of it.</footer>
+</main>
+<aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#scaffold-and-app-bars">Scaffold and app bars</a><a class="l2" href="#navigation">Navigation</a><a class="l2" href="#buttons">Buttons</a><a class="l2" href="#cards-and-lists">Cards and lists</a><a class="l2" href="#selection-controls">Selection controls</a><a class="l2" href="#chips">Chips</a><a class="l2" href="#text-fields">Text fields</a><a class="l2" href="#dialogs-sheets-and-menus">Dialogs, sheets and menus</a><a class="l2" href="#snackbars">Snackbars</a><a class="l2" href="#progress">Progress</a><a class="l2" href="#other-components">Other components</a><a class="l2" href="#see-also">See also</a></aside>
+</div>
+<div class="scrim"></div>
+<script>window.KOMPOZ_UI={"noresults": "No results", "copy": "Copy", "copied": "Copied"};</script>
+<script src="../assets/search-en.js" defer></script>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>
