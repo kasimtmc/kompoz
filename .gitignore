@@ -1,0 +1,24 @@
+build/
+build-*/
+dist/
+third_party/*
+!third_party/.gitkeep
+examples/*/android/.gradle/
+examples/*/android/build/
+examples/*/android/app/build/
+examples/*/android/app/.cxx/
+examples/*/android/local.properties
+.idea/
+
+# Local, never shared: tool state, editors, caches, signing keys, secrets
+.vscode/
+.cache/
+compile_commands.json
+CMakeUserPresets.json
+*.swp
+*~
+.DS_Store
+*.jks
+*.keystore
+.env
+.env.*

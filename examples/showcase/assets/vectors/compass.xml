@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A compass for the showcase's vectorResource: arcs, a turned group, strokes, gradients. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path android:pathData="M12,1a11,11 0 1,1 0,22a11,11 0 1,1 0,-22z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="10"
+                android:centerY="8"
+                android:gradientRadius="14"
+                android:type="radial">
+                <item android:color="#FFFFFF" android:offset="0" />
+                <item android:color="#E3F2FD" android:offset="0.5" />
+                <item android:color="#90CAF9" android:offset="1" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path
+        android:strokeColor="#1565C0"
+        android:strokeWidth="1.2"
+        android:pathData="M12,2.6a9.4,9.4 0 1,1 0,18.8a9.4,9.4 0 1,1 0,-18.8z" />
+    <path
+        android:strokeColor="#1565C0"
+        android:strokeWidth="1"
+        android:strokeLineCap="round"
+        android:strokeAlpha="0.6"
+        android:pathData="M12,4.2v1.4M19.8,12h-1.4M12,19.8v-1.4M4.2,12h1.4" />
+    <group
+        android:pivotX="12"
+        android:pivotY="12"
+        android:rotation="35">
+        <path android:pathData="M12,5L14.4,12H9.6z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:endColor="#B71C1C"
+                    android:endX="14.4"
+                    android:endY="12"
+                    android:startColor="#FF8A80"
+                    android:startX="9.6"
+                    android:startY="12"
+                    android:type="linear" />
+            </aapt:attr>
+        </path>
+        <path
+            android:fillColor="#546E7A"
+            android:pathData="M12,19L9.6,12H14.4z" />
+    </group>
+    <path
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#263238"
+        android:strokeWidth="0.8"
+        android:pathData="M12,10.6a1.4,1.4 0 1,1 0,2.8a1.4,1.4 0 1,1 0,-2.8z" />
+</vector>

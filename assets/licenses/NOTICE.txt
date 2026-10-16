@@ -1,0 +1,19 @@
+Kompoz
+Copyright 2026 The Kompoz Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Kompoz follows the behavior and public API of Jetpack Compose (Copyright The Android Open Source
+Project, Apache License 2.0); its HCT color code follows Material Color Utilities (Copyright Google
+LLC, Apache License 2.0). No source files of either are included.
+
+Apps built with Kompoz include, from assets/:
+- Noto Sans (fonts/Regular.ttf, Medium.ttf, Bold.ttf): Copyright 2022 The Noto Project Authors,
+  SIL Open Font License 1.1 (licenses/OFL.txt).
+
+Builds made with the vendored dependencies (Android, iOS, Windows, the web) also contain:
+- SDL 3.4.18: Copyright (C) 1997-2026 Sam Lantinga, zlib license (licenses/SDL.txt).
+- FreeType 2.14.3: Portions of this software are copyright (C) 2026 The FreeType Project
+  (www.freetype.org). All rights reserved. FreeType License (licenses/FreeType-FTL.txt).
+- HarfBuzz 14.5.0: "Old MIT" license (licenses/HarfBuzz.txt).
+On Linux and other desktops the system's libraries are used instead, under their own licenses.

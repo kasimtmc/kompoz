@@ -1,0 +1,1 @@
+landscape.png, mountains.jpg, lake.webp: procedurally generated for Kompoz (no third-party content).

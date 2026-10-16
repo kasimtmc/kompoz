@@ -1,0 +1,39 @@
+# The site's menu: sections (English | Turkish) and their pages, by the file name in en/ and tr/.
+# A page's title is its first "# " heading. "api" is docs/components.md (components.tr.md).
+
+Get started | Başlarken
+    index
+    setup
+    tutorial
+    coming-from-compose
+
+Foundation | Temeller
+    thinking
+    state
+    lifecycle
+    side-effects
+    phases
+    composition-local
+
+Design | Tasarım
+    modifiers
+    layouts
+    custom-layouts
+    lists
+    material
+    theming
+    text
+    graphics
+    animation
+    gestures
+
+App | Uygulama
+    architecture
+    navigation
+    resources
+    accessibility
+    testing
+    tools
+
+Reference | Başvuru
+    api

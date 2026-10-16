@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Play turning into pause, for the showcase's rememberAnimatedVectorPainter: the triangle's two
+     halves morph into the two bars as the icon turns half round and the disc changes color. -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="56dp"
+            android:height="56dp"
+            android:viewportWidth="24"
+            android:viewportHeight="24">
+            <path
+                android:name="disc"
+                android:fillColor="#3F51B5"
+                android:pathData="M12,1a11,11 0 1,1 0,22a11,11 0 1,1 0,-22z" />
+            <group
+                android:name="icon"
+                android:pivotX="12"
+                android:pivotY="12">
+                <path
+                    android:name="left"
+                    android:fillColor="#FFFFFF"
+                    android:pathData="M8,6L13,9L13,15L8,18z" />
+                <path
+                    android:name="right"
+                    android:fillColor="#FFFFFF"
+                    android:pathData="M11.5,8.1L18,12L18,12L11.5,15.9z" />
+            </group>
+        </vector>
+    </aapt:attr>
+    <target android:name="left">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="450"
+                android:interpolator="@android:interpolator/fast_out_slow_in"
+                android:propertyName="pathData"
+                android:valueFrom="M8,6L13,9L13,15L8,18z"
+                android:valueTo="M14,7L17,7L17,17L14,17z"
+                android:valueType="pathType" />
+        </aapt:attr>
+    </target>
+    <target android:name="right">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="450"
+                android:interpolator="@android:interpolator/fast_out_slow_in"
+                android:propertyName="pathData"
+                android:valueFrom="M11.5,8.1L18,12L18,12L11.5,15.9z"
+                android:valueTo="M7,7L10,7L10,17L7,17z"
+                android:valueType="pathType" />
+        </aapt:attr>
+    </target>
+    <target android:name="icon">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="450"
+                android:interpolator="@android:interpolator/fast_out_slow_in"
+                android:propertyName="rotation"
+                android:valueFrom="0"
+                android:valueTo="180" />
+        </aapt:attr>
+    </target>
+    <target android:name="disc">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="450"
+                android:propertyName="fillColor"
+                android:valueFrom="#3F51B5"
+                android:valueTo="#E91E63"
+                android:valueType="colorType" />
+        </aapt:attr>
+    </target>
+</animated-vector>

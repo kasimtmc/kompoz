@@ -1,0 +1,3 @@
+Regular.ttf = Noto Sans Regular, Medium.ttf = Noto Sans Medium, Bold.ttf = Noto Sans Bold
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
+Licensed under the SIL Open Font License, Version 1.1: the full text is in ../licenses/OFL.txt.

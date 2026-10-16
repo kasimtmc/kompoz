@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Kompoz</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #1c1b1f; }
+    @media (prefers-color-scheme: light) { html, body { background: #fef7ff; } }
+    canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
+    #status { position: fixed; inset: 0; display: grid; place-items: center; font: 15px system-ui, sans-serif;
+              color: #938f99; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <!-- The app draws everything on this canvas (SDL3 + WebGL); Kompoz takes the whole page. -->
+  <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+  <div id="status">Yükleniyor…</div>
+  <script>
+    var loading = document.getElementById('status');  // not "status": that is window.status, a string
+    var Module = {
+      canvas: document.getElementById('canvas'),
+      setStatus: function (text) { loading.textContent = text; loading.style.display = text ? 'grid' : 'none'; },
+      onRuntimeInitialized: function () { Module.setStatus(''); },
+    };
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>
