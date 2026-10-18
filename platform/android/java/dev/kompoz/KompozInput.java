@@ -570,6 +570,24 @@ public final class KompozInput {
         return colors;
     }
 
+    // The wallpaper's main colors as the system picked them from the picture (WallpaperColors,
+    // Android 8.1+): primary, secondary and tertiary as ARGB, 0 for one it doesn't have; null when
+    // there are none.
+    static int[] wallpaperColors() {
+        Activity activity = SDLActivity.getContext();
+        if (activity == null || Build.VERSION.SDK_INT < 27) return null;
+        try {
+            android.app.WallpaperColors colors =
+                android.app.WallpaperManager.getInstance(activity).getWallpaperColors(android.app.WallpaperManager.FLAG_SYSTEM);
+            if (colors == null) return null;
+            android.graphics.Color secondary = colors.getSecondaryColor(), tertiary = colors.getTertiaryColor();
+            return new int[] {colors.getPrimaryColor().toArgb(), secondary != null ? secondary.toArgb() : 0,
+                              tertiary != null ? tertiary.toArgb() : 0};
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
     // Draws text (an emoji) with Android's own text stack, which renders the system's color
     // emoji font (COLRv1, beyond FreeType). Returns {width, height, left, top, advance * 64}
     // followed by the ARGB pixels, or null.

@@ -658,23 +658,31 @@ void TimePickerSection(CallSite site) {
 }
 
 // Material You: the switch and the system's palettes (Android 12+).
-void DynamicColorSection(MutableState<bool> enabled, CallSite site) {
-    composable(site, enabled, [=] {
+void DynamicColorSection(MutableState<ColorSource> source, CallSite site) {
+    composable(site, source, [=] {
         const ColorScheme& cs = colorScheme();
-        const auto& palette = LocalDynamicTonalPalette.current();
+        const auto& system = LocalDynamicTonalPalette.current();
+        const auto& wallpaper = LocalWallpaperTonalPalette.current();
         Section("Dinamik renk (Material You)", [&] {
-            OutlinedCard(Modifier().fillMaxWidth().clip(RoundedCornerShape(12)), [&] {
-                ListItem({.headline = [] { Text("Duvar kağıdı renkleri"); },
-                          .supporting = [&] {
-                              Text(palette ? "dynamicLightColorScheme / dynamicDarkColorScheme"
-                                           : "Bu platform sistem paleti vermiyor (Android 12+ gerekir)");
-                          },
-                          .trailing = [&] {
-                              Switch(enabled.get() && palette, [enabled](bool on) { enabled.set(on); }, Modifier(),
-                                     palette.has_value());
-                          }});
+            // Three sources, each its own API: which one is the app's (or its user's) choice.
+            SingleChoiceSegmentedButtonRow(Modifier().fillMaxWidth(), [&] {
+                const std::pair<ColorSource, const char*> choices[] = {
+                    {ColorSource::App, "Uygulama"}, {ColorSource::System, "Sistem"}, {ColorSource::Wallpaper, "Duvar kağıdı"}};
+                for (const auto& [value, label] : choices)
+                    SegmentedButton(source.get() == value, [source, value] { source.set(value); }, [label] { Text(label); },
+                                    Modifier().weight(1));
             });
-            if (!palette) return;
+            const std::optional<TonalPalette>* shown = source.get() == ColorSource::System      ? &system
+                                                       : source.get() == ColorSource::Wallpaper ? &wallpaper
+                                                                                                : nullptr;
+            Text(source.get() == ColorSource::App         ? "lightColorScheme / darkColorScheme: uygulamanın kendi renkleri"
+                 : source.get() == ColorSource::System    ? (system ? "dynamicLightColorScheme: sistemin vurgu rengi (Android 12+, Linux masaüstü)"
+                                                                    : "Bu sistem vurgu rengi vermiyor; uygulamanın renkleri kullanılıyor")
+                 : wallpaper ? "wallpaperLightColorScheme: duvar kağıdından seçilen renkler"
+                             : "Duvar kağıdı okunamadı; uygulamanın renkleri kullanılıyor",
+                 {.font = typography().bodySmall, .color = cs.onSurfaceVariant});
+            if (!shown || !*shown) return;
+            const TonalPalette* palette = &**shown;
             // The five key colors in their 13 system tones (white .. black).
             const std::pair<const char*, const std::array<Color, 13>*> rows[] = {
                 {"accent1", &palette->accent1}, {"accent2", &palette->accent2}, {"accent3", &palette->accent3},
@@ -685,6 +693,18 @@ void DynamicColorSection(MutableState<bool> enabled, CallSite site) {
                     for (const Color& c : *tones) Box(Modifier().weight(1).height(20).background(c));
                 });
         });
+    });
+}
+
+// The section on its own, in the colors of the source picked in it (KOMPOZ_PREVIEW=DynamicColorPreview).
+KOMPOZ_PREVIEW(DynamicColorPreview, .width = 420, .height = 330) {
+    auto source = remember([] { return mutableStateOf(ColorSource::Wallpaper); });
+    bool dark = isSystemInDarkTheme();
+    ColorScheme scheme = source.get() == ColorSource::System && isDynamicColorAvailable() ? (dark ? dynamicDarkColorScheme() : dynamicLightColorScheme())
+                         : source.get() == ColorSource::Wallpaper && isWallpaperColorAvailable() ? (dark ? wallpaperDarkColorScheme() : wallpaperLightColorScheme())
+                                                                                                 : (dark ? darkColorScheme() : lightColorScheme());
+    MaterialTheme(scheme, [&] {
+        Box(Modifier().fillMaxSize().background(colorScheme().surface).padding(16), [&] { DynamicColorSection(source); });
     });
 }
 

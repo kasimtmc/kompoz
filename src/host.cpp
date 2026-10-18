@@ -175,7 +175,8 @@ ComposeHost::ComposeHost(TextMeasurer& measurer, Content content)
                                   LocalWindowSize.provides(viewport_), LocalWindowInfo.provides(WindowInfo{windowFocused_, viewport_}),
                                   LocalViewConfiguration.provides(viewConfiguration_),
                                   LocalDensity.provides(density_),
-                                  LocalDynamicTonalPalette.provides(dynamicPalette_), LocalUiMediaScope.provides(media_),
+                                  LocalDynamicTonalPalette.provides(dynamicPalette_),
+                                  LocalWallpaperTonalPalette.provides(wallpaperPalette_), LocalUiMediaScope.provides(media_),
                                   detail::LocalSaveableRegistry.provides(saveable_)},
                                  content_);
     });
@@ -310,6 +311,12 @@ void ComposeHost::setMediaInfo(const MediaInfo& info) {
 void ComposeHost::setDynamicTonalPalette(std::optional<TonalPalette> palette) {
     if (palette == dynamicPalette_) return;
     dynamicPalette_ = std::move(palette);
+    invalidate();
+}
+
+void ComposeHost::setWallpaperTonalPalette(std::optional<TonalPalette> palette) {
+    if (palette == wallpaperPalette_) return;
+    wallpaperPalette_ = std::move(palette);
     invalidate();
 }
 

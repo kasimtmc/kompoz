@@ -162,4 +162,16 @@ ColorScheme dynamicDarkColorScheme() {
     return palette ? dynamicDarkColorScheme(*palette) : darkColorScheme();
 }
 
+bool isWallpaperColorAvailable() { return LocalWallpaperTonalPalette.current().has_value(); }
+
+ColorScheme wallpaperLightColorScheme() {
+    const auto& palette = LocalWallpaperTonalPalette.current();
+    return palette ? dynamicLightColorScheme(*palette) : lightColorScheme();
+}
+
+ColorScheme wallpaperDarkColorScheme() {
+    const auto& palette = LocalWallpaperTonalPalette.current();
+    return palette ? dynamicDarkColorScheme(*palette) : darkColorScheme();
+}
+
 } // namespace kompoz

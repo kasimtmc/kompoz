@@ -11,7 +11,7 @@ void ShowcaseApp() {
         if (!darkChosen.peek()) dark.set(system);
         co_return;
     });
-    auto dynamicColor = remember([] { return mutableStateOf(true); });  // Material You where the system has it
+    auto colorSource = rememberSaveable([] { return mutableStateOf(ColorSource::System); });  // Material You where the system has it
     auto showRecompositions = remember([] { return mutableStateOf(false); });
     // The screens are routes of a NavHost; the tabs keep their own back stacks (and scroll
     // positions), saved while another tab is shown, as Compose's bottom navigation does.
@@ -177,7 +177,7 @@ void ShowcaseApp() {
             graph.composable<routes::Components>({navDeepLink("kompoz://components")},
                                                  [&](const NavBackStackEntry&) { ComponentsScreen(Modifier().fillMaxSize()); });
             graph.composable<routes::Material>({navDeepLink("kompoz://material")},
-                                               [&](const NavBackStackEntry&) { MaterialScreen(Modifier().fillMaxSize(), dynamicColor, nav); });
+                                               [&](const NavBackStackEntry&) { MaterialScreen(Modifier().fillMaxSize(), colorSource, nav); });
             graph.composable<routes::Places>({navDeepLink("kompoz://places")},
                                              [&](const NavBackStackEntry&) { PlacesScreen(Modifier().fillMaxSize()); });
         }, {.transition = fade, .popTransition = fade});
@@ -195,8 +195,11 @@ void ShowcaseApp() {
                          }});
     };
 
-    ColorScheme scheme = dynamicColor.get() && isDynamicColorAvailable()
+    // The colors from where the user chose, the app's own where that has none.
+    ColorScheme scheme = colorSource.get() == ColorSource::System && isDynamicColorAvailable()
                              ? (dark.get() ? dynamicDarkColorScheme() : dynamicLightColorScheme())
+                         : colorSource.get() == ColorSource::Wallpaper && isWallpaperColorAvailable()
+                             ? (dark.get() ? wallpaperDarkColorScheme() : wallpaperLightColorScheme())
                              : (dark.get() ? darkColorScheme() : lightColorScheme());
     SystemBarsAppearance(!dark.get());  // dark status bar icons over the light theme
     MaterialTheme(animateColorScheme(scheme), [&] {
@@ -247,7 +250,14 @@ void ShowcaseApp() {
                          {"Görünüm",
                           {{.text = "Koyu tema", .onClick = [dark, darkChosen] { dark.set(!dark.get()), darkChosen.set(true); }, .shortcut = KeyShortcut{Key::D, true},
                             .checked = dark.get()},
-                           {.text = "Dinamik renk", .onClick = [dynamicColor] { dynamicColor.set(!dynamicColor.get()); }, .checked = dynamicColor.get()},
+                           MenuBarItem::Separator(),
+                           {.text = "Uygulamanın renkleri", .onClick = [colorSource] { colorSource.set(ColorSource::App); },
+                            .checked = colorSource.get() == ColorSource::App},
+                           {.text = "Sistemin renkleri", .onClick = [colorSource] { colorSource.set(ColorSource::System); },
+                            .checked = colorSource.get() == ColorSource::System},
+                           {.text = "Duvar kağıdının renkleri", .onClick = [colorSource] { colorSource.set(ColorSource::Wallpaper); },
+                            .checked = colorSource.get() == ColorSource::Wallpaper},
+                           MenuBarItem::Separator(),
                            {.text = "Sağdan sola", .onClick = [rightToLeft] { rightToLeft.set(!rightToLeft.get()); },
                             .shortcut = KeyShortcut{Key::R, true, true}, .checked = rightToLeft.get()},
                            MenuBarItem::Separator(),

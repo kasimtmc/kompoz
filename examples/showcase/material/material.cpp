@@ -2,8 +2,8 @@
 
 #include "showcase.hpp"
 
-void MaterialScreen(Modifier modifier, MutableState<bool> dynamicColor, NavController nav, CallSite site) {
-    composable(site, modifier, dynamicColor, nav, [=] {
+void MaterialScreen(Modifier modifier, MutableState<ColorSource> colorSource, NavController nav, CallSite site) {
+    composable(site, modifier, colorSource, nav, [=] {
         auto scroll = rememberScrollState();
         Column(modifier.verticalScroll(scroll).padding(20, 8, 20, 20), {.verticalArrangement = Arrangement::spacedBy(16)},
                [&] {
@@ -17,7 +17,7 @@ void MaterialScreen(Modifier modifier, MutableState<bool> dynamicColor, NavContr
                    RippleSection();
                    SelectableRowsSection();
                    SemanticsSection();
-                   DynamicColorSection(dynamicColor);
+                   DynamicColorSection(colorSource);
                    InsetsSection();
                    ImeNestedScrollSection();
                    FrameRateSection();

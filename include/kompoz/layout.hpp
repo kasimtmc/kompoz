@@ -1242,6 +1242,11 @@ std::vector<std::pair<Color, uint32_t>> quantizeColors(const ImageBitmap& image,
 // picked as far apart in hue as `desired` of them can be. When none is left: Google blue alone.
 std::vector<Color> seedColors(const std::vector<std::pair<Color, uint32_t>>& colors, int desired = 4);
 inline const CompositionLocal<std::optional<TonalPalette>> LocalDynamicTonalPalette{std::nullopt};
+// The wallpaper's own palette, where the platform can read the wallpaper (TonalPalette::fromImage
+// of it; Android's wallpaper colors): read by wallpaperLightColorScheme() and
+// wallpaperDarkColorScheme(). Whether an app takes its colors from it, from the system's accent
+// (LocalDynamicTonalPalette) or from its own scheme is the app's choice, or its user's.
+inline const CompositionLocal<std::optional<TonalPalette>> LocalWallpaperTonalPalette{std::nullopt};
 // The window's size in dp (pick a layout for phones, tablets and desktops).
 inline const CompositionLocal<Size> LocalWindowSize{Size{}};
 // The window the composition is in (Compose's LocalWindowInfo): whether it has the input focus

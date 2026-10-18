@@ -21,7 +21,7 @@ namespace {
 jclass gClass = nullptr;
 jmethodID gMediaInfo = nullptr;
 jmethodID gShow = nullptr, gUpdate = nullptr, gHide = nullptr, gAttach = nullptr, gFontScale = nullptr,
-          gRenderGlyph = nullptr, gDynamicPalette = nullptr, gSystemBars = nullptr, gDecodeImage = nullptr, gImageBounds = nullptr, gHaptic = nullptr, gImeControlBy = nullptr, gSetFrameRate = nullptr, gImeControlEnd = nullptr, gHttpGet = nullptr,
+          gRenderGlyph = nullptr, gDynamicPalette = nullptr, gWallpaperColors = nullptr, gSystemBars = nullptr, gDecodeImage = nullptr, gImageBounds = nullptr, gHaptic = nullptr, gImeControlBy = nullptr, gSetFrameRate = nullptr, gImeControlEnd = nullptr, gHttpGet = nullptr,
           gStateSaved = nullptr, gTakeRestoredState = nullptr, gSetBackEnabled = nullptr, gViewConfiguration = nullptr,
           gGestureExclusion = nullptr, gContentSensitive = nullptr, gAutofillFocus = nullptr, gAutofillValue = nullptr,
           gAutofillVisibility = nullptr, gAutofillDone = nullptr;
@@ -215,6 +215,26 @@ std::optional<TonalPalette> dynamicPalette() {
             (*keys[k])[size_t(t)] = Color::hex(c & 0xFFFFFF);
         }
     return palette;
+}
+
+// As System UI takes a seed from WallpaperColors whose populations it can't see (as an app
+// can't): the first of its main colors with chroma 5 or more, else Google blue.
+std::optional<TonalPalette> wallpaperPalette() {
+    if (!gClass || !gWallpaperColors) return std::nullopt;
+    JNIEnv* e = env();
+    auto result = static_cast<jintArray>(e->CallStaticObjectMethod(gClass, gWallpaperColors));
+    checkException(e);
+    if (!result) return std::nullopt;  // before Android 8.1, or no wallpaper colors
+    jint argb[3] = {};
+    bool ok = e->GetArrayLength(result) == 3;
+    if (ok) e->GetIntArrayRegion(result, 0, 3, argb);
+    e->DeleteLocalRef(result);
+    if (!ok) return std::nullopt;
+    for (jint c : argb) {
+        Color color = Color::hex(uint32_t(c) & 0xFFFFFF);
+        if ((uint32_t(c) >> 24) != 0 && Hct::fromColor(color).chroma >= 5) return TonalPalette::fromSeed(color);
+    }
+    return TonalPalette::fromSeed(Color::hex(0x1B6EF3));
 }
 
 bool accessibilityEnabled() { return gAccessibility; }
@@ -546,6 +566,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     android_ime::gStateSaved = e->GetStaticMethodID(android_ime::gClass, "stateSaved", "([B)V");
     android_ime::gTakeRestoredState = e->GetStaticMethodID(android_ime::gClass, "takeRestoredState", "()[B");
     android_ime::gDynamicPalette = e->GetStaticMethodID(android_ime::gClass, "dynamicPalette", "()[I");
+    android_ime::gWallpaperColors = e->GetStaticMethodID(android_ime::gClass, "wallpaperColors", "()[I");
     android_ime::gMediaInfo = e->GetStaticMethodID(android_ime::gClass, "mediaInfo", "()[I");
     android_ime::gSystemBars = e->GetStaticMethodID(android_ime::gClass, "setSystemBarsAppearance", "(ZZ)V");
     android_ime::gSemanticsChanged = e->GetStaticMethodID(android_ime::gClass, "semanticsChanged", "([I)V");

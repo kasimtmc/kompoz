@@ -164,7 +164,10 @@ void FocusPropertiesDemo(CallSite site = CallSite::current());
 void SelectableRowsSection(CallSite site = CallSite::current());
 void DatePickerSection(CallSite site = CallSite::current());
 void TimePickerSection(CallSite site = CallSite::current());
-void DynamicColorSection(MutableState<bool> enabled, CallSite site = CallSite::current());
+// Where the theme's colors come from: the app's own scheme, the system's accent color, or the
+// wallpaper. The library offers all three; the app (here its user) picks.
+enum class ColorSource { App, System, Wallpaper };
+void DynamicColorSection(MutableState<ColorSource> source, CallSite site = CallSite::current());
 void ImeNestedScrollSection(CallSite site = CallSite::current());
 void FrameRateSection(CallSite site = CallSite::current());
 void InsetsSection(CallSite site = CallSite::current());
@@ -194,4 +197,4 @@ void FloatingToolbarsSection(CallSite site = CallSite::current());
 void PlacesScreen(Modifier modifier, CallSite site = CallSite::current());
 
 // material/material.cpp
-void MaterialScreen(Modifier modifier, MutableState<bool> dynamicColor, NavController nav, CallSite site = CallSite::current());
+void MaterialScreen(Modifier modifier, MutableState<ColorSource> colorSource, NavController nav, CallSite site = CallSite::current());

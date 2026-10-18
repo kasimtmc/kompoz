@@ -59,6 +59,9 @@ std::vector<uint8_t> takeRestoredState();
 void setSystemBarsAppearance(bool lightStatusBars, bool lightNavigationBars);
 // The wallpaper palette (Android 12+), none before.
 std::optional<TonalPalette> dynamicPalette();
+// The wallpaper's own colors (Android 8.1+'s WallpaperColors): fromSeed of its first main color
+// that isn't grey, as System UI takes one when it can't see the colors' populations.
+std::optional<TonalPalette> wallpaperPalette();
 // android.view.ViewConfiguration's gesture thresholds, in dp at `scale` pixels per dp.
 std::optional<ViewConfiguration> viewConfiguration(float scale);
 bool accessibilityEnabled();

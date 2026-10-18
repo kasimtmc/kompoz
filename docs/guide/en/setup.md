@@ -90,7 +90,7 @@ On the desktop the command line can carry a deep link that the app opens with, s
 
 ### Linux
 
-The build above is all it takes. Dark mode and the desktop's accent color come from the XDG desktop portal and follow it as it changes: `isSystemInDarkTheme()` and `dynamicLightColorScheme()` see them.
+The build above is all it takes. Dark mode and the desktop's accent color come from the XDG desktop portal and follow it as it changes: `isSystemInDarkTheme()` and `dynamicLightColorScheme()` see them. The wallpaper is read from the desktop's settings (KDE Plasma, GNOME, Cinnamon, MATE, Xfce) for `wallpaperLightColorScheme()`.
 
 ### Windows
 

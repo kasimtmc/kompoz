@@ -25005,6 +25005,29 @@ TEST(tonal_palette_from_a_picture_takes_its_best_seed) {
     CHECK(TonalPalette::fromImage(pixelsOf({{0x777777, 50}, {0x222222, 50}})) == TonalPalette::fromSeed(Color::hex(0x1B6EF3)));
 }
 
+TEST(wallpaper_colors_are_a_source_of_their_own) {
+    // Where the host has a wallpaper palette, the wallpaper schemes come from it, apart from the
+    // system's (accent) palette and the app's own scheme; without one they are the baseline.
+    TonalPalette wall = TonalPalette::fromSeed(Color::hex(0x2E7D32)), accent = TonalPalette::fromSeed(Color::hex(0xC2185B));
+    ColorScheme light, dark, system;
+    bool available = true;
+    ComposeTestRule rule([&] {
+        available = isWallpaperColorAvailable();
+        light = wallpaperLightColorScheme();
+        dark = wallpaperDarkColorScheme();
+        system = dynamicLightColorScheme();
+    });
+    CHECK(!available && light == lightColorScheme() && dark == darkColorScheme());
+    rule.host().setWallpaperTonalPalette(wall);
+    rule.host().setDynamicTonalPalette(accent);
+    rule.waitForIdle();
+    CHECK(available && light == dynamicLightColorScheme(wall) && dark == dynamicDarkColorScheme(wall));
+    CHECK(system == dynamicLightColorScheme(accent) && !(light == system));
+    rule.host().setWallpaperTonalPalette(std::nullopt);
+    rule.waitForIdle();
+    CHECK(!available && light == lightColorScheme() && system == dynamicLightColorScheme(accent));
+}
+
 KOMPOZ_PREVIEW(TestGreetingPreview, .width = 200, .height = 100, .darkTheme = true, .background = Color::hex(0x102030)) {
     Text(isSystemInDarkTheme() ? "karanlık" : "aydınlık");
 }

@@ -57,8 +57,9 @@ kompoz::Application kompoz::createApplication(int, char**) {
   kısayollar, önerili yazılım klavyesi, sürükle-bırak, tahmine dayalı geri hareketi.
 - **Erişilebilirlik**: Android'de TalkBack'in okuduğu semantik ağaç (etiketler, roller, durumlar, eylemler, özel
   eylemler, canlı bölgeler).
-- **Platformla bütünleşme**: sistemin koyu modu; Android 12+'da duvar kağıdından, Linux'ta masaüstünün vurgu renginden
-  dinamik renk; sistem yazı ölçeği; sistemin dili (kütüphanenin kendi metinleri İngilizce ya da Türkçe, `LocalStrings`,
+- **Platformla bütünleşme**: sistemin koyu modu; kaynağını uygulamanın (ya da kullanıcısının) seçtiği dinamik renk:
+  sistemin paleti (Android 12+'da duvar kağıdınınki, Linux'ta masaüstünün vurgu rengi) ya da duvar kağıdının kendisi
+  (Linux masaüstleri, Windows, Android 8.1+); sistem yazı ölçeği; sistemin dili (kütüphanenin kendi metinleri İngilizce ya da Türkçe, `LocalStrings`,
   ve sağdan sola yerleşim); pano, titreşim, URI'ler, IME.
 - **Araçlar**: pencere açmadan UI testleri (`ComposeTestRule`), önizlemeler (`KOMPOZ_PREVIEW`), kaydedince uygulamanın
   durumunu koruyarak yeniden derleyip başlatma (`scripts/dev.sh`), betikle ekran görüntüsü, kare profili, her platform
@@ -137,7 +138,7 @@ Her Compose API'sinin durumuyla tam liste [docs/components.tr.md](docs/component
 | `BottomSheetScaffold(sheetContent = { ... }, scaffoldState = state, sheetPeekHeight = 128.dp) { padding -> ... }` | `BottomSheetScaffold([&] { ... }, Modifier(), {.scaffoldState = state, .sheetPeekHeight = 128}, [&](PaddingValues padding) { ... })`, `co_await state.bottomSheetState.expand()` |
 | `NavigationSuiteScaffold(navigationSuiteItems = { item(selected, onClick, icon, label) }) { content }`, `currentWindowAdaptiveInfo().windowSizeClass` | `NavigationSuiteScaffold([&](NavigationSuiteScope& nav) { nav.item(selected, onClick, Icons::Filled::Home, "Ana sayfa"); }, Modifier(), {}, content)`, `currentWindowAdaptiveInfo().windowSizeClass.windowWidthSizeClass` |
 | `Modifier.imePadding()`, `WindowInsets.statusBars`, `consumeWindowInsets` | `Modifier().padding(padding).consumeWindowInsets(padding).imePadding()`, `WindowInsets::statusBars()`, `windowInsetsPadding(WindowInsets::systemBars())`; `SystemBarsAppearance(!dark)` sistem çubuğu ikonları |
-| `dynamicLightColorScheme(context)` (Material You) | `MaterialTheme(isDynamicColorAvailable() ? dynamicLightColorScheme() : lightColorScheme(), ...)`: Android 12+ duvar kağıdı renkleri; Linux'ta masaüstünün vurgu renginden (XDG portalı); `TonalPalette::fromSeed(renk)` her yerde |
+| `dynamicLightColorScheme(context)` (Material You) | `MaterialTheme(isDynamicColorAvailable() ? dynamicLightColorScheme() : lightColorScheme(), ...)`: Android 12+ duvar kağıdı renkleri; Linux'ta masaüstünün vurgu renginden (XDG portalı); `TonalPalette::fromSeed(renk)` her yerde; duvar kağıdının kendisinden `wallpaperLightColorScheme()` (Linux masaüstleri, Windows, Android 8.1+), herhangi bir resimden `TonalPalette::fromImage(bitmap)` |
 | `Modifier.semantics { contentDescription = ...; role = Role.Button }` | `Modifier().semantics({.contentDescription = "...", .role = SemanticsRole::Button})`; Android'de TalkBack bu ağacı okur |
 | `Modifier.semantics(mergeDescendants = true) {}`, `Modifier.clearAndSetSemantics { contentDescription = "Puan: 4 / 5" }`, `Modifier.semantics { hideFromAccessibility() }` | `Modifier().semantics({.mergeDescendants = true})`, `Modifier().clearAndSetSemantics({.contentDescription = "Puan: 4 / 5"})`, `Modifier().hideFromAccessibility()` |
 | `Modifier.animateItem()`, `SwipeToDismissBox`, `Modifier.draggable` | Aynı isimler; `SwipeToDismissBox(rememberSwipeToDismissBoxState(confirm), background, content)` |
@@ -460,10 +461,11 @@ KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 Komutlar: `click x y`, `rclick x y`, `move x y`, `down x y` / `up x y` (basılı tutma), `drag x1 y1 x2 y2`,
 `mdrag x1 y1 x2 y2` (fareyle), `resize w h`, `swipe x1 y1 x2 y2 kare` (kare başına bir hareket, fling'i de tetikler),
 `fdown|fmove|fup kimlik x y` (çoklu dokunma), `wheel x y dy`, `zoom x y kat` (Ctrl+tekerlek / touchpad sıkıştırması),
-`type metin`, `key enter|backspace|escape|tab|shift+tab|space|up|down|left|right`, `wait kare`, `shot dosya.png`,
-`quit`. Ortam değişkenleri: `KOMPOZ_TRACE=1` her recomposition'da kaç scope'un çalıştığını/atlandığını loglar;
+`type metin`, `key enter|backspace|escape|tab|shift+tab|space|up|down|left|right`, `wait kare`, `sleep ms` (gerçek
+zaman: başka iş parçacıklarının işi için), `shot dosya.png`, `quit`. Ortam değişkenleri: `KOMPOZ_TRACE=1` her recomposition'da kaç scope'un çalıştığını/atlandığını loglar;
 `KOMPOZ_FONT_SCALE=1.3` masaüstünde sistem yazı ölçeğini, `KOMPOZ_SCALE=2.625` bir telefonun yoğunluğunu taklit eder;
-`KOMPOZ_NO_DESKTOP_ACCENT=1` Linux'ta masaüstünün vurgu rengini almaz (her makinede aynı ekran görüntüsü için);
+`KOMPOZ_NO_DESKTOP_ACCENT=1` ve `KOMPOZ_NO_WALLPAPER_COLORS=1` masaüstünün vurgu rengini ve duvar kağıdının renklerini
+almaz (her makinede aynı ekran görüntüsü için);
 `KOMPOZ_LANGUAGE=tr|en` kütüphanenin kendi metinleri için sistemin dilinin yerine geçer;
 `KOMPOZ_STATE_FILE=dosya` kayıtlı durumu çalıştırmalar arasında korur; `KOMPOZ_PREVIEW=ad` bir önizleme gösterir.
 

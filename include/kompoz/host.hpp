@@ -111,6 +111,8 @@ public:
     void setDensity(Density density);            // read via LocalDensity
     // The system's wallpaper palette (Android 12+), read via dynamicLightColorScheme(); none elsewhere.
     void setDynamicTonalPalette(std::optional<TonalPalette> palette);
+    // The wallpaper's own palette where the platform reads it, read via wallpaperLightColorScheme().
+    void setWallpaperTonalPalette(std::optional<TonalPalette> palette);
     // The device as mediaQuery tells it (the pointer, the keyboard, a microphone and a camera,
     // the viewing distance, the posture); the window's size and the on-screen keyboard come from
     // setViewportSize and setSystemInsets.
@@ -448,7 +450,7 @@ private:
     LayoutDirection layoutDirection_ = LayoutDirection::Ltr;
     Strings strings_;
     Density density_;
-    std::optional<TonalPalette> dynamicPalette_;
+    std::optional<TonalPalette> dynamicPalette_, wallpaperPalette_;
     UiMediaScope media_;  // LocalUiMediaScope
     MediaInfo mediaInfo_;
     std::optional<std::pair<bool, bool>> barsAppearance_;

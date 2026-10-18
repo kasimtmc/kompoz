@@ -197,6 +197,11 @@ if(KOMPOZ_BUILD_SDL3)
         target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_DESKTOP_ACCENT=1)
         target_link_libraries(kompoz_sdl3 PUBLIC ${CMAKE_DL_LIBS})
     endif()
+    if(WIN32 OR (UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN))
+        # The wallpaper's own colors, found and picked on a thread (Android's come from the system).
+        target_sources(kompoz_sdl3 PRIVATE platform/sdl3/wallpaper_colors.cpp)
+        target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_WALLPAPER_COLORS=1)
+    endif()
 
     # For an app's CMakeLists: copies what every app ships (Kompoz's assets/: the bundled fonts and
     # the licenses) next to `target`'s binary each time it is built (desktops; Android and the web

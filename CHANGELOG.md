@@ -14,9 +14,10 @@ and the web.
   `SubcomposeLayout`, `LookaheadScope`, intrinsics, window insets, right-to-left layouts.
 - **Lists and scrolling**: lazy lists, grids and staggered grids, pagers, carousels, nested scroll, Android's fling
   curve, overscroll stretch, snapping, pull to refresh, the mouse wheel.
-- **Material 3** (Compose Material 3 1.4 with the Expressive components) and `MaterialTheme` with dynamic color: from
-  the wallpaper on Android 12+, from the desktop's accent color on Linux, from any color with
-  `TonalPalette::fromSeed`.
+- **Material 3** (Compose Material 3 1.4 with the Expressive components) and `MaterialTheme` with dynamic color from
+  the source the app or its user picks: the system's palette (the wallpaper's on Android 12+, the desktop's accent
+  color on Linux), the wallpaper itself (Linux desktops, Windows, Android 8.1+), any picture
+  (`TonalPalette::fromImage`) or any color (`TonalPalette::fromSeed`).
 - **Drawing and text**: `Canvas`, brushes, paths, shapes (Material's shape library and morphing), blurred shadows,
   `graphicsLayer`, vectors, images loaded over HTTP, HarfBuzz shaping, bidirectional text, selection, text fields
   with undo, autofill and hardware keyboard editing.

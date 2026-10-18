@@ -14,8 +14,10 @@
   `SubcomposeLayout`, `LookaheadScope`, intrinsic'ler, pencere kenar boşlukları, sağdan sola yerleşim.
 - **Listeler ve kaydırma**: tembel listeler, ızgaralar ve kademeli ızgaralar, pager'lar, carousel'ler, iç içe kaydırma,
   Android'in fling eğrisi, kenar esnemesi, yakalama, yenilemek için çekme, fare tekerleği.
-- **Material 3** (Expressive bileşenleriyle Compose Material 3 1.4) ve dinamik renkli `MaterialTheme`: Android 12+'da
-  duvar kağıdından, Linux'ta masaüstünün vurgu renginden, `TonalPalette::fromSeed` ile herhangi bir renkten.
+- **Material 3** (Expressive bileşenleriyle Compose Material 3 1.4) ve kaynağını uygulamanın ya da kullanıcısının
+  seçtiği dinamik renkli `MaterialTheme`: sistemin paleti (Android 12+'da duvar kağıdınınki, Linux'ta masaüstünün vurgu
+  rengi), duvar kağıdının kendisi (Linux masaüstleri, Windows, Android 8.1+), herhangi bir resim
+  (`TonalPalette::fromImage`) ya da herhangi bir renk (`TonalPalette::fromSeed`).
 - **Çizim ve metin**: `Canvas`, fırçalar, path'ler, şekiller (Material'in şekil kitaplığı ve biçim değiştirme), bulanık
   gölgeler, `graphicsLayer`, vektörler, HTTP'den yüklenen resimler, HarfBuzz ile şekillendirme, iki yönlü metin, seçim;
   geri almalı, otomatik doldurmalı ve donanım klavyesiyle düzenlenen metin alanları.

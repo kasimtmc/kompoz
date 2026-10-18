@@ -103,6 +103,14 @@ ColorScheme dynamicLightColorScheme();
 ColorScheme dynamicDarkColorScheme();
 ColorScheme dynamicLightColorScheme(const TonalPalette& palette);
 ColorScheme dynamicDarkColorScheme(const TonalPalette& palette);
+// Material You from the wallpaper itself, the way Android 12 makes it, also where the system
+// doesn't (LocalWallpaperTonalPalette): Linux desktops (KDE Plasma; GNOME and the desktops that
+// keep its settings, Cinnamon and MATE; Xfce), Windows and Android 8.1+. Followed as the wallpaper
+// changes; none where it can't be read (the web), and none for a moment after the app starts,
+// while it is read. Where there is none the schemes are the baseline ones.
+bool isWallpaperColorAvailable();
+ColorScheme wallpaperLightColorScheme();
+ColorScheme wallpaperDarkColorScheme();
 // A tone (0 black .. 100 white, CIELAB lightness) of one of the palette's key colors.
 Color paletteTone(const std::array<Color, 13>& keyColor, float tone);
 

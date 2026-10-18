@@ -58,8 +58,9 @@ kompoz::Application kompoz::createApplication(int, char**) {
   and shortcuts, the software keyboard with suggestions, drag and drop, the predictive back gesture.
 - **Accessibility**: a semantics tree that TalkBack reads on Android (labels, roles, states, actions, custom
   actions, live regions).
-- **Platform integration**: the system's dark mode; dynamic color from the wallpaper on Android 12+ and from the
-  desktop's accent color on Linux; system font scale; the system language (the library's own texts in English or
+- **Platform integration**: the system's dark mode; dynamic color, from a source the app (or its user) picks: the
+  system's palette (the wallpaper's on Android 12+, the desktop's accent color on Linux) or the wallpaper itself (Linux
+  desktops, Windows, Android 8.1+); system font scale; the system language (the library's own texts in English or
   Turkish, `LocalStrings`, and right-to-left layouts); clipboard, haptics, URIs, the IME.
 - **Tools**: headless UI tests (`ComposeTestRule`), previews (`KOMPOZ_PREVIEW`), rebuild-and-restart on save
   that keeps the app's state (`scripts/dev.sh`), scripted screenshots, frame profiling, packaging for every
@@ -138,7 +139,7 @@ The full list, with the status of each Compose API, is in [docs/components.md](d
 | `BottomSheetScaffold(sheetContent = { ... }, scaffoldState = state, sheetPeekHeight = 128.dp) { padding -> ... }` | `BottomSheetScaffold([&] { ... }, Modifier(), {.scaffoldState = state, .sheetPeekHeight = 128}, [&](PaddingValues padding) { ... })`, `co_await state.bottomSheetState.expand()` |
 | `NavigationSuiteScaffold(navigationSuiteItems = { item(selected, onClick, icon, label) }) { content }`, `currentWindowAdaptiveInfo().windowSizeClass` | `NavigationSuiteScaffold([&](NavigationSuiteScope& nav) { nav.item(selected, onClick, Icons::Filled::Home, "Home"); }, Modifier(), {}, content)`, `currentWindowAdaptiveInfo().windowSizeClass.windowWidthSizeClass` |
 | `Modifier.imePadding()`, `WindowInsets.statusBars`, `consumeWindowInsets` | `Modifier().padding(padding).consumeWindowInsets(padding).imePadding()`, `WindowInsets::statusBars()`, `windowInsetsPadding(WindowInsets::systemBars())`; `SystemBarsAppearance(!dark)` for the system bars' icons |
-| `dynamicLightColorScheme(context)` (Material You) | `MaterialTheme(isDynamicColorAvailable() ? dynamicLightColorScheme() : lightColorScheme(), ...)`: the wallpaper's colors on Android 12+, the desktop's accent color on Linux (XDG portal); `TonalPalette::fromSeed(color)` anywhere |
+| `dynamicLightColorScheme(context)` (Material You) | `MaterialTheme(isDynamicColorAvailable() ? dynamicLightColorScheme() : lightColorScheme(), ...)`: the wallpaper's colors on Android 12+, the desktop's accent color on Linux (XDG portal); `TonalPalette::fromSeed(color)` anywhere; `wallpaperLightColorScheme()` from the wallpaper itself (Linux desktops, Windows, Android 8.1+), `TonalPalette::fromImage(bitmap)` from any picture |
 | `Modifier.semantics { contentDescription = ...; role = Role.Button }` | `Modifier().semantics({.contentDescription = "...", .role = SemanticsRole::Button})`; TalkBack reads this tree on Android |
 | `Modifier.semantics(mergeDescendants = true) {}`, `Modifier.clearAndSetSemantics { contentDescription = "Rating: 4 of 5" }`, `Modifier.semantics { hideFromAccessibility() }` | `Modifier().semantics({.mergeDescendants = true})`, `Modifier().clearAndSetSemantics({.contentDescription = "Rating: 4 of 5"})`, `Modifier().hideFromAccessibility()` |
 | `Modifier.animateItem()`, `SwipeToDismissBox`, `Modifier.draggable` | The same names; `SwipeToDismissBox(rememberSwipeToDismissBoxState(confirm), background, content)` |
@@ -464,11 +465,11 @@ KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 Commands: `click x y`, `rclick x y`, `move x y`, `down x y` / `up x y` (holding down), `drag x1 y1 x2 y2`,
 `mdrag x1 y1 x2 y2` (with the mouse), `resize w h`, `swipe x1 y1 x2 y2 frames` (a move per frame, so it flings),
 `fdown|fmove|fup id x y` (multi-touch), `wheel x y dy`, `zoom x y factor` (Ctrl+wheel / touchpad pinch),
-`type text`, `key enter|backspace|escape|tab|shift+tab|space|up|down|left|right`, `wait frames`, `shot file.png`,
-`quit`. Environment variables: `KOMPOZ_TRACE=1` logs how many scopes ran or were skipped in each recomposition;
+`type text`, `key enter|backspace|escape|tab|shift+tab|space|up|down|left|right`, `wait frames`, `sleep ms` (real
+time, for work on other threads), `shot file.png`, `quit`. Environment variables: `KOMPOZ_TRACE=1` logs how many scopes ran or were skipped in each recomposition;
 `KOMPOZ_FONT_SCALE=1.3` stands in for the system's font scale on the desktop, `KOMPOZ_SCALE=2.625` for a phone's
-density; `KOMPOZ_NO_DESKTOP_ACCENT=1` leaves out the desktop's accent color on Linux (screenshots the same on every
-machine); `KOMPOZ_LANGUAGE=tr|en` stands in for the system language of the library's own texts;
+density; `KOMPOZ_NO_DESKTOP_ACCENT=1` and `KOMPOZ_NO_WALLPAPER_COLORS=1` leave out the desktop's accent color and the
+wallpaper's colors (screenshots the same on every machine); `KOMPOZ_LANGUAGE=tr|en` stands in for the system language of the library's own texts;
 `KOMPOZ_STATE_FILE=file` keeps the saved state across runs; `KOMPOZ_PREVIEW=name` shows a preview.
 
 `KOMPOZ_PROFILE=1` logs frame times: for each slow frame the input, compose + layout, drawing and present times, the

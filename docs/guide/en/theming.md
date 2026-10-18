@@ -92,19 +92,47 @@ void Root(ThemeChoice choice) {
 ![Example-1](../../screenshots/dynamic-color-linux/d9.png)
 ![Example-2](../../screenshots/dynamic-color-linux/d16_light.png)
 
-On Android 12 and later, the system derives a palette from the wallpaper ("Material You"). On Linux, Kompoz reads the desktop's accent color from the XDG desktop portal and turns it into a palette the same way. `dynamicLightColorScheme()` and `dynamicDarkColorScheme()` give the schemes, and update when the wallpaper or the accent color changes:
+A theme's colors can come from three places, and Kompoz offers each as an API of its own. Which one an app uses is the app's decision, or its user's: Kompoz never switches from one to another by itself.
+
+| Source | Schemes | Where it is available |
+|---|---|---|
+| The app's own colors | `lightColorScheme()`, `darkColorScheme()`, or a scheme of your own (`TonalPalette::fromSeed` of a brand color) | Everywhere. |
+| The system's palette | `dynamicLightColorScheme()`, `dynamicDarkColorScheme()`; `isDynamicColorAvailable()` | Android 12+ (the palette the system made, from the wallpaper or the colors the user picked); Linux desktops that give an accent color through the XDG portal (on KDE, the color scheme's accent). |
+| The wallpaper itself | `wallpaperLightColorScheme()`, `wallpaperDarkColorScheme()`; `isWallpaperColorAvailable()` | Linux (KDE Plasma; GNOME, Cinnamon and MATE; Xfce), Windows, Android 8.1+. |
+
+The system's palette follows what the user chose in the system's settings, so an app that uses it matches the rest of the desktop. The wallpaper's colors are picked from the picture itself the way Android picks them (`TonalPalette::fromImage`), also on desktops whose own colors don't follow the wallpaper. On Android, where apps can't see the colors' populations, the seed is the first of the system's main wallpaper colors that isn't grey, as System UI takes it in that case. Both update while the app runs, when the wallpaper, the accent color or the theme changes; where a source has nothing, its schemes are the baseline ones, so an app can always fall back to its own colors.
+
+Let the user choose, and keep the choice:
 
 ```cpp
 #! void App() {}
-void Root() {
+enum class ColorSource { App, System, Wallpaper };
+
+void Root(ColorSource source) {
     bool dark = isSystemInDarkTheme();
-    ColorScheme scheme = isDynamicColorAvailable() ? (dark ? dynamicDarkColorScheme() : dynamicLightColorScheme())
-                                                   : (dark ? darkColorScheme() : lightColorScheme());
+    ColorScheme scheme = source == ColorSource::System && isDynamicColorAvailable()
+                             ? (dark ? dynamicDarkColorScheme() : dynamicLightColorScheme())
+                         : source == ColorSource::Wallpaper && isWallpaperColorAvailable()
+                             ? (dark ? wallpaperDarkColorScheme() : wallpaperLightColorScheme())
+                             : (dark ? darkColorScheme() : lightColorScheme());
     MaterialTheme(scheme, App);
 }
 ```
 
-Where there is no system palette (Windows, the web, older Android), `isDynamicColorAvailable()` is false and the dynamic schemes are the baseline ones. `KOMPOZ_NO_DESKTOP_ACCENT=1` ignores the Linux accent color, for screenshots that are the same on every machine.
+The showcase asks this way, in its View menu and on its Material screen.
+
+### Colors from any picture
+
+`TonalPalette::fromImage(bitmap)` makes Material You's palettes from any picture, as the wallpaper's are made: an album's cover, a profile photo. It does what Android does with a wallpaper: the picture scaled to at most 112 × 112 of area without filtering, as `WallpaperColors` scales it; `quantizeColors(bitmap)` finds the colors it is made of and how much of each (the Celebi quantizer Android and Material Color Utilities use); `seedColors(colors)` ranks those that would make good theme seeds as Android's System UI ranks a wallpaper's, up to four, so you can offer the user a choice of seeds as Android's wallpaper picker does:
+
+```cpp
+void CoverTheme(const ImageBitmap& cover, const Content& content) {
+    TonalPalette palette = remember(cover, [&] { return TonalPalette::fromImage(cover); });   // once per picture
+    MaterialTheme(isSystemInDarkTheme() ? dynamicDarkColorScheme(palette) : dynamicLightColorScheme(palette), content);
+}
+```
+
+`KOMPOZ_NO_DESKTOP_ACCENT=1` and `KOMPOZ_NO_WALLPAPER_COLORS=1` leave out the desktop's accent color and the wallpaper's colors, for screenshots that are the same on every machine.
 
 ## Animating a theme change
 

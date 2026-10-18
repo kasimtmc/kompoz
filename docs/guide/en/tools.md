@@ -85,7 +85,8 @@ The commands, separated by `;`:
 | `type text` | Types text into the focused field. |
 | `key name` | `enter`, `backspace`, `escape`, `tab`, `shift+tab`, `space`, `up`, `down`, `left`, `right`. |
 | `resize w h` | Resizes the window. |
-| `wait frames` | Lets frames pass. |
+| `wait frames` | Lets frames pass (in virtual time). |
+| `sleep ms` | Lets real time pass, for work on other threads: an image loading, the wallpaper's colors being read. |
 | `shot file.png` | Saves a screenshot. |
 | `quit` | Ends the app. |
 
@@ -131,6 +132,7 @@ Kompoz records each frame first and draws again only what changed since the fram
 | `KOMPOZ_LANGUAGE=tr` | The language of the library's own texts, instead of the system's (`en` or `tr`). |
 | `KOMPOZ_LAYOUT_DIRECTION=rtl` | Right-to-left or left-to-right layout, instead of the system language's. |
 | `KOMPOZ_NO_DESKTOP_ACCENT=1` | Ignores the Linux desktop's accent color, so screenshots are the same on every machine. |
+| `KOMPOZ_NO_WALLPAPER_COLORS=1` | Doesn't read the wallpaper's colors, for the same reason. |
 | `KOMPOZ_TRACE=1` | Logs how many scopes ran and were skipped in each recomposition. |
 | `KOMPOZ_PROFILE=1` | Logs frame times. |
 | `KOMPOZ_DAMAGE_SHOW=1`, `KOMPOZ_DAMAGE_CHECK=1`, `KOMPOZ_FULL_REDRAW=1` | Show, check or turn off redrawing only what changed. |

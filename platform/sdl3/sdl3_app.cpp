@@ -32,6 +32,9 @@
 #ifdef KOMPOZ_DESKTOP_ACCENT
 #include "desktop_accent.hpp"
 #endif
+#ifdef KOMPOZ_WALLPAPER_COLORS
+#include "wallpaper_colors.hpp"
+#endif
 
 #ifdef SDL_PLATFORM_ANDROID
 #include "android_ime.hpp"
@@ -2362,6 +2365,7 @@ struct Script {
     std::vector<std::string> commands;
     size_t next = 0;
     int waitFrames = 0;
+    uint64_t sleepUntilNs = 0;  // `sleep`: real time going by (SDL ticks), for work on other threads
     int64_t clock = 0;
     // A swipe in progress: one pointer move per frame, so it has a real velocity.
     Offset swipeFrom, swipeTo;
@@ -2369,13 +2373,16 @@ struct Script {
     std::deque<std::string> dropped;  // what dropfile/droptext pushed to SDL, alive until handled
 
     bool enabled() const { return !commands.empty(); }
-    bool running() const { return next < commands.size() || waitFrames > 0 || swipeStep < swipeFrames; }
+    bool running() const { return next < commands.size() || waitFrames > 0 || sleepUntilNs > 0 || swipeStep < swipeFrames; }
 };
 
 struct App {
     Application config;
 #ifdef KOMPOZ_DESKTOP_ACCENT
     std::unique_ptr<kompoz::sdl::DesktopAccent> accent;  // the desktop's accent color: dynamic color (Linux)
+#endif
+#ifdef KOMPOZ_WALLPAPER_COLORS
+    std::unique_ptr<kompoz::sdl::WallpaperColors> wallpaper;  // the wallpaper's own colors (desktops)
 #endif
     int64_t lastSemantics = 0;  // Android accessibility
     bool semanticsDirty = true;  // the screen changed since the tree was last published
@@ -2541,6 +2548,9 @@ void updateMetrics(App& app) {
     }
 #endif
     app.host->setSystemDarkTheme(SDL_GetSystemTheme() == SDL_SYSTEM_THEME_DARK);
+#ifdef KOMPOZ_WALLPAPER_COLORS
+    if (app.wallpaper) app.wallpaper->setDarkTheme(SDL_GetSystemTheme() == SDL_SYSTEM_THEME_DARK);  // a dark variant
+#endif
     // The preferred language: right to left when it is written so (KOMPOZ_LAYOUT_DIRECTION=rtl|ltr
     // decides instead), and the library's texts in it (KOMPOZ_LANGUAGE=tr|en decides instead).
     std::string language;
@@ -2556,6 +2566,7 @@ void updateMetrics(App& app) {
     app.host->setStrings(kompoz::Strings::forLanguage(language));
 #ifdef SDL_PLATFORM_ANDROID
     app.host->setDynamicTonalPalette(kompoz::android_ime::dynamicPalette());
+    app.host->setWallpaperTonalPalette(kompoz::android_ime::wallpaperPalette());
     if (auto config = kompoz::android_ime::viewConfiguration(app.scale)) app.host->setViewConfiguration(*config);
 #endif
     refreshMedia(app);
@@ -2825,6 +2836,13 @@ std::string stepScript(App& app) {
         --s.waitFrames;
         return {};
     }
+    if (s.sleepUntilNs > 0) {
+        if (SDL_GetTicksNS() < s.sleepUntilNs) {
+            SDL_DelayNS(2'000'000);
+            return {};
+        }
+        s.sleepUntilNs = 0;
+    }
     while (s.next < s.commands.size()) {
         std::istringstream in(s.commands[s.next++]);
         std::string command;
@@ -2832,6 +2850,11 @@ std::string stepScript(App& app) {
         float x = 0, y = 0, x2 = 0, y2 = 0;
         if (command == "wait") {
             in >> s.waitFrames;
+            return {};
+        } else if (command == "sleep") {  // real milliseconds: what other threads do (an image read, the wallpaper's colors)
+            int ms = 0;
+            in >> ms;
+            s.sleepUntilNs = SDL_GetTicksNS() + uint64_t(std::max(ms, 0)) * 1'000'000;
             return {};
         } else if (command == "click") {
             in >> x >> y;
@@ -3001,6 +3024,12 @@ void handleEvent(App& app, const SDL_Event& e) {
     if (app.accent && app.accent->eventType() != 0 && e.type == app.accent->eventType()) {  // learned or changed
         std::optional<Color> accent = app.accent->accent();
         host.setDynamicTonalPalette(accent ? std::optional(TonalPalette::fromSeed(*accent)) : std::nullopt);
+        return;
+    }
+#endif
+#ifdef KOMPOZ_WALLPAPER_COLORS
+    if (app.wallpaper && app.wallpaper->eventType() != 0 && e.type == app.wallpaper->eventType()) {  // read or changed
+        host.setWallpaperTonalPalette(app.wallpaper->palette());
         return;
     }
 #endif
@@ -3313,6 +3342,9 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     app->host = std::make_unique<kompoz::ComposeHost>(*app->fonts, app->config.content);
 #ifdef KOMPOZ_DESKTOP_ACCENT
     app->accent = std::make_unique<kompoz::sdl::DesktopAccent>();  // tells its color as an event, soon
+#endif
+#ifdef KOMPOZ_WALLPAPER_COLORS
+    app->wallpaper = std::make_unique<kompoz::sdl::WallpaperColors>(SDL_GetSystemTheme() == SDL_SYSTEM_THEME_DARK);
 #endif
     app->wakeEvent = SDL_RegisterEvents(1);
 
