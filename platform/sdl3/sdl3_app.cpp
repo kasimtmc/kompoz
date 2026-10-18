@@ -38,6 +38,12 @@
 #ifdef KOMPOZ_ATSPI
 #include "atspi_bridge.hpp"
 #endif
+#ifdef KOMPOZ_UIA
+#include "uia_bridge.hpp"
+#endif
+#if defined(KOMPOZ_ATSPI) || defined(KOMPOZ_UIA)
+#define KOMPOZ_A11Y_BRIDGE 1  // the desktop's screen readers read the semantics tree
+#endif
 
 #ifdef SDL_PLATFORM_ANDROID
 #include "android_ime.hpp"
@@ -2388,7 +2394,9 @@ struct App {
     std::unique_ptr<kompoz::sdl::WallpaperColors> wallpaper;  // the wallpaper's own colors (desktops)
 #endif
 #ifdef KOMPOZ_ATSPI
-    std::unique_ptr<kompoz::sdl::AtspiBridge> atspi;  // screen readers (Linux)
+    std::unique_ptr<kompoz::sdl::AtspiBridge> a11y;  // screen readers (Linux: AT-SPI)
+#elif defined(KOMPOZ_UIA)
+    std::unique_ptr<kompoz::sdl::UiaBridge> a11y;  // screen readers (Windows: UI Automation)
 #endif
     int64_t lastSemantics = 0;  // Android accessibility, AT-SPI
     bool semanticsDirty = true;  // the screen changed since the tree was last published
@@ -2459,6 +2467,9 @@ struct App {
         android_ime::setMediaHandler(nullptr);
         android_ime::setDeepLinkHandler(nullptr);
         android_ime::setBackHandler(nullptr);
+#endif
+#ifdef KOMPOZ_A11Y_BRIDGE
+        a11y.reset();  // (UI Automation's hooked into the window)
 #endif
         host.reset();  // runs effect cleanups while the window still exists
         canvas.reset();
@@ -3039,9 +3050,9 @@ void handleEvent(App& app, const SDL_Event& e) {
         return;
     }
 #endif
-#ifdef KOMPOZ_ATSPI
-    if (app.atspi && app.atspi->eventType() != 0 && e.type == app.atspi->eventType()) {  // asked for, or connected
-        for (const auto& r : app.atspi->takeRequests()) {
+#ifdef KOMPOZ_A11Y_BRIDGE
+    if (app.a11y && app.a11y->eventType() != 0 && e.type == app.a11y->eventType()) {  // asked for, or connected
+        for (const auto& r : app.a11y->takeRequests()) {
             if (r.action == kompoz::SemanticsAction::SetText) host.performSemanticsAction(r.id, r.action, r.text);
             else host.performSemanticsAction(r.id, r.action, r.argument);
         }
@@ -3363,7 +3374,10 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     app->wallpaper = std::make_unique<kompoz::sdl::WallpaperColors>(SDL_GetSystemTheme() == SDL_SYSTEM_THEME_DARK);
 #endif
 #ifdef KOMPOZ_ATSPI
-    app->atspi = std::make_unique<kompoz::sdl::AtspiBridge>(app->config.title);  // connects on its thread, if wanted
+    app->a11y = std::make_unique<kompoz::sdl::AtspiBridge>(app->config.title);  // connects on its thread, if wanted
+#elif defined(KOMPOZ_UIA)
+    app->a11y = std::make_unique<kompoz::sdl::UiaBridge>(
+        SDL_GetPointerProperty(SDL_GetWindowProperties(app->window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
 #endif
     app->wakeEvent = SDL_RegisterEvents(1);
 
@@ -3555,22 +3569,27 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
         if (on) SDL_DisableScreenSaver();
         else SDL_EnableScreenSaver();
     }
-#ifdef KOMPOZ_ATSPI
-    // The same for AT-SPI, which answers from the tree last published (on its thread), with where
-    // the window is: once connected (it asks for the first), after frames that changed the screen.
-    bool treeRequested = app.atspi && app.atspi->takeTreeRequest();
+#ifdef KOMPOZ_A11Y_BRIDGE
+    // The same for AT-SPI and UI Automation, which answer from the tree last published (on threads
+    // of their own), with where the window is: once asked for (they want the first), after frames
+    // that changed the screen.
+    bool treeRequested = app.a11y && app.a11y->takeTreeRequest();
     app.semanticsDirty = app.semanticsDirty || redraw || treeRequested;
-    if (app.atspi && app.atspi->active() && app.semanticsDirty &&
+    if (app.a11y && app.a11y->active() && app.semanticsDirty &&
         (treeRequested || now - app.lastSemantics > (app.host->hasPendingWork() ? 500'000'000 : 50'000'000))) {
         app.lastSemantics = now;
         app.semanticsDirty = false;
+#ifdef KOMPOZ_ATSPI
         int x = 0, y = 0, w = 0, h = 0;
         SDL_GetWindowPosition(app.window, &x, &y);
         SDL_GetWindowSize(app.window, &w, &h);
         const char* title = SDL_GetWindowTitle(app.window);
-        app.atspi->publish(app.host->semanticsTree(), {.x = float(x), .y = float(y), .width = float(w), .height = float(h),
-                                                       .dpToPoints = 1 / app.pointToDp, .focused = app.focused,
-                                                       .title = title ? title : ""});
+        app.a11y->publish(app.host->semanticsTree(), {.x = float(x), .y = float(y), .width = float(w), .height = float(h),
+                                                      .dpToPoints = 1 / app.pointToDp, .focused = app.focused,
+                                                      .title = title ? title : ""});
+#else
+        app.a11y->publish(app.host->semanticsTree(), SDL_GetWindowPixelDensity(app.window) / app.pointToDp);
+#endif
     }
 #endif
 #ifdef SDL_PLATFORM_ANDROID
@@ -3638,8 +3657,8 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 #ifdef SDL_PLATFORM_ANDROID
     busy = busy || (kompoz::android_ime::accessibilityEnabled() && app.semanticsDirty);  // one more frame publishes it
 #endif
-#ifdef KOMPOZ_ATSPI
-    busy = busy || (app.atspi && app.atspi->active() && app.semanticsDirty);  // the same
+#ifdef KOMPOZ_A11Y_BRIDGE
+    busy = busy || (app.a11y && app.a11y->active() && app.semanticsDirty);  // the same
 #endif
 #ifdef SDL_PLATFORM_EMSCRIPTEN
     busy = true;  // the browser's frames don't wait for events there: input would sit until the next timer
