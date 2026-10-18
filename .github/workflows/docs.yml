@@ -1,0 +1,41 @@
+# The guide (docs/guide, docs/components*.md), its C++ examples compiled against the headers, built
+# by scripts/docs.py and published on GitHub Pages.
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**', 'scripts/docs.py', 'include/**', 'CMakeLists.txt', '.github/workflows/docs.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile the examples
+        run: python3 scripts/docs.py --check
+      - name: Build the site
+        run: python3 scripts/docs.py site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
