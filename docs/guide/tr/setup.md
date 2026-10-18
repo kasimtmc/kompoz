@@ -4,7 +4,7 @@ Kompoz'u derleyin, kendi CMake projenize ekleyin ve uygulamanızı Linux, Window
 
 ## Gereksinimler
 
-- Bir C++20 derleyicisi: GCC 13 ya da daha yenisi, veya Clang 17 ya da daha yenisi (Kompoz GCC 16 ve Clang 22 ile test ediliyor).
+- Bir C++20 derleyicisi: GCC 13 ya da daha yenisi, veya Clang 17 ya da daha yenisi (Kompoz GCC 16 ve Clang 22 ile test ediliyor). GCC 13 bazı coroutine lambda'larında dahili derleyici hatasıyla çöküyor; GCC 14'te bu yok.
 - CMake 3.24 ya da daha yenisi.
 - SDL3 ve FreeType.
 - İsteğe bağlı: metin şekillendirme için HarfBuzz (Arapça harf bağlama, Hint yazıları, bitişik harfler, emoji dizileri). Olmadan metin karakter karakter çizilir.

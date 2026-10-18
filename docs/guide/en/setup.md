@@ -4,7 +4,7 @@ Build Kompoz, add it to your own CMake project, and run your app on Linux, Windo
 
 ## Requirements
 
-- A C++20 compiler: GCC 13 or newer, or Clang 17 or newer (Kompoz is tested with GCC 16 and Clang 22).
+- A C++20 compiler: GCC 13 or newer, or Clang 17 or newer (Kompoz is tested with GCC 16 and Clang 22). GCC 13 crashes on some coroutine lambdas, with an internal compiler error that GCC 14 doesn't have.
 - CMake 3.24 or newer.
 - SDL3 and FreeType.
 - Optional: HarfBuzz for text shaping (Arabic joining, Indic scripts, ligatures, emoji sequences). Without it, text is drawn character by character.
