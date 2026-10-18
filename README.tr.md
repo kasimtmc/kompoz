@@ -498,7 +498,7 @@ bir de baştan çizip pikselleri karşılaştırır (fark varsa loglar), `KOMPOZ
 ## Bilinen sınırlar
 
 1. **macOS ve iOS** derlenmedi (Mac gerekiyor), NSAccessibility'ye de bağlanmadı; Android'de TalkBack, Linux'ta
-   AT-SPI ve Windows'ta UI Automation çalışıyor (UI Automation Wine'da denendi, henüz Ekran Okuyucusu ile değil).
+   AT-SPI ve Windows'ta UI Automation çalışıyor.
 2. Kenar esnemesi Android 12'nin esnemesini ölçekleme olarak yapıyor (gerçek bükülme değil). `graphicsLayer` ile
    büyütülen içerik 1× katman dokusundan ölçeklenir (Compose içeriği ölçekte yeniden çizer); çok yakınlaşınca yumuşar.
    İç içe kaydırmada `onPreFling`/`onPostFling` Compose'daki gibi askıya alınmaz (animasyon için bağlantı kendi

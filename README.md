@@ -502,7 +502,7 @@ that looks the same) is neither drawn nor shown. `KOMPOZ_DAMAGE_SHOW=1` outlines
 ## Known limitations
 
 1. **macOS and iOS** haven't been built (they need a Mac), nor connected to NSAccessibility; TalkBack on Android,
-   AT-SPI on Linux and UI Automation on Windows work (UI Automation tried under Wine, not yet with Narrator).
+   AT-SPI on Linux and UI Automation on Windows work.
 2. Overscroll is Android 12's stretch done as a scale, not a true warp. Content scaled up with `graphicsLayer` is
    scaled from a 1× layer texture (Compose draws it again at the scale), so it softens when zoomed far in. In nested
    scrolling, `onPreFling`/`onPostFling` don't suspend as in Compose (a connection that animates starts its own
