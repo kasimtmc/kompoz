@@ -24,6 +24,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Compile the examples
         run: python3 scripts/docs.py --check
+        env:
+          CXX: g++-14  # the runner's default GCC 13 crashes on a coroutine lambda in them (an internal compiler error)
       - name: Build the site
         run: python3 scripts/docs.py site
       - uses: actions/upload-pages-artifact@v3
