@@ -1033,6 +1033,7 @@ struct SemanticsNode {
     std::string value;  // a text field's text
     std::string stateDescription;
     SemanticsRole role = SemanticsRole::None;
+    // focused: has the keyboard focus (a text field, or a clickable that Tab went to)
     bool clickable = false, enabled = true, focused = false, editable = false, scrollable = false, heading = false;
     bool selectableGroup = false;  // the selectables inside are one group (a list of choices)
     std::optional<bool> checked;
@@ -1046,7 +1047,8 @@ struct SemanticsNode {
     bool password = false;
 };
 // SetProgress's argument is the value; CustomAction's, the action's index; SetText's (a text
-// field's whole text: autofill, accessibility services), the text.
+// field's whole text: autofill, accessibility services), the text. Focus: the keyboard focus, on a
+// text field or an enabled clickable.
 enum class SemanticsAction { Click, LongClick, Focus, ScrollForward, ScrollBackward, SetProgress, CustomAction, SetText };
 
 // layoutId(): names a child for a custom Layout (Measurable::layoutId).

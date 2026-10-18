@@ -97,6 +97,7 @@ bool isSelectionItem(const SemanticsNode& n) {
     return n.checked && (n.role == SemanticsRole::Tab || n.role == SemanticsRole::RadioButton);
 }
 bool isToggle(const SemanticsNode& n) { return n.checked && !isSelectionItem(n); }
+bool focusable(const SemanticsNode& n) { return n.editable || (n.clickable && n.enabled); }  // what Tab goes to
 
 // A text field's text as it is told: a password's hidden.
 std::string textOf(const SemanticsNode& n) {
@@ -238,7 +239,7 @@ public:
         case UIA_FrameworkIdPropertyId: *out = variantString("Kompoz"); break;
         case UIA_IsEnabledPropertyId: *out = variantBool(n->enabled); break;
         case UIA_HasKeyboardFocusPropertyId: *out = variantBool(n->focused); break;
-        case UIA_IsKeyboardFocusablePropertyId: *out = variantBool(n->editable); break;
+        case UIA_IsKeyboardFocusablePropertyId: *out = variantBool(focusable(*n)); break;
         case UIA_IsPasswordPropertyId: *out = variantBool(n->password); break;
         case UIA_ItemStatusPropertyId:
             if (!n->stateDescription.empty()) *out = variantString(n->stateDescription);
@@ -310,7 +311,7 @@ public:
     }
     HRESULT STDMETHODCALLTYPE SetFocus() override {
         return withNode([&](const SemanticsNode& n) {
-            if (n.editable) state_->request(id_, SemanticsAction::Focus);
+            if (focusable(n)) state_->request(id_, SemanticsAction::Focus);
             return S_OK;
         }, S_OK);
     }

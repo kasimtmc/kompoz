@@ -520,7 +520,7 @@ struct AtspiBridge::State {
             } else if (member == "GetMDIZOrder") {
                 out.i16(0);
             } else if (member == "GrabFocus") {
-                bool focusable = object >= 0 && node(object).editable;
+                bool focusable = object >= 0 && (node(object).editable || (node(object).clickable && node(object).enabled));
                 if (focusable) request(object, SemanticsAction::Focus);
                 out.boolean(focusable);
             } else if (member == "GetAlpha") {

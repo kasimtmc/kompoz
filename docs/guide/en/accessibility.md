@@ -132,7 +132,7 @@ Text sizes are in sp and follow the system's font size, also when it changes whi
 
 ## Keyboard
 
-Every clickable and text field can be reached with Tab and used with Enter or Space, and the arrow keys move between focusable items. Keep custom controls focusable (`clickable` and `toggleable` are) and make sure focus order follows reading order. See [Gestures](gestures.md#focus).
+Every clickable and text field can be reached with Tab and used with Enter or Space, and the arrow keys move between focusable items. Keep custom controls focusable (`clickable` and `toggleable` are) and make sure focus order follows reading order. See [Gestures](gestures.md#focus). Screen readers on Linux and Windows follow the keyboard focus as Tab moves it, and can move it themselves.
 
 ## Platforms
 

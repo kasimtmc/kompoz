@@ -11241,6 +11241,44 @@ TEST(semantics_tree_merges_buttons_and_performs_actions) {
     CHECK(find(modal, [](auto& n) { return n.label == "Uyarı"; }) && !find(modal, [](auto& n) { return n.role == SemanticsRole::Button; }));
 }
 
+// The keyboard focus is in the tree wherever Tab took it (a button too, for screen readers on the
+// desktop), and Focus puts it on what Tab can go to.
+TEST(semantics_tree_has_the_keyboard_focus) {
+    ComposeTestRule rule([] {
+        Column([] {
+            Button([] {}, [] { Text("Bir"); });
+            Button([] {}, Modifier(), {.enabled = false}, [] { Text("Kapalı"); });
+            Button([] {}, [] { Text("İki"); });
+            Button([] {}, Modifier().focusProperties({.canFocus = false}), [] { Text("Odaksız"); });
+            Text("Etiket");
+        });
+    });
+    auto focusedLabel = [&] {
+        for (const SemanticsNode& n : rule.host().semanticsTree())
+            if (n.focused) return n.label;
+        return std::string("(none)");
+    };
+    auto idOf = [&](const std::string& label) {
+        for (const SemanticsNode& n : rule.host().semanticsTree())
+            if (n.label == label) return n.id;
+        return -1;
+    };
+    CHECK(focusedLabel() == "(none)");
+    rule.host().keyDown(Key::Tab);
+    rule.waitForIdle();
+    CHECK(focusedLabel() == "Bir");
+    rule.host().keyDown(Key::Tab);  // past the disabled one
+    rule.waitForIdle();
+    CHECK(focusedLabel() == "İki");
+    CHECK(rule.host().performSemanticsAction(idOf("Bir"), SemanticsAction::Focus));
+    rule.waitForIdle();
+    CHECK(focusedLabel() == "Bir");
+    CHECK(!rule.host().performSemanticsAction(idOf("Kapalı"), SemanticsAction::Focus));
+    CHECK(!rule.host().performSemanticsAction(idOf("Etiket"), SemanticsAction::Focus));
+    CHECK(!rule.host().performSemanticsAction(idOf("Odaksız"), SemanticsAction::Focus));  // focusProperties says no
+    CHECK(focusedLabel() == "Bir");
+}
+
 // ---- Nested scrolling ---------------------------------------------------------------------
 
 namespace {

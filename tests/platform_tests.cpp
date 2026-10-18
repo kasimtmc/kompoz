@@ -498,14 +498,16 @@ void atspiBridgeServesTheTree() {
     CHECK(peer.boolean(node(3), "org.a11y.atspi.EditableText", "DeleteText", [](dbus::Writer& w) { w.i32(0), w.i32(6); }));
     CHECK(peer.boolean(node(3), "org.a11y.atspi.EditableText", "InsertText", [](dbus::Writer& w) { w.i32(5), w.str("!?"), w.i32(1); }));
     CHECK(peer.boolean(node(3), "org.a11y.atspi.Component", "GrabFocus", {}));
-    CHECK(!peer.boolean(node(1), "org.a11y.atspi.Component", "GrabFocus", {}));
+    CHECK(peer.boolean(node(1), "org.a11y.atspi.Component", "GrabFocus", {}));  // a button: Tab goes to it
+    CHECK(!peer.boolean(node(6), "org.a11y.atspi.Component", "GrabFocus", {}));  // a label: nothing to focus
     requests = bridge.takeRequests();
-    CHECK(requests.size() == 4);
-    if (requests.size() == 4) {
+    CHECK(requests.size() == 5);
+    if (requests.size() == 5) {
         CHECK(requests[0].action == SemanticsAction::SetText && requests[0].text == "x" && requests[0].id == 3);
         CHECK(requests[1].text == "wörld");
         CHECK(requests[2].text == "héllo! wörld");
         CHECK(requests[3].action == SemanticsAction::Focus && requests[3].id == 3);
+        CHECK(requests[4].action == SemanticsAction::Focus && requests[4].id == 1);
     }
     // A password field: what is typed isn't said.
     CHECK(peer.role(node(7)) == 40);
@@ -605,6 +607,7 @@ void atspiBridgeServesTheTree() {
     CHECK(peer.heard.size() == 9);
     CHECK(peer.role(node(8)) == 39 && peer.role(node(9)) == 29);
     CHECK(!peer.state(node(2), 8) && !peer.state(node(2), 24));
+    CHECK(!peer.boolean(node(2), "org.a11y.atspi.Component", "GrabFocus", {}));  // disabled: Tab doesn't go to it
     // In the spaces after a word: that word's.
     CHECK(peer.text(node(3), "org.a11y.atspi.Text", "GetStringAtOffset", [](dbus::Writer& w) { w.i32(3), w.u32(1); }) == "hé   0 4");
 }

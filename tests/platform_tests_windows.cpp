@@ -342,7 +342,7 @@ void uiaBridgeServesTheTree() {
     };
     // A button: invoked; found from a point in it.
     withProvider("OK", [&](IRawElementProviderSimple* p) {
-        CHECK(numberOf(p, UIA_IsEnabledPropertyId) == 1 && numberOf(p, UIA_IsKeyboardFocusablePropertyId) == 0);
+        CHECK(numberOf(p, UIA_IsEnabledPropertyId) == 1 && numberOf(p, UIA_IsKeyboardFocusablePropertyId) == 1);  // Tab goes to it
         CHECK(stringOf(p, UIA_AutomationIdPropertyId) == "1" && stringOf(p, UIA_FrameworkIdPropertyId) == "Kompoz");
         auto* invoke = static_cast<IInvokeProvider*>(pattern(p, UIA_InvokePatternId, IID_IInvokeProvider));
         CHECK(invoke && SUCCEEDED(invoke->Invoke()));
@@ -364,11 +364,21 @@ void uiaBridgeServesTheTree() {
         if (at) at->QueryInterface(IID_IRawElementProviderSimple, reinterpret_cast<void**>(&atSimple)), at->Release();
         CHECK(atSimple && stringOf(atSimple, UIA_NamePropertyId) == "Item");
         if (atSimple) atSimple->Release();
-        Ref<IRawElementProviderFragment> fragment;
-        p->QueryInterface(IID_IRawElementProviderFragment, reinterpret_cast<void**>(fragment.out()));
-        CHECK(fragment && SUCCEEDED(fragment->SetFocus()));  // not focusable: nothing asked
     });
     CHECK(requested(1, SemanticsAction::Click));
+    // Focus: on a button, which Tab goes to; not on a label.
+    auto setFocus = [&](const char* name) {
+        withProvider(name, [&](IRawElementProviderSimple* p) {
+            Ref<IRawElementProviderFragment> fragment;
+            p->QueryInterface(IID_IRawElementProviderFragment, reinterpret_cast<void**>(fragment.out()));
+            CHECK(fragment && SUCCEEDED(fragment->SetFocus()));
+        });
+    };
+    setFocus("OK");
+    CHECK(requested(1, SemanticsAction::Focus));
+    setFocus("Item");
+    CHECK(requests().empty());
+    withProvider("Item", [&](IRawElementProviderSimple* p) { CHECK(numberOf(p, UIA_IsKeyboardFocusablePropertyId) == 0); });
     SDL_PumpEvents();
     CHECK(SDL_PeepEvents(nullptr, 0, SDL_PEEKEVENT, bridge.eventType(), bridge.eventType()) > 0);  // the main loop woken
     // A checkbox: toggled.
@@ -532,7 +542,7 @@ void uiaBridgeServesTheTree() {
         if (item) item->Release();
     });
     withProvider("Agree", [&](IRawElementProviderSimple* p) {
-        CHECK(numberOf(p, UIA_IsEnabledPropertyId) == 0);
+        CHECK(numberOf(p, UIA_IsEnabledPropertyId) == 0 && numberOf(p, UIA_IsKeyboardFocusablePropertyId) == 0);
         auto* toggle = static_cast<IToggleProvider*>(pattern(p, UIA_TogglePatternId, IID_IToggleProvider));
         CHECK(toggle && toggle->Toggle() == HRESULT(UIA_E_ELEMENTNOTENABLED));
         if (toggle) toggle->Release();

@@ -3051,10 +3051,10 @@ std::vector<SemanticsNode> ComposeHost::semanticsTree() {
             s.clickable = click != nullptr;
             s.enabled = !click || click->enabled;
             s.scrollable = scroll != nullptr;
+            s.focused = &n == focused_;  // a text field, or what Tab went to
             if (focus) {
                 s.editable = true;
                 s.value = focus->value;
-                s.focused = &n == focused_;
                 if (focus->onEdit && contentType) s.contentType = contentType->hints;
                 KeyboardType type = focus->keyboardOptions.keyboardType;
                 s.password = focus->onEdit && (type == KeyboardType::Password || type == KeyboardType::NumberPassword || !focus->allowCopy);
@@ -3133,8 +3133,8 @@ bool ComposeHost::performSemanticsAction(int id, SemanticsAction action, float a
             onLongClick();
         }
         return true;
-    case SemanticsAction::Focus:
-        if (!node->modifier.find<FocusableElement>()) return false;
+    case SemanticsAction::Focus:  // what Tab can go to
+        if ((!node->modifier.find<FocusableElement>() && !(click && click->enabled)) || !canFocus(*node)) return false;
         setFocus(node);
         return true;
     case SemanticsAction::ScrollForward:

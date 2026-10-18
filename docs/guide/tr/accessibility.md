@@ -132,7 +132,7 @@ Metin boyutları sp cinsindendir ve sistemin font boyutunu izler; uygulama çal�
 
 ## Klavye
 
-Her tıklanabilire ve metin alanına Tab ile ulaşılabilir, Enter ya da Space ile kullanılabilir; ok tuşları odaklanabilir öğeler arasında gezinir. Özel kontrolleri odaklanabilir tutun (`clickable` ve `toggleable` öyledir) ve odak sırasının okuma sırasını izlediğinden emin olun. Bkz. [Hareketler](gestures.md#odak).
+Her tıklanabilire ve metin alanına Tab ile ulaşılabilir, Enter ya da Space ile kullanılabilir; ok tuşları odaklanabilir öğeler arasında gezinir. Özel kontrolleri odaklanabilir tutun (`clickable` ve `toggleable` öyledir) ve odak sırasının okuma sırasını izlediğinden emin olun. Bkz. [Hareketler](gestures.md#odak). Linux'ta ve Windows'ta ekran okuyucular klavye odağını Tab ile ilerledikçe izler, kendileri de taşıyabilir.
 
 ## Platformlar
 
