@@ -58,7 +58,7 @@ kompoz::Application kompoz::createApplication(int, char**) {
 - **Erişilebilirlik**: Android'de TalkBack'in okuduğu semantik ağaç (etiketler, roller, durumlar, eylemler, özel
   eylemler, canlı bölgeler).
 - **Platformla bütünleşme**: sistemin koyu modu; kaynağını uygulamanın (ya da kullanıcısının) seçtiği dinamik renk:
-  sistemin paleti (Android 12+'da duvar kağıdınınki, Linux'ta masaüstünün vurgu rengi) ya da duvar kağıdının kendisi
+  sistemin paleti (Android 12+'da duvar kağıdınınki, Linux ve Windows'ta masaüstünün vurgu rengi) ya da duvar kağıdının kendisi
   (Linux masaüstleri, Windows, Android 8.1+); sistem yazı ölçeği; sistemin dili (kütüphanenin kendi metinleri İngilizce ya da Türkçe, `LocalStrings`,
   ve sağdan sola yerleşim); pano, titreşim, URI'ler, IME.
 - **Araçlar**: pencere açmadan UI testleri (`ComposeTestRule`), önizlemeler (`KOMPOZ_PREVIEW`), kaydedince uygulamanın
@@ -138,7 +138,7 @@ Her Compose API'sinin durumuyla tam liste [docs/components.tr.md](docs/component
 | `BottomSheetScaffold(sheetContent = { ... }, scaffoldState = state, sheetPeekHeight = 128.dp) { padding -> ... }` | `BottomSheetScaffold([&] { ... }, Modifier(), {.scaffoldState = state, .sheetPeekHeight = 128}, [&](PaddingValues padding) { ... })`, `co_await state.bottomSheetState.expand()` |
 | `NavigationSuiteScaffold(navigationSuiteItems = { item(selected, onClick, icon, label) }) { content }`, `currentWindowAdaptiveInfo().windowSizeClass` | `NavigationSuiteScaffold([&](NavigationSuiteScope& nav) { nav.item(selected, onClick, Icons::Filled::Home, "Ana sayfa"); }, Modifier(), {}, content)`, `currentWindowAdaptiveInfo().windowSizeClass.windowWidthSizeClass` |
 | `Modifier.imePadding()`, `WindowInsets.statusBars`, `consumeWindowInsets` | `Modifier().padding(padding).consumeWindowInsets(padding).imePadding()`, `WindowInsets::statusBars()`, `windowInsetsPadding(WindowInsets::systemBars())`; `SystemBarsAppearance(!dark)` sistem çubuğu ikonları |
-| `dynamicLightColorScheme(context)` (Material You) | `MaterialTheme(isDynamicColorAvailable() ? dynamicLightColorScheme() : lightColorScheme(), ...)`: Android 12+ duvar kağıdı renkleri; Linux'ta masaüstünün vurgu renginden (XDG portalı); `TonalPalette::fromSeed(renk)` her yerde; duvar kağıdının kendisinden `wallpaperLightColorScheme()` (Linux masaüstleri, Windows, Android 8.1+), herhangi bir resimden `TonalPalette::fromImage(bitmap)` |
+| `dynamicLightColorScheme(context)` (Material You) | `MaterialTheme(isDynamicColorAvailable() ? dynamicLightColorScheme() : lightColorScheme(), ...)`: Android 12+ duvar kağıdı renkleri; Linux'ta (XDG portalı) ve Windows'ta masaüstünün vurgu renginden; `TonalPalette::fromSeed(renk)` her yerde; duvar kağıdının kendisinden `wallpaperLightColorScheme()` (Linux masaüstleri, Windows, Android 8.1+), herhangi bir resimden `TonalPalette::fromImage(bitmap)` |
 | `Modifier.semantics { contentDescription = ...; role = Role.Button }` | `Modifier().semantics({.contentDescription = "...", .role = SemanticsRole::Button})`; Android'de TalkBack bu ağacı okur |
 | `Modifier.semantics(mergeDescendants = true) {}`, `Modifier.clearAndSetSemantics { contentDescription = "Puan: 4 / 5" }`, `Modifier.semantics { hideFromAccessibility() }` | `Modifier().semantics({.mergeDescendants = true})`, `Modifier().clearAndSetSemantics({.contentDescription = "Puan: 4 / 5"})`, `Modifier().hideFromAccessibility()` |
 | `Modifier.animateItem()`, `SwipeToDismissBox`, `Modifier.draggable` | Aynı isimler; `SwipeToDismissBox(rememberSwipeToDismissBoxState(confirm), background, content)` |

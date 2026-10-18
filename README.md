@@ -59,7 +59,7 @@ kompoz::Application kompoz::createApplication(int, char**) {
 - **Accessibility**: a semantics tree that TalkBack reads on Android (labels, roles, states, actions, custom
   actions, live regions).
 - **Platform integration**: the system's dark mode; dynamic color, from a source the app (or its user) picks: the
-  system's palette (the wallpaper's on Android 12+, the desktop's accent color on Linux) or the wallpaper itself (Linux
+  system's palette (the wallpaper's on Android 12+, the desktop's accent color on Linux and Windows) or the wallpaper itself (Linux
   desktops, Windows, Android 8.1+); system font scale; the system language (the library's own texts in English or
   Turkish, `LocalStrings`, and right-to-left layouts); clipboard, haptics, URIs, the IME.
 - **Tools**: headless UI tests (`ComposeTestRule`), previews (`KOMPOZ_PREVIEW`), rebuild-and-restart on save
@@ -139,7 +139,7 @@ The full list, with the status of each Compose API, is in [docs/components.md](d
 | `BottomSheetScaffold(sheetContent = { ... }, scaffoldState = state, sheetPeekHeight = 128.dp) { padding -> ... }` | `BottomSheetScaffold([&] { ... }, Modifier(), {.scaffoldState = state, .sheetPeekHeight = 128}, [&](PaddingValues padding) { ... })`, `co_await state.bottomSheetState.expand()` |
 | `NavigationSuiteScaffold(navigationSuiteItems = { item(selected, onClick, icon, label) }) { content }`, `currentWindowAdaptiveInfo().windowSizeClass` | `NavigationSuiteScaffold([&](NavigationSuiteScope& nav) { nav.item(selected, onClick, Icons::Filled::Home, "Home"); }, Modifier(), {}, content)`, `currentWindowAdaptiveInfo().windowSizeClass.windowWidthSizeClass` |
 | `Modifier.imePadding()`, `WindowInsets.statusBars`, `consumeWindowInsets` | `Modifier().padding(padding).consumeWindowInsets(padding).imePadding()`, `WindowInsets::statusBars()`, `windowInsetsPadding(WindowInsets::systemBars())`; `SystemBarsAppearance(!dark)` for the system bars' icons |
-| `dynamicLightColorScheme(context)` (Material You) | `MaterialTheme(isDynamicColorAvailable() ? dynamicLightColorScheme() : lightColorScheme(), ...)`: the wallpaper's colors on Android 12+, the desktop's accent color on Linux (XDG portal); `TonalPalette::fromSeed(color)` anywhere; `wallpaperLightColorScheme()` from the wallpaper itself (Linux desktops, Windows, Android 8.1+), `TonalPalette::fromImage(bitmap)` from any picture |
+| `dynamicLightColorScheme(context)` (Material You) | `MaterialTheme(isDynamicColorAvailable() ? dynamicLightColorScheme() : lightColorScheme(), ...)`: the wallpaper's colors on Android 12+, the desktop's accent color on Linux (XDG portal) and Windows; `TonalPalette::fromSeed(color)` anywhere; `wallpaperLightColorScheme()` from the wallpaper itself (Linux desktops, Windows, Android 8.1+), `TonalPalette::fromImage(bitmap)` from any picture |
 | `Modifier.semantics { contentDescription = ...; role = Role.Button }` | `Modifier().semantics({.contentDescription = "...", .role = SemanticsRole::Button})`; TalkBack reads this tree on Android |
 | `Modifier.semantics(mergeDescendants = true) {}`, `Modifier.clearAndSetSemantics { contentDescription = "Rating: 4 of 5" }`, `Modifier.semantics { hideFromAccessibility() }` | `Modifier().semantics({.mergeDescendants = true})`, `Modifier().clearAndSetSemantics({.contentDescription = "Rating: 4 of 5"})`, `Modifier().hideFromAccessibility()` |
 | `Modifier.animateItem()`, `SwipeToDismissBox`, `Modifier.draggable` | The same names; `SwipeToDismissBox(rememberSwipeToDismissBoxState(confirm), background, content)` |

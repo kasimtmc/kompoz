@@ -196,6 +196,10 @@ if(KOMPOZ_BUILD_SDL3)
         target_sources(kompoz_sdl3 PRIVATE platform/sdl3/desktop_accent.cpp)
         target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_DESKTOP_ACCENT=1)
         target_link_libraries(kompoz_sdl3 PUBLIC ${CMAKE_DL_LIBS})
+    elseif(WIN32)
+        # Windows' accent color (DWM's, in the registry): dynamic color.
+        target_sources(kompoz_sdl3 PRIVATE platform/sdl3/desktop_accent_windows.cpp)
+        target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_DESKTOP_ACCENT=1)
     endif()
     if(WIN32 OR (UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN))
         # The wallpaper's own colors, found and picked on a thread (Android's come from the system).

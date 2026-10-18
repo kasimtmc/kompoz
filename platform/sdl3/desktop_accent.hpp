@@ -3,7 +3,8 @@
 // The desktop's accent color on Linux (and other free desktops): the XDG settings portal's
 // org.freedesktop.appearance accent-color, which GNOME and KDE fill in. It is read, and followed
 // as it changes, on a thread of its own over D-Bus (libdbus, loaded when it is there, as SDL
-// does); each value comes to the main loop as an SDL event. The light/dark preference needs none
+// does); each value comes to the main loop as an SDL event. On Windows, the one in Settings >
+// Personalization > Colors, from the registry (desktop_accent_windows.cpp). The light/dark preference needs none
 // of this: SDL follows the portal's color-scheme itself (SDL_EVENT_SYSTEM_THEME_CHANGED).
 
 #include <kompoz/graphics.hpp>

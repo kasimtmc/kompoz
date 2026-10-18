@@ -131,7 +131,7 @@ Kompoz her kareyi önce kaydeder ve yalnızca bir önceki kareden beri değişen
 | `KOMPOZ_SCALE=2.625` | Bir telefonun yerleşimini masaüstünde görmek için ekran yoğunluğunun yerini tutar. |
 | `KOMPOZ_LANGUAGE=tr` | Sistemin dili yerine kütüphanenin kendi metinlerinin dili (`en` ya da `tr`). |
 | `KOMPOZ_LAYOUT_DIRECTION=rtl` | Sistem dilininki yerine sağdan sola ya da soldan sağa yerleşim. |
-| `KOMPOZ_NO_DESKTOP_ACCENT=1` | Ekran görüntüleri her makinede aynı olsun diye Linux masaüstünün vurgu rengini yok sayar. |
+| `KOMPOZ_NO_DESKTOP_ACCENT=1` | Ekran görüntüleri her makinede aynı olsun diye masaüstünün vurgu rengini (Linux, Windows) yok sayar. |
 | `KOMPOZ_NO_WALLPAPER_COLORS=1` | Aynı nedenle duvar kağıdının renklerini okumaz. |
 | `KOMPOZ_TRACE=1` | Her recomposition'da kaç scope'un çalışıp atlandığını günlüğe yazar. |
 | `KOMPOZ_PROFILE=1` | Kare sürelerini günlüğe yazar. |

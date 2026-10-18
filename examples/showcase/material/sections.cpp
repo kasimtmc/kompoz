@@ -676,7 +676,7 @@ void DynamicColorSection(MutableState<ColorSource> source, CallSite site) {
                                                        : source.get() == ColorSource::Wallpaper ? &wallpaper
                                                                                                 : nullptr;
             Text(source.get() == ColorSource::App         ? "lightColorScheme / darkColorScheme: uygulamanın kendi renkleri"
-                 : source.get() == ColorSource::System    ? (system ? "dynamicLightColorScheme: sistemin vurgu rengi (Android 12+, Linux masaüstü)"
+                 : source.get() == ColorSource::System    ? (system ? "dynamicLightColorScheme: sistemin vurgu rengi (Android 12+, Linux, Windows)"
                                                                     : "Bu sistem vurgu rengi vermiyor; uygulamanın renkleri kullanılıyor")
                  : wallpaper ? "wallpaperLightColorScheme: duvar kağıdından seçilen renkler"
                              : "Duvar kağıdı okunamadı; uygulamanın renkleri kullanılıyor",
