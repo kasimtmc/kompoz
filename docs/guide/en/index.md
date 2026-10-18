@@ -2,7 +2,7 @@
 
 Kompoz is a declarative UI library for C++20 in the style of Jetpack Compose, with Material 3 components, running on Linux, Windows, Android and the web from one codebase.
 
-If you know Compose, you know Kompoz: the same way of thinking (composable functions, state, recomposition, modifiers), the same names where C++ allows, and Material 3 components that look and behave like Compose's. Version 0.1.0 is the first public release, licensed under the Apache License 2.0.
+If you know Compose, you know Kompoz: the same way of thinking (composable functions, state, recomposition, modifiers), the same names where C++ allows, and Material 3 components that look and behave like Compose's. Kompoz 0.1.1 is licensed under the Apache License 2.0.
 
 ![The showcase's home screen](../../screenshots/home.png)
 

@@ -7,7 +7,7 @@ model (composable functions, state, recomposition, modifiers), the same names wh
 Material 3 components that look and behave like Compose's. It runs on Linux, Windows, Android and the
 web from one code base.
 
-Version 0.1.0, the first public release: the API follows Compose closely, but it may still change.
+Version 0.1.1. The API follows Compose closely, but it may still change.
 Licensed under the [Apache License 2.0](LICENSE).
 
 <p>

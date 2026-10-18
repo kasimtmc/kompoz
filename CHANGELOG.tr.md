@@ -2,6 +2,19 @@
 
 [English](CHANGELOG.md) · **Türkçe**
 
+## 0.1.1 — 2026-10-18
+
+- **Her biri ayrı bir API olan üç kaynaktan dinamik renk**; aralarında uygulama ya da kullanıcısı seçer (kütüphane
+  kendiliğinden geçiş yapmaz): uygulamanın kendi şeması, sistemin paleti (`dynamicLightColorScheme()`: Android 12+'da
+  duvar kağıdınınki, Linux'ta ve artık Windows'ta masaüstünün vurgu rengi) ve duvar kağıdının kendisi
+  (`wallpaperLightColorScheme()`: Linux masaüstleri, Windows, Android 8.1+). Vitrin soruyor.
+- **Herhangi bir resimden renkler**, Android'in duvar kağıdından seçtiği gibi: `TonalPalette::fromImage`,
+  `quantizeColors` (Celebi nicemleyicisi) ve `seedColors` (System UI'ın sıralaması).
+- **Belge sitesi**: `scripts/docs.py`, `docs/guide/`'dan İngilizce ve Türkçe bir HTML rehber üretir (içindeki her C++
+  örneği `--check` ile derlenir); API durum sayfası da içinde.
+- **Küçükler**: `Offset` `==` ile karşılaştırılır; betiğin `sleep ms` komutu; `KOMPOZ_NO_WALLPAPER_COLORS`; pencere
+  gerektirmeyen platform kodunun testleri (`kompoz_platform_tests`).
+
 ## 0.1.0 — 2026-10-16
 
 İlk açık yayın. Kompoz, Jetpack Compose'un modelini ve API'sini C++20'ye getirir; Linux, Windows, Android ve web'de
@@ -14,10 +27,8 @@
   `SubcomposeLayout`, `LookaheadScope`, intrinsic'ler, pencere kenar boşlukları, sağdan sola yerleşim.
 - **Listeler ve kaydırma**: tembel listeler, ızgaralar ve kademeli ızgaralar, pager'lar, carousel'ler, iç içe kaydırma,
   Android'in fling eğrisi, kenar esnemesi, yakalama, yenilemek için çekme, fare tekerleği.
-- **Material 3** (Expressive bileşenleriyle Compose Material 3 1.4) ve kaynağını uygulamanın ya da kullanıcısının
-  seçtiği dinamik renkli `MaterialTheme`: sistemin paleti (Android 12+'da duvar kağıdınınki, Linux'ta masaüstünün vurgu
-  rengi), duvar kağıdının kendisi (Linux masaüstleri, Windows, Android 8.1+), herhangi bir resim
-  (`TonalPalette::fromImage`) ya da herhangi bir renk (`TonalPalette::fromSeed`).
+- **Material 3** (Expressive bileşenleriyle Compose Material 3 1.4) ve dinamik renkli `MaterialTheme`: Android 12+'da
+  duvar kağıdından, Linux'ta masaüstünün vurgu renginden, `TonalPalette::fromSeed` ile herhangi bir renkten.
 - **Çizim ve metin**: `Canvas`, fırçalar, path'ler, şekiller (Material'in şekil kitaplığı ve biçim değiştirme), bulanık
   gölgeler, `graphicsLayer`, vektörler, HTTP'den yüklenen resimler, HarfBuzz ile şekillendirme, iki yönlü metin, seçim;
   geri almalı, otomatik doldurmalı ve donanım klavyesiyle düzenlenen metin alanları.

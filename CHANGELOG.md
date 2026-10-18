@@ -2,6 +2,19 @@
 
 **English** · [Türkçe](CHANGELOG.tr.md)
 
+## 0.1.1 — 2026-10-18
+
+- **Dynamic color from three sources, each an API of its own**, which the app or its user picks between (the library
+  never switches by itself): the app's own scheme, the system's palette (`dynamicLightColorScheme()`: the
+  wallpaper's on Android 12+, the desktop's accent color on Linux and now on Windows) and the wallpaper itself
+  (`wallpaperLightColorScheme()`: Linux desktops, Windows, Android 8.1+). The showcase asks.
+- **Colors from any picture**, picked as Android picks a wallpaper's: `TonalPalette::fromImage`, `quantizeColors`
+  (the Celebi quantizer) and `seedColors` (System UI's ranking).
+- **Documentation site**: `scripts/docs.py` builds an HTML guide in English and Turkish from `docs/guide/` (every C++
+  example in it compiled by `--check`), with the API status page.
+- **Smaller**: `Offset` compares with `==`; the script's `sleep ms`; `KOMPOZ_NO_WALLPAPER_COLORS`; tests of the
+  platform code that runs without a window (`kompoz_platform_tests`).
+
 ## 0.1.0 — 2026-10-16
 
 The first public release. Kompoz brings Jetpack Compose's model and API to C++20 and runs on Linux, Windows, Android
@@ -14,10 +27,9 @@ and the web.
   `SubcomposeLayout`, `LookaheadScope`, intrinsics, window insets, right-to-left layouts.
 - **Lists and scrolling**: lazy lists, grids and staggered grids, pagers, carousels, nested scroll, Android's fling
   curve, overscroll stretch, snapping, pull to refresh, the mouse wheel.
-- **Material 3** (Compose Material 3 1.4 with the Expressive components) and `MaterialTheme` with dynamic color from
-  the source the app or its user picks: the system's palette (the wallpaper's on Android 12+, the desktop's accent
-  color on Linux), the wallpaper itself (Linux desktops, Windows, Android 8.1+), any picture
-  (`TonalPalette::fromImage`) or any color (`TonalPalette::fromSeed`).
+- **Material 3** (Compose Material 3 1.4 with the Expressive components) and `MaterialTheme` with dynamic color: from
+  the wallpaper on Android 12+, from the desktop's accent color on Linux, from any color with
+  `TonalPalette::fromSeed`.
 - **Drawing and text**: `Canvas`, brushes, paths, shapes (Material's shape library and morphing), blurred shadows,
   `graphicsLayer`, vectors, images loaded over HTTP, HarfBuzz shaping, bidirectional text, selection, text fields
   with undo, autofill and hardware keyboard editing.

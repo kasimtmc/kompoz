@@ -6,7 +6,7 @@ C++20 için Jetpack Compose tarzı, deklaratif ve çok platformlu bir arayüz k�
 (composable fonksiyonlar, durum, recomposition, modifier'lar), C++'ın izin verdiği yerde aynı isimler ve Compose'unkiler
 gibi görünen ve davranan Material 3 bileşenleri. Tek kod tabanından Linux, Windows, Android ve web'de çalışır.
 
-Sürüm 0.1.0, ilk açık yayın: API Compose'u yakından izliyor ama henüz değişebilir.
+Sürüm 0.1.1. API Compose'u yakından izliyor ama henüz değişebilir.
 [Apache Lisansı 2.0](LICENSE) ile lisanslıdır.
 
 <p>
