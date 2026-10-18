@@ -4,8 +4,9 @@ Copyright 2026 The Kompoz Authors
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
 Kompoz follows the behavior and public API of Jetpack Compose (Copyright The Android Open Source
-Project, Apache License 2.0); its HCT color code follows Material Color Utilities (Copyright Google
-LLC, Apache License 2.0). No source files of either are included.
+Project, Apache License 2.0); its HCT color code and the colors it picks from a picture (QuantizerCelebi,
+Score) follow Material Color Utilities (Copyright Google LLC, Apache License 2.0). No source files of
+either are included.
 
 Apps built with Kompoz include, from assets/:
 - Noto Sans (fonts/Regular.ttf, Medium.ttf, Bold.ttf): Copyright 2022 The Noto Project Authors,

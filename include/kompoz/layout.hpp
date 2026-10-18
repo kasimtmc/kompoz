@@ -1224,8 +1224,21 @@ struct TonalPalette {
     // chroma 36, 16 (accent2), 24 turned 60° (accent3), 6 and 8 (the neutrals). On Linux the
     // desktop's accent color (the XDG portal's) is turned into them.
     static TonalPalette fromSeed(Color seed);
+    // Material You from a picture, as Android makes it from the wallpaper: fromSeed of the
+    // picture's best seed color (seedColors' first), the picture scaled down to about 112 × 112
+    // first. An empty picture gives Google blue's.
+    static TonalPalette fromImage(const ImageBitmap& image);
     friend bool operator==(const TonalPalette&, const TonalPalette&) = default;
 };
+// The colors a picture is made of, as Material Color Utilities' QuantizerCelebi finds them: Wu's
+// quantizer, its colors then refined by k-means in L*a*b*. Up to `maxColors` (at most 256), each
+// with how many pixels went to it, the most first. Pixels not fully opaque are left out.
+std::vector<std::pair<Color, uint32_t>> quantizeColors(const ImageBitmap& image, int maxColors = 128);
+// Which of those would make good theme seeds, best first (Material Color Utilities' Score): each
+// scored by how much of the picture its hue and the hues near it cover and by its chroma (48 is
+// best), the greyish (chroma below 5) and the rare (1% or less around its hue) left out, then
+// picked as far apart in hue as `desired` of them can be. When none is left: Google blue alone.
+std::vector<Color> seedColors(const std::vector<std::pair<Color, uint32_t>>& colors, int desired = 4);
 inline const CompositionLocal<std::optional<TonalPalette>> LocalDynamicTonalPalette{std::nullopt};
 // The window's size in dp (pick a layout for phones, tablets and desktops).
 inline const CompositionLocal<Size> LocalWindowSize{Size{}};

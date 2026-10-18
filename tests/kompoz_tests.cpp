@@ -24879,6 +24879,115 @@ TEST(tonal_palette_from_a_seed_is_material_yous_tonal_spot) {
     CHECK(light.primary == p.accent1[8] && light.primaryContainer == p.accent1[3] && light.surface == dynamicLightColorScheme(p).surface);
 }
 
+namespace {
+// An image of `colors` in rows: each (0xRRGGBB, how many pixels), alpha 255 unless given as 0xAARRGGBB >> 24 != 0.
+ImageBitmap pixelsOf(std::initializer_list<std::pair<uint32_t, int>> colors, bool transparentLast = false) {
+    std::vector<uint8_t> rgba;
+    size_t n = 0, k = 0;
+    for (const auto& [c, count] : colors) n += size_t(count);
+    for (const auto& [c, count] : colors) {
+        ++k;
+        for (int i = 0; i < count; ++i)
+            rgba.insert(rgba.end(), {uint8_t(c >> 16), uint8_t(c >> 8), uint8_t(c), uint8_t(transparentLast && k == colors.size() ? 0 : 255)});
+    }
+    return ImageBitmap::fromPixels(int(n), 1, std::move(rgba));
+}
+uint32_t hexOf(Color c) {
+    auto ch = [](float v) { return uint32_t(std::lround(v * 255)); };
+    return ch(c.r) << 16 | ch(c.g) << 8 | ch(c.b);
+}
+}  // namespace
+
+TEST(quantizer_finds_a_pictures_colors_and_how_much_of_each) {
+    auto colorsOf = [](const std::vector<std::pair<Color, uint32_t>>& q) {
+        std::vector<std::pair<uint32_t, uint32_t>> out;
+        for (const auto& [c, n] : q) out.push_back({hexOf(c), n});
+        return out;
+    };
+    using V = std::vector<std::pair<uint32_t, uint32_t>>;
+    CHECK((colorsOf(quantizeColors(pixelsOf({{0xFF0000, 1}}))) == V{{0xFF0000, 1}}));
+    CHECK((colorsOf(quantizeColors(pixelsOf({{0x141216, 1}}))) == V{{0x141216, 1}}));
+    CHECK((colorsOf(quantizeColors(pixelsOf({{0x0000FF, 5}}))) == V{{0x0000FF, 5}}));
+    // Three colors, the most first.
+    CHECK((colorsOf(quantizeColors(pixelsOf({{0x00FF00, 30}, {0x0000FF, 10}, {0xFF0000, 60}}))) ==
+           V{{0xFF0000, 60}, {0x00FF00, 30}, {0x0000FF, 10}}));
+    // Pixels that aren't opaque don't count; nothing at all gives nothing.
+    CHECK((colorsOf(quantizeColors(pixelsOf({{0xFF0000, 2}, {0x00FF00, 7}}, true))) == V{{0xFF0000, 2}}));
+    CHECK(quantizeColors(ImageBitmap()).empty() && quantizeColors(pixelsOf({{0xFF0000, 1}}), 0).empty());
+    CHECK(quantizeColors(pixelsOf({{0xFF0000, 3}}, true)).empty());
+    // One color asked for: the mean of them all, every pixel in it.
+    auto one = quantizeColors(pixelsOf({{0xFF0000, 1}, {0xFF0010, 1}}), 1);
+    CHECK(one.size() == 1 && one[0].second == 2 && hexOf(one[0].first) == 0xFF0008);
+    // Close shades of one color and a far one: two colors, the shades together.
+    auto two = quantizeColors(pixelsOf({{0x2060C0, 10}, {0x2262C2, 10}, {0x1E5EBE, 10}, {0xE0A020, 5}}), 2);
+    CHECK(two.size() == 2 && two[0].second == 30 && two[1].second == 5 && hexOf(two[1].first) == 0xE0A020);
+    CHECK(std::abs(int(hexOf(two[0].first) >> 16) - 0x20) <= 2 && std::abs(int(hexOf(two[0].first) & 0xFF) - 0xC0) <= 2);
+    // Colors that differ only in blue are told apart (each channel is an axis of Wu's cube).
+    auto blues = quantizeColors(pixelsOf({{0x000000, 10}, {0x0000FF, 10}}), 2);
+    CHECK(blues.size() == 2 && blues[0].second == 10 && blues[1].second == 10);
+}
+
+TEST(seed_colors_are_scored_as_material_color_utilities_does) {
+    auto seeds = [](std::initializer_list<uint32_t> colors, int desired = 4) {
+        std::vector<std::pair<Color, uint32_t>> in;
+        for (uint32_t c : colors) in.push_back({Color::hex(c), 1});
+        std::vector<uint32_t> out;
+        for (Color c : seedColors(in, desired)) out.push_back(hexOf(c));
+        return out;
+    };
+    using V = std::vector<uint32_t>;
+    CHECK((seeds({0x000000, 0xFFFFFF, 0x0000FF}) == V{0x0000FF}));               // chroma first: greys left out
+    CHECK((seeds({0xFF0000, 0x00FF00, 0x0000FF}) == V{0xFF0000, 0x00FF00, 0x0000FF}));  // as much of each: by chroma
+    CHECK((seeds({0x000000}) == V{0x4285F4}));                                    // none fit: Google blue
+    CHECK(seeds({}) == V{0x4285F4});
+    CHECK((seeds({0x008772, 0x318477}) == V{0x008772}));                         // hues this close: one of them
+    CHECK((seeds({0x008772, 0x008587, 0x007EBC}, 2) == V{0x007EBC, 0x008772}));   // as far apart as two can be
+    // A color that covers 1% of the picture or less, around its hue, isn't a seed.
+    std::vector<std::pair<Color, uint32_t>> mostlyGrey = {{Color::hex(0x808080), 999}, {Color::hex(0xFF0000), 1}};
+    CHECK((seedColors(mostlyGrey).size() == 1 && hexOf(seedColors(mostlyGrey)[0]) == 0x4285F4));
+    mostlyGrey[0].second = 98;
+    CHECK(hexOf(seedColors(mostlyGrey)[0]) == 0xFF0000);
+    auto ofHct = [](float hue, float chroma, float tone, uint32_t n) { return std::pair(Hct{hue, chroma, tone}.toColor(), n); };
+    auto hueOf = [](Color c) { return Hct::fromColor(c).hue; };
+    // Chroma under 48 counts against a color less than chroma over it counts for one (0.1 vs 0.3 a unit):
+    // 56% of chroma 40 beats 44% of chroma 70.
+    auto picked = seedColors({ofHct(120, 40, 60, 56), ofHct(300, 70, 50, 44)}, 1);
+    CHECK(picked.size() == 1 && std::abs(hueOf(picked[0]) - 120) < 3);
+    // Picked as far apart as they can be: of hues 20, 40 and 140, two are 20 and 140.
+    auto spread = seedColors({ofHct(20, 60, 50, 1), ofHct(40, 58, 50, 1), ofHct(140, 56, 50, 1)}, 2);
+    CHECK(spread.size() == 2 && std::abs(hueOf(spread[0]) - 20) < 3 && std::abs(hueOf(spread[1]) - 140) < 3);
+    // Hue distance goes round the circle: 355° and 5° are 10° apart, too close for two seeds.
+    CHECK(seedColors({ofHct(355, 60, 50, 1), ofHct(5, 58, 50, 1)}, 2).size() == 1);
+}
+
+TEST(tonal_palette_from_a_picture_takes_its_best_seed) {
+    // 1000 × 600: mostly a blue, a stripe of white; scaled down to about 112 × 112 first.
+    int w = 1000, h = 600;
+    std::vector<uint8_t> rgba(size_t(w) * size_t(h) * 4);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            uint8_t* p = &rgba[(size_t(y) * size_t(w) + size_t(x)) * 4];
+            bool white = y < h / 5;
+            p[0] = white ? 255 : 0x1E, p[1] = white ? 255 : 0x88, p[2] = white ? 255 : 0xE5, p[3] = 255;
+        }
+    TonalPalette p = TonalPalette::fromImage(ImageBitmap::fromPixels(w, h, std::move(rgba)));
+    TonalPalette blue = TonalPalette::fromSeed(Color::hex(0x1E88E5));
+    CHECK(std::abs(Hct::fromColor(p.accent1[8]).hue - Hct::fromColor(blue.accent1[8]).hue) < 1);
+    CHECK(TonalPalette::fromImage(ImageBitmap()) == TonalPalette::fromSeed(Color::hex(0x4285F4)));
+    // Scaled down by averaging blocks: a fine red and blue checkerboard is purple.
+    std::vector<uint8_t> checks(224 * 224 * 4);
+    for (int y = 0; y < 224; ++y)
+        for (int x = 0; x < 224; ++x) {
+            uint8_t* q = &checks[(size_t(y) * 224 + size_t(x)) * 4];
+            bool r = (x + y) % 2 == 0;
+            q[0] = r ? 255 : 0, q[1] = 0, q[2] = r ? 0 : 255, q[3] = 255;
+        }
+    TonalPalette purple = TonalPalette::fromImage(ImageBitmap::fromPixels(224, 224, std::move(checks)));
+    CHECK(std::abs(Hct::fromColor(purple.accent1[8]).hue - Hct::fromColor(TonalPalette::fromSeed(Color::hex(0x7F007F)).accent1[8]).hue) < 2);
+    // A picture of greys only: Google blue's.
+    CHECK(TonalPalette::fromImage(pixelsOf({{0x777777, 50}, {0x222222, 50}})) == TonalPalette::fromSeed(Color::hex(0x4285F4)));
+}
+
 KOMPOZ_PREVIEW(TestGreetingPreview, .width = 200, .height = 100, .darkTheme = true, .background = Color::hex(0x102030)) {
     Text(isSystemInDarkTheme() ? "karanlık" : "aydınlık");
 }
