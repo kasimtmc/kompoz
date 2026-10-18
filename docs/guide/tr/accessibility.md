@@ -1,6 +1,6 @@
 # Erişilebilirlik
 
-Uygulamanızı ekran okuyucularla, klavyeyle ve büyük metinle kullanılabilir kılmak. Kompoz, Compose'un yaptığı gibi bir semantik ağaç kurar; Android'de TalkBack onu okur, testler de her platformda onu sorgular.
+Uygulamanızı ekran okuyucularla, klavyeyle ve büyük metinle kullanılabilir kılmak. Kompoz, Compose'un yaptığı gibi bir semantik ağaç kurar; Android'de TalkBack, Linux'ta AT-SPI üzerinden ekran okuyucular onu okur, testler de her platformda onu sorgular.
 
 ## Semantik ağaç
 
@@ -136,7 +136,11 @@ Her tıklanabilire ve metin alanına Tab ile ulaşılabilir, Enter ya da Space i
 
 ## Platformlar
 
-Android'de TalkBack semantik ağacı okur: etiketler, roller, durumlar, eylemler, özel eylemler ve canlı bölgeler. Masaüstü platformlarının erişilebilirlik API'leri (Linux'ta AT-SPI, Windows'ta UI Automation) henüz bağlı değildir; bu yüzden oradaki ekran okuyucular Kompoz uygulamalarını görmez.
+Android'de TalkBack semantik ağacı okur: etiketler, roller, durumlar, eylemler, özel eylemler ve canlı bölgeler.
+
+Linux'ta Orca gibi ekran okuyucular onu AT-SPI üzerinden okur. Uygulama, masaüstünün erişilebilirliği açıksa erişilebilirlik veriyoluna katılır; Qt uygulamaları da böyle yapar (uygulama çalışırken açılırsa da katılır). `KOMPOZ_ATSPI=1` her durumda bağlar, `KOMPOZ_ATSPI=0` hiç bağlamaz. Ekran okuyucular aynı etiketleri, rolleri, durumları, değerleri ve metni alır; tıklayabilir, odaklayabilir, kaydırabilir, bir kaydırıcının değerini ya da bir metin alanının metnini ayarlayabilir, özel eylemleri çalıştırabilir; değişenler de onlara bildirilir: odak, işaretli ve seçili durumları, yazılan metin, değerler, duyuru olarak canlı bölgeler. Bir parola alanının metni nokta olarak okunur.
+
+Windows'un UI Automation'ı ve macOS'un NSAccessibility'si henüz bağlı değildir; bu yüzden oradaki ekran okuyucular Kompoz uygulamalarını görmez.
 
 ## Ayrıca bakın
 

@@ -55,8 +55,8 @@ kompoz::Application kompoz::createApplication(int, char**) {
   iki yönlü metin, `AnnotatedString`, seçim, emoji ve sistem yedek fontları.
 - **Girdi**: dokunma, çoklu dokunma hareketleri, fare (üzerine gelme, sağ tık, fareyle metin seçimi), klavye odağı ve
   kısayollar, önerili yazılım klavyesi, sürükle-bırak, tahmine dayalı geri hareketi.
-- **Erişilebilirlik**: Android'de TalkBack'in okuduğu semantik ağaç (etiketler, roller, durumlar, eylemler, özel
-  eylemler, canlı bölgeler).
+- **Erişilebilirlik**: Android'de TalkBack'in, Linux'ta AT-SPI üzerinden ekran okuyucuların (Orca) okuduğu semantik
+  ağaç (etiketler, roller, durumlar, eylemler, özel eylemler, canlı bölgeler).
 - **Platformla bütünleşme**: sistemin koyu modu; kaynağını uygulamanın (ya da kullanıcısının) seçtiği dinamik renk:
   sistemin paleti (Android 12+'da duvar kağıdınınki, Linux ve Windows'ta masaüstünün vurgu rengi) ya da duvar kağıdının kendisi
   (Linux masaüstleri, Windows, Android 8.1+); sistem yazı ölçeği; sistemin dili (kütüphanenin kendi metinleri İngilizce ya da Türkçe, `LocalStrings`,
@@ -496,8 +496,8 @@ bir de baştan çizip pikselleri karşılaştırır (fark varsa loglar), `KOMPOZ
 
 ## Bilinen sınırlar
 
-1. **macOS ve iOS** derlenmedi (Mac gerekiyor); masaüstü erişilebilirlik API'lerine (AT-SPI, UI Automation,
-   NSAccessibility) bağlanmadı; Android'de TalkBack çalışıyor.
+1. **macOS ve iOS** derlenmedi (Mac gerekiyor); Windows'un ve macOS'un erişilebilirlik API'lerine (UI Automation,
+   NSAccessibility) bağlanmadı; Android'de TalkBack, Linux'ta AT-SPI çalışıyor.
 2. Kenar esnemesi Android 12'nin esnemesini ölçekleme olarak yapıyor (gerçek bükülme değil). `graphicsLayer` ile
    büyütülen içerik 1× katman dokusundan ölçeklenir (Compose içeriği ölçekte yeniden çizer); çok yakınlaşınca yumuşar.
    İç içe kaydırmada `onPreFling`/`onPostFling` Compose'daki gibi askıya alınmaz (animasyon için bağlantı kendi

@@ -2,6 +2,12 @@
 
 **English** · [Türkçe](CHANGELOG.tr.md)
 
+## Unreleased
+
+- **Screen readers on Linux**: the semantics tree is served over AT-SPI (libdbus loaded at run time), so Orca reads
+  Kompoz apps and can use them: roles, names, states, values and text, actions, and events for what changes. On when
+  the desktop's accessibility is; `KOMPOZ_ATSPI=1` / `0` to force it on or off.
+
 ## 0.1.1 — 2026-10-18
 
 - **Dynamic color from three sources, each an API of its own**, which the app or its user picks between (the library

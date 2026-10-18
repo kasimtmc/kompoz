@@ -133,6 +133,7 @@ Kompoz her kareyi önce kaydeder ve yalnızca bir önceki kareden beri değişen
 | `KOMPOZ_LAYOUT_DIRECTION=rtl` | Sistem dilininki yerine sağdan sola ya da soldan sağa yerleşim. |
 | `KOMPOZ_NO_DESKTOP_ACCENT=1` | Ekran görüntüleri her makinede aynı olsun diye masaüstünün vurgu rengini (Linux, Windows) yok sayar. |
 | `KOMPOZ_NO_WALLPAPER_COLORS=1` | Aynı nedenle duvar kağıdının renklerini okumaz. |
+| `KOMPOZ_ATSPI=1` | Masaüstünün erişilebilirliği kapalıyken de semantik ağacı AT-SPI üzerinden ekran okuyuculara sunar (Linux); `0` hiç sunmaz. |
 | `KOMPOZ_TRACE=1` | Her recomposition'da kaç scope'un çalışıp atlandığını günlüğe yazar. |
 | `KOMPOZ_PROFILE=1` | Kare sürelerini günlüğe yazar. |
 | `KOMPOZ_DAMAGE_SHOW=1`, `KOMPOZ_DAMAGE_CHECK=1`, `KOMPOZ_FULL_REDRAW=1` | Yalnızca değişeni yeniden çizmeyi gösterir, kontrol eder ya da kapatır. |

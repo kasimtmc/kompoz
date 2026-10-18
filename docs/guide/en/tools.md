@@ -133,6 +133,7 @@ Kompoz records each frame first and draws again only what changed since the fram
 | `KOMPOZ_LAYOUT_DIRECTION=rtl` | Right-to-left or left-to-right layout, instead of the system language's. |
 | `KOMPOZ_NO_DESKTOP_ACCENT=1` | Ignores the desktop's accent color (Linux, Windows), so screenshots are the same on every machine. |
 | `KOMPOZ_NO_WALLPAPER_COLORS=1` | Doesn't read the wallpaper's colors, for the same reason. |
+| `KOMPOZ_ATSPI=1` | Serves the semantics tree to screen readers over AT-SPI even when the desktop's accessibility is off (Linux); `0` never. |
 | `KOMPOZ_TRACE=1` | Logs how many scopes ran and were skipped in each recomposition. |
 | `KOMPOZ_PROFILE=1` | Logs frame times. |
 | `KOMPOZ_DAMAGE_SHOW=1`, `KOMPOZ_DAMAGE_CHECK=1`, `KOMPOZ_FULL_REDRAW=1` | Show, check or turn off redrawing only what changed. |
