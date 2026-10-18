@@ -107,7 +107,7 @@ void Drawing() {
     auto points = remember([] { return mutableStateOf(std::vector<Offset>{}); });
     Color ink = colorScheme().onSurface;
     Canvas(Modifier().fillMaxSize().pointerInput(0, [points](PointerInputScope& s) -> Task {
-        co_await detectDragGestures(s, {.onDragStart = [points](Offset at) { points.update([&](std::vector<Offset>& v) { v.assign(1, at); }); },
+        co_await detectDragGestures(s, {.onDragStart = [points](Offset at) { points.set({at}); },
                                         .onDrag = [points](PointerInputChange& change, Offset) {
                                             points.update([&](std::vector<Offset>& v) { v.push_back(change.position); });
                                         }});

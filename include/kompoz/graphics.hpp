@@ -43,6 +43,7 @@ constexpr Color lerp(const Color& a, const Color& b, float t) {
 
 struct Offset {
     float x = 0, y = 0;
+    friend constexpr bool operator==(const Offset&, const Offset&) = default;
 };
 
 struct Size {

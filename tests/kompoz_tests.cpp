@@ -25028,6 +25028,23 @@ TEST(wallpaper_colors_are_a_source_of_their_own) {
     CHECK(!available && light == lightColorScheme() && system == dynamicLightColorScheme(accent));
 }
 
+TEST(offsets_compare_by_value_so_a_state_of_them_can_be_set) {
+    static_assert(Offset{1, 2} == Offset{1, 2} && Offset{1, 2} != Offset{1, 3});
+    // A state of Offsets (a drawing's points) takes set(), and an equal value recomposes nothing.
+    auto points = mutableStateOf(std::vector<Offset>{{1, 2}});
+    int runs = 0;
+    ComposeTestRule rule([&] {
+        ++runs;
+        Text(std::to_string(points.get().size()));
+    });
+    points.set({{1, 2}});
+    rule.waitForIdle();
+    CHECK(runs == 1);
+    points.set({{1, 2}, {3, 4}});
+    rule.waitForIdle();
+    CHECK(runs == 2 && rule.onNodeWithText("2").exists());
+}
+
 KOMPOZ_PREVIEW(TestGreetingPreview, .width = 200, .height = 100, .darkTheme = true, .background = Color::hex(0x102030)) {
     Text(isSystemInDarkTheme() ? "karanlık" : "aydınlık");
 }
