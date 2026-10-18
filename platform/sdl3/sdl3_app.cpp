@@ -35,6 +35,9 @@
 #ifdef KOMPOZ_WALLPAPER_COLORS
 #include "wallpaper_colors.hpp"
 #endif
+#ifdef KOMPOZ_ATSPI
+#include "atspi_bridge.hpp"
+#endif
 
 #ifdef SDL_PLATFORM_ANDROID
 #include "android_ime.hpp"
@@ -2384,7 +2387,10 @@ struct App {
 #ifdef KOMPOZ_WALLPAPER_COLORS
     std::unique_ptr<kompoz::sdl::WallpaperColors> wallpaper;  // the wallpaper's own colors (desktops)
 #endif
-    int64_t lastSemantics = 0;  // Android accessibility
+#ifdef KOMPOZ_ATSPI
+    std::unique_ptr<kompoz::sdl::AtspiBridge> atspi;  // screen readers (Linux)
+#endif
+    int64_t lastSemantics = 0;  // Android accessibility, AT-SPI
     bool semanticsDirty = true;  // the screen changed since the tree was last published
     bool wantsBack = false;  // as Android was last told (the app's back callback registered)
     bool keepScreenOn = false;  // as SDL was last told
@@ -3033,6 +3039,15 @@ void handleEvent(App& app, const SDL_Event& e) {
         return;
     }
 #endif
+#ifdef KOMPOZ_ATSPI
+    if (app.atspi && app.atspi->eventType() != 0 && e.type == app.atspi->eventType()) {  // asked for, or connected
+        for (const auto& r : app.atspi->takeRequests()) {
+            if (r.action == kompoz::SemanticsAction::SetText) host.performSemanticsAction(r.id, r.action, r.text);
+            else host.performSemanticsAction(r.id, r.action, r.argument);
+        }
+        return;
+    }
+#endif
     switch (e.type) {  // pointer events carry the keys held down
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
     case SDL_EVENT_MOUSE_BUTTON_UP:
@@ -3050,6 +3065,7 @@ void handleEvent(App& app, const SDL_Event& e) {
     case SDL_EVENT_WINDOW_FOCUS_GAINED:
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         app.focused = e.type == SDL_EVENT_WINDOW_FOCUS_GAINED;
+        app.semanticsDirty = true;  // (AT-SPI tells which window is active)
         host.setWindowFocused(app.focused);
         updateLifecycle(app);
         break;
@@ -3346,6 +3362,9 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
 #ifdef KOMPOZ_WALLPAPER_COLORS
     app->wallpaper = std::make_unique<kompoz::sdl::WallpaperColors>(SDL_GetSystemTheme() == SDL_SYSTEM_THEME_DARK);
 #endif
+#ifdef KOMPOZ_ATSPI
+    app->atspi = std::make_unique<kompoz::sdl::AtspiBridge>(app->config.title);  // connects on its thread, if wanted
+#endif
     app->wakeEvent = SDL_RegisterEvents(1);
 
     App* raw = app.get();
@@ -3536,6 +3555,24 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
         if (on) SDL_DisableScreenSaver();
         else SDL_EnableScreenSaver();
     }
+#ifdef KOMPOZ_ATSPI
+    // The same for AT-SPI, which answers from the tree last published (on its thread), with where
+    // the window is: once connected (it asks for the first), after frames that changed the screen.
+    bool treeRequested = app.atspi && app.atspi->takeTreeRequest();
+    app.semanticsDirty = app.semanticsDirty || redraw || treeRequested;
+    if (app.atspi && app.atspi->active() && app.semanticsDirty &&
+        (treeRequested || now - app.lastSemantics > (app.host->hasPendingWork() ? 500'000'000 : 50'000'000))) {
+        app.lastSemantics = now;
+        app.semanticsDirty = false;
+        int x = 0, y = 0, w = 0, h = 0;
+        SDL_GetWindowPosition(app.window, &x, &y);
+        SDL_GetWindowSize(app.window, &w, &h);
+        const char* title = SDL_GetWindowTitle(app.window);
+        app.atspi->publish(app.host->semanticsTree(), {.x = float(x), .y = float(y), .width = float(w), .height = float(h),
+                                                       .dpToPoints = 1 / app.pointToDp, .focused = app.focused,
+                                                       .title = title ? title : ""});
+    }
+#endif
 #ifdef SDL_PLATFORM_ANDROID
     // Accessibility services read the semantics tree from the UI thread: publish it after
     // frames that changed the screen, at most every 50 ms, and only every half second while it
@@ -3600,6 +3637,9 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
     bool busy = app.host->hasPendingWork() || app.script.running() || app.resizeFrames > 0;
 #ifdef SDL_PLATFORM_ANDROID
     busy = busy || (kompoz::android_ime::accessibilityEnabled() && app.semanticsDirty);  // one more frame publishes it
+#endif
+#ifdef KOMPOZ_ATSPI
+    busy = busy || (app.atspi && app.atspi->active() && app.semanticsDirty);  // the same
 #endif
 #ifdef SDL_PLATFORM_EMSCRIPTEN
     busy = true;  // the browser's frames don't wait for events there: input would sit until the next timer

@@ -6,6 +6,7 @@
 #include <dlfcn.h>
 
 #include <cstdint>
+#include <string>
 #include <type_traits>
 #include <utility>
 
@@ -45,6 +46,8 @@ struct Lib {
     Message* (*connection_pop_message)(Connection*);
     unsigned (*connection_send)(Connection*, Message*, uint32_t*);
     void (*connection_flush)(Connection*);
+    unsigned (*connection_get_unix_fd)(Connection*, int*);
+    int (*bus_request_name)(Connection*, const char*, unsigned, Error*);
     Message* (*connection_send_with_reply_and_block)(Connection*, Message*, int, Error*);
     Message* (*message_new_method_call)(const char*, const char*, const char*, const char*);
     Message* (*message_new_method_return)(Message*);
@@ -90,6 +93,8 @@ struct Lib {
         get(connection_pop_message, "dbus_connection_pop_message");
         get(connection_send, "dbus_connection_send");
         get(connection_flush, "dbus_connection_flush");
+        get(connection_get_unix_fd, "dbus_connection_get_unix_fd");
+        get(bus_request_name, "dbus_bus_request_name");
         get(connection_send_with_reply_and_block, "dbus_connection_send_with_reply_and_block");
         get(message_new_method_call, "dbus_message_new_method_call");
         get(message_new_method_return, "dbus_message_new_method_return");
@@ -117,6 +122,84 @@ struct Lib {
     }
     ~Lib() {
         if (handle) dlclose(handle);
+    }
+};
+
+// A message's arguments written in order; a container filled by a function given its writer.
+struct Writer {
+    Lib& d;
+    Iter it{};
+    explicit Writer(Lib& lib) : d(lib) {}
+    Writer(Lib& lib, Message* m) : d(lib) { d.message_iter_init_append(m, &it); }
+    void basic(int type, const void* value) { d.message_iter_append_basic(&it, type, value); }
+    void str(const std::string& v) {
+        const char* c = v.c_str();
+        basic(kTypeString, &c);
+    }
+    void path(const std::string& v) {
+        const char* c = v.c_str();
+        basic(kTypeObjectPath, &c);
+    }
+    void i16(int16_t v) { basic(kTypeInt16, &v); }
+    void i32(int32_t v) { basic(kTypeInt32, &v); }
+    void u32(uint32_t v) { basic(kTypeUint32, &v); }
+    void boolean(bool v) {
+        uint32_t b = v;  // dbus_bool_t
+        basic(kTypeBoolean, &b);
+    }
+    void dbl(double v) { basic(kTypeDouble, &v); }
+    template <class Fill>
+    void open(int type, const char* signature, Fill&& fill) {  // signature: an array's or a variant's contents
+        Writer inner(d);
+        d.message_iter_open_container(&it, type, signature, &inner.it);
+        fill(inner);
+        d.message_iter_close_container(&it, &inner.it);
+    }
+};
+
+// A message's arguments read in order. One of another type than asked for reads as nothing and
+// sets `ok` false.
+struct Reader {
+    Lib& d;
+    Iter it{};
+    bool ok = false;
+    explicit Reader(Lib& lib) : d(lib) {}
+    Reader(Lib& lib, Message* m) : d(lib) { ok = d.message_iter_init(m, &it); }
+    int type() { return ok ? d.message_iter_get_arg_type(&it) : kTypeInvalid; }
+    template <class T>
+    T basic(int type) {
+        T v{};
+        if (this->type() != type) {
+            ok = false;
+            return v;
+        }
+        d.message_iter_get_basic(&it, &v);
+        d.message_iter_next(&it);
+        return v;
+    }
+    std::string str() {
+        const char* s = basic<const char*>(kTypeString);
+        return s ? s : "";
+    }
+    std::string path() {
+        const char* s = basic<const char*>(kTypeObjectPath);
+        return s ? s : "";
+    }
+    int32_t i32() { return basic<int32_t>(kTypeInt32); }
+    uint32_t u32() { return basic<uint32_t>(kTypeUint32); }
+    bool boolean() { return basic<uint32_t>(kTypeBoolean) != 0; }
+    double dbl() { return basic<double>(kTypeDouble); }
+    Reader enter() {  // into an array, a struct, a variant or a dictionary entry
+        Reader inner(d);
+        int t = type();
+        if (t != kTypeArray && t != kTypeStruct && t != kTypeVariant && t != kTypeDictEntry) {
+            ok = false;
+            return inner;
+        }
+        d.message_iter_recurse(&it, &inner.it);
+        inner.ok = true;
+        d.message_iter_next(&it);
+        return inner;
     }
 };
 

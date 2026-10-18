@@ -193,8 +193,9 @@ if(KOMPOZ_BUILD_SDL3)
         target_sources(kompoz_sdl3 PRIVATE platform/sdl3/android_ime.cpp)  # + platform/android/java
     elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
         # The desktop's accent color from the XDG portal (libdbus loaded at run time): dynamic color.
-        target_sources(kompoz_sdl3 PRIVATE platform/sdl3/desktop_accent.cpp)
-        target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_DESKTOP_ACCENT=1)
+        # Screen readers read the semantics tree through AT-SPI (the same libdbus).
+        target_sources(kompoz_sdl3 PRIVATE platform/sdl3/desktop_accent.cpp platform/sdl3/atspi_bridge.cpp)
+        target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_DESKTOP_ACCENT=1 KOMPOZ_ATSPI=1)
         target_link_libraries(kompoz_sdl3 PUBLIC ${CMAKE_DL_LIBS})
     elseif(WIN32)
         # Windows' accent color (DWM's, in the registry): dynamic color.
@@ -206,10 +207,10 @@ if(KOMPOZ_BUILD_SDL3)
         target_sources(kompoz_sdl3 PRIVATE platform/sdl3/wallpaper_colors.cpp)
         target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_WALLPAPER_COLORS=1)
     endif()
-    # The platform code that runs without a window (the wallpaper's colors), tested on its own.
+    # The platform code that runs without a window (the wallpaper's colors, AT-SPI), tested on its own.
     if(KOMPOZ_BUILD_TESTS AND UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
         add_executable(kompoz_platform_tests tests/platform_tests.cpp platform/sdl3/wallpaper_colors.cpp
-                       platform/sdl3/image_loader.cpp)
+                       platform/sdl3/image_loader.cpp platform/sdl3/atspi_bridge.cpp)
         target_include_directories(kompoz_platform_tests PRIVATE platform/sdl3)
         target_link_libraries(kompoz_platform_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,INTERFACE_LINK_LIBRARIES>)
         target_compile_definitions(kompoz_platform_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,COMPILE_DEFINITIONS>)
