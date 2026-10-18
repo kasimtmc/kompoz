@@ -1,6 +1,6 @@
 # Accessibility
 
-Making your app usable with screen readers, keyboards and large text. Kompoz builds a semantics tree, as Compose does, that TalkBack reads on Android, screen readers read through AT-SPI on Linux, and tests query everywhere.
+Making your app usable with screen readers, keyboards and large text. Kompoz builds a semantics tree, as Compose does, that TalkBack reads on Android, screen readers read through AT-SPI on Linux and UI Automation on Windows, and tests query everywhere.
 
 ## The semantics tree
 
@@ -140,7 +140,9 @@ On Android, TalkBack reads the semantics tree: labels, roles, states, actions, c
 
 On Linux, screen readers such as Orca read it through AT-SPI. The app joins the accessibility bus when the desktop's accessibility is on, as Qt apps do (also when it is turned on while the app runs); `KOMPOZ_ATSPI=1` connects it anyway and `KOMPOZ_ATSPI=0` never. Screen readers get the same labels, roles, states, values and text; they can click, focus, scroll, set a slider's value or a text field's text and run custom actions; and they are told what changes: focus, checked and selected states, typed text, values, and live regions as announcements. A password field's text is read as dots.
 
-Windows' UI Automation and macOS's NSAccessibility are not connected yet, so screen readers there don't see Kompoz apps.
+On Windows, Narrator, NVDA and other UI Automation clients read it: the window gives them its nodes when they ask for them. They get control types, names, states, positions, values (a text field's, a slider's) and the patterns to use them (invoke, toggle, select, set a value, scroll, focus), and are told about focus, name, state and value changes, children coming and going, and live regions. Custom actions have no place in UI Automation, so they are only on Android and Linux.
+
+macOS's NSAccessibility is not connected yet.
 
 ## See also
 

@@ -7,6 +7,8 @@
 - **Screen readers on Linux**: the semantics tree is served over AT-SPI (libdbus loaded at run time), so Orca reads
   Kompoz apps and can use them: roles, names, states, values and text, actions, and events for what changes. On when
   the desktop's accessibility is; `KOMPOZ_ATSPI=1` / `0` to force it on or off.
+- **Screen readers on Windows**: the semantics tree is served through UI Automation, for Narrator and NVDA: control
+  types, names, states, positions, the patterns to use the nodes, and events for what changes.
 
 ## 0.1.1 — 2026-10-18
 

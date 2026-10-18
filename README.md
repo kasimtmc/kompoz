@@ -56,8 +56,9 @@ kompoz::Application kompoz::createApplication(int, char**) {
   text, `AnnotatedString`, selection, emoji and system fallback fonts.
 - **Input**: touch, multi-touch gestures, mouse (hover, right click, text selection by mouse), keyboard focus
   and shortcuts, the software keyboard with suggestions, drag and drop, the predictive back gesture.
-- **Accessibility**: a semantics tree that TalkBack reads on Android and screen readers (Orca) read through AT-SPI
-  on Linux (labels, roles, states, actions, custom actions, live regions).
+- **Accessibility**: a semantics tree that TalkBack reads on Android, and screen readers read through AT-SPI on
+  Linux (Orca) and UI Automation on Windows (Narrator, NVDA): labels, roles, states, actions, custom actions, live
+  regions.
 - **Platform integration**: the system's dark mode; dynamic color, from a source the app (or its user) picks: the
   system's palette (the wallpaper's on Android 12+, the desktop's accent color on Linux and Windows) or the wallpaper itself (Linux
   desktops, Windows, Android 8.1+); system font scale; the system language (the library's own texts in English or
@@ -500,8 +501,8 @@ that looks the same) is neither drawn nor shown. `KOMPOZ_DAMAGE_SHOW=1` outlines
 
 ## Known limitations
 
-1. **macOS and iOS** haven't been built (they need a Mac); Windows' and macOS's accessibility APIs (UI Automation,
-   NSAccessibility) aren't connected; TalkBack on Android and AT-SPI on Linux work.
+1. **macOS and iOS** haven't been built (they need a Mac), nor connected to NSAccessibility; TalkBack on Android,
+   AT-SPI on Linux and UI Automation on Windows work (UI Automation tried under Wine, not yet with Narrator).
 2. Overscroll is Android 12's stretch done as a scale, not a true warp. Content scaled up with `graphicsLayer` is
    scaled from a 1× layer texture (Compose draws it again at the scale), so it softens when zoomed far in. In nested
    scrolling, `onPreFling`/`onPostFling` don't suspend as in Compose (a connection that animates starts its own
