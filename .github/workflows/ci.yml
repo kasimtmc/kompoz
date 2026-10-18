@@ -43,9 +43,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ninja-build g++-14 clang-19 lld-19 dbus \
-            libturbojpeg0-dev libwebp-dev libcurl4-openssl-dev libdbus-1-dev \
-            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxkbcommon-dev \
-            libwayland-dev wayland-protocols libegl-dev libgl-dev
+            libturbojpeg0-dev libwebp-dev libcurl4-openssl-dev
+          # What SDL's own README lists for Linux
+          sudo apt-get install -y --no-install-recommends libasound2-dev libpulse-dev libpipewire-0.3-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
+            libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
+            libdbus-1-dev libibus-1.0-dev libudev-dev libwayland-dev wayland-protocols libdecor-0-dev liburing-dev
       - uses: actions/cache@v4
         with:
           path: third_party/.downloads
