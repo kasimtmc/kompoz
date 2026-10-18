@@ -1,0 +1,146 @@
+# Builds Kompoz on every platform it runs on and runs its tests where they can run: the headless
+# tests everywhere but Android and the web, the platform tests on Linux (the wallpaper's colors,
+# AT-SPI on a D-Bus of their own) and Windows (UI Automation). macOS is built and tested here too,
+# although its backend hasn't been tried on a Mac.
+name: CI
+
+on:
+  push:
+    branches: [main, ci]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GCC 14, ASan + UBSan
+            cc: gcc-14
+            cxx: g++-14
+            flags: -fsanitize=address,undefined -fno-omit-frame-pointer
+          - name: Clang 19
+            cc: clang-19
+            cxx: clang++-19
+            flags: ""
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build g++-14 clang-19 lld-19 dbus \
+            libturbojpeg0-dev libwebp-dev libcurl4-openssl-dev libdbus-1-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxkbcommon-dev \
+            libwayland-dev wayland-protocols libegl-dev libgl-dev
+      - uses: actions/cache@v4
+        with:
+          path: third_party/.downloads
+          key: deps-${{ hashFiles('scripts/fetch-deps.sh') }}
+      - name: "Dependencies (SDL3, FreeType, HarfBuzz from source: no SDL3 package here)"
+        run: scripts/fetch-deps.sh
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_VENDORED_DEPS=ON -DCMAKE_CXX_FLAGS="${{ matrix.flags }}"
+      - name: Build
+        run: cmake --build build
+      - name: Tests
+        run: build/kompoz_tests
+      - name: Platform tests
+        run: build/kompoz_platform_tests
+
+  windows:
+    name: Windows (MinGW-w64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja
+            patch tar xz curl
+      - uses: actions/cache@v4
+        with:
+          path: third_party/.downloads
+          key: deps-${{ hashFiles('scripts/fetch-deps.sh') }}
+      - name: Dependencies
+        run: scripts/fetch-deps.sh
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build
+      - name: Tests
+        run: build/kompoz_tests.exe
+      - name: Platform tests (UI Automation)
+        run: build/kompoz_platform_tests.exe
+
+  macos:
+    name: "macOS (headless tests; the backend only built)"
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Packages
+        run: brew install ninja sdl3 freetype harfbuzz jpeg-turbo webp
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build
+      - name: Tests
+        run: build/kompoz_tests
+
+  android:
+    name: Android (the showcase's APK)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: actions/cache@v4
+        with:
+          path: third_party/.downloads
+          key: deps-${{ hashFiles('scripts/fetch-deps.sh') }}
+      - name: Dependencies
+        run: scripts/fetch-deps.sh
+      - name: NDK and CMake
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;29.0.14206865" "cmake;4.1.2" > /dev/null
+      - name: Build
+        working-directory: examples/showcase/android
+        run: ./gradlew --no-daemon assembleDebug
+
+  web:
+    name: Web (Emscripten)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+      - uses: actions/cache@v4
+        with:
+          path: third_party/.downloads
+          key: deps-${{ hashFiles('scripts/fetch-deps.sh') }}
+      - name: Dependencies
+        run: scripts/fetch-deps.sh
+      - name: Configure
+        run: emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_BUILD_TESTS=OFF
+      - name: Build
+        run: cmake --build build-web --target showcase -j4
