@@ -206,6 +206,15 @@ if(KOMPOZ_BUILD_SDL3)
         target_sources(kompoz_sdl3 PRIVATE platform/sdl3/wallpaper_colors.cpp)
         target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_WALLPAPER_COLORS=1)
     endif()
+    # The platform code that runs without a window (the wallpaper's colors), tested on its own.
+    if(KOMPOZ_BUILD_TESTS AND UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
+        add_executable(kompoz_platform_tests tests/platform_tests.cpp platform/sdl3/wallpaper_colors.cpp
+                       platform/sdl3/image_loader.cpp)
+        target_include_directories(kompoz_platform_tests PRIVATE platform/sdl3)
+        target_link_libraries(kompoz_platform_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,INTERFACE_LINK_LIBRARIES>)
+        target_compile_definitions(kompoz_platform_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,COMPILE_DEFINITIONS>)
+        add_test(NAME kompoz_platform_tests COMMAND kompoz_platform_tests)
+    endif()
 
     # For an app's CMakeLists: copies what every app ships (Kompoz's assets/: the bundled fonts and
     # the licenses) next to `target`'s binary each time it is built (desktops; Android and the web
