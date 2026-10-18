@@ -1,6 +1,6 @@
 // Material's HCT color space, the palettes Material You makes from one color, and the colors it
-// picks from a picture, as Material Color Utilities (CAM16 under its default viewing conditions,
-// tone as L*; QuantizerCelebi and Score).
+// picks from a picture: as Material Color Utilities (CAM16 under its default viewing conditions,
+// tone as L*; QuantizerCelebi) and as Android picks a wallpaper's (WallpaperColors, System UI).
 
 #include <kompoz/layout.hpp>
 
@@ -507,34 +507,34 @@ std::vector<std::pair<Color, uint32_t>> quantizeColors(const ImageBitmap& image,
     return out;
 }
 
+// As Android's System UI picks the seeds of its themes from the wallpaper's colors (monet's
+// ColorScheme.getSeedColors), which Material Color Utilities' Score follows.
 std::vector<Color> seedColors(const std::vector<std::pair<Color, uint32_t>>& colors, int desired) {
-    constexpr double kTargetChroma = 48, kWeightProportion = 0.7, kWeightChromaAbove = 0.3, kWeightChromaBelow = 0.1;
-    constexpr double kCutoffChroma = 5, kCutoffExcitedProportion = 0.01;
-    auto hueIndex = [](double h) { return int(sanitizeDegrees(h)) % 360; };
-    std::vector<Hct> hcts;
-    std::vector<double> huePopulation(360);
+    constexpr double kTargetChroma = 48, kMinChroma = 5;  // ACCENT1_CHROMA, MIN_CHROMA
+    auto wrap = [](int degrees) { return ((degrees % 360) + 360) % 360; };
     double total = 0;
+    for (const auto& [color, n] : colors) total += n;
+    std::vector<Hct> hcts;
+    std::vector<double> huePopulation(360);  // the share of the picture of each hue, its greys left out
     for (const auto& [color, n] : colors) {
         Hct h = Hct::fromColor(color);
         hcts.push_back(h);
-        huePopulation[size_t(hueIndex(std::floor(h.hue)))] += n;
-        total += n;
+        if (total > 0 && h.chroma > kMinChroma) huePopulation[size_t(wrap(int(std::lround(h.hue))))] += n / total;
     }
-    // A hue counts with the 30° around it.
-    std::vector<double> excited(360);
-    if (total > 0)
-        for (int hue = 0; hue < 360; ++hue)
-            for (int i = hue - 14; i < hue + 16; ++i) excited[size_t(hueIndex(i))] += huePopulation[size_t(hue)] / total;
     struct Scored {
         Hct hct;
         double score;
     };
     std::vector<Scored> scored;
     for (const Hct& h : hcts) {
-        double proportion = excited[size_t(hueIndex(std::round(h.hue)))];
-        if (h.chroma < kCutoffChroma || proportion <= kCutoffExcitedProportion) continue;
-        double chromaWeight = h.chroma < kTargetChroma ? kWeightChromaBelow : kWeightChromaAbove;
-        scored.push_back({h, proportion * 100 * kWeightProportion + (h.chroma - kTargetChroma) * chromaWeight});
+        // The share of the picture within 15° of its hue; too little of it, or too grey: not a seed
+        // (raising a grey's chroma would make a much louder color than the picture has).
+        int hue = int(std::lround(h.hue));
+        double proportion = 0;
+        for (int i = hue - 15; i <= hue + 15; ++i) proportion += huePopulation[size_t(wrap(i))];
+        if (h.chroma < kMinChroma || proportion <= 0.01) continue;
+        double chromaScore = h.chroma < kTargetChroma ? 0.1 * (h.chroma - kTargetChroma) : 0.3 * (h.chroma - kTargetChroma);
+        scored.push_back({h, chromaScore + 0.7 * 100 * proportion});
     }
     std::ranges::stable_sort(scored, std::greater{}, &Scored::score);
     // As far apart in hue as `desired` of them can be: 90° apart first, down to 15°.
@@ -553,30 +553,31 @@ std::vector<Color> seedColors(const std::vector<std::pair<Color, uint32_t>>& col
     }
     std::vector<Color> out;
     for (const Hct& h : chosen) out.push_back(h.toColor());
-    if (out.empty()) out.push_back(Color::hex(0x4285F4));
+    if (out.empty()) out.push_back(Color::hex(0x1B6EF3));  // Google blue (GOOGLE_BLUE)
     return out;
 }
 
+// As Android makes a wallpaper's colors (WallpaperColors.fromBitmap): the picture scaled to at most
+// 112 × 112 of area, without filtering (each pixel the one under it), its colors quantized
+// (QuantizerCelebi, 128), then System UI's seed.
 TonalPalette TonalPalette::fromImage(const ImageBitmap& image) {
-    if (image.empty()) return fromSeed(Color::hex(0x4285F4));
-    // Scaled down (each pixel the average of its block) to about 112 × 112, as Android does.
+    if (image.empty()) return fromSeed(Color::hex(0x1B6EF3));
     int w = image.width(), h = image.height();
-    int step = std::max(1, int(std::sqrt(double(w) * h / (112.0 * 112.0))));
-    int sw = std::max(1, w / step), sh = std::max(1, h / step);
-    std::vector<uint8_t> small(size_t(sw) * size_t(sh) * 4);
-    const uint8_t* src = image.pixels();
-    for (int y = 0; y < sh; ++y)
-        for (int x = 0; x < sw; ++x) {
-            uint32_t sum[4] = {};
-            for (int dy = 0; dy < step; ++dy)
-                for (int dx = 0; dx < step; ++dx) {
-                    const uint8_t* q = src + (size_t(y * step + dy) * size_t(w) + size_t(x * step + dx)) * 4;
-                    for (int k = 0; k < 4; ++k) sum[k] += q[k];
-                }
-            uint8_t* d = &small[(size_t(y) * size_t(sw) + size_t(x)) * 4];
-            for (int k = 0; k < 4; ++k) d[k] = uint8_t(sum[k] / uint32_t(step * step));
-        }
-    return fromSeed(seedColors(quantizeColors(ImageBitmap::fromPixels(sw, sh, std::move(small)), 128)).front());
+    constexpr double kMaxArea = 112.0 * 112.0;
+    ImageBitmap picture = image;
+    if (double(w) * h > kMaxArea) {
+        double scale = std::sqrt(kMaxArea / (double(w) * h));
+        int sw = std::max(1, int(w * scale)), sh = std::max(1, int(h * scale));
+        std::vector<uint8_t> small(size_t(sw) * size_t(sh) * 4);
+        const uint8_t* src = image.pixels();
+        for (int y = 0; y < sh; ++y)
+            for (int x = 0; x < sw; ++x) {
+                int sx = std::min(w - 1, int((x + 0.5) * w / sw)), sy = std::min(h - 1, int((y + 0.5) * h / sh));
+                std::copy_n(src + (size_t(sy) * size_t(w) + size_t(sx)) * 4, 4, &small[(size_t(y) * size_t(sw) + size_t(x)) * 4]);
+            }
+        picture = ImageBitmap::fromPixels(sw, sh, std::move(small));
+    }
+    return fromSeed(seedColors(quantizeColors(picture, 128)).front());
 }
 
 } // namespace kompoz

@@ -24927,7 +24927,7 @@ TEST(quantizer_finds_a_pictures_colors_and_how_much_of_each) {
     CHECK(blues.size() == 2 && blues[0].second == 10 && blues[1].second == 10);
 }
 
-TEST(seed_colors_are_scored_as_material_color_utilities_does) {
+TEST(seed_colors_are_picked_as_androids_system_ui_picks_them) {
     auto seeds = [](std::initializer_list<uint32_t> colors, int desired = 4) {
         std::vector<std::pair<Color, uint32_t>> in;
         for (uint32_t c : colors) in.push_back({Color::hex(c), 1});
@@ -24938,13 +24938,13 @@ TEST(seed_colors_are_scored_as_material_color_utilities_does) {
     using V = std::vector<uint32_t>;
     CHECK((seeds({0x000000, 0xFFFFFF, 0x0000FF}) == V{0x0000FF}));               // chroma first: greys left out
     CHECK((seeds({0xFF0000, 0x00FF00, 0x0000FF}) == V{0xFF0000, 0x00FF00, 0x0000FF}));  // as much of each: by chroma
-    CHECK((seeds({0x000000}) == V{0x4285F4}));                                    // none fit: Google blue
-    CHECK(seeds({}) == V{0x4285F4});
+    CHECK((seeds({0x000000}) == V{0x1B6EF3}));                                    // none fit: Google blue
+    CHECK(seeds({}) == V{0x1B6EF3});
     CHECK((seeds({0x008772, 0x318477}) == V{0x008772}));                         // hues this close: one of them
     CHECK((seeds({0x008772, 0x008587, 0x007EBC}, 2) == V{0x007EBC, 0x008772}));   // as far apart as two can be
     // A color that covers 1% of the picture or less, around its hue, isn't a seed.
     std::vector<std::pair<Color, uint32_t>> mostlyGrey = {{Color::hex(0x808080), 999}, {Color::hex(0xFF0000), 1}};
-    CHECK((seedColors(mostlyGrey).size() == 1 && hexOf(seedColors(mostlyGrey)[0]) == 0x4285F4));
+    CHECK((seedColors(mostlyGrey).size() == 1 && hexOf(seedColors(mostlyGrey)[0]) == 0x1B6EF3));
     mostlyGrey[0].second = 98;
     CHECK(hexOf(seedColors(mostlyGrey)[0]) == 0xFF0000);
     auto ofHct = [](float hue, float chroma, float tone, uint32_t n) { return std::pair(Hct{hue, chroma, tone}.toColor(), n); };
@@ -24956,6 +24956,22 @@ TEST(seed_colors_are_scored_as_material_color_utilities_does) {
     // Picked as far apart as they can be: of hues 20, 40 and 140, two are 20 and 140.
     auto spread = seedColors({ofHct(20, 60, 50, 1), ofHct(40, 58, 50, 1), ofHct(140, 56, 50, 1)}, 2);
     CHECK(spread.size() == 2 && std::abs(hueOf(spread[0]) - 20) < 3 && std::abs(hueOf(spread[1]) - 140) < 3);
+    // Greys don't count for their hue: a colorful 1 in 201 of the picture is too little, though
+    // the near grey of the same hue is the rest.
+    CHECK(hexOf(seedColors({ofHct(30, 40, 50, 1), ofHct(30, 3, 50, 200)})[0]) == 0x1B6EF3);
+    CHECK(std::abs(hueOf(seedColors({ofHct(30, 40, 50, 3), ofHct(30, 3, 50, 200)})[0]) - 30) < 3);
+    // A color's share counts what is within 15° of its hue, both ends in: alone, 1 in 101 is too
+    // little, but with a neighbor exactly 15° off it is enough to be the second seed.
+    auto rare = ofHct(100, 60, 50, 1);
+    long rareHue = std::lround(hueOf(rare.first));
+    for (long off : {-15L, 15L}) {
+        std::pair<Color, uint32_t> near{};
+        bool found = false;
+        for (float h = float(rareHue + off) - 1.5f; h < float(rareHue + off) + 1.5f && !found; h += 0.05f)  // its 8-bit color's hue rounds right
+            if (auto c = ofHct(h, 40, 50, 100); std::lround(hueOf(c.first)) == rareHue + off && std::abs(hueOf(c.first) - hueOf(rare.first)) >= 15)
+                near = c, found = true;
+        CHECK(found && seedColors({rare, near}, 2).size() == 2);
+    }
     // Hue distance goes round the circle: 355° and 5° are 10° apart, too close for two seeds.
     CHECK(seedColors({ofHct(355, 60, 50, 1), ofHct(5, 58, 50, 1)}, 2).size() == 1);
 }
@@ -24973,19 +24989,20 @@ TEST(tonal_palette_from_a_picture_takes_its_best_seed) {
     TonalPalette p = TonalPalette::fromImage(ImageBitmap::fromPixels(w, h, std::move(rgba)));
     TonalPalette blue = TonalPalette::fromSeed(Color::hex(0x1E88E5));
     CHECK(std::abs(Hct::fromColor(p.accent1[8]).hue - Hct::fromColor(blue.accent1[8]).hue) < 1);
-    CHECK(TonalPalette::fromImage(ImageBitmap()) == TonalPalette::fromSeed(Color::hex(0x4285F4)));
-    // Scaled down by averaging blocks: a fine red and blue checkerboard is purple.
-    std::vector<uint8_t> checks(224 * 224 * 4);
+    CHECK(TonalPalette::fromImage(ImageBitmap()) == TonalPalette::fromSeed(Color::hex(0x1B6EF3)));
+    // Scaled down without filtering, as Android does: each pixel the one under its center, so
+    // stripes of red (even columns) and blue (odd ones) halved are all blue; unscaled, red wins.
+    std::vector<uint8_t> stripes(224 * 224 * 4);
     for (int y = 0; y < 224; ++y)
         for (int x = 0; x < 224; ++x) {
-            uint8_t* q = &checks[(size_t(y) * 224 + size_t(x)) * 4];
-            bool r = (x + y) % 2 == 0;
+            uint8_t* q = &stripes[(size_t(y) * 224 + size_t(x)) * 4];
+            bool r = x % 2 == 0;
             q[0] = r ? 255 : 0, q[1] = 0, q[2] = r ? 0 : 255, q[3] = 255;
         }
-    TonalPalette purple = TonalPalette::fromImage(ImageBitmap::fromPixels(224, 224, std::move(checks)));
-    CHECK(std::abs(Hct::fromColor(purple.accent1[8]).hue - Hct::fromColor(TonalPalette::fromSeed(Color::hex(0x7F007F)).accent1[8]).hue) < 2);
+    TonalPalette striped = TonalPalette::fromImage(ImageBitmap::fromPixels(224, 224, std::move(stripes)));
+    CHECK(std::abs(Hct::fromColor(striped.accent1[8]).hue - Hct::fromColor(TonalPalette::fromSeed(Color::hex(0x0000FF)).accent1[8]).hue) < 2);
     // A picture of greys only: Google blue's.
-    CHECK(TonalPalette::fromImage(pixelsOf({{0x777777, 50}, {0x222222, 50}})) == TonalPalette::fromSeed(Color::hex(0x4285F4)));
+    CHECK(TonalPalette::fromImage(pixelsOf({{0x777777, 50}, {0x222222, 50}})) == TonalPalette::fromSeed(Color::hex(0x1B6EF3)));
 }
 
 KOMPOZ_PREVIEW(TestGreetingPreview, .width = 200, .height = 100, .darkTheme = true, .background = Color::hex(0x102030)) {
