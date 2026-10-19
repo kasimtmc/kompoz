@@ -8,7 +8,7 @@ Build Kompoz, add it to your own CMake project, and run your app on Linux, Windo
 - CMake 3.24 or newer.
 - SDL3 and FreeType.
 - Optional: HarfBuzz for text shaping (Arabic joining, Indic scripts, ligatures, emoji sequences). Without it, text is drawn character by character.
-- Optional on Linux: libcurl, libwebp and libturbojpeg, which `AsyncImage` uses to download images and decode WebP and JPEG. libdbus is loaded at run time, if present, to read the desktop's accent color.
+- Optional on Linux: libcurl, libwebp and libturbojpeg (3.0 or later), which `AsyncImage` uses to download images and decode WebP and JPEG. libdbus is loaded at run time, if present, to read the desktop's accent color.
 
 On Linux, install these from your distribution's packages. For Android, the web and Windows, Kompoz builds SDL3, FreeType and HarfBuzz from source; `scripts/fetch-deps.sh` downloads them (see below).
 

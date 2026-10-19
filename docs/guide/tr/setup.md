@@ -8,7 +8,7 @@ Kompoz'u derleyin, kendi CMake projenize ekleyin ve uygulamanızı Linux, Window
 - CMake 3.24 ya da daha yenisi.
 - SDL3 ve FreeType.
 - İsteğe bağlı: metin şekillendirme için HarfBuzz (Arapça harf bağlama, Hint yazıları, bitişik harfler, emoji dizileri). Olmadan metin karakter karakter çizilir.
-- Linux'ta isteğe bağlı: `AsyncImage`'ın resim indirmek ve WebP ile JPEG çözmek için kullandığı libcurl, libwebp ve libturbojpeg. libdbus, varsa, masaüstünün vurgu rengini okumak için çalışma anında yüklenir.
+- Linux'ta isteğe bağlı: `AsyncImage`'ın resim indirmek ve WebP ile JPEG çözmek için kullandığı libcurl, libwebp ve libturbojpeg (3.0 ya da sonrası). libdbus, varsa, masaüstünün vurgu rengini okumak için çalışma anında yüklenir.
 
 Linux'ta bunları dağıtımınızın paketlerinden kurun. Android, web ve Windows için Kompoz SDL3, FreeType ve HarfBuzz'ı kaynaktan derler; `scripts/fetch-deps.sh` onları indirir (aşağıya bakın).
 

@@ -258,7 +258,7 @@ fonts and color emoji, vector and path rasterization, gradient meshes, transform
 Requirements: a C++20 compiler (GCC 13+, Clang 17+; tested with GCC 16 and Clang 22; GCC 13 crashes on some coroutine
 lambdas, an internal compiler error that GCC 14 doesn't have), CMake 3.24+, SDL3 and
 FreeType. Optional: HarfBuzz (text shaping: Arabic joining, Indic scripts, ligatures, emoji sequences; without it
-text is drawn character by character), and on Linux libcurl, libwebp and libturbojpeg for `AsyncImage` (HTTP,
+text is drawn character by character), and on Linux libcurl, libwebp and libturbojpeg 3.0+ for `AsyncImage` (HTTP,
 WebP, JPEG). On Linux, libdbus is loaded at run time, when present, for the desktop's accent color.
 
 ```bash

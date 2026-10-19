@@ -257,7 +257,7 @@ atlası, vektör ve path rasterleştirme, gradyan mesh'leri, dönüşümlü offs
 Gerekenler: C++20 derleyici (GCC 13+, Clang 17+; GCC 16 ve Clang 22 ile test edildi; GCC 13 bazı coroutine
 lambda'larında dahili derleyici hatasıyla çöküyor, GCC 14'te bu yok), CMake 3.24+, SDL3 ve FreeType.
 İsteğe bağlı: HarfBuzz (metin şekillendirme: Arapça harf birleşmesi, Hint yazıları, ligatürler, emoji dizileri; yoksa
-metin karakter karakter çizilir) ve Linux'ta `AsyncImage` için libcurl, libwebp ve libturbojpeg (HTTP, WebP, JPEG).
+metin karakter karakter çizilir) ve Linux'ta `AsyncImage` için libcurl, libwebp ve libturbojpeg 3.0+ (HTTP, WebP, JPEG).
 Linux'ta masaüstünün vurgu rengi için libdbus, varsa çalışırken yüklenir.
 
 ```bash
