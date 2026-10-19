@@ -4,6 +4,7 @@ build-*/
 dist/
 third_party/*
 !third_party/.gitkeep
+tests/golden/*.actual.png
 examples/*/android/.gradle/
 examples/*/android/build/
 examples/*/android/app/build/
