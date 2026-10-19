@@ -2850,7 +2850,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     };
     // Under a caret a finger put: drag it to move the caret, tap it for the toolbar.
     auto caretHandle = [=] {
-        constexpr float kSize = 22;
+        static constexpr float kSize = 22;  // (static: GCC 14 wants a plain constexpr captured by the lambdas below)
         Popup({.position = [ime, handles](const Rect& field, Size, Size) {
                    handles->field = {field.x, field.y};
                    Offset c = handles->caretPoint(ime->selectionEnd);
