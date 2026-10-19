@@ -132,6 +132,46 @@ jobs:
           path: build-package/*.png
           if-no-files-found: ignore
 
+  vcpkg:
+    name: vcpkg (the overlay port, and an app built with it)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Packages (what SDL needs from the system to build)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build g++-14 \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
+            libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
+            libwayland-dev wayland-protocols libdecor-0-dev libdbus-1-dev libibus-1.0-dev libudev-dev \
+            libasound2-dev libpulse-dev autoconf autoconf-archive automake libtool pkg-config
+      - name: Install Kompoz with vcpkg
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        run: |
+          "$VCPKG_INSTALLATION_ROOT/vcpkg" install kompoz --overlay-ports=packaging/vcpkg/ports \
+            --x-install-root="$PWD/vcpkg_installed" --triplet x64-linux
+      - name: Build an app against it
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        run: |
+          cmake -S tests/package -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_INSTALLED_DIR="$PWD/vcpkg_installed" -DVCPKG_MANIFEST_MODE=OFF
+          cmake --build build-package
+      - name: Run it offscreen, click its button, take a screenshot
+        working-directory: build-package
+        env:
+          SDL_VIDEO_DRIVER: offscreen
+          SDL_RENDER_DRIVER: software
+          KOMPOZ_SCRIPT: wait 5;click 70 70;wait 5;shot vcpkg.png;quit
+        run: ./demo && test -s vcpkg.png
+      - name: The logs of what failed
+        if: failure()
+        run: find "$VCPKG_INSTALLATION_ROOT/buildtrees" -name '*-err.log' -newer packaging -exec tail -40 {} + 2>/dev/null | tail -200
+
   android:
     name: Android (the showcase's APK)
     runs-on: ubuntu-24.04

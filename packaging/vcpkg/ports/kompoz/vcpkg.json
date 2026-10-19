@@ -1,0 +1,25 @@
+{
+  "name": "kompoz",
+  "version": "0.1.1",
+  "description": "Jetpack Compose's model and API in C++20: a declarative UI library for Linux, Windows, macOS, Android and the web.",
+  "homepage": "https://github.com/kasimtmc/kompoz",
+  "license": "Apache-2.0",
+  "dependencies": [
+    "freetype",
+    {
+      "name": "harfbuzz",
+      "features": [
+        "freetype"
+      ]
+    },
+    "sdl3",
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
+  ]
+}
