@@ -33,7 +33,7 @@ public:
 };
 
 // Records drawn text, so tests can check what actually reached the screen (where it lands:
-// translations are applied; layer transforms aren't).
+// translations are applied; layer transforms and pushTransform's matrices aren't).
 class RecordingCanvas final : public GraphicsContext {
 public:
     std::vector<std::string> texts;
@@ -61,6 +61,8 @@ public:
     std::string order;  // the fills as they came: 'r' a rect, 'p' a path (the nth of each in rects, paths)
     std::vector<Offset> translations;  // each pushTranslation's
     Offset translation;                // in effect now (their sum)
+    std::vector<Matrix> transforms;    // each pushTransform's
+    int transformDepth = 0;            // pushTransform's in effect now
     std::vector<ColorFilter> filterStack;  // pushColorFilter's in effect, the innermost last
     std::vector<std::vector<ColorFilter>> imageFilters;  // each drawn image's (as filterStack was)
     // A color as the filters in effect make it (the innermost first): what a backend would show.
@@ -201,6 +203,11 @@ public:
         translation = stack_.back();
         stack_.pop_back();
     }
+    void pushTransform(const Matrix& matrix) override {
+        transforms.push_back(matrix);
+        ++transformDepth;
+    }
+    void popTransform() override { --transformDepth; }
     std::optional<Rect> visible;  // set: what lies outside isn't drawn (as a real screen culls it)
     bool quickReject(const Rect& rect) const override {
         Rect r = moved(rect);

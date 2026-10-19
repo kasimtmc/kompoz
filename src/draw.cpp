@@ -8,6 +8,7 @@
 #include <kompoz/widgets.hpp>
 
 #include <cmath>
+#include <numbers>
 
 namespace kompoz {
 
@@ -332,8 +333,14 @@ void DrawTransform::translate(float left, float top) {
 void DrawTransform::rotate(float degrees, std::optional<Offset> pivot) {
     steps_.push_back([=](DrawScope& d, const std::function<void(DrawScope&)>& next) { d.rotate(degrees, next, pivot); });
 }
+void DrawTransform::rotateRad(float radians, std::optional<Offset> pivot) {
+    steps_.push_back([=](DrawScope& d, const std::function<void(DrawScope&)>& next) { d.rotateRad(radians, next, pivot); });
+}
 void DrawTransform::scale(float scaleX, float scaleY, std::optional<Offset> pivot) {
     steps_.push_back([=](DrawScope& d, const std::function<void(DrawScope&)>& next) { d.scale(scaleX, scaleY, next, pivot); });
+}
+void DrawTransform::transform(const Matrix& matrix) {
+    steps_.push_back([=](DrawScope& d, const std::function<void(DrawScope&)>& next) { d.transformed(matrix, next); });
 }
 void DrawTransform::inset(float left, float top, float right, float bottom) {
     steps_.push_back([=](DrawScope& d, const std::function<void(DrawScope&)>& next) { d.inset(left, top, right, bottom, next); });
@@ -351,29 +358,40 @@ void DrawScope::clipRect(Offset topLeft, Size size, const std::function<void(Dra
     context_->popClip();
 }
 
-void DrawScope::transformed(const LayerTransform& t, const std::function<void(DrawScope&)>& block) {
-    if (bounds_.width <= 0 || bounds_.height <= 0) return;
-    context_->pushLayer(bounds_, 0, 1, t);
+void DrawScope::transformed(const Matrix& matrix, const std::function<void(DrawScope&)>& block) {
+    // The context's coordinates are absolute: from them to this scope's, the matrix, and back.
+    Matrix m;
+    m.translate(-bounds_.x, -bounds_.y);
+    m *= matrix;
+    Matrix back;
+    back.translate(bounds_.x, bounds_.y);
+    m *= back;
+    context_->pushTransform(m);
     block(*this);
-    context_->popLayer();
+    context_->popTransform();
 }
 
 void DrawScope::rotate(float degrees, const std::function<void(DrawScope&)>& block, std::optional<Offset> pivot) {
     Offset p = pivot.value_or(center());
-    LayerTransform t;
-    t.rotationZ = degrees;
-    t.origin = {bounds_.width > 0 ? p.x / bounds_.width : 0.5f, bounds_.height > 0 ? p.y / bounds_.height : 0.5f};
-    transformed(t, block);
+    Matrix m;  // (each step before the one above it)
+    m.translate(p.x, p.y);
+    m.rotateZ(degrees);
+    m.translate(-p.x, -p.y);
+    transformed(m, block);
+}
+
+void DrawScope::rotateRad(float radians, const std::function<void(DrawScope&)>& block, std::optional<Offset> pivot) {
+    rotate(radians * 180 / std::numbers::pi_v<float>, block, pivot);
 }
 
 void DrawScope::scale(float scaleX, float scaleY, const std::function<void(DrawScope&)>& block,
                       std::optional<Offset> pivot) {
     Offset p = pivot.value_or(center());
-    LayerTransform t;
-    t.scaleX = scaleX;
-    t.scaleY = scaleY;
-    t.origin = {bounds_.width > 0 ? p.x / bounds_.width : 0.5f, bounds_.height > 0 ? p.y / bounds_.height : 0.5f};
-    transformed(t, block);
+    Matrix m;
+    m.translate(p.x, p.y);
+    m.scale(scaleX, scaleY);
+    m.translate(-p.x, -p.y);
+    transformed(m, block);
 }
 
 Modifier Modifier::drawBehind(std::function<void(DrawScope&)> onDraw) const {

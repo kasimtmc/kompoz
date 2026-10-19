@@ -295,17 +295,67 @@ public:
         translations_.pop_back();
     }
 
-    bool quickReject(const Rect& r) const override {
-        SDL_Rect visible;  // the clip, or else the whole target (the layer's texture or the window)
-        if (!clips_.empty()) {
-            visible = clips_.back();
-        } else if (!layers_.empty() && layers_.back().texture) {
-            visible = {0, 0, layers_.back().rect.w, layers_.back().rect.h};
-        } else {
-            int w = 0, h = 0;
-            SDL_GetCurrentRenderOutputSize(renderer_, &w, &h);
-            visible = {0, 0, w, h};
+    // A transform that only moves is a translation. Any other draws into a layer over what can
+    // show through it (the visible pixels mapped back), composited through the matrix.
+    void pushTransform(const Matrix& matrix) override {
+        const auto& v = matrix.values;
+        bool moved = v[Matrix::ScaleX] == 1 && v[Matrix::SkewY] == 0 && v[Matrix::SkewX] == 0 && v[Matrix::ScaleY] == 1 &&
+                     v[Matrix::Perspective0] == 0 && v[Matrix::Perspective1] == 0 && v[Matrix::Perspective2] == 1;
+        transformLayers_.push_back(!moved);
+        if (moved) return pushTranslation({v[Matrix::TranslateX], v[Matrix::TranslateY]});
+        SDL_Rect visible = visibleRect();
+        Rect seen{(float(visible.x) + ox_) / scale, (float(visible.y) + oy_) / scale, float(visible.w) / scale, float(visible.h) / scale};
+        Matrix back = matrix;
+        back.invert();
+        // Where the visible corners come from (the visible area three times over if one of them
+        // comes from behind the eye), no more than a layer can be.
+        Rect bounds{seen.x - seen.width, seen.y - seen.height, seen.width * 3, seen.height * 3};
+        bool front = true;
+        for (int c = 0; c < 4; ++c) {
+            float x = c & 1 ? seen.right() : seen.x, y = c & 2 ? seen.bottom() : seen.y;
+            front = front && back(0, 3) * x + back(1, 3) * y + back(3, 3) > 0;
         }
+        if (front) bounds = back.map(seen);
+        float most = 4000 / scale;
+        Offset middle = bounds.center();
+        bounds = bounds.intersect({middle.x - most / 2, middle.y - most / 2, most, most});
+        float pox = ox_, poy = oy_;
+        pushLayer(bounds, CornerRadii(), 1, {});
+        // The matrix in the parent's pixels: back to dp, through it, to pixels again.
+        auto& m = layers_.back().matrix;
+        float sx = scale, a = v[Matrix::ScaleX], b = v[Matrix::SkewX], c = v[Matrix::TranslateX], d = v[Matrix::SkewY], e = v[Matrix::ScaleY],
+              f = v[Matrix::TranslateY], g = v[Matrix::Perspective0], h = v[Matrix::Perspective1], i = v[Matrix::Perspective2];
+        // [s 0 -o; 0 s -o; 0 0 1] M [1/s 0 o/s; 0 1/s o/s; 0 0 1]
+        float px = pox / sx, py = poy / sx;
+        float r0[3] = {sx * a - pox * g, sx * b - pox * h, sx * c - pox * i}, r1[3] = {sx * d - poy * g, sx * e - poy * h, sx * f - poy * i},
+              r2[3] = {g, h, i};
+        for (int k = 0; k < 3; ++k) {
+            const float* r = k == 0 ? r0 : k == 1 ? r1 : r2;
+            m[size_t(k * 3)] = r[0] / sx, m[size_t(k * 3 + 1)] = r[1] / sx, m[size_t(k * 3 + 2)] = r[0] * px + r[1] * py + r[2];
+        }
+        layers_.back().matrixSet = true;
+    }
+
+    void popTransform() override {
+        if (transformLayers_.empty()) return;
+        bool layer = transformLayers_.back();
+        transformLayers_.pop_back();
+        if (layer) popLayer();
+        else popTranslation();
+    }
+
+    // The clip, or else the whole target (the layer's texture or the window).
+    SDL_Rect visibleRect() const {
+        if (!clips_.empty()) return clips_.back();
+        for (auto it = layers_.rbegin(); it != layers_.rend(); ++it)
+            if (it->texture) return {0, 0, it->rect.w, it->rect.h};
+        int w = 0, h = 0;
+        SDL_GetCurrentRenderOutputSize(renderer_, &w, &h);
+        return {0, 0, w, h};
+    }
+
+    bool quickReject(const Rect& r) const override {
+        SDL_Rect visible = visibleRect();
         float x0 = r.x * scale - ox_, y0 = r.y * scale - oy_, x1 = r.right() * scale - ox_, y1 = r.bottom() * scale - oy_;
         return x1 <= float(visible.x) || y1 <= float(visible.y) || x0 >= float(visible.x + visible.w) ||
                y0 >= float(visible.y + visible.h);
@@ -682,7 +732,33 @@ public:
                       clamped(layer.radii.bottomLeft)};
         const LayerTransform& tf = layer.transform;
         bool outlined = !layer.outline.empty();
-        if (!outlined && r.max() < 0.5f && tf.rotationZ == 0) {
+        const auto& mx = layer.matrix;
+        if (layer.matrixSet) {
+            // Through pushTransform's matrix: a grid of cells small enough for SDL's software
+            // triangles (which leave out big ones) and for the texture to follow a perspective
+            // (SDL interpolates texture coordinates straight across each triangle). Its edges lie
+            // past what can show: no anti-aliasing for them.
+            int cells = std::clamp(int(std::ceil(std::max(b.w, b.h) / 128)), 1, 64);
+            if (software_) SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
+            begin();
+            float tw = float(layer.texW), th = float(layer.texH);
+            SDL_FColor c{a, a, a, a};
+            for (int j = 0; j <= cells; ++j)
+                for (int i = 0; i <= cells; ++i) {
+                    float px = b.x + b.w * float(i) / float(cells), py = b.y + b.h * float(j) / float(cells);
+                    float depth = mx[6] * px + mx[7] * py + mx[8];
+                    float k = depth > 1e-4f ? 1 / depth : 1e4f;
+                    vertices_.push_back({{(mx[0] * px + mx[1] * py + mx[2]) * k, (mx[3] * px + mx[4] * py + mx[5]) * k}, c,
+                                         {std::clamp((px - x) / tw, 0.f, w / tw), std::clamp((py - y) / th, 0.f, h / th)}});
+                }
+            for (int j = 0; j < cells; ++j)
+                for (int i = 0; i < cells; ++i) {
+                    int q = j * (cells + 1) + i;
+                    triangle(q, q + 1, q + cells + 2);
+                    triangle(q, q + cells + 2, q + cells + 1);
+                }
+            SDL_RenderGeometry(renderer_, t, vertices_.data(), int(vertices_.size()), indices_.data(), int(indices_.size()));
+        } else if (!outlined && r.max() < 0.5f && tf.rotationZ == 0) {
             // Square and not turned: one quad, scaled about the origin and moved (the fan below
             // showed its seams through anything see-through in a scaled layer — a ripple in a
             // pulsing button).
@@ -989,7 +1065,10 @@ private:
         int texW = 0, texH = 0;  // the pooled texture can be a little bigger than rect
         std::vector<SDL_FPoint> outline;  // an outline layer's, in the parent's pixels (else rounded)
         float blurX = 0, blurY = 0;       // px: blurred as it is composited
+        std::array<float, 9> matrix{};    // pushTransform's, in the parent's pixels (row by row), if matrixSet
+        bool matrixSet = false;
     };
+    std::vector<bool> transformLayers_;  // each pushTransform: drawn through a layer (else a translation)
     struct ImageTexture {
         SDL_Texture* texture;
         std::weak_ptr<const void> token;

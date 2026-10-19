@@ -36,9 +36,10 @@ public:
     float fontScale() const override;
 
     // The glyphs of text drawn from the pen at (xPx, baselinePx), appended to `out`. `shadow`:
-    // only the glyphs that take a color (no emoji), blurred by `blurPx`.
+    // only the glyphs that take a color (no emoji), blurred by `blurPx`. `scale`: its px per dp,
+    // if not setScale's.
     void layout(std::string_view text, float xPx, float baselinePx, const Font& font, bool rtl, std::vector<gpu::GlyphQuad>& out,
-                bool shadow = false, int blurPx = 0) override;
+                bool shadow = false, int blurPx = 0, float scale = 0) override;
     // `vector` filled into the px rect (x, y, w, h): rasterized once per size by FreeType's
     // anti-aliasing outline rasterizer. False if there is nothing to draw.
     bool vectorQuad(const ImageVector& vector, float x, float y, float w, float h, gpu::GlyphQuad& out) override;

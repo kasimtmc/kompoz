@@ -26,7 +26,9 @@
   every tile mode) are worked out per pixel from their stops, on fills, paths and text alike, as `Brush::colorAt`
   does (`Brush::geometry` says where one lies). All 29 blend modes are drawn, those the blend unit can't do worked out
   in the shader from a copy of what is under the draw, and color filters (matrices, lighting, tints in any mode) are
-  applied to each pixel. Blurs come next. Its shaders are written once (Slang) and compiled for every API by
+  applied to each pixel. Everything is drawn through any transform (turned, stretched, skewed, in perspective) sharp
+  and exactly anti-aliased: text laid out and layers made at the size they show, paths projected, clips under a turn
+  cut exactly. Blurs come next. Its shaders are written once (Slang) and compiled for every API by
   `scripts/shaders.py`; tests draw its scenes on a real device and compare them with pictures.
 - **All of Compose's blend modes**: `BlendMode` gains Overlay, ColorDodge, ColorBurn, Hardlight, Softlight,
   Difference, Exclusion, Hue, Saturation, Color and Luminosity; `blend(source, destination, mode)` works any of the 29
@@ -36,6 +38,10 @@
   keep their own paints through a filter (a gray matrix made a multi-colored vector one color before).
 - **`Matrix`**, Compose's 4x4 transform, operation for operation: `translate`, `scale`, `rotateX`/`Y`/`Z`,
   `timesAssign`, `invert`, `resetToPivotedTransform`, and `map` for points and rects, with their perspective.
+- **Transforms without layers**: `GraphicsContext::pushTransform(matrix)`; `DrawScope`'s `rotate`, `scale` and
+  `withTransform` go through it (with `rotateRad`, `scale(s)`, `inset(horizontal, vertical)` and
+  `DrawTransform::transform(matrix)` added), so, as in Compose, what they draw isn't clipped to the drawing's area
+  any more. The display list follows transforms (perspective too) for damage and culling.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

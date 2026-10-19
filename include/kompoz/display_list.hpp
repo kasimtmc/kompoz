@@ -67,22 +67,25 @@ public:
     void popClip() override;
     void pushTranslation(Offset by) override;
     void popTranslation() override;
+    void pushTransform(const Matrix& matrix) override;
+    void popTransform() override;
     bool quickReject(const Rect& rect) const override;
     void fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& brush, const Rect& brushArea) override;
     void drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& brushArea, const PathStroke& stroke) override;
 
-    // Maps points of a layer's content to the screen (an affine transform).
-    struct Affine {
-        float a = 1, b = 0, c = 0, d = 1, e = 0, f = 0;  // x' = a x + c y + e, y' = b x + d y + f
-        Offset apply(Offset p) const { return {a * p.x + c * p.y + e, b * p.x + d * p.y + f}; }
-        Rect map(const Rect& r) const;  // the bounding box of the mapped rect
-        friend bool operator==(const Affine&, const Affine&) = default;
+    // Maps points of what is drawn inside transforms and layers to the screen: (x, y, 1) to
+    // (x', y', w), row by row, the point x' / w, y' / w.
+    struct Projective {
+        float m[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+        // The bounding box of the mapped rect; if part of it is behind the eye, all of the plane.
+        Rect map(const Rect& r) const;
+        friend bool operator==(const Projective&, const Projective&) = default;
     };
 
 private:
     enum class Kind : uint8_t { FillRoundRect, StrokeRoundRect, Line, Text, TextBrush, TextShadow, Shadow, Vector, Arc, Image, Gradient, Path,
                                 PushLayer, PopLayer, PushClip, PopClip, PushTranslation, PopTranslation, PushBlend, PopBlend,
-                                ShadowPath, PushFilter, PopFilter };
+                                ShadowPath, PushFilter, PopFilter, PushTransform, PopTransform };
     struct Command {
         Kind kind{};
         Rect rect, rect2;     // the shape; an image's source, a brush's area
@@ -100,7 +103,8 @@ private:
         Path path;
         PathStroke stroke;
         LayerTransform transform;
-        Affine m;             // the transform it is drawn through
+        Matrix matrix;        // PushTransform's
+        Projective m;         // the transform it is drawn through
         Rect bounds;          // what it can touch on the screen (a layer: where it is composited)
         uint32_t end = 0;     // a push: the index after its pop
         bool same(const Command& o) const;
@@ -109,8 +113,8 @@ private:
         uint64_t key;
         uint32_t first, count;
     };
-    struct State {  // a layer's, clip's or translation's
-        Affine m;
+    struct State {  // a layer's, clip's, translation's or transform's
+        Projective m;
         Rect clip;
         uint32_t push;  // its command
     };

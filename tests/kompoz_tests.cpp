@@ -4493,6 +4493,54 @@ TEST(display_list_lines_frames_up_by_node_and_replays_an_area) {
     CHECK(part.rects.size() == 1 && part.rects[0].width == 100 && part.layers == 0 && part.clips.empty());
 }
 
+// What is drawn through a transform touches where the transform takes it; a transform that
+// changes is damage where its drawing was and where it is; replayed, it is pushed again.
+TEST(display_list_follows_transforms) {
+    testing::FakeTextMeasurer measurer;
+    DisplayList list(measurer);
+    int node = 0;
+    auto frame = [&](const Matrix& m) {
+        list.begin({400, 400}, 1);
+        list.beginNode(&node);
+        list.pushTransform(m);
+        list.fillRoundRect({100, 100, 40, 20}, 0, colors::Black);
+        list.popTransform();
+        list.endNode();
+        return list.end();
+    };
+    Matrix turn;  // a quarter about the rect's middle: x 110..130, y 90..130
+    turn.translate(120, 110);
+    turn.rotateZ(90);
+    turn.translate(-120, -110);
+    frame(turn);
+    CHECK(!frame(turn));
+    Matrix moved;  // the same, 100 to the right
+    moved.translate(220, 110);
+    moved.rotateZ(90);
+    moved.translate(-120, -110);
+    auto d = frame(moved);
+    CHECK(d && d->x <= 110 && d->x >= 106 && d->y <= 90 && d->y >= 86 && d->right() >= 230 && d->right() <= 234 && d->bottom() >= 130 &&
+          d->bottom() <= 134);
+    testing::RecordingCanvas replayed;
+    list.replay(replayed);
+    CHECK(replayed.transforms.size() == 1 && replayed.transforms[0] == moved && replayed.transformDepth == 0 && replayed.rects.size() == 1);
+    Matrix behind;  // part of it behind the eye: it may touch anything
+    behind(0, 3) = -0.008f;  // w = 1 - x / 125: below 0 right of x = 125
+    d = frame(behind);
+    CHECK(d && d->x <= 0 && d->right() >= 400 && d->y <= 0 && d->bottom() >= 400);
+    list.begin({400, 400}, 1);
+    CHECK(list.quickReject({195, -55, 10, 10}));  // above the screen
+    Matrix eighth;  // an eighth of a turn about the middle: (200, -50) goes to (377, 23)
+    eighth.translate(200, 200);
+    eighth.rotateZ(45);
+    eighth.translate(-200, -200);
+    list.pushTransform(eighth);
+    CHECK(!list.quickReject({195, -55, 10, 10}));
+    CHECK(list.quickReject({195, -400, 10, 10}));  // (still out of view)
+    list.popTransform();
+    list.end();
+}
+
 TEST(lazy_column_items_keep_saveable_state_when_scrolled_away) {
     LazyListState list;
     ComposeTestRule rule([&] {
@@ -5907,7 +5955,13 @@ TEST(draw_scope_rotation_and_text) {
     });
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
-    CHECK(canvas.transformedLayers == 1 && canvas.depth == 0);
+    // Turned through the context's transform (no layer), about the middle.
+    CHECK(canvas.layers == 0 && canvas.transforms.size() == 1 && canvas.transformDepth == 0);
+    if (canvas.transforms.size() == 1) {
+        Offset middle = canvas.transforms[0].map(Offset{50, 50}), right = canvas.transforms[0].map(Offset{60, 50});
+        CHECK(near(middle.x, 50, 0.01f) && near(middle.y, 50, 0.01f));
+        CHECK(near(right.x, 50 + 10 * std::cos(std::numbers::pi_v<float> / 6), 0.01f) && near(right.y, 55, 0.01f));
+    }
     CHECK((canvas.texts == std::vector<std::string>{"çizim"}));
 }
 
@@ -10145,8 +10199,12 @@ TEST(paths_take_arcs_and_draw_scopes_clip_to_paths) {
     CHECK(canvas.paths.size() == 3 && sameRect(canvas.paths[0], {10, 10, 80, 40}) && sameRect(canvas.paths[1], {0, 0, 100, 100}) &&
           sameRect(canvas.paths[2], {20, 20, 60, 60}));
     CHECK((canvas.pathBlends == std::vector<BlendMode>{BlendMode::SrcOver, BlendMode::DstOut, BlendMode::DstOut}));
-    CHECK(canvas.layerBounds.size() == 3 && canvas.translations.size() == 1 && near(canvas.translations[0].x, 10) &&
-          near(canvas.translations[0].y, 20) && near(canvas.layerTransforms[2].rotationZ, 45));
+    CHECK(canvas.layerBounds.size() == 2 && canvas.translations.size() == 1 && near(canvas.translations[0].x, 10) &&
+          near(canvas.translations[0].y, 20) && canvas.transforms.size() == 1);
+    if (canvas.transforms.size() == 1) {  // turned 45 degrees about the middle, inside the translation
+        Offset right = canvas.transforms[0].map(Offset{60, 50});
+        CHECK(near(right.x, 50 + 10 / std::numbers::sqrt2_v<float>, 0.01f) && near(right.y, 50 + 10 / std::numbers::sqrt2_v<float>, 0.01f));
+    }
     CHECK(!canvas.clips.empty() && sameRect(canvas.clips.back(), {10, 10, 20, 20}));
 }
 
@@ -23827,6 +23885,8 @@ TEST(shadow_default_draws_fading_rings_and_display_list_damage_reaches_the_blur)
         void popClip() override {}
         void pushTranslation(Offset) override {}
         void popTranslation() override {}
+        void pushTransform(const Matrix&) override {}
+        void popTransform() override {}
         void drawPath(const Path&, Offset, const Brush&, const Rect&, const PathStroke&) override {}
     } rings;
     rings.drawShadow({10, 10, 20, 20}, 4, Shadow{Color{0, 0, 0, 1}, {0, 3}, 6, 1}, false);

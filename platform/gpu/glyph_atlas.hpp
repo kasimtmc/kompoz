@@ -144,9 +144,10 @@ class TextSource {
 public:
     virtual ~TextSource() = default;
     // The glyphs of text drawn from the pen at (xPx, baselinePx), appended to `out`. `shadow`:
-    // only the glyphs that take a color (no emoji), blurred by `blurPx`.
+    // only the glyphs that take a color (no emoji), blurred by `blurPx`. `scale`: its px per dp, if
+    // not the font system's (text under a transform that enlarges it, laid out that much bigger).
     virtual void layout(std::string_view text, float xPx, float baselinePx, const Font& font, bool rtl, std::vector<GlyphQuad>& out,
-                        bool shadow = false, int blurPx = 0) = 0;
+                        bool shadow = false, int blurPx = 0, float scale = 0) = 0;
     // `vector` filled into the px rect (x, y, w, h); false if there is nothing to draw.
     virtual bool vectorQuad(const ImageVector& vector, float x, float y, float w, float h, GlyphQuad& out) = 0;
     virtual GlyphAtlas& atlas() = 0;

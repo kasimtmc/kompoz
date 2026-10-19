@@ -954,6 +954,12 @@ public:
     // before stay where they are, those set inside move along.
     virtual void pushTranslation(Offset by) = 0;
     virtual void popTranslation() = 0;
+    // Everything drawn until popTransform() goes through `matrix` (dp to dp, from the drawing's
+    // own coordinates to those outside it), as through Compose's Canvas.concat: clips set before
+    // stay where they are, those set inside are transformed with what they clip. Nothing is
+    // clipped to where the drawing was.
+    virtual void pushTransform(const Matrix& matrix) = 0;
+    virtual void popTransform() = 0;
     // A layer (popLayer ends it) whose content is blurred by `radiusX` x `radiusY` dp when it is
     // composited; where the backend can't blur, a plain one.
     virtual void pushBlurLayer(const Rect& bounds, float radiusX, float radiusY) {

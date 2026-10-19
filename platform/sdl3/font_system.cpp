@@ -217,9 +217,15 @@ struct FontSystem::Impl {
     }
 
     // The glyphs of text from the pen at (xPx, baselinePx). `shadow`: only the glyphs that take a
-    // color (no emoji), blurred by `blurPx`.
+    // color (no emoji), blurred by `blurPx`. `scale`: px per dp for this text, if not scale_.
     void layout(std::string_view text, float xPx, float baselinePx, const Font& font, bool rtl, std::vector<gpu::GlyphQuad>& out,
-                bool shadow, int blurPx) {
+                bool shadow, int blurPx, float scale) {
+        struct Restore {
+            float& value;
+            float kept;
+            ~Restore() { value = kept; }
+        } restore{scale_, scale_};
+        if (scale > 0) scale_ = scale;
         int px = pixelSize(font);
         GlyphStyle style{font.strokeWidth > 0 ? std::max(1, int(std::lround(font.strokeWidth * scale_))) : 0, font.strokeJoin, font.scaleX, font.skewX};
         std::shared_ptr<const Shaped> shape = shaped(text, font, rtl);
@@ -971,8 +977,8 @@ float FontSystem::measureWidth(std::string_view utf8, const Font& font) { return
 FontMetrics FontSystem::metrics(const Font& font) { return impl_->metrics(font); }
 float FontSystem::fontScale() const { return impl_->fontScale(); }
 void FontSystem::layout(std::string_view text, float xPx, float baselinePx, const Font& font, bool rtl, std::vector<gpu::GlyphQuad>& out,
-                        bool shadow, int blurPx) {
-    impl_->layout(text, xPx, baselinePx, font, rtl, out, shadow, blurPx);
+                        bool shadow, int blurPx, float scale) {
+    impl_->layout(text, xPx, baselinePx, font, rtl, out, shadow, blurPx, scale);
 }
 bool FontSystem::vectorQuad(const ImageVector& vector, float x, float y, float w, float h, gpu::GlyphQuad& out) {
     return impl_->vectorQuad(vector, x, y, w, h, out);

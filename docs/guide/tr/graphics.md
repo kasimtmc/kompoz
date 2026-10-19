@@ -35,7 +35,7 @@ void Target() {
 
 ### Dönüştürmek
 
-`translate`, `rotate`, `scale`, `inset`, `clipRect` ve `clipPath` bir blok alır: bloğun çizdiği taşınır, döndürülür, ölçeklenir ya da kırpılır. `withTransform` birkaçını birden yapar. Döndürme ve ölçekleme, çizimin alanı kadar bir ekran dışı katmandan geçer.
+`translate`, `rotate` (ve `rotateRad`), `scale`, `inset`, `clipRect` ve `clipPath` bir blok alır: bloğun çizdiği taşınır, döndürülür, ölçeklenir ya da kırpılır. `withTransform` birkaçını birden yapar; onun `transform(matrix)`'i herhangi bir `Matrix`'i (Compose'un 4x4'lüğü, perspektif de) alır. Compose'daki gibi dönüşüm çizimin kendisine işler: hiçbir şey çizimin alanına kırpılmaz; GPU renderer'da her şey, nasıl döndürülürse, gerilirse ya da perspektiften görülürse görülsün keskin ve birebir kenar yumuşatmalı kalır (yazı gösterildiği boyutta dizilir).
 
 ```cpp
 void Clock(float minutes) {

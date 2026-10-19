@@ -35,7 +35,7 @@ The draw lambda runs while drawing, not while composing. Read the colors you nee
 
 ### Transforming
 
-`translate`, `rotate`, `scale`, `inset`, `clipRect` and `clipPath` take a block: what the block draws is moved, turned, scaled or clipped. `withTransform` does several at once. Rotating and scaling go through an offscreen layer of the drawing's area.
+`translate`, `rotate` (and `rotateRad`), `scale`, `inset`, `clipRect` and `clipPath` take a block: what the block draws is moved, turned, scaled or clipped. `withTransform` does several at once, and its `transform(matrix)` takes any `Matrix` (Compose's 4x4, perspective too). As in Compose, the transform goes into the drawing itself: nothing is clipped to the drawing's area, and on the GPU renderer everything stays sharp and exactly anti-aliased however it is turned, stretched or seen in perspective (text is laid out at the size it is shown).
 
 ```cpp
 void Clock(float minutes) {

@@ -55,7 +55,7 @@ Pipeline& Renderer::pipeline(Format target, const BlendState& blend) {
     PipelineDesc desc;
     desc.vertex = &kVertex;
     desc.fragment = &kFragment;
-    for (uint32_t i = 0; i < 11; ++i) desc.instanceAttributes.push_back({i, VertexFormat::Float4, i * 16});
+    for (uint32_t i = 0; i < 12; ++i) desc.instanceAttributes.push_back({i, VertexFormat::Float4, i * 16});
     desc.instanceStride = sizeof(Prim);
     desc.textures = 4;
     desc.blend = blend;
@@ -100,11 +100,12 @@ BlendPlan planFor(BlendMode mode, bool opaque) {
 // --- Targets -------------------------------------------------------------------------------------
 
 void Renderer::beginTarget(Texture& target, const std::optional<ClearColor>& clear) {
-    targets_.push_back({passes_.size(), ox_, oy_, std::move(clips_), std::move(translations_), std::move(blends_), std::move(filters_)});
+    targets_.push_back({passes_.size(), ox_, oy_, transform_, std::move(clips_), std::move(placements_), std::move(blends_), std::move(filters_)});
     passes_.push_back({&target, clear, {}, {}});
     ox_ = oy_ = 0;
+    transform_ = {};
     clips_.clear();
-    translations_.clear();
+    placements_.clear();
     blends_.clear();  // (what is drawn into it starts plain: its composite gets the modes and filters outside)
     filters_.clear();
 }
@@ -114,8 +115,9 @@ void Renderer::endTarget() {
     targets_.pop_back();
     order_.push_back(t.pass);
     ox_ = t.ox, oy_ = t.oy;
+    transform_ = t.transform;
     clips_ = std::move(t.clips);
-    translations_ = std::move(t.translations);
+    placements_ = std::move(t.placements);
     blends_ = std::move(t.blends);
     filters_ = std::move(t.filters);
 }
@@ -133,7 +135,42 @@ IRect Renderer::scissor() const {
     if (targets_.empty()) return {};
     const Texture& t = *passes_[targets_.back().pass].target;
     IRect all{0, 0, t.width(), t.height()};
-    return clips_.empty() ? all : intersect(clips_.back(), all);
+    return clips_.empty() ? all : intersect(clips_.back().scissor, all);
+}
+
+float Renderer::rasterScale(float x, float y) const {
+    if (transform_.identity()) return 1;
+    float s = transform_.maxScale(x, y);
+    if (!(s > 0) || std::abs(s - 1) < 1e-3f) return 1;
+    return std::clamp(std::exp2(std::ceil(std::log2(s) * 8 - 1e-3f) / 8), 1.f / 16, 16.f);
+}
+
+std::optional<Rect> Renderer::mapped(float x0, float y0, float x1, float y1) const {
+    float l = 1e30f, t = 1e30f, r = -1e30f, b = -1e30f;
+    for (int c = 0; c < 4; ++c) {
+        float w;
+        Offset q = transform_.apply(c & 1 ? x1 : x0, c & 2 ? y1 : y0, &w);
+        if (w <= 0) return std::nullopt;
+        l = std::min(l, q.x), t = std::min(t, q.y), r = std::max(r, q.x), b = std::max(b, q.y);
+    }
+    return Rect{l, t, r - l, b - t};
+}
+
+int Renderer::clipRow(int chain) {
+    ClipChain& c = clipChains_[size_t(chain)];
+    if (c.row >= 0) return c.row;
+    c.row = int(stops_.size() / (kStopsWidth * 4));
+    size_t at = stops_.size();
+    stops_.resize(at + kStopsWidth * 4, 0.f);
+    for (size_t i = 0; i < c.elements.size() && i < kStopsWidth / 6; ++i) {  // six texels each (see clipCoverage)
+        const ClipElement& e = c.elements[i];
+        float* t = &stops_[at + i * 24];
+        t[1] = e.outside ? 1.f : 0.f;
+        std::copy(std::begin(e.rect), std::end(e.rect), t + 4);
+        std::copy(std::begin(e.radii), std::end(e.radii), t + 8);
+        for (int r = 0; r < 3; ++r) std::copy(e.toLocal.m + r * 3, e.toLocal.m + r * 3 + 3, t + 12 + r * 4);
+    }
+    return c.row;
 }
 
 void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Mask mask, Texture* texture1) {
@@ -145,6 +182,39 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Ma
     if (blend == BlendMode::Dst) return;  // (changes nothing)
     Prim p = prim;
     p.extra[2] = float(kind);
+    if (kind != PATH && !opaque && !transform_.identity()) {
+        // Its own transform, then the current one.
+        Projective own{{p.xform[0], p.xform[2], p.extra[0], p.xform[1], p.xform[3], p.extra[1], p.projection[0], p.projection[1], p.projection[2]}};
+        Projective t = transform_ * own;
+        set(p.xform, t.m[0], t.m[3], t.m[1], t.m[4]);
+        p.extra[0] = t.m[2], p.extra[1] = t.m[5];
+        set(p.projection, t.m[6], t.m[7], t.m[8], 0);
+        // The quad reaches a device pixel past the shape where that is smallest (it reaches one
+        // of its own pixels past it already); glyphs and images turned get anti-aliased edges.
+        float least = 0;
+        for (int c = 0; c < 4; ++c) {
+            float x = p.bounds[c & 1 ? 2 : 0], y = p.bounds[c & 2 ? 3 : 1], w;
+            t.apply(x, y, &w);
+            float m = w > 0 ? t.minScale(x, y) : 0;
+            if (m > 0) least = least > 0 ? std::min(least, m) : m;
+        }
+        float pad = least > 0 ? std::min(1 / least, 1e4f) : 1;
+        int flags = int(p.extra[3]);
+        auto grow = [&](float by) { p.bounds[0] -= by, p.bounds[1] -= by, p.bounds[2] += by, p.bounds[3] += by; };
+        if (kind == GLYPH || kind == IMAGE) {
+            if (!t.axisAligned()) {
+                p.extra[3] = float(flags | 2);
+                grow(pad);
+            }
+        } else if (!(kind == LAYER && (flags & 1)) && pad > 1) {
+            grow(pad - 1);
+        }
+    }
+    if (!clips_.empty() && clips_.back().chain >= 0 && !opaque) {
+        int chain = clips_.back().chain;
+        p.filter[2] = float(std::min<size_t>(clipChains_[size_t(chain)].elements.size(), kStopsWidth / 6));
+        p.filter[3] = float(clipRow(chain));
+    }
     if (!filters_.empty() && !opaque) {
         // The filters in effect, the innermost first, in a row of the table (once a frame for each chain).
         std::vector<ColorFilter> chain(filters_.rbegin(), filters_.rend());
@@ -175,7 +245,8 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Ma
             filterChains_.push_back(chain);
             filterRows_.push_back(row);
         }
-        set(p.filter, float(std::min<size_t>(chain.size(), kStopsWidth / 6)), float(row), 0, 0);
+        p.filter[0] = float(std::min<size_t>(chain.size(), kStopsWidth / 6));
+        p.filter[1] = float(row);
     }
     if (!texture) texture = white_.get();
     if (!texture1) texture1 = white_.get();
@@ -351,14 +422,19 @@ void Renderer::execute(Pass& pass) {
             // the pass goes on.
             for (uint32_t k = b.first; k < b.first + b.count; ++k) {
                 const Prim& q = pass.prims[k];
+                Projective place{{q.xform[0], q.xform[2], q.extra[0], q.xform[1], q.xform[3], q.extra[1], q.projection[0], q.projection[1],
+                                  q.projection[2]}};
                 float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f;
+                bool behind = false;  // part of it behind the eye: all of the scissor
                 for (int c = 0; c < 4; ++c) {
-                    float x = q.bounds[c & 1 ? 2 : 0], y = q.bounds[c & 2 ? 3 : 1];
-                    float px = q.xform[0] * x + q.xform[2] * y + q.extra[0], py = q.xform[1] * x + q.xform[3] * y + q.extra[1];
-                    x0 = std::min(x0, px), y0 = std::min(y0, py), x1 = std::max(x1, px), y1 = std::max(y1, py);
+                    float w;
+                    Offset d = place.apply(q.bounds[c & 1 ? 2 : 0], q.bounds[c & 2 ? 3 : 1], &w);
+                    behind = behind || w <= 0;
+                    x0 = std::min(x0, d.x), y0 = std::min(y0, d.y), x1 = std::max(x1, d.x), y1 = std::max(y1, d.y);
                 }
-                IRect under{int(std::floor(x0)), int(std::floor(y0)), int(std::ceil(x1)) - int(std::floor(x0)),
-                            int(std::ceil(y1)) - int(std::floor(y0))};
+                IRect under = behind ? b.scissor
+                                     : IRect{int(std::floor(x0)), int(std::floor(y0)), int(std::ceil(x1)) - int(std::floor(x0)),
+                                             int(std::ceil(y1)) - int(std::floor(y0))};
                 under = intersect(intersect(under, b.scissor), all);
                 if (under.empty()) continue;
                 device_.endPass();
@@ -383,6 +459,7 @@ void Renderer::endFrame() {
     stopRows_.clear();
     filterChains_.clear();
     filterRows_.clear();
+    clipChains_.clear();
     stopsUploaded_ = 0;
     for (auto it = images_.begin(); it != images_.end();)
         it = it->second.token.expired() ? images_.erase(it) : std::next(it);
@@ -467,7 +544,7 @@ void Renderer::drawLine(Offset from, Offset to, float width, Color color) {
     add(LINE, p);
 }
 
-Renderer::Prim Renderer::painted(const Brush& brush, const Rect& area, float alpha) {
+Renderer::Prim Renderer::painted(const Brush& brush, const Rect& area, float alpha, float enlarged) {
     Prim p;
     if (brush.isSolid() || brush.stops().size() < 2) {
         Color c = brush.stops().empty() ? colors::Transparent : brush.stops().front().color;
@@ -493,52 +570,65 @@ Renderer::Prim Renderer::painted(const Brush& brush, const Rect& area, float alp
         }
     }
     Brush::Geometry g = brush.geometry(area);
-    auto px = [&](Offset o) { return Offset{o.x * scale - ox_, o.y * scale - oy_}; };
+    auto px = [&](Offset o) { return Offset{(o.x * scale - ox_) * enlarged, (o.y * scale - oy_) * enlarged}; };
     Offset start = px(g.start), end = px(g.end);
     int kind = brush.kind() == Brush::Kind::Linear ? 1 : brush.kind() == Brush::Kind::Radial ? 2 : 3;
     set(p.paint, float(kind), float(int(brush.tileMode())), float(std::min<size_t>(brush.stops().size(), kStopsWidth / 2)), float(row));
-    set(p.gradient, start.x, start.y, kind == 1 ? end.x : g.radius * scale, kind == 1 ? end.y : 0);
+    set(p.gradient, start.x, start.y, kind == 1 ? end.x : g.radius * scale * enlarged, kind == 1 ? end.y : 0);
     set(p.color, 1, 1, 1, alpha);
     return p;
 }
 
-void Renderer::glyphs(const Prim& paint) {
+void Renderer::glyphs(const Prim& paint, float enlarged) {
     constexpr float kPage = float(AtlasPage::kSize);
     for (const GlyphQuad& g : glyphs_) {
         Prim p = paint;
         set(p.bounds, g.x0, g.y0, g.x1, g.y1);
+        std::copy(std::begin(p.bounds), std::end(p.bounds), p.shape);
         set(p.uv, float(g.u) / kPage, float(g.v) / kPage, float(g.u + g.width) / kPage, float(g.v + g.height) / kPage);
-        p.params[0] = g.color ? 1.f : 0.f;
+        set(p.params, g.color ? 1.f : 0.f, 0, 0.5f / kPage, 0.5f / kPage);
+        if (enlarged != 1) set(p.xform, 1 / enlarged, 0, 0, 1 / enlarged);  // laid out that many times bigger
         add(GLYPH, p, pageTexture(g.page));
     }
 }
 
+namespace {
+// How many times bigger than its pixels text is laid out under a transform that enlarges it by
+// `enlarged`: as much, unless its glyphs would no longer fit on the atlas (then they are enlarged
+// after, a little soft).
+float textScale(float enlarged, const Font& font, float scale) {
+    return std::min(enlarged, std::max(1.f, 384 / std::max(1.f, font.size * scale)));
+}
+} // namespace
+
 void Renderer::drawText(std::string_view text, Offset baseline, const Font& font, Color color, bool rtl) {
     if (color.a <= 0) return;
+    float x = baseline.x * scale - ox_, y = baseline.y * scale - oy_, k = textScale(rasterScale(x, y), font, scale);
     glyphs_.clear();
-    text_.layout(text, baseline.x * scale - ox_, baseline.y * scale - oy_, font, rtl, glyphs_);
-    glyphs(painted(Brush::solid(color), {}));
+    text_.layout(text, x * k, y * k, font, rtl, glyphs_, false, 0, scale * k);
+    glyphs(painted(Brush::solid(color), {}), k);
 }
 
 void Renderer::drawTextBrush(std::string_view text, Offset baseline, const Font& font, const Brush& brush, const Rect& area, bool rtl) {
+    float x = baseline.x * scale - ox_, y = baseline.y * scale - oy_, k = textScale(rasterScale(x, y), font, scale);
     glyphs_.clear();
-    text_.layout(text, baseline.x * scale - ox_, baseline.y * scale - oy_, font, rtl, glyphs_);
-    glyphs(painted(brush, area));
+    text_.layout(text, x * k, y * k, font, rtl, glyphs_, false, 0, scale * k);
+    glyphs(painted(brush, area, 1, k), k);
 }
 
 void Renderer::drawTextShadow(std::string_view text, Offset baseline, const Font& font, Color color, float blurRadius, bool rtl) {
     if (color.a <= 0) return;
+    float x = baseline.x * scale - ox_, y = baseline.y * scale - oy_, k = textScale(rasterScale(x, y), font, scale);
     glyphs_.clear();
-    text_.layout(text, baseline.x * scale - ox_, baseline.y * scale - oy_, font, rtl, glyphs_, true,
-                 std::max(0, int(std::lround(blurRadius * scale))));
-    glyphs(painted(Brush::solid(color), {}));
+    text_.layout(text, x * k, y * k, font, rtl, glyphs_, true, std::max(0, int(std::lround(blurRadius * scale * k))), scale * k);
+    glyphs(painted(Brush::solid(color), {}), k);
 }
 
 void Renderer::drawVector(const ImageVector& vector, const Rect& b, Color color) {
     if (color.a <= 0 || b.width <= 0 || b.height <= 0) return;
+    float x = b.x * scale - ox_, y = b.y * scale - oy_, k = rasterScale(x + b.width * scale / 2, y + b.height * scale / 2);
     glyphs_.resize(1);
-    if (text_.vectorQuad(vector, b.x * scale - ox_, b.y * scale - oy_, b.width * scale, b.height * scale, glyphs_[0]))
-        glyphs(painted(Brush::solid(color), {}));
+    if (text_.vectorQuad(vector, x * k, y * k, b.width * scale * k, b.height * scale * k, glyphs_[0])) glyphs(painted(Brush::solid(color), {}), k);
 }
 
 void Renderer::drawArc(const Rect& oval, float start, float sweep, float width, Color color, bool roundCap) {
@@ -560,9 +650,10 @@ void Renderer::drawImage(const ImageBitmap& image, const Rect& src, const Rect& 
     float x = dst.x * scale - ox_, y = dst.y * scale - oy_;
     Prim p;
     set(p.bounds, x, y, x + dst.width * scale, y + dst.height * scale);
+    std::copy(std::begin(p.bounds), std::end(p.bounds), p.shape);
     float iw = float(image.width()), ih = float(image.height());
     set(p.uv, src.x / iw, src.y / ih, src.right() / iw, src.bottom() / ih);
-    p.params[0] = alpha;
+    set(p.params, alpha, 0, 0.5f / iw, 0.5f / ih);
     add(IMAGE, p, t);
 }
 
@@ -651,13 +742,35 @@ void Renderer::fillContours(const std::vector<Contour>& contours, bool evenOdd, 
 
 void Renderer::drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& area, const PathStroke& stroke) {
     if (path.isEmpty()) return;
-    std::vector<Contour> contours = flattenPath(path.commands(), {origin, scale, {ox_, oy_}});
+    PathPlacement place{origin, scale, {ox_, oy_}};
+    bool transformed = !transform_.identity();
+    if (transformed) {
+        // Cut finely enough for where the transform enlarges it most (its stroke included).
+        Rect b = path.bounds();
+        float reach = stroke.width * scale, most = 0;
+        float x0 = (b.x + origin.x) * scale - ox_ - reach, y0 = (b.y + origin.y) * scale - oy_ - reach;
+        float x1 = (b.right() + origin.x) * scale - ox_ + reach, y1 = (b.bottom() + origin.y) * scale - oy_ + reach;
+        for (int c = 0; c < 4; ++c) most = std::max(most, transform_.maxScale(c & 1 ? x1 : x0, c & 2 ? y1 : y0));
+        place.tolerance = kTolerance / std::clamp(most, 1.f, 64.f);
+    }
+    std::vector<Contour> contours = flattenPath(path.commands(), place);
     bool evenOdd = false;
     if (stroke.width > 0)
-        contours = strokeOutline(contours, stroke.width * scale, stroke.cap, stroke.join, stroke.miter);
+        contours = strokeOutline(contours, stroke.width * scale, stroke.cap, stroke.join, stroke.miter, place.tolerance);
     else
         evenOdd = path.fillType == Path::FillType::EvenOdd;
-    fillContours(contours, evenOdd, painted(brush, area));
+    Prim paint = painted(brush, area);
+    if (transformed) {
+        contours = project(contours, transform_);
+        if (paint.paint[0] != 0) {  // a gradient: worked out where each pixel is in the path's space
+            Projective back = transform_.inverse();
+            set(paint.radii, back.m[0], back.m[1], back.m[2], 0);
+            set(paint.uv, back.m[3], back.m[4], back.m[5], 0);
+            set(paint.shape, back.m[6], back.m[7], back.m[8], 0);
+            paint.extra[3] = 4;
+        }
+    }
+    fillContours(contours, evenOdd, paint);
 }
 
 void Renderer::fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& brush, const Rect& area) {
@@ -678,12 +791,27 @@ void Renderer::pushOutlineLayer(const Rect& bounds, const Path& outline, float a
 }
 
 void Renderer::pushClip(const Rect& r) {
-    // Edges go to the nearest pixel (rounding outwards would show a row of what scrolled past).
-    int x0 = int(std::lround(r.x * scale - ox_)), y0 = int(std::lround(r.y * scale - oy_));
-    int x1 = int(std::lround(r.right() * scale - ox_)), y1 = int(std::lround(r.bottom() * scale - oy_));
-    IRect rect{x0, y0, std::max(0, x1 - x0), std::max(0, y1 - y0)};
-    if (!clips_.empty()) rect = intersect(rect, clips_.back());
-    clips_.push_back(rect);
+    float x0 = r.x * scale - ox_, y0 = r.y * scale - oy_, x1 = r.right() * scale - ox_, y1 = r.bottom() * scale - oy_;
+    Clip clip{{}, clips_.empty() ? -1 : clips_.back().chain};
+    std::optional<Rect> on = mapped(x0, y0, x1, y1);
+    if (transform_.axisAligned() && on) {
+        // Edges go to the nearest pixel (rounding outwards would show a row of what scrolled past).
+        int l = int(std::lround(on->x)), t = int(std::lround(on->y)), rr = int(std::lround(on->right())), b = int(std::lround(on->bottom()));
+        clip.scissor = {l, t, std::max(0, rr - l), std::max(0, b - t)};
+    } else {
+        // Turned (or in perspective): the pixels it can reach, and the rect itself in the chain,
+        // its edges anti-aliased.
+        ClipChain chain;
+        if (clip.chain >= 0) chain.elements = clipChains_[size_t(clip.chain)].elements;
+        chain.elements.push_back({{x0, y0, x1, y1}, {0, 0, 0, 0}, transform_.inverse(), false});
+        clip.chain = int(clipChains_.size());
+        clipChains_.push_back(std::move(chain));
+        clip.scissor = on ? IRect{int(std::floor(on->x)), int(std::floor(on->y)), int(std::ceil(on->right())) - int(std::floor(on->x)),
+                                  int(std::ceil(on->bottom())) - int(std::floor(on->y))}
+                          : scissor();
+    }
+    if (!clips_.empty()) clip.scissor = intersect(clip.scissor, clips_.back().scissor);
+    clips_.push_back(clip);
 }
 
 void Renderer::popClip() {
@@ -691,38 +819,61 @@ void Renderer::popClip() {
 }
 
 void Renderer::pushTranslation(Offset by) {
-    translations_.push_back({ox_, oy_});
+    placements_.push_back({ox_, oy_, transform_});
     ox_ -= by.x * scale;
     oy_ -= by.y * scale;
 }
 
 void Renderer::popTranslation() {
-    if (translations_.empty()) return;
-    ox_ = translations_.back().x;
-    oy_ = translations_.back().y;
-    translations_.pop_back();
+    if (placements_.empty()) return;
+    ox_ = placements_.back().ox;
+    oy_ = placements_.back().oy;
+    transform_ = placements_.back().transform;
+    placements_.pop_back();
 }
+
+void Renderer::pushTransform(const Matrix& matrix) {
+    placements_.push_back({ox_, oy_, transform_});
+    Projective t = Projective::of(matrix);
+    if (t.affine() && t.m[0] == 1 && t.m[1] == 0 && t.m[3] == 0 && t.m[4] == 1 && t.m[8] == 1) {  // only moved
+        ox_ -= t.m[2] * scale;
+        oy_ -= t.m[5] * scale;
+        return;
+    }
+    // In the target's pixels: the map from dp (x * scale - origin), the matrix, and back.
+    Projective dp{{scale, 0, -ox_, 0, scale, -oy_, 0, 0, 1}};
+    transform_ = transform_ * dp * t * dp.inverse();
+}
+
+void Renderer::popTransform() { popTranslation(); }
 
 bool Renderer::quickReject(const Rect& r) const {
     IRect visible = scissor();
-    float x0 = r.x * scale - ox_, y0 = r.y * scale - oy_, x1 = r.right() * scale - ox_, y1 = r.bottom() * scale - oy_;
-    return x1 <= float(visible.x) || y1 <= float(visible.y) || x0 >= float(visible.x + visible.width) ||
-           y0 >= float(visible.y + visible.height);
+    std::optional<Rect> on = mapped(r.x * scale - ox_, r.y * scale - oy_, r.right() * scale - ox_, r.bottom() * scale - oy_);
+    if (!on) return false;  // partly behind the eye: whatever shows of it may be anywhere
+    return on->right() <= float(visible.x) || on->bottom() <= float(visible.y) || on->x >= float(visible.x + visible.width) ||
+           on->y >= float(visible.y + visible.height);
 }
 
 void Renderer::pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform) {
     ++layerCount;
-    int x0 = int(std::floor(bounds.x * scale - ox_)), y0 = int(std::floor(bounds.y * scale - oy_));
-    int x1 = int(std::ceil(bounds.right() * scale - ox_)), y1 = int(std::ceil(bounds.bottom() * scale - oy_));
-    Layer layer{nullptr, {x0, y0, std::max(1, x1 - x0), std::max(1, y1 - y0)},
-                {bounds.x * scale - ox_, bounds.y * scale - oy_, bounds.width * scale, bounds.height * scale}, radii.scaled(scale), alpha,
-                transform};
+    float lx = bounds.x * scale - ox_, ly = bounds.y * scale - oy_, lw = bounds.width * scale, lh = bounds.height * scale;
+    // As many texels for each of its pixels as the transform enlarges it by at most (no more than
+    // fit a texture).
+    float r = 1;
+    for (int c = 0; c < 4; ++c) r = std::max(r, rasterScale(c & 1 ? lx + lw : lx, c & 2 ? ly + lh : ly));
+    if (r > 1 && std::max(lw, lh) * r > float(kMaxLayer)) r = std::max(1.f, float(kMaxLayer) / std::max(lw, lh));
+    int x0 = int(std::floor(lx * r)), y0 = int(std::floor(ly * r));
+    int x1 = int(std::ceil((lx + lw) * r)), y1 = int(std::ceil((ly + lh) * r));
+    Layer layer{nullptr, {x0, y0, std::max(1, x1 - x0), std::max(1, y1 - y0)}, {lx * r, ly * r, lw * r, lh * r}, radii.scaled(scale * r),
+                alpha, transform, r, scale};
     if (layer.rect.width <= kMaxLayer && layer.rect.height <= kMaxLayer) layer.texture = acquire(layer.rect.width, layer.rect.height);
     // Too big: drawn straight into the target (no rounding, alpha or transform), in its clips.
     if (layer.texture) {
         beginTarget(*layer.texture, ClearColor{});
-        ox_ = targets_.back().ox + float(x0);
-        oy_ = targets_.back().oy + float(y0);
+        scale *= r;
+        ox_ = targets_.back().ox * r + float(x0);
+        oy_ = targets_.back().oy * r + float(y0);
     }
     layers_.push_back(layer);
 }
@@ -732,6 +883,8 @@ void Renderer::popLayer() {
     layers_.pop_back();
     if (!layer.texture) return;
     endTarget();
+    scale = layer.parentScale;
+    float res = layer.resolution;
     Texture& t = *layer.texture;
     const Rect& b = layer.shape;
     float half = std::min(b.width, b.height) / 2;
@@ -744,7 +897,7 @@ void Renderer::popLayer() {
     // Cut to an outline: its coverage, rasterized in the layer's pixels before its transform.
     std::optional<Offset> outline;
     if (layer.outline) {
-        std::vector<Contour> contours = flattenPath(layer.outline->commands(), {{0, 0}, scale, {-b.x, -b.y}});
+        std::vector<Contour> contours = flattenPath(layer.outline->commands(), {{0, 0}, scale * res, {-b.x, -b.y}});
         outline = rasterize(contours, layer.rect);
         if (!outline) return;
         square = true;  // (its pixels, cut by the mask)
@@ -753,7 +906,7 @@ void Renderer::popLayer() {
     if (square) {
         set(p.bounds, rx0, ry0, rx1, ry1);
         set(p.shape, rx0, ry0, rx1, ry1);
-        if (!tf.identity()) set(p.bounds, rx0 - 1, ry0 - 1, rx1 + 1, ry1 + 1);
+        if (!tf.identity() || res != 1 || !transform_.axisAligned()) set(p.bounds, rx0 - 1, ry0 - 1, rx1 + 1, ry1 + 1);
     } else {
         set(p.bounds, b.x - 1, b.y - 1, b.right() + 1, b.bottom() + 1);
         set(p.shape, b.x, b.y, b.right(), b.bottom());
@@ -762,11 +915,12 @@ void Renderer::popLayer() {
     set(p.params, rx0, ry0, rx1, ry1);
     set(p.uv, 0, 0, 1 / float(t.width()), 1 / float(t.height()));
     set(p.color, 0, 0, 0, layer.alpha);
-    // Scaled and turned about the origin, then moved: x' = M (x - o) + o + t.
-    float ox = b.x + b.width * tf.origin.x, oy = b.y + b.height * tf.origin.y;
+    // Back to the parent's pixels (the texture's are `res` times as many), scaled and turned about
+    // the origin, then moved: x' = M (x / res - o) + o + t.
+    float ox = (b.x + b.width * tf.origin.x) / res, oy = (b.y + b.height * tf.origin.y) / res;
     float rad = tf.rotationZ * std::numbers::pi_v<float> / 180, cs = std::cos(rad), sn = std::sin(rad);
     float a = cs * tf.scaleX, bb = sn * tf.scaleX, c = -sn * tf.scaleY, d = cs * tf.scaleY;
-    set(p.xform, a, bb, c, d);
+    set(p.xform, a / res, bb / res, c / res, d / res);
     p.extra[0] = ox - (a * ox + c * oy) + tf.translationX * scale;
     p.extra[1] = oy - (bb * ox + d * oy) + tf.translationY * scale;
     if (outline) {

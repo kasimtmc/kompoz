@@ -26,32 +26,48 @@ Rect united(const Rect& a, const Rect& b) {
 
 uint64_t mix(uint64_t h, uint64_t v) { return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2)); }
 
+using Projective = DisplayList::Projective;
+
 // A layer's compositing (as backends do it): scaled and rotated around its origin, then moved.
-DisplayList::Affine layerAffine(const Rect& bounds, const LayerTransform& t) {
+Projective layerMap(const Rect& bounds, const LayerTransform& t) {
     if (t.identity()) return {};
     float px = bounds.x + bounds.width * t.origin.x, py = bounds.y + bounds.height * t.origin.y;
     float rad = t.rotationZ * std::numbers::pi_v<float> / 180.f, cs = std::cos(rad), sn = std::sin(rad);
-    DisplayList::Affine m{t.scaleX * cs, t.scaleX * sn, -t.scaleY * sn, t.scaleY * cs, 0, 0};
-    m.e = px + t.translationX - (m.a * px + m.c * py);
-    m.f = py + t.translationY - (m.b * px + m.d * py);
-    return m;
+    float a = t.scaleX * cs, b = t.scaleX * sn, c = -t.scaleY * sn, d = t.scaleY * cs;
+    return {{a, c, px + t.translationX - (a * px + c * py), b, d, py + t.translationY - (b * px + d * py), 0, 0, 1}};
 }
 
-DisplayList::Affine compose(const DisplayList::Affine& m, const DisplayList::Affine& l) {  // m after l
-    return {m.a * l.a + m.c * l.b, m.b * l.a + m.d * l.b, m.a * l.c + m.c * l.d,
-            m.b * l.c + m.d * l.d, m.a * l.e + m.c * l.f + m.e, m.b * l.e + m.d * l.f + m.f};
+// Matrix's plane part (as backends draw through it).
+Projective planeMap(const Matrix& t) {
+    const auto& v = t.values;
+    return {{v[Matrix::ScaleX], v[Matrix::SkewX], v[Matrix::TranslateX], v[Matrix::SkewY], v[Matrix::ScaleY], v[Matrix::TranslateY],
+             v[Matrix::Perspective0], v[Matrix::Perspective1], v[Matrix::Perspective2]}};
+}
+
+Projective compose(const Projective& a, const Projective& b) {  // a after b
+    Projective out;
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 3; ++c) out.m[r * 3 + c] = a.m[r * 3] * b.m[c] + a.m[r * 3 + 1] * b.m[3 + c] + a.m[r * 3 + 2] * b.m[6 + c];
+    return out;
 }
 
 } // namespace
 
-Rect DisplayList::Affine::map(const Rect& r) const {
-    if (b == 0 && c == 0) {  // no rotation: no need for the corners
-        float x0 = a * r.x + e, x1 = a * r.right() + e, y0 = d * r.y + f, y1 = d * r.bottom() + f;
+Rect DisplayList::Projective::map(const Rect& r) const {
+    if (m[6] == 0 && m[7] == 0 && m[1] == 0 && m[3] == 0 && m[8] != 0) {  // only scaled and moved: no need for the corners
+        float x0 = (m[0] * r.x + m[2]) / m[8], x1 = (m[0] * r.right() + m[2]) / m[8];
+        float y0 = (m[4] * r.y + m[5]) / m[8], y1 = (m[4] * r.bottom() + m[5]) / m[8];
         return {std::min(x0, x1), std::min(y0, y1), std::abs(x1 - x0), std::abs(y1 - y0)};
     }
-    Offset p[4] = {apply({r.x, r.y}), apply({r.right(), r.y}), apply({r.x, r.bottom()}), apply({r.right(), r.bottom()})};
-    float l = p[0].x, t = p[0].y, rr = p[0].x, bb = p[0].y;
-    for (const Offset& q : p) l = std::min(l, q.x), t = std::min(t, q.y), rr = std::max(rr, q.x), bb = std::max(bb, q.y);
+    bool affine = m[6] == 0 && m[7] == 0;  // (w the same everywhere: in front whatever its sign)
+    float l = kInfinity, t = kInfinity, rr = -kInfinity, bb = -kInfinity;
+    for (int c = 0; c < 4; ++c) {
+        float x = c & 1 ? r.right() : r.x, y = c & 2 ? r.bottom() : r.y;
+        float w = m[6] * x + m[7] * y + m[8];
+        if (affine ? w == 0 : !(w > 0)) return {-1e30f, -1e30f, 2e30f, 2e30f};  // behind the eye
+        float px = (m[0] * x + m[1] * y + m[2]) / w, py = (m[3] * x + m[4] * y + m[5]) / w;
+        l = std::min(l, px), t = std::min(t, py), rr = std::max(rr, px), bb = std::max(bb, py);
+    }
     return {l, t, rr - l, bb - t};
 }
 
@@ -60,7 +76,7 @@ bool DisplayList::Command::same(const Command& o) const {
            kompoz::same(rect2, o.rect2) && radii == o.radii && f1 == o.f1 && f2 == o.f2 && f3 == o.f3 && color == o.color &&
            kompoz::same(p1, o.p1) && kompoz::same(p2, o.p2) && flag == o.flag && font == o.font && vector == o.vector &&
            image == o.image && kompoz::same(stroke, o.stroke) && kompoz::same(transform, o.transform) && text == o.text &&
-           brush == o.brush && filter == o.filter && path == o.path;
+           brush == o.brush && filter == o.filter && path == o.path && matrix == o.matrix;
 }
 
 void DisplayList::begin(Size viewport, float pixel) {
@@ -243,7 +259,7 @@ void DisplayList::drawPath(const Path& path, Offset origin, const Brush& brush, 
 
 void DisplayList::pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform) {
     State s = states_.back();
-    Affine m = compose(s.m, layerAffine(bounds, transform));
+    Projective m = compose(s.m, layerMap(bounds, transform));
     // Its texture is whole pixels around the bounds, composited with an anti-aliased edge.
     Rect area = grown(m.map(grown(bounds, pixel_)), 2 * pixel_).intersect(s.clip);
     Command& c = add(Kind::PushLayer);
@@ -276,7 +292,7 @@ void DisplayList::pushClip(const Rect& rect) {
 
 void DisplayList::pushTranslation(Offset by) {
     State s = states_.back();
-    Affine moved = compose(s.m, Affine{1, 0, 0, 1, by.x, by.y});
+    Projective moved = compose(s.m, Projective{{1, 0, by.x, 0, 1, by.y, 0, 0, 1}});
     Command& c = add(Kind::PushTranslation);
     c.p1 = by;
     c.bounds = s.clip;  // what anything inside can touch (replay skips it when that's outside the area)
@@ -314,6 +330,16 @@ void DisplayList::popLayer() { pop(Kind::PopLayer); }
 void DisplayList::popClip() { pop(Kind::PopClip); }
 void DisplayList::popTranslation() { pop(Kind::PopTranslation); }
 
+void DisplayList::pushTransform(const Matrix& matrix) {
+    State s = states_.back();
+    Command& c = add(Kind::PushTransform);
+    c.matrix = matrix;
+    c.bounds = s.clip;  // what anything inside can touch (replay skips it when that's outside the area)
+    states_.push_back({compose(s.m, planeMap(matrix)), s.clip, uint32_t(recording_.size() - 1)});
+}
+
+void DisplayList::popTransform() { pop(Kind::PopTransform); }
+
 bool DisplayList::quickReject(const Rect& rect) const {
     const State& s = states_.back();
     return empty(grown(s.m.map(rect), pixel_).intersect(s.clip));
@@ -324,7 +350,7 @@ void DisplayList::addDamage(std::optional<Rect>& damage, const std::vector<Comma
         const Command& c = commands[i];
         if (c.kind == Kind::PopLayer || c.kind == Kind::PushClip || c.kind == Kind::PopClip || c.kind == Kind::PushTranslation ||
             c.kind == Kind::PopTranslation || c.kind == Kind::PushBlend || c.kind == Kind::PopBlend || c.kind == Kind::PushFilter ||
-            c.kind == Kind::PopFilter || empty(c.bounds))
+            c.kind == Kind::PopFilter || c.kind == Kind::PushTransform || c.kind == Kind::PopTransform || empty(c.bounds))
             continue;
         damage = damage ? united(*damage, c.bounds) : c.bounds;
     }
@@ -337,6 +363,7 @@ std::optional<Rect> DisplayList::end() {
             : open == Kind::PushTranslation ? Kind::PopTranslation
             : open == Kind::PushBlend       ? Kind::PopBlend
             : open == Kind::PushFilter      ? Kind::PopFilter
+            : open == Kind::PushTransform   ? Kind::PopTransform
                                             : Kind::PopLayer);
     }
     Rect screen{0, 0, viewport_.width, viewport_.height};
@@ -398,6 +425,7 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
         case Kind::PushTranslation:
         case Kind::PushBlend:
         case Kind::PushFilter:
+        case Kind::PushTransform:
             if (skip(c) && c.end > i) {  // nothing inside touches the area
                 i = c.end;
                 continue;
@@ -408,6 +436,7 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
             else if (c.kind == Kind::PushClip) canvas.pushClip(c.rect);
             else if (c.kind == Kind::PushBlend) canvas.pushBlendMode(BlendMode(int(c.f1)));
             else if (c.kind == Kind::PushFilter) canvas.pushColorFilter(*c.filter);
+            else if (c.kind == Kind::PushTransform) canvas.pushTransform(c.matrix);
             else canvas.pushTranslation(c.p1);
             break;
         case Kind::PopBlend: canvas.popBlendMode(); break;
@@ -415,6 +444,7 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
         case Kind::PopLayer: canvas.popLayer(); break;
         case Kind::PopClip: canvas.popClip(); break;
         case Kind::PopTranslation: canvas.popTranslation(); break;
+        case Kind::PopTransform: canvas.popTransform(); break;
         default:
             if (skip(c)) break;
             switch (c.kind) {

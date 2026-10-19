@@ -179,6 +179,15 @@ void matchesGolden(const std::string& name, Pixels& actual) {
 
 // --- Scenes --------------------------------------------------------------------------------------
 
+// A transform about (cx, cy): `change` made there.
+Matrix about(float cx, float cy, const std::function<void(Matrix&)>& change) {
+    Matrix m;  // (each step before the one above it)
+    m.translate(cx, cy);
+    change(m);
+    m.translate(-cx, -cy);
+    return m;
+}
+
 void rects(GraphicsContext& c) {
     Color red{0.86f, 0.15f, 0.15f, 1}, blue{0.15f, 0.3f, 0.86f, 1};
     c.fillRoundRect({8, 8, 40, 30}, 0, red);                   // square, whole pixels
@@ -381,6 +390,54 @@ void outlineLayers(GraphicsContext& c) {
     c.fillRoundRect({100, 100, 80, 80}, 0, Color{0.8f, 0.2f, 0.3f, 1});
     c.drawText("love", {118, 140}, Font{16}, colors::White, false);
     c.popLayer();
+}
+
+void transforms(GraphicsContext& c) {  // through pushTransform: turned, skewed, stretched, in perspective
+    static ImageBitmap image = checker();
+    Color a{0.95f, 0.45f, 0.1f, 1}, b{0.3f, 0.1f, 0.7f, 1}, ink{0.1f, 0.1f, 0.12f, 1};
+    c.pushTransform(about(50, 34, [](Matrix& m) { m.rotateZ(-20); }));  // turned text, a gradient across it
+    Font big{22};
+    big.weight = FontWeight::Bold;
+    c.drawTextBrush("Kompoz", {6, 42}, big, Brush::horizontalGradient({a, b}), {6, 20, 88, 28}, false);
+    c.popTransform();
+    Matrix skew;  // x leans with y
+    skew(1, 0) = 0.5f;
+    skew.translate(-14, 0);
+    c.pushTransform(skew);
+    c.fillRoundRect({110, 8, 40, 40}, CornerRadii(8), Color{0.15f, 0.5f, 0.85f, 1});
+    c.strokeRoundRect({110, 8, 40, 40}, CornerRadii(8), 2, ink);
+    c.popTransform();
+    c.pushTransform(about(150, 80, [](Matrix& m) { m.scale(2.5f, 0.6f); }));  // a circle stretched, a line through it
+    c.fillRoundRect({138, 68, 24, 24}, CornerRadii(12), Color{0.1f, 0.6f, 0.35f, 1});
+    c.drawLine({136, 80}, {164, 80}, 1, ink);
+    c.drawArc({140, 70, 20, 20}, 0, 270, 2, colors::White, true);
+    c.popTransform();
+    // A card in perspective: turned about y, seen from in front.
+    Matrix card = about(50, 130, [](Matrix& m) {
+        Matrix far;  // the right side further away: w grows to the right
+        far(0, 3) = 0.006f;
+        far *= m;
+        m = far;
+        m.rotateZ(4);
+    });
+    c.pushTransform(card);
+    c.drawShadow({14, 100, 72, 60}, CornerRadii(10), {Color{0, 0, 0, 0.4f}, {0, 4}, 6, 0}, false);
+    c.fillRoundRect({14, 100, 72, 60}, CornerRadii(10), colors::White);
+    c.drawImage(image, {0, 0, 16, 16}, {20, 106, 24, 24}, 1);
+    c.drawText("card", {50, 124}, Font{14}, ink, false);
+    Path ring;
+    ring.addOval({22, 134, 60, 20});
+    c.drawPath(ring, {}, Brush::linearGradient({a, b}), {22, 134, 60, 20}, {3, StrokeCap::Butt, StrokeJoin::Miter, 4});
+    c.popTransform();
+    // Clipped to a turned rect, and a layer inside a turn.
+    c.pushTransform(about(150, 150, [](Matrix& m) { m.rotateZ(30); }));
+    c.pushClip({128, 128, 44, 44});
+    c.fillGradient({100, 100, 100, 100}, 0, Brush::radialGradient({colors::White, a, b}), {120, 120, 60, 60});
+    c.popClip();
+    c.pushLayer({134, 134, 32, 32}, CornerRadii(6), 0.7f);
+    c.fillRoundRect({120, 140, 60, 20}, 0, ink);
+    c.popLayer();
+    c.popTransform();
 }
 
 void fractionalDensity(GraphicsContext& c) {  // at 2.625 px per dp, as a phone's
@@ -629,6 +686,287 @@ void colorFiltersMatchApply(Gpu& g) {
     }
 }
 
+// A bit of everything, unevenly placed (96 x 96 dp): what a transform must carry exactly.
+void mixed(GraphicsContext& c, bool withShadow = true) {
+    static ImageBitmap image = checker();
+    Color red{0.86f, 0.15f, 0.15f, 1}, blue{0.15f, 0.3f, 0.86f, 1}, green{0.1f, 0.55f, 0.3f, 1}, ink{0.1f, 0.1f, 0.12f, 1};
+    if (withShadow) c.drawShadow({52, 4, 36, 20}, 6, {Color{0, 0, 0, 0.5f}, {0, 3}, 5, 0}, false);
+    c.fillGradient({6, 6, 38, 22}, CornerRadii(6), Brush::linearGradient({red, blue}), {6, 6, 38, 22});
+    c.strokeRoundRect({52, 4, 36, 20}, CornerRadii(8), 3, green);
+    c.drawLine({8, 36}, {44, 48}, 3, ink);
+    c.drawArc({54, 32, 30, 30}, -60, 200, 4, Color{0.5f, 0.2f, 0.6f, 1}, true);
+    c.drawTextBrush("Kompoz", {6, 92}, Font{13}, Brush::horizontalGradient({ink, red}), {6, 80, 50, 14}, false);
+    c.drawImage(image, {0, 0, 16, 16}, {66, 72, 16, 16}, 1);
+    Path s = star(26, 64, 13);
+    c.drawPath(s, {}, Brush::radialGradient({colors::White, blue}), {13, 51, 26, 26}, {});
+    Path curve;
+    curve.moveTo(40, 70);
+    curve.cubicTo(50, 50, 60, 90, 70, 60);
+    c.drawPath(curve, {}, Brush::solid(red), {}, {2.5f, StrokeCap::Round, StrokeJoin::Round, 4});
+    c.pushLayer({42, 76, 22, 16}, CornerRadii(4), 0.6f);
+    c.fillRoundRect({36, 70, 40, 30}, 0, Color{0.95f, 0.6f, 0.1f, 1});
+    c.popLayer();
+    c.pushClip({70, 40, 20, 14});
+    c.fillRoundRect({60, 30, 40, 40}, CornerRadii(10), Color{0, 0.5f, 0.5f, 1});
+    c.popClip();
+    c.pushBlendMode(BlendMode::Multiply);  // (read from the target, under where it goes)
+    c.fillRoundRect({30, 20, 20, 14}, 0, Color{0.9f, 0.8f, 0.2f, 1});
+    c.popBlendMode();
+}
+
+// The largest difference between two pictures, the second's pixels found where `at` says.
+// The largest difference between two pictures, the second's pixels found where `at` says (and
+// those `skip` says left out).
+Offset worstAt;  // where worstAgainst found its largest difference
+int worstAgainst(const Pixels& a, const std::function<const uint8_t*(int x, int y)>& at,
+                 const std::function<bool(int x, int y)>& skip = nullptr) {
+    int worst = 0;
+    for (int y = 0; y < a.height; ++y)
+        for (int x = 0; x < a.width; ++x) {
+            int d = skip && skip(x, y) ? 0 : maxDifference(a.at(x, y), at(x, y));
+            if (d > worst) worst = d, worstAt = {float(x), float(y)};
+        }
+    return worst;
+}
+
+// Pixels within 1.5 px of any of `corners`.
+std::function<bool(int, int)> around(std::vector<Offset> corners) {
+    return [corners](int x, int y) {
+        for (Offset c : corners)
+            if (std::abs(float(x) + 0.5f - c.x) < 1.5f && std::abs(float(y) + 0.5f - c.y) < 1.5f) return true;
+        return false;
+    };
+}
+
+// Everything drawn through a transform is the same as without it, moved: turned a quarter about
+// the middle, each pixel is where the turn takes it; mirrored, where the mirror does; enlarged
+// twice, it is what 2 px per dp draws (shadows aside: their blur grows with the transform, as in
+// Skia).
+void transformsCarryEverything(Gpu& g) {
+    const int n = 96;
+    Pixels plain = g.render(n, n, 1, [](GraphicsContext& c) { mixed(c); });
+    auto through = [&](const Matrix& m, int size, float scale, bool shadow) {
+        return g.render(size, size, scale, [&](GraphicsContext& c) {
+            c.pushTransform(m);
+            mixed(c, shadow);
+            c.popTransform();
+        });
+    };
+    Pixels turned = through(about(48, 48, [](Matrix& m) { m.rotateZ(90); }), n, 1, true);
+    int worst = worstAgainst(plain, [&](int x, int y) { return turned.at(n - 1 - y, x); });
+    CHECK(worst <= 3);
+    if (worst > 3) std::printf("  turned a quarter: off by %d\n", worst);
+    Pixels mirrored = through(about(48, 48, [](Matrix& m) { m.scale(-1, 1); }), n, 1, true);
+    worst = worstAgainst(plain, [&](int x, int y) { return mirrored.at(n - 1 - x, y); });
+    CHECK(worst <= 3);
+    if (worst > 3) std::printf("  mirrored: off by %d\n", worst);
+    // At 2 px per dp, inside translations: the same (the matrix is in dp, the translations are
+    // around it and inside it).
+    Pixels plain2 = g.render(2 * n, 2 * n, 2, [](GraphicsContext& c) { mixed(c); });
+    Pixels turned2 = g.render(2 * n, 2 * n, 2, [&](GraphicsContext& c) {
+        c.pushTranslation({-10, 0});
+        c.pushTransform(about(58, 48, [](Matrix& m) { m.rotateZ(90); }));  // about (48, 48) once the two moves are undone
+        c.pushTranslation({10, 0});
+        mixed(c);
+        c.popTranslation();
+        c.popTransform();
+        c.popTranslation();
+    });
+    worst = worstAgainst(plain2, [&](int x, int y) { return turned2.at(2 * n - 1 - y, x); });
+    CHECK(worst <= 3);
+    if (worst > 3) std::printf("  turned a quarter at 2 px per dp: off by %d\n", worst);
+    Matrix twice;
+    twice.scale(2, 2);
+    Pixels enlarged = through(twice, 2 * n, 1, false);
+    Pixels dense = g.render(2 * n, 2 * n, 2, [](GraphicsContext& c) { mixed(c, false); });
+    worst = worstAgainst(dense, [&](int x, int y) { return enlarged.at(x, y); });
+    CHECK(worst <= 3);
+    if (worst > 3) std::printf("  enlarged twice: off by %d\n", worst);
+}
+
+// How much of each pixel is covered, summed (red on white: what the green channel lost).
+float coveredArea(const Pixels& p) {
+    float sum = 0;
+    for (int y = 0; y < p.height; ++y)
+        for (int x = 0; x < p.width; ++x) sum += float(255 - p.at(x, y)[1]) / 255;
+    return sum;
+}
+
+// Stretched more one way than the other, edges are still covered exactly (each by the pixel's
+// size across it); turned or seen in perspective, a shape covers as much as its area; a rect
+// clipped to a turned one is that one; a shape partly behind the eye shows what is in front.
+void transformedEdgesAreExact(Gpu& g) {
+    Color red{1, 0, 0, 1};
+    Pixels stretched = g.render(32, 32, 1, [&](GraphicsContext& c) {
+        Matrix m;
+        m.scale(4, 0.5f);
+        c.pushTransform(m);
+        c.fillRoundRect({1.1f, 2.3f, 1.9f, 40}, 0, red);  // x 4.4 to 12, y 1.15 to 21.15
+        c.popTransform();
+    });
+    CHECK(near(stretched.at(4, 10), 255, 102, 102));  // 0.6 of it
+    CHECK(near(stretched.at(8, 10), 255, 0, 0));
+    CHECK(near(stretched.at(12, 10), 255, 255, 255));
+    CHECK(near(stretched.at(8, 1), 255, 38, 38));     // 0.85
+    CHECK(near(stretched.at(8, 21), 255, 217, 217));  // 0.15
+    // Shrunk to a quarter down: the quad still reaches a pixel past the edge (y 1.9: 0.1 of the
+    // pixel above it).
+    Pixels shrunk = g.render(16, 16, 1, [&](GraphicsContext& c) {
+        Matrix m;
+        m.scale(1, 0.25f);
+        c.pushTransform(m);
+        c.fillRoundRect({2, 7.6f, 10, 40}, 0, red);
+        c.popTransform();
+    });
+    CHECK(near(shrunk.at(6, 1), 255, 230, 230));
+    // An arc and a line stretched: each pixel covered as much as 16 x 16 samples of the shapes
+    // through the transform say (as near as a distance's straight ramp gets to a slanted edge's
+    // coverage: 11 / 255 at 45 degrees).
+    Matrix stretch = about(32, 32, [](Matrix& m) { m.scale(2, 0.75f); });
+    Pixels shapes = g.render(64, 64, 1, [&](GraphicsContext& c) {
+        c.pushTransform(stretch);
+        c.drawArc({20, 18, 24, 24}, 0, 360, 4, red, false);  // a ring 10 to 14 from (32, 30)
+        c.drawLine({18, 50}, {46, 56}, 3, red);              // square caps: 1.5 past each end
+        c.popTransform();
+    });
+    Matrix back = stretch;
+    back.invert();
+    auto inside = [&](float x, float y) {
+        Offset p = back.map(Offset{x, y});
+        float r = std::hypot(p.x - 32, p.y - 30);
+        float along = ((p.x - 18) * 28 + (p.y - 50) * 6) / std::hypot(28.f, 6.f), across = ((p.y - 50) * 28 - (p.x - 18) * 6) / std::hypot(28.f, 6.f);
+        return (r >= 10 && r <= 14) || (along >= -1.5f && along <= std::hypot(28.f, 6.f) + 1.5f && std::abs(across) <= 1.5f);
+    };
+    int worstShape = 0;
+    for (int y = 0; y < 64; ++y)
+        for (int x = 0; x < 64; ++x) {
+            int in = 0;
+            for (int j = 0; j < 16; ++j)
+                for (int i = 0; i < 16; ++i) in += inside(float(x) + (float(i) + 0.5f) / 16, float(y) + (float(j) + 0.5f) / 16);
+            int want = int(std::lround(255 * (1 - float(in) / 256)));
+            worstShape = std::max(worstShape, std::abs(int(shapes.at(x, y)[1]) - want));
+        }
+    CHECK(worstShape <= 16);
+    if (worstShape > 16) std::printf("  stretched arc and line: off by %d\n", worstShape);
+    if (worstShape > 16) std::printf("  stretched arc and line: off by %d at (%g, %g)\n", worstShape, worstAt.x, worstAt.y);
+    Matrix turn = about(32, 32, [](Matrix& m) { m.rotateZ(30); });
+    Pixels turned = g.render(64, 64, 1, [&](GraphicsContext& c) {
+        c.pushTransform(turn);
+        c.fillRoundRect({20, 26, 24, 12}, 0, red);
+        c.popTransform();
+    });
+    CHECK(std::abs(coveredArea(turned) - 288) < 1.5f);
+    // An image turned: its edges anti-aliased as the rect's are.
+    static ImageBitmap solid = ImageBitmap::fromPixels(4, 4, std::vector<uint8_t>(64, 255));  // white
+    Pixels turnedImage = g.render(64, 64, 1, [&](GraphicsContext& c) {
+        c.pushTransform(turn);
+        c.drawImage(solid, {0, 0, 4, 4}, {20, 26, 24, 12}, 1);
+        c.popTransform();
+    }, {0, 0, 0, 1});
+    Pixels turnedBox = g.render(64, 64, 1, [&](GraphicsContext& c) {
+        c.pushTransform(turn);
+        c.fillRoundRect({20, 26, 24, 12}, 0, colors::White);
+        c.popTransform();
+    }, {0, 0, 0, 1});
+    int worstImage = worstAgainst(turnedBox, [&](int x, int y) { return turnedImage.at(x, y); });
+    CHECK(worstImage <= 3);
+    if (worstImage > 3) std::printf("  turned image: off by %d\n", worstImage);
+    // In perspective: as much as the quad its corners go to (by the shoelace formula).
+    Matrix seen;
+    seen(0, 3) = 0.004f;  // w = 1 + 0.004 x
+    seen(1, 3) = 0.002f;
+    Rect r{8, 10, 40, 36};
+    Pixels far = g.render(64, 64, 1, [&](GraphicsContext& c) {
+        c.pushTransform(seen);
+        c.fillRoundRect(r, 0, red);
+        c.popTransform();
+    });
+    Offset q[4] = {seen.map(Offset{r.x, r.y}), seen.map(Offset{r.right(), r.y}), seen.map(Offset{r.right(), r.bottom()}),
+                   seen.map(Offset{r.x, r.bottom()})};
+    float area = 0;
+    for (int i = 0; i < 4; ++i) area += q[i].x * q[(i + 1) % 4].y - q[(i + 1) % 4].x * q[i].y;
+    area = std::abs(area) / 2;
+    CHECK(std::abs(coveredArea(far) - area) < area * 0.005f + 1);
+    // A path through the same transform: projected on the CPU, covered exactly. The same pixels,
+    // but for what a distance's straight ramp makes of a slanted edge (up to 11 / 255 at 45
+    // degrees) and of a corner.
+    Pixels farPath = g.render(64, 64, 1, [&](GraphicsContext& c) {
+        Path p;
+        p.addRect(r);
+        c.pushTransform(seen);
+        c.drawPath(p, {}, Brush::solid(red), {}, {});
+        c.popTransform();
+    });
+    CHECK(worstAgainst(far, [&](int x, int y) { return farPath.at(x, y); }, around({q[0], q[1], q[2], q[3]})) <= 13);
+    // Close to the horizon of a perspective along x (w = 1 + x / 50), where it changes fast, an
+    // edge up and down stays so: each pixel it crosses is covered by the distance to it over its
+    // derivative exactly at the pixel's middle (in the shape's own units), as worked out here.
+    Pixels bars = g.render(64, 16, 1, [&](GraphicsContext& c) {
+        Matrix deep;
+        deep(0, 3) = 0.02f;
+        c.pushTransform(deep);
+        for (float x0 : {120.f, 170.f, 230.f}) c.fillRoundRect({x0, -100, 12, 500}, 0, red);  // 1 to 0.3 px wide at 35 to 41
+        c.popTransform();
+    });
+    int worstBar = 0;
+    for (int x = 20; x < 42; ++x) {
+        float px = float(x) + 0.5f, local = px / (1 - px / 50), along = 1 / ((1 - px / 50) * (1 - px / 50));
+        float inside = 0;
+        for (float x0 : {120.f, 170.f, 230.f}) inside += std::clamp(0.5f - std::max(x0 - local, local - x0 - 12) / along, 0.f, 1.f);
+        worstBar = std::max(worstBar, std::abs(int(bars.at(x, 8)[1]) - int(std::lround(255 * (1 - std::min(inside, 1.f))))));
+    }
+    CHECK(worstBar <= 3);
+    if (worstBar > 3) std::printf("  edges near the horizon: off by %d\n", worstBar);
+    // Clipped to a turned rect, turned or in perspective: the rect itself.
+    for (const Matrix& m : {turn, seen}) {
+        Pixels filled = g.render(64, 64, 1, [&](GraphicsContext& c) {
+            c.pushTransform(m);
+            c.fillRoundRect({14, 12, 30, 22}, 0, red);
+            c.popTransform();
+        });
+        Pixels clipped = g.render(64, 64, 1, [&](GraphicsContext& c) {
+            c.pushTransform(m);
+            c.pushClip({14, 12, 30, 22});
+            c.fillRoundRect({-20, -20, 100, 100}, 0, red);
+            c.popClip();
+            c.popTransform();
+        });
+        int worst = worstAgainst(filled, [&](int x, int y) { return clipped.at(x, y); });
+        CHECK(worst <= 3);
+        if (worst > 3) std::printf("  clipped to a transformed rect: off by %d\n", worst);
+    }
+    // Partly behind the eye (w = 1 + 0.02 x is below 0 left of x = -50): what is in front shows,
+    // as the path cut there shows it, and nothing else.
+    Matrix behind;
+    behind(0, 3) = 0.02f;
+    Rect wide{-100, 8, 140, 40};
+    Pixels front = g.render(64, 64, 1, [&](GraphicsContext& c) {
+        c.pushTransform(behind);
+        c.fillRoundRect(wide, 0, red);
+        c.popTransform();
+    });
+    Pixels frontPath = g.render(64, 64, 1, [&](GraphicsContext& c) {
+        Path p;
+        p.addRect(wide);
+        c.pushTransform(behind);
+        c.drawPath(p, {}, Brush::solid(red), {}, {});
+        c.popTransform();
+    });
+    Offset frontCorners[2] = {behind.map(Offset{wide.right(), wide.y}), behind.map(Offset{wide.right(), wide.bottom()})};
+    CHECK(worstAgainst(front, [&](int x, int y) { return frontPath.at(x, y); }, around({frontCorners[0], frontCorners[1]})) <= 13);
+    CHECK(near(front.at(10, 20), 255, 0, 0));      // x 10 / 1.2 = 8.3: in front, drawn
+    CHECK(near(front.at(30, 20), 255, 255, 255));  // past its right edge (40 / 1.8 = 22.2)
+    // Turned into view, what was out of it isn't skipped.
+    bool skipped = true, skippedPlain = false;
+    g.render(96, 48, 1, [&](GraphicsContext& c) {
+        skippedPlain = c.quickReject({60, 60, 4, 4});  // below the target
+        c.pushTransform(about(48, 24, [](Matrix& m) { m.rotateZ(90); }));
+        skipped = c.quickReject({60, 60, 4, 4});  // turned to (10, 38)
+        c.popTransform();
+    });
+    CHECK(skippedPlain && !skipped);
+}
+
 // Curves cut into lines stay within kTolerance of the curve, in the target's pixels.
 void curvesAreFlattenedClosely() {
     Path circle;
@@ -644,6 +982,44 @@ void curvesAreFlattenedClosely() {
         }
         CHECK(worst <= gpu::kTolerance + 0.05f);  // (the oval is cubics, themselves within 0.03% of the circle)
     }
+    // Finer when asked (a transform enlarges it after): within that.
+    std::vector<gpu::Contour> fine = gpu::flattenPath(circle.commands(), {{0, 0}, 1, {0, 0}, 0.02f});
+    float worst = 0;
+    const auto& pts = fine[0].points;
+    for (size_t i = 0; i + 1 < pts.size(); ++i) {
+        Offset m{(pts[i].x + pts[i + 1].x) / 2 - 50, (pts[i].y + pts[i + 1].y) / 2 - 50};
+        worst = std::max(worst, std::abs(std::hypot(m.x, m.y) - 50));
+    }
+    CHECK(worst <= 0.02f + 0.02f);
+}
+
+// The renderer's projective transforms: composed, inverted, how much they stretch; polygons
+// projected through one are cut where they pass behind the eye.
+void projectionsAreExact() {
+    auto at = [](Offset p, float x, float y) { return std::abs(p.x - x) < 1e-3f && std::abs(p.y - y) < 1e-3f; };
+    gpu::Projective m = gpu::Projective::translation(10, 0) * gpu::Projective::scaling(3, 0.5f);  // scaled, then moved
+    CHECK(at(m.apply(2, 4), 16, 2));
+    CHECK(at(m.inverse().apply(16, 2), 2, 4));
+    CHECK(std::abs(m.maxScale(0, 0) - 3) < 1e-4f && std::abs(m.minScale(0, 0) - 0.5f) < 1e-4f);
+    CHECK(m.axisAligned() && !m.identity());
+    Matrix halved;
+    halved(3, 3) = 2;  // w = 2 everywhere: half size, and w made 1
+    gpu::Projective h = gpu::Projective::of(halved);
+    CHECK(h.m[8] == 1 && at(h.apply(8, 6), 4, 3));
+    Matrix seen;
+    seen(0, 3) = 0.2f;  // w = 1 + x / 5: behind the eye left of x = -5
+    gpu::Projective p = gpu::Projective::of(seen);
+    CHECK(std::abs(p.maxScale(5, 0) - 0.5f) < 1e-4f);  // twice as far at x = 5: half as big
+    gpu::Contour square{{{-10, -10}, {10, -10}, {10, 10}, {-10, 10}}, true};
+    std::vector<gpu::Contour> cut = gpu::project({square}, p);
+    CHECK(cut.size() == 1);
+    bool finite = true, right = true;
+    for (Offset q : cut[0].points) {
+        finite = finite && std::isfinite(q.x) && std::isfinite(q.y);
+        right = right && q.x > -6e4f;  // (the cut is just in front of the eye: far, but finite)
+    }
+    CHECK(finite && right && cut[0].points.size() == 4);  // the two corners behind: two points where its edges pass w = 0
+    CHECK(std::any_of(cut[0].points.begin(), cut[0].points.end(), [&](Offset q) { return at(q, 10.f / 3, 10.f / 3); }));
 }
 
 void scenesMatchTheirPictures(Gpu& g) {
@@ -657,7 +1033,7 @@ void scenesMatchTheirPictures(Gpu& g) {
                             {"text", 192, 192, 1, text},     {"images", 192, 192, 1, images}, {"layers", 192, 192, 1, layers},
                             {"paths", 192, 192, 1, paths},   {"outline-layers", 192, 192, 1, outlineLayers},
                             {"gradients", 192, 192, 1, gradients},   {"blend-modes", 192, 192, 1, blendModes},
-                            {"density", 192, 192, 2.625f, fractionalDensity}};
+                            {"transforms", 192, 192, 1, transforms},  {"density", 192, 192, 2.625f, fractionalDensity}};
     for (const Scene& s : scenes) {
         Pixels p = g.render(s.w, s.h, s.scale, s.draw);
         matchesGolden(s.name, p);
@@ -688,9 +1064,12 @@ int main() {
             clipsAndTranslationsAreExact(g);
             pathsAreCoveredExactly(g);
             curvesAreFlattenedClosely();
+            projectionsAreExact();
             gradientsMatchColorAt(g);
             blendModesMatchBlend(g);
             colorFiltersMatchApply(g);
+            transformsCarryEverything(g);
+            transformedEdgesAreExact(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
             std::printf("%d checks, %d failed\n", checks, failures);

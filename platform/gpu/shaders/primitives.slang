@@ -3,8 +3,10 @@
 // shader works out how much of each pixel the shape covers from its distance to the shape's edge,
 // so edges are anti-aliased exactly at any scale or rotation.
 //
-// Positions are pixels of the target, y down; an instance's quad (`bounds`) is moved by its 2x3
-// transform (`xform`, `extra.xy`) before it is drawn. Colors come premultiplied.
+// Positions are pixels of the target, y down; an instance's quad (`bounds`) is moved by its
+// projective transform (`xform`, `extra.xy`, `projection`) before it is drawn, and its shape is
+// worked out where it is before that (`local`), so it stays exact however it is turned, stretched
+// or seen in perspective. Colors come premultiplied.
 
 static const int FILL = 0;         // a rounded rect: shape, radii (tl, tr, br, bl)
 static const int STROKE = 1;       // its outline inside it, params.x wide
@@ -13,11 +15,15 @@ static const int ARC = 3;          // center shape.xy, radius shape.z, params.x 
 static const int SHADOW = 4;       // a rounded rect's blurred shadow: params.x sigma; params.y: inner (bounds: the rect it is in, uv its radii)
 static const int GLYPH = 5;        // the atlas's texels at uv; params.x: a color glyph (drawn as it is, at the color's alpha)
 static const int IMAGE = 6;        // an image's texels at uv, at alpha params.x
+                                   // (both: uv spans `shape`; with flags & 2 the quad reaches past it, its edges
+                                   // anti-aliased, the texels sampled no further than params.zw inside uv's)
 static const int LAYER = 7;        // a layer's texture: texel (0, 0) at params.xy, uv.zw a texel's size, its pixels within
                                    // params.xy..params.zw; at alpha color.a, cut to the rounded rect (shape, radii), or
-                                   // with extra.w = 1 to the path whose coverage mask (texture1, linearly filtered) has
+                                   // with flags & 1 to the path whose coverage mask (texture1, linearly filtered) has
                                    // texel (0, 0) at radii.xy
-static const int PATH = 8;         // a path: its coverage mask (texture0) has texel (0, 0) at params.xy; params.z: even-odd
+static const int PATH = 8;         // a path: its coverage mask (texture0) has texel (0, 0) at params.xy; params.z: even-odd;
+                                   // drawn in the target's pixels, with flags & 4 its paint where the pixel is in its
+                                   // own space (radii, uv and shape: the rows of the map there)
 //
 // What covers the shape is `color`, or a gradient (`paint`, `gradient`): a fill, a stroke, a path
 // and a glyph that takes a color can have one, at the color's alpha.
@@ -27,8 +33,10 @@ static const int SWEEP = 3;   // round gradient.xy, clockwise from 3 o'clock
 // paint.y: the tile mode (clamp, repeated, mirror, decal); paint.z: how many stops; paint.w: their
 // row in the table (texture2): stop i's straight color at texel 2i, its offset at 2i + 1.
 //
-// Then its color goes through color filters (`filter`: how many, and their row in the table, six
-// texels each, innermost first) and onto the target by the batch's blend mode (uniforms.blend):
+// Its coverage is cut by the clips it is drawn in (filter.z of them, from row filter.w of the
+// table, six texels each: see clipCoverage). Then its color goes through color filters (filter.x
+// of them, from row filter.y, six texels each, innermost first) and onto the target by the batch's
+// blend mode (uniforms.blend):
 // by the blend unit with the coverage multiplied in, or (a mode it can't do) worked out here from
 // a copy of the target (texture3) and mixed with it by the coverage.
 
@@ -63,12 +71,14 @@ struct Instance {
     float4 extra : EXTRA;  // tx, ty, kind, flags
     float4 paint : PAINT;
     float4 gradient : GRADIENT;
-    float4 filter : FILTER;  // how many color filters, their row in the table
+    float4 filter : FILTER;  // how many color filters, their row in the table; how many clips, their row
+    float4 projection : PROJECTION;  // g, h, i: the transform's w = g x + h y + i
 };
 
 struct Varyings {
     float4 position : SV_Position;
     float2 local : LOCAL;  // the pixel in the instance's own space
+    float w : DEPTH_W;     // the transform's w there (1 unless in perspective)
     float2 texcoord : TEXCOORD;
     nointerpolation float4 bounds : BOUNDS;
     nointerpolation float4 shape : SHAPE;
@@ -89,12 +99,16 @@ Varyings vs(Instance instance, uint vertex : VERTEX_ID) {
     static const float2 corners[6] = { float2(0, 0), float2(1, 0), float2(1, 1), float2(0, 0), float2(1, 1), float2(0, 1) };
     float2 corner = corners[vertex % 6];
     float2 local = lerp(instance.bounds.xy, instance.bounds.zw, corner);
-    float2 placed = float2(instance.xform.x * local.x + instance.xform.z * local.y + instance.extra.x,
-                           instance.xform.y * local.x + instance.xform.w * local.y + instance.extra.y);
+    float3 placed = float3(instance.xform.x * local.x + instance.xform.z * local.y + instance.extra.x,
+                           instance.xform.y * local.x + instance.xform.w * local.y + instance.extra.y,
+                           instance.projection.x * local.x + instance.projection.y * local.y + instance.projection.z);
     Varyings out;
-    out.position = float4(placed * uniforms.toClip.xy + uniforms.toClip.zw, 0, 1);
+    out.position = float4(placed.xy * uniforms.toClip.xy + placed.z * uniforms.toClip.zw, 0, placed.z);
     out.local = local;
-    out.texcoord = lerp(instance.uv.xy, instance.uv.zw, corner);
+    out.w = placed.z;
+    int kind = int(instance.extra.z + 0.5);
+    float2 across = (kind == GLYPH || kind == IMAGE) ? (local - instance.shape.xy) / (instance.shape.zw - instance.shape.xy) : corner;
+    out.texcoord = lerp(instance.uv.xy, instance.uv.zw, across);
     out.bounds = instance.bounds;
     out.shape = instance.shape;
     out.radii = instance.radii;
@@ -118,10 +132,33 @@ float roundRectDistance(float2 p, float4 rect, float4 radii) {
     return min(max(d.x, d.y), 0) + length(max(d, 0)) - r;
 }
 
-// How much of the pixel a distance (in the instance's pixels) covers: `aa` is a device pixel's
-// size there.
+// The way a rounded rect's distance grows at p: away from it, square to its edge.
+float2 roundRectNormal(float2 p, float4 rect, float4 radii) {
+    float2 center = (rect.xy + rect.zw) * 0.5, halfSize = (rect.zw - rect.xy) * 0.5;
+    float2 q = p - center;
+    float r = q.x < 0 ? (q.y < 0 ? radii.x : radii.w) : (q.y < 0 ? radii.y : radii.z);
+    float2 d = abs(q) - halfSize + r;
+    float2 corner = max(d, 0);
+    float len = length(corner);
+    float2 n = len > 0 ? corner / len : (d.x > d.y ? float2(1, 0) : float2(0, 1));
+    return n * float2(q.x < 0 ? -1 : 1, q.y < 0 ? -1 : 1);
+}
+
+// How much a distance (in the instance's own units) changes over a device pixel, the distance
+// growing along `n` and a pixel's steps across and down being dx and dy there: a pixel's size in
+// the distance's units.
+float pixelSize(float2 n, float2 dx, float2 dy) {
+    return length(float2(dot(dx, n), dot(dy, n)));
+}
+
+// How much of the pixel a distance covers: `aa` is a device pixel's size in its units.
 float coverage(float distance, float aa) {
-    return saturate(0.5 - distance / aa);
+    return saturate(0.5 - distance / max(aa, 1e-6));
+}
+
+// How much of the pixel at p a rounded rect covers.
+float roundRectCoverage(float2 p, float4 rect, float4 radii, float2 dx, float2 dy) {
+    return coverage(roundRectDistance(p, rect, radii), pixelSize(roundRectNormal(p, rect, radii), dx, dy));
 }
 
 // How much of the pixel at x (device pixels across a band from -h to h) the band covers.
@@ -347,72 +384,130 @@ float blurredRoundRect(float2 p, float4 rect, float4 radii, float sigma) {
     return value;
 }
 
-// The distance to an arc's ring from `start`, `sweep` radians round (round or flat ends).
-float arcDistance(float2 q, float radius, float halfSize, float start, float sweep, bool roundCaps) {
+// The distance to an arc's ring from `start`, `sweep` radians round (round or flat ends), and the
+// way it grows (xy, z).
+float3 arcField(float2 q, float radius, float halfSize, float start, float sweep, bool roundCaps) {
     float aperture = abs(sweep) * 0.5;
-    float ring = abs(length(q) - radius) - halfSize;
-    if (aperture >= 3.14159) return ring;
+    float len = length(q);
+    float side = len - radius;
+    float2 radial = len > 0 ? q / len : float2(1, 0);
+    float3 field = float3(abs(side) - halfSize, radial * (side < 0 ? -1 : 1));
     float middle = start + sweep * 0.5;
     float c = cos(-middle), s = sin(-middle);
     float2 p = float2(c * q.x - s * q.y, s * q.x + c * q.y);
+    float mirror = p.y < 0 ? -1 : 1;
     p.y = abs(p.y);  // symmetric about the middle
     float2 end = float2(cos(aperture), sin(aperture));
-    if (atan2(p.y, p.x) <= aperture) return ring;
-    float2 cap = end * radius;
-    if (roundCaps) return length(p - cap) - halfSize;
-    float2 outward = float2(-end.y, end.x);  // past the end, along the circle
-    float along = dot(p - cap, outward), across = abs(dot(p - cap, end)) - halfSize;
-    return across <= 0 ? along : length(float2(max(along, 0), across));
+    if (aperture < 3.14159 && atan2(p.y, p.x) > aperture) {  // past an end: its cap
+        float2 cap = end * radius, v = p - cap;
+        float2 outward = float2(-end.y, end.x);  // past the end, along the circle
+        float d = 0;
+        float2 n = outward;
+        if (roundCaps) {
+            float l = length(v);
+            d = l - halfSize;
+            n = l > 0 ? v / l : outward;
+        } else {
+            float along = dot(v, outward), toward = dot(v, end), across = abs(toward) - halfSize;
+            float2 beyond = float2(max(along, 0), max(across, 0));
+            float l = length(beyond);
+            d = across <= 0 ? along : l;
+            n = across <= 0 || l <= 0 ? outward : (outward * beyond.x + end * (toward < 0 ? -1 : 1) * beyond.y) / l;
+        }
+        n.y *= mirror;
+        field = float3(d, c * n.x + s * n.y, -s * n.x + c * n.y);  // turned back
+    }
+    return field;
+}
+
+// The clips a primitive is drawn in, from row `row` of the table: how much of the pixel at
+// `pixel` (the target's) is inside all of them. Each takes six texels: kind and op (x: 0 a rounded
+// rect; y: 1 for what is outside it), the rect and its radii in its own space, and the rows of the
+// map from the target's pixels to that space.
+float clipCoverage(float2 pixel, int count, float row) {
+    float inside = 1;
+    for (int i = 0; i < count; ++i) {
+        float x = float(i * 6);
+        float4 head = tableTexel(x, row), rect = tableTexel(x + 1, row), radii = tableTexel(x + 2, row);
+        float3 r0 = tableTexel(x + 3, row).xyz, r1 = tableTexel(x + 4, row).xyz, r2 = tableTexel(x + 5, row).xyz;
+        float3 h = float3(pixel, 1);
+        float3 q = float3(dot(r0, h), dot(r1, h), dot(r2, h));
+        float2 p = q.xy / q.z;
+        // A pixel's steps in its space (the map's derivative there).
+        float2 dx = float2(r0.x - r2.x * p.x, r1.x - r2.x * p.y) / q.z, dy = float2(r0.y - r2.y * p.x, r1.y - r2.y * p.y) / q.z;
+        float c = q.z > 0 ? roundRectCoverage(p, rect, radii, dx, dy) : 0;
+        inside *= head.y > 0.5 ? 1 - c : c;
+    }
+    return inside;
 }
 
 [shader("fragment")]
 float4 fs(Varyings v) : SV_Target {
     int kind = int(v.kind + 0.5);
-    float aa = 0.5 * (length(ddx(v.local)) + length(ddy(v.local)));
-    float4 paint = paintAt(v.local, v.color, v.paint, v.gradient);
+    int flags = int(v.flags + 0.5);
+    // A device pixel's steps in the instance's space, exactly: the local point over w, and 1 over
+    // w, go straight across the screen (their differences are exact), the local point doesn't
+    // in perspective.
+    float q = 1 / v.w;
+    float2 lq = v.local * q;
+    float2 dx = (ddx(lq) - v.local * ddx(q)) / q, dy = (ddy(lq) - v.local * ddy(q)) / q;
+    float2 painted = v.local;
+    if ((flags & 4) != 0) {
+        float3 h = float3(v.local, 1);
+        float3 q = float3(dot(v.radii.xyz, h), dot(v.uv.xyz, h), dot(v.shape.xyz, h));
+        painted = q.xy / q.z;
+    }
+    float4 paint = paintAt(painted, v.color, v.paint, v.gradient);
     float4 src = paint;  // premultiplied, before the coverage
     float cover = 0;
+    // Glyphs and images whose quad reaches past them (turned): sampled no further than their
+    // texels, their edges anti-aliased.
+    bool edged = (flags & 2) != 0;
+    float2 lowUv = min(v.uv.xy, v.uv.zw) + v.params.zw, highUv = max(v.uv.xy, v.uv.zw) - v.params.zw;
+    float2 texcoord = edged ? clamp(v.texcoord, lowUv, highUv) : v.texcoord;
+    float edge = edged ? roundRectCoverage(v.local, v.shape, float4(0, 0, 0, 0), dx, dy) : 1;
     if (kind == FILL) {
-        cover = coverage(roundRectDistance(v.local, v.shape, v.radii), aa);
+        cover = roundRectCoverage(v.local, v.shape, v.radii, dx, dy);
     } else if (kind == STROKE) {
         float w = v.params.x;
         float4 inner = float4(v.shape.xy + w, v.shape.zw - w);
-        float outside = coverage(roundRectDistance(v.local, v.shape, v.radii), aa);
-        float inside = coverage(roundRectDistance(v.local, inner, max(v.radii - w, 0)), aa);
+        float outside = roundRectCoverage(v.local, v.shape, v.radii, dx, dy);
+        float inside = roundRectCoverage(v.local, inner, max(v.radii - w, 0), dx, dy);
         cover = saturate(outside - inside);
     } else if (kind == LINE) {
         float2 a = v.shape.xy, b = v.shape.zw;
         float len = length(b - a);
-        float2 dir = len > 0 ? (b - a) / len : float2(1, 0);
+        float2 dir = len > 0 ? (b - a) / len : float2(1, 0), side = float2(-dir.y, dir.x);
         float2 d = v.local - a;
-        float along = dot(d, dir) - len * 0.5, across = dot(d, float2(-dir.y, dir.x));
-        float h = v.params.x;
-        cover = bandCoverage(across / aa, h / aa) * bandCoverage(along / aa, (len * 0.5 + h) / aa);
+        float along = dot(d, dir) - len * 0.5, across = dot(d, side);
+        float h = v.params.x, aaAcross = max(pixelSize(side, dx, dy), 1e-6), aaAlong = max(pixelSize(dir, dx, dy), 1e-6);
+        cover = bandCoverage(across / aaAcross, h / aaAcross) * bandCoverage(along / aaAlong, (len * 0.5 + h) / aaAlong);
     } else if (kind == ARC) {
-        cover = coverage(arcDistance(v.local - v.shape.xy, v.shape.z, v.params.x, v.params.y, v.params.z, v.params.w > 0.5), aa);
+        float3 field = arcField(v.local - v.shape.xy, v.shape.z, v.params.x, v.params.y, v.params.z, v.params.w > 0.5);
+        cover = coverage(field.x, pixelSize(field.yz, dx, dy));
     } else if (kind == SHADOW) {
         float sigma = v.params.x;
-        float blurred = sigma > 0.01 ? blurredRoundRect(v.local, v.shape, v.radii, sigma)
-                                     : coverage(roundRectDistance(v.local, v.shape, v.radii), aa);
+        float blurred = sigma > 0.01 ? blurredRoundRect(v.local, v.shape, v.radii, sigma) : roundRectCoverage(v.local, v.shape, v.radii, dx, dy);
         // Inner: inside the rect (bounds, its radii in uv), where the blurred hole isn't.
-        cover = v.params.y > 0.5 ? (1 - blurred) * coverage(roundRectDistance(v.local, v.bounds, v.uv), aa) : blurred;
+        cover = v.params.y > 0.5 ? (1 - blurred) * roundRectCoverage(v.local, v.bounds, v.uv, dx, dy) : blurred;
     } else if (kind == GLYPH) {
-        float4 texel = texture0.Sample(v.texcoord);
+        float4 texel = texture0.Sample(texcoord);
         bool colored = v.params.x > 0.5;  // an emoji: as it is, at the color's alpha
         src = colored ? float4(texel.rgb * texel.a, texel.a) * v.color.a : paint;
-        cover = colored ? 1 : texel.a;
+        cover = (colored ? 1 : texel.a) * edge;
     } else if (kind == IMAGE) {
-        float4 texel = texture0.Sample(v.texcoord);
+        float4 texel = texture0.Sample(texcoord);
         src = float4(texel.rgb * texel.a, texel.a) * v.params.x;
-        cover = 1;
+        cover = edge;
     } else if (kind == LAYER) {
         float2 texel = clamp(v.local, v.params.xy + 0.5, v.params.zw - 0.5);
         src = texture0.Sample((texel - v.params.xy) * v.uv.zw) * v.color.a;
         // (Filtered where it is: a turned or scaled layer's pixels fall between the mask's texels.)
-        cover = v.flags > 0.5 ? pathCoverage(texture1.SampleLevel((v.local - v.radii.xy) * uniforms.texels.xy, 0).r, false)
-                              : coverage(roundRectDistance(v.local, v.shape, v.radii), aa);
+        cover = (flags & 1) != 0 ? pathCoverage(texture1.SampleLevel((v.local - v.radii.xy) * uniforms.texels.xy, 0).r, false)
+                                 : roundRectCoverage(v.local, v.shape, v.radii, dx, dy);
     } else if (kind == PATH) {
         cover = pathCoverage(texture0.SampleLevel(maskTexcoord(v.local - v.params.xy), 0).r, v.params.z > 0.5);
     }
+    cover *= clipCoverage(v.position.xy, int(v.filter.z + 0.5), v.filter.w);
     return finish(applyFilters(src, v.filter), cover, v.position.xy);
 }

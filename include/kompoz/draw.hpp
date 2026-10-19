@@ -35,8 +35,14 @@ class DrawTransform {
 public:
     void translate(float left, float top);
     void rotate(float degrees, std::optional<Offset> pivot = {});
+    void rotateRad(float radians, std::optional<Offset> pivot = {});
     void scale(float scaleX, float scaleY, std::optional<Offset> pivot = {});
+    void scale(float scale, std::optional<Offset> pivot = {}) { this->scale(scale, scale, pivot); }
+    // Through `matrix` (from the drawing's coordinates to the scope's, its top left the origin).
+    void transform(const Matrix& matrix);
     void inset(float left, float top, float right, float bottom);
+    void inset(float horizontal, float vertical) { inset(horizontal, vertical, horizontal, vertical); }
+    void inset(float all) { inset(all, all, all, all); }
     void clipRect(Offset topLeft, Size size);
     void clipPath(const Path& path, ClipOp op = ClipOp::Intersect);
 
@@ -102,16 +108,23 @@ public:
     // Draws what `layer` recorded at its topLeft, with its alpha, scale, rotation and translation.
     void drawLayer(const GraphicsLayer& layer);
 
-    // Draws `block` moved, inset, clipped, rotated or scaled. Rotation and scaling go through
-    // an offscreen layer of this area, so nothing outside it shows; a translation moves what
-    // drawContent() draws inside it too.
+    // Draws `block` moved, inset, clipped, rotated or scaled (about the center unless a pivot is
+    // given), as Compose does: what it draws — drawContent() too — goes through the transform, and
+    // isn't clipped to this area.
     void translate(float left, float top, const std::function<void(DrawScope&)>& block);
     void inset(float left, float top, float right, float bottom, const std::function<void(DrawScope&)>& block);
     void inset(float all, const std::function<void(DrawScope&)>& block) { inset(all, all, all, all, block); }
+    void inset(float horizontal, float vertical, const std::function<void(DrawScope&)>& block) {
+        inset(horizontal, vertical, horizontal, vertical, block);
+    }
     void clipRect(Offset topLeft, Size size, const std::function<void(DrawScope&)>& block);
     void rotate(float degrees, const std::function<void(DrawScope&)>& block, std::optional<Offset> pivot = {});
+    void rotateRad(float radians, const std::function<void(DrawScope&)>& block, std::optional<Offset> pivot = {});
     void scale(float scaleX, float scaleY, const std::function<void(DrawScope&)>& block,
                std::optional<Offset> pivot = {});
+    void scale(float scale, const std::function<void(DrawScope&)>& block, std::optional<Offset> pivot = {}) {
+        this->scale(scale, scale, block, pivot);
+    }
     // What `block` draws, only inside `path` (or outside it: ClipOp::Difference), any path, its
     // edge antialiased: drawn in a layer, then what is outside (inside) the path erased (DstOut).
     void clipPath(const Path& path, const std::function<void(DrawScope&)>& block, ClipOp op = ClipOp::Intersect);
@@ -124,7 +137,9 @@ private:
         return {bounds_.x + topLeft.x, bounds_.y + topLeft.y, s.width, s.height};
     }
     Offset abs(Offset p) const { return {bounds_.x + p.x, bounds_.y + p.y}; }
-    void transformed(const LayerTransform& t, const std::function<void(DrawScope&)>& block);
+    // Draws `block` through `matrix`, which is in this scope's coordinates (its top left the origin).
+    void transformed(const Matrix& matrix, const std::function<void(DrawScope&)>& block);
+    friend class DrawTransform;
 
     GraphicsContext* context_;
     Rect bounds_;
