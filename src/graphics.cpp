@@ -125,24 +125,32 @@ Brush Brush::scaled(float sx, float sy) const {
     return b;
 }
 
-float Brush::parameterAt(Offset p, const Rect& area) const {
+Brush::Geometry Brush::geometry(const Rect& area) const {
     auto resolve = [&](float v, float size) { return std::isinf(v) ? size : v; };
-    Offset local{p.x - area.x, p.y - area.y};
+    Offset corner{area.x, area.y};
+    Offset center = hasCenter_ ? start_ : Offset{area.width / 2, area.height / 2};
+    switch (kind_) {
+    case Kind::Linear:
+        return {{corner.x + resolve(start_.x, area.width), corner.y + resolve(start_.y, area.height)},
+                {corner.x + resolve(end_.x, area.width), corner.y + resolve(end_.y, area.height)}};
+    case Kind::Radial:
+        return {{corner.x + center.x, corner.y + center.y}, {}, std::isinf(radius_) ? std::min(area.width, area.height) / 2 : radius_};
+    case Kind::Sweep: return {{corner.x + center.x, corner.y + center.y}};
+    case Kind::Solid: break;
+    }
+    return {};
+}
+
+float Brush::parameterAt(Offset p, const Rect& area) const {
+    Geometry g = geometry(area);
     switch (kind_) {
     case Kind::Linear: {
-        Offset s{resolve(start_.x, area.width), resolve(start_.y, area.height)};
-        Offset e{resolve(end_.x, area.width), resolve(end_.y, area.height)};
-        float dx = e.x - s.x, dy = e.y - s.y, len2 = dx * dx + dy * dy;
-        return len2 > 0 ? ((local.x - s.x) * dx + (local.y - s.y) * dy) / len2 : 0;
+        float dx = g.end.x - g.start.x, dy = g.end.y - g.start.y, len2 = dx * dx + dy * dy;
+        return len2 > 0 ? ((p.x - g.start.x) * dx + (p.y - g.start.y) * dy) / len2 : 0;
     }
-    case Kind::Radial: {
-        Offset c = hasCenter_ ? start_ : Offset{area.width / 2, area.height / 2};
-        float r = std::isinf(radius_) ? std::min(area.width, area.height) / 2 : radius_;
-        return r > 0 ? std::hypot(local.x - c.x, local.y - c.y) / r : 0;
-    }
+    case Kind::Radial: return g.radius > 0 ? std::hypot(p.x - g.start.x, p.y - g.start.y) / g.radius : 0;
     case Kind::Sweep: {
-        Offset c = hasCenter_ ? start_ : Offset{area.width / 2, area.height / 2};
-        float a = std::atan2(local.y - c.y, local.x - c.x);
+        float a = std::atan2(p.y - g.start.y, p.x - g.start.x);
         if (a < 0) a += 2 * std::numbers::pi_v<float>;
         return a / (2 * std::numbers::pi_v<float>);
     }

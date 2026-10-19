@@ -6569,6 +6569,26 @@ TEST(brush_gradients_interpolate_in_the_painted_area) {
     CHECK(Brush::solid(red).isSolid() && Brush::solid(red) == Brush::solid(red) && !(h == v));
 }
 
+// Where a gradient lies when it paints an area (what a backend draws it from): the far edges and
+// the default centers resolved, in absolute points; parameterAt follows it.
+TEST(brush_geometry_resolves_on_the_area) {
+    Color red = Color::hex(0xFF0000), blue = Color::hex(0x0000FF);
+    Rect area{100, 50, 200, 100};
+    auto at = [](Offset a, Offset b) { return std::abs(a.x - b.x) < 1e-4f && std::abs(a.y - b.y) < 1e-4f; };
+    Brush::Geometry d = Brush::linearGradient({red, blue}).geometry(area);  // to the far corner
+    CHECK(at(d.start, {100, 50}) && at(d.end, {300, 150}));
+    Brush::Geometry h = Brush::horizontalGradient({red, blue}, 20).geometry(area);  // on to the far edge
+    CHECK(at(h.start, {120, 50}) && at(h.end, {300, 50}));
+    Brush::Geometry r = Brush::radialGradient({red, blue}).geometry(area);  // centered, to the nearer edge
+    CHECK(at(r.start, {200, 100}) && r.radius == 50);
+    Brush::Geometry own = Brush::radialGradient({red, blue}, Offset{10, 20}, 30).geometry(area);
+    CHECK(at(own.start, {110, 70}) && own.radius == 30);
+    Brush::Geometry s = Brush::sweepGradient({red, blue}).geometry(area);
+    CHECK(at(s.start, {200, 100}));
+    CHECK(Brush::radialGradient({red, blue}).parameterAt({200, 125}, area) == 0.5f);
+    CHECK(Brush::horizontalGradient({red, blue}, 20).parameterAt({210, 0}, area) == 0.5f);
+}
+
 TEST(path_building_and_bounds) {
     Path p;
     p.moveTo(10, 10);

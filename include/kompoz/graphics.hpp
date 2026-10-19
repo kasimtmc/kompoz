@@ -512,6 +512,14 @@ public:
     // Where `p` is along the gradient before its tile mode: 0 at its start, 1 at its end (a
     // sweep's: 0..1 round its center).
     float parameterAt(Offset p, const Rect& area) const;
+    // Where it lies when painting `area` (absolute), the far edges and the default centers
+    // resolved: a linear one from `start` to `end`; a radial one round `start` out to `radius`; a
+    // sweep round `start` (what a backend draws it from).
+    struct Geometry {
+        Offset start, end;
+        float radius = 0;
+    };
+    Geometry geometry(const Rect& area) const;
     // The color that far along it, its tile mode applied.
     Color colorAtParameter(float t) const;
 
