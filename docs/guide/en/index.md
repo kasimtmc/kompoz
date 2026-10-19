@@ -68,4 +68,4 @@ Application kompoz::createApplication(int, char**) {
 
 ![Dynamic 1](../../screenshots/dynamic-color-linux/d16_light.png)
 
-To see [more](../../screenshots/dynamic-color-linux/)
+To see [more](dynamic_color_gallery.md)

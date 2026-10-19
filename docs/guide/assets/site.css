@@ -351,6 +351,9 @@ article a code { color: var(--primary); }
 article img { max-width: 100%; height: auto; border-radius: 16px; border: 1px solid var(--outline); }
 article figure { margin: 24px 0; text-align: center; }
 article figure img { max-height: 520px; width: auto; }
+article figure.row { display: flex; gap: 12px; align-items: flex-start; }
+article figure.row img { flex: 1; min-width: 0; width: 100%; max-height: none; }
+@media (max-width: 640px) { article figure.row { flex-direction: column; } }
 
 /* ---- Code ---- */
 

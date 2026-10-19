@@ -14,8 +14,8 @@ Lines starting with "#! " are compiled but not shown (setup a snippet needs, as 
 `cpp body` block the ones it starts with go before the function, at namespace scope.
 
 Markdown: # ## ### headings, paragraphs, - and 1. lists (nested by indenting), ``` fences, tables,
-> quotes (> **Note:** / **Warning:** become callouts), ![alt](image), [text](page.md#anchor),
-`code`, **bold**, *italic*.
+> quotes (> **Note:** / **Warning:** become callouts), ![alt](image) (a line of pictures alone: side by
+side), [text](page.md#anchor), `code`, **bold**, *italic*.
 """
 import concurrent.futures
 import html
@@ -357,8 +357,10 @@ class Page:
                 para.append(lines[i].strip())
                 i += 1
             text = ' '.join(para)
-            if re.fullmatch(r'!\[[^\]]*\]\([^)]+\)', text):
-                out.append(f'<figure>{self.inline(text)}</figure>')
+            images = re.findall(r'!\[[^\]]*\]\([^)]+\)', text)
+            if images and re.fullmatch(r'(?:!\[[^\]]*\]\([^)]+\)\s*)+', text):  # pictures alone: side by side
+                row = ' class="row"' if len(images) > 1 else ''
+                out.append(f'<figure{row}>{self.inline(text)}</figure>')
             else:
                 rendered = self.inline(text)
                 if not self.summary and not out[-1:] == [''] and self.title != self.slug:
