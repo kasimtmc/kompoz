@@ -1,8 +1,10 @@
 # AsyncImage's libraries on Linux and macOS (Windows, Android and the web decode and download with
 # their own): libjpeg-turbo for JPEG (its TurboJPEG 3 API from 3.0, the one before on 2.x),
-# libwebp for WebP and libcurl for HTTP. Each comes from its CMake package (vcpkg, Conan, most
-# systems) or else from pkg-config. Kompoz's build and its installed package both find them here,
-# the package the same way the build did.
+# libwebp for WebP and libcurl for HTTP. libjpeg-turbo and libwebp come from pkg-config where it is
+# (a system's; Ubuntu 24.04's libjpeg-turbo CMake package names a file its package lacks, which
+# stops CMake) or else from their CMake packages (vcpkg, Conan, which turn pkg-config off); libcurl
+# from its CMake package or else CMake's FindCURL. Kompoz's build and its installed package both
+# find them here, the package the same way the build did.
 #
 #   kompoz_find_image_library(<JPEG|WEBP|CURL> <AUTO|ON|OFF> [HOW <CONFIG|PKGCONFIG|MODULE>])
 #
@@ -34,6 +36,10 @@ function(kompoz_find_image_library lib mode)
     endmacro()
     if(NOT mode STREQUAL "OFF")
         if(lib STREQUAL "JPEG")
+            kompoz_try(PKGCONFIG)
+            if(kompoz_trying)
+                kompoz_pkg_config(libturbojpeg kompoz_pc_turbojpeg)
+            endif()
             kompoz_try(CONFIG)
             if(kompoz_trying)
                 find_package(libjpeg-turbo CONFIG QUIET)
@@ -45,11 +51,11 @@ function(kompoz_find_image_library lib mode)
                     endif()
                 endforeach()
             endif()
+        elseif(lib STREQUAL "WEBP")
             kompoz_try(PKGCONFIG)
             if(kompoz_trying)
-                kompoz_pkg_config(libturbojpeg kompoz_pc_turbojpeg)
+                kompoz_pkg_config(libwebp kompoz_pc_webp)
             endif()
-        elseif(lib STREQUAL "WEBP")
             kompoz_try(CONFIG)
             if(kompoz_trying)
                 find_package(WebP CONFIG QUIET)
@@ -57,10 +63,6 @@ function(kompoz_find_image_library lib mode)
                     set(target WebP::webp)
                     set(how CONFIG)
                 endif()
-            endif()
-            kompoz_try(PKGCONFIG)
-            if(kompoz_trying)
-                kompoz_pkg_config(libwebp kompoz_pc_webp)
             endif()
         elseif(lib STREQUAL "CURL")
             kompoz_try(CONFIG)  # curl's own CMake package (vcpkg, Conan, some systems)
