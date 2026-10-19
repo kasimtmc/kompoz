@@ -267,23 +267,6 @@ struct BackgroundElement final : ModifierElement {
     }
 };
 
-// A rounded rect's outline, its corners quarter circles (the usual 0.5523 control points).
-Path roundedRectPath(const Rect& r, const CornerRadii& c) {
-    constexpr float k = 1 - 0.5522848f;
-    Path p;
-    p.moveTo(r.x + c.topLeft, r.y);
-    p.lineTo(r.right() - c.topRight, r.y);
-    p.cubicTo(r.right() - c.topRight * k, r.y, r.right(), r.y + c.topRight * k, r.right(), r.y + c.topRight);
-    p.lineTo(r.right(), r.bottom() - c.bottomRight);
-    p.cubicTo(r.right(), r.bottom() - c.bottomRight * k, r.right() - c.bottomRight * k, r.bottom(), r.right() - c.bottomRight, r.bottom());
-    p.lineTo(r.x + c.bottomLeft, r.bottom());
-    p.cubicTo(r.x + c.bottomLeft * k, r.bottom(), r.x, r.bottom() - c.bottomLeft * k, r.x, r.bottom() - c.bottomLeft);
-    p.lineTo(r.x, r.y + c.topLeft);
-    p.cubicTo(r.x, r.y + c.topLeft * k, r.x + c.topLeft * k, r.y, r.x + c.topLeft, r.y);
-    p.close();
-    return p;
-}
-
 struct BorderElement final : ModifierElement {
     float width = 1;
     Color color;
@@ -291,20 +274,8 @@ struct BorderElement final : ModifierElement {
     Shape shape;
     void draw(GraphicsContext& canvas, const Rect& bounds, const LayoutNode& node, const std::function<void()>& drawContent) const override {
         drawContent();
-        if (!brush) return canvas.strokeShape(bounds, shape, node.rtl, width, color);
-        // Painted by the brush over the bounds, its middle half the width inside them.
-        float h = width / 2;
-        Rect inner{h, h, std::max(0.f, bounds.width - width), std::max(0.f, bounds.height - width)};
-        Path outline;
-        if (shape.pathed()) {
-            outline = shape.outlinePath(inner, node.rtl);
-            outline.translate({h, h});
-        } else {
-            CornerRadii r = shape.radiiFor(bounds, node.rtl);
-            outline = roundedRectPath(inner, {std::max(0.f, r.topLeft - h), std::max(0.f, r.topRight - h), std::max(0.f, r.bottomRight - h),
-                                              std::max(0.f, r.bottomLeft - h)});
-        }
-        canvas.drawPath(outline, {bounds.x, bounds.y}, *brush, bounds, PathStroke{width});
+        if (brush) canvas.strokeShape(bounds, shape, node.rtl, width, *brush, bounds);  // painted by the brush over the bounds
+        else canvas.strokeShape(bounds, shape, node.rtl, width, color);
     }
     bool equals(const ModifierElement& other) const override {
         auto* o = as<BorderElement>(other);
@@ -312,14 +283,13 @@ struct BorderElement final : ModifierElement {
     }
 };
 
-// clip(RoundedCornerShape / CircleShape): content goes through a layer composited with a
-// rounded outline (SDL_Renderer has no stencil).
+// clip(shape): content is drawn inside the shape's outline, through the context's clip (no layer).
 struct ShapeClipElement final : ModifierElement {
     Shape shape;
     void draw(GraphicsContext& canvas, const Rect& bounds, const LayoutNode& node, const std::function<void()>& drawContent) const override {
-        canvas.pushShapeLayer(bounds, shape, node.rtl, 1);
+        canvas.pushClipShape(bounds, shape, node.rtl);
         drawContent();
-        canvas.popLayer();
+        canvas.popClip();
     }
     bool clipsContent() const override { return true; }
     bool equals(const ModifierElement& other) const override {
@@ -367,14 +337,9 @@ struct ShadowElement final : ModifierElement {
                 canvas.fillRoundRect(r, radii.grown(grow / 2), c);
         }
         if (!clip) return drawContent();
-        if (shape.kind == Shape::Kind::Rectangle) {
-            canvas.pushClip(b);
-            drawContent();
-            return canvas.popClip();
-        }
-        canvas.pushShapeLayer(b, shape, node.rtl, 1);
+        canvas.pushClipShape(b, shape, node.rtl);
         drawContent();
-        canvas.popLayer();
+        canvas.popClip();
     }
     bool equals(const ModifierElement& other) const override {
         auto* o = as<ShadowElement>(other);
@@ -387,10 +352,7 @@ struct ShapeShadowElement final : ModifierElement {
     Shadow shadow;
     bool inner = false;
     void draw(GraphicsContext& canvas, const Rect& b, const LayoutNode& node, const std::function<void()>& drawContent) const override {
-        if (shape.pathed())
-            canvas.drawShadowPath(shape.outlinePath(b, node.rtl), {b.x, b.y}, shadow, inner);
-        else
-            canvas.drawShadow(b, shape.radiiFor(b, node.rtl), shadow, inner);
+        canvas.drawShapeShadow(b, shape, node.rtl, shadow, inner);
         drawContent();
     }
     bool equals(const ModifierElement& other) const override {
@@ -506,14 +468,11 @@ void drawStateLayer(GraphicsContext& canvas, const Rect& bounds, const LayoutNod
     if (alpha > 0 && circle) canvas.fillRoundRect(*circle, circle->width / 2, color.copy(alpha));
     else if (alpha > 0) canvas.fillShape(bounds, shape, node.rtl, color.copy(alpha));
     if (ripples.empty()) return;
-    bool shaped = shape.pathed() || shape.radiiFor(bounds, node.rtl).max() > 0;  // clipped by a layer
     bool clip = indication.bounded;
-    if (clip && shaped) canvas.pushShapeLayer(bounds, shape, node.rtl, 1);
-    else if (clip) canvas.pushClip(bounds);
+    if (clip) canvas.pushClipShape(bounds, shape, node.rtl);
     for (const auto& r : ripples)
         canvas.fillRoundRect({r.center.x - r.radius, r.center.y - r.radius, 2 * r.radius, 2 * r.radius}, r.radius, color.copy(r.alpha));
-    if (clip && shaped) canvas.popLayer();
-    else if (clip) canvas.popClip();
+    if (clip) canvas.popClip();
 }
 } // namespace
 

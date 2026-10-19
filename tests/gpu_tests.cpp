@@ -1199,6 +1199,24 @@ void clipsCutAsTheirShapes(Gpu& g) {
             c.drawPath(*p, {2, 1}, Brush::solid(colors::White), {}, {});
         });
     }
+    // A shape that isn't star-shaped about its middle (a C), as a clip and as a layer's outline:
+    // the path filled.
+    Path cee;
+    cee.addOval({6, 6, 60, 60});
+    Path hole;
+    hole.addOval({22, 18, 52, 36});
+    cee = Path::combine(PathOperation::Difference, cee, hole);
+    Shape ceeShape = GenericShape([cee](Path& p, Size, LayoutDirection) { p.addPath(cee); });
+    same("C clip", [&](GraphicsContext& c) {
+        c.pushClipShape({0, 0, 72, 72}, ceeShape, false);
+        c.fillRoundRect(all, 0, red);
+        c.popClip();
+    }, [&](GraphicsContext& c) { c.drawPath(cee, {}, Brush::solid(red), {}, {}); });
+    same("C layer", [&](GraphicsContext& c) {
+        c.pushShapeLayer({0, 0, 72, 72}, ceeShape, false, 1);
+        c.fillRoundRect(all, 0, red);
+        c.popLayer();
+    }, [&](GraphicsContext& c) { c.drawPath(cee, {}, Brush::solid(red), {}, {}); });
     // Inside each other: the coverages multiply.
     Pixels a = g.render(72, 72, 1, [&](GraphicsContext& c) { c.drawPath(star1, {}, Brush::solid(red), {}, {}); });
     Pixels b = g.render(72, 72, 1, [&](GraphicsContext& c) { c.fillRoundRect(box, radii, red); });

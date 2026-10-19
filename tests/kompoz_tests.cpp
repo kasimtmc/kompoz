@@ -1847,16 +1847,17 @@ TEST(outlined_icon_button_has_an_outline_and_ripples_in_its_circle) {
         CHECK((canvas.rectColors == std::vector<Color>{colors::Transparent, colors::Transparent, cs.primary}));
         CHECK((canvas.vectorColors == std::vector<Color>{colors::Black, colors::Black.copy(0.38f), cs.onPrimary}));
     }
-    // A press on the (checked) toggle: its ripple is clipped to the circle (a rounded layer,
-    // not a rectangular clip) and drawn in its content color.
+    // A press on the (checked) toggle: its ripple is clipped to the circle (a rounded clip, not a
+    // rectangular one) and drawn in its content color.
     Rect toggle = rule.onNodeWithTag("aç").bounds();
     Offset mid{toggle.x + toggle.width / 2, toggle.y + toggle.height / 2};
     rule.host().pointerDown(mid);
     for (int k = 0; k < 3; ++k) rule.advanceFrame();
     testing::RecordingCanvas pressed;
     rule.host().draw(pressed);
-    CHECK(pressed.clips.empty() && pressed.layerBounds.size() == 1);
-    if (pressed.layerBounds.size() == 1) CHECK(near(pressed.layerBounds[0].x, toggle.x + 4) && near(pressed.layerBounds[0].width, 40));
+    CHECK(pressed.clips.empty() && pressed.clipShapes.size() == 1 && pressed.layers == 0);
+    if (pressed.clipShapes.size() == 1)
+        CHECK(near(pressed.clipShapes[0].bounds.x, toggle.x + 4) && near(pressed.clipShapes[0].bounds.width, 40) && near(pressed.clipShapes[0].radii.topLeft, 20));
     CHECK(pressed.rectColors.size() == 4);
     if (pressed.rectColors.size() == 4) {
         Color ripple = pressed.rectColors[3];
@@ -2216,7 +2217,7 @@ TEST(content_scale_places_the_image) {
     CHECK(near(cropSrc.x, 50) && near(cropSrc.width, 100));                  // ...showing the middle half
 }
 
-TEST(rounded_clip_and_alpha_use_layers) {
+TEST(rounded_clip_is_a_clip_and_alpha_a_layer) {
     ComposeTestRule rule([] {
         Column([] {
             Box(Modifier().size(40).clip(CircleShape).background(colors::Black));
@@ -2228,7 +2229,8 @@ TEST(rounded_clip_and_alpha_use_layers) {
     });
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
-    CHECK(canvas.layers == 2 && canvas.depth == 0);
+    CHECK(canvas.layers == 1 && canvas.depth == 0);  // the half alpha
+    CHECK(canvas.clipShapes.size() == 1 && canvas.clipShapes[0].radii == CornerRadii(20) && !canvas.clipShapes[0].path);  // the circle
     CHECK((canvas.texts == std::vector<std::string>{"yarım", "tam"}));
 }
 
@@ -2813,10 +2815,10 @@ TEST(offscreen_clipped_content_is_not_drawn) {
     auto drawn = [&](const char* text) { return std::find(canvas.texts.begin(), canvas.texts.end(), text) != canvas.texts.end(); };
     CHECK(drawn("görünen") && drawn("düz"));
     CHECK(!drawn("kırpılmış") && !drawn("soluk") && !drawn("dönen") && canvas.layers == 0);
-    // Without culling everything is drawn, through its layers.
+    // Without culling everything is drawn, through its clip and layers.
     testing::RecordingCanvas all;
     rule.host().draw(all);
-    CHECK(std::find(all.texts.begin(), all.texts.end(), "kırpılmış") != all.texts.end() && all.layers == 3);
+    CHECK(std::find(all.texts.begin(), all.texts.end(), "kırpılmış") != all.texts.end() && all.layers == 2 && all.clipShapes.size() == 1);
 }
 
 bool sameRect(Rect a, Rect b) { return near(a.x, b.x) && near(a.y, b.y) && near(a.width, b.width) && near(a.height, b.height); }
@@ -10273,7 +10275,7 @@ TEST(shadows_take_colors_and_clip_and_borders_take_brushes) {
         CHECK(black.r == 0 && black.b == 0 && tinted.r == 1 && tinted.g == 0 && near(tinted.a, black.a, 0.001f));
         CHECK(faint.b == 1 && near(faint.a, black.a / 2, 0.001f));
     }
-    CHECK(canvas.layerBounds.size() == 1 && sameRect(canvas.layerBounds[0], {0, 100, 100, 100}) && near(canvas.layerCorners[0].topLeft, 16));
+    CHECK(canvas.clipShapes.size() == 1 && sameRect(canvas.clipShapes[0].bounds, {0, 100, 100, 100}) && near(canvas.clipShapes[0].radii.topLeft, 16));
     CHECK(canvas.clips.size() == 1 && sameRect(canvas.clips[0], {0, 200, 100, 100}));
     // A colored border is a stroke; a brush's a path stroked half its width inside.
     CHECK(canvas.strokes.size() == 1 && canvas.strokeColors[0] == red);
@@ -10845,9 +10847,9 @@ TEST(carousel_items_clip_and_border_their_masks) {
     Rect content = rule.onNodeWithTag("m1").bounds();
     CHECK(near(content.width, 186));
     bool clipped = false, bordered = false;
-    for (size_t i = 0; i < canvas.layerBounds.size(); ++i) {
-        const Rect& r = canvas.layerBounds[i];
-        clipped = clipped || (near(r.x, 194) && near(r.width, 142) && near(r.height, 200) && near(canvas.layerCorners[i].topLeft, 20));
+    for (const auto& k : canvas.clipShapes) {
+        const Rect& r = k.bounds;
+        clipped = clipped || (near(r.x, 194) && near(r.width, 142) && near(r.height, 200) && near(k.radii.topLeft, 20));
     }
     for (size_t i = 0; i < canvas.strokes.size(); ++i) {
         const Rect& r = canvas.strokes[i];
@@ -12048,6 +12050,81 @@ TEST(scrims_take_the_schemes_scrim_color) {
     CHECK(red);
 }
 
+// Shapes make outlines as Compose's do: a rect, a rounded rect (mirrored right to left unless
+// absolute; no corners: a rect), a path for cut corners, polygons and generic shapes; a RoundRect's
+// corners fit together and may be elliptical; and what draws a shape goes by its outline: a
+// rounded rect with circular corners as such, an elliptical one or a path as a path, clipped
+// without a layer.
+TEST(shapes_make_outlines_as_compose) {
+    auto same = [](CornerRadii a, CornerRadii b) {
+        return near(a.topLeft, b.topLeft, 1e-4f) && near(a.topRight, b.topRight, 1e-4f) && near(a.bottomRight, b.bottomRight, 1e-4f) &&
+               near(a.bottomLeft, b.bottomLeft, 1e-4f);
+    };
+    Size size{100, 40};
+    Outline rect = RectangleShape.createOutline(size, LayoutDirection::Ltr);
+    CHECK((rect.kind == Outline::Kind::Rectangle && rect.bounds() == Rect{0, 0, 100, 40}));
+    CHECK(RoundedCornerShape(0).createOutline(size, LayoutDirection::Ltr).kind == Outline::Kind::Rectangle);
+    Outline circle = CircleShape.createOutline(size, LayoutDirection::Ltr);
+    CHECK(circle.kind == Outline::Kind::Rounded && circle.roundRect.circular() && same(circle.roundRect.radii(), CornerRadii(20)));
+    Outline tab = RoundedCornerShape(16, 8, 0, 4).createOutline(size, LayoutDirection::Rtl);
+    CHECK(tab.kind == Outline::Kind::Rounded && same(tab.roundRect.radii(), {8, 16, 4, 0}));  // the start on the right
+    CHECK(same(AbsoluteRoundedCornerShape(16, 8, 0, 4).createOutline(size, LayoutDirection::Rtl).roundRect.radii(), {16, 8, 0, 4}));
+    Outline cut = CutCornerShape(10).createOutline(size, LayoutDirection::Ltr);
+    CHECK(cut.kind == Outline::Kind::Generic && !cut.path.contains({2, 2}) && cut.path.contains({12, 2}));
+    // A generic shape builds its path in the size and direction asked for.
+    Size seen;
+    LayoutDirection seenDirection = LayoutDirection::Ltr;
+    Shape notch = GenericShape([&](Path& p, Size s, LayoutDirection d) {
+        seen = s, seenDirection = d;
+        p.addRect({0, 0, s.width / 2, s.height});
+    });
+    Outline half = notch.createOutline({80, 30}, LayoutDirection::Rtl);
+    CHECK((half.kind == Outline::Kind::Generic && near(seen.width, 80) && seenDirection == LayoutDirection::Rtl && half.bounds() == Rect{0, 0, 40, 30}));
+    Shape copy = notch;
+    CHECK(copy == notch && !(GenericShape([](Path&, Size, LayoutDirection) {}) == notch));
+    // A RoundRect's corners fit: all four shrink by one factor (Android's); elliptical ones aren't circular.
+    RoundRect big{{0, 0, 100, 40}, 30, 30, 30, 30};
+    CHECK(same(big.radii(), CornerRadii(20)));
+    RoundRect oval{{0, 0, 100, 40}, CornerRadius(30, 10), CornerRadius(30, 10), CornerRadius(30, 10), CornerRadius(30, 10)};
+    CHECK(!oval.circular());
+    Path ovalPath;
+    ovalPath.addRoundRect(oval);
+    // (12, 1) is outside a 30 x 10 corner, inside a circular one of 10; so is (88, 1) on the right.
+    CHECK(ovalPath.contains({50, 1}) && !ovalPath.contains({3, 3}) && ovalPath.contains({20, 3}) && !ovalPath.contains({12, 1}) &&
+          !ovalPath.contains({88, 1}) && !ovalPath.contains({88, 39}) && !ovalPath.contains({12, 39}) && ovalPath.contains({99, 12}) &&
+          ovalPath.contains({99, 28}) && ovalPath.contains({1, 12}) && ovalPath.contains({1, 28}));  // (the sides straight below 10 dp)
+    // Drawn by its outline: an elliptical one as a path (filled, stroked, clipped, its shadow), a
+    // circular one as a rounded rect, a clip of any shape without a layer.
+    Shape elliptical = OutlineShape([](Size s, LayoutDirection) {
+        return Outline::Rounded({{0, 0, s.width, s.height}, CornerRadius(30, 10), CornerRadius(30, 10), CornerRadius(30, 10), CornerRadius(30, 10)});
+    });
+    ComposeTestRule rule([&] {
+        Column([&] {
+            Box(Modifier().size(100, 40).dropShadow(elliptical, Shadow{colors::Black, {}, 4}).background(Color{1, 0, 0, 1}, elliptical)
+                    .border(2, Color{0, 0, 1, 1}, elliptical).clip(elliptical));
+            Box(Modifier().size(100, 40).background(Color{0, 1, 0, 1}, CircleShape).clip(CircleShape));
+            Box(Modifier().size(120, 72).clip(notch));
+        });
+    }, {400, 400});
+    testing::RecordingCanvas c;
+    rule.host().draw(c);
+    bool filled = false, stroked = false;
+    for (size_t i = 0; i < c.paths.size(); ++i) {
+        filled |= c.pathColors[i] == Color{1, 0, 0, 1} && c.pathStrokes[i] == 0 && sameRect(c.paths[i], {0, 0, 100, 40});
+        stroked |= c.pathColors[i] == Color{0, 0, 1, 1} && c.pathStrokes[i] == 2;
+    }
+    CHECK(filled && stroked && c.pathShadows.size() == 1 && c.shadows.empty());
+    bool circleFill = false;
+    for (size_t i = 0; i < c.rects.size(); ++i) circleFill |= c.rectColors[i] == Color{0, 1, 0, 1} && near(c.rectRadii[i], 20);
+    CHECK(circleFill);
+    CHECK(c.layers == 0 && c.clipShapes.size() == 3);
+    if (c.clipShapes.size() == 3) {
+        CHECK(c.clipShapes[0].path && sameRect(c.clipShapes[0].bounds, {0, 0, 100, 40}));      // elliptical: its path
+        CHECK(!c.clipShapes[1].path && near(c.clipShapes[1].radii.topLeft, 20));               // circular: a rounded rect
+        CHECK(c.clipShapes[2].path && sameRect(c.clipShapes[2].bounds, {0, 80, 60, 72}));      // the generic one
+    }
+}
+
 TEST(cut_corner_and_absolute_shapes) {
     auto rtl = mutableStateOf(false);
     ComposeTestRule rule([&] {
@@ -12090,13 +12167,17 @@ TEST(cut_corner_and_absolute_shapes) {
     for (size_t i = 0; i < c->rects.size(); ++i)
         left |= sameRect(c->rects[i], r) && near(c->rectCorners[i].topLeft, 10) && near(c->rectCorners[i].topRight, 0);
     CHECK(left);
-    // Cuts of half the shorter side clip to a diamond-ended shape; too large cuts shrink to fit.
+    // Cuts of half the shorter side clip to a diamond-ended shape (its path, no layer); too large
+    // cuts shrink to fit.
     Rect diamond = rule.onNodeWithTag("elmas").bounds();
-    bool clipped = std::ranges::any_of(c->layerBounds, [&](Rect l) { return sameRect(l, diamond); });
-    CHECK(clipped && Shape(CutCornerShape(30)).outlinePath({0, 0, 60, 40}).contains({30, 1}) &&
-          !Shape(CutCornerShape(30)).outlinePath({0, 0, 60, 40}).contains({2, 2}));
-    CHECK(Shape(CutCornerShape(4)).radiiFor({0, 0, 60, 40}).max() == 0 && Shape(CutCornerShape(4)).pathed());
-    CHECK(Shape(CutCornerShape(30)).outlinePath({0, 0, 60, 40}).contains({12, 12}));  // the cuts fit the 40 dp side: 20 each
+    bool clipped = std::ranges::any_of(c->clipShapes, [&](const testing::RecordingCanvas::ClipShape& k) {
+        return k.path && sameRect(k.bounds, diamond) && k.op == ClipOp::Intersect;
+    });
+    CHECK(clipped && c->layers == 0);
+    Outline cut30 = CutCornerShape(30).createOutline({60, 40}, LayoutDirection::Ltr);
+    CHECK(cut30.kind == Outline::Kind::Generic && cut30.path.contains({30, 1}) && !cut30.path.contains({2, 2}));
+    CHECK(CutCornerShape(4).radiiFor({0, 0, 60, 40}).max() == 0 && CutCornerShape(4).pathed());
+    CHECK(cut30.path.contains({12, 12}));  // the cuts fit the 40 dp side: 20 each
     // A border along the cuts: a stroked path.
     Rect edge = rule.onNodeWithTag("sınır").bounds();
     bool stroked = false;
@@ -12775,7 +12856,7 @@ TEST(cards_as_compose_1_4) {
     // Their content clipped to their corners.
     Rect card = rule.onNodeWithTag("dolu").bounds();
     bool clipped = false;
-    for (size_t i = 0; i < canvas.layerBounds.size(); ++i) clipped |= sameRect(canvas.layerBounds[i], card) && near(canvas.layerCorners[i].topLeft, 12);
+    for (const auto& k : canvas.clipShapes) clipped |= sameRect(k.bounds, card) && near(k.radii.topLeft, 12);
     CHECK(clipped);
     // The elevated one's shadow the one of 1 dp (spread 0.8 dp at most); none for the others.
     auto shadowSpread = [&](const char* tag) {
@@ -14988,14 +15069,14 @@ TEST(shapes_with_corners_of_their_own_reach_the_canvas_mirrored_in_rtl) {
         CHECK(same(drawn.rectCorners[6], {16, 8, 0, 4}) && same(drawn.rectCorners[0], tab.radiiFor(r).grown(0.8f)));
     }
     CHECK(drawn.strokeCorners.size() == 1 && same(drawn.strokeCorners[0], {16, 8, 0, 4}));
-    CHECK(drawn.layerCorners.size() == 1 && same(drawn.layerCorners[0], {16, 8, 0, 4}));
+    CHECK(drawn.clipShapes.size() == 1 && same(drawn.clipShapes[0].radii, {16, 8, 0, 4}));
 
     rule.host().pointerDown({50, 20});
     rule.advanceFrame();
     rule.advanceFrame();
     testing::RecordingCanvas pressed;
     rule.host().draw(pressed);
-    CHECK(pressed.layerCorners.size() == 2 && same(pressed.layerCorners[1], {16, 8, 0, 4}));  // the ripple keeps to the shape
+    CHECK(pressed.clipShapes.size() == 2 && same(pressed.clipShapes[1].radii, {16, 8, 0, 4}));  // the ripple keeps to the shape
     rule.host().pointerUp({50, 20});
     rule.waitForIdle();
     frame();
@@ -15007,7 +15088,7 @@ TEST(shapes_with_corners_of_their_own_reach_the_canvas_mirrored_in_rtl) {
     list.replay(mirrored);
     CHECK(mirrored.rectCorners.size() == 7 && same(mirrored.rectCorners.back(), {8, 16, 4, 0}));
     CHECK(mirrored.strokeCorners.size() == 1 && same(mirrored.strokeCorners[0], {8, 16, 4, 0}));
-    CHECK(mirrored.layerCorners.size() == 1 && same(mirrored.layerCorners[0], {8, 16, 4, 0}));
+    CHECK(mirrored.clipShapes.size() == 1 && same(mirrored.clipShapes[0].radii, {8, 16, 4, 0}));
 
     MutableInteractionSource source;  // a graphicsLayer's clip and an indication's ripple
     ComposeTestRule other([&] {
@@ -15026,8 +15107,9 @@ TEST(shapes_with_corners_of_their_own_reach_the_canvas_mirrored_in_rtl) {
         layered = {};
         other.host().draw(layered);
     }
-    CHECK(layered.layerCorners.size() == 2);
+    CHECK(layered.layerCorners.size() == 1 && layered.clipShapes.size() == 1);  // the layer's, the ripple's clip
     for (const CornerRadii& corners : layered.layerCorners) CHECK(same(corners, {8, 16, 4, 0}));
+    for (const auto& k : layered.clipShapes) CHECK(same(k.radii, {8, 16, 4, 0}));
 }
 
 TEST(connected_button_group_rounds_the_outer_ends_and_the_checked_one) {
@@ -16909,18 +16991,19 @@ TEST(outline_shapes_fill_stroke_clip_shadow_and_ripple) {
     CHECK(stroke && sameRect(c.paths[*stroke], {tri.x + 1, tri.y + 1, tri.width - 2, tri.height - 2}));
     CHECK(shadows == 6);
     CHECK(std::none_of(c.rectColors.begin(), c.rectColors.end(), [](Color k) { return k == Color{1, 0, 0, 1}; }));
-    // Clips: a shape's and a graphics layer's, each an outline layer over its bounds.
-    CHECK(c.layerOutlines.size() == 2);
-    if (c.layerOutlines.size() == 2) {
-        CHECK(sameRect(c.layerOutlines[0].bounds(), {0, 0, 60, 60}) && sameRect(c.layerOutlines[1].bounds(), {0, 0, 80, 80}));
-        CHECK(c.layerOutlines[0].commands()[0].x == 0 && c.layerOutlines[0].commands()[1].x == 60);  // from the start to the point at the end
+    // Clips: a shape's, its outline as a path clip; a graphics layer's, an outline layer over its bounds.
+    CHECK(c.clipShapes.size() == 1 && c.layerOutlines.size() == 1);
+    if (c.clipShapes.size() == 1 && c.layerOutlines.size() == 1) {
+        const Path& clip = *c.clipShapes[0].path;
+        CHECK(sameRect(clip.bounds(), {0, 0, 60, 60}) && sameRect(c.layerOutlines[0].bounds(), {0, 0, 80, 80}));
+        CHECK(clip.commands()[0].x == 0 && clip.commands()[1].x == 60);  // from the start to the point at the end
     }
     // A ripple stays inside the outline it is drawn on.
     Rect button = rule.onNodeWithTag("düğme").bounds();
     rule.host().pointerDown(button.center());
     rule.advanceTimeBy(100);
     c = drawn();
-    CHECK(c.layerOutlines.size() == 3 && sameRect(c.layerOutlines.back().bounds(), {0, 0, 70, 70}));
+    CHECK(c.clipShapes.size() == 2 && sameRect(c.clipShapes.back().path->bounds(), {0, 0, 70, 70}));
     rule.host().pointerUp(button.center());
     rule.waitForIdle();
     CHECK(taps == 1);
@@ -16931,25 +17014,26 @@ TEST(outline_shapes_fill_stroke_clip_shadow_and_ripple) {
         rule.advanceFrame();
         c = drawn();
     }
-    CHECK(c.layerOutlines.size() == 3 && sameRect(c.layerOutlines.back().bounds(), {0, 0, 50, 50}));
+    CHECK(c.clipShapes.size() == 2 && sameRect(c.clipShapes.back().path->bounds(), {0, 0, 50, 50}));
     source.tryEmit(press.release());
     for (int k = 0; k < 60; ++k) {
         rule.advanceFrame();
         drawn();
     }
-    // A display list replays outline layers as such.
+    // A display list replays path clips and outline layers as such.
     DisplayList list(rule.host().textMeasurer());
     list.begin({400, 800}, 0.5f);
     rule.host().draw(list);
     list.end();
     testing::RecordingCanvas replayed;
     list.replay(replayed, std::nullopt);
-    CHECK(replayed.layerOutlines.size() == 2 && replayed.layerOutlines[0] == c.layerOutlines[0]);
+    CHECK(replayed.clipShapes.size() == 1 && *replayed.clipShapes[0].path == *c.clipShapes[0].path && replayed.layerOutlines.size() == 1 &&
+          replayed.layerOutlines[0] == c.layerOutlines[0]);
     // Right to left: mirrored, the arrow points to the left.
     rtl.set(true);
     rule.waitForIdle();
     c = drawn();
-    CHECK(c.layerOutlines.size() == 2 && c.layerOutlines[0].commands()[0].x == 60 && c.layerOutlines[0].commands()[1].x == 0);
+    CHECK(c.clipShapes.size() == 1 && c.clipShapes[0].path->commands()[0].x == 60 && c.clipShapes[0].path->commands()[1].x == 0);
 }
 
 TEST(material_shapes_fill_the_unit_square_and_morph) {
@@ -24479,7 +24563,7 @@ TEST(segmented_buttons_keep_48_dp_of_room_and_draw_40) {
     bool outline = false, ends = false, fill = false;
     for (size_t i = 0; i < canvas.strokes.size(); ++i)
         outline |= sameRect(canvas.strokes[i], band) && near(canvas.strokeCorners[i].topLeft, 20) && canvas.strokeColors[i] == cs.outline;
-    for (size_t i = 0; i < canvas.layerBounds.size(); ++i) ends |= sameRect(canvas.layerBounds[i], band) && near(canvas.layerCorners[i].topLeft, 20);
+    for (const auto& k : canvas.clipShapes) ends |= sameRect(k.bounds, band) && near(k.radii.topLeft, 20);
     bool separator = false;  // between the first two
     for (size_t i = 0; i < canvas.rects.size(); ++i) {
         fill |= canvas.rectColors[i] == cs.secondaryContainer && sameRect(canvas.rects[i], {row.x, row.y + 4, 100, 40});

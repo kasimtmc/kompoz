@@ -121,7 +121,21 @@ Box(Modifier().size(96).clip(CircleShape).background(colorScheme().tertiaryConta
 Box(Modifier().size(96).border(2, colorScheme().outline, RoundedCornerShape(12, 12, 0, 0)));
 ```
 
-`clip(shape)` clips the content to the shape; the content is drawn through a layer so the edge is smooth.
+As in Compose, a shape makes its outline in a size and layout direction (`createOutline`): a rect, a rounded rect (`Outline::Rounded(RoundRect{…})`, whose corners may be elliptical) or any path. `GenericShape` builds one from a path:
+
+```cpp body
+Shape ticket = GenericShape([](Path& p, Size size, LayoutDirection) {
+    p.moveTo(0, 0);
+    p.lineTo(size.width, 0);
+    p.lineTo(size.width, size.height);
+    p.arcTo({size.width / 2 - 12, size.height - 12, 24, 24}, 0, -180, false);  // a notch at the bottom
+    p.lineTo(0, size.height);
+    p.close();
+});
+Box(Modifier().size(120, 72).clip(ticket).background(colorScheme().primaryContainer));
+```
+
+`clip(shape)` clips the content to the shape, its edge anti-aliased, without a layer.
 
 ## Shadows
 

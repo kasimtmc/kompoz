@@ -7,6 +7,7 @@
 #include <array>
 #include <initializer_list>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -65,6 +66,7 @@ struct Rect {
         float r = std::min(right(), o.right()), b = std::min(bottom(), o.bottom());
         return {l, t, std::max(0.f, r - l), std::max(0.f, b - t)};
     }
+    friend constexpr bool operator==(const Rect&, const Rect&) = default;
 };
 
 // A font's weight, 1 to 1000 (Compose's FontWeight): Normal is 400, Medium 500, Bold 700.
@@ -335,12 +337,18 @@ constexpr CornerSize CornerPercent(float percent) { return {0, percent}; }
 
 class Path;
 struct ShapeOutline;
+struct Outline;
 
-// Outline for backgrounds, borders and clips: RectangleShape, CircleShape, RoundedCornerShape(16),
-// RoundedCornerShape(16, 16, 0, 0) for corners of their own, CutCornerShape(8) for corners cut
-// straight, OutlineShape(outline) for any other.
+// Which way layouts go (see LocalLayoutDirection in layout.hpp).
+enum class LayoutDirection { Ltr, Rtl };
+
+// What backgrounds, borders, clips and shadows take the form of (Compose's Shape): in a given
+// size and layout direction it makes an Outline (createOutline). RectangleShape, CircleShape,
+// RoundedCornerShape(16), RoundedCornerShape(16, 16, 0, 0) for corners of their own,
+// CutCornerShape(8) for corners cut straight, GenericShape(builder) for any path,
+// OutlineShape(createOutline) for any outline, OutlineShape(points) for a polygon in a unit square.
 struct Shape {
-    enum class Kind { Rectangle, Rounded, Circle, Outline, Cut };
+    enum class Kind { Rectangle, Rounded, Circle, Outline, Cut, Generic };
     Kind kind = Kind::Rectangle;
     float radius = 0;   // dp, for Rounded
     float percent = 0;  // and a share of the shorter side on top (0..50)
@@ -348,17 +356,20 @@ struct Shape {
     // bottomEnd, bottomStart — the start is the right in right-to-left layouts.
     bool perCorner = false;
     std::array<CornerSize, 4> corners{};
-    const ShapeOutline* outline = nullptr;  // Kind::Outline: drawn as a path (no corner radii)
+    const ShapeOutline* outline = nullptr;  // Kind::Outline: a polygon in a unit square
     // Corners named left and right on the screen, not mirrored right to left (Compose's
     // AbsoluteRoundedCornerShape, AbsoluteCutCornerShape): `corners` are then topLeft, topRight,
     // bottomRight, bottomLeft.
     bool absolute = false;
+    // Kind::Generic: what makes its outline in a size and direction (GenericShape, OutlineShape).
+    std::shared_ptr<const std::function<Outline(Size, LayoutDirection)>> generic;
 
-    // Drawn, filled and clipped as a path (an outline, cut corners) rather than a rounded rect.
-    constexpr bool pathed() const { return kind == Kind::Outline || kind == Kind::Cut; }
-
-    // The outline fitted to `r`, from its top left (mirrored in right-to-left layouts).
-    Path outlinePath(const Rect& r, bool rtl = false) const;
+    // Its outline in `size` (dp, from the top left), mirrored right to left where it has a start
+    // and an end (Compose's createOutline).
+    Outline createOutline(Size size, LayoutDirection layoutDirection) const;
+    // A rounded rect's corners for a rect, or a polygon's or path's (not one: those of a shape
+    // drawn as a path).
+    bool pathed() const { return kind == Kind::Outline || kind == Kind::Cut || kind == Kind::Generic; }
     constexpr float radiusFor(const Rect& r) const {  // one radius (corners of their own: the largest)
         float shorter = std::min(r.width, r.height);
         return kind == Kind::Circle    ? shorter / 2
@@ -389,55 +400,53 @@ struct Shape {
         }
         return rtl ? CornerRadii{te, ts, bs, be} : CornerRadii{ts, te, be, bs};
     }
-    friend constexpr bool operator==(const Shape&, const Shape&) = default;
+    friend bool operator==(const Shape&, const Shape&) = default;
 };
-inline constexpr Shape RectangleShape{Shape::Kind::Rectangle, 0};
-inline constexpr Shape CircleShape{Shape::Kind::Circle, 0};
-constexpr Shape RoundedCornerShape(float radius) { return {Shape::Kind::Rounded, radius}; }
-constexpr Shape RoundedCornerShape(float topStart, float topEnd, float bottomEnd, float bottomStart) {
+inline const Shape RectangleShape{Shape::Kind::Rectangle, 0};
+inline const Shape CircleShape{Shape::Kind::Circle, 0};
+inline Shape RoundedCornerShape(float radius) { return {Shape::Kind::Rounded, radius}; }
+inline Shape RoundedCornerShape(float topStart, float topEnd, float bottomEnd, float bottomStart) {
     return {Shape::Kind::Rounded, 0, 0, true, {CornerSize{topStart}, CornerSize{topEnd}, CornerSize{bottomEnd}, CornerSize{bottomStart}}};
 }
-constexpr Shape RoundedCornerShape(CornerSize topStart, CornerSize topEnd, CornerSize bottomEnd, CornerSize bottomStart) {
+inline Shape RoundedCornerShape(CornerSize topStart, CornerSize topEnd, CornerSize bottomEnd, CornerSize bottomStart) {
     return {Shape::Kind::Rounded, 0, 0, true, {topStart, topEnd, bottomEnd, bottomStart}};
 }
 // Corners `percent` of the shorter side (Compose's RoundedCornerShape(percent = 50) is a pill).
-constexpr Shape RoundedCornerShapePercent(float percent) { return {Shape::Kind::Rounded, 0, percent}; }
+inline Shape RoundedCornerShapePercent(float percent) { return {Shape::Kind::Rounded, 0, percent}; }
 // Rounded corners named left and right, the same right to left (Compose's AbsoluteRoundedCornerShape).
-constexpr Shape AbsoluteRoundedCornerShape(CornerSize topLeft, CornerSize topRight, CornerSize bottomRight, CornerSize bottomLeft) {
+inline Shape AbsoluteRoundedCornerShape(CornerSize topLeft, CornerSize topRight, CornerSize bottomRight, CornerSize bottomLeft) {
     Shape s{Shape::Kind::Rounded, 0, 0, true, {topLeft, topRight, bottomRight, bottomLeft}};
     s.absolute = true;
     return s;
 }
-constexpr Shape AbsoluteRoundedCornerShape(float topLeft, float topRight, float bottomRight, float bottomLeft) {
+inline Shape AbsoluteRoundedCornerShape(float topLeft, float topRight, float bottomRight, float bottomLeft) {
     return AbsoluteRoundedCornerShape(CornerSize{topLeft}, CornerSize{topRight}, CornerSize{bottomRight}, CornerSize{bottomLeft});
 }
-constexpr Shape AbsoluteRoundedCornerShape(float all) { return AbsoluteRoundedCornerShape(all, all, all, all); }
+inline Shape AbsoluteRoundedCornerShape(float all) { return AbsoluteRoundedCornerShape(all, all, all, all); }
 // Corners cut straight across, as far along each side as the size (Compose's CutCornerShape): one
 // size, a share of the shorter side, or each its own (topStart, topEnd, bottomEnd, bottomStart).
-constexpr Shape CutCornerShape(CornerSize topStart, CornerSize topEnd, CornerSize bottomEnd, CornerSize bottomStart) {
+inline Shape CutCornerShape(CornerSize topStart, CornerSize topEnd, CornerSize bottomEnd, CornerSize bottomStart) {
     return {Shape::Kind::Cut, 0, 0, true, {topStart, topEnd, bottomEnd, bottomStart}};
 }
-constexpr Shape CutCornerShape(float topStart, float topEnd, float bottomEnd, float bottomStart) {
+inline Shape CutCornerShape(float topStart, float topEnd, float bottomEnd, float bottomStart) {
     return CutCornerShape(CornerSize{topStart}, CornerSize{topEnd}, CornerSize{bottomEnd}, CornerSize{bottomStart});
 }
-constexpr Shape CutCornerShape(float all) { return CutCornerShape(all, all, all, all); }
-constexpr Shape CutCornerShapePercent(float percent) {
+inline Shape CutCornerShape(float all) { return CutCornerShape(all, all, all, all); }
+inline Shape CutCornerShapePercent(float percent) {
     return CutCornerShape(CornerPercent(percent), CornerPercent(percent), CornerPercent(percent), CornerPercent(percent));
 }
 // The same with corners named left and right (Compose's AbsoluteCutCornerShape).
-constexpr Shape AbsoluteCutCornerShape(CornerSize topLeft, CornerSize topRight, CornerSize bottomRight, CornerSize bottomLeft) {
+inline Shape AbsoluteCutCornerShape(CornerSize topLeft, CornerSize topRight, CornerSize bottomRight, CornerSize bottomLeft) {
     Shape s = CutCornerShape(topLeft, topRight, bottomRight, bottomLeft);
     s.absolute = true;
     return s;
 }
-constexpr Shape AbsoluteCutCornerShape(float topLeft, float topRight, float bottomRight, float bottomLeft) {
+inline Shape AbsoluteCutCornerShape(float topLeft, float topRight, float bottomRight, float bottomLeft) {
     return AbsoluteCutCornerShape(CornerSize{topLeft}, CornerSize{topRight}, CornerSize{bottomRight}, CornerSize{bottomLeft});
 }
-// Any outline (Compose's GenericShape; Material's shapes are made of these): points around it,
-// clockwise, in a unit square (0..1 both ways), stretched over the bounds it fills and fine enough
-// to look smooth there. Keep it alive (a static) while shapes refer to it. Parts of the content
-// that don't reach out from the middle are clipped by a fan from it: make it star-shaped about
-// the middle (all Material shapes are).
+// A polygon in a unit square (0..1 both ways), stretched over the bounds it fills: points around
+// it, fine enough to look smooth there (Material's shapes are made of these). Keep it alive (a
+// static) while shapes refer to it.
 struct ShapeOutline {
     std::vector<Offset> points;
 };
@@ -449,7 +458,7 @@ inline Shape OutlineShape(const ShapeOutline& outline) {
 
 // The shape `t` of the way from `a` to `b` (corners that morph): radii and shares blended,
 // corner by corner when either has corners of its own. Outlines switch half way.
-constexpr Shape lerp(const Shape& a, const Shape& b, float t) {
+inline Shape lerp(const Shape& a, const Shape& b, float t) {
     if (a.pathed() || b.pathed() || a.absolute != b.absolute) return t < 0.5f ? a : b;
     auto rounded = [](const Shape& s) {
         return s.kind == Shape::Kind::Circle ? Shape{Shape::Kind::Rounded, 0, 50} : s.kind == Shape::Kind::Rounded ? s : Shape{Shape::Kind::Rounded, 0, 0};
@@ -613,6 +622,29 @@ private:
 enum class PathOperation { Difference, Intersect, Union, Xor, ReverseDifference };
 
 // A shape built from lines and curves (Compose's Path), drawn with DrawScope::drawPath.
+// A corner's radius across and down (Compose's CornerRadius): a quarter ellipse, a circle's if
+// the two are equal.
+struct CornerRadius {
+    float x = 0, y = 0;
+    constexpr CornerRadius() = default;
+    constexpr CornerRadius(float radius) : x(radius), y(radius) {}
+    constexpr CornerRadius(float x, float y) : x(x), y(y) {}
+    friend constexpr bool operator==(const CornerRadius&, const CornerRadius&) = default;
+};
+
+// A rect with corners of their own (Compose's RoundRect). A side's two corners that don't fit
+// in it shrink together (all four by the same factor, as Android draws one).
+struct RoundRect {
+    Rect rect;
+    CornerRadius topLeft, topRight, bottomRight, bottomLeft;
+    // Each corner a quarter circle (as drawn: after they are fitted), and their radii.
+    bool circular() const;
+    CornerRadii radii() const;
+    // The corners shrunk to fit.
+    RoundRect fitted() const;
+    friend constexpr bool operator==(const RoundRect&, const RoundRect&) = default;
+};
+
 class Path {
 public:
     enum class FillType { NonZero, EvenOdd };
@@ -639,6 +671,7 @@ public:
     void addRect(const Rect& r);
     void addOval(const Rect& r);
     void addRoundRect(const Rect& r, float radius);
+    void addRoundRect(const RoundRect& r);  // its corners quarter ellipses
     void addPath(const Path& path, Offset offset = {});  // its contours, moved by `offset`
     void translate(Offset offset);                       // every point moved
     void reset();
@@ -664,6 +697,29 @@ private:
     std::vector<PathCommand> commands_;
     Offset current_, start_;
 };
+
+// What a Shape is in a size (Compose's Outline): a rect, a rounded rect, or any path, in dp from
+// the top left of what it is for. Backgrounds, borders, clips and shadows draw the first two as
+// themselves and the third as a path.
+struct Outline {
+    enum class Kind { Rectangle, Rounded, Generic };
+    Kind kind = Kind::Rectangle;
+    RoundRect roundRect;  // a Rectangle's rect is roundRect.rect, its corners none
+    Path path;            // Generic's
+    static Outline Rectangle(const Rect& rect) { return {Kind::Rectangle, {rect}, {}}; }
+    static Outline Rounded(const RoundRect& roundRect) { return {Kind::Rounded, roundRect, {}}; }
+    static Outline Generic(Path path) { return {Kind::Generic, {path.bounds()}, std::move(path)}; }
+    Rect bounds() const { return roundRect.rect; }
+    // As a path (a rect's or rounded rect's outline, or the path).
+    Path asPath() const;
+    friend bool operator==(const Outline&, const Outline&) = default;
+};
+
+// A shape made by a path built in its size and direction (Compose's GenericShape):
+//   GenericShape([](Path& p, Size size, LayoutDirection) { p.moveTo(size.width / 2, 0); ... })
+Shape GenericShape(std::function<void(Path& path, Size size, LayoutDirection layoutDirection)> builder);
+// A shape whose outline is made as `createOutline` says (Compose's Shape implemented).
+Shape OutlineShape(std::function<Outline(Size size, LayoutDirection layoutDirection)> createOutline);
 
 struct PathStroke {
     float width = 0;  // 0: fill
@@ -1014,18 +1070,23 @@ public:
         Rect b = outline.bounds();
         drawShadow({origin.x + b.x, origin.y + b.y, b.width, b.height}, CornerRadii(), shadow, inner);
     }
-    // A layer clipped to `outline` (from the bounds' top left; star-shaped about their middle)
-    // rather than a rounded rect. The default clips to the bounds.
+    // A layer clipped to `outline` (from the bounds' top left, any path by its fill type) rather
+    // than a rounded rect. The default clips to the bounds.
     virtual void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform = {}) {
         (void)outline;
         pushLayer(bounds, CornerRadii(), alpha, transform);
     }
 
-    // Any Shape: a rounded rect, or an outline drawn as a path. Strokes lie inside the bounds.
+    // Any Shape over a rect, by its outline there: a rect or a rounded rect whose corners are
+    // circles drawn as such, any other as a path. Strokes lie inside the bounds; a clip
+    // (pushClipShape) is popped by popClip().
     void fillShape(const Rect& rect, const Shape& shape, bool rtl, Color color);
     void fillShape(const Rect& rect, const Shape& shape, bool rtl, const Brush& brush, const Rect& brushArea);
     void strokeShape(const Rect& rect, const Shape& shape, bool rtl, float width, Color color);
+    void strokeShape(const Rect& rect, const Shape& shape, bool rtl, float width, const Brush& brush, const Rect& brushArea);
     void pushShapeLayer(const Rect& bounds, const Shape& shape, bool rtl, float alpha, const LayerTransform& transform = {});
+    void pushClipShape(const Rect& rect, const Shape& shape, bool rtl, ClipOp op = ClipOp::Intersect);
+    void drawShapeShadow(const Rect& rect, const Shape& shape, bool rtl, const Shadow& shadow, bool inner);
     // Around what each layout node draws: a recording canvas lines frames up by them (see
     // display_list.hpp); others ignore them.
     virtual void beginNode(const void* node) { (void)node; }

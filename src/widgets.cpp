@@ -1992,7 +1992,7 @@ void LinearProgressIndicator(float progress, const Modifier& modifier, std::opti
 
 // Compose 1.4's cards: 12 dp corners clipping their content; filled ones surfaceContainerHighest,
 // elevated ones surfaceContainerLow 1 dp up, outlined ones the surface in a 1 dp outlineVariant line.
-constexpr Shape kCardShape = RoundedCornerShape(12);
+const Shape kCardShape = RoundedCornerShape(12);
 
 std::optional<Color> ColorScheme::contentColorFor(Color c) const {
     const std::pair<Color, Color> pairs[] = {
@@ -2960,7 +2960,8 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
         if (kind == FieldKind::Filled) {
             d.drawRect(indicator, {0, h - indicatorWidth}, Size{s.width, indicatorWidth});
         } else if (shape.pathed()) {  // a shape of its own: all of it, no gap
-            d.drawPath(shape.outlinePath({0, 0, s.width, h}, layoutRtl), indicator, Stroke(indicatorWidth));
+            d.drawPath(shape.createOutline({s.width, h}, layoutRtl ? LayoutDirection::Rtl : LayoutDirection::Ltr).asPath(), indicator,
+                       Stroke(indicatorWidth));
         } else {
             // The outline along the shape's corners, with a gap for the floated label.
             float half = indicatorWidth / 2, x0 = half, y0 = half, x1 = s.width - half, y1 = h - half;

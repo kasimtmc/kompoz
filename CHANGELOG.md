@@ -50,6 +50,13 @@
   erased. On the GPU a rounded rect clip is worked out in the shader, a path clip read from the coverage mask. With
   SDL's software renderer `clipPath` drew the area it erased black (that renderer has no DstOut); it is now masked on
   the CPU.
+- **Shapes make outlines, as in Compose**: `Shape::createOutline(size, layoutDirection)` gives an `Outline` (`Rectangle`,
+  `Rounded` with a `RoundRect`, whose corners may be elliptical (`CornerRadius(x, y)`), or `Generic` with any `Path`);
+  `GenericShape(builder)` makes a shape from a path built in its size and direction, `OutlineShape(createOutline)` from
+  any outline; `Path::addRoundRect(RoundRect)`. Backgrounds, borders, shadows, clips and ripples all go by the outline,
+  and `clip` (and a clipping `shadow`, a bounded ripple) clips through the drawing context instead of a layer. A
+  polygon shape no longer has to be star-shaped about its middle: SDL_Renderer masks outline layers and clips with the
+  shape instead of cutting them with a fan.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

@@ -589,58 +589,12 @@ public:
         layers_.push_back(std::move(layer));
     }
 
-    // Clipped to an outline: its polygon (curves flattened) in the parent's pixels, composited
-    // through a fan from the middle as rounded layers are.
+    // Clipped to an outline: the layer keeps what the outline covers (masked as a path clip's is),
+    // then is composited as a square one.
     void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform) override {
         pushLayer(bounds, CornerRadii(), alpha, transform);
         Layer& layer = layers_.back();
-        if (!layer.texture) return;  // drawn directly: no clip
-        float x0 = layer.shape.x, y0 = layer.shape.y;
-        auto at = [&](float x, float y) { return SDL_FPoint{x0 + x * scale, y0 + y * scale}; };
-        SDL_FPoint last{};
-        for (const PathCommand& c : outline.commands()) {
-            switch (c.verb) {
-            case PathCommand::Verb::Move:
-            case PathCommand::Verb::Line: layer.outline.push_back(at(c.x, c.y)); break;
-            case PathCommand::Verb::Quad:
-            case PathCommand::Verb::Cubic:
-                for (int i = 1; i <= 8; ++i) {
-                    float t = float(i) / 8, u = 1 - t;
-                    float x = c.verb == PathCommand::Verb::Quad ? u * u * last.x + 2 * u * t * c.x1 + t * t * c.x
-                                                                : u * u * u * last.x + 3 * u * u * t * c.x1 + 3 * u * t * t * c.x2 + t * t * t * c.x;
-                    float y = c.verb == PathCommand::Verb::Quad ? u * u * last.y + 2 * u * t * c.y1 + t * t * c.y
-                                                                : u * u * u * last.y + 3 * u * u * t * c.y1 + 3 * u * t * t * c.y2 + t * t * t * c.y;
-                    layer.outline.push_back(at(x, y));
-                }
-                break;
-            case PathCommand::Verb::Close: break;
-            }
-            if (c.verb != PathCommand::Verb::Close) last = {c.x, c.y};
-        }
-        if (layer.outline.size() < 3) layer.outline.clear();
-    }
-
-    // The contour of an outline layer: its points with normals pointing out, whichever way round.
-    void outlineContour(const std::vector<SDL_FPoint>& outline) {
-        points_ = outline;
-        normals_.clear();
-        size_t n = points_.size();
-        float area = 0;
-        for (size_t i = 0; i < n; ++i) {
-            const SDL_FPoint &a = points_[i], &b = points_[(i + 1) % n];
-            area += a.x * b.y - b.x * a.y;
-        }
-        float way = area >= 0 ? 1.f : -1.f;  // clockwise on screen: out is to the left of travel
-        auto edgeNormal = [&](size_t i) {
-            const SDL_FPoint &a = points_[i], &b = points_[(i + 1) % n];
-            float dx = b.x - a.x, dy = b.y - a.y, len = std::hypot(dx, dy);
-            return len > 0 ? SDL_FPoint{way * dy / len, -way * dx / len} : SDL_FPoint{0, 0};
-        };
-        for (size_t i = 0; i < n; ++i) {
-            SDL_FPoint p = edgeNormal((i + n - 1) % n), q = edgeNormal(i);
-            float x = p.x + q.x, y = p.y + q.y, len = std::hypot(x, y);
-            normals_.push_back(len > 1e-4f ? SDL_FPoint{x / len, y / len} : q);
-        }
+        if (layer.texture) layer.clip = ClipMask{2, {}, {}, outline, {bounds.x, bounds.y}, false};  // (drawn directly: no clip)
     }
 
     // Color filters: applied here, to each color, brush and image drawn (the innermost first).
@@ -826,7 +780,6 @@ public:
         CornerRadii r{clamped(layer.radii.topLeft), clamped(layer.radii.topRight), clamped(layer.radii.bottomRight),
                       clamped(layer.radii.bottomLeft)};
         const LayerTransform& tf = layer.transform;
-        bool outlined = !layer.outline.empty();
         const auto& mx = layer.matrix;
         if (layer.matrixSet) {
             // Through pushTransform's matrix: a grid of cells small enough for SDL's software
@@ -853,7 +806,7 @@ public:
                     triangle(q, q + cells + 2, q + cells + 1);
                 }
             SDL_RenderGeometry(renderer_, t, vertices_.data(), int(vertices_.size()), indices_.data(), int(indices_.size()));
-        } else if (!outlined && r.max() < 0.5f && tf.rotationZ == 0) {
+        } else if (r.max() < 0.5f && tf.rotationZ == 0) {
             // Square and not turned: one quad, scaled about the origin and moved (the fan below
             // showed its seams through anything see-through in a scaled layer — a ripple in a
             // pulsing button).
@@ -871,10 +824,7 @@ public:
             // transparent pixels); plain blending only darkens the anti-aliased edges a little.
             if (software_) SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
             SDL_FColor c{a, a, a, a}, clear{0, 0, 0, 0};
-            if (outlined)
-                outlineContour(layer.outline);
-            else
-                contour(b.x, b.y, b.w, b.h, r);
+            contour(b.x, b.y, b.w, b.h, r);
             begin();
             // Clamped: the fringe lies half a pixel outside, and UVs beyond [0, 1] make SDL wrap.
             float tw = float(layer.texW), th = float(layer.texH);
@@ -1158,7 +1108,6 @@ private:
         float alpha;
         LayerTransform transform;
         int texW = 0, texH = 0;  // the pooled texture can be a little bigger than rect
-        std::vector<SDL_FPoint> outline;  // an outline layer's, in the parent's pixels (else rounded)
         float blurX = 0, blurY = 0;       // px: blurred as it is composited
         std::array<float, 9> matrix{};    // pushTransform's, in the parent's pixels (row by row), if matrixSet
         bool matrixSet = false;

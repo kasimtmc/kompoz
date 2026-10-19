@@ -577,7 +577,7 @@ namespace PullToRefreshDefaults {
 inline constexpr float PositionalThreshold = 80;                    // dp of indicator travel that refreshes
 inline constexpr float IndicatorMaxDistance = PositionalThreshold;  // where the indicator stands at the threshold
 inline constexpr float Elevation = 3;                               // Material level 2
-inline constexpr Shape indicatorShape = CircleShape;
+inline const Shape indicatorShape = CircleShape;
 Color indicatorContainerColor();  // surfaceContainerHigh
 Color indicatorColor();           // onSurfaceVariant
 } // namespace PullToRefreshDefaults

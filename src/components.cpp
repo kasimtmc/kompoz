@@ -937,9 +937,9 @@ void segmentedRow(const Modifier& modifier, const Content& content) {
     Row(modifier.height(room).drawWithContent([outline](ContentDrawScope& d) {
         Rect band = segmentBand(d.size()), b = d.bounds();
         band = {b.x + band.x, b.y + band.y, band.width, band.height};
-        d.context().pushShapeLayer(band, RoundedCornerShape(band.height / 2), false, 1);
+        d.context().pushClipRoundRect(band, band.height / 2);
         d.drawContent();
-        d.context().popLayer();
+        d.context().popClip();
         d.context().strokeRoundRect(band, band.height / 2, 1, outline);
     }), content);
 }

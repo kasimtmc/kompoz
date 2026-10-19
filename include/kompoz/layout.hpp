@@ -214,7 +214,6 @@ inline const CompositionLocal<Color> LocalContentColor{colors::Black};
 // and follows the finger the other way. Drawing, absoluteOffset/absolutePadding and the
 // window insets don't mirror.
 //   CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] { ... });
-enum class LayoutDirection { Ltr, Rtl };
 inline const CompositionLocal<LayoutDirection> LocalLayoutDirection{LayoutDirection::Ltr};
 // Whether a language is written right to left ("ar", "he-IL", "fa_IR", "ur"...): what the host
 // takes the app's direction from (ComposeHost::setLayoutDirection, the system's language).

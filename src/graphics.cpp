@@ -1098,9 +1098,64 @@ void Path::addRoundRect(const Rect& r, float radius) {
     close();
 }
 
+void Path::addRoundRect(const RoundRect& rr) {
+    RoundRect f = rr.fitted();
+    const Rect& r = f.rect;
+    if (f.topLeft == CornerRadius() && f.topRight == CornerRadius() && f.bottomRight == CornerRadius() && f.bottomLeft == CornerRadius())
+        return addRect(r);
+    constexpr float k = 1 - 0.5522848f;  // quarter ellipses as cubics
+    float x0 = r.x, y0 = r.y, x1 = r.right(), y1 = r.bottom();
+    CornerRadius tl = f.topLeft, tr = f.topRight, br = f.bottomRight, bl = f.bottomLeft;
+    moveTo(x0 + tl.x, y0);
+    lineTo(x1 - tr.x, y0);
+    cubicTo(x1 - tr.x * k, y0, x1, y0 + tr.y * k, x1, y0 + tr.y);
+    lineTo(x1, y1 - br.y);
+    cubicTo(x1, y1 - br.y * k, x1 - br.x * k, y1, x1 - br.x, y1);
+    lineTo(x0 + bl.x, y1);
+    cubicTo(x0 + bl.x * k, y1, x0, y1 - bl.y * k, x0, y1 - bl.y);
+    lineTo(x0, y0 + tl.y);
+    cubicTo(x0, y0 + tl.y * k, x0 + tl.x * k, y0, x0 + tl.x, y0);
+    close();
+}
+
 void Path::reset() {
     commands_.clear();
     current_ = start_ = {};
+}
+
+RoundRect RoundRect::fitted() const {
+    auto positive = [](CornerRadius c) { return CornerRadius{std::max(0.f, c.x), std::max(0.f, c.y)}; };
+    RoundRect f{rect, positive(topLeft), positive(topRight), positive(bottomRight), positive(bottomLeft)};
+    // The largest factor that fits every side's two corners in it, as Android draws a RoundRect.
+    float k = 1;
+    auto fit = [&](float side, float a, float b) {
+        if (a + b > side && a + b > 0) k = std::min(k, std::max(0.f, side) / (a + b));
+    };
+    fit(rect.width, f.topLeft.x, f.topRight.x);
+    fit(rect.width, f.bottomLeft.x, f.bottomRight.x);
+    fit(rect.height, f.topLeft.y, f.bottomLeft.y);
+    fit(rect.height, f.topRight.y, f.bottomRight.y);
+    if (k < 1)
+        for (CornerRadius* c : {&f.topLeft, &f.topRight, &f.bottomRight, &f.bottomLeft}) c->x *= k, c->y *= k;
+    return f;
+}
+
+bool RoundRect::circular() const {
+    RoundRect f = fitted();
+    return f.topLeft.x == f.topLeft.y && f.topRight.x == f.topRight.y && f.bottomRight.x == f.bottomRight.y && f.bottomLeft.x == f.bottomLeft.y;
+}
+
+CornerRadii RoundRect::radii() const {
+    RoundRect f = fitted();
+    return {f.topLeft.x, f.topRight.x, f.bottomRight.x, f.bottomLeft.x};
+}
+
+Path Outline::asPath() const {
+    if (kind == Kind::Generic) return path;
+    Path p;
+    if (kind == Kind::Rectangle) p.addRect(roundRect.rect);
+    else p.addRoundRect(roundRect);
+    return p;
 }
 
 Rect Path::bounds() const {
@@ -1133,12 +1188,21 @@ bool operator==(const Path& a, const Path& b) {
 
 // ---- Shapes ------------------------------------------------------------------------------------
 
-Path Shape::outlinePath(const Rect& r, bool rtl) const {
-    Path path;
-    if (absolute) rtl = false;
-    if (kind == Kind::Cut) {  // as rounded corners fit (a side's two cuts within the shorter side), cut straight
+Outline Shape::createOutline(Size size, LayoutDirection layoutDirection) const {
+    Rect r{0, 0, size.width, size.height};
+    bool rtl = layoutDirection == LayoutDirection::Rtl && !absolute;
+    switch (kind) {
+    case Kind::Rectangle: return Outline::Rectangle(r);
+    case Kind::Rounded:
+    case Kind::Circle: {
+        CornerRadii c = radiiFor(r, layoutDirection == LayoutDirection::Rtl);
+        if (c.max() <= 0) return Outline::Rectangle(r);
+        return Outline::Rounded({r, c.topLeft, c.topRight, c.bottomRight, c.bottomLeft});
+    }
+    case Kind::Cut: {  // as rounded corners fit (a side's two cuts within the shorter side), cut straight
         CornerRadii c = cornersFor(r, rtl);
         float tl = c.topLeft, tr = c.topRight, br = c.bottomRight, bl = c.bottomLeft, w = r.width, h = r.height;
+        Path path;
         path.moveTo(tl, 0);
         path.lineTo(w - tr, 0);
         path.lineTo(w, tr);
@@ -1148,49 +1212,111 @@ Path Shape::outlinePath(const Rect& r, bool rtl) const {
         path.lineTo(0, h - bl);
         path.lineTo(0, tl);
         path.close();
-        return path;
+        return Outline::Generic(std::move(path));
     }
-    if (!outline || outline->points.size() < 3) {
-        path.addRect({0, 0, r.width, r.height});
-        return path;
+    case Kind::Outline: {
+        if (!outline || outline->points.size() < 3) return Outline::Rectangle(r);
+        Path path;
+        bool first = true;
+        for (Offset u : outline->points) {
+            float x = (rtl ? 1 - u.x : u.x) * r.width, y = u.y * r.height;
+            first ? path.moveTo(x, y) : path.lineTo(x, y);
+            first = false;
+        }
+        path.close();
+        return Outline::Generic(std::move(path));
     }
-    bool first = true;
-    for (Offset u : outline->points) {
-        float x = (rtl ? 1 - u.x : u.x) * r.width, y = u.y * r.height;
-        first ? path.moveTo(x, y) : path.lineTo(x, y);
-        first = false;
+    case Kind::Generic: return generic ? (*generic)(size, layoutDirection) : Outline::Rectangle(r);
     }
-    path.close();
-    return path;
+    return Outline::Rectangle(r);
 }
 
+Shape GenericShape(std::function<void(Path& path, Size size, LayoutDirection layoutDirection)> builder) {
+    return OutlineShape([builder = std::move(builder)](Size size, LayoutDirection direction) {
+        Path path;
+        builder(path, size, direction);
+        return Outline::Generic(std::move(path));
+    });
+}
+
+Shape OutlineShape(std::function<Outline(Size size, LayoutDirection layoutDirection)> createOutline) {
+    Shape s{Shape::Kind::Generic};
+    s.generic = std::make_shared<const std::function<Outline(Size, LayoutDirection)>>(std::move(createOutline));
+    return s;
+}
+
+namespace {
+// A shape's outline over `rect`, and whether it is drawn as a rounded rect (its corners circles).
+struct Placed {
+    Outline outline;
+    bool rounded;
+    CornerRadii radii;
+};
+Placed place(const Rect& rect, const Shape& shape, bool rtl) {
+    Placed p{shape.createOutline({rect.width, rect.height}, rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr), false, {}};
+    p.rounded = p.outline.kind == Outline::Kind::Rectangle || (p.outline.kind == Outline::Kind::Rounded && p.outline.roundRect.circular());
+    if (p.outline.kind == Outline::Kind::Rounded) p.radii = p.outline.roundRect.radii();
+    return p;
+}
+// The path a stroke `width` wide goes along so that it lies inside the shape over `rect` (from
+// the rect's top left): the shape made half the width smaller, or its rounded rect with the
+// corners that much smaller.
+Path strokedPath(const Rect& rect, const Shape& shape, bool rtl, float width) {
+    float h = width / 2;
+    Size inner{std::max(0.f, rect.width - width), std::max(0.f, rect.height - width)};
+    Outline full = shape.createOutline({rect.width, rect.height}, rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr);
+    Path path;
+    if (full.kind == Outline::Kind::Generic) {
+        path = shape.createOutline(inner, rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr).asPath();
+        path.translate({h, h});
+        return path;
+    }
+    RoundRect f = full.roundRect.fitted();
+    auto less = [h](CornerRadius c) { return CornerRadius{std::max(0.f, c.x - h), std::max(0.f, c.y - h)}; };
+    path.addRoundRect({{h, h, inner.width, inner.height}, less(f.topLeft), less(f.topRight), less(f.bottomRight), less(f.bottomLeft)});
+    return path;
+}
+} // namespace
+
 void GraphicsContext::fillShape(const Rect& rect, const Shape& shape, bool rtl, Color color) {
-    if (shape.pathed())
-        drawPath(shape.outlinePath(rect, rtl), {rect.x, rect.y}, Brush::solid(color), rect, PathStroke{});
-    else
-        fillRoundRect(rect, shape.radiiFor(rect, rtl), color);
+    Placed p = place(rect, shape, rtl);
+    if (p.rounded) fillRoundRect(rect, p.radii, color);
+    else drawPath(p.outline.asPath(), {rect.x, rect.y}, Brush::solid(color), rect, PathStroke{});
 }
 
 void GraphicsContext::fillShape(const Rect& rect, const Shape& shape, bool rtl, const Brush& brush, const Rect& brushArea) {
-    if (shape.pathed())
-        drawPath(shape.outlinePath(rect, rtl), {rect.x, rect.y}, brush, brushArea, PathStroke{});
-    else
-        fillGradient(rect, shape.radiiFor(rect, rtl), brush, brushArea);
+    Placed p = place(rect, shape, rtl);
+    if (p.rounded) fillGradient(rect, p.radii, brush, brushArea);
+    else drawPath(p.outline.asPath(), {rect.x, rect.y}, brush, brushArea, PathStroke{});
 }
 
 void GraphicsContext::strokeShape(const Rect& rect, const Shape& shape, bool rtl, float width, Color color) {
-    if (!shape.pathed()) return strokeRoundRect(rect, shape.radiiFor(rect, rtl), width, color);
-    float h = width / 2;  // the line's middle half its width inside, as a rounded rect's
-    Rect inner{rect.x + h, rect.y + h, std::max(0.f, rect.width - width), std::max(0.f, rect.height - width)};
-    drawPath(shape.outlinePath(inner, rtl), {inner.x, inner.y}, Brush::solid(color), rect,
-             PathStroke{.width = width, .join = StrokeJoin::Round});
+    Placed p = place(rect, shape, rtl);
+    if (p.rounded) return strokeRoundRect(rect, p.radii, width, color);
+    strokeShape(rect, shape, rtl, width, Brush::solid(color), rect);
+}
+
+void GraphicsContext::strokeShape(const Rect& rect, const Shape& shape, bool rtl, float width, const Brush& brush, const Rect& brushArea) {
+    drawPath(strokedPath(rect, shape, rtl, width), {rect.x, rect.y}, brush, brushArea, PathStroke{.width = width, .join = StrokeJoin::Round});
 }
 
 void GraphicsContext::pushShapeLayer(const Rect& bounds, const Shape& shape, bool rtl, float alpha, const LayerTransform& transform) {
-    if (shape.pathed())
-        pushOutlineLayer(bounds, shape.outlinePath(bounds, rtl), alpha, transform);
-    else
-        pushLayer(bounds, shape.radiiFor(bounds, rtl), alpha, transform);
+    Placed p = place(bounds, shape, rtl);
+    if (p.rounded) pushLayer(bounds, p.radii, alpha, transform);
+    else pushOutlineLayer(bounds, p.outline.asPath(), alpha, transform);
+}
+
+void GraphicsContext::pushClipShape(const Rect& rect, const Shape& shape, bool rtl, ClipOp op) {
+    Placed p = place(rect, shape, rtl);
+    if (p.rounded && op == ClipOp::Intersect && p.radii.max() <= 0) pushClip(rect);
+    else if (p.rounded) pushClipRoundRect(rect, p.radii, op);
+    else pushClipPath(p.outline.asPath(), {rect.x, rect.y}, op);
+}
+
+void GraphicsContext::drawShapeShadow(const Rect& rect, const Shape& shape, bool rtl, const Shadow& shadow, bool inner) {
+    Placed p = place(rect, shape, rtl);
+    if (p.rounded) drawShadow(rect, p.radii, shadow, inner);
+    else drawShadowPath(p.outline.asPath(), {rect.x, rect.y}, shadow, inner);
 }
 
 } // namespace kompoz
