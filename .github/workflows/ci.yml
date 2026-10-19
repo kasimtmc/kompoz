@@ -81,6 +81,9 @@ jobs:
         env:
           SDL_VIDEO_DRIVER: offscreen
           SDL_RENDER_DRIVER: software
+          # ASan still checks every access; only the leak report at exit is off: it lists what Mesa's EGL and
+          # ALSA allocate in libraries already unloaded by then. Kompoz's own leaks are checked by the tests.
+          ASAN_OPTIONS: detect_leaks=0
         run: KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo && test -s shot.png
 
   windows:
