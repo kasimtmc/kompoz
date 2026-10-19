@@ -18,13 +18,13 @@ enum Kind { FILL = 0, STROKE = 1, LINE = 2, ARC = 3, SHADOW = 4, GLYPH = 5, IMAG
 
 constexpr int kMaxLayer = 4096;  // px: a bigger layer is drawn straight into its target
 
-const ShaderCode kVertex{shaders::primitives_vs_spirv, shaders::primitives_vs_dxil, shaders::primitives_vs_msl,
+const ShaderCode kVertex{shaders::primitives_vs_spirv, shaders::primitives_vs_msl,
                          shaders::primitives_vs_glsl, shaders::primitives_vs_wgsl, "vs"};
-const ShaderCode kFragment{shaders::primitives_fs_spirv, shaders::primitives_fs_dxil, shaders::primitives_fs_msl,
+const ShaderCode kFragment{shaders::primitives_fs_spirv, shaders::primitives_fs_msl,
                            shaders::primitives_fs_glsl, shaders::primitives_fs_wgsl, "fs"};
-const ShaderCode kCoverageVertex{shaders::path_vs_spirv, shaders::path_vs_dxil, shaders::path_vs_msl, shaders::path_vs_glsl,
+const ShaderCode kCoverageVertex{shaders::path_vs_spirv, shaders::path_vs_msl, shaders::path_vs_glsl,
                                  shaders::path_vs_wgsl, "vs"};
-const ShaderCode kCoverageFragment{shaders::path_fs_spirv, shaders::path_fs_dxil, shaders::path_fs_msl, shaders::path_fs_glsl,
+const ShaderCode kCoverageFragment{shaders::path_fs_spirv, shaders::path_fs_msl, shaders::path_fs_glsl,
                                    shaders::path_fs_wgsl, "fs"};
 
 constexpr int kMaskSize = 2048;  // a generation's mask is at least this big each way (px), and at least its target's size

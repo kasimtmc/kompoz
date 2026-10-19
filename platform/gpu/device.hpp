@@ -1,7 +1,8 @@
 #pragma once
 
 // The GPU renderer's hardware layer: the little of a graphics API the renderer needs, implemented
-// once for each native API (Vulkan, Direct3D 12, Metal, OpenGL ES 3 / WebGL 2, WebGPU). It is
+// once for each native API: Vulkan (Linux, Windows, Android), Metal (Apple), WebGPU (the web), and
+// OpenGL ES 3 where there is none of those (old GPUs; WebGL 2; ANGLE on Windows). It is
 // explicit like those APIs and small: textures, pipelines made up front, render passes that say
 // which textures they read, and per-frame memory for what the CPU hands the GPU once. The
 // renderer (renderer.hpp) does the rest.
@@ -27,7 +28,7 @@
 
 namespace kompoz::gpu {
 
-enum class Backend { Vulkan, D3D12, Metal, GLES, WebGPU };
+enum class Backend { Vulkan, Metal, GLES, WebGPU };
 const char* backendName(Backend backend);
 
 // 8 bits a channel, not sRGB-encoded: colors are blended as they are stored, as Android and Skia
@@ -66,10 +67,10 @@ struct Sampler {
     bool operator==(const Sampler&) const = default;
 };
 
-// An entry point's code for each backend (from scripts/shaders.py): SPIR-V, DXIL, MSL source,
-// GLSL ES 3.00 source, WGSL source (the sources end in a NUL).
+// An entry point's code for each backend (from scripts/shaders.py): SPIR-V, MSL source, GLSL ES
+// 3.00 source, WGSL source (the sources end in a NUL).
 struct ShaderCode {
-    std::span<const unsigned char> spirv, dxil, msl, glsl, wgsl;
+    std::span<const unsigned char> spirv, msl, glsl, wgsl;
     const char* entry = "main";
 };
 
@@ -156,7 +157,7 @@ public:
     virtual std::string deviceName() const = 0;
     // Errors the API's validation reported so far (with KOMPOZ_GPU_VALIDATION=1; tests want none).
     virtual int validationErrors() const { return 0; }
-    // In clip space y goes up (Direct3D, Metal, OpenGL, WebGPU) or down (Vulkan): the renderer
+    // In clip space y goes up (Metal, OpenGL, WebGPU) or down (Vulkan): the renderer
     // flips its projection for the second.
     virtual bool clipYDown() const = 0;
     // A render target's rows are stored bottom up when sampled (OpenGL): the renderer flips

@@ -19,7 +19,7 @@
   run and clicked (in a real window on Windows and macOS, where Kompoz now runs, and offscreen on macOS too). `CONTRIBUTING.md`, issue forms and
   `scripts/release.sh` for publishing a release's packages.
 - **Kompoz's own GPU renderer**, being built (`KOMPOZ_GPU=vulkan`): one core over a thin layer per native graphics
-  API, Vulkan first (Direct3D 12, Metal, OpenGL ES 3 / WebGL 2 and WebGPU to come). Rounded rects, borders, lines, arcs,
+  API: Vulkan on Linux, Windows and Android first, then Metal on Apple's systems, WebGPU on the web, and OpenGL ES 3 where there is none of those (old GPUs, WebGL 2, ANGLE on Windows). Rounded rects, borders, lines, arcs,
   shadows, text, images, clips and layers are drawn on the GPU with exact anti-aliasing (a straight edge at any angle
   cuts each pixel as exactly as a path's polygon does, a square corner as its two edges, a ring or a line thinner than a
   pixel covers as much as it is wide), and paths too: filled by the

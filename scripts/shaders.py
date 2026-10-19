@@ -4,11 +4,11 @@ them in C++ headers (platform/gpu/shaders/generated/*.h), which are committed: b
 none of the tools below, only changing a shader does.
 
 Each shader is written once in Slang and compiled to
-  SPIR-V (Vulkan), DXIL (Direct3D 12, through DXC), MSL (Metal), WGSL (WebGPU) and, from the SPIR-V
-  through SPIRV-Cross, GLSL ES 3.00 (OpenGL ES 3 and WebGL 2).
+  SPIR-V (Vulkan), MSL (Metal), WGSL (WebGPU) and, from the SPIR-V through SPIRV-Cross, GLSL ES 3.00
+  (OpenGL ES 3 and WebGL 2, and through ANGLE where there is no Vulkan on Windows).
 The tools are downloaded at pinned versions (checked against their SHA-256) into
-third_party/.tools/, SPIRV-Cross built from its source there. Linux x86-64 only: DXC and Slang's
-releases are used as they come.
+third_party/.tools/, SPIRV-Cross built from its source there. Linux x86-64 only: Slang's release
+is used as it comes.
 
   scripts/shaders.py           compile and write the headers
   scripts/shaders.py --check   compile and fail if a header differs from what is committed (CI)
@@ -33,9 +33,6 @@ TOOLS = ROOT / "third_party" / ".tools"
 SLANG = ("2026.20",
          "https://github.com/shader-slang/slang/releases/download/v2026.20/slang-2026.20-linux-x86_64.tar.gz",
          "e863e568c204810d6e8bc31852f056aef6763c55ea9925db2db7affa060347c9")
-DXC = ("1.9.2609",
-       "https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2609/linux_dxc_2026_09_28.x86_x64.tar.gz",
-       "96faadc7f5c282d2ffda49804beb4c3ee38127bc252b723234e3c5cdf7aa39a1")
 SPIRV_CROSS = ("vulkan-sdk-1.4.363.0",
                "https://github.com/KhronosGroup/SPIRV-Cross/archive/refs/tags/vulkan-sdk-1.4.363.0.tar.gz",
                "f708982e88b763ef5b0394ed468fc2c3628f68cdab89f2e7a946cd628c04e721")
@@ -94,12 +91,11 @@ def entry_points(source):
 
 def compile_shader(source, stage, entry, tools, work):
     """{target: bytes} for one entry point."""
-    slangc, dxc_lib, cross = tools
+    slangc, cross = tools
     base = work / f"{source.stem}-{entry}"
-    env = dict(os.environ, LD_LIBRARY_PATH=f"{dxc_lib}:{os.environ.get('LD_LIBRARY_PATH', '')}")
 
     def run(command):
-        result = subprocess.run(command, env=env, capture_output=True)
+        result = subprocess.run(command, capture_output=True)
         if result.returncode != 0:
             sys.exit(f"{source.name} ({entry}): {Path(command[0]).name} failed\n{result.stderr.decode()}{result.stdout.decode()}")
         return result.stdout
@@ -114,7 +110,6 @@ def compile_shader(source, stage, entry, tools, work):
     # SPIR-V 1.3: what Vulkan 1.1 takes (every Vulkan Android device); entry points named as on the
     # other targets.
     out = {"spirv": slang("spirv", "spv", "-DKOMPOZ_SPIRV", "-profile", "spirv_1_3", "-fvk-use-entrypoint-name"),
-           "dxil": slang("dxil", "dxil", "-profile", "sm_6_0"),
            "msl": slang("metal", "metal"),
            "wgsl": slang("wgsl", "wgsl")}
     if stage != "compute":  # OpenGL ES 3.0 and WebGL 2 have no compute shaders
@@ -149,11 +144,10 @@ def main():
     parser.add_argument("--check", action="store_true", help="fail if a committed header is out of date")
     args = parser.parse_args()
     if sys.platform != "linux" or os.uname().machine != "x86_64":
-        sys.exit("scripts/shaders.py runs on Linux x86-64 (where Slang's and DXC's releases run)")
+        sys.exit("scripts/shaders.py runs on Linux x86-64 (where Slang's release runs)")
 
     slang = fetch("slang", SLANG)
-    dxc = fetch("dxc", DXC)
-    tools = (slang / "bin" / "slangc", dxc / "lib", spirv_cross())
+    tools = (slang / "bin" / "slangc", spirv_cross())
     work = TOOLS / "shader-build"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)

@@ -24,7 +24,6 @@ void log(const std::string& message) {
 const char* backendName(Backend backend) {
     switch (backend) {
     case Backend::Vulkan: return "vulkan";
-    case Backend::D3D12: return "d3d12";
     case Backend::Metal: return "metal";
     case Backend::GLES: return "gles";
     case Backend::WebGPU: return "webgpu";
