@@ -106,11 +106,14 @@ def compile_shader(source, stage, entry, tools, work):
 
     def slang(target, suffix, *extra):
         out = Path(f"{base}.{suffix}")
+        # No #line directives: they would carry this machine's path into the sources.
         run([str(slangc), str(source), "-entry", entry, "-stage", stage, "-target", target, "-O2",
-             "-matrix-layout-row-major", "-o", str(out), *extra])
+             "-matrix-layout-row-major", "-line-directive-mode", "none", "-o", str(out), *extra])
         return out.read_bytes()
 
-    out = {"spirv": slang("spirv", "spv", "-DKOMPOZ_SPIRV", "-fvk-use-entrypoint-name"),  # (named as on the other targets)
+    # SPIR-V 1.3: what Vulkan 1.1 takes (every Vulkan Android device); entry points named as on the
+    # other targets.
+    out = {"spirv": slang("spirv", "spv", "-DKOMPOZ_SPIRV", "-profile", "spirv_1_3", "-fvk-use-entrypoint-name"),
            "dxil": slang("dxil", "dxil", "-profile", "sm_6_0"),
            "msl": slang("metal", "metal"),
            "wgsl": slang("wgsl", "wgsl")}
