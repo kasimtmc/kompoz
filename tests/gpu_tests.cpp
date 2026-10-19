@@ -451,6 +451,57 @@ void fractionalDensity(GraphicsContext& c) {  // at 2.625 px per dp, as a phone'
 
 // --- Exact checks --------------------------------------------------------------------------------
 
+// How much of each pixel of a w x h picture polygons (each closed) cover by the non-zero rule:
+// along 64 lines across each row of pixels, exactly where each line is inside.
+std::vector<float> coverageOf(const std::vector<gpu::Contour>& polygons, int w, int h) {
+    std::vector<float> out(size_t(w) * size_t(h), 0.f);
+    std::vector<std::pair<float, int>> crossings;
+    for (int y = 0; y < h; ++y)
+        for (int j = 0; j < 64; ++j) {
+            float line = float(y) + (float(j) + 0.5f) / 64;
+            crossings.clear();
+            for (const gpu::Contour& c : polygons)
+                for (size_t i = 0, n = c.points.size(); i < n; ++i) {
+                    Offset a = c.points[i], b = c.points[(i + 1) % n];
+                    if ((a.y <= line) != (b.y <= line)) crossings.push_back({a.x + (b.x - a.x) * (line - a.y) / (b.y - a.y), b.y > a.y ? 1 : -1});
+                }
+            std::sort(crossings.begin(), crossings.end());
+            int winding = 0;
+            for (size_t k = 0; k + 1 < crossings.size(); ++k) {
+                winding += crossings[k].second;
+                if (winding == 0) continue;
+                float from = std::max(crossings[k].first, 0.f), to = std::min(crossings[k + 1].first, float(w));
+                for (int x = int(std::floor(from)); x < w && float(x) < to; ++x)
+                    out[size_t(y) * size_t(w) + size_t(x)] += (std::min(to, float(x + 1)) - std::max(from, float(x))) / 64;
+            }
+        }
+    return out;
+}
+
+// The largest difference between two pictures, the second's pixels found where `at` says (and
+// those `skip` says left out).
+Offset worstAt;  // where worstAgainst found its largest difference
+int worstAgainst(const Pixels& a, const std::function<const uint8_t*(int x, int y)>& at,
+                 const std::function<bool(int x, int y)>& skip = nullptr) {
+    int worst = 0;
+    for (int y = 0; y < a.height; ++y)
+        for (int x = 0; x < a.width; ++x) {
+            int d = skip && skip(x, y) ? 0 : maxDifference(a.at(x, y), at(x, y));
+            if (d > worst) worst = d, worstAt = {float(x), float(y)};
+        }
+    return worst;
+}
+
+// Pixels within 1.5 px of any of `corners`.
+std::function<bool(int, int)> around(std::vector<Offset> corners) {
+    return [corners](int x, int y) {
+        for (Offset c : corners)
+            if (std::abs(float(x) + 0.5f - c.x) < 1.5f && std::abs(float(y) + 0.5f - c.y) < 1.5f) return true;
+        return false;
+    };
+}
+
+
 void edgesAreCoveredExactly(Gpu& g) {
     Pixels p = g.render(64, 32, 1, [](GraphicsContext& c) {
         c.fillRoundRect({4, 4, 10, 10}, 0, Color{1, 0, 0, 1});      // whole pixels
@@ -466,6 +517,61 @@ void edgesAreCoveredExactly(Gpu& g) {
     CHECK(near(p.at(30, 8), 255, 128, 128));
     CHECK(near(p.at(25, 8), 255, 0, 0));
     CHECK(near(p.at(45, 4), 64, 64, 255));    // three quarters covered
+}
+
+// A straight edge at any angle cuts each pixel's box exactly (a slanted line's sides, a turned
+// rect's, as a path's polygon covers it), a corner square to the screen as its two edges'
+// product, and a ring thinner than a pixel covers as much as it is wide.
+void edgesCutPixelsExactly(Gpu& g) {
+    Color red{1, 0, 0, 1};
+    Pixels p = g.render(64, 64, 1, [&](GraphicsContext& c) {
+        c.fillRoundRect({4.5f, 4.25f, 8, 8}, 0, red);                     // a corner half and three quarters in
+        c.strokeRoundRect({20, 4, 12, 12}, 0, 0.5f, red);                // half a pixel wide: its corner three quarters
+        c.drawLine({6, 40}, {30, 26}, 3, red);                           // slanted
+        c.fillRoundRect({40.5f, 4.25f, 8, 8}, 0.4f, red);                // rounded by less than a pixel
+    });
+    CHECK(near(p.at(4, 4), 255, 159, 159));    // 0.5 x 0.75
+    // Rounded by 0.4 px, the corner covers a little less than the square one (0.375 - 0.034):
+    // the circle's edge alone would make it more.
+    CHECK(p.at(40, 4)[1] >= 159 && p.at(40, 4)[1] <= 175);
+    CHECK(near(p.at(20, 4), 255, 64, 64));     // 0.5 + 0.5 - 0.25
+    CHECK(near(p.at(26, 4), 255, 128, 128));   // the side: half
+    // The line's sides as its polygon covers them (its square caps' corners aside).
+    float len = std::hypot(24.f, -14.f), ux = 24 / len * 1.5f, uy = -14 / len * 1.5f;
+    std::vector<Offset> box{{6 - ux + uy, 40 - uy - ux}, {30 + ux + uy, 26 + uy - ux}, {30 + ux - uy, 26 + uy + ux}, {6 - ux - uy, 40 - uy + ux}};
+    std::vector<float> want = coverageOf({{box, true}}, 64, 64);
+    auto corners = around(box);
+    int worst = 0;
+    for (int y = 20; y < 48; ++y)
+        for (int x = 0; x < 40; ++x)
+            if (!corners(x, y)) worst = std::max(worst, std::abs(int(p.at(x, y)[1]) - int(std::lround(255 * (1 - want[size_t(y * 64 + x)])))));
+    CHECK(worst <= 3);
+    if (worst > 3) std::printf("  slanted line: off by %d\n", worst);
+    // A rect turned 30 degrees, against its polygon (the corners aside).
+    Matrix turn;
+    turn.translate(40, 40);
+    turn.rotateZ(30);
+    turn.translate(-40, -40);
+    Pixels t = g.render(64, 64, 1, [&](GraphicsContext& c) {
+        c.pushTransform(turn);
+        c.fillRoundRect({30, 34, 20, 12}, 0, red);
+        c.popTransform();
+    });
+    std::vector<Offset> quad{turn.map(Offset{30, 34}), turn.map(Offset{50, 34}), turn.map(Offset{50, 46}), turn.map(Offset{30, 46})};
+    want = coverageOf({{quad, true}}, 64, 64);
+    corners = around(quad);
+    worst = 0;
+    for (int y = 0; y < 64; ++y)
+        for (int x = 0; x < 64; ++x)
+            if (!corners(x, y)) worst = std::max(worst, std::abs(int(t.at(x, y)[1]) - int(std::lround(255 * (1 - want[size_t(y * 64 + x)])))));
+    CHECK(worst <= 3);
+    if (worst > 3) std::printf("  turned rect: off by %d\n", worst);
+    // A ring half a pixel wide covers 2 pi r 0.5.
+    Pixels ring = g.render(64, 64, 1, [&](GraphicsContext& c) { c.drawArc({12, 12, 40, 40}, 0, 360, 0.5f, red, false); });
+    float area = 0;
+    for (int y = 0; y < 64; ++y)
+        for (int x = 0; x < 64; ++x) area += float(255 - ring.at(x, y)[1]) / 255;
+    CHECK(std::abs(area - 2 * 3.14159265f * 20 * 0.5f) < 0.6f);
 }
 
 void layerAlphaIsExact(Gpu& g) {
@@ -538,33 +644,6 @@ void pathsAreCoveredExactly(Gpu& g) {
     CHECK(near(p.at(10, 31), 255, 255, 255));
     CHECK(near(p.at(3, 29), 255, 255, 255));   // butt: nothing past the ends
     CHECK(near(p.at(20, 29), 255, 255, 255));
-}
-
-// How much of each pixel of a w x h picture polygons (each closed) cover by the non-zero rule:
-// along 64 lines across each row of pixels, exactly where each line is inside.
-std::vector<float> coverageOf(const std::vector<gpu::Contour>& polygons, int w, int h) {
-    std::vector<float> out(size_t(w) * size_t(h), 0.f);
-    std::vector<std::pair<float, int>> crossings;
-    for (int y = 0; y < h; ++y)
-        for (int j = 0; j < 64; ++j) {
-            float line = float(y) + (float(j) + 0.5f) / 64;
-            crossings.clear();
-            for (const gpu::Contour& c : polygons)
-                for (size_t i = 0, n = c.points.size(); i < n; ++i) {
-                    Offset a = c.points[i], b = c.points[(i + 1) % n];
-                    if ((a.y <= line) != (b.y <= line)) crossings.push_back({a.x + (b.x - a.x) * (line - a.y) / (b.y - a.y), b.y > a.y ? 1 : -1});
-                }
-            std::sort(crossings.begin(), crossings.end());
-            int winding = 0;
-            for (size_t k = 0; k + 1 < crossings.size(); ++k) {
-                winding += crossings[k].second;
-                if (winding == 0) continue;
-                float from = std::max(crossings[k].first, 0.f), to = std::min(crossings[k + 1].first, float(w));
-                for (int x = int(std::floor(from)); x < w && float(x) < to; ++x)
-                    out[size_t(y) * size_t(w) + size_t(x)] += (std::min(to, float(x + 1)) - std::max(from, float(x))) / 64;
-            }
-        }
-    return out;
 }
 
 // A stroke covers each pixel as much as what its outline encloses does by the non-zero rule:
@@ -836,29 +915,6 @@ void mixed(GraphicsContext& c, bool withShadow = true) {
 }
 
 // The largest difference between two pictures, the second's pixels found where `at` says.
-// The largest difference between two pictures, the second's pixels found where `at` says (and
-// those `skip` says left out).
-Offset worstAt;  // where worstAgainst found its largest difference
-int worstAgainst(const Pixels& a, const std::function<const uint8_t*(int x, int y)>& at,
-                 const std::function<bool(int x, int y)>& skip = nullptr) {
-    int worst = 0;
-    for (int y = 0; y < a.height; ++y)
-        for (int x = 0; x < a.width; ++x) {
-            int d = skip && skip(x, y) ? 0 : maxDifference(a.at(x, y), at(x, y));
-            if (d > worst) worst = d, worstAt = {float(x), float(y)};
-        }
-    return worst;
-}
-
-// Pixels within 1.5 px of any of `corners`.
-std::function<bool(int, int)> around(std::vector<Offset> corners) {
-    return [corners](int x, int y) {
-        for (Offset c : corners)
-            if (std::abs(float(x) + 0.5f - c.x) < 1.5f && std::abs(float(y) + 0.5f - c.y) < 1.5f) return true;
-        return false;
-    };
-}
-
 // Everything drawn through a transform is the same as without it, moved: turned a quarter about
 // the middle, each pixel is where the turn takes it; mirrored, where the mirror does; enlarged
 // twice, it is what 2 px per dp draws (shadows aside: their blur grows with the transform, as in
@@ -940,9 +996,10 @@ void transformedEdgesAreExact(Gpu& g) {
         c.popTransform();
     });
     CHECK(near(shrunk.at(6, 1), 255, 230, 230));
-    // An arc and a line stretched: each pixel covered as much as 16 x 16 samples of the shapes
-    // through the transform say (as near as a distance's straight ramp gets to a slanted edge's
-    // coverage: 11 / 255 at 45 degrees).
+    // An arc and a line stretched: each pixel covered within 5 / 255 of what 64 x 64 samples of
+    // the shapes through the transform say (the most at the ring's ends, which bend round in 3 px),
+    // but for the line's corners, no longer square on the screen, where its two edges' coverages
+    // multiplied are only near.
     Matrix stretch = about(32, 32, [](Matrix& m) { m.scale(2, 0.75f); });
     Pixels shapes = g.render(64, 64, 1, [&](GraphicsContext& c) {
         c.pushTransform(stretch);
@@ -958,17 +1015,24 @@ void transformedEdgesAreExact(Gpu& g) {
         float along = ((p.x - 18) * 28 + (p.y - 50) * 6) / std::hypot(28.f, 6.f), across = ((p.y - 50) * 28 - (p.x - 18) * 6) / std::hypot(28.f, 6.f);
         return (r >= 10 && r <= 14) || (along >= -1.5f && along <= std::hypot(28.f, 6.f) + 1.5f && std::abs(across) <= 1.5f);
     };
+    float lineLength = std::hypot(28.f, 6.f), ux = 28 / lineLength * 1.5f, uy = 6 / lineLength * 1.5f;  // along it, half its width
+    std::vector<Offset> lineCorners;
+    for (Offset c : {Offset{18 - ux + uy, 50 - uy - ux}, Offset{46 + ux + uy, 56 + uy - ux}, Offset{46 + ux - uy, 56 + uy + ux},
+                     Offset{18 - ux - uy, 50 - uy + ux}})
+        lineCorners.push_back(stretch.map(c));
+    auto skip = around(lineCorners);
     int worstShape = 0;
     for (int y = 0; y < 64; ++y)
         for (int x = 0; x < 64; ++x) {
+            if (skip(x, y)) continue;
             int in = 0;
-            for (int j = 0; j < 16; ++j)
-                for (int i = 0; i < 16; ++i) in += inside(float(x) + (float(i) + 0.5f) / 16, float(y) + (float(j) + 0.5f) / 16);
-            int want = int(std::lround(255 * (1 - float(in) / 256)));
+            for (int j = 0; j < 64; ++j)
+                for (int i = 0; i < 64; ++i) in += inside(float(x) + (float(i) + 0.5f) / 64, float(y) + (float(j) + 0.5f) / 64);
+            int want = int(std::lround(255 * (1 - float(in) / 4096)));
             worstShape = std::max(worstShape, std::abs(int(shapes.at(x, y)[1]) - want));
         }
-    CHECK(worstShape <= 16);
-    if (worstShape > 16) std::printf("  stretched arc and line: off by %d\n", worstShape);
+    CHECK(worstShape <= 5);
+    if (worstShape > 5) std::printf("  stretched arc and line: off by %d\n", worstShape);
     if (worstShape > 16) std::printf("  stretched arc and line: off by %d at (%g, %g)\n", worstShape, worstAt.x, worstAt.y);
     Matrix turn = about(32, 32, [](Matrix& m) { m.rotateZ(30); });
     Pixels turned = g.render(64, 64, 1, [&](GraphicsContext& c) {
@@ -1009,8 +1073,8 @@ void transformedEdgesAreExact(Gpu& g) {
     area = std::abs(area) / 2;
     CHECK(std::abs(coveredArea(far) - area) < area * 0.005f + 1);
     // A path through the same transform: projected on the CPU, covered exactly. The same pixels,
-    // but for what a distance's straight ramp makes of a slanted edge (up to 11 / 255 at 45
-    // degrees) and of a corner.
+    // but at the corners, which perspective has made other than square (there the two edges'
+    // coverages multiplied are only near).
     Pixels farPath = g.render(64, 64, 1, [&](GraphicsContext& c) {
         Path p;
         p.addRect(r);
@@ -1018,10 +1082,11 @@ void transformedEdgesAreExact(Gpu& g) {
         c.drawPath(p, {}, Brush::solid(red), {}, {});
         c.popTransform();
     });
-    CHECK(worstAgainst(far, [&](int x, int y) { return farPath.at(x, y); }, around({q[0], q[1], q[2], q[3]})) <= 13);
+    CHECK(worstAgainst(far, [&](int x, int y) { return farPath.at(x, y); }, around({q[0], q[1], q[2], q[3]})) <= 3);
     // Close to the horizon of a perspective along x (w = 1 + x / 50), where it changes fast, an
     // edge up and down stays so: each pixel it crosses is covered by the distance to it over its
-    // derivative exactly at the pixel's middle (in the shape's own units), as worked out here.
+    // derivative exactly at the pixel's middle (in the shape's own units), each side of a thin
+    // bar on its own, as worked out here.
     Pixels bars = g.render(64, 16, 1, [&](GraphicsContext& c) {
         Matrix deep;
         deep(0, 3) = 0.02f;
@@ -1033,7 +1098,8 @@ void transformedEdgesAreExact(Gpu& g) {
     for (int x = 20; x < 42; ++x) {
         float px = float(x) + 0.5f, local = px / (1 - px / 50), along = 1 / ((1 - px / 50) * (1 - px / 50));
         float inside = 0;
-        for (float x0 : {120.f, 170.f, 230.f}) inside += std::clamp(0.5f - std::max(x0 - local, local - x0 - 12) / along, 0.f, 1.f);
+        for (float x0 : {120.f, 170.f, 230.f})
+            inside += std::max(0.f, std::clamp(0.5f - (x0 - local) / along, 0.f, 1.f) + std::clamp(0.5f - (local - x0 - 12) / along, 0.f, 1.f) - 1);
         worstBar = std::max(worstBar, std::abs(int(bars.at(x, 8)[1]) - int(std::lround(255 * (1 - std::min(inside, 1.f))))));
     }
     CHECK(worstBar <= 3);
@@ -1074,7 +1140,7 @@ void transformedEdgesAreExact(Gpu& g) {
         c.popTransform();
     });
     Offset frontCorners[2] = {behind.map(Offset{wide.right(), wide.y}), behind.map(Offset{wide.right(), wide.bottom()})};
-    CHECK(worstAgainst(front, [&](int x, int y) { return frontPath.at(x, y); }, around({frontCorners[0], frontCorners[1]})) <= 13);
+    CHECK(worstAgainst(front, [&](int x, int y) { return frontPath.at(x, y); }, around({frontCorners[0], frontCorners[1]})) <= 3);
     CHECK(near(front.at(10, 20), 255, 0, 0));      // x 10 / 1.2 = 8.3: in front, drawn
     CHECK(near(front.at(30, 20), 255, 255, 255));  // past its right edge (40 / 1.8 = 22.2)
     // Turned into view, what was out of it isn't skipped.
@@ -1181,6 +1247,7 @@ int main() {
         } else {
             std::printf("device: %s\n", g.device->deviceName().c_str());
             edgesAreCoveredExactly(g);
+            edgesCutPixelsExactly(g);
             layerAlphaIsExact(g);
             clipsAndTranslationsAreExact(g);
             pathsAreCoveredExactly(g);

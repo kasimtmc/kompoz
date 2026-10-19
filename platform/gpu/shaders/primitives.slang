@@ -132,38 +132,41 @@ float roundRectDistance(float2 p, float4 rect, float4 radii) {
     return min(max(d.x, d.y), 0) + length(max(d, 0)) - r;
 }
 
-// The way a rounded rect's distance grows at p: away from it, square to its edge.
-float2 roundRectNormal(float2 p, float4 rect, float4 radii) {
+// How much a distance changes over a device pixel across and down, the distance growing along
+// `n` (in the instance's own units) and a pixel's steps across and down being dx and dy there.
+float2 pixelSteps(float2 n, float2 dx, float2 dy) {
+    return float2(dot(dx, n), dot(dy, n));
+}
+
+// How much of a device pixel the inside of a straight edge covers: the pixel's box cut by the
+// line, exactly. `d` is the distance to the edge (negative inside), `g` how much it changes
+// across and down the pixel.
+float edgeCoverage(float d, float2 g) {
+    float len = max(length(g), 1e-6);
+    float2 n = abs(g) / len;
+    float a = max(n.x, n.y), b = min(n.x, n.y);  // the box is a + b long across the edge
+    float u = clamp(0.5 * (a + b) - d / len, 0, a + b);  // how far into the box the inside reaches
+    float twice = max(2 * a * b, 1e-12);
+    // A corner of the box, then a band across it, then all but the opposite corner.
+    return u <= b ? u * u / twice : (u <= a ? (u - 0.5 * b) / a : 1 - (a + b - u) * (a + b - u) / twice);
+}
+
+// How much of the pixel at p a rounded rect covers: its straight edges each cut the pixel's box
+// exactly (a corner as the two edges' product, which is exact while it is square to the screen),
+// a rounded corner by the circle's edge where the pixel is.
+float roundRectCoverage(float2 p, float4 rect, float4 radii, float2 dx, float2 dy) {
+    float2 gx = float2(dx.x, dy.x), gy = float2(dx.y, dy.y);  // how x and y change across and down
+    float across = edgeCoverage(rect.x - p.x, -gx) + edgeCoverage(p.x - rect.z, gx) - 1;
+    float down = edgeCoverage(rect.y - p.y, -gy) + edgeCoverage(p.y - rect.w, gy) - 1;
+    float straight = saturate(across) * saturate(down);
     float2 center = (rect.xy + rect.zw) * 0.5, halfSize = (rect.zw - rect.xy) * 0.5;
     float2 q = p - center;
     float r = q.x < 0 ? (q.y < 0 ? radii.x : radii.w) : (q.y < 0 ? radii.y : radii.z);
-    float2 d = abs(q) - halfSize + r;
-    float2 corner = max(d, 0);
+    float2 corner = abs(q) - halfSize + r;  // from the corner circle's middle
     float len = length(corner);
-    float2 n = len > 0 ? corner / len : (d.x > d.y ? float2(1, 0) : float2(0, 1));
-    return n * float2(q.x < 0 ? -1 : 1, q.y < 0 ? -1 : 1);
-}
-
-// How much a distance (in the instance's own units) changes over a device pixel, the distance
-// growing along `n` and a pixel's steps across and down being dx and dy there: a pixel's size in
-// the distance's units.
-float pixelSize(float2 n, float2 dx, float2 dy) {
-    return length(float2(dot(dx, n), dot(dy, n)));
-}
-
-// How much of the pixel a distance covers: `aa` is a device pixel's size in its units.
-float coverage(float distance, float aa) {
-    return saturate(0.5 - distance / max(aa, 1e-6));
-}
-
-// How much of the pixel at p a rounded rect covers.
-float roundRectCoverage(float2 p, float4 rect, float4 radii, float2 dx, float2 dy) {
-    return coverage(roundRectDistance(p, rect, radii), pixelSize(roundRectNormal(p, rect, radii), dx, dy));
-}
-
-// How much of the pixel at x (device pixels across a band from -h to h) the band covers.
-float bandCoverage(float x, float h) {
-    return saturate(min(x + 0.5, h) - max(x - 0.5, -h));
+    float2 n = (len > 0 ? corner / len : float2(0.7071, 0.7071)) * float2(q.x < 0 ? -1 : 1, q.y < 0 ? -1 : 1);
+    float curved = edgeCoverage(len - r, pixelSteps(n, dx, dy));
+    return r > 0 && corner.x > 0 && corner.y > 0 ? min(curved, straight) : straight;
 }
 
 // A path's coverage from its mask's sum at the pixel (see shaders/path.slang): by the non-zero
@@ -384,14 +387,11 @@ float blurredRoundRect(float2 p, float4 rect, float4 radii, float sigma) {
     return value;
 }
 
-// The distance to an arc's ring from `start`, `sweep` radians round (round or flat ends), and the
-// way it grows (xy, z).
-float3 arcField(float2 q, float radius, float halfSize, float start, float sweep, bool roundCaps) {
+// Whether q is past an arc's ends (w: 1), `sweep` radians round from `start`, and if so the
+// distance to its cap there (round or flat) and the way it grows (xy, z).
+float4 arcCap(float2 q, float radius, float halfSize, float start, float sweep, bool roundCaps) {
     float aperture = abs(sweep) * 0.5;
-    float len = length(q);
-    float side = len - radius;
-    float2 radial = len > 0 ? q / len : float2(1, 0);
-    float3 field = float3(abs(side) - halfSize, radial * (side < 0 ? -1 : 1));
+    float4 field = float4(0, 1, 0, 0);
     float middle = start + sweep * 0.5;
     float c = cos(-middle), s = sin(-middle);
     float2 p = float2(c * q.x - s * q.y, s * q.x + c * q.y);
@@ -415,7 +415,7 @@ float3 arcField(float2 q, float radius, float halfSize, float start, float sweep
             n = across <= 0 || l <= 0 ? outward : (outward * beyond.x + end * (toward < 0 ? -1 : 1) * beyond.y) / l;
         }
         n.y *= mirror;
-        field = float3(d, c * n.x + s * n.y, -s * n.x + c * n.y);  // turned back
+        field = float4(d, c * n.x + s * n.y, -s * n.x + c * n.y, 1);  // turned back
     }
     return field;
 }
@@ -480,11 +480,22 @@ float4 fs(Varyings v) : SV_Target {
         float2 dir = len > 0 ? (b - a) / len : float2(1, 0), side = float2(-dir.y, dir.x);
         float2 d = v.local - a;
         float along = dot(d, dir) - len * 0.5, across = dot(d, side);
-        float h = v.params.x, aaAcross = max(pixelSize(side, dx, dy), 1e-6), aaAlong = max(pixelSize(dir, dx, dy), 1e-6);
-        cover = bandCoverage(across / aaAcross, h / aaAcross) * bandCoverage(along / aaAlong, (len * 0.5 + h) / aaAlong);
+        // A rect turned along it: a band across, its two sides each cutting the pixel's box, and
+        // one along (its square caps).
+        float h = v.params.x, reach = len * 0.5 + h;
+        float2 gSide = pixelSteps(side, dx, dy), gDir = pixelSteps(dir, dx, dy);
+        float acrossIt = edgeCoverage(across - h, gSide) + edgeCoverage(-across - h, -gSide) - 1;
+        float alongIt = edgeCoverage(along - reach, gDir) + edgeCoverage(-along - reach, -gDir) - 1;
+        cover = saturate(acrossIt) * saturate(alongIt);
     } else if (kind == ARC) {
-        float3 field = arcField(v.local - v.shape.xy, v.shape.z, v.params.x, v.params.y, v.params.z, v.params.w > 0.5);
-        cover = coverage(field.x, pixelSize(field.yz, dx, dy));
+        // The ring between its two circles, each edge cutting the pixel's box (a ring thinner than
+        // a pixel covers as much as it is wide); past its ends, the caps.
+        float2 q = v.local - v.shape.xy;
+        float len = length(q), radius = v.shape.z, h = v.params.x;
+        float2 g = pixelSteps(len > 0 ? q / len : float2(1, 0), dx, dy);
+        float ring = saturate(edgeCoverage(len - radius - h, g) + edgeCoverage(radius - h - len, -g) - 1);
+        float4 cap = arcCap(q, radius, h, v.params.y, v.params.z, v.params.w > 0.5);
+        cover = cap.w > 0.5 ? edgeCoverage(cap.x, pixelSteps(cap.yz, dx, dy)) : ring;
     } else if (kind == SHADOW) {
         float sigma = v.params.x;
         float blurred = sigma > 0.01 ? blurredRoundRect(v.local, v.shape, v.radii, sigma) : roundRectCoverage(v.local, v.shape, v.radii, dx, dy);
