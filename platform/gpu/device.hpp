@@ -32,8 +32,11 @@ const char* backendName(Backend backend);
 
 // 8 bits a channel, not sRGB-encoded: colors are blended as they are stored, as Android and Skia
 // do (and as Kompoz always has). R16F: one 16-bit float channel, drawn into with additive blending
-// (the path renderer's coverage).
-enum class Format : uint8_t { RGBA8, BGRA8, R16F };
+// (the path renderer's coverage). RGBA32F: four 32-bit floats, uploaded and read with nearest
+// filtering (gradients' stops).
+enum class Format : uint8_t { RGBA8, BGRA8, R16F, RGBA32F };
+// A texel's size in bytes.
+constexpr size_t bytesPerTexel(Format f) { return f == Format::RGBA32F ? 16 : f == Format::R16F ? 2 : 4; }
 
 struct TextureUsage {
     enum : uint8_t { Sampled = 1, RenderTarget = 2 };
@@ -173,7 +176,7 @@ public:
     virtual Texture* swapchainTexture() = 0;
     // `size` bytes of this frame's memory (aligned to `alignment`), to write now.
     virtual void* allocate(size_t size, size_t alignment, BufferRef* ref) = 0;
-    // Pixels (RGBA8, `rowBytes` apart) into part of a texture; outside passes.
+    // Texels (in the texture's format, `rowBytes` apart) into part of a texture; outside passes.
     virtual void upload(Texture& texture, const IRect& region, const void* pixels, size_t rowBytes) = 0;
     // Draws into `target` (cleared first if `clear`), sampling `reads` (each read before by
     // what was drawn into it).

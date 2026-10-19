@@ -23,7 +23,9 @@
   Yuvarlak dikdörtgenler, kenarlıklar, çizgiler, yaylar, gölgeler, yazı, resimler, clip'ler ve katmanlar GPU'da birebir
   kenar yumuşatmayla çiziliyor; path'ler de: nonzero ya da evenodd kuralıyla dolduruluyor, her uç ve birleşim türüyle
   çiziliyor, kapsamaları GPU'da FreeType'ın rasterizer'ının hesapladığı gibi birebir toplanıyor, eğriler 0.2 px
-  içinde; katmanlar herhangi bir dış çizgiyle kesilebiliyor. Gradyanlar, blend modları ve blur sırada. Shader'ları bir kez (Slang ile)
+  içinde; katmanlar herhangi bir dış çizgiyle kesilebiliyor. Gradyanlar (doğrusal, radyal, sweep, her döşeme moduyla)
+  dolgularda, path'lerde ve yazıda aynı biçimde, duraklarından piksel başına `Brush::colorAt`'in hesapladığı gibi
+  çiziliyor (`Brush::geometry` birinin nerede durduğunu söylüyor). Blend modları ve blur sırada. Shader'ları bir kez (Slang ile)
   yazılıp `scripts/shaders.py` ile her API için derleniyor; testler sahnelerini gerçek bir cihazda çizip resimlerle
   karşılaştırıyor.
 - **Düzeltildi**: GCC 14 ile (metin alanının imleç tutamacı) ve MSVC ile derleme; MinGW toolchain dosyası verilen kök

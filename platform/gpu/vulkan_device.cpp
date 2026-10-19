@@ -69,6 +69,7 @@ VkFormat vkFormat(Format f) {
     case Format::RGBA8: return VK_FORMAT_R8G8B8A8_UNORM;
     case Format::BGRA8: return VK_FORMAT_B8G8R8A8_UNORM;
     case Format::R16F: return VK_FORMAT_R16_SFLOAT;  // (a color attachment that blends, everywhere: Vulkan's required formats)
+    case Format::RGBA32F: return VK_FORMAT_R32G32B32A32_SFLOAT;  // (sampled without filtering, everywhere)
     }
     return VK_FORMAT_R8G8B8A8_UNORM;
 }
@@ -798,7 +799,7 @@ public:
 
     void upload(Texture& texture, const IRect& region, const void* pixels, size_t rowBytes) override {
         auto& t = static_cast<VulkanTexture&>(texture);
-        size_t row = size_t(region.width) * 4, size = row * size_t(region.height);
+        size_t row = size_t(region.width) * bytesPerTexel(t.format()), size = row * size_t(region.height);
         BufferRef ref;
         auto* dst = static_cast<uint8_t*>(allocate(size, 16, &ref));
         if (!dst) return;

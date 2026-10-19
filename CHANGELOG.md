@@ -22,8 +22,9 @@
   API, Vulkan first (Direct3D 12, Metal, OpenGL ES 3 / WebGL 2 and WebGPU to come). Rounded rects, borders, lines, arcs,
   shadows, text, images, clips and layers are drawn on the GPU with exact anti-aliasing, and paths too: filled by the
   non-zero or even-odd rule and stroked with every cap and join, their coverage summed on the GPU exactly as FreeType's
-  rasterizer works it out, curves within 0.2 px; layers can be cut to any outline. Gradients, blend modes and blurs
-  come next. Its shaders are written once (Slang) and compiled for every API by `scripts/shaders.py`; tests
+  rasterizer works it out, curves within 0.2 px; layers can be cut to any outline. Gradients (linear, radial, sweep,
+  every tile mode) are worked out per pixel from their stops, on fills, paths and text alike, as `Brush::colorAt`
+  does (`Brush::geometry` says where one lies). Blend modes and blurs come next. Its shaders are written once (Slang) and compiled for every API by `scripts/shaders.py`; tests
   draw its scenes on a real device and compare them with pictures.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL

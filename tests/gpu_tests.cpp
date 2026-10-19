@@ -338,6 +338,21 @@ void paths(GraphicsContext& c) {
     c.drawPath(ring, {}, Brush::solid(green), {}, {4, StrokeCap::Butt, StrokeJoin::Miter, 4});
 }
 
+void gradients(GraphicsContext& c) {
+    Color a{0.95f, 0.45f, 0.1f, 1}, b{0.3f, 0.1f, 0.7f, 1}, d{0.1f, 0.7f, 0.6f, 1};
+    c.fillGradient({8, 8, 80, 50}, 12, Brush::linearGradient({a, b}), {8, 8, 80, 50});  // corner to corner
+    c.fillGradient({100, 8, 84, 50}, 25, Brush::horizontalGradient({a, d, b}, 0, 30, TileMode::Mirror), {100, 8, 84, 50});
+    c.fillGradient({8, 66, 60, 60}, 30, Brush::radialGradient({colors::White, a, b}), {8, 66, 60, 60});
+    c.fillGradient({76, 66, 60, 60}, 8, Brush::sweepGradient({a, d, b, a}), {76, 66, 60, 60});
+    Path ring;  // a gradient stroke, as a BorderStroke with a brush draws one
+    ring.addRoundRect({146, 70, 40, 52}, 12);
+    c.drawPath(ring, {}, Brush::verticalGradient({a, b}), {146, 70, 40, 52}, {4, StrokeCap::Butt, StrokeJoin::Miter, 4});
+    Font big{30};
+    big.weight = FontWeight::Bold;
+    c.drawTextBrush("Gradient", {8, 168}, big, Brush::horizontalGradient({a, d, b}), {8, 140, 150, 34}, false);
+    c.fillGradient({160, 136, 24, 48}, 4, Brush::verticalGradient({a.copy(0), a}), {160, 136, 24, 48});  // to see-through
+}
+
 void outlineLayers(GraphicsContext& c) {
     Color blue{0.15f, 0.3f, 0.86f, 1}, orange{0.9f, 0.6f, 0.1f, 1};
     c.pushOutlineLayer({2, 2, 80, 80}, star(40, 40, 38), 1);  // (the outline from the bounds' top left)
@@ -457,6 +472,56 @@ void pathsAreCoveredExactly(Gpu& g) {
     CHECK(near(p.at(20, 29), 255, 255, 255));
 }
 
+// Every pixel of a gradient fill is Brush::colorAt at its middle (over white): each kind, each
+// tile mode, hard stops, uneven stops, see-through ones.
+void gradientsMatchColorAt(Gpu& g) {
+    Color a{0.9f, 0.2f, 0.1f, 1}, b{0.1f, 0.3f, 0.9f, 1}, c{0.1f, 0.8f, 0.2f, 0.4f};
+    std::vector<ColorStop> hard{{0, a}, {0.5f, a}, {0.5f, b}, {1, b}}, uneven{{0.1f, a}, {0.3f, c}, {0.9f, b}};
+    const Rect area{8, 8, 48, 48};
+    struct Case {
+        const char* name;
+        Brush brush;
+    };
+    const Case cases[] = {
+        {"linear clamp", Brush::linearGradient({a, b}, {0, 0}, {48, 24})},
+        {"linear repeated", Brush::linearGradient({a, b}, {10, 10}, {22, 16}, TileMode::Repeated)},
+        {"linear mirror", Brush::linearGradient({a, c, b}, {10, 10}, {22, 16}, TileMode::Mirror)},
+        {"linear decal", Brush::linearGradient({a, b}, {10, 10}, {30, 30}, TileMode::Decal)},
+        {"linear hard stops", Brush::linearGradient(hard, {0, 0}, {48, 0})},
+        {"linear uneven stops", Brush::linearGradient(uneven, {0, 48}, {48, 0})},
+        {"radial", Brush::radialGradient({a, c, b})},
+        {"radial repeated", Brush::radialGradient({a, b}, Offset{12, 30}, 10, TileMode::Repeated)},
+        {"radial decal", Brush::radialGradient({a, b}, Offset{30, 20}, 14, TileMode::Decal)},
+        {"sweep", Brush::sweepGradient({a, b, c, a})},
+        {"sweep off center", Brush::sweepGradient(uneven, Offset{10, 40})},
+    };
+    for (float scale : {1.f, 2.625f})  // (at a phone's density too: the gradient in dp, drawn in px)
+    for (const Case& k : cases) {
+        int size = int(std::ceil(64 * scale));
+        Pixels p = g.render(size, size, scale, [&](GraphicsContext& gc) { gc.fillGradient(area, 0, k.brush, area); });
+        int worst = 0, wx = 0, wy = 0;
+        int from = int(std::ceil(9 * scale)), to = int(std::floor(55 * scale));
+        for (int y = from; y < to; ++y)  // inside the rect, away from its anti-aliased edge
+            for (int x = from; x < to; ++x) {
+                Offset at{(float(x) + 0.5f) / scale, (float(y) + 0.5f) / scale};
+                // Where the gradient jumps (a hard stop, a repeat starting over) within float error of
+                // the pixel's middle, either side's color is right.
+                float t = k.brush.parameterAt(at, area);
+                Color before = k.brush.colorAtParameter(t - 1e-4f), after = k.brush.colorAtParameter(t + 1e-4f);
+                if (std::max({std::abs(before.r - after.r), std::abs(before.g - after.g), std::abs(before.b - after.b),
+                              std::abs(before.a - after.a)}) > 0.02f)
+                    continue;
+                Color want = k.brush.colorAt(at, area);
+                auto over = [&](float v) { return int(std::lround((v * want.a + (1 - want.a)) * 255)); };
+                const uint8_t expect[4] = {uint8_t(over(want.r)), uint8_t(over(want.g)), uint8_t(over(want.b)), 255};
+                int d = maxDifference(p.at(x, y), expect);
+                if (d > worst) worst = d, wx = x, wy = y;
+            }
+        CHECK(worst <= 2);
+        if (worst > 2) std::printf("  %s at %.3g px per dp: off by %d at %d,%d\n", k.name, scale, worst, wx, wy);
+    }
+}
+
 // Curves cut into lines stay within kTolerance of the curve, in the target's pixels.
 void curvesAreFlattenedClosely() {
     Path circle;
@@ -484,6 +549,7 @@ void scenesMatchTheirPictures(Gpu& g) {
     const Scene scenes[] = {{"rects", 192, 192, 1, rects},   {"lines", 192, 192, 1, lines},   {"shadows", 192, 192, 1, shadows},
                             {"text", 192, 192, 1, text},     {"images", 192, 192, 1, images}, {"layers", 192, 192, 1, layers},
                             {"paths", 192, 192, 1, paths},   {"outline-layers", 192, 192, 1, outlineLayers},
+                            {"gradients", 192, 192, 1, gradients},
                             {"density", 192, 192, 2.625f, fractionalDensity}};
     for (const Scene& s : scenes) {
         Pixels p = g.render(s.w, s.h, s.scale, s.draw);
@@ -515,6 +581,7 @@ int main() {
             clipsAndTranslationsAreExact(g);
             pathsAreCoveredExactly(g);
             curvesAreFlattenedClosely();
+            gradientsMatchColorAt(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
             std::printf("%d checks, %d failed\n", checks, failures);

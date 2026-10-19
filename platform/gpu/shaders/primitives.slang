@@ -18,6 +18,14 @@ static const int LAYER = 7;        // a layer's texture: texel (0, 0) at params.
                                    // with extra.w = 1 to the path whose coverage mask (texture1, linearly filtered) has
                                    // texel (0, 0) at radii.xy
 static const int PATH = 8;         // a path: its coverage mask (texture0) has texel (0, 0) at params.xy; params.z: even-odd
+//
+// What covers the shape is `color`, or a gradient (`paint`, `gradient`): a fill, a stroke, a path
+// and a glyph that takes a color can have one, at the color's alpha.
+static const int LINEAR = 1;  // paint.x: the kind; from gradient.xy to gradient.zw
+static const int RADIAL = 2;  // round gradient.xy out to gradient.z
+static const int SWEEP = 3;   // round gradient.xy, clockwise from 3 o'clock
+// paint.y: the tile mode (clamp, repeated, mirror, decal); paint.z: how many stops; paint.w: their
+// row in the stops table (texture2): stop i's straight color at texel 2i, its offset at 2i + 1.
 
 // The vertex's index: on SPIR-V (Vulkan, and through it OpenGL ES) without the base vertex that
 // D3D's SV_VertexID leaves out, which OpenGL ES doesn't have (draws start at vertex 0 anyway).
@@ -28,13 +36,14 @@ static const int PATH = 8;         // a path: its coverage mask (texture0) has t
 #endif
 
 struct Uniforms {
-    float4 toClip;     // clip = position * toClip.xy + toClip.zw
-    float4 maskTexel;  // a coverage mask's texel's size (xy)
+    float4 toClip;   // clip = position * toClip.xy + toClip.zw
+    float4 texels;   // a texel's size in the coverage mask (xy) and in the stops table (zw)
 };
 [[vk::push_constant]] ConstantBuffer<Uniforms> uniforms;
 
 [[vk::binding(1, 0)]] Sampler2D texture0;
 [[vk::binding(2, 0)]] Sampler2D texture1;
+[[vk::binding(3, 0)]] Sampler2D texture2;
 
 struct Instance {
     float4 bounds : BOUNDS;  // the quad: x0, y0, x1, y1
@@ -45,6 +54,8 @@ struct Instance {
     float4 uv : UV;
     float4 xform : XFORM;  // a, b, c, d: x' = a x + c y + tx, y' = b x + d y + ty
     float4 extra : EXTRA;  // tx, ty, kind, flags
+    float4 paint : PAINT;
+    float4 gradient : GRADIENT;
 };
 
 struct Varyings {
@@ -59,6 +70,8 @@ struct Varyings {
     nointerpolation float4 uv : UV;
     nointerpolation float kind : KIND;
     nointerpolation float flags : FLAGS;
+    nointerpolation float4 paint : PAINT;
+    nointerpolation float4 gradient : GRADIENT;
 };
 
 [shader("vertex")]
@@ -81,6 +94,8 @@ Varyings vs(Instance instance, uint vertex : VERTEX_ID) {
     out.uv = instance.uv;
     out.kind = instance.extra.z;
     out.flags = instance.extra.w;
+    out.paint = instance.paint;
+    out.gradient = instance.gradient;
     return out;
 }
 
@@ -115,7 +130,56 @@ float pathCoverage(float sum, bool evenOdd) {
 
 // Where a mask texel is sampled: its middle (with nearest filtering, texel for pixel).
 float2 maskTexcoord(float2 texel) {
-    return (floor(texel) + 0.5) * uniforms.maskTexel.xy;
+    return (floor(texel) + 0.5) * uniforms.texels.xy;
+}
+
+// The paint at p: `color`, or the gradient's color there (as Brush::colorAt works it out: the
+// stops' straight colors mixed, then premultiplied) at the color's alpha.
+float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
+    int kind = int(paint.x + 0.5);
+    if (kind == 0) return color;
+    const float pi = 3.141592653589793;
+    float t = 0;
+    if (kind == LINEAR) {
+        float2 d = g.zw - g.xy;
+        float len2 = dot(d, d);
+        t = len2 > 0 ? dot(p - g.xy, d) / len2 : 0;
+    } else if (kind == RADIAL) {
+        t = g.z > 0 ? length(p - g.xy) / g.z : 0;
+    } else {
+        float a = atan2(p.y - g.y, p.x - g.x);
+        if (a < 0) a += 2 * pi;
+        t = a / (2 * pi);
+    }
+    int tile = int(paint.y + 0.5);
+    if (tile == 0) {
+        t = saturate(t);
+    } else if (tile == 1) {
+        t -= floor(t);
+    } else if (tile == 2) {
+        t = abs(t) - 2 * floor(abs(t) / 2);
+        if (t > 1) t = 2 - t;
+    } else if (t < 0 || t > 1) {
+        return float4(0, 0, 0, 0);  // decal: nothing past its ends
+    }
+    int count = int(paint.z + 0.5);
+    float v = (paint.w + 0.5) * uniforms.texels.w;
+    float4 straight = texture2.SampleLevel(float2(0.5 * uniforms.texels.z, v), 0);
+    float before = texture2.SampleLevel(float2(1.5 * uniforms.texels.z, v), 0).x;
+    if (t > before) {
+        for (int i = 1; i < count; ++i) {
+            float4 next = texture2.SampleLevel(float2((2 * i + 0.5) * uniforms.texels.z, v), 0);
+            float offset = texture2.SampleLevel(float2((2 * i + 1.5) * uniforms.texels.z, v), 0).x;
+            if (t <= offset || i == count - 1) {
+                float span = offset - before;
+                straight = t > offset ? next : lerp(straight, next, span > 0 ? (t - before) / span : 1);
+                break;
+            }
+            straight = next;
+            before = offset;
+        }
+    }
+    return float4(straight.rgb * straight.a, straight.a) * color.a;
 }
 
 // A Gaussian's integral, approximated (Abramowitz and Stegun 7.1.25).
@@ -171,6 +235,7 @@ float arcDistance(float2 q, float radius, float halfSize, float start, float swe
 [shader("fragment")]
 float4 fs(Varyings v) : SV_Target {
     int kind = int(v.kind + 0.5);
+    float4 color = paintAt(v.local, v.color, v.paint, v.gradient);
     float aa = 0.5 * (length(ddx(v.local)) + length(ddy(v.local)));
     float alpha = 0;
     if (kind == FILL) {
@@ -204,7 +269,7 @@ float4 fs(Varyings v) : SV_Target {
     } else if (kind == GLYPH) {
         float4 texel = texture0.Sample(v.texcoord);
         if (v.params.x > 0.5) return float4(texel.rgb * texel.a, texel.a) * v.color.a;
-        return v.color * texel.a;
+        return color * texel.a;
     } else if (kind == IMAGE) {
         float4 texel = texture0.Sample(v.texcoord);
         return float4(texel.rgb * texel.a, texel.a) * v.params.x;
@@ -212,11 +277,11 @@ float4 fs(Varyings v) : SV_Target {
         float2 texel = clamp(v.local, v.params.xy + 0.5, v.params.zw - 0.5);
         float4 color = texture0.Sample((texel - v.params.xy) * v.uv.zw);
         // (Filtered where it is: a turned or scaled layer's pixels fall between the mask's texels.)
-        float cut = v.flags > 0.5 ? pathCoverage(texture1.SampleLevel((v.local - v.radii.xy) * uniforms.maskTexel.xy, 0).r, false)
+        float cut = v.flags > 0.5 ? pathCoverage(texture1.SampleLevel((v.local - v.radii.xy) * uniforms.texels.xy, 0).r, false)
                                   : coverage(roundRectDistance(v.local, v.shape, v.radii), aa);
         return color * v.color.a * cut;
     } else if (kind == PATH) {
         alpha = pathCoverage(texture0.SampleLevel(maskTexcoord(v.local - v.params.xy), 0).r, v.params.z > 0.5);
     }
-    return v.color * alpha;
+    return color * alpha;
 }

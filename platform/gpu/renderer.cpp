@@ -54,9 +54,9 @@ Pipeline& Renderer::pipeline(Format target, bool opaque) {
     PipelineDesc desc;
     desc.vertex = &kVertex;
     desc.fragment = &kFragment;
-    for (uint32_t i = 0; i < 8; ++i) desc.instanceAttributes.push_back({i, VertexFormat::Float4, i * 16});
+    for (uint32_t i = 0; i < 10; ++i) desc.instanceAttributes.push_back({i, VertexFormat::Float4, i * 16});
     desc.instanceStride = sizeof(Prim);
-    desc.textures = 2;
+    desc.textures = 3;
     desc.blend.enabled = !opaque;
     desc.target = target;
     pipelines_.emplace_back(std::pair{target, opaque}, device_.createPipeline(desc));
@@ -158,6 +158,17 @@ void Renderer::flush() {
         device_.upload(*white_, {0, 0, 1, 1}, white, 4);
         whiteUploaded_ = true;
     }
+    // The gradients' stops recorded since the last flush (all of them into a bigger table).
+    int rows = int(stops_.size() / (kStopsWidth * 4));
+    if (rows > stopsUploaded_) {
+        if (!stopsTexture_ || stopsTexture_->height() < rows) {
+            stopsTexture_ = device_.createTexture(kStopsWidth, std::max(64, (rows + 63) / 64 * 64), Format::RGBA32F, TextureUsage::Sampled);
+            stopsUploaded_ = 0;
+        }
+        device_.upload(*stopsTexture_, {0, stopsUploaded_, kStopsWidth, rows - stopsUploaded_},
+                       stops_.data() + size_t(stopsUploaded_) * kStopsWidth * 4, kStopsWidth * 16);
+        stopsUploaded_ = rows;
+    }
     for (size_t index : order_) execute(passes_[index]);
     order_.clear();
     // Passes still being drawn into keep their places; the others go.
@@ -215,10 +226,13 @@ void Renderer::execute(Pass& pass) {
             for (Texture* t : {b.mask == Mask::Texture0 ? mask_.get() : b.texture, b.mask == Mask::Texture1 ? mask_.get() : b.texture1})
                 if (std::find(reads.begin(), reads.end(), t) == reads.end()) reads.push_back(t);
         }
+        if (stopsTexture_) reads.push_back(stopsTexture_.get());
         device_.beginPass(*pass.target, g == 0 ? pass.clear : std::nullopt, reads);
         float uniforms[8] = {2 / w, yDown ? 2 / h : -2 / h, -1, yDown ? -1.f : 1.f,
-                             mask_ ? 1 / float(mask_->width()) : 0.f, mask_ ? 1 / float(mask_->height()) : 0.f, 0, 0};
+                             mask_ ? 1 / float(mask_->width()) : 0.f, mask_ ? 1 / float(mask_->height()) : 0.f,
+                             stopsTexture_ ? 1 / float(stopsTexture_->width()) : 0.f, stopsTexture_ ? 1 / float(stopsTexture_->height()) : 0.f};
         Pipeline* bound = nullptr;
+        const Sampler nearest{Filter::Nearest};
         for (size_t i = firstBatch; i < batch; ++i) {
             const Batch& b = pass.batches[i];
             Pipeline& p = pipeline(pass.target->format(), b.opaque);
@@ -228,7 +242,6 @@ void Renderer::execute(Pass& pass) {
                 bound = &p;
             }
             device_.setScissor(b.scissor);
-            const Sampler nearest{Filter::Nearest};
             if (b.mask == Mask::Texture0)
                 device_.setTexture(0, *mask_, nearest);
             else
@@ -237,6 +250,7 @@ void Renderer::execute(Pass& pass) {
                 device_.setTexture(1, *mask_, Sampler{});
             else
                 device_.setTexture(1, *b.texture1, Sampler{});
+            device_.setTexture(2, stopsTexture_ ? *stopsTexture_ : *white_, nearest);
             device_.draw({prims.buffer, prims.offset + uint64_t(b.first) * sizeof(Prim)}, 6, b.count);
         }
         device_.endPass();
@@ -248,6 +262,9 @@ void Renderer::execute(Pass& pass) {
 }
 
 void Renderer::endFrame() {
+    stops_.clear();
+    stopBrushes_.clear();
+    stopsUploaded_ = 0;
     for (auto it = images_.begin(); it != images_.end();)
         it = it->second.token.expired() ? images_.erase(it) : std::next(it);
     std::erase_if(pool_, [](PooledTexture& p) {  // kept for a second unused: layers scroll back in
@@ -331,13 +348,46 @@ void Renderer::drawLine(Offset from, Offset to, float width, Color color) {
     add(LINE, p);
 }
 
-void Renderer::glyphs(Color color) {
+Renderer::Prim Renderer::painted(const Brush& brush, const Rect& area, float alpha) {
+    Prim p;
+    if (brush.isSolid() || brush.stops().size() < 2) {
+        Color c = brush.stops().empty() ? colors::Transparent : brush.stops().front().color;
+        premultiplied(p.color, c.copy(c.a * alpha));
+        return p;
+    }
+    // Its stops in this frame's table (once for equal brushes), its geometry in the target's pixels.
+    int row = -1;
+    for (size_t i = 0; i < stopBrushes_.size() && row < 0; ++i)
+        if (stopBrushes_[i] == brush) row = int(i);
+    if (row < 0) {
+        row = int(stopBrushes_.size());
+        stopBrushes_.push_back(brush);
+        size_t at = stops_.size();
+        stops_.resize(at + kStopsWidth * 4, 0.f);
+        const auto& stops = brush.stops();
+        for (size_t i = 0; i < stops.size() && i < kStopsWidth / 2; ++i) {
+            const ColorStop& stop = stops[i];
+            float* texel = &stops_[at + i * 8];
+            texel[0] = stop.color.r, texel[1] = stop.color.g, texel[2] = stop.color.b, texel[3] = stop.color.a;
+            texel[4] = stop.offset;
+        }
+    }
+    Brush::Geometry g = brush.geometry(area);
+    auto px = [&](Offset o) { return Offset{o.x * scale - ox_, o.y * scale - oy_}; };
+    Offset start = px(g.start), end = px(g.end);
+    int kind = brush.kind() == Brush::Kind::Linear ? 1 : brush.kind() == Brush::Kind::Radial ? 2 : 3;
+    set(p.paint, float(kind), float(int(brush.tileMode())), float(std::min<size_t>(brush.stops().size(), kStopsWidth / 2)), float(row));
+    set(p.gradient, start.x, start.y, kind == 1 ? end.x : g.radius * scale, kind == 1 ? end.y : 0);
+    set(p.color, 1, 1, 1, alpha);
+    return p;
+}
+
+void Renderer::glyphs(const Prim& paint) {
     constexpr float kPage = float(AtlasPage::kSize);
     for (const GlyphQuad& g : glyphs_) {
-        Prim p;
+        Prim p = paint;
         set(p.bounds, g.x0, g.y0, g.x1, g.y1);
         set(p.uv, float(g.u) / kPage, float(g.v) / kPage, float(g.u + g.width) / kPage, float(g.v + g.height) / kPage);
-        premultiplied(p.color, color);
         p.params[0] = g.color ? 1.f : 0.f;
         add(GLYPH, p, pageTexture(g.page));
     }
@@ -347,19 +397,13 @@ void Renderer::drawText(std::string_view text, Offset baseline, const Font& font
     if (color.a <= 0) return;
     glyphs_.clear();
     text_.layout(text, baseline.x * scale - ox_, baseline.y * scale - oy_, font, rtl, glyphs_);
-    glyphs(color);
+    glyphs(painted(Brush::solid(color), {}));
 }
 
 void Renderer::drawTextBrush(std::string_view text, Offset baseline, const Font& font, const Brush& brush, const Rect& area, bool rtl) {
-    // Each glyph in the brush's color at its middle (until brushes are drawn per pixel).
     glyphs_.clear();
     text_.layout(text, baseline.x * scale - ox_, baseline.y * scale - oy_, font, rtl, glyphs_);
-    std::vector<GlyphQuad> all = std::move(glyphs_);
-    for (const GlyphQuad& g : all) {
-        glyphs_ = {g};
-        glyphs(brush.colorAt({((g.x0 + g.x1) / 2 + ox_) / scale, ((g.y0 + g.y1) / 2 + oy_) / scale}, area));
-    }
-    glyphs_.clear();
+    glyphs(painted(brush, area));
 }
 
 void Renderer::drawTextShadow(std::string_view text, Offset baseline, const Font& font, Color color, float blurRadius, bool rtl) {
@@ -367,13 +411,14 @@ void Renderer::drawTextShadow(std::string_view text, Offset baseline, const Font
     glyphs_.clear();
     text_.layout(text, baseline.x * scale - ox_, baseline.y * scale - oy_, font, rtl, glyphs_, true,
                  std::max(0, int(std::lround(blurRadius * scale))));
-    glyphs(color);
+    glyphs(painted(Brush::solid(color), {}));
 }
 
 void Renderer::drawVector(const ImageVector& vector, const Rect& b, Color color) {
     if (color.a <= 0 || b.width <= 0 || b.height <= 0) return;
     glyphs_.resize(1);
-    if (text_.vectorQuad(vector, b.x * scale - ox_, b.y * scale - oy_, b.width * scale, b.height * scale, glyphs_[0])) glyphs(color);
+    if (text_.vectorQuad(vector, b.x * scale - ox_, b.y * scale - oy_, b.width * scale, b.height * scale, glyphs_[0]))
+        glyphs(painted(Brush::solid(color), {}));
 }
 
 void Renderer::drawArc(const Rect& oval, float start, float sweep, float width, Color color, bool roundCap) {
@@ -467,8 +512,8 @@ std::optional<Offset> Renderer::rasterize(const std::vector<Contour>& contours, 
     return Offset{float(region.x - mx), float(region.y - my)};
 }
 
-void Renderer::fillContours(const std::vector<Contour>& contours, bool evenOdd, Color color) {
-    if (color.a <= 0 || targets_.empty()) return;
+void Renderer::fillContours(const std::vector<Contour>& contours, bool evenOdd, const Prim& paint) {
+    if (targets_.empty() || (paint.paint[0] == 0 && paint.color[3] <= 0)) return;
     // The pixels the polygons touch, within the clip.
     float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f;
     for (const Contour& c : contours)
@@ -478,10 +523,9 @@ void Renderer::fillContours(const std::vector<Contour>& contours, bool evenOdd, 
     IRect region = intersect(bounds, scissor());
     std::optional<Offset> origin = rasterize(contours, region);
     if (!origin) return;
-    Prim p;
+    Prim p = paint;
     set(p.bounds, float(region.x), float(region.y), float(region.x + region.width), float(region.y + region.height));
     set(p.params, origin->x, origin->y, evenOdd ? 1.f : 0.f, 0);
-    premultiplied(p.color, color);
     add(PATH, p, nullptr, false, Mask::Texture0);
 }
 
@@ -493,10 +537,19 @@ void Renderer::drawPath(const Path& path, Offset origin, const Brush& brush, con
         contours = strokeOutline(contours, stroke.width * scale, stroke.cap, stroke.join, stroke.miter);
     else
         evenOdd = path.fillType == Path::FillType::EvenOdd;
-    // In the brush's color at the path's middle (until brushes are drawn per pixel).
-    Rect b = path.bounds();
-    Color color = brush.isSolid() ? brush.stops().front().color : brush.colorAt({origin.x + b.x + b.width / 2, origin.y + b.y + b.height / 2}, area);
-    fillContours(contours, evenOdd, color);
+    fillContours(contours, evenOdd, painted(brush, area));
+}
+
+void Renderer::fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& brush, const Rect& area) {
+    if (rect.width <= 0 || rect.height <= 0) return;
+    float x = rect.x * scale - ox_, y = rect.y * scale - oy_, w = rect.width * scale, h = rect.height * scale;
+    float half = std::min(w, h) / 2;
+    auto px = [&](float r) { return std::clamp(r * scale, 0.f, half); };
+    Prim p = painted(brush, area);
+    set(p.bounds, x - 1, y - 1, x + w + 1, y + h + 1);
+    set(p.shape, x, y, x + w, y + h);
+    set(p.radii, px(radii.topLeft), px(radii.topRight), px(radii.bottomRight), px(radii.bottomLeft));
+    add(FILL, p);
 }
 
 void Renderer::pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform) {

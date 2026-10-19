@@ -65,6 +65,7 @@ public:
     bool quickReject(const Rect& rect) const override;
     void drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& brushArea, const PathStroke& stroke) override;
     void drawShadow(const Rect& rect, const CornerRadii& radii, const Shadow& shadow, bool inner) override;
+    void fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& brush, const Rect& brushArea) override;
     void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform = {}) override;
 
 private:
@@ -72,6 +73,7 @@ private:
     struct Prim {
         float bounds[4]{}, shape[4]{}, radii[4]{}, color[4]{}, params[4]{}, uv[4]{};
         float xform[4]{1, 0, 0, 1}, extra[4]{};
+        float paint[4]{}, gradient[4]{};
     };
     // Where a batch's textures come from: its own, or the coverage mask (made when the pass runs).
     enum class Mask : uint8_t { None, Texture0, Texture1 };
@@ -135,8 +137,10 @@ private:
     // target, or of a layer before its transform): where the mask's texel (0, 0) is in those
     // pixels, or nothing if the region is empty.
     std::optional<Offset> rasterize(const std::vector<Contour>& contours, IRect region);
-    void fillContours(const std::vector<Contour>& contours, bool evenOdd, Color color);
-    void glyphs(Color color);
+    void fillContours(const std::vector<Contour>& contours, bool evenOdd, const Prim& paint);
+    // A prim painted with `brush` over `area` (dp): its color, or its gradient (at `alpha`).
+    Prim painted(const Brush& brush, const Rect& area, float alpha = 1);
+    void glyphs(const Prim& paint);
     Texture* pageTexture(int page);
     Texture* imageTexture(const ImageBitmap& image);
     Texture* acquire(int width, int height);
@@ -154,6 +158,12 @@ private:
     std::vector<std::pair<std::pair<Format, bool>, std::unique_ptr<Pipeline>>> pipelines_;
     std::unique_ptr<Pipeline> coveragePipeline_;
     std::unique_ptr<Texture> mask_;  // the coverage mask, as big as a generation needed so far
+    // Gradients' stops this frame, a row each (see shaders/primitives.slang), and their texture.
+    static constexpr int kStopsWidth = 256;  // texels: 128 stops
+    std::vector<float> stops_;
+    std::vector<Brush> stopBrushes_;
+    int stopsUploaded_ = 0;  // rows
+    std::unique_ptr<Texture> stopsTexture_;
     std::vector<Edge> edgeScratch_;
     std::vector<Pass> passes_;
     std::vector<size_t> order_;  // ended passes, in the order they run
