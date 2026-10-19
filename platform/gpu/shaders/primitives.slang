@@ -51,7 +51,7 @@ static const int SWEEP = 3;   // round gradient.xy, clockwise from 3 o'clock
 struct Uniforms {
     float4 toClip;   // clip = position * toClip.xy + toClip.zw
     float4 texels;   // a texel's size in the coverage mask (xy) and in the table (zw)
-    float4 blend;    // the blend mode (x), and how the coverage goes in (y: see finish)
+    float4 blend;    // the blend mode (x), how the coverage goes in (y: see finish), a texel of the target's copy (zw)
 };
 [[vk::push_constant]] ConstantBuffer<Uniforms> uniforms;
 
@@ -350,7 +350,7 @@ float4 finish(float4 src, float cover, float2 pixel) {
     } else if (how == 3) {
         out = float4(0, 0, 0, cover);
     } else if (how == 4) {
-        float4 dst = texture3.SampleLevel(pixel * float2(uniforms.toClip.x, abs(uniforms.toClip.y)) * 0.5, 0);
+        float4 dst = texture3.SampleLevel(pixel * uniforms.blend.zw, 0);
         out = lerp(dst, blendColors(src, dst, int(uniforms.blend.x + 0.5)), cover);
     }
     return out;

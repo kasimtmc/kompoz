@@ -834,6 +834,26 @@ void blendModesMatchBlend(Gpu& g) {
     }
 }
 
+// A blend mode that reads the target reads it where the pixel is whatever size the target is: the
+// target's copy is one texture, as big as the biggest target so far.
+void targetCopiesFitEveryTarget(Gpu& g) {
+    Color under{0.2f, 0.6f, 0.9f, 1}, over{0.9f, 0.5f, 0.2f, 1};
+    auto multiplied = [&](int size) {
+        return g.render(size, size, 1, [&](GraphicsContext& c) {
+            c.fillRoundRect({0, 0, float(size), float(size)}, 0, under);
+            c.pushBlendMode(BlendMode::Multiply);
+            c.fillRoundRect({0, 0, float(size), float(size)}, 0, over);
+            c.popBlendMode();
+        });
+    };
+    Color want = blend(over, under, BlendMode::Multiply);
+    for (int size : {200, 16, 120}) {  // big first: the copy stays that big
+        Pixels p = multiplied(size);
+        for (Offset at : {Offset{1, 1}, Offset{float(size) / 2, float(size) / 2}, Offset{float(size) - 2, float(size) - 2}})
+            CHECK(near(p.at(int(at.x), int(at.y)), int(std::lround(want.r * 255)), int(std::lround(want.g * 255)), int(std::lround(want.b * 255))));
+    }
+}
+
 // Color filters change each pixel as ColorFilter::apply does: an image's, a fill's; nested ones the
 // inner one first.
 void colorFiltersMatchApply(Gpu& g) {
@@ -1381,6 +1401,7 @@ int main() {
             gradientsMatchColorAt(g);
             blendModesMatchBlend(g);
             colorFiltersMatchApply(g);
+            targetCopiesFitEveryTarget(g);
             transformsCarryEverything(g);
             transformedEdgesAreExact(g);
             clipsCutAsTheirShapes(g);

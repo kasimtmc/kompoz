@@ -427,7 +427,9 @@ void Renderer::execute(Pass& pass) {
         float uniforms[12] = {2 / w, yDown ? 2 / h : -2 / h, -1, yDown ? -1.f : 1.f,
                               mask_ ? 1 / float(mask_->width()) : 0.f, mask_ ? 1 / float(mask_->height()) : 0.f,
                               stopsTexture_ ? 1 / float(stopsTexture_->width()) : 0.f, stopsTexture_ ? 1 / float(stopsTexture_->height()) : 0.f,
-                              0, 0, 0, 0};
+                              0, 0,
+                              // A texel of the target's copy (which may be bigger than the target: one copy for all).
+                              readsTarget ? 1 / float(dstCopy_->width()) : 0.f, readsTarget ? 1 / float(dstCopy_->height()) : 0.f};
         const Sampler nearest{Filter::Nearest};
         IRect all{0, 0, pass.target->width(), pass.target->height()};
         for (size_t i = firstBatch; i < batch; ++i) {
