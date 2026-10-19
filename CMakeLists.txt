@@ -220,7 +220,7 @@ if(KOMPOZ_BUILD_SDL3)
     # is a GPU API (Linux, Android, Windows). Vulkan's headers come from the system or the package
     # manager, else from third_party/ (scripts/fetch-deps.sh); the Vulkan Memory Allocator is in
     # platform/gpu/external/. Neither is needed by apps: Vulkan itself is loaded at run time.
-    target_sources(kompoz_sdl3 PRIVATE platform/gpu/device.cpp platform/gpu/renderer.cpp)
+    target_sources(kompoz_sdl3 PRIVATE platform/gpu/device.cpp platform/gpu/path_geometry.cpp platform/gpu/renderer.cpp)
     if(NOT APPLE AND NOT EMSCRIPTEN)
         find_package(VulkanHeaders CONFIG QUIET)
         # (find_path searches where the toolchain's headers are: the NDK's sysroot, MinGW's, the
@@ -298,7 +298,7 @@ if(KOMPOZ_BUILD_SDL3)
 
     # The GPU renderer drawn on a real device (Vulkan), against pictures in tests/golden/.
     if(KOMPOZ_BUILD_TESTS AND kompoz_gpu_vulkan AND NOT ANDROID)
-        add_executable(kompoz_gpu_tests tests/gpu_tests.cpp platform/gpu/device.cpp platform/gpu/renderer.cpp
+        add_executable(kompoz_gpu_tests tests/gpu_tests.cpp platform/gpu/device.cpp platform/gpu/path_geometry.cpp platform/gpu/renderer.cpp
                        platform/gpu/vulkan_device.cpp platform/gpu/vma.cpp platform/sdl3/font_system.cpp)
         target_include_directories(kompoz_gpu_tests PRIVATE ${kompoz_vulkan_include} platform/gpu/external)
         target_link_libraries(kompoz_gpu_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,INTERFACE_LINK_LIBRARIES>)

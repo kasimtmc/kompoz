@@ -31,8 +31,9 @@ enum class Backend { Vulkan, D3D12, Metal, GLES, WebGPU };
 const char* backendName(Backend backend);
 
 // 8 bits a channel, not sRGB-encoded: colors are blended as they are stored, as Android and Skia
-// do (and as Kompoz always has).
-enum class Format : uint8_t { RGBA8, BGRA8 };
+// do (and as Kompoz always has). R16F: one 16-bit float channel, drawn into with additive blending
+// (the path renderer's coverage).
+enum class Format : uint8_t { RGBA8, BGRA8, R16F };
 
 struct TextureUsage {
     enum : uint8_t { Sampled = 1, RenderTarget = 2 };

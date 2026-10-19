@@ -2,6 +2,7 @@
 
 #include "renderer.hpp"
 
+#include "shaders/generated/path.h"
 #include "shaders/generated/primitives.h"
 
 #include <algorithm>
@@ -13,7 +14,7 @@ namespace kompoz::gpu {
 namespace {
 
 // shaders/primitives.slang's kinds.
-enum Kind { FILL = 0, STROKE = 1, LINE = 2, ARC = 3, SHADOW = 4, GLYPH = 5, IMAGE = 6, LAYER = 7 };
+enum Kind { FILL = 0, STROKE = 1, LINE = 2, ARC = 3, SHADOW = 4, GLYPH = 5, IMAGE = 6, LAYER = 7, PATH = 8 };
 
 constexpr int kMaxLayer = 4096;  // px: a bigger layer is drawn straight into its target
 
@@ -21,6 +22,12 @@ const ShaderCode kVertex{shaders::primitives_vs_spirv, shaders::primitives_vs_dx
                          shaders::primitives_vs_glsl, shaders::primitives_vs_wgsl, "vs"};
 const ShaderCode kFragment{shaders::primitives_fs_spirv, shaders::primitives_fs_dxil, shaders::primitives_fs_msl,
                            shaders::primitives_fs_glsl, shaders::primitives_fs_wgsl, "fs"};
+const ShaderCode kCoverageVertex{shaders::path_vs_spirv, shaders::path_vs_dxil, shaders::path_vs_msl, shaders::path_vs_glsl,
+                                 shaders::path_vs_wgsl, "vs"};
+const ShaderCode kCoverageFragment{shaders::path_fs_spirv, shaders::path_fs_dxil, shaders::path_fs_msl, shaders::path_fs_glsl,
+                                   shaders::path_fs_wgsl, "fs"};
+
+constexpr int kMaskSize = 2048;  // a generation's mask is at least this big each way (px), and at least its target's size
 
 void set(float (&out)[4], float a, float b, float c, float d) {
     out[0] = a, out[1] = b, out[2] = c, out[3] = d;
@@ -49,7 +56,7 @@ Pipeline& Renderer::pipeline(Format target, bool opaque) {
     desc.fragment = &kFragment;
     for (uint32_t i = 0; i < 8; ++i) desc.instanceAttributes.push_back({i, VertexFormat::Float4, i * 16});
     desc.instanceStride = sizeof(Prim);
-    desc.textures = 1;
+    desc.textures = 2;
     desc.blend.enabled = !opaque;
     desc.target = target;
     pipelines_.emplace_back(std::pair{target, opaque}, device_.createPipeline(desc));
@@ -82,7 +89,7 @@ IRect Renderer::scissor() const {
     return clips_.empty() ? all : intersect(clips_.back(), all);
 }
 
-void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque) {
+void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Mask mask, Texture* texture1) {
     if (targets_.empty()) return;  // (drawn outside beginTarget/endTarget)
     Pass& pass = passes_[targets_.back().pass];
     IRect clip = scissor();
@@ -90,15 +97,18 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque) {
     Prim p = prim;
     p.extra[2] = float(kind);
     if (!texture) texture = white_.get();
+    if (!texture1) texture1 = white_.get();
+    uint32_t generation = pass.shelf.generation;
     if (!pass.batches.empty()) {
         Batch& last = pass.batches.back();
-        if (last.texture == texture && last.opaque == opaque && last.scissor == clip) {
+        if (last.texture == texture && last.texture1 == texture1 && last.mask == mask && last.opaque == opaque && last.scissor == clip &&
+            last.generation == generation) {
             pass.prims.push_back(p);
             ++last.count;
             return;
         }
     }
-    pass.batches.push_back({texture, opaque, clip, uint32_t(pass.prims.size()), 1});
+    pass.batches.push_back({texture, texture1, mask, opaque, clip, generation, uint32_t(pass.prims.size()), 1});
     pass.prims.push_back(p);
 }
 
@@ -155,33 +165,86 @@ void Renderer::flush() {
 }
 
 void Renderer::execute(Pass& pass) {
-    std::vector<Texture*> reads;
-    for (const Batch& b : pass.batches)
-        if (std::find(reads.begin(), reads.end(), b.texture) == reads.end()) reads.push_back(b.texture);
-    device_.beginPass(*pass.target, pass.clear, reads);
+    // The instances, all at once; then each mask generation: its paths' coverage, then the
+    // batches that read it (the target cleared only before the first).
+    BufferRef prims;
     if (!pass.prims.empty()) {
-        BufferRef ref;
-        void* memory = device_.allocate(pass.prims.size() * sizeof(Prim), 16, &ref);
+        void* memory = device_.allocate(pass.prims.size() * sizeof(Prim), 16, &prims);
         std::memcpy(memory, pass.prims.data(), pass.prims.size() * sizeof(Prim));
-        float w = float(pass.target->width()), h = float(pass.target->height());
-        // Pixels (y down) to clip space.
-        float toClip[4] = {2 / w, device_.clipYDown() ? 2 / h : -2 / h, -1, device_.clipYDown() ? -1.f : 1.f};
+    }
+    float w = float(pass.target->width()), h = float(pass.target->height());
+    bool yDown = device_.clipYDown();
+    uint32_t generations = pass.batches.empty() ? 1 : pass.batches.back().generation + 1;
+    bool masked = !pass.edges.empty();
+    if (masked && (!mask_ || mask_->width() < pass.shelf.width || mask_->height() < pass.shelf.height)) {
+        int mw = std::max(pass.shelf.width, mask_ ? mask_->width() : 0), mh = std::max(pass.shelf.height, mask_ ? mask_->height() : 0);
+        mask_ = device_.createTexture(mw, mh, Format::R16F, TextureUsage::Sampled | TextureUsage::RenderTarget);
+    }
+    size_t edge = 0, batch = 0;
+    for (uint32_t g = 0; g < generations; ++g) {
+        size_t firstEdge = edge;
+        while (edge < pass.edges.size() && pass.edgeGenerations[edge] == g) ++edge;
+        if (edge > firstEdge) {
+            if (!coveragePipeline_) {
+                PipelineDesc desc;
+                desc.vertex = &kCoverageVertex;
+                desc.fragment = &kCoverageFragment;
+                desc.instanceAttributes = {{0, VertexFormat::Float4, 0}, {1, VertexFormat::Float4, 16}};
+                desc.instanceStride = sizeof(EdgeInstance);
+                desc.blend = {true, BlendFactor::One, BlendFactor::One, BlendFactor::One, BlendFactor::One};
+                desc.target = Format::R16F;
+                coveragePipeline_ = device_.createPipeline(desc);
+            }
+            BufferRef edges;
+            void* memory = device_.allocate((edge - firstEdge) * sizeof(EdgeInstance), 16, &edges);
+            std::memcpy(memory, pass.edges.data() + firstEdge, (edge - firstEdge) * sizeof(EdgeInstance));
+            float mw = float(mask_->width()), mh = float(mask_->height());
+            float toMask[8] = {2 / mw, yDown ? 2 / mh : -2 / mh, -1, yDown ? -1.f : 1.f, 0, 0, 0, 0};
+            device_.beginPass(*mask_, ClearColor{}, {});
+            device_.setPipeline(*coveragePipeline_);
+            device_.setUniforms(toMask, sizeof toMask);
+            device_.setScissor({0, 0, mask_->width(), mask_->height()});
+            device_.draw(edges, 6, uint32_t(edge - firstEdge));
+            device_.endPass();
+        }
+        std::vector<Texture*> reads;
+        size_t firstBatch = batch;
+        while (batch < pass.batches.size() && pass.batches[batch].generation == g) ++batch;
+        for (size_t i = firstBatch; i < batch; ++i) {
+            const Batch& b = pass.batches[i];
+            for (Texture* t : {b.mask == Mask::Texture0 ? mask_.get() : b.texture, b.mask == Mask::Texture1 ? mask_.get() : b.texture1})
+                if (std::find(reads.begin(), reads.end(), t) == reads.end()) reads.push_back(t);
+        }
+        device_.beginPass(*pass.target, g == 0 ? pass.clear : std::nullopt, reads);
+        float uniforms[8] = {2 / w, yDown ? 2 / h : -2 / h, -1, yDown ? -1.f : 1.f,
+                             mask_ ? 1 / float(mask_->width()) : 0.f, mask_ ? 1 / float(mask_->height()) : 0.f, 0, 0};
         Pipeline* bound = nullptr;
-        for (const Batch& b : pass.batches) {
+        for (size_t i = firstBatch; i < batch; ++i) {
+            const Batch& b = pass.batches[i];
             Pipeline& p = pipeline(pass.target->format(), b.opaque);
             if (&p != bound) {
                 device_.setPipeline(p);
-                device_.setUniforms(toClip, sizeof toClip);
+                device_.setUniforms(uniforms, sizeof uniforms);
                 bound = &p;
             }
             device_.setScissor(b.scissor);
-            device_.setTexture(0, *b.texture, Sampler{});
-            device_.draw({ref.buffer, ref.offset + uint64_t(b.first) * sizeof(Prim)}, 6, b.count);
+            const Sampler nearest{Filter::Nearest};
+            if (b.mask == Mask::Texture0)
+                device_.setTexture(0, *mask_, nearest);
+            else
+                device_.setTexture(0, *b.texture, Sampler{});
+            if (b.mask == Mask::Texture1)  // (a layer's cut, which may be turned: filtered)
+                device_.setTexture(1, *mask_, Sampler{});
+            else
+                device_.setTexture(1, *b.texture1, Sampler{});
+            device_.draw({prims.buffer, prims.offset + uint64_t(b.first) * sizeof(Prim)}, 6, b.count);
         }
+        device_.endPass();
     }
-    device_.endPass();
     pass.prims.clear();
     pass.batches.clear();
+    pass.edges.clear();
+    pass.edgeGenerations.clear();
 }
 
 void Renderer::endFrame() {
@@ -372,9 +435,73 @@ void Renderer::drawShadow(const Rect& rect, const CornerRadii& radii, const Shad
     add(SHADOW, p);
 }
 
+std::optional<Offset> Renderer::rasterize(const std::vector<Contour>& contours, IRect region) {
+    if (region.empty() || targets_.empty()) return std::nullopt;
+    Pass& pass = passes_[targets_.back().pass];
+    MaskShelf& shelf = pass.shelf;
+    // As big as the target, or as a region bigger than it (a layer reaching past it).
+    shelf.width = std::max({shelf.width, kMaskSize, pass.target->width() + 2, region.width + 1});
+    shelf.height = std::max({shelf.height, kMaskSize, pass.target->height() + 2, region.height + 1});
+    // A spot on the shelves (a texel apart), in this generation's mask or the next one's.
+    int w = region.width, h = region.height;
+    if (shelf.x + w + 1 > shelf.width) {
+        shelf.x = 0;
+        shelf.y += shelf.row;
+        shelf.row = 0;
+    }
+    if (shelf.y + h + 1 > shelf.height) {
+        ++shelf.generation;
+        shelf.x = shelf.y = shelf.row = 0;
+    }
+    int mx = shelf.x, my = shelf.y;
+    shelf.x += w + 1;
+    shelf.row = std::max(shelf.row, h + 1);
+    edgeScratch_.clear();
+    appendEdges(contours, edgeScratch_);
+    float dx = float(mx - region.x), dy = float(my - region.y);
+    float r[4] = {float(mx), float(my), float(mx + w), float(my + h)};
+    for (const Edge& e : edgeScratch_) {
+        pass.edges.push_back({{e.x0 + dx, e.y0 + dy, e.x1 + dx, e.y1 + dy}, {r[0], r[1], r[2], r[3]}});
+        pass.edgeGenerations.push_back(shelf.generation);
+    }
+    return Offset{float(region.x - mx), float(region.y - my)};
+}
+
+void Renderer::fillContours(const std::vector<Contour>& contours, bool evenOdd, Color color) {
+    if (color.a <= 0 || targets_.empty()) return;
+    // The pixels the polygons touch, within the clip.
+    float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f;
+    for (const Contour& c : contours)
+        for (Offset q : c.points) x0 = std::min(x0, q.x), y0 = std::min(y0, q.y), x1 = std::max(x1, q.x), y1 = std::max(y1, q.y);
+    if (x0 > x1) return;
+    IRect bounds{int(std::floor(x0)), int(std::floor(y0)), int(std::ceil(x1)) - int(std::floor(x0)), int(std::ceil(y1)) - int(std::floor(y0))};
+    IRect region = intersect(bounds, scissor());
+    std::optional<Offset> origin = rasterize(contours, region);
+    if (!origin) return;
+    Prim p;
+    set(p.bounds, float(region.x), float(region.y), float(region.x + region.width), float(region.y + region.height));
+    set(p.params, origin->x, origin->y, evenOdd ? 1.f : 0.f, 0);
+    premultiplied(p.color, color);
+    add(PATH, p, nullptr, false, Mask::Texture0);
+}
+
 void Renderer::drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& area, const PathStroke& stroke) {
-    // Paths come with the path renderer.
-    (void)path, (void)origin, (void)brush, (void)area, (void)stroke;
+    if (path.isEmpty()) return;
+    std::vector<Contour> contours = flattenPath(path.commands(), {origin, scale, {ox_, oy_}});
+    bool evenOdd = false;
+    if (stroke.width > 0)
+        contours = strokeOutline(contours, stroke.width * scale, stroke.cap, stroke.join, stroke.miter);
+    else
+        evenOdd = path.fillType == Path::FillType::EvenOdd;
+    // In the brush's color at the path's middle (until brushes are drawn per pixel).
+    Rect b = path.bounds();
+    Color color = brush.isSolid() ? brush.stops().front().color : brush.colorAt({origin.x + b.x + b.width / 2, origin.y + b.y + b.height / 2}, area);
+    fillContours(contours, evenOdd, color);
+}
+
+void Renderer::pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform) {
+    pushLayer(bounds, CornerRadii(), alpha, transform);
+    if (layers_.back().texture) layers_.back().outline = outline;
 }
 
 void Renderer::pushClip(const Rect& r) {
@@ -441,6 +568,14 @@ void Renderer::popLayer() {
     bool square = r.max() < 0.5f;
     float rx0 = float(layer.rect.x), ry0 = float(layer.rect.y), rx1 = rx0 + float(layer.rect.width), ry1 = ry0 + float(layer.rect.height);
     Prim p;
+    // Cut to an outline: its coverage, rasterized in the layer's pixels before its transform.
+    std::optional<Offset> outline;
+    if (layer.outline) {
+        std::vector<Contour> contours = flattenPath(layer.outline->commands(), {{0, 0}, scale, {-b.x, -b.y}});
+        outline = rasterize(contours, layer.rect);
+        if (!outline) return;
+        square = true;  // (its pixels, cut by the mask)
+    }
     // Square: all of its pixels. Rounded: its exact bounds, edges anti-aliased.
     if (square) {
         set(p.bounds, rx0, ry0, rx1, ry1);
@@ -461,6 +596,13 @@ void Renderer::popLayer() {
     set(p.xform, a, bb, c, d);
     p.extra[0] = ox - (a * ox + c * oy) + tf.translationX * scale;
     p.extra[1] = oy - (bb * ox + d * oy) + tf.translationY * scale;
+    if (outline) {
+        p.radii[0] = outline->x, p.radii[1] = outline->y;
+        p.extra[3] = 1;
+        set(p.bounds, rx0, ry0, rx1, ry1);  // (no further: the mask goes no further)
+        add(LAYER, p, &t, false, Mask::Texture1);
+        return;
+    }
     add(LAYER, p, &t);
 }
 

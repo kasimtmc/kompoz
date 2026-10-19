@@ -15,6 +15,7 @@
 
 #include "device.hpp"
 #include "glyph_atlas.hpp"
+#include "path_geometry.hpp"
 
 #include <kompoz/graphics.hpp>
 
@@ -64,6 +65,7 @@ public:
     bool quickReject(const Rect& rect) const override;
     void drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& brushArea, const PathStroke& stroke) override;
     void drawShadow(const Rect& rect, const CornerRadii& radii, const Shadow& shadow, bool inner) override;
+    void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform = {}) override;
 
 private:
     // One quad: what shaders/primitives.slang's Instance says.
@@ -71,17 +73,36 @@ private:
         float bounds[4]{}, shape[4]{}, radii[4]{}, color[4]{}, params[4]{}, uv[4]{};
         float xform[4]{1, 0, 0, 1}, extra[4]{};
     };
+    // Where a batch's textures come from: its own, or the coverage mask (made when the pass runs).
+    enum class Mask : uint8_t { None, Texture0, Texture1 };
     struct Batch {
         Texture* texture;
+        Texture* texture1;
+        Mask mask;
         bool opaque;  // written as it is, not blended
         IRect scissor;
+        uint32_t generation;  // the pass's masks it reads (see Pass)
         uint32_t first, count;
+    };
+    // One edge of a path in the coverage mask, and the path's part of the mask (shaders/path.slang).
+    struct EdgeInstance {
+        float edge[4], region[4];
+    };
+    // A pass's paths are rasterized into the coverage mask before it runs. When the mask is full a
+    // new generation starts: the mask is made again for the batches recorded after that.
+    struct MaskShelf {
+        int width = 0, height = 0;  // what a generation has
+        int x = 0, y = 0, row = 0;
+        uint32_t generation = 0;
     };
     struct Pass {
         Texture* target;
         std::optional<ClearColor> clear;
         std::vector<Prim> prims;
         std::vector<Batch> batches;
+        std::vector<EdgeInstance> edges;
+        std::vector<uint32_t> edgeGenerations;  // the generation each edge is in
+        MaskShelf shelf;
     };
     // A target being drawn into: its pass, and the drawing state outside it.
     struct Target {
@@ -97,6 +118,7 @@ private:
         CornerRadii radii;  // px
         float alpha;
         LayerTransform transform;
+        std::optional<Path> outline;  // cut to this (dp from the bounds' top left) instead of the corners
     };
     struct ImageTexture {
         std::unique_ptr<Texture> texture;
@@ -108,7 +130,12 @@ private:
         int idleFrames = 0;
     };
 
-    void add(int kind, const Prim& prim, Texture* texture = nullptr, bool opaque = false);
+    void add(int kind, const Prim& prim, Texture* texture = nullptr, bool opaque = false, Mask mask = Mask::None, Texture* texture1 = nullptr);
+    // Rasterizes polygons into the current pass's coverage mask, within `region` (px of the
+    // target, or of a layer before its transform): where the mask's texel (0, 0) is in those
+    // pixels, or nothing if the region is empty.
+    std::optional<Offset> rasterize(const std::vector<Contour>& contours, IRect region);
+    void fillContours(const std::vector<Contour>& contours, bool evenOdd, Color color);
     void glyphs(Color color);
     Texture* pageTexture(int page);
     Texture* imageTexture(const ImageBitmap& image);
@@ -125,6 +152,9 @@ private:
     std::unordered_map<uint64_t, ImageTexture> images_;
     std::vector<PooledTexture> pool_;  // layer targets
     std::vector<std::pair<std::pair<Format, bool>, std::unique_ptr<Pipeline>>> pipelines_;
+    std::unique_ptr<Pipeline> coveragePipeline_;
+    std::unique_ptr<Texture> mask_;  // the coverage mask, as big as a generation needed so far
+    std::vector<Edge> edgeScratch_;
     std::vector<Pass> passes_;
     std::vector<size_t> order_;  // ended passes, in the order they run
     std::vector<Target> targets_;  // the targets being drawn into, innermost last

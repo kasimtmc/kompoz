@@ -14,7 +14,10 @@ static const int SHADOW = 4;       // a rounded rect's blurred shadow: params.x 
 static const int GLYPH = 5;        // the atlas's texels at uv; params.x: a color glyph (drawn as it is, at the color's alpha)
 static const int IMAGE = 6;        // an image's texels at uv, at alpha params.x
 static const int LAYER = 7;        // a layer's texture: texel (0, 0) at params.xy, uv.zw a texel's size, its pixels within
-                                   // params.xy..params.zw; at alpha color.a, cut to the rounded rect (shape, radii)
+                                   // params.xy..params.zw; at alpha color.a, cut to the rounded rect (shape, radii), or
+                                   // with extra.w = 1 to the path whose coverage mask (texture1, linearly filtered) has
+                                   // texel (0, 0) at radii.xy
+static const int PATH = 8;         // a path: its coverage mask (texture0) has texel (0, 0) at params.xy; params.z: even-odd
 
 // The vertex's index: on SPIR-V (Vulkan, and through it OpenGL ES) without the base vertex that
 // D3D's SV_VertexID leaves out, which OpenGL ES doesn't have (draws start at vertex 0 anyway).
@@ -25,11 +28,13 @@ static const int LAYER = 7;        // a layer's texture: texel (0, 0) at params.
 #endif
 
 struct Uniforms {
-    float4 toClip;  // clip = position * toClip.xy + toClip.zw
+    float4 toClip;     // clip = position * toClip.xy + toClip.zw
+    float4 maskTexel;  // a coverage mask's texel's size (xy)
 };
 [[vk::push_constant]] ConstantBuffer<Uniforms> uniforms;
 
 [[vk::binding(1, 0)]] Sampler2D texture0;
+[[vk::binding(2, 0)]] Sampler2D texture1;
 
 struct Instance {
     float4 bounds : BOUNDS;  // the quad: x0, y0, x1, y1
@@ -39,7 +44,7 @@ struct Instance {
     float4 params : PARAMS;
     float4 uv : UV;
     float4 xform : XFORM;  // a, b, c, d: x' = a x + c y + tx, y' = b x + d y + ty
-    float4 extra : EXTRA;  // tx, ty, kind
+    float4 extra : EXTRA;  // tx, ty, kind, flags
 };
 
 struct Varyings {
@@ -53,6 +58,7 @@ struct Varyings {
     nointerpolation float4 params : PARAMS;
     nointerpolation float4 uv : UV;
     nointerpolation float kind : KIND;
+    nointerpolation float flags : FLAGS;
 };
 
 [shader("vertex")]
@@ -74,6 +80,7 @@ Varyings vs(Instance instance, uint vertex : VERTEX_ID) {
     out.params = instance.params;
     out.uv = instance.uv;
     out.kind = instance.extra.z;
+    out.flags = instance.extra.w;
     return out;
 }
 
@@ -95,6 +102,20 @@ float coverage(float distance, float aa) {
 // How much of the pixel at x (device pixels across a band from -h to h) the band covers.
 float bandCoverage(float x, float h) {
     return saturate(min(x + 0.5, h) - max(x - 0.5, -h));
+}
+
+// A path's coverage from its mask's sum at the pixel (see shaders/path.slang): by the non-zero
+// rule, or the even-odd one.
+float pathCoverage(float sum, bool evenOdd) {
+    sum = abs(sum);
+    if (!evenOdd) return min(sum, 1);
+    float m = sum - 2 * floor(sum / 2);
+    return m <= 1 ? m : 2 - m;
+}
+
+// Where a mask texel is sampled: its middle (with nearest filtering, texel for pixel).
+float2 maskTexcoord(float2 texel) {
+    return (floor(texel) + 0.5) * uniforms.maskTexel.xy;
 }
 
 // A Gaussian's integral, approximated (Abramowitz and Stegun 7.1.25).
@@ -190,7 +211,12 @@ float4 fs(Varyings v) : SV_Target {
     } else if (kind == LAYER) {
         float2 texel = clamp(v.local, v.params.xy + 0.5, v.params.zw - 0.5);
         float4 color = texture0.Sample((texel - v.params.xy) * v.uv.zw);
-        return color * v.color.a * coverage(roundRectDistance(v.local, v.shape, v.radii), aa);
+        // (Filtered where it is: a turned or scaled layer's pixels fall between the mask's texels.)
+        float cut = v.flags > 0.5 ? pathCoverage(texture1.SampleLevel((v.local - v.radii.xy) * uniforms.maskTexel.xy, 0).r, false)
+                                  : coverage(roundRectDistance(v.local, v.shape, v.radii), aa);
+        return color * v.color.a * cut;
+    } else if (kind == PATH) {
+        alpha = pathCoverage(texture0.SampleLevel(maskTexcoord(v.local - v.params.xy), 0).r, v.params.z > 0.5);
     }
     return v.color * alpha;
 }

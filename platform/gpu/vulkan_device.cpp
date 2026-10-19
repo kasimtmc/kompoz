@@ -64,7 +64,14 @@ struct Api {
 constexpr int kFramesInFlight = 2;
 constexpr VkDeviceSize kChunkSize = 4 << 20;  // per-frame memory comes in chunks of this (or one as big as asked)
 
-VkFormat vkFormat(Format f) { return f == Format::BGRA8 ? VK_FORMAT_B8G8R8A8_UNORM : VK_FORMAT_R8G8B8A8_UNORM; }
+VkFormat vkFormat(Format f) {
+    switch (f) {
+    case Format::RGBA8: return VK_FORMAT_R8G8B8A8_UNORM;
+    case Format::BGRA8: return VK_FORMAT_B8G8R8A8_UNORM;
+    case Format::R16F: return VK_FORMAT_R16_SFLOAT;  // (a color attachment that blends, everywhere: Vulkan's required formats)
+    }
+    return VK_FORMAT_R8G8B8A8_UNORM;
+}
 
 VkBlendFactor vkFactor(BlendFactor f) {
     switch (f) {

@@ -11,6 +11,7 @@
 // The device is Vulkan's, on SDL's offscreen video driver (a headless surface): lavapipe in CI.
 
 #include "../platform/gpu/device.hpp"
+#include "../platform/gpu/path_geometry.hpp"
 #include "../platform/gpu/renderer.hpp"
 #include "../platform/sdl3/font_system.hpp"
 
@@ -281,6 +282,81 @@ void layers(GraphicsContext& c) {
     c.popClip();
 }
 
+Path star(float cx, float cy, float r) {  // five points, drawn in one go: it crosses itself
+    Path p;
+    for (int i = 0; i < 5; ++i) {
+        float a = -3.14159265f / 2 + float(i) * 4 * 3.14159265f / 5;
+        if (i == 0)
+            p.moveTo(cx + r * std::cos(a), cy + r * std::sin(a));
+        else
+            p.lineTo(cx + r * std::cos(a), cy + r * std::sin(a));
+    }
+    p.close();
+    return p;
+}
+
+void paths(GraphicsContext& c) {
+    Color ink{0.15f, 0.15f, 0.2f, 1}, green{0.1f, 0.55f, 0.3f, 1}, red{0.8f, 0.2f, 0.2f, 1};
+    Brush inkBrush = Brush::solid(ink);
+    Path s1 = star(30, 32, 26);
+    c.drawPath(s1, {}, Brush::solid(green), {}, {});  // non-zero: the middle filled
+    Path s2 = star(90, 32, 26);
+    s2.fillType = Path::FillType::EvenOdd;
+    c.drawPath(s2, {}, Brush::solid(green), {}, {});  // even-odd: the middle left out
+    Path circle;
+    circle.addOval({126, 8, 52, 48});
+    c.drawPath(circle, {}, Brush::solid(red.copy(0.6f)), {}, {});
+    // Strokes: caps (butt, round, square), joins (miter, round, bevel), a miter past its limit.
+    StrokeCap caps[3] = {StrokeCap::Butt, StrokeCap::Round, StrokeCap::Square};
+    StrokeJoin joins[3] = {StrokeJoin::Miter, StrokeJoin::Round, StrokeJoin::Bevel};
+    for (int i = 0; i < 3; ++i) {
+        Path z;
+        z.moveTo(14 + float(i) * 60, 112);
+        z.lineTo(34 + float(i) * 60, 76);
+        z.lineTo(54 + float(i) * 60, 112);
+        c.drawPath(z, {}, inkBrush, {}, {8, caps[i], joins[i], 4});
+    }
+    Path sharp;  // too sharp for a miter limit of 2: beveled
+    sharp.moveTo(10, 150);
+    sharp.lineTo(60, 140);
+    sharp.lineTo(10, 130);
+    c.drawPath(sharp, {}, Brush::solid(red), {}, {6, StrokeCap::Butt, StrokeJoin::Miter, 2});
+    Path curve;
+    curve.moveTo(72, 180);
+    curve.cubicTo(90, 120, 120, 200, 140, 130);
+    c.drawPath(curve, {}, inkBrush, {}, {3, StrokeCap::Round, StrokeJoin::Round, 4});
+    Path thin;
+    thin.moveTo(150, 130);
+    thin.quadraticTo(185, 140, 160, 186);
+    c.drawPath(thin, {}, inkBrush, {}, {0.5f, StrokeCap::Butt, StrokeJoin::Miter, 4});
+    Path dot;  // a contour that goes nowhere: a dot for round caps
+    dot.moveTo(176, 120);
+    dot.lineTo(176, 120);
+    c.drawPath(dot, {}, Brush::solid(red), {}, {10, StrokeCap::Round, StrokeJoin::Round, 4});
+    Path ring;
+    ring.addRoundRect({100, 140, 40, 40}, 10);
+    c.drawPath(ring, {}, Brush::solid(green), {}, {4, StrokeCap::Butt, StrokeJoin::Miter, 4});
+}
+
+void outlineLayers(GraphicsContext& c) {
+    Color blue{0.15f, 0.3f, 0.86f, 1}, orange{0.9f, 0.6f, 0.1f, 1};
+    c.pushOutlineLayer({2, 2, 80, 80}, star(40, 40, 38), 1);  // (the outline from the bounds' top left)
+    c.fillRoundRect({2, 2, 80, 40}, 0, blue);
+    c.fillRoundRect({2, 42, 80, 40}, 0, orange);
+    c.popLayer();
+    LayerTransform turned;
+    turned.rotationZ = 20;
+    Path heart;
+    heart.moveTo(40, 72);
+    heart.cubicTo(-10, 40, 10, 0, 40, 22);
+    heart.cubicTo(70, 0, 90, 40, 40, 72);
+    heart.close();
+    c.pushOutlineLayer({100, 100, 80, 80}, heart, 0.8f, turned);  // turned, half see-through
+    c.fillRoundRect({100, 100, 80, 80}, 0, Color{0.8f, 0.2f, 0.3f, 1});
+    c.drawText("love", {118, 140}, Font{16}, colors::White, false);
+    c.popLayer();
+}
+
 void fractionalDensity(GraphicsContext& c) {  // at 2.625 px per dp, as a phone's
     c.fillRoundRect({4, 4, 30, 20}, 6, Color{0.2f, 0.5f, 0.3f, 1});
     c.strokeRoundRect({38, 4, 30, 20}, 6, 1, Color{0.2f, 0.2f, 0.2f, 1});
@@ -348,6 +424,56 @@ void clipsAndTranslationsAreExact(Gpu& g) {
     CHECK(near(p.at(26, 12), 255, 255, 255));
 }
 
+void pathsAreCoveredExactly(Gpu& g) {
+    Pixels p = g.render(64, 40, 1, [](GraphicsContext& c) {
+        Path square;  // as a path: the same coverage as the rect
+        square.addRect({4.5f, 4, 10, 10});
+        c.drawPath(square, {}, Brush::solid(Color{1, 0, 0, 1}), {}, {});
+        Path nested;  // two squares the same way round: non-zero fills the inner one, even-odd doesn't
+        nested.addRect({20, 4, 16, 16});
+        nested.addRect({24, 8, 8, 8});
+        c.drawPath(nested, {}, Brush::solid(Color{0, 0, 1, 1}), {}, {});
+        Path holed = nested;
+        holed.translate({20, 0});
+        holed.fillType = Path::FillType::EvenOdd;
+        c.drawPath(holed, {}, Brush::solid(Color{0, 0, 1, 1}), {}, {});
+        Path line;  // a 2 px stroke along whole pixels, butt caps: exactly a 2 px wide rect
+        line.moveTo(4, 30);
+        line.lineTo(20, 30);
+        c.drawPath(line, {}, Brush::solid(Color{0, 0, 0, 1}), {}, {2, StrokeCap::Butt, StrokeJoin::Miter, 4});
+    });
+    CHECK(near(p.at(4, 8), 255, 128, 128));  // half covered
+    CHECK(near(p.at(8, 8), 255, 0, 0));
+    CHECK(near(p.at(14, 8), 255, 128, 128));
+    CHECK(near(p.at(15, 8), 255, 255, 255));
+    CHECK(near(p.at(27, 11), 0, 0, 255));      // non-zero: inside the inner square too
+    CHECK(near(p.at(47, 11), 255, 255, 255));  // even-odd: a hole
+    CHECK(near(p.at(41, 5), 0, 0, 255));
+    CHECK(near(p.at(10, 29), 0, 0, 0));
+    CHECK(near(p.at(10, 30), 0, 0, 0));
+    CHECK(near(p.at(10, 28), 255, 255, 255));
+    CHECK(near(p.at(10, 31), 255, 255, 255));
+    CHECK(near(p.at(3, 29), 255, 255, 255));   // butt: nothing past the ends
+    CHECK(near(p.at(20, 29), 255, 255, 255));
+}
+
+// Curves cut into lines stay within kTolerance of the curve, in the target's pixels.
+void curvesAreFlattenedClosely() {
+    Path circle;
+    circle.addOval({0, 0, 100, 100});
+    for (float scale : {1.f, 2.625f, 4.f}) {
+        std::vector<gpu::Contour> contours = gpu::flattenPath(circle.commands(), {{0, 0}, scale, {0, 0}});
+        CHECK(contours.size() == 1);
+        float r = 50 * scale, worst = 0;
+        const auto& pts = contours[0].points;
+        for (size_t i = 0; i + 1 < pts.size(); ++i) {  // each line's middle, the farthest from the arc
+            Offset m{(pts[i].x + pts[i + 1].x) / 2 - r, (pts[i].y + pts[i + 1].y) / 2 - r};
+            worst = std::max(worst, std::abs(std::hypot(m.x, m.y) - r));
+        }
+        CHECK(worst <= gpu::kTolerance + 0.05f);  // (the oval is cubics, themselves within 0.03% of the circle)
+    }
+}
+
 void scenesMatchTheirPictures(Gpu& g) {
     struct Scene {
         const char* name;
@@ -357,6 +483,7 @@ void scenesMatchTheirPictures(Gpu& g) {
     };
     const Scene scenes[] = {{"rects", 192, 192, 1, rects},   {"lines", 192, 192, 1, lines},   {"shadows", 192, 192, 1, shadows},
                             {"text", 192, 192, 1, text},     {"images", 192, 192, 1, images}, {"layers", 192, 192, 1, layers},
+                            {"paths", 192, 192, 1, paths},   {"outline-layers", 192, 192, 1, outlineLayers},
                             {"density", 192, 192, 2.625f, fractionalDensity}};
     for (const Scene& s : scenes) {
         Pixels p = g.render(s.w, s.h, s.scale, s.draw);
@@ -386,6 +513,8 @@ int main() {
             edgesAreCoveredExactly(g);
             layerAlphaIsExact(g);
             clipsAndTranslationsAreExact(g);
+            pathsAreCoveredExactly(g);
+            curvesAreFlattenedClosely();
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
             std::printf("%d checks, %d failed\n", checks, failures);
