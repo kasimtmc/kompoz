@@ -4,6 +4,7 @@ import os
 from conan import ConanFile
 from conan.tools.build import can_run
 from conan.tools.cmake import CMake, cmake_layout
+from conan.tools.env import Environment
 
 
 class KompozTestConan(ConanFile):
@@ -24,5 +25,9 @@ class KompozTestConan(ConanFile):
     def test(self):
         if can_run(self):
             demo = os.path.join(self.cpp.build.bindir, "package", "demo")
-            self.run(f'SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software KOMPOZ_SCRIPT="wait 5;click 70 70;wait 5;quit" {demo}',
-                     env="conanrun")
+            env = Environment()
+            env.define("SDL_VIDEO_DRIVER", "offscreen")
+            env.define("SDL_RENDER_DRIVER", "software")
+            env.define("KOMPOZ_SCRIPT", "wait 5;click 70 70;wait 5;quit")
+            with env.vars(self, scope="run").apply():
+                self.run(demo, env="conanrun")
