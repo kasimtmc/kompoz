@@ -66,6 +66,10 @@ public:
     void drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& brushArea, const PathStroke& stroke) override;
     void drawShadow(const Rect& rect, const CornerRadii& radii, const Shadow& shadow, bool inner) override;
     void fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& brush, const Rect& brushArea) override;
+    void pushBlendMode(BlendMode mode) override;
+    void popBlendMode() override;
+    void pushColorFilter(const ColorFilter& filter) override;
+    void popColorFilter() override;
     void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform = {}) override;
 
 private:
@@ -74,6 +78,7 @@ private:
         float bounds[4]{}, shape[4]{}, radii[4]{}, color[4]{}, params[4]{}, uv[4]{};
         float xform[4]{1, 0, 0, 1}, extra[4]{};
         float paint[4]{}, gradient[4]{};
+        float filter[4]{};  // how many color filters, their row in the table
     };
     // Where a batch's textures come from: its own, or the coverage mask (made when the pass runs).
     enum class Mask : uint8_t { None, Texture0, Texture1 };
@@ -82,6 +87,7 @@ private:
         Texture* texture1;
         Mask mask;
         bool opaque;  // written as it is, not blended
+        BlendMode blend;
         IRect scissor;
         uint32_t generation;  // the pass's masks it reads (see Pass)
         uint32_t first, count;
@@ -112,6 +118,8 @@ private:
         float ox, oy;  // the pixel origin
         std::vector<IRect> clips;
         std::vector<Offset> translations;
+        std::vector<BlendMode> blends;
+        std::vector<ColorFilter> filters;
     };
     struct Layer {
         Texture* texture;  // null: too big, drawn straight into the target
@@ -145,7 +153,7 @@ private:
     Texture* imageTexture(const ImageBitmap& image);
     Texture* acquire(int width, int height);
     IRect scissor() const;
-    Pipeline& pipeline(Format target, bool opaque);
+    Pipeline& pipeline(Format target, const BlendState& blend);
     void execute(Pass& pass);
 
     Device& device_;
@@ -155,13 +163,20 @@ private:
     std::vector<std::unique_ptr<Texture>> pages_;  // the glyph atlas's pages
     std::unordered_map<uint64_t, ImageTexture> images_;
     std::vector<PooledTexture> pool_;  // layer targets
-    std::vector<std::pair<std::pair<Format, bool>, std::unique_ptr<Pipeline>>> pipelines_;
+    struct PipelineKey {
+        Format format;
+        BlendState blend;
+        bool operator==(const PipelineKey&) const = default;
+    };
+    std::vector<std::pair<PipelineKey, std::unique_ptr<Pipeline>>> pipelines_;
+    std::unique_ptr<Texture> dstCopy_;  // a target's pixels under a draw whose blend mode reads them
     std::unique_ptr<Pipeline> coveragePipeline_;
     std::unique_ptr<Texture> mask_;  // the coverage mask, as big as a generation needed so far
     // Gradients' stops this frame, a row each (see shaders/primitives.slang), and their texture.
     static constexpr int kStopsWidth = 256;  // texels: 128 stops
     std::vector<float> stops_;
     std::vector<Brush> stopBrushes_;
+    std::vector<int> stopRows_;  // each one's row
     int stopsUploaded_ = 0;  // rows
     std::unique_ptr<Texture> stopsTexture_;
     std::vector<Edge> edgeScratch_;
@@ -173,6 +188,10 @@ private:
     float ox_ = 0, oy_ = 0;  // the current target's pixel origin
     std::vector<IRect> clips_;
     std::vector<Offset> translations_;
+    std::vector<BlendMode> blends_;       // pushBlendMode's in this target, the innermost last
+    std::vector<ColorFilter> filters_;    // pushColorFilter's in this target, the innermost last
+    std::vector<std::vector<ColorFilter>> filterChains_;  // this frame's, a table row each (after the stops')
+    std::vector<int> filterRows_;
 };
 
 } // namespace kompoz::gpu

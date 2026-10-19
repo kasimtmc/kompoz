@@ -188,6 +188,8 @@ public:
     // `instanceCount` instances of `vertexCount` vertices (triangles), their attributes from `instances`.
     virtual void draw(const BufferRef& instances, uint32_t vertexCount, uint32_t instanceCount) = 0;
     virtual void endPass() = 0;
+    // Part of one texture into another of the same format, at (x, y); outside passes.
+    virtual void copyTexture(Texture& source, const IRect& region, Texture& destination, int x, int y) = 0;
     // A texture's pixels (RGBA8, top row first), waiting for what was drawn into it so far.
     virtual std::vector<uint8_t> readPixels(Texture& texture, const IRect& region) = 0;
     // Submits the frame, and shows the swapchain image if `present` (and it was asked for).

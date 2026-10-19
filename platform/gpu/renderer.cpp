@@ -48,29 +48,65 @@ Renderer::Renderer(Device& device, TextSource& text) : device_(device), text_(te
 
 Renderer::~Renderer() { device_.waitIdle(); }
 
-Pipeline& Renderer::pipeline(Format target, bool opaque) {
-    for (auto& [key, p] : pipelines_)
-        if (key == std::pair{target, opaque}) return *p;
+Pipeline& Renderer::pipeline(Format target, const BlendState& blend) {
+    PipelineKey key{target, blend};
+    for (auto& [k, p] : pipelines_)
+        if (k == key) return *p;
     PipelineDesc desc;
     desc.vertex = &kVertex;
     desc.fragment = &kFragment;
-    for (uint32_t i = 0; i < 10; ++i) desc.instanceAttributes.push_back({i, VertexFormat::Float4, i * 16});
+    for (uint32_t i = 0; i < 11; ++i) desc.instanceAttributes.push_back({i, VertexFormat::Float4, i * 16});
     desc.instanceStride = sizeof(Prim);
-    desc.textures = 3;
-    desc.blend.enabled = !opaque;
+    desc.textures = 4;
+    desc.blend = blend;
     desc.target = target;
-    pipelines_.emplace_back(std::pair{target, opaque}, device_.createPipeline(desc));
+    pipelines_.emplace_back(key, device_.createPipeline(desc));
     return *pipelines_.back().second;
 }
+
+namespace {
+
+// How a blend mode is drawn: by the blend unit (`state`), the shader putting the coverage in as
+// `how` says (see shaders/primitives.slang's finish), or worked out in the shader from a copy of
+// the target (`readsTarget`, the blend unit off).
+struct BlendPlan {
+    BlendState state;
+    int how = 0;
+    bool readsTarget = false;
+};
+BlendPlan planFor(BlendMode mode, bool opaque) {
+    using F = BlendFactor;
+    auto unit = [](F src, F dst, F srcA, F dstA, int how = 0) { return BlendPlan{{true, src, dst, srcA, dstA}, how}; };
+    if (opaque) return {{false}};
+    switch (mode) {
+    // The coverage multiplied in mixes these with what is there exactly.
+    case BlendMode::SrcOver: return unit(F::One, F::OneMinusSrcAlpha, F::One, F::OneMinusSrcAlpha);
+    case BlendMode::DstOver: return unit(F::OneMinusDstAlpha, F::One, F::OneMinusDstAlpha, F::One);
+    case BlendMode::SrcAtop: return unit(F::DstAlpha, F::OneMinusSrcAlpha, F::DstAlpha, F::OneMinusSrcAlpha);
+    case BlendMode::DstOut: return unit(F::Zero, F::OneMinusSrcAlpha, F::Zero, F::OneMinusSrcAlpha);
+    case BlendMode::Xor: return unit(F::OneMinusDstAlpha, F::OneMinusSrcAlpha, F::OneMinusDstAlpha, F::OneMinusSrcAlpha);
+    case BlendMode::Plus: return unit(F::One, F::One, F::One, F::One);
+    case BlendMode::Screen: return unit(F::One, F::OneMinusSrcColor, F::One, F::OneMinusSrcAlpha);
+    // These mix towards a source that changes nothing; Clear by the coverage alone.
+    case BlendMode::Modulate: return unit(F::Zero, F::SrcColor, F::Zero, F::SrcAlpha, 1);
+    case BlendMode::DstIn: return unit(F::Zero, F::SrcAlpha, F::Zero, F::SrcAlpha, 2);
+    case BlendMode::Clear: return unit(F::Zero, F::OneMinusSrcAlpha, F::Zero, F::OneMinusSrcAlpha, 3);
+    default: return {{false}, 4, true};  // Src, SrcIn, SrcOut, DstAtop and the separable and non-separable modes
+    }
+}
+
+} // namespace
 
 // --- Targets -------------------------------------------------------------------------------------
 
 void Renderer::beginTarget(Texture& target, const std::optional<ClearColor>& clear) {
-    targets_.push_back({passes_.size(), ox_, oy_, std::move(clips_), std::move(translations_)});
+    targets_.push_back({passes_.size(), ox_, oy_, std::move(clips_), std::move(translations_), std::move(blends_), std::move(filters_)});
     passes_.push_back({&target, clear, {}, {}});
     ox_ = oy_ = 0;
     clips_.clear();
     translations_.clear();
+    blends_.clear();  // (what is drawn into it starts plain: its composite gets the modes and filters outside)
+    filters_.clear();
 }
 
 void Renderer::endTarget() {
@@ -80,6 +116,17 @@ void Renderer::endTarget() {
     ox_ = t.ox, oy_ = t.oy;
     clips_ = std::move(t.clips);
     translations_ = std::move(t.translations);
+    blends_ = std::move(t.blends);
+    filters_ = std::move(t.filters);
+}
+
+void Renderer::pushBlendMode(BlendMode mode) { blends_.push_back(mode); }
+void Renderer::popBlendMode() {
+    if (!blends_.empty()) blends_.pop_back();
+}
+void Renderer::pushColorFilter(const ColorFilter& filter) { filters_.push_back(filter); }
+void Renderer::popColorFilter() {
+    if (!filters_.empty()) filters_.pop_back();
 }
 
 IRect Renderer::scissor() const {
@@ -94,21 +141,55 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Ma
     Pass& pass = passes_[targets_.back().pass];
     IRect clip = scissor();
     if (clip.empty()) return;
+    BlendMode blend = blends_.empty() || opaque ? BlendMode::SrcOver : blends_.back();
+    if (blend == BlendMode::Dst) return;  // (changes nothing)
     Prim p = prim;
     p.extra[2] = float(kind);
+    if (!filters_.empty() && !opaque) {
+        // The filters in effect, the innermost first, in a row of the table (once a frame for each chain).
+        std::vector<ColorFilter> chain(filters_.rbegin(), filters_.rend());
+        int row = -1;
+        for (size_t i = 0; i < filterChains_.size() && row < 0; ++i)
+            if (filterChains_[i] == chain) row = filterRows_[i];
+        if (row < 0) {
+            row = int(stops_.size() / (kStopsWidth * 4));
+            size_t at = stops_.size();
+            stops_.resize(at + kStopsWidth * 4, 0.f);
+            for (size_t i = 0; i < chain.size() && i < kStopsWidth / 6; ++i) {
+                const ColorFilter& f = chain[i];
+                float* t = &stops_[at + i * 24];  // six texels
+                t[0] = f.kind() == ColorFilter::Kind::Matrix ? 1.f : f.kind() == ColorFilter::Kind::Lighting ? 2.f : 0.f;
+                t[1] = float(int(f.blendMode()));
+                if (f.kind() == ColorFilter::Kind::Matrix) {
+                    const auto& m = f.matrix().values;
+                    for (int r = 0; r < 4; ++r) {
+                        for (int k = 0; k < 4; ++k) t[4 + r * 4 + k] = m[size_t(r * 5 + k)];
+                        t[20 + r] = m[size_t(r * 5 + 4)];
+                    }
+                } else {
+                    Color c = f.color(), add = f.add();
+                    t[4] = c.r, t[5] = c.g, t[6] = c.b, t[7] = c.a;
+                    t[8] = add.r, t[9] = add.g, t[10] = add.b, t[11] = add.a;
+                }
+            }
+            filterChains_.push_back(chain);
+            filterRows_.push_back(row);
+        }
+        set(p.filter, float(std::min<size_t>(chain.size(), kStopsWidth / 6)), float(row), 0, 0);
+    }
     if (!texture) texture = white_.get();
     if (!texture1) texture1 = white_.get();
     uint32_t generation = pass.shelf.generation;
     if (!pass.batches.empty()) {
         Batch& last = pass.batches.back();
-        if (last.texture == texture && last.texture1 == texture1 && last.mask == mask && last.opaque == opaque && last.scissor == clip &&
-            last.generation == generation) {
+        if (last.texture == texture && last.texture1 == texture1 && last.mask == mask && last.opaque == opaque && last.blend == blend &&
+            last.scissor == clip && last.generation == generation) {
             pass.prims.push_back(p);
             ++last.count;
             return;
         }
     }
-    pass.batches.push_back({texture, texture1, mask, opaque, clip, generation, uint32_t(pass.prims.size()), 1});
+    pass.batches.push_back({texture, texture1, mask, opaque, blend, clip, generation, uint32_t(pass.prims.size()), 1});
     pass.prims.push_back(p);
 }
 
@@ -221,27 +302,36 @@ void Renderer::execute(Pass& pass) {
         std::vector<Texture*> reads;
         size_t firstBatch = batch;
         while (batch < pass.batches.size() && pass.batches[batch].generation == g) ++batch;
+        bool readsTarget = false;
         for (size_t i = firstBatch; i < batch; ++i) {
             const Batch& b = pass.batches[i];
             for (Texture* t : {b.mask == Mask::Texture0 ? mask_.get() : b.texture, b.mask == Mask::Texture1 ? mask_.get() : b.texture1})
                 if (std::find(reads.begin(), reads.end(), t) == reads.end()) reads.push_back(t);
+            readsTarget = readsTarget || planFor(b.blend, b.opaque).readsTarget;
         }
         if (stopsTexture_) reads.push_back(stopsTexture_.get());
+        if (readsTarget) {
+            if (!dstCopy_ || dstCopy_->width() < pass.target->width() || dstCopy_->height() < pass.target->height() ||
+                dstCopy_->format() != pass.target->format())
+                dstCopy_ = device_.createTexture(std::max(pass.target->width(), dstCopy_ ? dstCopy_->width() : 0),
+                                                 std::max(pass.target->height(), dstCopy_ ? dstCopy_->height() : 0), pass.target->format(),
+                                                 TextureUsage::Sampled);
+            reads.push_back(dstCopy_.get());
+        }
         device_.beginPass(*pass.target, g == 0 ? pass.clear : std::nullopt, reads);
-        float uniforms[8] = {2 / w, yDown ? 2 / h : -2 / h, -1, yDown ? -1.f : 1.f,
-                             mask_ ? 1 / float(mask_->width()) : 0.f, mask_ ? 1 / float(mask_->height()) : 0.f,
-                             stopsTexture_ ? 1 / float(stopsTexture_->width()) : 0.f, stopsTexture_ ? 1 / float(stopsTexture_->height()) : 0.f};
-        Pipeline* bound = nullptr;
+        float uniforms[12] = {2 / w, yDown ? 2 / h : -2 / h, -1, yDown ? -1.f : 1.f,
+                              mask_ ? 1 / float(mask_->width()) : 0.f, mask_ ? 1 / float(mask_->height()) : 0.f,
+                              stopsTexture_ ? 1 / float(stopsTexture_->width()) : 0.f, stopsTexture_ ? 1 / float(stopsTexture_->height()) : 0.f,
+                              0, 0, 0, 0};
         const Sampler nearest{Filter::Nearest};
+        IRect all{0, 0, pass.target->width(), pass.target->height()};
         for (size_t i = firstBatch; i < batch; ++i) {
             const Batch& b = pass.batches[i];
-            Pipeline& p = pipeline(pass.target->format(), b.opaque);
-            if (&p != bound) {
-                device_.setPipeline(p);
-                device_.setUniforms(uniforms, sizeof uniforms);
-                bound = &p;
-            }
-            device_.setScissor(b.scissor);
+            BlendPlan plan = planFor(b.blend, b.opaque);
+            uniforms[8] = float(int(b.blend));
+            uniforms[9] = float(plan.how);
+            device_.setPipeline(pipeline(pass.target->format(), plan.state));
+            device_.setUniforms(uniforms, sizeof uniforms);
             if (b.mask == Mask::Texture0)
                 device_.setTexture(0, *mask_, nearest);
             else
@@ -251,7 +341,33 @@ void Renderer::execute(Pass& pass) {
             else
                 device_.setTexture(1, *b.texture1, Sampler{});
             device_.setTexture(2, stopsTexture_ ? *stopsTexture_ : *white_, nearest);
-            device_.draw({prims.buffer, prims.offset + uint64_t(b.first) * sizeof(Prim)}, 6, b.count);
+            device_.setTexture(3, readsTarget ? *dstCopy_ : *white_, nearest);
+            if (!plan.readsTarget) {
+                device_.setScissor(b.scissor);
+                device_.draw({prims.buffer, prims.offset + uint64_t(b.first) * sizeof(Prim)}, 6, b.count);
+                continue;
+            }
+            // Each one on what is there just before it: the pass ends, the pixels under it are copied,
+            // the pass goes on.
+            for (uint32_t k = b.first; k < b.first + b.count; ++k) {
+                const Prim& q = pass.prims[k];
+                float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f;
+                for (int c = 0; c < 4; ++c) {
+                    float x = q.bounds[c & 1 ? 2 : 0], y = q.bounds[c & 2 ? 3 : 1];
+                    float px = q.xform[0] * x + q.xform[2] * y + q.extra[0], py = q.xform[1] * x + q.xform[3] * y + q.extra[1];
+                    x0 = std::min(x0, px), y0 = std::min(y0, py), x1 = std::max(x1, px), y1 = std::max(y1, py);
+                }
+                IRect under{int(std::floor(x0)), int(std::floor(y0)), int(std::ceil(x1)) - int(std::floor(x0)),
+                            int(std::ceil(y1)) - int(std::floor(y0))};
+                under = intersect(intersect(under, b.scissor), all);
+                if (under.empty()) continue;
+                device_.endPass();
+                device_.copyTexture(*pass.target, under, *dstCopy_, under.x, under.y);
+                device_.beginPass(*pass.target, std::nullopt, reads);
+                device_.setUniforms(uniforms, sizeof uniforms);
+                device_.setScissor(under);
+                device_.draw({prims.buffer, prims.offset + uint64_t(k) * sizeof(Prim)}, 6, 1);
+            }
         }
         device_.endPass();
     }
@@ -264,6 +380,9 @@ void Renderer::execute(Pass& pass) {
 void Renderer::endFrame() {
     stops_.clear();
     stopBrushes_.clear();
+    stopRows_.clear();
+    filterChains_.clear();
+    filterRows_.clear();
     stopsUploaded_ = 0;
     for (auto it = images_.begin(); it != images_.end();)
         it = it->second.token.expired() ? images_.erase(it) : std::next(it);
@@ -358,10 +477,11 @@ Renderer::Prim Renderer::painted(const Brush& brush, const Rect& area, float alp
     // Its stops in this frame's table (once for equal brushes), its geometry in the target's pixels.
     int row = -1;
     for (size_t i = 0; i < stopBrushes_.size() && row < 0; ++i)
-        if (stopBrushes_[i] == brush) row = int(i);
+        if (stopBrushes_[i] == brush) row = stopRows_[i];
     if (row < 0) {
-        row = int(stopBrushes_.size());
+        row = int(stops_.size() / (kStopsWidth * 4));
         stopBrushes_.push_back(brush);
+        stopRows_.push_back(row);
         size_t at = stops_.size();
         stops_.resize(at + kStopsWidth * 4, 0.f);
         const auto& stops = brush.stops();

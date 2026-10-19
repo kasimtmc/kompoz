@@ -25,7 +25,12 @@ static const int LINEAR = 1;  // paint.x: the kind; from gradient.xy to gradient
 static const int RADIAL = 2;  // round gradient.xy out to gradient.z
 static const int SWEEP = 3;   // round gradient.xy, clockwise from 3 o'clock
 // paint.y: the tile mode (clamp, repeated, mirror, decal); paint.z: how many stops; paint.w: their
-// row in the stops table (texture2): stop i's straight color at texel 2i, its offset at 2i + 1.
+// row in the table (texture2): stop i's straight color at texel 2i, its offset at 2i + 1.
+//
+// Then its color goes through color filters (`filter`: how many, and their row in the table, six
+// texels each, innermost first) and onto the target by the batch's blend mode (uniforms.blend):
+// by the blend unit with the coverage multiplied in, or (a mode it can't do) worked out here from
+// a copy of the target (texture3) and mixed with it by the coverage.
 
 // The vertex's index: on SPIR-V (Vulkan, and through it OpenGL ES) without the base vertex that
 // D3D's SV_VertexID leaves out, which OpenGL ES doesn't have (draws start at vertex 0 anyway).
@@ -37,13 +42,15 @@ static const int SWEEP = 3;   // round gradient.xy, clockwise from 3 o'clock
 
 struct Uniforms {
     float4 toClip;   // clip = position * toClip.xy + toClip.zw
-    float4 texels;   // a texel's size in the coverage mask (xy) and in the stops table (zw)
+    float4 texels;   // a texel's size in the coverage mask (xy) and in the table (zw)
+    float4 blend;    // the blend mode (x), and how the coverage goes in (y: see finish)
 };
 [[vk::push_constant]] ConstantBuffer<Uniforms> uniforms;
 
 [[vk::binding(1, 0)]] Sampler2D texture0;
 [[vk::binding(2, 0)]] Sampler2D texture1;
 [[vk::binding(3, 0)]] Sampler2D texture2;
+[[vk::binding(4, 0)]] Sampler2D texture3;
 
 struct Instance {
     float4 bounds : BOUNDS;  // the quad: x0, y0, x1, y1
@@ -56,6 +63,7 @@ struct Instance {
     float4 extra : EXTRA;  // tx, ty, kind, flags
     float4 paint : PAINT;
     float4 gradient : GRADIENT;
+    float4 filter : FILTER;  // how many color filters, their row in the table
 };
 
 struct Varyings {
@@ -72,6 +80,7 @@ struct Varyings {
     nointerpolation float flags : FLAGS;
     nointerpolation float4 paint : PAINT;
     nointerpolation float4 gradient : GRADIENT;
+    nointerpolation float4 filter : FILTER;
 };
 
 [shader("vertex")]
@@ -96,6 +105,7 @@ Varyings vs(Instance instance, uint vertex : VERTEX_ID) {
     out.flags = instance.extra.w;
     out.paint = instance.paint;
     out.gradient = instance.gradient;
+    out.filter = instance.filter;
     return out;
 }
 
@@ -185,6 +195,126 @@ float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
     return float4(straight.rgb * straight.a, straight.a) * color.a * shown;
 }
 
+// --- Blend modes (BlendMode's order), as blend() in graphics.cpp works them out ---------------
+
+float lum(float3 c) { return dot(c, float3(0.3, 0.59, 0.11)); }
+float3 clipColor(float3 c) {
+    float l = lum(c), n = min(c.r, min(c.g, c.b)), x = max(c.r, max(c.g, c.b));
+    float3 out = c;
+    if (n < 0 && l - n > 0) out = l + (out - l) * l / (l - n);
+    if (x > 1 && x - l > 0) out = l + (out - l) * (1 - l) / (x - l);
+    return out;
+}
+float3 setLum(float3 c, float l) { return clipColor(c + (l - lum(c))); }
+float sat(float3 c) { return max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b)); }
+float3 setSat(float3 c, float s) {
+    float n = min(c.r, min(c.g, c.b)), x = max(c.r, max(c.g, c.b));
+    return x > n ? (c - n) * s / (x - n) : float3(0, 0, 0);
+}
+float hardLight(float s, float b) { return s <= 0.5 ? b * 2 * s : b + (2 * s - 1) - b * (2 * s - 1); }
+float separable(int mode, float cs, float cb) {
+    float r = cs;
+    if (mode == 6) r = cs * cb;                    // Multiply
+    else if (mode == 7) r = cs + cb - cs * cb;     // Screen
+    else if (mode == 8) r = min(cs, cb);           // Darken
+    else if (mode == 9) r = max(cs, cb);           // Lighten
+    else if (mode == 18) r = hardLight(cb, cs);    // Overlay
+    else if (mode == 19) r = cb <= 0 ? 0 : (cs >= 1 ? 1 : min(1, cb / (1 - cs)));  // ColorDodge
+    else if (mode == 20) r = cb >= 1 ? 1 : (cs <= 0 ? 0 : 1 - min(1, (1 - cb) / cs));  // ColorBurn
+    else if (mode == 21) r = hardLight(cs, cb);    // Hardlight
+    else if (mode == 22) {                         // Softlight
+        float d = cb <= 0.25 ? ((16 * cb - 12) * cb + 4) * cb : sqrt(cb);
+        r = cs <= 0.5 ? cb - (1 - 2 * cs) * cb * (1 - cb) : cb + (2 * cs - 1) * (d - cb);
+    } else if (mode == 23) r = abs(cs - cb);       // Difference
+    else if (mode == 24) r = cs + cb - 2 * cs * cb;  // Exclusion
+    return r;
+}
+
+// s onto d with `mode`, both premultiplied (as the result).
+float4 blendColors(float4 s, float4 d, int mode) {
+    float sa = s.a, da = d.a;
+    float3 cs = sa > 0 ? s.rgb / sa : float3(0, 0, 0), cb = da > 0 ? d.rgb / da : float3(0, 0, 0);
+    // Porter-Duff: s fs + d fd.
+    float fs = -1, fd = 0;
+    if (mode == 11) { fs = 0; fd = 0; }               // Clear
+    else if (mode == 0) { fs = 1; fd = 0; }           // Src
+    else if (mode == 12) { fs = 0; fd = 1; }          // Dst
+    else if (mode == 1) { fs = 1; fd = 1 - sa; }      // SrcOver
+    else if (mode == 13) { fs = 1 - da; fd = 1; }     // DstOver
+    else if (mode == 2) { fs = da; fd = 0; }          // SrcIn
+    else if (mode == 4) { fs = 0; fd = sa; }          // DstIn
+    else if (mode == 14) { fs = 1 - da; fd = 0; }     // SrcOut
+    else if (mode == 15) { fs = 0; fd = 1 - sa; }     // DstOut
+    else if (mode == 3) { fs = da; fd = 1 - sa; }     // SrcAtop
+    else if (mode == 16) { fs = 1 - da; fd = sa; }    // DstAtop
+    else if (mode == 17) { fs = 1 - da; fd = 1 - sa; }  // Xor
+    float4 out;
+    if (fs >= 0) {
+        out = s * fs + d * fd;
+    } else if (mode == 10) {  // Plus
+        out = min(s + d, float4(1, 1, 1, 1));
+    } else if (mode == 5) {   // Modulate
+        out = s * d;
+    } else {
+        float3 b;
+        if (mode == 25) b = setLum(setSat(cs, sat(cb)), lum(cb));       // Hue
+        else if (mode == 26) b = setLum(setSat(cb, sat(cs)), lum(cb));  // Saturation
+        else if (mode == 27) b = setLum(cs, lum(cb));                   // Color
+        else if (mode == 28) b = setLum(cb, lum(cs));                   // Luminosity
+        else b = float3(separable(mode, cs.r, cb.r), separable(mode, cs.g, cb.g), separable(mode, cs.b, cb.b));
+        out = float4(s.rgb * (1 - da) + d.rgb * (1 - sa) + sa * da * b, sa + da - sa * da);
+    }
+    return out;
+}
+
+// --- Color filters, as ColorFilter::apply works them out --------------------------------------
+
+float4 tableTexel(float x, float row) {
+    return texture2.SampleLevel(float2((x + 0.5) * uniforms.texels.z, (row + 0.5) * uniforms.texels.w), 0);
+}
+
+// A premultiplied color through the filters (each on the straight color).
+float4 applyFilters(float4 color, float4 filter) {
+    int count = int(filter.x + 0.5);
+    float4 c = color.a > 0 ? float4(color.rgb / color.a, color.a) : float4(0, 0, 0, 0);
+    for (int i = 0; i < count; ++i) {
+        float x = float(i * 6);
+        float4 head = tableTexel(x, filter.y);
+        int kind = int(head.x + 0.5);
+        float4 a = tableTexel(x + 1, filter.y), b = tableTexel(x + 2, filter.y);
+        if (kind == 1) {  // a matrix: rows in texels 1..4, the added column in 5
+            float4 r2 = tableTexel(x + 3, filter.y), r3 = tableTexel(x + 4, filter.y), added = tableTexel(x + 5, filter.y);
+            c = saturate(float4(dot(a, c), dot(b, c), dot(r2, c), dot(r3, c)) + added);
+        } else if (kind == 2) {  // lighting: multiply (texel 1), add (texel 2); alpha as it is
+            c = float4(saturate(c.rgb * a.rgb + b.rgb), c.a);
+        } else {  // a tint (texel 1, straight) by its blend mode
+            float4 tinted = blendColors(float4(a.rgb * a.a, a.a), float4(c.rgb * c.a, c.a), int(head.y + 0.5));
+            c = tinted.a > 0 ? float4(saturate(tinted.rgb / tinted.a), min(tinted.a, 1)) : float4(0, 0, 0, 0);
+        }
+    }
+    return count > 0 ? float4(c.rgb * c.a, c.a) : color;
+}
+
+// What goes to the target: a premultiplied color covering `cover` of the pixel, by the batch's
+// mode (uniforms.blend.y): 0 multiplied by the coverage, for the blend unit; 1 (Modulate) and 2
+// (DstIn) mixed towards what changes nothing; 3 (Clear) the coverage alone; 4 the mode worked out
+// here against the target's copy and mixed with it.
+float4 finish(float4 src, float cover, float2 pixel) {
+    int how = int(uniforms.blend.y + 0.5);
+    float4 out = src * cover;
+    if (how == 1) {
+        out = lerp(float4(1, 1, 1, 1), src, cover);
+    } else if (how == 2) {
+        out = float4(0, 0, 0, lerp(1, src.a, cover));
+    } else if (how == 3) {
+        out = float4(0, 0, 0, cover);
+    } else if (how == 4) {
+        float4 dst = texture3.SampleLevel(pixel * float2(uniforms.toClip.x, abs(uniforms.toClip.y)) * 0.5, 0);
+        out = lerp(dst, blendColors(src, dst, int(uniforms.blend.x + 0.5)), cover);
+    }
+    return out;
+}
+
 // A Gaussian's integral, approximated (Abramowitz and Stegun 7.1.25).
 float2 erf2(float2 x) {
     float2 s = sign(x), a = abs(x);
@@ -238,17 +368,18 @@ float arcDistance(float2 q, float radius, float halfSize, float start, float swe
 [shader("fragment")]
 float4 fs(Varyings v) : SV_Target {
     int kind = int(v.kind + 0.5);
-    float4 color = paintAt(v.local, v.color, v.paint, v.gradient);
     float aa = 0.5 * (length(ddx(v.local)) + length(ddy(v.local)));
-    float alpha = 0;
+    float4 paint = paintAt(v.local, v.color, v.paint, v.gradient);
+    float4 src = paint;  // premultiplied, before the coverage
+    float cover = 0;
     if (kind == FILL) {
-        alpha = coverage(roundRectDistance(v.local, v.shape, v.radii), aa);
+        cover = coverage(roundRectDistance(v.local, v.shape, v.radii), aa);
     } else if (kind == STROKE) {
         float w = v.params.x;
         float4 inner = float4(v.shape.xy + w, v.shape.zw - w);
         float outside = coverage(roundRectDistance(v.local, v.shape, v.radii), aa);
         float inside = coverage(roundRectDistance(v.local, inner, max(v.radii - w, 0)), aa);
-        alpha = saturate(outside - inside);
+        cover = saturate(outside - inside);
     } else if (kind == LINE) {
         float2 a = v.shape.xy, b = v.shape.zw;
         float len = length(b - a);
@@ -256,35 +387,32 @@ float4 fs(Varyings v) : SV_Target {
         float2 d = v.local - a;
         float along = dot(d, dir) - len * 0.5, across = dot(d, float2(-dir.y, dir.x));
         float h = v.params.x;
-        alpha = bandCoverage(across / aa, h / aa) * bandCoverage(along / aa, (len * 0.5 + h) / aa);
+        cover = bandCoverage(across / aa, h / aa) * bandCoverage(along / aa, (len * 0.5 + h) / aa);
     } else if (kind == ARC) {
-        alpha = coverage(arcDistance(v.local - v.shape.xy, v.shape.z, v.params.x, v.params.y, v.params.z, v.params.w > 0.5), aa);
+        cover = coverage(arcDistance(v.local - v.shape.xy, v.shape.z, v.params.x, v.params.y, v.params.z, v.params.w > 0.5), aa);
     } else if (kind == SHADOW) {
         float sigma = v.params.x;
-        bool inner = v.params.y > 0.5;
         float blurred = sigma > 0.01 ? blurredRoundRect(v.local, v.shape, v.radii, sigma)
                                      : coverage(roundRectDistance(v.local, v.shape, v.radii), aa);
-        if (inner) {  // inside the rect (bounds, its radii in uv), where the blurred hole isn't
-            alpha = (1 - blurred) * coverage(roundRectDistance(v.local, v.bounds, v.uv), aa);
-        } else {
-            alpha = blurred;
-        }
+        // Inner: inside the rect (bounds, its radii in uv), where the blurred hole isn't.
+        cover = v.params.y > 0.5 ? (1 - blurred) * coverage(roundRectDistance(v.local, v.bounds, v.uv), aa) : blurred;
     } else if (kind == GLYPH) {
         float4 texel = texture0.Sample(v.texcoord);
-        if (v.params.x > 0.5) return float4(texel.rgb * texel.a, texel.a) * v.color.a;
-        return color * texel.a;
+        bool colored = v.params.x > 0.5;  // an emoji: as it is, at the color's alpha
+        src = colored ? float4(texel.rgb * texel.a, texel.a) * v.color.a : paint;
+        cover = colored ? 1 : texel.a;
     } else if (kind == IMAGE) {
         float4 texel = texture0.Sample(v.texcoord);
-        return float4(texel.rgb * texel.a, texel.a) * v.params.x;
+        src = float4(texel.rgb * texel.a, texel.a) * v.params.x;
+        cover = 1;
     } else if (kind == LAYER) {
         float2 texel = clamp(v.local, v.params.xy + 0.5, v.params.zw - 0.5);
-        float4 color = texture0.Sample((texel - v.params.xy) * v.uv.zw);
+        src = texture0.Sample((texel - v.params.xy) * v.uv.zw) * v.color.a;
         // (Filtered where it is: a turned or scaled layer's pixels fall between the mask's texels.)
-        float cut = v.flags > 0.5 ? pathCoverage(texture1.SampleLevel((v.local - v.radii.xy) * uniforms.texels.xy, 0).r, false)
-                                  : coverage(roundRectDistance(v.local, v.shape, v.radii), aa);
-        return color * v.color.a * cut;
+        cover = v.flags > 0.5 ? pathCoverage(texture1.SampleLevel((v.local - v.radii.xy) * uniforms.texels.xy, 0).r, false)
+                              : coverage(roundRectDistance(v.local, v.shape, v.radii), aa);
     } else if (kind == PATH) {
-        alpha = pathCoverage(texture0.SampleLevel(maskTexcoord(v.local - v.params.xy), 0).r, v.params.z > 0.5);
+        cover = pathCoverage(texture0.SampleLevel(maskTexcoord(v.local - v.params.xy), 0).r, v.params.z > 0.5);
     }
-    return color * alpha;
+    return finish(applyFilters(src, v.filter), cover, v.position.xy);
 }

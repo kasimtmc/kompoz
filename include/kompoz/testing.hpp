@@ -61,6 +61,17 @@ public:
     std::string order;  // the fills as they came: 'r' a rect, 'p' a path (the nth of each in rects, paths)
     std::vector<Offset> translations;  // each pushTranslation's
     Offset translation;                // in effect now (their sum)
+    std::vector<ColorFilter> filterStack;  // pushColorFilter's in effect, the innermost last
+    std::vector<std::vector<ColorFilter>> imageFilters;  // each drawn image's (as filterStack was)
+    // A color as the filters in effect make it (the innermost first): what a backend would show.
+    Color filtered(Color c) const {
+        for (auto it = filterStack.rbegin(); it != filterStack.rend(); ++it) c = it->apply(c);
+        return c;
+    }
+    void pushColorFilter(const ColorFilter& filter) override { filterStack.push_back(filter); }
+    void popColorFilter() override {
+        if (!filterStack.empty()) filterStack.pop_back();
+    }
     std::vector<BlendMode> blendStack;  // pushBlendMode's in effect
     std::vector<BlendMode> rectBlends;  // each filled rect's (and gradient's) blend mode
     std::vector<BlendMode> pathBlends;  // each path's
@@ -73,13 +84,13 @@ public:
         order += 'r';
         rectBlends.push_back(blend());
         rects.push_back(moved(r));
-        rectColors.push_back(c);
+        rectColors.push_back(filtered(c));
         rectRadii.push_back(radii.topLeft);
         rectCorners.push_back(radii);
     }
     void strokeRoundRect(const Rect& r, const CornerRadii& radii, float, Color c) override {
         strokes.push_back(moved(r));
-        strokeColors.push_back(c);
+        strokeColors.push_back(filtered(c));
         strokeCorners.push_back(radii);
     }
     std::vector<std::pair<Offset, Offset>> lines;  // drawn lines (underlines, strike-throughs, carets), where they land
@@ -92,7 +103,7 @@ public:
         textOrder += 't';
         texts.emplace_back(text);
         fonts.push_back(font);
-        colors.push_back(color);
+        colors.push_back(filtered(color));
         baselines.push_back({baseline.x + translation.x, baseline.y + translation.y});
         rtl.push_back(rightToLeft);
     }
@@ -153,6 +164,7 @@ public:
     }
     void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float) override {
         images.push_back(image.id());
+        imageFilters.push_back(filterStack);
         imageSources.push_back(src);
         imageDestinations.push_back(moved(dst));
     }
@@ -199,7 +211,7 @@ public:
         rectBlends.push_back(blend());
         ++gradients;
         rects.push_back(moved(r));
-        rectColors.push_back(brush.colorAt(r.center(), area));  // (a gradient's at the rect's center)
+        rectColors.push_back(filtered(brush.colorAt(r.center(), area)));  // (a gradient's at the rect's center)
         rectRadii.push_back(radii.topLeft);
         rectCorners.push_back(radii);
     }
@@ -210,7 +222,7 @@ public:
         order += 'p';
         pathBlends.push_back(blend());
         Rect b = path.bounds();
-        pathColors.push_back(brush.colorAt(Rect{b.x + origin.x, b.y + origin.y, b.width, b.height}.center(), area));
+        pathColors.push_back(filtered(brush.colorAt(Rect{b.x + origin.x, b.y + origin.y, b.width, b.height}.center(), area)));
         paths.push_back(moved({b.x + origin.x, b.y + origin.y, b.width, b.height}));
         pathStrokes.push_back(stroke.width);
         pathShapes.push_back(path);

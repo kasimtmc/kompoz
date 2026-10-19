@@ -1590,10 +1590,10 @@ void Image(const ImageBitmap& bitmap, std::string contentDescription, const Modi
     composable(site, bitmap, contentDescription, modifier, contentScale, alpha, colorFilter, [=] {
         float iw = float(bitmap.width()), ih = float(bitmap.height());
         auto measure = [iw, ih](LayoutNode&, const Constraints& c) -> Size { return imageSize(iw, ih, c); };
-        ImageBitmap shown = colorFilter ? colorFilter->apply(bitmap) : bitmap;
-        auto draw = [bitmap = shown, contentScale, alpha, iw, ih](GraphicsContext& canvas, const Rect& b, const LayoutNode&) {
+        auto draw = [bitmap, contentScale, alpha, colorFilter, iw, ih](GraphicsContext& canvas, const Rect& b, const LayoutNode&) {
             if (iw <= 0 || ih <= 0 || b.width <= 0 || b.height <= 0) return;
             auto [src, dst] = fitImage(iw, ih, b, contentScale);
+            detail::Filtering filtering(canvas, colorFilter);
             if (dst.width > 0 && dst.height > 0) canvas.drawImage(bitmap, src, dst, alpha);
         };
         layoutNode(CallSite::current(), modifier, measure, {}, draw, contentDescription);

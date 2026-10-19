@@ -248,54 +248,124 @@ Brush ColorFilter::apply(const Brush& brush) const {
     return filtered;
 }
 
+namespace {
+
+// W3C's compositing spec's helpers for the non-separable modes, on straight colors.
+struct Rgb {
+    float r, g, b;
+};
+float lum(Rgb c) { return 0.3f * c.r + 0.59f * c.g + 0.11f * c.b; }
+Rgb clipColor(Rgb c) {
+    float l = lum(c), n = std::min({c.r, c.g, c.b}), x = std::max({c.r, c.g, c.b});
+    auto low = [&](float v) { return l + (v - l) * l / (l - n); };
+    auto high = [&](float v) { return l + (v - l) * (1 - l) / (x - l); };
+    if (n < 0 && l - n > 0) c = {low(c.r), low(c.g), low(c.b)};
+    if (x > 1 && x - l > 0) c = {high(c.r), high(c.g), high(c.b)};
+    return c;
+}
+Rgb setLum(Rgb c, float l) {
+    float d = l - lum(c);
+    return clipColor({c.r + d, c.g + d, c.b + d});
+}
+float sat(Rgb c) { return std::max({c.r, c.g, c.b}) - std::min({c.r, c.g, c.b}); }
+Rgb setSat(Rgb c, float s) {
+    float* v[3] = {&c.r, &c.g, &c.b};
+    std::sort(std::begin(v), std::end(v), [](float* x, float* y) { return *x < *y; });  // min, mid, max
+    if (*v[2] > *v[0]) {
+        *v[1] = (*v[1] - *v[0]) * s / (*v[2] - *v[0]);
+        *v[2] = s;
+    } else {
+        *v[1] = *v[2] = 0;
+    }
+    *v[0] = 0;
+    return c;
+}
+
+// A separable mode's B(cs, cb), on straight channels.
+float separable(BlendMode mode, float cs, float cb) {
+    auto hardLight = [](float s, float b) { return s <= 0.5f ? b * 2 * s : b + (2 * s - 1) - b * (2 * s - 1); };
+    switch (mode) {
+    case BlendMode::Multiply: return cs * cb;
+    case BlendMode::Screen: return cs + cb - cs * cb;
+    case BlendMode::Overlay: return hardLight(cb, cs);
+    case BlendMode::Darken: return std::min(cs, cb);
+    case BlendMode::Lighten: return std::max(cs, cb);
+    case BlendMode::ColorDodge: return cb <= 0 ? 0 : cs >= 1 ? 1 : std::min(1.f, cb / (1 - cs));
+    case BlendMode::ColorBurn: return cb >= 1 ? 1 : cs <= 0 ? 0 : 1 - std::min(1.f, (1 - cb) / cs);
+    case BlendMode::Hardlight: return hardLight(cs, cb);
+    case BlendMode::Softlight: {
+        if (cs <= 0.5f) return cb - (1 - 2 * cs) * cb * (1 - cb);
+        float d = cb <= 0.25f ? ((16 * cb - 12) * cb + 4) * cb : std::sqrt(cb);
+        return cb + (2 * cs - 1) * (d - cb);
+    }
+    case BlendMode::Difference: return std::abs(cs - cb);
+    case BlendMode::Exclusion: return cs + cb - 2 * cs * cb;
+    default: return cs;
+    }
+}
+
+} // namespace
+
+Color blend(Color source, Color destination, BlendMode mode) {
+    float sa = source.a, da = destination.a;
+    float s[3] = {source.r * sa, source.g * sa, source.b * sa}, d[3] = {destination.r * da, destination.g * da, destination.b * da};
+    float out[3], a = sa + da - sa * da;  // (the separable and non-separable modes' alpha)
+    auto porterDuff = [&](float fs, float fd) {  // s fs + d fd
+        for (int i = 0; i < 3; ++i) out[i] = s[i] * fs + d[i] * fd;
+        a = sa * fs + da * fd;
+    };
+    switch (mode) {
+    case BlendMode::Clear: porterDuff(0, 0); break;
+    case BlendMode::Src: porterDuff(1, 0); break;
+    case BlendMode::Dst: porterDuff(0, 1); break;
+    case BlendMode::SrcOver: porterDuff(1, 1 - sa); break;
+    case BlendMode::DstOver: porterDuff(1 - da, 1); break;
+    case BlendMode::SrcIn: porterDuff(da, 0); break;
+    case BlendMode::DstIn: porterDuff(0, sa); break;
+    case BlendMode::SrcOut: porterDuff(1 - da, 0); break;
+    case BlendMode::DstOut: porterDuff(0, 1 - sa); break;
+    case BlendMode::SrcAtop: porterDuff(da, 1 - sa); break;
+    case BlendMode::DstAtop: porterDuff(1 - da, sa); break;
+    case BlendMode::Xor: porterDuff(1 - da, 1 - sa); break;
+    case BlendMode::Plus:
+        for (int i = 0; i < 3; ++i) out[i] = std::min(1.f, s[i] + d[i]);
+        a = std::min(1.f, sa + da);
+        break;
+    case BlendMode::Modulate:
+        for (int i = 0; i < 3; ++i) out[i] = s[i] * d[i];
+        a = sa * da;
+        break;
+    case BlendMode::Hue:
+    case BlendMode::Saturation:
+    case BlendMode::Color:
+    case BlendMode::Luminosity: {
+        Rgb cs{source.r, source.g, source.b}, cb{destination.r, destination.g, destination.b}, b{};
+        switch (mode) {
+        case BlendMode::Hue: b = setLum(setSat(cs, sat(cb)), lum(cb)); break;
+        case BlendMode::Saturation: b = setLum(setSat(cb, sat(cs)), lum(cb)); break;
+        case BlendMode::Color: b = setLum(cs, lum(cb)); break;
+        default: b = setLum(cb, lum(cs)); break;
+        }
+        float bc[3] = {b.r, b.g, b.b};
+        for (int i = 0; i < 3; ++i) out[i] = s[i] * (1 - da) + d[i] * (1 - sa) + sa * da * bc[i];
+        break;
+    }
+    default: {  // separable: s (1 - da) + d (1 - sa) + sa da B(cs, cb)
+        const float cs[3] = {source.r, source.g, source.b}, cb[3] = {destination.r, destination.g, destination.b};
+        for (int i = 0; i < 3; ++i) out[i] = s[i] * (1 - da) + d[i] * (1 - sa) + sa * da * separable(mode, cs[i], cb[i]);
+        break;
+    }
+    }
+    if (a <= 0) return {0, 0, 0, 0};
+    return {std::clamp(out[0] / a, 0.f, 1.f), std::clamp(out[1] / a, 0.f, 1.f), std::clamp(out[2] / a, 0.f, 1.f), std::min(a, 1.f)};
+}
+
 Color ColorFilter::apply(Color d) const {
     if (kind_ == Kind::Matrix) return matrix_.apply(d);
     if (kind_ == Kind::Lighting)
         return {std::clamp(d.r * color_.r + add_.r, 0.f, 1.f), std::clamp(d.g * color_.g + add_.g, 0.f, 1.f),
                 std::clamp(d.b * color_.b + add_.b, 0.f, 1.f), d.a};
-    // Porter-Duff and the separable modes on premultiplied colors: the tint (s) over the pixel (d).
-    float sa = color_.a, da = d.a;
-    float s[3] = {color_.r * sa, color_.g * sa, color_.b * sa}, p[3] = {d.r * da, d.g * da, d.b * da}, out[3];
-    float a = sa + da - sa * da;
-    for (int i = 0; i < 3; ++i) {
-        switch (mode_) {
-        case BlendMode::Src: out[i] = s[i]; break;
-        case BlendMode::SrcOver: out[i] = s[i] + p[i] * (1 - sa); break;
-        case BlendMode::SrcIn: out[i] = s[i] * da; break;
-        case BlendMode::SrcAtop: out[i] = s[i] * da + p[i] * (1 - sa); break;
-        case BlendMode::DstIn: out[i] = p[i] * sa; break;
-        case BlendMode::Modulate: out[i] = s[i] * p[i]; break;
-        case BlendMode::Multiply: out[i] = s[i] * p[i] + s[i] * (1 - da) + p[i] * (1 - sa); break;
-        case BlendMode::Screen: out[i] = s[i] + p[i] - s[i] * p[i]; break;
-        case BlendMode::Darken: out[i] = s[i] + p[i] - std::max(s[i] * da, p[i] * sa); break;
-        case BlendMode::Lighten: out[i] = s[i] + p[i] - std::min(s[i] * da, p[i] * sa); break;
-        case BlendMode::Plus: out[i] = std::min(1.f, s[i] + p[i]); break;
-        case BlendMode::Clear: out[i] = 0; break;
-        case BlendMode::Dst: out[i] = p[i]; break;
-        case BlendMode::DstOver: out[i] = p[i] + s[i] * (1 - da); break;
-        case BlendMode::SrcOut: out[i] = s[i] * (1 - da); break;
-        case BlendMode::DstOut: out[i] = p[i] * (1 - sa); break;
-        case BlendMode::DstAtop: out[i] = p[i] * sa + s[i] * (1 - da); break;
-        case BlendMode::Xor: out[i] = s[i] * (1 - da) + p[i] * (1 - sa); break;
-        }
-    }
-    switch (mode_) {
-    case BlendMode::Src: a = sa; break;
-    case BlendMode::SrcIn:
-    case BlendMode::DstIn:
-    case BlendMode::Modulate: a = sa * da; break;
-    case BlendMode::SrcAtop: a = da; break;
-    case BlendMode::Plus: a = std::min(1.f, sa + da); break;
-    case BlendMode::Clear: a = 0; break;
-    case BlendMode::Dst: a = da; break;
-    case BlendMode::SrcOut: a = sa * (1 - da); break;
-    case BlendMode::DstOut: a = da * (1 - sa); break;
-    case BlendMode::DstAtop: a = sa; break;
-    case BlendMode::Xor: a = sa + da - 2 * sa * da; break;
-    default: break;
-    }
-    if (a <= 0) return {0, 0, 0, 0};
-    return {std::clamp(out[0] / a, 0.f, 1.f), std::clamp(out[1] / a, 0.f, 1.f), std::clamp(out[2] / a, 0.f, 1.f), a};
+    return blend(color_, d, mode_);  // the tint (the source) onto the pixel
 }
 
 ImageBitmap ColorFilter::apply(const ImageBitmap& image) const {

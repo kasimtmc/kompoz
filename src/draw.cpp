@@ -266,7 +266,8 @@ void DrawScope::drawImage(const ImageBitmap& image, Offset topLeft, std::optiona
                           std::optional<ColorFilter> colorFilter) {
     if (image.empty()) return;
     Rect dst = local(topLeft, size.value_or(Size{float(image.width()), float(image.height())}));
-    context_->drawImage(colorFilter ? colorFilter->apply(image) : image, {0, 0, float(image.width()), float(image.height())}, dst, alpha);
+    detail::Filtering filtering(*context_, colorFilter);
+    context_->drawImage(image, {0, 0, float(image.width()), float(image.height())}, dst, alpha);
 }
 
 void DrawScope::drawVector(const ImageVector& vector, Color color, Offset topLeft, std::optional<Size> size) {
@@ -541,29 +542,21 @@ void Painter::draw(GraphicsContext& canvas, const Rect& b, float alpha, const st
     if (!data_ || alpha <= 0 || b.width <= 0 || b.height <= 0) return;
     const Data& d = *data_;
     using Kind = Data::Kind;
+    detail::Filtering filtering(canvas, colorFilter);  // what it draws, through the filter
     switch (d.kind) {
     case Kind::Bitmap:
-        if (!d.bitmap.empty())
-            canvas.drawImage(colorFilter ? colorFilter->apply(d.bitmap) : d.bitmap, {0, 0, float(d.bitmap.width()), float(d.bitmap.height())}, b,
-                             alpha);
+        if (!d.bitmap.empty()) canvas.drawImage(d.bitmap, {0, 0, float(d.bitmap.width()), float(d.bitmap.height())}, b, alpha);
         break;
-    case Kind::Vector: {  // in its own paints (a one-color one black, as Compose's icons are), unless a filter tints it
-        std::optional<Color> tint;
-        if (colorFilter) tint = colorFilter->apply(colors::Black);
-        if (!d.vector.empty()) detail::drawImageVector(canvas, d.vector.autoMirror() && rtl ? d.vector.mirrored() : d.vector, b, tint, alpha);
+    case Kind::Vector:  // in its own paints (a one-color one black, as Compose's icons are)
+        if (!d.vector.empty()) detail::drawImageVector(canvas, d.vector.autoMirror() && rtl ? d.vector.mirrored() : d.vector, b, std::nullopt, alpha);
         break;
-    }
-    case Kind::Fill: {
-        Color c = colorFilter ? colorFilter->apply(d.color) : d.color;
-        canvas.fillRoundRect(b, CornerRadii(), c.copy(c.a * alpha));
-        break;
-    }
+    case Kind::Fill: canvas.fillRoundRect(b, CornerRadii(), d.color.copy(d.color.a * alpha)); break;
     case Kind::Gradient:
     case Kind::Custom: {
         bool layer = alpha < 1;
         if (layer) canvas.pushLayer(b, CornerRadii(), alpha);
         DrawScope scope(canvas, b);
-        if (d.kind == Kind::Gradient) scope.drawRect(colorFilter ? colorFilter->apply(*d.brush) : *d.brush);
+        if (d.kind == Kind::Gradient) scope.drawRect(*d.brush);
         else if (d.onDraw) d.onDraw(scope);
         if (layer) canvas.popLayer();
         break;

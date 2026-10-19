@@ -62,6 +62,8 @@ public:
     void pushClip(const Rect& rect) override;
     void pushBlendMode(BlendMode mode) override;
     void popBlendMode() override;
+    void pushColorFilter(const ColorFilter& filter) override;
+    void popColorFilter() override;
     void popClip() override;
     void pushTranslation(Offset by) override;
     void popTranslation() override;
@@ -80,7 +82,7 @@ public:
 private:
     enum class Kind : uint8_t { FillRoundRect, StrokeRoundRect, Line, Text, TextBrush, TextShadow, Shadow, Vector, Arc, Image, Gradient, Path,
                                 PushLayer, PopLayer, PushClip, PopClip, PushTranslation, PopTranslation, PushBlend, PopBlend,
-                                ShadowPath };
+                                ShadowPath, PushFilter, PopFilter };
     struct Command {
         Kind kind{};
         Rect rect, rect2;     // the shape; an image's source, a brush's area
@@ -94,6 +96,7 @@ private:
         ImageVector vector;
         ImageBitmap image;
         std::optional<Brush> brush;
+        std::optional<ColorFilter> filter;  // PushFilter's
         Path path;
         PathStroke stroke;
         LayerTransform transform;

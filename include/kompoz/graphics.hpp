@@ -553,12 +553,16 @@ struct BorderStroke {
     friend bool operator==(const BorderStroke&, const BorderStroke&) = default;
 };
 
-// How a ColorFilter::tint's color goes with the pixels it paints over (Compose's BlendMode, the
-// ones a filter uses): the color is the source, the pixel the destination.
-// How a drawing (the source) goes onto what is there (the destination), Compose's BlendMode:
-// the Porter-Duff ones and a few separable ones.
+// How a drawing (the source) goes onto what is there (the destination), Compose's BlendMode: the
+// Porter-Duff ones, Modulate and Plus, the separable ones and the non-separable ones (hue,
+// saturation, color, luminosity), as W3C's compositing spec and Skia define them. Also how a
+// ColorFilter::tint's color goes with the pixels it paints over.
 enum class BlendMode { Src, SrcOver, SrcIn, SrcAtop, DstIn, Modulate, Multiply, Screen, Darken, Lighten, Plus,
-                       Clear, Dst, DstOver, SrcOut, DstOut, DstAtop, Xor };
+                       Clear, Dst, DstOver, SrcOut, DstOut, DstAtop, Xor, Overlay, ColorDodge, ColorBurn, Hardlight,
+                       Softlight, Difference, Exclusion, Hue, Saturation, Color, Luminosity };
+
+// `source` drawn onto `destination` with `mode` (both straight colors, as is the result).
+Color blend(Color source, Color destination, BlendMode mode);
 
 // A 4x5 matrix over a color's red, green, blue and alpha (0..1), the fifth column added after
 // (Compose's ColorMatrix, row by row).
@@ -588,8 +592,16 @@ public:
     ImageBitmap apply(const ImageBitmap& image) const;
     friend bool operator==(const ColorFilter&, const ColorFilter&) = default;
 
-private:
+    // What it is, for a backend that applies it per pixel: a tint's color() and blendMode(), a
+    // matrix(), a lighting's color() (multiply) and add().
     enum class Kind { Tint, Matrix, Lighting };
+    Kind kind() const { return kind_; }
+    Color color() const { return color_; }
+    Color add() const { return add_; }
+    BlendMode blendMode() const { return mode_; }
+    const ColorMatrix& matrix() const { return matrix_; }
+
+private:
     Kind kind_ = Kind::Tint;
     Color color_, add_;
     BlendMode mode_ = BlendMode::SrcIn;
@@ -917,6 +929,11 @@ public:
     // DrawScope's blendMode).
     virtual void pushBlendMode(BlendMode mode) { (void)mode; }
     virtual void popBlendMode() {}
+    // Draws in between have their colors (their paint's, an image's pixels) through `filter`
+    // before they go on, an inner filter's first (Compose's ColorFilter on a Paint, an Image, an
+    // Icon). Backends apply it; one that draws nothing itself records it.
+    virtual void pushColorFilter(const ColorFilter& filter) = 0;
+    virtual void popColorFilter() = 0;
     // True if nothing drawn inside `rect` could show: it lies wholly outside the current clip
     // (or layer). Content that clips itself to such a rect isn't drawn at all.
     virtual bool quickReject(const Rect& rect) const {
@@ -965,6 +982,22 @@ public:
     virtual void beginNode(const void* node) { (void)node; }
     virtual void endNode() {}
 };
+
+namespace detail {
+// Draws within its scope go through `filter` (if there is one): pushColorFilter, then popColorFilter.
+struct Filtering {
+    GraphicsContext& canvas;
+    bool on;
+    Filtering(GraphicsContext& context, const std::optional<ColorFilter>& filter) : canvas(context), on(filter.has_value()) {
+        if (on) canvas.pushColorFilter(*filter);
+    }
+    ~Filtering() {
+        if (on) canvas.popColorFilter();
+    }
+    Filtering(const Filtering&) = delete;
+    Filtering& operator=(const Filtering&) = delete;
+};
+} // namespace detail
 
 namespace utf8 {
 

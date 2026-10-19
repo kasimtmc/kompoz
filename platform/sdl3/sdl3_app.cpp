@@ -122,6 +122,7 @@ public:
     }
 
     void fillRoundRect(const Rect& rect, const CornerRadii& radii, Color color) override {
+        color = filtered(color);
         if (color.a <= 0 || rect.width <= 0 || rect.height <= 0) return;
         float x = rect.x * scale - ox_, y = rect.y * scale - oy_, w = rect.width * scale, h = rect.height * scale;
         CornerRadii r = pixelRadii(radii, w, h);
@@ -141,6 +142,7 @@ public:
     }
 
     void strokeRoundRect(const Rect& rect, const CornerRadii& radii, float width, Color color) override {
+        color = filtered(color);
         if (color.a <= 0 || width <= 0 || rect.width <= 0 || rect.height <= 0) return;
         float x = rect.x * scale - ox_, y = rect.y * scale - oy_, w = rect.width * scale, h = rect.height * scale;
         float sw = std::min(width * scale, std::min(w, h) / 2);
@@ -170,6 +172,7 @@ public:
     }
 
     void drawLine(Offset from, Offset to, float width, Color color) override {
+        color = filtered(color);
         float x0 = from.x * scale - ox_, y0 = from.y * scale - oy_, x1 = to.x * scale - ox_, y1 = to.y * scale - oy_;
         float dx = x1 - x0, dy = y1 - y0, length = std::hypot(dx, dy);
         if (length < 1e-3f || color.a <= 0) return;
@@ -196,6 +199,7 @@ public:
     }
 
     void drawText(std::string_view text, Offset baseline, const Font& font, Color color, bool rtl) override {
+        color = filtered(color);
         if (color.a <= 0) return;
         glyphs_.clear();
         fonts_.layout(text, baseline.x * scale - ox_, baseline.y * scale - oy_, font, rtl, glyphs_);
@@ -203,8 +207,9 @@ public:
     }
 
     // A gradient across text: each glyph's corners take the brush's color where they are.
-    void drawTextBrush(std::string_view text, Offset baseline, const Font& font, const Brush& brush, const Rect& area, bool rtl) override {
-        if (brush.isSolid()) return drawText(text, baseline, font, brush.stops().front().color, rtl);
+    void drawTextBrush(std::string_view text, Offset baseline, const Font& font, const Brush& unfiltered, const Rect& area, bool rtl) override {
+        if (unfiltered.isSolid()) return drawText(text, baseline, font, unfiltered.stops().front().color, rtl);
+        Brush brush = filtered(unfiltered);
         float ox = ox_, oy = oy_, s = scale;
         std::function<SDL_FColor(float, float)> shade = [&](float x, float y) { return toF(brush.colorAt({(x + ox) / s, (y + oy) / s}, area)); };
         glyphs_.clear();
@@ -213,6 +218,7 @@ public:
     }
 
     void drawTextShadow(std::string_view text, Offset baseline, const Font& font, Color color, float blurRadius, bool rtl) override {
+        color = filtered(color);
         if (color.a <= 0) return;
         int blur = std::max(0, int(std::lround(blurRadius * scale)));
         glyphs_.clear();
@@ -221,6 +227,8 @@ public:
     }
 
     void drawArc(const Rect& oval, float start, float sweep, float width, Color color, bool roundCap) override {
+        Color unfiltered = color;  // (the caps are filled by fillRoundRect, which filters)
+        color = filtered(color);
         if (color.a <= 0 || width <= 0 || sweep == 0) return;
         float cx = (oval.x + oval.width / 2) * scale - ox_, cy = (oval.y + oval.height / 2) * scale - oy_;
         float r = std::min(oval.width, oval.height) / 2 * scale, hw = width * scale / 2;
@@ -245,12 +253,13 @@ public:
             for (float deg : {start, start + sweep}) {
                 float a = deg * std::numbers::pi_v<float> / 180.f;
                 float px = oval.x + oval.width / 2 + std::cos(a) * r / scale, py = oval.y + oval.height / 2 + std::sin(a) * r / scale;
-                fillRoundRect({px - width / 2, py - width / 2, width, width}, width / 2, color);
+                fillRoundRect({px - width / 2, py - width / 2, width, width}, width / 2, unfiltered);
             }
         }
     }
 
     void drawVector(const ImageVector& vector, const Rect& b, Color color) override {
+        color = filtered(color);
         if (color.a <= 0 || b.width <= 0 || b.height <= 0) return;
         glyphs_.resize(1);
         if (fonts_.vectorQuad(vector, b.x * scale - ox_, b.y * scale - oy_, b.width * scale, b.height * scale, glyphs_[0])) drawGlyphs(toF(color));
@@ -306,6 +315,11 @@ public:
     // sigma for the radius) once for each size, corners, blur (and an inner one's hole), then
     // drawn tinted. Too big a mask falls back to the base class's rings.
     void drawShadow(const Rect& rect, const CornerRadii& radii, const Shadow& shadow, bool inner) override {
+        drawFilteredShadow(rect, radii, shadow, inner);
+    }
+    void drawFilteredShadow(const Rect& rect, const CornerRadii& radii, const Shadow& original, bool inner) {
+        Shadow shadow = original;
+        shadow.color = filtered(shadow.color);
         if (shadow.color.a <= 0 || rect.width <= 0 || rect.height <= 0) return;
         float blur = std::max(0.f, shadow.blurRadius) * scale;
         float sigma = 0.57735f * blur + 0.5f;
@@ -318,7 +332,7 @@ public:
         int w = int(std::lround((inner ? rect.width : shape.width) * scale)), h = int(std::lround((inner ? rect.height : shape.height) * scale));
         if (w <= 0 || h <= 0) return;
         int W = inner ? w : w + 2 * pad, H = inner ? h : h + 2 * pad;
-        if (W > 4096 || H > 4096 || double(W) * H > 6e6) return GraphicsContext::drawShadow(rect, radii, shadow, inner);
+        if (W > 4096 || H > 4096 || double(W) * H > 6e6) return GraphicsContext::drawShadow(rect, radii, original, inner);  // (filtered as it fills)
         CornerRadii r = radii.scaled(scale);
         // An inner shadow's hole, in the mask's pixels (from the rect's corner).
         float hx = (shape.x - rect.x + shadow.offset.x) * scale, hy = (shape.y - rect.y + shadow.offset.y) * scale;
@@ -412,6 +426,11 @@ public:
     // An outline shape's shadow: its fill rasterized (moved by the offset for a drop shadow, for
     // an inner one's hole), spread by growing or shrinking the coverage, blurred, cached.
     void drawShadowPath(const Path& outline, Offset origin, const Shadow& shadow, bool inner) override {
+        drawFilteredShadowPath(outline, origin, shadow, inner);
+    }
+    void drawFilteredShadowPath(const Path& outline, Offset origin, const Shadow& original, bool inner) {
+        Shadow shadow = original;
+        shadow.color = filtered(shadow.color);
         if (shadow.color.a <= 0 || outline.isEmpty()) return;
         Rect b = outline.bounds();
         float blur = std::max(0.f, shadow.blurRadius) * scale, sigma = 0.57735f * blur + 0.5f;
@@ -421,7 +440,7 @@ public:
         float fx = std::round((sx - std::floor(sx)) * 4) / 4, fy = std::round((sy - std::floor(sy)) * 4) / 4;  // quarter pixels
         int x0 = int(std::floor(sx)) - margin, y0 = int(std::floor(sy)) - margin;
         int W = int(std::ceil(b.width * scale + fx)) + 2 * margin, H = int(std::ceil(b.height * scale + fy)) + 2 * margin;
-        if (W > 4096 || H > 4096 || double(W) * H > 6e6) return GraphicsContext::drawShadowPath(outline, origin, shadow, inner);
+        if (W > 4096 || H > 4096 || double(W) * H > 6e6) return GraphicsContext::drawShadowPath(outline, origin, original, inner);
         std::string key = "path";
         auto add = [&](float v) { key.append(reinterpret_cast<const char*>(&v), sizeof v); };
         uint64_t pk = pathKey(outline, PathStroke{});
@@ -459,7 +478,9 @@ public:
         SDL_RenderTexture(renderer_, it->second.texture, nullptr, &d);
     }
 
-    void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha) override {
+    void drawImage(const ImageBitmap& unfiltered, const Rect& src, const Rect& dst, float alpha) override {
+        ImageBitmap image = unfiltered;
+        for (auto it = filters_.rbegin(); it != filters_.rend(); ++it) image = it->apply(image);
         SDL_Texture* texture = textureFor(image);
         if (!texture || alpha <= 0) return;
         SDL_FRect s{src.x, src.y, src.width, src.height};
@@ -547,6 +568,21 @@ public:
             float x = p.x + q.x, y = p.y + q.y, len = std::hypot(x, y);
             normals_.push_back(len > 1e-4f ? SDL_FPoint{x / len, y / len} : q);
         }
+    }
+
+    // Color filters: applied here, to each color, brush and image drawn (the innermost first).
+    void pushColorFilter(const ColorFilter& filter) override { filters_.push_back(filter); }
+    void popColorFilter() override {
+        if (!filters_.empty()) filters_.pop_back();
+    }
+    Color filtered(Color c) const {
+        for (auto it = filters_.rbegin(); it != filters_.rend(); ++it) c = it->apply(c);
+        return c;
+    }
+    Brush filtered(const Brush& brush) const {
+        Brush b = brush;
+        for (auto it = filters_.rbegin(); it != filters_.rend(); ++it) b = it->apply(b);
+        return b;
     }
 
     // Blend modes, on what the renderer draws next (the colors drawn aren't premultiplied, layers
@@ -698,8 +734,9 @@ public:
         release(t);
     }
 
-    void fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& brush, const Rect& area) override {
-        if (brush.isSolid()) return fillRoundRect(rect, radii, brush.stops().front().color);
+    void fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& unfiltered, const Rect& area) override {
+        if (unfiltered.isSolid()) return fillRoundRect(rect, radii, unfiltered.stops().front().color);
+        Brush brush = filtered(unfiltered);
         if (rect.width <= 0 || rect.height <= 0) return;
         float x = rect.x * scale - ox_, y = rect.y * scale - oy_, w = rect.width * scale, h = rect.height * scale;
         CornerRadii r = pixelRadii(radii, w, h);
@@ -818,8 +855,9 @@ public:
         }
     }
 
-    void drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& area, const PathStroke& stroke) override {
+    void drawPath(const Path& path, Offset origin, const Brush& unfiltered, const Rect& area, const PathStroke& stroke) override {
         if (path.isEmpty()) return;
+        Brush brush = filtered(unfiltered);
         // Rasterized relative to a whole pixel, with the fraction (in quarter pixels) part of the
         // cache key: moving a path by whole pixels doesn't rasterize it again. One that moves by
         // fractions (scrolling at 2.625 px per dp) is drawn snapped to whole pixels until it
@@ -1326,6 +1364,7 @@ private:
     std::vector<SDL_Rect> clips_;
     std::vector<Layer> layers_;
     std::vector<BlendMode> blends_;  // pushBlendMode's, innermost last
+    std::vector<ColorFilter> filters_;  // pushColorFilter's, innermost last
     SDL_BlendMode blend_ = SDL_BLENDMODE_BLEND;
     std::unordered_map<uint64_t, ImageTexture> images_;
     std::vector<PooledTexture> pool_;

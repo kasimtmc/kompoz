@@ -6589,6 +6589,40 @@ TEST(brush_geometry_resolves_on_the_area) {
     CHECK(Brush::horizontalGradient({red, blue}, 20).parameterAt({210, 0}, area) == 0.5f);
 }
 
+// blend(): Compose's 29 blend modes, against values worked out by hand from W3C's compositing spec.
+TEST(blend_modes_follow_the_compositing_spec) {
+    auto gray = [](float v, float a = 1) { return Color{v, v, v, a}; };
+    auto near = [](Color c, Color want) {
+        return std::abs(c.r - want.r) < 1e-3f && std::abs(c.g - want.g) < 1e-3f && std::abs(c.b - want.b) < 1e-3f &&
+               std::abs(c.a - want.a) < 1e-3f;
+    };
+    CHECK(near(blend(gray(0.5f), gray(0.4f), BlendMode::Multiply), gray(0.2f)));
+    CHECK(near(blend(gray(0.5f), gray(0.4f), BlendMode::Screen), gray(0.7f)));
+    CHECK(near(blend(gray(0.8f), gray(0.3f), BlendMode::Overlay), gray(0.48f)));    // the backdrop's hard light
+    CHECK(near(blend(gray(0.3f), gray(0.8f), BlendMode::Hardlight), gray(0.48f)));
+    CHECK(near(blend(gray(0.5f), gray(0.4f), BlendMode::ColorDodge), gray(0.8f)));
+    CHECK(near(blend(gray(0.5f), gray(0.6f), BlendMode::ColorBurn), gray(0.2f)));
+    CHECK(near(blend(gray(0.25f), gray(0.5f), BlendMode::Softlight), gray(0.375f)));
+    CHECK(near(blend(gray(0.75f), gray(0.16f), BlendMode::Softlight), gray(0.16f + 0.5f * (((16 * 0.16f - 12) * 0.16f + 4) * 0.16f - 0.16f))));
+    CHECK(near(blend(gray(0.2f), gray(0.7f), BlendMode::Difference), gray(0.5f)));
+    CHECK(near(blend(gray(0.5f), gray(0.5f), BlendMode::Exclusion), gray(0.5f)));
+    CHECK(near(blend(gray(0.3f), gray(0.6f), BlendMode::Darken), gray(0.3f)));
+    CHECK(near(blend(gray(0.3f), gray(0.6f), BlendMode::Lighten), gray(0.6f)));
+    // Non-separable: red onto gray.
+    Color red{1, 0, 0, 1};
+    CHECK(near(blend(red, gray(0.5f), BlendMode::Hue), gray(0.5f)));         // gray's saturation (none) and luminosity
+    CHECK(near(blend(red, gray(0.5f), BlendMode::Color), Color{1, 0.2f / 0.7f, 0.2f / 0.7f, 1}));  // red's hue at 0.5, clipped
+    CHECK(near(blend(red, gray(0.5f), BlendMode::Saturation), gray(0.5f)));  // red's saturation of gray: no hue to keep
+    CHECK(near(blend(red, gray(0.5f), BlendMode::Luminosity), gray(0.3f)));  // gray at red's luminosity
+    // Alpha: the source covers what it covers.
+    CHECK(near(blend(Color{1, 0, 0, 0.5f}, Color{0, 0, 1, 1}, BlendMode::SrcOver), Color{0.5f, 0, 0.5f, 1}));
+    CHECK(near(blend(Color{1, 0, 0, 0.5f}, Color{0, 0, 1, 1}, BlendMode::Multiply), Color{0, 0, 0.5f, 1}));  // red x blue: black, over half
+    CHECK(near(blend(Color{1, 0, 0, 0.5f}, Color{0, 0, 1, 0.5f}, BlendMode::Xor), Color{0.5f, 0, 0.5f, 0.5f}));
+    CHECK(blend(red, gray(0.5f), BlendMode::Clear).a == 0);
+    CHECK(near(blend(red, gray(0.5f), BlendMode::Dst), gray(0.5f)));
+    CHECK(near(blend(Color{1, 0, 0, 0.25f}, gray(0.5f, 0.5f), BlendMode::Plus), Color{(0.25f + 0.25f) / 0.75f, 0.25f / 0.75f, 0.25f / 0.75f, 0.75f}));
+}
+
 TEST(path_building_and_bounds) {
     Path p;
     p.moveTo(10, 10);
@@ -23628,25 +23662,30 @@ TEST(images_draw_through_a_color_filter) {
             Canvas(Modifier().size(20, 10), [&](DrawScope& d) { d.drawImage(photo, {}, Size{20, 10}, 1, ColorFilter::lighting(Color{0, 0, 0, 1}, Color{})); });
         });
     });
+    // The image itself is drawn, the filter in effect around it (the backend applies it per pixel).
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
-    CHECK(canvas.images.size() == 2 && canvas.images[0] != photo.id() && canvas.images[1] != photo.id());
+    CHECK(canvas.images.size() == 2 && canvas.images[0] == photo.id() && canvas.images[1] == photo.id());
+    CHECK(canvas.imageFilters.size() == 2 && canvas.imageFilters[0] == std::vector{ColorFilter::tint(Color{0, 0, 1, 1})});
+    CHECK(canvas.imageFilters.size() == 2 && canvas.imageFilters[1] == std::vector{ColorFilter::lighting(Color{0, 0, 0, 1}, Color{})});
+    CHECK(canvas.filterStack.empty());  // (only around the image)
+    // A filtered copy, for a backend that filters images on the CPU: made once, then kept.
     ImageBitmap tinted = ColorFilter::tint(Color{0, 0, 1, 1}).apply(photo);
-    CHECK(canvas.images.size() == 2 && canvas.images[0] == tinted.id());  // made once, then kept
+    CHECK(tinted.id() == ColorFilter::tint(Color{0, 0, 1, 1}).apply(photo).id());
     const uint8_t* px = tinted.pixels();
     CHECK(px[0] == 0 && px[2] == 255 && px[3] == 255 && px[4] == 0 && px[6] == 255 && px[7] == 128);
     ImageBitmap green = ColorFilter::tint(Color{0, 1, 0, 1}).apply(photo);  // another filter: its own copy
     CHECK(green.id() != tinted.id() && green.pixels()[1] == 255 && green.pixels()[2] == 0);
-    tick.set(1);  // recomposed: the same filtered image
+    tick.set(1);  // recomposed: the same
     rule.waitForIdle();
     testing::RecordingCanvas again;
     rule.host().draw(again);
-    CHECK(again.images.size() == 2 && again.images[0] == canvas.images[0] && again.images[1] == canvas.images[1]);
-    filter.set(std::nullopt);  // no filter: the image itself
+    CHECK(again.images == canvas.images && again.imageFilters == canvas.imageFilters);
+    filter.set(std::nullopt);  // no filter: none around the image
     rule.waitForIdle();
     testing::RecordingCanvas plain;
     rule.host().draw(plain);
-    CHECK(!plain.images.empty() && plain.images[0] == photo.id());
+    CHECK(!plain.images.empty() && plain.images[0] == photo.id() && plain.imageFilters[0].empty());
 }
 
 TEST(drop_and_inner_shadows_of_shapes) {
@@ -23720,6 +23759,8 @@ TEST(shadow_default_draws_fading_rings_and_display_list_damage_reaches_the_blur)
         void drawImage(const ImageBitmap&, const Rect&, const Rect&, float) override {}
         void pushLayer(const Rect&, const CornerRadii&, float, const LayerTransform&) override {}
         void popLayer() override {}
+        void pushColorFilter(const ColorFilter&) override {}
+        void popColorFilter() override {}
         void pushClip(const Rect&) override {}
         void popClip() override {}
         void pushTranslation(Offset) override {}

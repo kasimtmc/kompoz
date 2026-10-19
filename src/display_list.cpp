@@ -60,7 +60,7 @@ bool DisplayList::Command::same(const Command& o) const {
            kompoz::same(rect2, o.rect2) && radii == o.radii && f1 == o.f1 && f2 == o.f2 && f3 == o.f3 && color == o.color &&
            kompoz::same(p1, o.p1) && kompoz::same(p2, o.p2) && flag == o.flag && font == o.font && vector == o.vector &&
            image == o.image && kompoz::same(stroke, o.stroke) && kompoz::same(transform, o.transform) && text == o.text &&
-           brush == o.brush && path == o.path;
+           brush == o.brush && filter == o.filter && path == o.path;
 }
 
 void DisplayList::begin(Size viewport, float pixel) {
@@ -300,6 +300,16 @@ void DisplayList::pushBlendMode(BlendMode mode) {
 }
 
 void DisplayList::popBlendMode() { pop(Kind::PopBlend); }
+
+void DisplayList::pushColorFilter(const ColorFilter& filter) {
+    State s = states_.back();
+    Command& c = add(Kind::PushFilter);
+    c.filter = filter;
+    c.bounds = s.clip;  // what anything inside can touch (replay skips it when that's outside the area)
+    states_.push_back({s.m, s.clip, uint32_t(recording_.size() - 1)});
+}
+
+void DisplayList::popColorFilter() { pop(Kind::PopFilter); }
 void DisplayList::popLayer() { pop(Kind::PopLayer); }
 void DisplayList::popClip() { pop(Kind::PopClip); }
 void DisplayList::popTranslation() { pop(Kind::PopTranslation); }
@@ -313,7 +323,8 @@ void DisplayList::addDamage(std::optional<Rect>& damage, const std::vector<Comma
     for (uint32_t i = first; i < first + count; ++i) {
         const Command& c = commands[i];
         if (c.kind == Kind::PopLayer || c.kind == Kind::PushClip || c.kind == Kind::PopClip || c.kind == Kind::PushTranslation ||
-            c.kind == Kind::PopTranslation || c.kind == Kind::PushBlend || c.kind == Kind::PopBlend || empty(c.bounds))
+            c.kind == Kind::PopTranslation || c.kind == Kind::PushBlend || c.kind == Kind::PopBlend || c.kind == Kind::PushFilter ||
+            c.kind == Kind::PopFilter || empty(c.bounds))
             continue;
         damage = damage ? united(*damage, c.bounds) : c.bounds;
     }
@@ -325,6 +336,7 @@ std::optional<Rect> DisplayList::end() {
         pop(open == Kind::PushClip          ? Kind::PopClip
             : open == Kind::PushTranslation ? Kind::PopTranslation
             : open == Kind::PushBlend       ? Kind::PopBlend
+            : open == Kind::PushFilter      ? Kind::PopFilter
                                             : Kind::PopLayer);
     }
     Rect screen{0, 0, viewport_.width, viewport_.height};
@@ -385,6 +397,7 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
         case Kind::PushClip:
         case Kind::PushTranslation:
         case Kind::PushBlend:
+        case Kind::PushFilter:
             if (skip(c) && c.end > i) {  // nothing inside touches the area
                 i = c.end;
                 continue;
@@ -394,9 +407,11 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
             else if (c.kind == Kind::PushLayer) canvas.pushLayer(c.rect, c.radii, c.f2, c.transform);
             else if (c.kind == Kind::PushClip) canvas.pushClip(c.rect);
             else if (c.kind == Kind::PushBlend) canvas.pushBlendMode(BlendMode(int(c.f1)));
+            else if (c.kind == Kind::PushFilter) canvas.pushColorFilter(*c.filter);
             else canvas.pushTranslation(c.p1);
             break;
         case Kind::PopBlend: canvas.popBlendMode(); break;
+        case Kind::PopFilter: canvas.popColorFilter(); break;
         case Kind::PopLayer: canvas.popLayer(); break;
         case Kind::PopClip: canvas.popClip(); break;
         case Kind::PopTranslation: canvas.popTranslation(); break;

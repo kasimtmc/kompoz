@@ -19,6 +19,7 @@
 #include <SDL3/SDL_vulkan.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -92,13 +93,13 @@ struct Gpu {
         if (window) SDL_DestroyWindow(window);
     }
 
-    // `draw` on a white w x h px target at `scale` px per dp, read back.
-    Pixels render(int w, int h, float scale, const std::function<void(GraphicsContext&)>& draw) {
+    // `draw` on a w x h px target (white, or `clear`) at `scale` px per dp, read back (premultiplied).
+    Pixels render(int w, int h, float scale, const std::function<void(GraphicsContext&)>& draw, gpu::ClearColor clear = {1, 1, 1, 1}) {
         fonts->setScale(scale);
         renderer->scale = scale;
         device->beginFrame();
         auto target = device->createTexture(w, h, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
-        renderer->beginTarget(*target, gpu::ClearColor{1, 1, 1, 1});
+        renderer->beginTarget(*target, clear);
         draw(*renderer);
         renderer->endTarget();
         renderer->flush();
@@ -353,6 +354,16 @@ void gradients(GraphicsContext& c) {
     c.fillGradient({160, 136, 24, 48}, 4, Brush::verticalGradient({a.copy(0), a}), {160, 136, 24, 48});  // to see-through
 }
 
+void blendModes(GraphicsContext& c) {  // every mode, a swatch each: an orange square over a blue to green ring
+    for (int m = 0; m <= int(BlendMode::Luminosity); ++m) {
+        float x = float(m % 6) * 32 + 2, y = float(m / 6) * 38 + 2;
+        c.fillGradient({x, y, 28, 28}, 14, Brush::linearGradient({Color{0.1f, 0.3f, 0.9f, 1}, Color{0.2f, 0.8f, 0.4f, 0.6f}}), {x, y, 28, 28});
+        c.pushBlendMode(BlendMode(m));
+        c.fillRoundRect({x + 8, y + 8, 18, 18}, 3, Color{0.95f, 0.55f, 0.1f, 0.85f});
+        c.popBlendMode();
+    }
+}
+
 void outlineLayers(GraphicsContext& c) {
     Color blue{0.15f, 0.3f, 0.86f, 1}, orange{0.9f, 0.6f, 0.1f, 1};
     c.pushOutlineLayer({2, 2, 80, 80}, star(40, 40, 38), 1);  // (the outline from the bounds' top left)
@@ -522,6 +533,102 @@ void gradientsMatchColorAt(Gpu& g) {
     }
 }
 
+// A straight color premultiplied, as 8-bit channels.
+std::array<uint8_t, 4> premultiplied8(Color c) {
+    auto b = [](float v) { return uint8_t(std::lround(std::clamp(v, 0.f, 1.f) * 255)); };
+    return {b(c.r * c.a), b(c.g * c.a), b(c.b * c.a), b(c.a)};
+}
+
+// Every blend mode draws what blend() works out, onto a see-through target too, and an edge half
+// a pixel in is half way between what was there and that.
+void blendModesMatchBlend(Gpu& g) {
+    struct Pair {
+        Color dst, src;
+    };
+    const Pair pairs[] = {{{0.2f, 0.5f, 0.9f, 1}, {0.9f, 0.4f, 0.1f, 1}},          // opaque
+                          {{0.3f, 0.8f, 0.2f, 0.6f}, {0.8f, 0.1f, 0.6f, 0.5f}}};   // see-through, both
+    for (int m = 0; m <= int(BlendMode::Luminosity); ++m) {
+        BlendMode mode = BlendMode(m);
+        for (const Pair& pair : pairs) {
+            Pixels p = g.render(32, 16, 1, [&](GraphicsContext& c) {
+                c.fillRoundRect({0, 0, 32, 16}, 0, pair.dst);
+                c.pushBlendMode(mode);
+                c.fillRoundRect({8.5f, 0, 16, 16}, 0, pair.src);  // (its left edge half a pixel in)
+                c.popBlendMode();
+            }, gpu::ClearColor{0, 0, 0, 0});
+            // What the target holds where the source didn't go, as the shader reads it back: 8 bits a
+            // channel, premultiplied, rounded as this GPU rounds (0.9 * 255 can be 229 or 230).
+            std::array<uint8_t, 4> there;
+            std::copy_n(p.at(4, 8), 4, there.begin());
+            CHECK(maxDifference(there.data(), premultiplied8(pair.dst).data()) <= 1);
+            float da = there[3] / 255.f;
+            Color stored = da > 0 ? Color{there[0] / 255.f / da, there[1] / 255.f / da, there[2] / 255.f / da, da} : Color{};
+            auto want = premultiplied8(blend(pair.src, stored, mode));
+            std::array<uint8_t, 4> half;
+            for (int k = 0; k < 4; ++k) half[size_t(k)] = uint8_t(std::lround((int(want[size_t(k)]) + int(there[size_t(k)])) / 2.0));
+            if (mode == BlendMode::Plus) {  // as Skia (Android's Compose) does Plus: the coverage as the source's alpha, then clamped
+                auto s = premultiplied8(pair.src);
+                for (int k = 0; k < 4; ++k) half[size_t(k)] = uint8_t(std::min(255L, std::lround(s[size_t(k)] / 2.0) + there[size_t(k)]));
+            }
+            int inside = maxDifference(p.at(16, 8), want.data()), edge = maxDifference(p.at(8, 8), half.data());
+            CHECK(inside <= 2 && edge <= 3);
+            if (inside > 2 || edge > 3) std::printf("  blend mode %d (alpha %.1f): off by %d inside, %d at the edge\n", m, pair.src.a, inside, edge);
+        }
+    }
+}
+
+// Color filters change each pixel as ColorFilter::apply does: an image's, a fill's; nested ones the
+// inner one first.
+void colorFiltersMatchApply(Gpu& g) {
+    std::vector<uint8_t> px(16 * 8 * 4);
+    for (int y = 0; y < 8; ++y)
+        for (int x = 0; x < 16; ++x) {
+            uint8_t* q = &px[size_t(y * 16 + x) * 4];
+            q[0] = uint8_t(x * 16), q[1] = uint8_t(y * 32), q[2] = uint8_t(255 - x * 12), q[3] = uint8_t(x < 8 ? 255 : 96 + y * 16);
+        }
+    ImageBitmap image = ImageBitmap::fromPixels(16, 8, px);
+    ColorMatrix gray;
+    gray.setToSaturation(0);
+    ColorMatrix swap{{0, 0, 1, 0, 0.1f, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0.8f, 0}};
+    struct Case {
+        const char* name;
+        std::vector<ColorFilter> filters;  // outermost first
+    };
+    const Case cases[] = {
+        {"gray", {ColorFilter::colorMatrix(gray)}},
+        {"matrix with offsets", {ColorFilter::colorMatrix(swap)}},
+        {"lighting", {ColorFilter::lighting(Color{0.5f, 1, 0.8f, 1}, Color{0.2f, 0, 0.1f, 0})}},
+        {"tint", {ColorFilter::tint(Color{0.1f, 0.6f, 0.3f, 0.8f})}},
+        {"tint multiply", {ColorFilter::tint(Color{0.9f, 0.5f, 0.2f, 1}, BlendMode::Multiply)}},
+        {"tint hue", {ColorFilter::tint(Color{0.1f, 0.3f, 0.9f, 1}, BlendMode::Hue)}},
+        {"tint dst over", {ColorFilter::tint(Color{1, 1, 0, 0.5f}, BlendMode::DstOver)}},
+        {"nested", {ColorFilter::colorMatrix(gray), ColorFilter::tint(Color{1, 0, 0, 1}, BlendMode::Screen)}},
+    };
+    for (const Case& k : cases) {
+        Pixels p = g.render(16, 16, 1, [&](GraphicsContext& c) {
+            for (const ColorFilter& f : k.filters) c.pushColorFilter(f);
+            c.drawImage(image, {0, 0, 16, 8}, {0, 0, 16, 8}, 1);
+            c.fillRoundRect({0, 8, 16, 8}, 0, Color{0.7f, 0.2f, 0.4f, 0.9f});
+            for (size_t i = 0; i < k.filters.size(); ++i) c.popColorFilter();
+        }, gpu::ClearColor{0, 0, 0, 0});
+        auto filtered = [&](Color c) {
+            for (auto it = k.filters.rbegin(); it != k.filters.rend(); ++it) c = it->apply(c);
+            return c;
+        };
+        int worst = 0;
+        for (int y = 0; y < 8; ++y)
+            for (int x = 0; x < 16; ++x) {
+                const uint8_t* q = &px[size_t(y * 16 + x) * 4];
+                auto want = premultiplied8(filtered(Color{q[0] / 255.f, q[1] / 255.f, q[2] / 255.f, q[3] / 255.f}));
+                worst = std::max(worst, maxDifference(p.at(x, y), want.data()));
+            }
+        auto fill = premultiplied8(filtered(Color{0.7f, 0.2f, 0.4f, 0.9f}));
+        worst = std::max(worst, maxDifference(p.at(8, 12), fill.data()));
+        CHECK(worst <= 2);
+        if (worst > 2) std::printf("  %s: off by %d\n", k.name, worst);
+    }
+}
+
 // Curves cut into lines stay within kTolerance of the curve, in the target's pixels.
 void curvesAreFlattenedClosely() {
     Path circle;
@@ -549,7 +656,7 @@ void scenesMatchTheirPictures(Gpu& g) {
     const Scene scenes[] = {{"rects", 192, 192, 1, rects},   {"lines", 192, 192, 1, lines},   {"shadows", 192, 192, 1, shadows},
                             {"text", 192, 192, 1, text},     {"images", 192, 192, 1, images}, {"layers", 192, 192, 1, layers},
                             {"paths", 192, 192, 1, paths},   {"outline-layers", 192, 192, 1, outlineLayers},
-                            {"gradients", 192, 192, 1, gradients},
+                            {"gradients", 192, 192, 1, gradients},   {"blend-modes", 192, 192, 1, blendModes},
                             {"density", 192, 192, 2.625f, fractionalDensity}};
     for (const Scene& s : scenes) {
         Pixels p = g.render(s.w, s.h, s.scale, s.draw);
@@ -582,6 +689,8 @@ int main() {
             pathsAreCoveredExactly(g);
             curvesAreFlattenedClosely();
             gradientsMatchColorAt(g);
+            blendModesMatchBlend(g);
+            colorFiltersMatchApply(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
             std::printf("%d checks, %d failed\n", checks, failures);

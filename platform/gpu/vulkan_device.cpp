@@ -47,7 +47,7 @@ namespace {
     X(vkCreateDescriptorPool) X(vkDestroyDescriptorPool) X(vkResetDescriptorPool) X(vkAllocateDescriptorSets)                              \
     X(vkUpdateDescriptorSets) X(vkCreateSampler) X(vkDestroySampler) X(vkCmdBeginRenderPass) X(vkCmdEndRenderPass)                         \
     X(vkCmdBindPipeline) X(vkCmdSetViewport) X(vkCmdSetScissor) X(vkCmdPushConstants) X(vkCmdBindDescriptorSets)                           \
-    X(vkCmdBindVertexBuffers) X(vkCmdDraw) X(vkCmdPipelineBarrier) X(vkCmdCopyBufferToImage) X(vkCmdCopyImageToBuffer)                    \
+    X(vkCmdBindVertexBuffers) X(vkCmdDraw) X(vkCmdPipelineBarrier) X(vkCmdCopyBufferToImage) X(vkCmdCopyImageToBuffer) X(vkCmdCopyImage)                    \
     X(vkCreatePipelineCache) X(vkDestroyPipelineCache)
 
 struct Api {
@@ -946,6 +946,19 @@ public:
             si.pSignalSemaphores = &renderFinished[swapIndex];
         }
         vk.vkQueueSubmit(queue, 1, &si, fence);
+    }
+
+    void copyTexture(Texture& source, const IRect& region, Texture& destination, int x, int y) override {
+        auto& src = static_cast<VulkanTexture&>(source);
+        auto& dst = static_cast<VulkanTexture&>(destination);
+        transition(src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        transition(dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        VkImageCopy copy{};
+        copy.srcSubresource = copy.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        copy.srcOffset = {region.x, region.y, 0};
+        copy.dstOffset = {x, y, 0};
+        copy.extent = {uint32_t(region.width), uint32_t(region.height), 1};
+        vk.vkCmdCopyImage(cmd, src.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
     }
 
     std::vector<uint8_t> readPixels(Texture& texture, const IRect& region) override {

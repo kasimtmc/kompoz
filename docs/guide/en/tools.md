@@ -136,7 +136,7 @@ Kompoz records each frame first and draws again only what changed since the fram
 | `KOMPOZ_ATSPI=1` | Serves the semantics tree to screen readers over AT-SPI even when the desktop's accessibility is off (Linux); `0` never. |
 | `KOMPOZ_TRACE=1` | Logs how many scopes ran and were skipped in each recomposition. |
 | `KOMPOZ_PROFILE=1` | Logs frame times. |
-| `KOMPOZ_GPU=vulkan` | Draws with Kompoz's own GPU renderer on Vulkan instead of SDL_Renderer (Linux, Windows, Android). It is being built: blend modes and blurs aren't drawn yet. |
+| `KOMPOZ_GPU=vulkan` | Draws with Kompoz's own GPU renderer on Vulkan instead of SDL_Renderer (Linux, Windows, Android). It is being built: blurs aren't drawn yet. |
 | `KOMPOZ_GPU_DEVICE=name`, `KOMPOZ_GPU_VALIDATION=1` | With it: the GPU whose name contains `name`; Vulkan's validation layers, where they are installed. |
 | `KOMPOZ_DAMAGE_SHOW=1`, `KOMPOZ_DAMAGE_CHECK=1`, `KOMPOZ_FULL_REDRAW=1` | Show, check or turn off redrawing only what changed. |
 | `KOMPOZ_LAYOUT_CHECK=1` | Checks every incremental layout against a full one (the tests always do). |
