@@ -48,7 +48,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ninja-build g++-14 clang-19 lld-19 dbus \
-            libturbojpeg0-dev libwebp-dev libcurl4-openssl-dev libvulkan-dev
+            libturbojpeg0-dev libwebp-dev libcurl4-openssl-dev libvulkan-dev mesa-vulkan-drivers
           # What SDL's own README lists for Linux
           sudo apt-get install -y --no-install-recommends libasound2-dev libpulse-dev libpipewire-0.3-dev \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
@@ -70,6 +70,14 @@ jobs:
         run: build/kompoz_tests
       - name: Platform tests
         run: build/kompoz_platform_tests
+      # Vulkan on lavapipe (Mesa's, on the CPU), which LeakSanitizer can't follow into.
+      - name: GPU renderer tests (Vulkan on lavapipe, against tests/golden)
+        working-directory: build
+        env:
+          KOMPOZ_GPU_REQUIRED: "1"
+          VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+          ASAN_OPTIONS: detect_leaks=0
+        run: ./kompoz_gpu_tests
       - name: Install (with the SDL3, FreeType and HarfBuzz built here), and build an app against it
         run: |
           cmake --install build --prefix "$PWD/install"

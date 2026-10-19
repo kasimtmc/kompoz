@@ -237,6 +237,7 @@ if(KOMPOZ_BUILD_SDL3)
         target_include_directories(kompoz_sdl3 PRIVATE $<BUILD_INTERFACE:${kompoz_vulkan_include}>
                                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/platform/gpu/external>)
         target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_GPU_VULKAN=1)
+        set(kompoz_gpu_vulkan ON)
         set_source_files_properties(platform/gpu/vma.cpp PROPERTIES COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang>:-w>")  # (its warnings)
     endif()
     # Text is shaped with HarfBuzz when it is there: ligatures, kerning, Arabic joining, Indic
@@ -291,6 +292,20 @@ if(KOMPOZ_BUILD_SDL3)
         add_custom_command(TARGET ${target} POST_BUILD
                            COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/assets $<TARGET_FILE_DIR:${target}>)
     endfunction()
+
+    # The GPU renderer drawn on a real device (Vulkan), against pictures in tests/golden/.
+    if(KOMPOZ_BUILD_TESTS AND kompoz_gpu_vulkan AND NOT ANDROID)
+        add_executable(kompoz_gpu_tests tests/gpu_tests.cpp platform/gpu/device.cpp platform/gpu/renderer.cpp
+                       platform/gpu/vulkan_device.cpp platform/gpu/vma.cpp platform/sdl3/font_system.cpp)
+        target_include_directories(kompoz_gpu_tests PRIVATE ${kompoz_vulkan_include} platform/gpu/external)
+        target_link_libraries(kompoz_gpu_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,INTERFACE_LINK_LIBRARIES>)
+        target_compile_definitions(kompoz_gpu_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,COMPILE_DEFINITIONS>
+                                   KOMPOZ_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden")
+        set_source_files_properties(platform/gpu/vma.cpp TARGET_DIRECTORY kompoz_gpu_tests PROPERTIES COMPILE_OPTIONS
+                                    "$<$<CXX_COMPILER_ID:GNU,Clang>:-w>")
+        kompoz_copy_assets(kompoz_gpu_tests)
+        add_test(NAME kompoz_gpu_tests COMMAND kompoz_gpu_tests WORKING_DIRECTORY $<TARGET_FILE_DIR:kompoz_gpu_tests>)
+    endif()
 
     if(KOMPOZ_BUILD_EXAMPLES)
         add_subdirectory(examples/showcase)

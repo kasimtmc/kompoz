@@ -18,6 +18,12 @@
 - **Her platformda CI**: testler, platform testleri ve Kompoz'un her kurulum yoluyla derlenip çalıştırılan, tıklanan
   bir uygulama (Windows'ta ve artık Kompoz'un çalıştığı macOS'ta gerçek pencerede, macOS'ta ekransız da). `CONTRIBUTING.md`, issue formları
   ve bir sürümün paketlerini yayımlayan `scripts/release.sh`.
+- **Kompoz'un kendi GPU renderer'ı**, yapım aşamasında (`KOMPOZ_GPU=vulkan`): her native grafik API'si için ince bir
+  katmanın üstünde tek bir çekirdek; önce Vulkan (Direct3D 12, Metal, OpenGL ES 3 / WebGL 2 ve WebGPU gelecek).
+  Yuvarlak dikdörtgenler, kenarlıklar, çizgiler, yaylar, gölgeler, yazı, resimler, clip'ler ve katmanlar GPU'da birebir
+  kenar yumuşatmayla çiziliyor; path'ler, gradyanlar, blend modları ve blur sırada. Shader'ları bir kez (Slang ile)
+  yazılıp `scripts/shaders.py` ile her API için derleniyor; testler sahnelerini gerçek bir cihazda çizip resimlerle
+  karşılaştırıyor.
 - **Düzeltildi**: GCC 14 ile (metin alanının imleç tutamacı) ve MSVC ile derleme; MinGW toolchain dosyası verilen kök
   yolları siliyordu; macOS'ta ekransızken pencere kurulamıyordu (SDL onu OpenGL penceresi yapıyordu, bu orada EGL
   ister): artık software renderer ile çiziyor.

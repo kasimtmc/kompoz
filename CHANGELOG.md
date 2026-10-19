@@ -18,6 +18,11 @@
 - **CI** on every platform: the tests, the platform tests, and an app built against each way of installing Kompoz,
   run and clicked (in a real window on Windows and macOS, where Kompoz now runs, and offscreen on macOS too). `CONTRIBUTING.md`, issue forms and
   `scripts/release.sh` for publishing a release's packages.
+- **Kompoz's own GPU renderer**, being built (`KOMPOZ_GPU=vulkan`): one core over a thin layer per native graphics
+  API, Vulkan first (Direct3D 12, Metal, OpenGL ES 3 / WebGL 2 and WebGPU to come). Rounded rects, borders, lines, arcs,
+  shadows, text, images, clips and layers are drawn on the GPU with exact anti-aliasing; paths, gradients, blend modes
+  and blurs come next. Its shaders are written once (Slang) and compiled for every API by `scripts/shaders.py`; tests
+  draw its scenes on a real device and compare them with pictures.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.
