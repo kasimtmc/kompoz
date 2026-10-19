@@ -24,7 +24,9 @@ class KompozTestConan(ConanFile):
 
     def test(self):
         if can_run(self):
-            demo = os.path.join(self.cpp.build.bindir, "package", "demo")
+            # tests/package is built as this build's package/ folder; multi-config generators
+            # (Visual Studio) put its demo in a folder of the build type under it.
+            demo = os.path.join("package", self.cpp.build.bindir, "demo")
             env = Environment()
             env.define("SDL_VIDEO_DRIVER", "offscreen")
             env.define("SDL_RENDER_DRIVER", "software")
