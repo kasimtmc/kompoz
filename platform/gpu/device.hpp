@@ -150,6 +150,8 @@ public:
 
     virtual Backend backend() const = 0;
     virtual std::string deviceName() const = 0;
+    // Errors the API's validation reported so far (with KOMPOZ_GPU_VALIDATION=1; tests want none).
+    virtual int validationErrors() const { return 0; }
     // In clip space y goes up (Direct3D, Metal, OpenGL, WebGPU) or down (Vulkan): the renderer
     // flips its projection for the second.
     virtual bool clipYDown() const = 0;

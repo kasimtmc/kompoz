@@ -6,6 +6,7 @@
 //
 //   KOMPOZ_GOLDEN_UPDATE=1   writes the pictures anew (look at them before committing them)
 //   KOMPOZ_GPU_REQUIRED=1    no device is a failure (CI), not a skip
+//   KOMPOZ_GPU_VALIDATION=1  the API's validation on: any error it reports is a failure
 //
 // The device is Vulkan's, on SDL's offscreen video driver (a headless surface): lavapipe in CI.
 
@@ -386,6 +387,7 @@ int main() {
             layerAlphaIsExact(g);
             clipsAndTranslationsAreExact(g);
             scenesMatchTheirPictures(g);
+            CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
             std::printf("%d checks, %d failed\n", checks, failures);
             result = failures == 0 ? 0 : 1;
         }

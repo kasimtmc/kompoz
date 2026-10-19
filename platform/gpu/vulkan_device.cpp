@@ -17,6 +17,7 @@
 #include "device.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <map>
@@ -153,6 +154,7 @@ public:
     VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     std::function<void(int*, int*)> drawableSize;
+    std::atomic<int> errors{0};  // validation errors reported
 
     // Swapchain.
     VkSwapchainKHR swapchain = VK_NULL_HANDLE;
@@ -270,11 +272,13 @@ public:
             mci.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
             mci.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
                               VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-            mci.pfnUserCallback = [](VkDebugUtilsMessageSeverityFlagBitsEXT, VkDebugUtilsMessageTypeFlagsEXT,
-                                     const VkDebugUtilsMessengerCallbackDataEXT* data, void*) -> VkBool32 {
+            mci.pfnUserCallback = [](VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT,
+                                     const VkDebugUtilsMessengerCallbackDataEXT* data, void* user) -> VkBool32 {
                 log(std::string("kompoz: vulkan: ") + data->pMessage);
+                if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) ++static_cast<VulkanDevice*>(user)->errors;
                 return VK_FALSE;
             };
+            mci.pUserData = this;
             vk.vkCreateDebugUtilsMessengerEXT(instance, &mci, nullptr, &messenger);
         }
         uint64_t rawSurface = 0;
@@ -399,6 +403,7 @@ public:
 
     Backend backend() const override { return Backend::Vulkan; }
     std::string deviceName() const override { return properties.deviceName; }
+    int validationErrors() const override { return errors.load(); }
     bool clipYDown() const override { return true; }
     Format swapchainFormat() const override { return swapFormatKompoz; }
 
