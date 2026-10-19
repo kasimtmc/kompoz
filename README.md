@@ -362,6 +362,10 @@ signed with the debug key, installable as it is) and the web (`.zip`; serve the 
 `python3 -m http.server 8765`). Only some of them: `scripts/package.sh linux web`. A platform whose toolchain is
 missing is skipped, with a note.
 
+On a version's tagged commit, after `scripts/package.sh`, `scripts/release.sh` publishes the four packages on GitHub
+Releases under the `v<version>` tag, with the version's changelog entry as the notes (`--dry-run` shows what it would
+do). It needs the GitHub CLI (`gh`), signed in.
+
 ### Android
 
 Requirements: the Android SDK, NDK 29.0.14206865, SDK CMake 4.1.2 (from Android Studio's SDK Manager or

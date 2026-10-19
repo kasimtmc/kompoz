@@ -359,6 +359,10 @@ HarfBuzz… kütüphanelerini kullanır), Windows (`.zip`, MinGW ile statik; Win
 anahtarıyla imzalı, doğrudan kurulur) ve web (`.zip`; klasörü bir HTTP sunucusuyla açın: `python3 -m http.server 8765`).
 Yalnız bazıları için: `scripts/package.sh linux web`. Araç zinciri olmayan platform atlanır ve söylenir.
 
+Bir sürümün etiketli commit'inde, `scripts/package.sh`'den sonra `scripts/release.sh` dört paketi `v<sürüm>`
+etiketiyle GitHub Releases'te yayımlar; notlar değişiklik günlüğündeki o sürümün maddeleridir (`--dry-run` ne
+yapacağını gösterir). GitHub CLI (`gh`) ve oturum açmış olmak gerekir.
+
 ### Android
 
 Gerekenler: Android SDK, NDK 29.0.14206865, SDK CMake 4.1.2 (Android Studio'nun SDK Manager'ından veya
