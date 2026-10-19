@@ -857,6 +857,41 @@ struct Shadow {
     }
 };
 
+// A transform of points (Compose's Matrix): 4x4, `values[row * 4 + column]`, a point taken as the
+// row (x, y, z, 1) times it, so row 3 is the translation and column 3 the perspective. As in
+// Compose, translate, scale and rotateZ come before what the matrix did already (as a Canvas's
+// do), rotateX and rotateY after it. Drawn through (DrawTransform::transform), it acts in the
+// plane: its z row and column are left out, as Android leaves them out.
+class Matrix {
+public:
+    static constexpr int ScaleX = 0, SkewY = 1, Perspective0 = 3, SkewX = 4, ScaleY = 5, Perspective1 = 7, ScaleZ = 10,
+                         TranslateX = 12, TranslateY = 13, TranslateZ = 14, Perspective2 = 15;
+    std::array<float, 16> values{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+
+    float operator()(int row, int column) const { return values[size_t(row * 4 + column)]; }
+    float& operator()(int row, int column) { return values[size_t(row * 4 + column)]; }
+    // Where `point` goes (divided by its w; where that is 0, the origin).
+    Offset map(Offset point) const;
+    // The bounds of where the rect's corners go.
+    Rect map(const Rect& rect) const;
+    // This, then `m`.
+    Matrix& timesAssign(const Matrix& m);
+    Matrix& operator*=(const Matrix& m) { return timesAssign(m); }
+    void invert();  // left as it is if it has no inverse
+    void reset();
+    void rotateX(float degrees);
+    void rotateY(float degrees);
+    void rotateZ(float degrees);  // clockwise on the screen
+    void scale(float x = 1, float y = 1, float z = 1);
+    void translate(float x = 0, float y = 0, float z = 0);
+    // Scaled, then turned about x, y and z, then moved, all about the pivot (graphicsLayer's).
+    void resetToPivotedTransform(float pivotX = 0, float pivotY = 0, float translationX = 0, float translationY = 0,
+                                 float translationZ = 0, float rotationX = 0, float rotationY = 0, float rotationZ = 0,
+                                 float scaleX = 1, float scaleY = 1, float scaleZ = 1);
+    bool isIdentity() const { return *this == Matrix(); }
+    friend bool operator==(const Matrix&, const Matrix&) = default;
+};
+
 // How a layer is composited (graphicsLayer): scaled and rotated around `origin` (a fraction
 // of its size), then moved.
 struct LayerTransform {

@@ -34,6 +34,8 @@
 - **Color filters are drawing state** (`GraphicsContext::pushColorFilter`): images, painters and `drawImage` draw
   through their filter instead of drawing a filtered copy, so a backend applies it per pixel. A vector painter's paths
   keep their own paints through a filter (a gray matrix made a multi-colored vector one color before).
+- **`Matrix`**, Compose's 4x4 transform, operation for operation: `translate`, `scale`, `rotateX`/`Y`/`Z`,
+  `timesAssign`, `invert`, `resetToPivotedTransform`, and `map` for points and rects, with their perspective.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

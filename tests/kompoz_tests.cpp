@@ -6623,6 +6623,68 @@ TEST(blend_modes_follow_the_compositing_spec) {
     CHECK(near(blend(Color{1, 0, 0, 0.25f}, gray(0.5f, 0.5f), BlendMode::Plus), Color{(0.25f + 0.25f) / 0.75f, 0.25f / 0.75f, 0.25f / 0.75f, 0.75f}));
 }
 
+// Matrix: Compose's, operation for operation (translate, scale and rotateZ before what it did,
+// rotateX and rotateY after), points mapped with their perspective.
+TEST(matrix_follows_compose) {
+    auto at = [](Offset p, Offset want) { return std::abs(p.x - want.x) < 1e-4f && std::abs(p.y - want.y) < 1e-4f; };
+    Matrix m;
+    CHECK(m.isIdentity());
+    m.translate(10, 0);
+    m.rotateZ(90);  // turned first (clockwise), then moved
+    CHECK(at(m.map(Offset{1, 0}), {10, 1}));
+    Matrix s;
+    s.scale(2, 3);
+    s.translate(5, 5);  // moved first, then scaled
+    CHECK(at(s.map(Offset{1, 1}), {12, 18}));
+    Matrix x;
+    x.scale(2, 2);
+    x.rotateX(60);  // after the scale: y' = y cos 60
+    CHECK(at(x.map(Offset{0, 1}), {0, 1}));
+    Matrix p;
+    p(1, 3) = 0.01f;  // Perspective1: w = 1 + y / 100
+    CHECK(at(p.map(Offset{0, 100}), {0, 50}));
+    p(3, 3) = 0;
+    CHECK(at(p.map(Offset{0, 0}), {0, 0}));  // w = 0: the origin
+    Matrix r;
+    r.rotateZ(90);
+    Rect b = r.map(Rect{0, 0, 10, 20});
+    CHECK(std::abs(b.x + 20) < 1e-4f && std::abs(b.y) < 1e-4f && std::abs(b.width - 20) < 1e-4f && std::abs(b.height - 10) < 1e-4f);
+    Matrix a, c;
+    a.translate(10, 0);
+    c.scale(2, 2);
+    a *= c;  // a, then c
+    CHECK(at(a.map(Offset{1, 0}), {22, 0}));
+    Matrix inv = m;
+    inv.invert();
+    CHECK(at(inv.map(m.map(Offset{3, 7})), {3, 7}));
+    Matrix singular;
+    singular.scale(0, 1);
+    Matrix kept = singular;
+    singular.invert();
+    CHECK(singular == kept);  // no inverse: left as it is
+    Matrix g;
+    g.resetToPivotedTransform(10, 10, 5, 0, 0, 0, 0, 90, 2, 2);  // scaled, turned about (10, 10), moved
+    CHECK(at(g.map(Offset{20, 10}), {15, 30}));
+    Matrix steps;  // the same step by step
+    steps.translate(15, 10);
+    steps.rotateZ(90);
+    steps.scale(2, 2);
+    steps.translate(-10, -10);
+    CHECK(at(steps.map(Offset{13, 4}), g.map(Offset{13, 4})));
+    Matrix tilt;
+    tilt.resetToPivotedTransform(0, 0, 0, 0, 0, 0, 60);  // about y: x' = x cos 60
+    CHECK(at(tilt.map(Offset{4, 2}), {2, 2}));
+    Matrix both;
+    both.resetToPivotedTransform(0, 0, 0, 0, 0, 60, 60);  // y goes into x by sin 60 sin 60
+    CHECK(at(both.map(Offset{0, 1}), {0.75f, 0.5f}));
+    Matrix yx;
+    yx.rotateY(60);
+    yx.rotateX(60);  // x went into z, which this turns into y: y' = -z sin 60
+    CHECK(at(yx.map(Offset{1, 0}), {0.5f, 0.75f}));
+    g.reset();
+    CHECK(g.isIdentity());
+}
+
 TEST(path_building_and_bounds) {
     Path p;
     p.moveTo(10, 10);

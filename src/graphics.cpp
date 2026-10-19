@@ -219,6 +219,124 @@ Color ColorMatrix::apply(Color c) const {
     return {out[0], out[1], out[2], out[3]};
 }
 
+// ---- Matrix (Compose's, operation for operation) ---------------------------------------------
+
+Offset Matrix::map(Offset p) const {
+    const Matrix& m = *this;
+    float inverse = 1 / (m(0, 3) * p.x + m(1, 3) * p.y + m(3, 3));
+    float w = std::isfinite(inverse) ? inverse : 0;
+    return {w * (m(0, 0) * p.x + m(1, 0) * p.y + m(3, 0)), w * (m(0, 1) * p.x + m(1, 1) * p.y + m(3, 1))};
+}
+
+Rect Matrix::map(const Rect& r) const {
+    Offset a = map(Offset{r.x, r.y}), b = map(Offset{r.x, r.bottom()}), c = map(Offset{r.right(), r.y}), d = map(Offset{r.right(), r.bottom()});
+    float l = std::min({a.x, b.x, c.x, d.x}), t = std::min({a.y, b.y, c.y, d.y});
+    return {l, t, std::max({a.x, b.x, c.x, d.x}) - l, std::max({a.y, b.y, c.y, d.y}) - t};
+}
+
+Matrix& Matrix::timesAssign(const Matrix& o) {
+    Matrix out;
+    for (int row = 0; row < 4; ++row)
+        for (int col = 0; col < 4; ++col)
+            out(row, col) = (*this)(row, 0) * o(0, col) + (*this)(row, 1) * o(1, col) + (*this)(row, 2) * o(2, col) + (*this)(row, 3) * o(3, col);
+    values = out.values;
+    return *this;
+}
+
+void Matrix::invert() {
+    const Matrix& m = *this;
+    float a00 = m(0, 0), a01 = m(0, 1), a02 = m(0, 2), a03 = m(0, 3), a10 = m(1, 0), a11 = m(1, 1), a12 = m(1, 2), a13 = m(1, 3);
+    float a20 = m(2, 0), a21 = m(2, 1), a22 = m(2, 2), a23 = m(2, 3), a30 = m(3, 0), a31 = m(3, 1), a32 = m(3, 2), a33 = m(3, 3);
+    float b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10, b03 = a01 * a12 - a02 * a11;
+    float b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12, b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30;
+    float b08 = a20 * a33 - a23 * a30, b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
+    float det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+    if (det == 0) return;
+    float k = 1 / det;
+    values = {(a11 * b11 - a12 * b10 + a13 * b09) * k,  (-a01 * b11 + a02 * b10 - a03 * b09) * k,
+              (a31 * b05 - a32 * b04 + a33 * b03) * k,  (-a21 * b05 + a22 * b04 - a23 * b03) * k,
+              (-a10 * b11 + a12 * b08 - a13 * b07) * k, (a00 * b11 - a02 * b08 + a03 * b07) * k,
+              (-a30 * b05 + a32 * b02 - a33 * b01) * k, (a20 * b05 - a22 * b02 + a23 * b01) * k,
+              (a10 * b10 - a11 * b08 + a13 * b06) * k,  (-a00 * b10 + a01 * b08 - a03 * b06) * k,
+              (a30 * b04 - a31 * b02 + a33 * b00) * k,  (-a20 * b04 + a21 * b02 - a23 * b00) * k,
+              (-a10 * b09 + a11 * b07 - a12 * b06) * k, (a00 * b09 - a01 * b07 + a02 * b06) * k,
+              (-a30 * b03 + a31 * b01 - a32 * b00) * k, (a20 * b03 - a21 * b01 + a22 * b00) * k};
+}
+
+void Matrix::reset() { *this = Matrix(); }
+
+namespace {
+// The sine and cosine of `degrees`, worked out in double as Compose does.
+std::pair<float, float> sinCos(float degrees) {
+    double r = double(degrees) * std::numbers::pi / 180.0;
+    return {float(std::sin(r)), float(std::cos(r))};
+}
+} // namespace
+
+void Matrix::rotateX(float degrees) {  // after: columns 1 and 2 mixed
+    auto [s, c] = sinCos(degrees);
+    for (int row = 0; row < 4; ++row) {
+        float a1 = (*this)(row, 1), a2 = (*this)(row, 2);
+        (*this)(row, 1) = a1 * c - a2 * s;
+        (*this)(row, 2) = a1 * s + a2 * c;
+    }
+}
+
+void Matrix::rotateY(float degrees) {  // after: columns 0 and 2 mixed
+    auto [s, c] = sinCos(degrees);
+    for (int row = 0; row < 4; ++row) {
+        float a0 = (*this)(row, 0), a2 = (*this)(row, 2);
+        (*this)(row, 0) = a0 * c + a2 * s;
+        (*this)(row, 2) = -a0 * s + a2 * c;
+    }
+}
+
+void Matrix::rotateZ(float degrees) {  // before: rows 0 and 1 mixed
+    auto [s, c] = sinCos(degrees);
+    for (int col = 0; col < 4; ++col) {
+        float a0 = (*this)(0, col), a1 = (*this)(1, col);
+        (*this)(0, col) = c * a0 + s * a1;
+        (*this)(1, col) = -s * a0 + c * a1;
+    }
+}
+
+void Matrix::scale(float x, float y, float z) {
+    for (int col = 0; col < 4; ++col) (*this)(0, col) *= x, (*this)(1, col) *= y, (*this)(2, col) *= z;
+}
+
+void Matrix::translate(float x, float y, float z) {
+    for (int col = 0; col < 4; ++col) (*this)(3, col) += (*this)(0, col) * x + (*this)(1, col) * y + (*this)(2, col) * z;
+}
+
+void Matrix::resetToPivotedTransform(float pivotX, float pivotY, float translationX, float translationY, float translationZ,
+                                     float rotationX, float rotationY, float rotationZ, float scaleX, float scaleY, float scaleZ) {
+    auto [sx, cx] = sinCos(rotationX);
+    float v11 = cx, v12 = sx, v21 = -sx, v22 = cx;
+    float v31 = translationY * cx - translationZ * sx, v32 = translationY * sx + translationZ * cx;
+    auto [sy, cy] = sinCos(rotationY);
+    float v00 = cy, v02 = -sy;
+    float v10 = v12 * sy;
+    v12 *= cy;
+    float v20 = v22 * sy;
+    v22 *= cy;
+    float v30 = translationX * cy + v32 * sy;
+    v32 = -translationX * sy + v32 * cy;
+    auto [sz, cz] = sinCos(rotationZ);
+    float a10 = v10;
+    v10 = -sz * v00 + cz * v10;
+    v00 = cz * v00 + sz * a10;
+    float v01 = sz * v11;
+    v11 *= cz;
+    float a12 = v12;
+    v12 = -sz * v02 + cz * a12;
+    v02 = cz * v02 + sz * a12;
+    v00 *= scaleX, v01 *= scaleX, v02 *= scaleX;
+    v10 *= scaleY, v11 *= scaleY, v12 *= scaleY;
+    v20 *= scaleZ, v21 *= scaleZ, v22 *= scaleZ;
+    values = {v00, v01, v02, 0, v10, v11, v12, 0, v20, v21, v22, 0,
+              -pivotX * v00 - pivotY * v10 + v30 + pivotX, -pivotX * v01 - pivotY * v11 + v31 + pivotY, -pivotX * v02 - pivotY * v12 + v32, 1};
+}
+
 ColorFilter ColorFilter::tint(Color color, BlendMode blendMode) {
     ColorFilter f;
     f.kind_ = Kind::Tint;
