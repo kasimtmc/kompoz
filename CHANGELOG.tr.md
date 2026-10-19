@@ -16,10 +16,11 @@
 - **libjpeg-turbo 2.x ile de JPEG** (3.x'in yanında); AsyncImage'ın kütüphaneleri CMake paketlerinden ya da
   pkg-config'ten bulunuyor, `KOMPOZ_WITH_JPEG` / `WEBP` / `CURL` her birini otomatik, zorunlu ya da kapalı yapıyor.
 - **Her platformda CI**: testler, platform testleri ve Kompoz'un her kurulum yoluyla derlenip çalıştırılan, tıklanan
-  bir uygulama (Windows'ta ve artık Kompoz'un çalıştığı macOS'ta gerçek pencerede). `CONTRIBUTING.md`, issue formları
+  bir uygulama (Windows'ta ve artık Kompoz'un çalıştığı macOS'ta gerçek pencerede, macOS'ta ekransız da). `CONTRIBUTING.md`, issue formları
   ve bir sürümün paketlerini yayımlayan `scripts/release.sh`.
-- **Düzeltildi**: GCC 14 ile derleme (metin alanının imleç tutamacı); MinGW toolchain dosyası verilen kök yolları
-  siliyordu.
+- **Düzeltildi**: GCC 14 ile (metin alanının imleç tutamacı) ve MSVC ile derleme; MinGW toolchain dosyası verilen kök
+  yolları siliyordu; macOS'ta ekransızken pencere kurulamıyordu (SDL onu OpenGL penceresi yapıyordu, bu orada EGL
+  ister): artık software renderer ile çiziyor.
 
 ## 0.1.1 — 2026-10-18
 

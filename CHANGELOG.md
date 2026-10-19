@@ -16,10 +16,11 @@
 - **JPEG with libjpeg-turbo 2.x** as well as 3.x; AsyncImage's libraries are found from their CMake packages or
   pkg-config, and `KOMPOZ_WITH_JPEG` / `WEBP` / `CURL` make each automatic, required or off.
 - **CI** on every platform: the tests, the platform tests, and an app built against each way of installing Kompoz,
-  run and clicked (in a real window on Windows and macOS, where Kompoz now runs). `CONTRIBUTING.md`, issue forms and
+  run and clicked (in a real window on Windows and macOS, where Kompoz now runs, and offscreen on macOS too). `CONTRIBUTING.md`, issue forms and
   `scripts/release.sh` for publishing a release's packages.
-- **Fixed**: building with GCC 14 (the text field's caret handle); the MinGW toolchain file dropped the roots it was
-  given.
+- **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
+  roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
+  there): it now draws with the software renderer.
 
 ## 0.1.1 — 2026-10-18
 

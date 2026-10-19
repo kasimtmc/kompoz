@@ -65,7 +65,7 @@ KOMPOZ_PREVIEW=CounterCardPreview scripts/dev.sh
 SDL_VIDEODRIVER=offscreen KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 ```
 
-`SDL_VIDEODRIVER=offscreen` runs without a window, which is useful on a build server (on macOS add `SDL_RENDER_DRIVER=software`, or run it in a window: SDL's offscreen driver makes OpenGL contexts with EGL, which macOS doesn't have). A preview becomes a picture the same way:
+`SDL_VIDEODRIVER=offscreen` runs without a window, which is useful on a build server (on macOS it draws with the software renderer: offscreen, SDL's OpenGL wants EGL there, which macOS doesn't have). A preview becomes a picture the same way:
 
 ```bash
 SDL_VIDEODRIVER=offscreen KOMPOZ_PREVIEW=CounterCardPreview KOMPOZ_SCRIPT="wait 10; shot preview.png; quit" ./build/myapp

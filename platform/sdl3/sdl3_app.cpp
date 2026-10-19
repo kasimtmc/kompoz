@@ -3336,7 +3336,18 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     flags |= SDL_WINDOW_FILL_DOCUMENT;  // the whole page, resized with the browser window
     kompoz_web_watch_wheel();
 #endif
-    app->window = SDL_CreateWindow(app->config.title.c_str(), app->config.width, app->config.height, flags);
+    SDL_PropertiesID windowProps = SDL_CreateProperties();
+    SDL_SetStringProperty(windowProps, SDL_PROP_WINDOW_CREATE_TITLE_STRING, app->config.title.c_str());
+    SDL_SetNumberProperty(windowProps, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, app->config.width);
+    SDL_SetNumberProperty(windowProps, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, app->config.height);
+    SDL_SetNumberProperty(windowProps, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, static_cast<Sint64>(flags));
+    // On the offscreen driver the window starts without a graphics API, as it does elsewhere: on
+    // macOS SDL would make it an OpenGL window, which offscreen means EGL, which macOS hasn't, so
+    // even the software renderer couldn't start. A GL renderer still makes it an OpenGL window.
+    if (const char* driver = SDL_GetCurrentVideoDriver(); driver && std::string_view(driver) == "offscreen")
+        SDL_SetBooleanProperty(windowProps, SDL_PROP_WINDOW_CREATE_EXTERNAL_GRAPHICS_CONTEXT_BOOLEAN, true);
+    app->window = SDL_CreateWindowWithProperties(windowProps);
+    SDL_DestroyProperties(windowProps);
     if (!app->window) {
         SDL_Log("kompoz: SDL_CreateWindow failed: %s", SDL_GetError());
         return SDL_APP_FAILURE;

@@ -65,7 +65,7 @@ KOMPOZ_PREVIEW=CounterCardPreview scripts/dev.sh
 SDL_VIDEODRIVER=offscreen KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 ```
 
-`SDL_VIDEODRIVER=offscreen` pencere olmadan çalıştırır; bu, bir derleme sunucusunda işe yarar (macOS'ta `SDL_RENDER_DRIVER=software` ekleyin ya da bir pencerede çalıştırın: SDL'in ekransız sürücüsü OpenGL bağlamlarını EGL ile kurar, macOS'ta EGL yoktur). Bir önizleme de aynı yolla resme dönüşür:
+`SDL_VIDEODRIVER=offscreen` pencere olmadan çalıştırır; bu, bir derleme sunucusunda işe yarar (macOS'ta çizim software renderer ile yapılır: ekransızken SDL'in OpenGL'i orada EGL ister, macOS'ta EGL yoktur). Bir önizleme de aynı yolla resme dönüşür:
 
 ```bash
 SDL_VIDEODRIVER=offscreen KOMPOZ_PREVIEW=CounterCardPreview KOMPOZ_SCRIPT="wait 10; shot preview.png; quit" ./build/myapp

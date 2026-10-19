@@ -494,7 +494,7 @@ SDL_VIDEODRIVER=offscreen SDL_RENDER_DRIVER=opengl \
 KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 ```
 
-macOS'ta bununla `SDL_RENDER_DRIVER=software` kullanın (ya da bir pencerede çalıştırın): SDL'in ekransız sürücüsü OpenGL bağlamlarını EGL ile kurar, macOS'ta EGL yoktur.
+macOS'ta `SDL_RENDER_DRIVER=opengl` vermeyin: ekransızken SDL'in OpenGL'i orada EGL ister, macOS'ta EGL yoktur; çizim software renderer ile yapılır.
 
 Komutlar: `click x y`, `rclick x y`, `move x y`, `down x y` / `up x y` (basılı tutma), `drag x1 y1 x2 y2`,
 `mdrag x1 y1 x2 y2` (fareyle), `resize w h`, `swipe x1 y1 x2 y2 kare` (kare başına bir hareket, fling'i de tetikler),

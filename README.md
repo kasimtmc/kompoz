@@ -498,7 +498,7 @@ SDL_VIDEODRIVER=offscreen SDL_RENDER_DRIVER=opengl \
 KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 ```
 
-On macOS use `SDL_RENDER_DRIVER=software` with it (or run it in a window): SDL's offscreen driver makes OpenGL contexts with EGL, which macOS doesn't have.
+On macOS leave out `SDL_RENDER_DRIVER=opengl`: offscreen, SDL's OpenGL wants EGL there, which macOS doesn't have, so it draws with the software renderer.
 
 Commands: `click x y`, `rclick x y`, `move x y`, `down x y` / `up x y` (holding down), `drag x1 y1 x2 y2`,
 `mdrag x1 y1 x2 y2` (with the mouse), `resize w h`, `swipe x1 y1 x2 y2 frames` (a move per frame, so it flings),
