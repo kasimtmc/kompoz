@@ -628,8 +628,10 @@ void NavHost(const NavController& navController, std::string startDestination, c
         });
         return [weak, token] {  // the NavHost is gone: its screens are no longer shown
             if (auto data = weak.lock())
-                for (const auto& [e, state] : data->lifecycles)
+                for (const auto& entry : data->lifecycles) {  // (no structured binding: MSVC can't use one in a nested lambda)
+                    const auto& e = entry.first;
                     e->lifecycle().setCurrentState(std::min(e->lifecycle().currentState(), LifecycleState::Created));
+                }
         };
     });
     SideEffect([data = navController.data(), gone] {
