@@ -40,6 +40,10 @@ web); bütün araç zincirlerinin sizde kurulu olması gerekmez.
   Türkçedir; birini yazamıyorsanız pull request'te belirtin, eklenir.
 - **API durum sayfasını güncel tutun** (`docs/components.md` ve `components.tr.md`): Compose'da olan bir API'yi
   eklediğinizde ya da değiştirdiğinizde.
+- **Shader'lar** (`platform/gpu/shaders/*.slang`) bir kez Slang'de yazılır ve her backend için derlenmiş hâlleriyle
+  commit'lenir (`platform/gpu/shaders/generated/`). Birini değiştirdikten sonra `python3 scripts/shaders.py`
+  çalıştırın (Linux x86-64: derleyicilerini sabitlenmiş sürümlerle indirir) ve başlıkları onunla birlikte commit'leyin;
+  CI eşleştiklerini denetler.
 
 ## macOS ve iOS
 

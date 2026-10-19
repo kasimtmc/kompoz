@@ -303,3 +303,15 @@ jobs:
         run: emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_BUILD_TESTS=OFF
       - name: Build
         run: cmake --build build-web --target showcase -j4
+
+  shaders:
+    name: Shaders (the committed headers are what their sources compile to)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: third_party/.tools
+          key: shader-tools-${{ hashFiles('scripts/shaders.py') }}
+      - name: Compile every shader for every backend, compare with platform/gpu/shaders/generated
+        run: python3 scripts/shaders.py --check

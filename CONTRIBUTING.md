@@ -38,6 +38,9 @@ request, so you don't need all the toolchains yourself.
   are in English and Turkish; if you can't write one of them, say so in the pull request and it will be added.
 - **Keep the API status page current** (`docs/components.md` and `components.tr.md`) when you add or change an API
   that Compose has.
+- **Shaders** (`platform/gpu/shaders/*.slang`) are written once in Slang and committed compiled for every backend
+  (`platform/gpu/shaders/generated/`). After changing one, run `python3 scripts/shaders.py` (Linux x86-64: it
+  downloads its compilers at pinned versions) and commit the headers with it; CI checks they match.
 
 ## macOS and iOS
 
