@@ -112,17 +112,24 @@ jobs:
           cmake --install build --prefix "$PWD/install"
           cmake -S tests/package -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/install"
           cmake --build build-package
-      - name: Run it (offscreen), click its button, take a screenshot
+      - name: Run it offscreen (software rendering), click its button, take a screenshot
         working-directory: build-package
         env:
           SDL_VIDEO_DRIVER: offscreen
-          KOMPOZ_SCRIPT: wait 5;click 70 70;wait 5;shot shot.png;quit
-        run: ./demo && test -s shot.png
+          SDL_RENDER_DRIVER: software  # (offscreen would want EGL for OpenGL, which macOS hasn't)
+          KOMPOZ_SCRIPT: wait 5;click 70 70;wait 5;shot offscreen.png;quit
+        run: ./demo && test -s offscreen.png
+      - name: Run it in a real window (Cocoa, Metal), the same
+        working-directory: build-package
+        continue-on-error: true  # (first tries: whether the runner's session gives it a window)
+        env:
+          KOMPOZ_SCRIPT: wait 30;click 70 70;wait 30;shot cocoa.png;quit
+        run: ./demo && test -s cocoa.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: macos-screenshot
-          path: build-package/shot.png
+          name: macos-screenshots
+          path: build-package/*.png
           if-no-files-found: ignore
 
   android:
