@@ -149,7 +149,7 @@ Box(Modifier().size(120)
 
 ## graphicsLayer
 
-`graphicsLayer` draws the content scaled, rotated, moved or faded, through an offscreen layer, without changing its layout:
+`graphicsLayer` draws the content scaled, rotated (in 3D too: `rotationX`, `rotationY`), moved, faded, clipped, filtered or blended, without changing its layout. As in Compose it goes through an offscreen layer only where it must (faded, a blend mode, a color filter, or `CompositingStrategy::Offscreen`); otherwise the transform and the clip go straight into the drawing:
 
 ```cpp body
 Box(Modifier().size(80).graphicsLayer({.scaleX = 1.2f, .scaleY = 1.2f, .alpha = 0.8f, .rotationZ = 15})

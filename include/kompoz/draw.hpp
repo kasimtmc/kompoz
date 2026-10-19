@@ -143,6 +143,32 @@ private:
     TextMeasurer* measurer_;
 };
 
+namespace detail {
+// How a layer is placed (graphicsLayer's, a GraphicsLayer's): scaled, turned in 2D or 3D, moved,
+// about `pivot` (absolute dp); `density` px per dp (the camera's distance is in px, as Android's).
+struct LayerGeometry {
+    float scaleX = 1, scaleY = 1, translationX = 0, translationY = 0, rotationX = 0, rotationY = 0, rotationZ = 0, cameraDistance = 8;
+    Offset pivot;
+    float density = 1;
+};
+// The matrix it is drawn through, as Android's RenderNode makes it.
+Matrix layerMatrix(const LayerGeometry& geometry);
+// Draws `content` (over `bounds`) through such a layer: its matrix, its clip to `outline` (from the
+// bounds' top left), its alpha, blend mode and color filter, offscreen only where it has to be.
+struct LayerDraw {
+    Rect bounds;
+    LayerGeometry geometry;
+    float alpha = 1;
+    bool clip = false;
+    Outline outline;
+    BlendMode blendMode = BlendMode::SrcOver;
+    std::optional<ColorFilter> colorFilter;
+    CompositingStrategy strategy = CompositingStrategy::Auto;
+    LayerOutsets outsets;
+};
+void drawThroughLayer(GraphicsContext& g, const LayerDraw& layer, const std::function<void()>& content);
+} // namespace detail
+
 // drawWithContent: decide where the content goes among your own drawing.
 class ContentDrawScope : public DrawScope {
 public:
@@ -164,13 +190,26 @@ private:
 //   ImageBitmap shot = layer.toImageBitmap();  // later, a "share" button
 class GraphicsLayer {
 public:
+    // How drawLayer draws it (Compose's GraphicsLayer's properties), as graphicsLayer does its
+    // content (see GraphicsLayerScope): offscreen only where it has to be.
     struct Properties {
         Offset topLeft;  // where drawLayer puts it in its scope
-        float alpha = 1, scaleX = 1, scaleY = 1, rotationZ = 0, translationX = 0, translationY = 0;
-        Offset pivot{0.5f, 0.5f};  // what it scales and turns about, a fraction of its size
+        float alpha = 1, scaleX = 1, scaleY = 1, translationX = 0, translationY = 0;
+        float rotationX = 0, rotationY = 0, rotationZ = 0, cameraDistance = 8;
+        std::optional<Offset> pivotOffset;  // what it scales and turns about, dp from its top left (unset: its middle)
+        // Clipped to its outline (unset: its bounds; setRectOutline, setRoundRectOutline, setPathOutline).
+        bool clip = false;
+        std::optional<Outline> outline;
+        BlendMode blendMode = BlendMode::SrcOver;
+        std::optional<ColorFilter> colorFilter;
+        CompositingStrategy compositingStrategy = CompositingStrategy::Auto;
     };
     GraphicsLayer();
     Properties& properties() const;  // change it any time: the next drawLayer uses it
+    // Its outline, from its top left (Compose's): a rect, a rounded rect, any path.
+    void setRectOutline(Offset topLeft, Size size) const;
+    void setRoundRectOutline(Offset topLeft, Size size, float cornerRadius) const;
+    void setPathOutline(const Path& path) const;
     Size size() const;               // the last recording's
     bool empty() const;              // nothing recorded yet
     // The recording as pixels at the screen's density (straight alpha), drawn offscreen by the

@@ -57,6 +57,12 @@
   and `clip` (and a clipping `shadow`, a bounded ripple) clips through the drawing context instead of a layer. A
   polygon shape no longer has to be star-shaped about its middle: SDL_Renderer masks outline layers and clips with the
   shape instead of cutting them with a fan.
+- **graphicsLayer as Compose's**: `rotationX`, `rotationY` and `cameraDistance` (3D, the matrix Android's RenderNode
+  makes: the camera `cameraDistance` × 72 px away), `blendMode`, `colorFilter`, `outsets`, `size` to read in the lambda,
+  and `CompositingStrategy` as in Compose: offscreen only where it must be (faded, a blend mode, a color filter,
+  `Offscreen`), `ModulateAlpha` fading each draw instead; otherwise the matrix and the clip go straight into the
+  drawing. A `GraphicsLayer` drawn takes the same properties, with `pivotOffset` and `setRectOutline` /
+  `setRoundRectOutline` / `setPathOutline` as in Compose.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

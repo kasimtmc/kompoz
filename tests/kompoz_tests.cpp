@@ -49,6 +49,30 @@ struct Register {
 bool near(float a, float b) { return std::abs(a - b) < 0.5f; }
 bool near(float a, float b, float tolerance) { return std::abs(a - b) < tolerance; }
 
+// What a recorded transform (pushTransform's matrix, a graphicsLayer's) does: its scale across and
+// down, its turn (degrees, clockwise), how far it moves the origin, and the point it scales and
+// turns about (absolute; where it only moves: none).
+struct Placed {
+    float scaleX = 1, scaleY = 1, turn = 0;
+    Offset moved;
+    std::optional<Offset> pivot;
+    std::optional<float> pivotX, pivotY;
+};
+Placed placedOf(const Matrix& m) {
+    Placed p;
+    float a = m(0, 0), b = m(0, 1), c = m(1, 0), d = m(1, 1), tx = m(3, 0), ty = m(3, 1);
+    p.scaleX = std::hypot(a, b);
+    p.scaleY = std::hypot(c, d);
+    p.turn = std::atan2(b, a) * 180 / std::numbers::pi_v<float>;
+    p.moved = {tx, ty};
+    float det = (1 - a) * (1 - d) - c * b;  // (I - A) pivot = translation
+    if (std::abs(det) > 1e-6f) p.pivot = Offset{((1 - d) * tx + c * ty) / det, (b * tx + (1 - a) * ty) / det};
+    // Only scaled: where it scales about across and down, each where it scales that way.
+    if (b == 0 && c == 0 && std::abs(1 - a) > 1e-6f) p.pivotX = tx / (1 - a);
+    if (b == 0 && c == 0 && std::abs(1 - d) > 1e-6f) p.pivotY = ty / (1 - d);
+    return p;
+}
+
 } // namespace
 
 TEST(counter_increments_on_click) {
@@ -2815,10 +2839,11 @@ TEST(offscreen_clipped_content_is_not_drawn) {
     auto drawn = [&](const char* text) { return std::find(canvas.texts.begin(), canvas.texts.end(), text) != canvas.texts.end(); };
     CHECK(drawn("görünen") && drawn("düz"));
     CHECK(!drawn("kırpılmış") && !drawn("soluk") && !drawn("dönen") && canvas.layers == 0);
-    // Without culling everything is drawn, through its clip and layers.
+    // Without culling everything is drawn, through its clip, layer and transform.
     testing::RecordingCanvas all;
     rule.host().draw(all);
-    CHECK(std::find(all.texts.begin(), all.texts.end(), "kırpılmış") != all.texts.end() && all.layers == 2 && all.clipShapes.size() == 1);
+    CHECK(std::find(all.texts.begin(), all.texts.end(), "kırpılmış") != all.texts.end() && all.layers == 1 && all.clipShapes.size() == 1 &&
+          all.transforms.size() == 1);  // the faded one's layer; the turned one's transform
 }
 
 bool sameRect(Rect a, Rect b) { return near(a.x, b.x) && near(a.y, b.y) && near(a.width, b.width) && near(a.height, b.height); }
@@ -6028,19 +6053,20 @@ TEST(aspect_ratio_wrap_content_and_required_size) {
     CHECK(sameRect(rule.onNodeWithTag("tall").bounds(), {0, 300, 30, 60}));
 }
 
-TEST(graphics_layer_transforms_through_a_layer) {
+TEST(graphics_layer_transforms_without_a_layer_and_fades_through_one) {
     auto angle = mutableStateOf(0.f);
     ComposeTestRule rule([&] {
         Column([&] {
             Box(Modifier().size(40).graphicsLayer({.rotationZ = 45}));
-            Box(Modifier().size(40).graphicsLayer(GraphicsLayerScope{}));  // identity: no layer
+            Box(Modifier().size(40).graphicsLayer(GraphicsLayerScope{}));  // identity: nothing
             Box(Modifier().size(40).graphicsLayer({.alpha = 0.5f}));       // a layer, not transformed
             Box(Modifier().size(40).graphicsLayer([angle](GraphicsLayerScope& l) { l.rotationZ = angle.get(); }));
         });
     });
     testing::RecordingCanvas before;
     rule.host().draw(before);
-    CHECK(before.layers == 2 && before.transformedLayers == 1);
+    CHECK(before.layers == 1 && before.transformedLayers == 0 && before.transforms.size() == 1);
+    if (before.transforms.size() == 1) CHECK(near(placedOf(before.transforms[0]).turn, 45, 0.01f));
     // Read while drawing: a new angle redraws without recomposing.
     uint64_t recompositions = rule.host().stats().recompositions;
     angle.set(30);
@@ -6048,7 +6074,8 @@ TEST(graphics_layer_transforms_through_a_layer) {
     CHECK(rule.host().stats().recompositions == recompositions);
     testing::RecordingCanvas after;
     rule.host().draw(after);
-    CHECK(after.layers == 3 && after.transformedLayers == 2);
+    CHECK(after.layers == 1 && after.transforms.size() == 2);
+    if (after.transforms.size() == 2) CHECK(near(placedOf(after.transforms[1]).turn, 30, 0.01f));
 }
 
 TEST(tap_gestures_tap_double_tap_and_long_press) {
@@ -6624,7 +6651,94 @@ TEST(pointer_input_restarts_on_key_change_and_stops_when_removed) {
     CHECK(*alive == 0);
 }
 
-TEST(scale_in_animates_through_a_transformed_layer) {
+// graphicsLayer's matrix is Android's (RenderProperties::updateMatrix): scaled about the pivot,
+// turned, moved; in 3D seen from a camera cameraDistance * 72 px away (so in dp it depends on
+// the density), the side turned towards it bigger.
+TEST(graphics_layer_matrix_is_androids) {
+    auto at = [](Offset p, float x, float y) { return near(p.x, x, 0.01f) && near(p.y, y, 0.01f); };
+    detail::LayerGeometry flat{2, 3, 10, 20, 0, 0, 90, 8, {50, 50}, 1};  // scaled, turned a quarter, moved
+    CHECK(at(detail::layerMatrix(flat).map(Offset{60, 50}), 50 + 10, 50 + 20 + 20));  // (10, 0) * 2 = (20, 0), turned: (0, 20)
+    // Tipped back 60 degrees about x: a point 100 below the pivot comes forward, 100 above goes back.
+    detail::LayerGeometry tipped{1, 1, 0, 0, 60, 0, 0, 8, {0, 0}, 1};
+    Matrix m = detail::layerMatrix(tipped);
+    float c = 0.5f, s = std::sqrt(3.f) / 2;
+    CHECK(at(m.map(Offset{0, 100}), 0, c * 100 / (1 - s * 100 / 576)));
+    CHECK(at(m.map(Offset{0, -100}), 0, -c * 100 / (1 + s * 100 / 576)));
+    // At 2 px per dp the camera is still 576 px away: 288 dp.
+    tipped.density = 2;
+    CHECK(at(detail::layerMatrix(tipped).map(Offset{0, 100}), 0, c * 100 / (1 - s * 100 / 288)));
+    // Turned 60 degrees about y: the right side goes back.
+    detail::LayerGeometry swung{1, 1, 0, 0, 0, 60, 0, 8, {0, 0}, 1};
+    CHECK(at(detail::layerMatrix(swung).map(Offset{100, 0}), c * 100 / (1 + s * 100 / 576), 0));
+    CHECK(at(detail::layerMatrix(swung).map(Offset{-100, 0}), -c * 100 / (1 - s * 100 / 576), 0));
+    // The 3D path turns about z as the flat one does.
+    detail::LayerGeometry both = flat;
+    both.rotationX = 1e-4f;
+    Matrix a = detail::layerMatrix(flat), b = detail::layerMatrix(both);
+    for (Offset p : {Offset{0, 0}, Offset{80, 30}, Offset{-40, 70}}) CHECK(at(b.map(p), a.map(p).x, a.map(p).y));
+}
+
+// A graphicsLayer goes offscreen only where it has to: faded (Auto), a blend mode, a color filter,
+// CompositingStrategy::Offscreen; transformed and clipped otherwise straight through the context;
+// ModulateAlpha fades each draw. A GraphicsLayer drawn takes the same properties.
+TEST(graphics_layer_goes_offscreen_only_where_it_must) {
+    Color red{1, 0, 0, 1};
+    auto layerLook = [](const std::function<void()>& content) {
+        ComposeTestRule rule(content, {400, 400});
+        auto canvas = std::make_shared<testing::RecordingCanvas>();
+        rule.host().draw(*canvas);
+        return canvas;
+    };
+    auto turned = layerLook([&] { Box(Modifier().size(40).graphicsLayer({.rotationY = 30, .clip = true}).background(red)); });
+    CHECK(turned->layers == 0 && turned->transforms.size() == 1 && turned->clips.size() == 1);
+    auto faded = layerLook([&] { Box(Modifier().size(40).graphicsLayer({.alpha = 0.5f}).background(red)); });
+    CHECK(faded->layers == 1 && near(faded->layerAlphas[0], 0.5f) && faded->rectColors.size() == 1 && faded->rectColors[0].a == 1);
+    auto modulated = layerLook([&] {
+        Box(Modifier().size(40).graphicsLayer({.alpha = 0.5f, .compositingStrategy = CompositingStrategy::ModulateAlpha}).background(red));
+    });
+    CHECK(modulated->layers == 0 && modulated->rectColors.size() == 1 && near(modulated->rectColors[0].a, 0.5f));  // the draw faded
+    auto blended = layerLook([&] { Box(Modifier().size(40).graphicsLayer({.blendMode = BlendMode::Multiply}).background(red)); });
+    CHECK(blended->layers == 1 && blended->rectBlends.size() == 1 && blended->rectBlends[0] == BlendMode::Multiply);
+    ColorMatrix gray;
+    gray.setToSaturation(0);
+    auto filtered = layerLook([&] { Box(Modifier().size(40).graphicsLayer({.colorFilter = ColorFilter::colorMatrix(gray)}).background(red)); });
+    CHECK(filtered->layers == 1 && filtered->rectColors.size() == 1 && filtered->rectColors[0].r < 1 && filtered->rectColors[0].g > 0);
+    auto forced = layerLook([&] { Box(Modifier().size(40).graphicsLayer({.compositingStrategy = CompositingStrategy::Offscreen}).background(red)); });
+    CHECK(forced->layers == 1);
+    // Faded and clipped to a rounded shape: the layer's own corners; with outsets: bigger, cut to the shape.
+    auto rounded = layerLook([&] { Box(Modifier().size(40).graphicsLayer({.alpha = 0.5f, .shape = RoundedCornerShape(8), .clip = true}).background(red)); });
+    CHECK(rounded->layers == 1 && near(rounded->layerCorners[0].topLeft, 8) && rounded->clipShapes.empty());
+    auto outset = layerLook([&] {
+        Box(Modifier().size(40).graphicsLayer({.alpha = 0.5f, .shape = RoundedCornerShape(8), .clip = true, .outsets = {4, 4, 4, 4}}).background(red));
+    });
+    CHECK(outset->layers == 1 && sameRect(outset->layerBounds[0], {-4, -4, 48, 48}) && outset->layerOutlines.size() == 1);
+    // The size, read in a block.
+    Size seen;
+    layerLook([&] { Box(Modifier().size(30, 20).graphicsLayer([&](GraphicsLayerScope& l) { seen = l.size; })); });
+    CHECK(near(seen.width, 30) && near(seen.height, 20));
+    // A GraphicsLayer: turned about its pivot, clipped to its rounded outline as it fades.
+    auto recorded = layerLook([&] {
+        auto layer = rememberGraphicsLayer();
+        Box(Modifier().size(100).drawWithContent([layer](ContentDrawScope& d) {
+            d.record(layer, [&](DrawScope& in) { in.drawRect(Color{0, 0, 1, 1}); }, Size{60, 40});
+            GraphicsLayer::Properties& p = layer.properties();
+            p.rotationZ = 90;
+            p.pivotOffset = Offset{0, 0};
+            p.alpha = 0.5f;
+            p.clip = true;
+            layer.setRoundRectOutline({0, 0}, {60, 40}, 10);
+            d.drawLayer(layer);
+            p = {};
+        }));
+    });
+    CHECK(recorded->transforms.size() == 1 && recorded->layers == 1 && near(recorded->layerCorners[0].topLeft, 10));
+    if (recorded->transforms.size() == 1) {
+        Placed t = placedOf(recorded->transforms[0]);
+        CHECK(near(t.turn, 90, 0.01f) && t.pivot && near(t.pivot->x, 0, 0.01f) && near(t.pivot->y, 0, 0.01f));
+    }
+}
+
+TEST(scale_in_animates_through_a_transform) {
     auto visible = mutableStateOf(false);
     ComposeTestRule rule([&] {
         AnimatedVisibility(visible.get(), Modifier(), scaleIn(), scaleOut(), [] { Text("ölçek"); });
@@ -6633,7 +6747,8 @@ TEST(scale_in_animates_through_a_transformed_layer) {
     rule.advanceTimeBy(64);
     testing::RecordingCanvas during;
     rule.host().draw(during);
-    CHECK(during.transformedLayers == 1);
+    CHECK(during.transforms.size() == 1 && during.layers == 0);
+    if (during.transforms.size() == 1) CHECK(placedOf(during.transforms[0]).scaleX < 0.99f);
     CHECK((during.texts == std::vector<std::string>{"ölçek"}));
     rule.waitForIdle();
     testing::RecordingCanvas after;
@@ -7902,12 +8017,12 @@ TEST(scale_rotate_and_primitive_states) {
     });
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
-    CHECK(canvas.transformedLayers == 1);  // a scale of 1 is no transform
+    CHECK(canvas.transforms.size() == 1 && canvas.layers == 0);  // a scale of 1 is no transform
     count.set(2);
     rule.waitForIdle();
     canvas = {};
     rule.host().draw(canvas);
-    CHECK(canvas.transformedLayers == 2 && ratio.get() == 0.5 && big.get() == (1LL << 40));
+    CHECK(canvas.transforms.size() == 2 && ratio.get() == 0.5 && big.get() == (1LL << 40));
 }
 
 TEST(horizontal_pager_drags_snaps_and_animates) {
@@ -9090,18 +9205,20 @@ TEST(drawer_sheets_follow_the_back_gesture) {
         });
     }, {400, 800});
     rule.waitForIdle();
-    // The sheet's layer (lower: scaleY) and its content's (scaled back across only).
+    // The sheet's transform (lower: scaleY) and its content's (scaled back across only), and where
+    // each scales about.
     struct Scales {
-        float sheetX = 1, sheetY = 1, originX = 0.5f, originY = 0.5f, contentX = 1, contentOriginX = 0.5f;
+        float sheetX = 1, sheetY = 1, pivotX = NAN, pivotY = NAN, contentX = 1, contentPivotX = NAN;
     };
     auto scales = [&] {
         rule.advanceFrame();
         testing::RecordingCanvas canvas;
         rule.host().draw(canvas);
         Scales out;
-        for (const LayerTransform& t : canvas.layerTransforms) {
-            if (t.scaleY != 1) out.sheetX = t.scaleX, out.sheetY = t.scaleY, out.originX = t.origin.x, out.originY = t.origin.y;
-            else if (t.scaleX != 1) out.contentX = t.scaleX, out.contentOriginX = t.origin.x;
+        for (const Matrix& m : canvas.transforms) {
+            Placed t = placedOf(m);
+            if (t.scaleY != 1) out.sheetX = t.scaleX, out.sheetY = t.scaleY, out.pivotX = t.pivotX.value_or(NAN), out.pivotY = t.pivotY.value_or(NAN);
+            else if (t.scaleX != 1) out.contentX = t.scaleX, out.contentPivotX = t.pivotX.value_or(NAN);
         }
         return out;
     };
@@ -9113,8 +9230,8 @@ TEST(drawer_sheets_follow_the_back_gesture) {
     host.backProgressed({40, 400, 0.5f, BackEventCompat::SwipeEdge::Left});
     Scales a = scales();
     CHECK(near(a.sheetX, 1 + 12 * p / 360, 0.001f) && near(a.sheetY, 1 - 48 * p / 800, 0.001f));
-    CHECK(near(a.originX, 16.f / 360, 0.001f) && a.originY == 0.5f);
-    CHECK(near(a.contentX, a.sheetY / a.sheetX, 0.001f) && a.contentOriginX == 1);
+    CHECK(near(a.pivotX, 0, 0.01f) && near(a.pivotY, 400, 0.01f));  // the window's edge, half way down
+    CHECK(near(a.contentX, a.sheetY / a.sheetX, 0.001f) && near(a.contentPivotX, 344, 0.01f));  // the content's right edge
     host.backCancelled();  // as it was, still open
     rule.waitForIdle();
     Scales b = scales();
@@ -9149,7 +9266,7 @@ TEST(drawer_sheets_follow_the_back_gesture) {
     host.backStarted({0, 400, 0, BackEventCompat::SwipeEdge::Left});
     host.backProgressed({40, 400, 0.5f, BackEventCompat::SwipeEdge::Left});
     Scales f = scales();
-    CHECK(near(f.sheetX, 1 + 12 * p / 300, 0.001f) && f.originX == 0 && near(f.sheetY, 1 - 48 * p / 800, 0.001f));
+    CHECK(near(f.sheetX, 1 + 12 * p / 300, 0.001f) && near(f.pivotX, 0, 0.01f) && near(f.sheetY, 1 - 48 * p / 800, 0.001f));
     host.backCancelled();
     // Right to left: the drawer's edge is the right one; mirrored.
     dismissible.set(false);
@@ -9158,7 +9275,7 @@ TEST(drawer_sheets_follow_the_back_gesture) {
     host.backStarted({400, 400, 0, BackEventCompat::SwipeEdge::Right});
     host.backProgressed({360, 400, 0.5f, BackEventCompat::SwipeEdge::Right});
     Scales g = scales();
-    CHECK(near(g.sheetX, 1 + 12 * p / 360, 0.001f) && near(g.originX, 1 - 16.f / 360, 0.001f) && g.contentOriginX == 0);
+    CHECK(near(g.sheetX, 1 + 12 * p / 360, 0.001f) && near(g.pivotX, 400, 0.01f) && near(g.contentPivotX, 56, 0.01f));
     host.backCancelled();
 }
 
@@ -13275,7 +13392,7 @@ TEST(segmented_buttons_as_compose_1_4) {
     CHECK(container);
     float sliding = rule.onNodeWithText("Iki").bounds().center().x;
     CHECK(sliding > 225.5f && sliding < 237.5f);
-    bool growing = std::ranges::any_of(c.layerTransforms, [](const LayerTransform& t) { return t.scaleX > 0.01f && t.scaleX < 0.99f; });
+    bool growing = std::ranges::any_of(c.transforms, [](const Matrix& m) { return placedOf(m).scaleX > 0.01f && placedOf(m).scaleX < 0.99f; });
     CHECK(growing);
     rule.waitForIdle();
     CHECK(near(rule.onNodeWithText("Iki").bounds().center().x, 238, 1));
@@ -15197,7 +15314,7 @@ TEST(split_button_rounds_its_menu_button_when_checked_and_turns_the_arrow) {
                 out = {c.rectCorners[i], c.rectColors[i], 0};
                 break;
             }
-        for (const LayerTransform& t : c.layerTransforms) out.turn = std::max(out.turn, t.rotationZ);
+        for (const Matrix& m : c.transforms) out.turn = std::max(out.turn, std::abs(placedOf(m).turn));
         return out;
     };
     Rect lead = rule.onNodeWithTag("kaydet").bounds(), trail = rule.onNodeWithTag("menü").bounds();
@@ -16991,11 +17108,11 @@ TEST(outline_shapes_fill_stroke_clip_shadow_and_ripple) {
     CHECK(stroke && sameRect(c.paths[*stroke], {tri.x + 1, tri.y + 1, tri.width - 2, tri.height - 2}));
     CHECK(shadows == 6);
     CHECK(std::none_of(c.rectColors.begin(), c.rectColors.end(), [](Color k) { return k == Color{1, 0, 0, 1}; }));
-    // Clips: a shape's, its outline as a path clip; a graphics layer's, an outline layer over its bounds.
-    CHECK(c.clipShapes.size() == 1 && c.layerOutlines.size() == 1);
-    if (c.clipShapes.size() == 1 && c.layerOutlines.size() == 1) {
+    // Clips: a shape's and a graphics layer's, each its outline as a path clip (no layer).
+    CHECK(c.clipShapes.size() == 2 && c.layers == 0);
+    if (c.clipShapes.size() == 2) {
         const Path& clip = *c.clipShapes[0].path;
-        CHECK(sameRect(clip.bounds(), {0, 0, 60, 60}) && sameRect(c.layerOutlines[0].bounds(), {0, 0, 80, 80}));
+        CHECK(sameRect(clip.bounds(), {0, 0, 60, 60}) && sameRect(c.clipShapes[1].path->bounds(), {0, 0, 80, 80}));
         CHECK(clip.commands()[0].x == 0 && clip.commands()[1].x == 60);  // from the start to the point at the end
     }
     // A ripple stays inside the outline it is drawn on.
@@ -17003,7 +17120,7 @@ TEST(outline_shapes_fill_stroke_clip_shadow_and_ripple) {
     rule.host().pointerDown(button.center());
     rule.advanceTimeBy(100);
     c = drawn();
-    CHECK(c.clipShapes.size() == 2 && sameRect(c.clipShapes.back().path->bounds(), {0, 0, 70, 70}));
+    CHECK(c.clipShapes.size() == 3 && sameRect(c.clipShapes.back().path->bounds(), {0, 0, 70, 70}));
     rule.host().pointerUp(button.center());
     rule.waitForIdle();
     CHECK(taps == 1);
@@ -17014,26 +17131,26 @@ TEST(outline_shapes_fill_stroke_clip_shadow_and_ripple) {
         rule.advanceFrame();
         c = drawn();
     }
-    CHECK(c.clipShapes.size() == 2 && sameRect(c.clipShapes.back().path->bounds(), {0, 0, 50, 50}));
+    CHECK(c.clipShapes.size() == 3 && sameRect(c.clipShapes.back().path->bounds(), {0, 0, 50, 50}));
     source.tryEmit(press.release());
     for (int k = 0; k < 60; ++k) {
         rule.advanceFrame();
         drawn();
     }
-    // A display list replays path clips and outline layers as such.
+    // A display list replays path clips as such.
     DisplayList list(rule.host().textMeasurer());
     list.begin({400, 800}, 0.5f);
     rule.host().draw(list);
     list.end();
     testing::RecordingCanvas replayed;
     list.replay(replayed, std::nullopt);
-    CHECK(replayed.clipShapes.size() == 1 && *replayed.clipShapes[0].path == *c.clipShapes[0].path && replayed.layerOutlines.size() == 1 &&
-          replayed.layerOutlines[0] == c.layerOutlines[0]);
+    CHECK(replayed.clipShapes.size() == 2 && *replayed.clipShapes[0].path == *c.clipShapes[0].path &&
+          *replayed.clipShapes[1].path == *c.clipShapes[1].path);
     // Right to left: mirrored, the arrow points to the left.
     rtl.set(true);
     rule.waitForIdle();
     c = drawn();
-    CHECK(c.clipShapes.size() == 1 && c.clipShapes[0].path->commands()[0].x == 60 && c.clipShapes[0].path->commands()[1].x == 0);
+    CHECK(c.clipShapes.size() == 2 && c.clipShapes[0].path->commands()[0].x == 60 && c.clipShapes[0].path->commands()[1].x == 0);
 }
 
 TEST(material_shapes_fill_the_unit_square_and_morph) {
@@ -18361,7 +18478,7 @@ TEST(pull_to_refresh_indicator_comes_out_from_under_the_top_edge) {
     rule.waitForIdle();
     auto quarter = draw();
     bool layer = false;
-    for (const LayerTransform& t : quarter->layerTransforms) layer |= near(t.translationY, 20 - 40, 0.01f);
+    for (const Matrix& m : quarter->transforms) layer |= near(placedOf(m).moved.y, 20 - 40, 0.01f);
     bool clipped = false;
     for (const Rect& c : quarter->clips) clipped |= near(c.y, 50) && c.x < -1000 && c.right() > 1000;
     CHECK(layer && clipped && quarter->arcs.empty());
@@ -18739,7 +18856,7 @@ TEST(tooltips_as_compose_1_4) {
     rule.advanceFrame();
     testing::RecordingCanvas coming;
     rule.host().draw(coming);
-    bool growing = std::ranges::any_of(coming.layerTransforms, [](const LayerTransform& t) { return t.scaleX > 0.8f && t.scaleX < 0.99f; });
+    bool growing = std::ranges::any_of(coming.transforms, [](const Matrix& m) { return placedOf(m).scaleX > 0.8f && placedOf(m).scaleX < 0.99f; });
     bool fading = std::ranges::any_of(coming.layerAlphas, [](float a) { return a > 0.01f && a < 0.99f; });
     CHECK(growing && fading);
     rule.waitForIdle();
@@ -22585,17 +22702,19 @@ TEST(modal_bottom_sheet_follows_the_back_gesture) {
             });
     }, {400, 800});
     rule.waitForIdle();
-    // The sheet's layer (narrower and lower) and its content's (scaled back along the height).
+    // The sheet's transform (narrower and lower) and its content's (scaled back along the height),
+    // and where the sheet scales about down.
     struct Scales {
-        float sheetX = 1, sheetY = 1, originY = 0.5f, contentY = 1;
+        float sheetX = 1, sheetY = 1, pivotY = NAN, contentY = 1;
     };
     auto scales = [&] {
         rule.advanceFrame();
         testing::RecordingCanvas canvas;
         rule.host().draw(canvas);
         Scales out;
-        for (const LayerTransform& t : canvas.layerTransforms) {
-            if (t.scaleX != 1) out.sheetX = t.scaleX, out.sheetY = t.scaleY, out.originY = t.origin.y;
+        for (const Matrix& m : canvas.transforms) {
+            Placed t = placedOf(m);
+            if (t.scaleX != 1) out.sheetX = t.scaleX, out.sheetY = t.scaleY, out.pivotY = t.pivotY.value_or(NAN);
             else if (t.scaleY != 1) out.contentY = t.scaleY;
         }
         return out;
@@ -22609,7 +22728,7 @@ TEST(modal_bottom_sheet_follows_the_back_gesture) {
     float p = Easing{0.1f, 0.1f, 0.f, 1.f}(0.5f);
     Scales a = scales();
     CHECK(near(a.sheetX, 1 - 48 * p / 400, 0.001f) && near(a.sheetY, 1 - 24 * p / 276, 0.001f));
-    CHECK(near(a.originY, 248.f / 276, 0.001f) && near(a.contentY, a.sheetX / a.sheetY, 0.001f));  // from its bottom at the window's
+    CHECK(near(a.pivotY, 800, 0.01f) && near(a.contentY, a.sheetX / a.sheetY, 0.001f));  // from its bottom at the window's
     host.backProgressed({120, 400, 1});
     CHECK(near(scales().sheetX, 1 - 48.f / 400, 0.001f));
     host.backCancelled();  // grows back, stays

@@ -1171,20 +1171,40 @@ enum class BlurredEdgeTreatment { Rectangle, Unbounded };
 // what is behind it. ModulateAlpha is taken as Auto.
 enum class CompositingStrategy { Auto, Offscreen, ModulateAlpha };
 
-// Properties of graphicsLayer(): how the content is drawn, without changing its layout.
+// How far a layer reaches past its bounds when it is drawn offscreen (Compose's LayerOutsets): a
+// shadow or what draws outside them isn't cut off. Its clip and shadow still go by its bounds.
+struct LayerOutsets {
+    float left = 0, top = 0, right = 0, bottom = 0;  // dp
+    friend constexpr bool operator==(const LayerOutsets&, const LayerOutsets&) = default;
+};
+
+// Properties of graphicsLayer() (Compose's GraphicsLayerScope): how the content is drawn, without
+// changing its layout. Scaled, then turned about z (clockwise) or in 3D about x (the top going
+// back), y (the right side going back) and z, seen from a camera cameraDistance * 72 px away (as
+// Android draws it), then moved; all about the pivot (transformOrigin). It is drawn offscreen,
+// then composited, only where it has to be: alpha below 1 (unless ModulateAlpha, which fades each
+// draw instead), a blend mode other than SrcOver, a color filter, or CompositingStrategy::Offscreen.
 struct GraphicsLayerScope {
     float scaleX = 1, scaleY = 1, alpha = 1;
-    float rotationZ = 0;                       // degrees, clockwise
     float translationX = 0, translationY = 0;  // dp
+    float rotationX = 0, rotationY = 0;        // degrees
+    float rotationZ = 0;                       // degrees, clockwise
+    float cameraDistance = 8;                  // Compose's DefaultCameraDistance
     Offset transformOrigin{0.5f, 0.5f};        // fraction of the size
     Shape shape = RectangleShape;              // outline used when clip is set
     bool clip = false;
+    BlendMode blendMode = BlendMode::SrcOver;  // how it goes onto what is under it
+    std::optional<ColorFilter> colorFilter;    // what its colors go through on the way
     CompositingStrategy compositingStrategy = CompositingStrategy::Auto;
-    friend constexpr bool operator==(const GraphicsLayerScope& a, const GraphicsLayerScope& b) {
-        return a.scaleX == b.scaleX && a.scaleY == b.scaleY && a.alpha == b.alpha && a.rotationZ == b.rotationZ &&
-               a.translationX == b.translationX && a.translationY == b.translationY &&
-               a.transformOrigin.x == b.transformOrigin.x && a.transformOrigin.y == b.transformOrigin.y &&
-               a.shape == b.shape && a.clip == b.clip && a.compositingStrategy == b.compositingStrategy;
+    LayerOutsets outsets;
+    Size size;  // the layer's (dp): set before a graphicsLayer block runs, to read in it
+    friend bool operator==(const GraphicsLayerScope& a, const GraphicsLayerScope& b) {
+        return a.scaleX == b.scaleX && a.scaleY == b.scaleY && a.alpha == b.alpha && a.translationX == b.translationX &&
+               a.translationY == b.translationY && a.rotationX == b.rotationX && a.rotationY == b.rotationY && a.rotationZ == b.rotationZ &&
+               a.cameraDistance == b.cameraDistance && a.transformOrigin.x == b.transformOrigin.x &&
+               a.transformOrigin.y == b.transformOrigin.y && a.shape == b.shape && a.clip == b.clip && a.blendMode == b.blendMode &&
+               a.colorFilter == b.colorFilter && a.compositingStrategy == b.compositingStrategy && a.outsets == b.outsets &&
+               a.size.width == b.size.width && a.size.height == b.size.height;
     }
 };
 

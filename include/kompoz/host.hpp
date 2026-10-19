@@ -109,6 +109,7 @@ public:
     // The library's texts in the system language (Strings::forLanguage): LocalStrings at the root.
     void setStrings(Strings strings);
     void setDensity(Density density);            // read via LocalDensity
+    Density density() const { return density_; }
     // The system's wallpaper palette (Android 12+), read via dynamicLightColorScheme(); none elsewhere.
     void setDynamicTonalPalette(std::optional<TonalPalette> palette);
     // The wallpaper's own palette where the platform reads it, read via wallpaperLightColorScheme().

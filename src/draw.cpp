@@ -66,6 +66,114 @@ struct DrawWithCacheElement final : ModifierElement {
     }
 };
 
+// The 3x3 of a Matrix's plane part, row by row, and back (Compose's index names).
+using Plane = std::array<float, 9>;
+Plane mul(const Plane& a, const Plane& b) {  // b, then a
+    Plane out{};
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 3; ++c) out[size_t(r * 3 + c)] = a[size_t(r * 3)] * b[size_t(c)] + a[size_t(r * 3 + 1)] * b[size_t(3 + c)] + a[size_t(r * 3 + 2)] * b[size_t(6 + c)];
+    return out;
+}
+Plane moving(float x, float y) { return {1, 0, x, 0, 1, y, 0, 0, 1}; }
+Matrix matrixOf(const Plane& p) {
+    Matrix m;
+    m.values[Matrix::ScaleX] = p[0], m.values[Matrix::SkewX] = p[1], m.values[Matrix::TranslateX] = p[2];
+    m.values[Matrix::SkewY] = p[3], m.values[Matrix::ScaleY] = p[4], m.values[Matrix::TranslateY] = p[5];
+    m.values[Matrix::Perspective0] = p[6], m.values[Matrix::Perspective1] = p[7], m.values[Matrix::Perspective2] = p[8];
+    return m;
+}
+
+// A rotation about a unit axis (Skia's SkM44::Rotate), 3x3.
+Plane rotation(float x, float y, float z, float degrees) {
+    double r = double(degrees) * std::numbers::pi / 180;
+    float c = float(std::cos(r)), s = float(std::sin(r)), t = 1 - c;
+    return {t * x * x + c, t * x * y - s * z, t * x * z + s * y, t * x * y + s * z, t * y * y + c, t * y * z - s * x,
+            t * x * z - s * y, t * y * z + s * x, t * z * z + c};
+}
+
+} // namespace
+
+namespace detail {
+
+Matrix layerMatrix(const LayerGeometry& g) {
+    float px = g.pivot.x, py = g.pivot.y;
+    Plane scale = mul(moving(px, py), mul(Plane{g.scaleX, 0, 0, 0, g.scaleY, 0, 0, 0, 1}, moving(-px, -py)));
+    if (g.rotationX == 0 && g.rotationY == 0) {  // turned about z in the plane, then moved (RenderProperties::updateMatrix)
+        double r = double(g.rotationZ) * std::numbers::pi / 180;
+        float c = float(std::cos(r)), s = float(std::sin(r));
+        Plane turn = mul(moving(px, py), mul(Plane{c, -s, 0, s, c, 0, 0, 0, 1}, moving(-px, -py)));
+        return matrixOf(mul(moving(g.translationX, g.translationY), mul(turn, scale)));
+    }
+    // Sk3DView: turned about x, then (0, -1, 0), then z the other way (applied z first), the
+    // drawing's plane (x across, y up: its patch) seen from (0, 0, -72 * cameraDistance) px.
+    Plane m = mul(mul(rotation(1, 0, 0, g.rotationX), rotation(0, -1, 0, g.rotationY)), rotation(0, 0, 1, -g.rotationZ));
+    float u[3] = {m[0], m[3], m[6]}, v[3] = {-m[1], -m[4], -m[7]};  // where (1, 0, 0) and (0, -1, 0) go
+    // The camera's distance in px (Android takes cameraDistance as inches of 72 px), the
+    // perspective in dp.
+    float k = g.density / (72 * std::max(g.cameraDistance, 1e-3f));
+    Plane camera{u[0], v[0], 0, -u[1], -v[1], 0, u[2] * k, v[2] * k, 1};
+    Plane placed = mul(moving(px + g.translationX, py + g.translationY), mul(camera, moving(-px, -py)));
+    return matrixOf(mul(placed, scale));
+}
+
+void drawThroughLayer(GraphicsContext& g, const LayerDraw& l, const std::function<void()>& content) {
+    float alpha = std::clamp(l.alpha, 0.f, 1.f);
+    if (alpha <= 0 || l.geometry.scaleX == 0 || l.geometry.scaleY == 0) return;
+    Matrix m = layerMatrix(l.geometry);
+    bool moved = !m.isIdentity();
+    bool offscreen = l.strategy == CompositingStrategy::Offscreen || (alpha < 1 && l.strategy == CompositingStrategy::Auto) ||
+                     l.blendMode != BlendMode::SrcOver || l.colorFilter.has_value();
+    bool modulated = !offscreen && alpha < 1;  // ModulateAlpha: each draw faded
+    if (!moved && !offscreen && !modulated && !l.clip) return content();
+    if (moved) g.pushTransform(m);
+    Rect reach{l.bounds.x - l.outsets.left, l.bounds.y - l.outsets.top, l.bounds.width + l.outsets.left + l.outsets.right,
+               l.bounds.height + l.outsets.top + l.outsets.bottom};
+    // Nothing of it can show (the transform taken into account): not drawn at all.
+    if (!g.quickReject(reach)) {
+        const Outline& o = l.outline;
+        Rect ob = o.bounds();
+        Rect at{l.bounds.x + ob.x, l.bounds.y + ob.y, ob.width, ob.height};
+        bool rounded = o.kind == Outline::Kind::Rectangle || (o.kind == Outline::Kind::Rounded && o.roundRect.circular());
+        CornerRadii radii = o.kind == Outline::Kind::Rounded ? o.roundRect.radii() : CornerRadii();
+        if (offscreen) {
+            std::optional<detail::Filtering> filtering;
+            if (l.colorFilter) filtering.emplace(g, l.colorFilter);
+            if (l.blendMode != BlendMode::SrcOver) g.pushBlendMode(l.blendMode);
+            // Clipped by the layer itself: to a rounded rect of its bounds, else its outline.
+            if (l.clip && rounded && at == l.bounds && l.outsets == LayerOutsets{}) g.pushLayer(l.bounds, radii, alpha);
+            else if (l.clip) {
+                Path p = o.asPath();  // (from the layer's top left, which the outsets move)
+                p.translate({l.bounds.x - reach.x, l.bounds.y - reach.y});
+                g.pushOutlineLayer(reach, p, alpha);
+            } else {
+                g.pushLayer(reach, CornerRadii(), alpha);
+            }
+            content();
+            g.popLayer();
+            if (l.blendMode != BlendMode::SrcOver) g.popBlendMode();
+        } else {
+            std::optional<detail::Filtering> fading;
+            if (modulated) {
+                ColorMatrix fade;
+                fade.setToScale(1, 1, 1, alpha);
+                fading.emplace(g, ColorFilter::colorMatrix(fade));
+            }
+            if (l.clip) {
+                if (rounded && radii.max() <= 0) g.pushClip(at);
+                else if (rounded) g.pushClipRoundRect(at, radii);
+                else g.pushClipPath(o.asPath(), {l.bounds.x, l.bounds.y});
+            }
+            content();
+            if (l.clip) g.popClip();
+        }
+    }
+    if (moved) g.popTransform();
+}
+
+} // namespace detail
+
+namespace {
+
 struct GraphicsLayerElement final : ModifierElement {
     GraphicsLayerScope layer;
     std::function<void(GraphicsLayerScope&)> block;  // evaluated at draw time when set
@@ -73,31 +181,21 @@ struct GraphicsLayerElement final : ModifierElement {
     void draw(GraphicsContext& g, const Rect& bounds, const LayoutNode& node,
               const std::function<void()>& drawContent) const override {
         GraphicsLayerScope l = layer;
+        l.size = {bounds.width, bounds.height};
         if (block) block(l);
-        LayerTransform t{l.scaleX, l.scaleY, l.rotationZ, l.translationX, l.translationY, l.transformOrigin};
-        float alpha = std::clamp(l.alpha, 0.f, 1.f);
-        if (alpha <= 0 || l.scaleX == 0 || l.scaleY == 0) return;
-        bool offscreen = l.compositingStrategy == CompositingStrategy::Offscreen;
-        if (t.identity() && alpha >= 1 && !l.clip && !offscreen) return drawContent();
-        if (t.identity() && alpha >= 1 && l.shape.kind == Shape::Kind::Rectangle && !offscreen) {  // a plain clip is cheaper
-            g.pushClip(bounds);
-            drawContent();
-            g.popClip();
-            return;
-        }
-        // Nothing shows outside the layer's bounds moved by its transform (a circle around them
-        // when it turns): offscreen, it isn't drawn at all.
-        Offset o{bounds.x + bounds.width * t.origin.x, bounds.y + bounds.height * t.origin.y};
-        float hx = std::max(std::abs(bounds.x - o.x), std::abs(bounds.right() - o.x)) * std::abs(t.scaleX);
-        float hy = std::max(std::abs(bounds.y - o.y), std::abs(bounds.bottom() - o.y)) * std::abs(t.scaleY);
-        if (t.rotationZ != 0) hx = hy = std::hypot(hx, hy);
-        if (g.quickReject({o.x + t.translationX - hx, o.y + t.translationY - hy, 2 * hx, 2 * hy})) return;
-        if (l.clip)
-            g.pushShapeLayer(bounds, l.shape, node.rtl, alpha, t);
-        else
-            g.pushLayer(bounds, CornerRadii(), alpha, t);
-        drawContent();
-        g.popLayer();
+        detail::LayerDraw d;
+        d.bounds = bounds;
+        d.geometry = {l.scaleX, l.scaleY, l.translationX, l.translationY, l.rotationX, l.rotationY, l.rotationZ, l.cameraDistance,
+                      {bounds.x + bounds.width * l.transformOrigin.x, bounds.y + bounds.height * l.transformOrigin.y},
+                      node.host() ? node.host()->density().density : 1.f};
+        d.alpha = l.alpha;
+        d.clip = l.clip;
+        if (l.clip) d.outline = l.shape.createOutline(l.size, node.rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr);
+        d.blendMode = l.blendMode;
+        d.colorFilter = l.colorFilter;
+        d.strategy = l.compositingStrategy;
+        d.outsets = l.outsets;
+        detail::drawThroughLayer(g, d, drawContent);
     }
     bool equals(const ModifierElement& other) const override {
         auto* o = dynamic_cast<const GraphicsLayerElement*>(&other);
@@ -498,14 +596,31 @@ void DrawScope::drawLayer(const GraphicsLayer& layer) {
     if (!d.list) return;
     const GraphicsLayer::Properties& p = d.properties;
     Rect at{bounds_.x + p.topLeft.x, bounds_.y + p.topLeft.y, d.size.width, d.size.height};
-    LayerTransform t{p.scaleX, p.scaleY, p.rotationZ, p.translationX, p.translationY, p.pivot};
-    bool layered = p.alpha < 1 || !t.identity();  // through an offscreen layer of its size
-    if (layered) context_->pushLayer(at, CornerRadii(), p.alpha, t);
-    context_->pushTranslation({at.x, at.y});
-    d.list->replay(*context_);
-    context_->popTranslation();
-    if (layered) context_->popLayer();
+    Offset pivot = p.pivotOffset.value_or(Offset{d.size.width / 2, d.size.height / 2});
+    detail::LayerDraw l;
+    l.bounds = at;
+    l.geometry = {p.scaleX, p.scaleY, p.translationX, p.translationY, p.rotationX, p.rotationY, p.rotationZ, p.cameraDistance,
+                  {at.x + pivot.x, at.y + pivot.y}, d.host ? d.host->density().density : 1.f};
+    l.alpha = p.alpha;
+    l.clip = p.clip;
+    l.outline = p.outline.value_or(Outline::Rectangle({0, 0, d.size.width, d.size.height}));
+    l.blendMode = p.blendMode;
+    l.colorFilter = p.colorFilter;
+    l.strategy = p.compositingStrategy;
+    detail::drawThroughLayer(*context_, l, [&] {
+        context_->pushTranslation({at.x, at.y});
+        d.list->replay(*context_);
+        context_->popTranslation();
+    });
 }
+
+void GraphicsLayer::setRectOutline(Offset topLeft, Size size) const {
+    data_->properties.outline = Outline::Rectangle({topLeft.x, topLeft.y, size.width, size.height});
+}
+void GraphicsLayer::setRoundRectOutline(Offset topLeft, Size size, float cornerRadius) const {
+    data_->properties.outline = Outline::Rounded({{topLeft.x, topLeft.y, size.width, size.height}, cornerRadius, cornerRadius, cornerRadius, cornerRadius});
+}
+void GraphicsLayer::setPathOutline(const Path& path) const { data_->properties.outline = Outline::Generic(path); }
 
 // ---- Painter -------------------------------------------------------------------------------
 

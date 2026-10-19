@@ -15,6 +15,8 @@
 #include "../platform/gpu/renderer.hpp"
 #include "../platform/sdl3/font_system.hpp"
 
+#include <kompoz/draw.hpp>
+
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
@@ -438,6 +440,45 @@ void transforms(GraphicsContext& c) {  // through pushTransform: turned, skewed,
     c.fillRoundRect({120, 140, 60, 20}, 0, ink);
     c.popLayer();
     c.popTransform();
+}
+
+void graphicsLayers(GraphicsContext& c) {  // graphicsLayer's: in 3D, faded, filtered, blended
+    static ImageBitmap image = checker();
+    Color a{0.95f, 0.45f, 0.1f, 1}, b{0.3f, 0.1f, 0.7f, 1}, ink{0.1f, 0.1f, 0.12f, 1};
+    auto card = [&](Rect r) {
+        c.fillGradient(r, CornerRadii(10), Brush::linearGradient({a, b}), r);
+        c.drawImage(image, {0, 0, 16, 16}, {r.x + 8, r.y + 8, 24, 24}, 1);
+        c.drawText("3D", {r.x + 40, r.y + 28}, Font{16}, colors::White, false);
+    };
+    auto layer = [&](Rect bounds, const std::function<void(detail::LayerDraw&)>& set, const std::function<void()>& content) {
+        detail::LayerDraw l;
+        l.bounds = bounds;
+        l.geometry.pivot = bounds.center();
+        set(l);
+        detail::drawThroughLayer(c, l, content);
+    };
+    layer({12, 10, 76, 56}, [](detail::LayerDraw& l) { l.geometry.rotationX = 40; }, [&] { card({12, 10, 76, 56}); });
+    layer({104, 10, 76, 56}, [](detail::LayerDraw& l) {
+        l.geometry.rotationY = -45;
+        l.clip = true;
+        l.outline = Outline::Rounded({{0, 0, 76, 56}, 18, 18, 18, 18});
+    }, [&] { card({104, 10, 76, 56}); c.fillRoundRect({104, 10, 30, 56}, 0, ink.copy(0.4f)); });
+    layer({12, 90, 76, 56}, [](detail::LayerDraw& l) {
+        l.geometry.rotationZ = -12;
+        l.geometry.scaleX = 0.9f;
+        l.alpha = 0.6f;
+    }, [&] { card({12, 90, 76, 56}); c.fillRoundRect({50, 100, 40, 40}, 20, Color{0.1f, 0.6f, 0.4f, 1}); });
+    ColorMatrix gray;
+    gray.setToSaturation(0);
+    layer({104, 90, 76, 40}, [&](detail::LayerDraw& l) { l.colorFilter = ColorFilter::colorMatrix(gray); }, [&] { card({104, 90, 76, 40}); });
+    c.fillGradient({12, 156, 168, 30}, CornerRadii(6), Brush::horizontalGradient({Color{0.9f, 0.9f, 0.3f, 1}, Color{0.3f, 0.8f, 0.9f, 1}}), {12, 156, 168, 30});
+    layer({20, 150, 152, 42}, [](detail::LayerDraw& l) {
+        l.blendMode = BlendMode::Multiply;
+        l.geometry.rotationX = -30;
+    }, [&] {
+        c.fillRoundRect({20, 150, 152, 42}, 21, Color{0.9f, 0.3f, 0.5f, 1});
+        c.drawText("Multiply", {64, 177}, Font{16}, colors::White, false);
+    });
 }
 
 void fractionalDensity(GraphicsContext& c) {  // at 2.625 px per dp, as a phone's
@@ -1298,6 +1339,60 @@ void clipsCutAsTheirShapes(Gpu& g) {
     same("many clips", discs(true), discs(false), 960);
 }
 
+// A graphicsLayer's layer on the GPU: turned half way round about y, the scene mirrored about its
+// pivot, pixel for pixel; faded offscreen, what overlaps in it fades once, faded each draw
+// (ModulateAlpha) twice; its blend mode and color filter go onto what is under it as blend() and
+// ColorFilter::apply work them out.
+void graphicsLayersCompositeAsCompose(Gpu& g) {
+    const int n = 96;
+    Pixels plain = g.render(n, n, 1, [](GraphicsContext& c) { mixed(c); });
+    Pixels flipped = g.render(n, n, 1, [](GraphicsContext& c) {
+        detail::LayerDraw l;
+        l.bounds = {0, 0, 96, 96};
+        l.geometry.rotationY = 180;
+        l.geometry.pivot = {48, 48};
+        detail::drawThroughLayer(c, l, [&] { mixed(c); });
+    });
+    int worst = worstAgainst(plain, [&](int x, int y) { return flipped.at(n - 1 - x, y); });
+    CHECK(worst <= 3);
+    if (worst > 3) std::printf("  turned half way about y: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+    auto overlapping = [&](CompositingStrategy strategy) {
+        return g.render(32, 32, 1, [strategy](GraphicsContext& c) {
+            detail::LayerDraw l;
+            l.bounds = {0, 0, 32, 32};
+            l.alpha = 0.5f;
+            l.strategy = strategy;
+            detail::drawThroughLayer(c, l, [&] {
+                c.fillRoundRect({0, 0, 20, 32}, 0, Color{1, 0, 0, 1});
+                c.fillRoundRect({12, 0, 20, 32}, 0, Color{0, 0, 1, 1});
+            });
+        });
+    };
+    Pixels once = overlapping(CompositingStrategy::Auto), twice = overlapping(CompositingStrategy::ModulateAlpha);
+    CHECK(near(once.at(16, 16), 128, 128, 255) && near(once.at(4, 16), 255, 128, 128));   // the blue alone over the overlap, at half
+    CHECK(near(twice.at(16, 16), 128, 64, 191) && near(twice.at(4, 16), 255, 128, 128));  // the red at half, the blue at half over it
+    Color under{0.2f, 0.6f, 0.9f, 1}, over{0.9f, 0.5f, 0.2f, 1};
+    Pixels multiplied = g.render(16, 16, 1, [&](GraphicsContext& c) {
+        c.fillRoundRect({0, 0, 16, 16}, 0, under);
+        detail::LayerDraw l;
+        l.bounds = {0, 0, 16, 16};
+        l.blendMode = BlendMode::Multiply;
+        detail::drawThroughLayer(c, l, [&] { c.fillRoundRect({0, 0, 16, 16}, 0, over); });
+    });
+    Color want = blend(over, under, BlendMode::Multiply);
+    CHECK(near(multiplied.at(8, 8), int(std::lround(want.r * 255)), int(std::lround(want.g * 255)), int(std::lround(want.b * 255))));
+    ColorMatrix gray;
+    gray.setToSaturation(0);
+    Pixels grayed = g.render(16, 16, 1, [&](GraphicsContext& c) {
+        detail::LayerDraw l;
+        l.bounds = {0, 0, 16, 16};
+        l.colorFilter = ColorFilter::colorMatrix(gray);
+        detail::drawThroughLayer(c, l, [&] { c.fillRoundRect({0, 0, 16, 16}, 0, over); });
+    });
+    Color g2 = ColorFilter::colorMatrix(gray).apply(over);
+    CHECK(near(grayed.at(8, 8), int(std::lround(g2.r * 255)), int(std::lround(g2.g * 255)), int(std::lround(g2.b * 255))));
+}
+
 // Curves cut into lines stay within kTolerance of the curve, in the target's pixels.
 void curvesAreFlattenedClosely() {
     Path circle;
@@ -1364,7 +1459,8 @@ void scenesMatchTheirPictures(Gpu& g) {
                             {"text", 192, 192, 1, text},     {"images", 192, 192, 1, images}, {"layers", 192, 192, 1, layers},
                             {"paths", 192, 192, 1, paths},   {"outline-layers", 192, 192, 1, outlineLayers},
                             {"gradients", 192, 192, 1, gradients},   {"blend-modes", 192, 192, 1, blendModes},
-                            {"transforms", 192, 192, 1, transforms},  {"density", 192, 192, 2.625f, fractionalDensity}};
+                            {"transforms", 192, 192, 1, transforms},  {"graphics-layers", 192, 196, 1, graphicsLayers},
+                            {"density", 192, 192, 2.625f, fractionalDensity}};
     for (const Scene& s : scenes) {
         Pixels p = g.render(s.w, s.h, s.scale, s.draw);
         matchesGolden(s.name, p);
@@ -1405,6 +1501,7 @@ int main() {
             transformsCarryEverything(g);
             transformedEdgesAreExact(g);
             clipsCutAsTheirShapes(g);
+            graphicsLayersCompositeAsCompose(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
             std::printf("%d checks, %d failed\n", checks, failures);

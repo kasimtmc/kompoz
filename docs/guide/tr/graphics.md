@@ -149,7 +149,7 @@ Box(Modifier().size(120)
 
 ## graphicsLayer
 
-`graphicsLayer` içeriği, yerleşimini değiştirmeden, bir ekran dışı katman üzerinden ölçeklenmiş, döndürülmüş, taşınmış ya da soldurulmuş olarak çizer:
+`graphicsLayer` içeriği, yerleşimini değiştirmeden ölçeklenmiş, döndürülmüş (3B de: `rotationX`, `rotationY`), taşınmış, soldurulmuş, kırpılmış, süzülmüş ya da karıştırılmış olarak çizer. Compose'daki gibi yalnızca gereken yerde ekran dışı bir katmandan geçer (soluk, bir blend modu, bir renk süzgeci ya da `CompositingStrategy::Offscreen`); yoksa dönüşüm ve kırpma doğrudan çizime gider:
 
 ```cpp body
 Box(Modifier().size(80).graphicsLayer({.scaleX = 1.2f, .scaleY = 1.2f, .alpha = 0.8f, .rotationZ = 15})
