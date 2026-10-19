@@ -326,7 +326,10 @@ WallpaperColors::WallpaperColors(bool darkTheme) : state_(std::make_shared<State
             inotify_add_watch(s.inotify, dir.c_str(), IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE);
     }
 #endif
-    s.thread = std::thread([&s] { s.run(); });
+    s.thread = std::thread([&s] {
+        s.run();
+        SDL_CleanupTLS();  // what SDL keeps for a thread it didn't start
+    });
 }
 
 WallpaperColors::~WallpaperColors() {

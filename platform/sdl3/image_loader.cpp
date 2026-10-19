@@ -326,7 +326,11 @@ public:
         std::lock_guard lock(mutex_);
         if (gStopping) return;
         if (threads_.empty())
-            for (int i = 0; i < 3; ++i) threads_.emplace_back([this] { work(); });
+            for (int i = 0; i < 3; ++i)
+                threads_.emplace_back([this] {
+                    work();
+                    SDL_CleanupTLS();  // what SDL keeps for a thread it didn't start
+                });
         queue_.push_back({std::move(model), size, std::move(done)});
         wake_.notify_one();
     }

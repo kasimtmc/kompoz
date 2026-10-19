@@ -67,7 +67,10 @@ DesktopAccent::DesktopAccent() : state_(std::make_shared<State>()) {
     if (!s.changed || !s.stop) return;
     s.eventType = SDL_RegisterEvents(1);
     if (s.eventType == 0) return;
-    s.thread = std::thread([&s] { s.run(); });
+    s.thread = std::thread([&s] {
+        s.run();
+        SDL_CleanupTLS();  // what SDL keeps for a thread it didn't start
+    });
 }
 
 DesktopAccent::~DesktopAccent() {
