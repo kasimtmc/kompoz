@@ -142,15 +142,22 @@ jobs:
           cmake --install build --prefix "$PWD/install"
           cmake -S tests/package -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/install"
           cmake --build build-package
-      # (In a real window: SDL's offscreen driver wants EGL on macOS, which it hasn't.)
       - name: Run it in a window (Cocoa, Metal), click its button, take a screenshot
         working-directory: build-package
         run: KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo && test -s shot.png
+      # Offscreen with the software renderer (SDL's offscreen driver makes OpenGL contexts with EGL,
+      # which macOS hasn't).
+      - name: Run it offscreen (the software renderer), click its button, take a screenshot
+        working-directory: build-package
+        env:
+          SDL_VIDEO_DRIVER: offscreen
+          SDL_RENDER_DRIVER: software
+        run: KOMPOZ_SCRIPT="${KOMPOZ_SCRIPT_RUN/shot.png/shot-offscreen.png}" ./demo && test -s shot-offscreen.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: macos-screenshot
-          path: build-package/shot.png
+          path: build-package/shot*.png
           if-no-files-found: ignore
 
   vcpkg:
