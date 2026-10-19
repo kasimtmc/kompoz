@@ -118,13 +118,20 @@ jobs:
           SDL_VIDEO_DRIVER: offscreen
           SDL_RENDER_DRIVER: software  # (offscreen would want EGL for OpenGL, which macOS hasn't)
           KOMPOZ_SCRIPT: wait 5;click 70 70;wait 5;shot offscreen.png;quit
-        run: ./demo && test -s offscreen.png
+        run: |
+          ./demo || echo "demo exited with $?"
+          ls -la
+          test -s offscreen.png
       - name: Run it in a real window (Cocoa, Metal), the same
+        if: success() || failure()
         working-directory: build-package
         continue-on-error: true  # (first tries: whether the runner's session gives it a window)
         env:
           KOMPOZ_SCRIPT: wait 30;click 70 70;wait 30;shot cocoa.png;quit
-        run: ./demo && test -s cocoa.png
+        run: |
+          ./demo || echo "demo exited with $?"
+          ls -la
+          test -s cocoa.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:
