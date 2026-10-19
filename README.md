@@ -290,7 +290,9 @@ target_link_libraries(myapp PRIVATE kompoz::sdl3)
 kompoz_copy_assets(myapp)       # the fonts and the licenses next to the binary
 ```
 
-Or install Kompoz once and find it as a package (Linux and macOS, built with the system's SDL3, FreeType and HarfBuzz):
+Or install Kompoz once and find it as a package, on Linux, macOS or Windows. Built with the system's SDL3, FreeType
+and HarfBuzz, it finds them there again; built with its own (`scripts/fetch-deps.sh`: Windows, or
+`-DKOMPOZ_VENDORED_DEPS=ON`), it installs them beside it:
 
 ```bash
 cmake -S kompoz -B kompoz/build -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_BUILD_EXAMPLES=OFF -DKOMPOZ_BUILD_TESTS=OFF
@@ -304,6 +306,19 @@ add_executable(myapp main.cpp)
 target_link_libraries(myapp PRIVATE kompoz::sdl3)
 kompoz_copy_assets(myapp)
 ```
+
+With vcpkg or Conan, from a clone of the repository (its overlay port and its recipe build that clone, with the
+package manager's SDL3, FreeType and HarfBuzz), then `find_package(kompoz)` as above:
+
+```bash
+vcpkg install kompoz --overlay-ports=kompoz/packaging/vcpkg/ports
+conan create kompoz/packaging/conan --build=missing -s compiler.cppstd=20
+```
+
+On Linux and macOS `AsyncImage` decodes JPEG with libjpeg-turbo (2.x or 3.x), WebP with libwebp and downloads with
+libcurl (Windows, Android and the web have their own). Each is used when found; `-DKOMPOZ_WITH_JPEG=ON` (or `WEBP`,
+`CURL`) requires it, `OFF` leaves it out. vcpkg's features `jpeg`, `webp`, `curl` and Conan's options `with_jpeg`,
+`with_webp`, `with_curl` (all on by default) are the same.
 
 `main.cpp` defines `kompoz::createApplication` (see the example at the top); the backend owns `main`. For Android and
 the web, start from the showcase's setup: its `android/` Gradle project and the Emscripten options in
@@ -483,6 +498,8 @@ SDL_VIDEODRIVER=offscreen SDL_RENDER_DRIVER=opengl \
 KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 ```
 
+On macOS use `SDL_RENDER_DRIVER=software` with it (or run it in a window): SDL's offscreen driver makes OpenGL contexts with EGL, which macOS doesn't have.
+
 Commands: `click x y`, `rclick x y`, `move x y`, `down x y` / `up x y` (holding down), `drag x1 y1 x2 y2`,
 `mdrag x1 y1 x2 y2` (with the mouse), `resize w h`, `swipe x1 y1 x2 y2 frames` (a move per frame, so it flings),
 `fdown|fmove|fup id x y` (multi-touch), `wheel x y dy`, `zoom x y factor` (Ctrl+wheel / touchpad pinch),
@@ -515,13 +532,13 @@ that looks the same) is neither drawn nor shown. `KOMPOZ_DAMAGE_SHOW=1` outlines
 | Android | Built; run on a phone (Xiaomi 24030PN60G, Android 16, arm64) and in the emulator (API 36, x86_64, GLES). The APK has `arm64-v8a` and `x86_64` |
 | Windows | Cross-built from Linux with MinGW-w64 (GCC 16); the tests pass under Wine and the showcase draws there |
 | Web | Built with Emscripten (WebGL, SDL3's main callbacks) and run in browsers (clicks, typing, scrolling) |
-| macOS | The code is portable (SDL3 + FreeType, CMake); not built yet |
+| macOS | Built and tested by CI with Homebrew's SDL3, FreeType and HarfBuzz; an app runs in a real window (Metal); not yet used by hand |
 | iOS | The vendored dependencies are ready (`KOMPOZ_VENDORED_DEPS`); it needs an Xcode project (on macOS) |
 
 ## Known limitations
 
-1. **macOS and iOS** haven't been built (they need a Mac), nor connected to NSAccessibility; TalkBack on Android,
-   AT-SPI on Linux and UI Automation on Windows work.
+1. **macOS** is built, tested and run by CI but hasn't been used by hand on a Mac, and isn't connected to
+   NSAccessibility (TalkBack on Android, AT-SPI on Linux and UI Automation on Windows work); **iOS** hasn't been built.
 2. Overscroll is Android 12's stretch done as a scale, not a true warp. Content scaled up with `graphicsLayer` is
    scaled from a 1× layer texture (Compose draws it again at the scale), so it softens when zoomed far in. In nested
    scrolling, `onPreFling`/`onPostFling` don't suspend as in Compose (a connection that animates starts its own

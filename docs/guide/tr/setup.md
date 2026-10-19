@@ -53,7 +53,9 @@ kompoz_copy_assets(myapp)       # the fonts and the licenses next to the binary
 
 `kompoz_copy_assets`, her uygulamanın birlikte dağıttığı şeyleri, yani gömülü Noto Sans fontlarını ve lisansları, her derlemede programınızın yanına kopyalar.
 
-Ya da Kompoz'u bir kez kurup paket olarak bulun (Linux ve macOS; sistemin SDL3, FreeType ve HarfBuzz'ıyla derlenmiş):
+Ya da Kompoz'u bir kez kurup paket olarak bulun; Linux'ta, macOS'ta ya da Windows'ta. Sistemin SDL3, FreeType ve
+HarfBuzz'ıyla derlendiyse onları yine orada bulur; kendi derlediğiyle derlendiyse (`scripts/fetch-deps.sh`: Windows ya
+da `-DKOMPOZ_VENDORED_DEPS=ON`) onları yanına kurar:
 
 ```bash
 cmake -S kompoz -B kompoz/build -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_BUILD_EXAMPLES=OFF -DKOMPOZ_BUILD_TESTS=OFF
@@ -67,6 +69,19 @@ add_executable(myapp main.cpp)
 target_link_libraries(myapp PRIVATE kompoz::sdl3)
 kompoz_copy_assets(myapp)
 ```
+
+vcpkg ya da Conan ile, deponun bir klonundan (overlay port'u ve reçetesi o klonu, paket yöneticisinin SDL3, FreeType ve
+HarfBuzz'ıyla derler), ardından yukarıdaki gibi `find_package(kompoz)`:
+
+```bash
+vcpkg install kompoz --overlay-ports=kompoz/packaging/vcpkg/ports
+conan create kompoz/packaging/conan --build=missing -s compiler.cppstd=20
+```
+
+Linux'ta ve macOS'ta `AsyncImage` JPEG'i libjpeg-turbo ile (2.x ya da 3.x), WebP'yi libwebp ile çözer ve libcurl ile
+indirir (Windows, Android ve web kendilerininkini kullanır). Her biri bulunursa kullanılır; `-DKOMPOZ_WITH_JPEG=ON` (ya
+da `WEBP`, `CURL`) onu zorunlu kılar, `OFF` dışarıda bırakır. vcpkg'nin `jpeg`, `webp`, `curl` özellikleri ve Conan'ın
+`with_jpeg`, `with_webp`, `with_curl` seçenekleri (hepsi varsayılan olarak açık) aynı şeydir.
 
 `main.cpp`'niz `main` yerine `kompoz::createApplication`'ı tanımlar:
 
@@ -149,7 +164,7 @@ Kendi uygulamanızın web derlemesi için Emscripten seçeneklerini `examples/sh
 
 ### macOS ve iOS
 
-Kod taşınabilir, ama ikisi de henüz derlenmedi: ikisi de bir Mac gerektiriyor.
+macOS'ta Kompoz, Linux'taki gibi Homebrew'un SDL3, FreeType ve HarfBuzz'ıyla derlenir (`brew install sdl3 freetype harfbuzz`) ve çalışır: CI onu orada derliyor, testleri ve bir uygulamayı gerçek bir pencerede (Cocoa, Metal) çalıştırıyor. Henüz bir Mac'te elle kullanılmadı, oradaki ekran okuyuculara da (NSAccessibility) bağlı değil. iOS derlenmedi: Android'inki gibi bir Xcode projesi ya da CMake kurulumu gerekiyor.
 
 ## Paketleme
 

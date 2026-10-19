@@ -53,7 +53,9 @@ kompoz_copy_assets(myapp)       # the fonts and the licenses next to the binary
 
 `kompoz_copy_assets` copies what every app ships, the bundled Noto Sans fonts and the licenses, next to your binary each time it is built.
 
-Or install Kompoz once and find it as a package (Linux and macOS, built with the system's SDL3, FreeType and HarfBuzz):
+Or install Kompoz once and find it as a package, on Linux, macOS or Windows. Built with the system's SDL3, FreeType
+and HarfBuzz, it finds them there again; built with its own (`scripts/fetch-deps.sh`: Windows, or
+`-DKOMPOZ_VENDORED_DEPS=ON`), it installs them beside it:
 
 ```bash
 cmake -S kompoz -B kompoz/build -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_BUILD_EXAMPLES=OFF -DKOMPOZ_BUILD_TESTS=OFF
@@ -67,6 +69,19 @@ add_executable(myapp main.cpp)
 target_link_libraries(myapp PRIVATE kompoz::sdl3)
 kompoz_copy_assets(myapp)
 ```
+
+With vcpkg or Conan, from a clone of the repository (its overlay port and its recipe build that clone, with the
+package manager's SDL3, FreeType and HarfBuzz), then `find_package(kompoz)` as above:
+
+```bash
+vcpkg install kompoz --overlay-ports=kompoz/packaging/vcpkg/ports
+conan create kompoz/packaging/conan --build=missing -s compiler.cppstd=20
+```
+
+On Linux and macOS `AsyncImage` decodes JPEG with libjpeg-turbo (2.x or 3.x), WebP with libwebp and downloads with
+libcurl (Windows, Android and the web have their own). Each is used when found; `-DKOMPOZ_WITH_JPEG=ON` (or `WEBP`,
+`CURL`) requires it, `OFF` leaves it out. vcpkg's features `jpeg`, `webp`, `curl` and Conan's options `with_jpeg`,
+`with_webp`, `with_curl` (all on by default) are the same.
 
 Your `main.cpp` defines `kompoz::createApplication` instead of `main`:
 
@@ -149,7 +164,7 @@ For the web build of your own app, copy the Emscripten options from `examples/sh
 
 ### macOS and iOS
 
-The code is portable, but neither has been built yet: both need a Mac.
+On macOS Kompoz builds with Homebrew's SDL3, FreeType and HarfBuzz (`brew install sdl3 freetype harfbuzz`) as on Linux, and runs: CI builds it there, runs the tests and an app in a real window (Cocoa, Metal). It hasn't been used by hand on a Mac yet, and screen readers there (NSAccessibility) aren't connected. iOS hasn't been built: it needs an Xcode project or CMake setup like the Android one.
 
 ## Packaging
 

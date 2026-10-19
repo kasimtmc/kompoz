@@ -43,11 +43,10 @@ web); bütün araç zincirlerinin sizde kurulu olması gerekmez.
 
 ## macOS ve iOS
 
-Kompoz'un kodu taşınabilir olacak şekilde yazıldı; CI çekirdeği ve SDL3 backend'ini macOS'ta derliyor ve pencere
-gerektirmeyen testleri orada çalıştırıyor. Ama henüz kimse bir uygulamayı Mac'te ya da iPhone'da çalıştırmadı.
-Gerekenler:
+CI, Kompoz'u macOS'ta derliyor, testlerini çalıştırıyor ve orada bir uygulamayı gerçek bir pencerede (Cocoa, Metal)
+çalıştırıyor; ama henüz kimse onu bir Mac'te elle kullanmadı ve iOS için derlenmedi. Gerekenler:
 
-- Showcase'i macOS'ta çalıştırıp çalışmayanları düzeltmek (pencereler, girdi, fontlar, ekran ölçeği).
+- Showcase'i bir Mac'te kullanıp çalışmayanları düzeltmek (girdi, metin girişi, fontlar, Retina ölçeği, koyu mod).
 - Bir iOS derlemesi: `examples/showcase/android`'deki Android kurulumu gibi bir Xcode projesi ya da CMake kurulumu.
 - Ekran okuyucular: semantik ağaçtan (`ComposeHost::semanticsTree`) NSAccessibility'ye (macOS) ve UIAccessibility'ye
   (iOS) bir köprü; `platform/sdl3/atspi_bridge.cpp` (Linux) ve `uia_bridge.cpp` (Windows) gibi, onlarınki gibi

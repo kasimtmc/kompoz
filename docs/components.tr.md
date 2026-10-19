@@ -560,7 +560,7 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 
 ## Sıradakiler
 
-- iOS ve macOS (macOS ve Xcode gerekiyor; kod taşınabilir, henüz derlenmedi).
+- iOS (bir Xcode projesi ya da CMake kurulumu gerekiyor); macOS'u CI derliyor, test ediyor ve çalıştırıyor ama henüz elle kullanılmadı.
 - macOS'un erişilebilirlik API'si (NSAccessibility); Android'de TalkBack, Linux'ta AT-SPI, Windows'ta UI Automation çalışıyor.
 - Lazy listelerde `contentType` ile öğe yeniden kullanımı (Compose'un SubcomposeLayout havuzu): ölçüldü, şimdilik gerek yok (10.000 satırlık listede kare başına 0,06–0,13 ms).
 - Kotlin `by` delegasyonunun karşılığı yok: durum `.get()` / `.set()` ile okunup yazılır.

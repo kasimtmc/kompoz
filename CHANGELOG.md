@@ -9,6 +9,17 @@
   the desktop's accessibility is; `KOMPOZ_ATSPI=1` / `0` to force it on or off.
 - **Screen readers on Windows**: the semantics tree is served through UI Automation, for Narrator and NVDA: control
   types, names, states, positions, the patterns to use the nodes, and events for what changes.
+- **Installing and packages**: `cmake --install` and `find_package(kompoz)` (`kompoz::core`, `kompoz::sdl3`,
+  `kompoz_copy_assets`) on Linux, macOS and Windows, with the system's SDL3, FreeType and HarfBuzz or with those built
+  from `third_party/`, installed beside it; a vcpkg overlay port and a Conan recipe, with AsyncImage's libraries as
+  features and options.
+- **JPEG with libjpeg-turbo 2.x** as well as 3.x; AsyncImage's libraries are found from their CMake packages or
+  pkg-config, and `KOMPOZ_WITH_JPEG` / `WEBP` / `CURL` make each automatic, required or off.
+- **CI** on every platform: the tests, the platform tests, and an app built against each way of installing Kompoz,
+  run and clicked (in a real window on Windows and macOS, where Kompoz now runs). `CONTRIBUTING.md`, issue forms and
+  `scripts/release.sh` for publishing a release's packages.
+- **Fixed**: building with GCC 14 (the text field's caret handle); the MinGW toolchain file dropped the roots it was
+  given.
 
 ## 0.1.1 — 2026-10-18
 

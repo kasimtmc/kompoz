@@ -559,7 +559,7 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 
 ## Next
 
-- iOS and macOS (requires macOS and Xcode; the code is portable but hasn't been compiled yet).
+- iOS (needs an Xcode project or CMake setup); macOS is built, tested and run by CI but not yet used by hand.
 - macOS's accessibility API (NSAccessibility); TalkBack works on Android, AT-SPI on Linux, UI Automation on Windows.
 - Item reuse in lazy lists via `contentType` (Compose's SubcomposeLayout pool): measured, not needed for now (0.06–0.13 ms per frame in a 10,000-row list).
 - No equivalent of Kotlin's `by` delegation: state is read and written with `.get()` / `.set()`.

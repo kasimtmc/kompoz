@@ -289,7 +289,9 @@ target_link_libraries(myapp PRIVATE kompoz::sdl3)
 kompoz_copy_assets(myapp)       # fontlar ve lisanslar ikilinin yanına
 ```
 
-Ya da Kompoz'u bir kez kurup paket olarak bulun (Linux ve macOS; sistemin SDL3, FreeType ve HarfBuzz'ıyla derlenmiş):
+Ya da Kompoz'u bir kez kurup paket olarak bulun; Linux'ta, macOS'ta ya da Windows'ta. Sistemin SDL3, FreeType ve
+HarfBuzz'ıyla derlendiyse onları yine orada bulur; kendi derlediğiyle derlendiyse (`scripts/fetch-deps.sh`: Windows ya
+da `-DKOMPOZ_VENDORED_DEPS=ON`) onları yanına kurar:
 
 ```bash
 cmake -S kompoz -B kompoz/build -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_BUILD_EXAMPLES=OFF -DKOMPOZ_BUILD_TESTS=OFF
@@ -303,6 +305,19 @@ add_executable(myapp main.cpp)
 target_link_libraries(myapp PRIVATE kompoz::sdl3)
 kompoz_copy_assets(myapp)
 ```
+
+vcpkg ya da Conan ile, deponun bir klonundan (overlay port'u ve reçetesi o klonu, paket yöneticisinin SDL3, FreeType ve
+HarfBuzz'ıyla derler), ardından yukarıdaki gibi `find_package(kompoz)`:
+
+```bash
+vcpkg install kompoz --overlay-ports=kompoz/packaging/vcpkg/ports
+conan create kompoz/packaging/conan --build=missing -s compiler.cppstd=20
+```
+
+Linux'ta ve macOS'ta `AsyncImage` JPEG'i libjpeg-turbo ile (2.x ya da 3.x), WebP'yi libwebp ile çözer ve libcurl ile
+indirir (Windows, Android ve web kendilerininkini kullanır). Her biri bulunursa kullanılır; `-DKOMPOZ_WITH_JPEG=ON` (ya
+da `WEBP`, `CURL`) onu zorunlu kılar, `OFF` dışarıda bırakır. vcpkg'nin `jpeg`, `webp`, `curl` özellikleri ve Conan'ın
+`with_jpeg`, `with_webp`, `with_curl` seçenekleri (hepsi varsayılan olarak açık) aynı şeydir.
 
 `main.cpp` `kompoz::createApplication`'ı tanımlar (en baştaki örneğe bakın); `main` arka ucundur. Android ve web için
 vitrinin kurulumundan başlayın: `android/` Gradle projesi ve `examples/showcase/CMakeLists.txt`'deki Emscripten seçenekleri.
@@ -479,6 +494,8 @@ SDL_VIDEODRIVER=offscreen SDL_RENDER_DRIVER=opengl \
 KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 ```
 
+macOS'ta bununla `SDL_RENDER_DRIVER=software` kullanın (ya da bir pencerede çalıştırın): SDL'in ekransız sürücüsü OpenGL bağlamlarını EGL ile kurar, macOS'ta EGL yoktur.
+
 Komutlar: `click x y`, `rclick x y`, `move x y`, `down x y` / `up x y` (basılı tutma), `drag x1 y1 x2 y2`,
 `mdrag x1 y1 x2 y2` (fareyle), `resize w h`, `swipe x1 y1 x2 y2 kare` (kare başına bir hareket, fling'i de tetikler),
 `fdown|fmove|fup kimlik x y` (çoklu dokunma), `wheel x y dy`, `zoom x y kat` (Ctrl+tekerlek / touchpad sıkıştırması),
@@ -511,13 +528,13 @@ bir de baştan çizip pikselleri karşılaştırır (fark varsa loglar), `KOMPOZ
 | Android | Derlendi; gerçek cihazda (Xiaomi 24030PN60G, Android 16, arm64) ve emülatörde (API 36, x86_64, GLES) çalıştırıldı. APK'da `arm64-v8a` ve `x86_64` var |
 | Windows | Linux'tan MinGW-w64 (GCC 16) ile çapraz derleniyor; testler Wine'da geçiyor, vitrin orada çiziliyor |
 | Web | Emscripten (WebGL, SDL3 main callback'leri) ile derlendi, tarayıcılarda çalıştırıldı (tıklama, yazma, kaydırma) |
-| macOS | Kod taşınabilir (SDL3 + FreeType, CMake); henüz derlenmedi |
+| macOS | CI, Homebrew'un SDL3, FreeType ve HarfBuzz'ıyla derliyor ve test ediyor; bir uygulama gerçek pencerede (Metal) çalışıyor; henüz elle kullanılmadı |
 | iOS | Kaynaktan derlenen bağımlılıklar hazır (`KOMPOZ_VENDORED_DEPS`); Xcode projesi gerekiyor (macOS'ta) |
 
 ## Bilinen sınırlar
 
-1. **macOS ve iOS** derlenmedi (Mac gerekiyor), NSAccessibility'ye de bağlanmadı; Android'de TalkBack, Linux'ta
-   AT-SPI ve Windows'ta UI Automation çalışıyor.
+1. **macOS**'u CI derliyor, test ediyor ve çalıştırıyor ama henüz bir Mac'te elle kullanılmadı ve NSAccessibility'ye
+   bağlı değil (Android'de TalkBack, Linux'ta AT-SPI, Windows'ta UI Automation çalışıyor); **iOS** derlenmedi.
 2. Kenar esnemesi Android 12'nin esnemesini ölçekleme olarak yapıyor (gerçek bükülme değil). `graphicsLayer` ile
    büyütülen içerik 1× katman dokusundan ölçeklenir (Compose içeriği ölçekte yeniden çizer); çok yakınlaşınca yumuşar.
    İç içe kaydırmada `onPreFling`/`onPostFling` Compose'daki gibi askıya alınmaz (animasyon için bağlantı kendi

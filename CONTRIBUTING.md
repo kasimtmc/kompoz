@@ -41,10 +41,10 @@ request, so you don't need all the toolchains yourself.
 
 ## macOS and iOS
 
-Kompoz's code is meant to be portable, and CI builds the core and the SDL3 backend on macOS and runs the headless
-tests there, but nobody has run an app on a Mac or an iPhone yet. What is needed:
+CI builds Kompoz on macOS, runs its tests and runs an app there in a real window (Cocoa, Metal), but nobody has used
+it by hand on a Mac yet, and it hasn't been built for iOS. What is needed:
 
-- Running the showcase on macOS and fixing what doesn't work (windows, input, fonts, the display scale).
+- Using the showcase on a Mac and fixing what doesn't work (input, text input, fonts, the Retina scale, dark mode).
 - An iOS build: an Xcode project or CMake setup, like the Android one in `examples/showcase/android`.
 - Screen readers: a bridge from the semantics tree (`ComposeHost::semanticsTree`) to NSAccessibility (macOS) and
   UIAccessibility (iOS), as `platform/sdl3/atspi_bridge.cpp` (Linux) and `uia_bridge.cpp` (Windows) do, with tests
