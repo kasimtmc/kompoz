@@ -1,0 +1,37 @@
+# find_package(kompoz): kompoz::core (the platform-independent library) and kompoz::sdl3 (the SDL3
+# backend, which brings the entry point), and kompoz_copy_assets(target), which copies the bundled
+# fonts and the licenses next to an app's binary.
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(Threads)
+if(@KOMPOZ_PACKAGE_SDL3@)
+    find_dependency(SDL3 CONFIG)
+    find_dependency(Freetype)
+    if(@KOMPOZ_PACKAGE_HARFBUZZ@)
+        find_dependency(harfbuzz CONFIG)
+    endif()
+    if(@KOMPOZ_PACKAGE_TURBOJPEG@ OR @KOMPOZ_PACKAGE_WEBP@ OR @KOMPOZ_PACKAGE_CURL@)
+        find_dependency(PkgConfig)
+    endif()
+    if(@KOMPOZ_PACKAGE_TURBOJPEG@)
+        pkg_check_modules(KOMPOZ_TURBOJPEG REQUIRED QUIET IMPORTED_TARGET "libturbojpeg>=3.0")
+    endif()
+    if(@KOMPOZ_PACKAGE_WEBP@)
+        pkg_check_modules(KOMPOZ_WEBP REQUIRED QUIET IMPORTED_TARGET libwebp)
+    endif()
+    if(@KOMPOZ_PACKAGE_CURL@)
+        pkg_check_modules(KOMPOZ_CURL REQUIRED QUIET IMPORTED_TARGET libcurl)
+    endif()
+endif()
+
+include(${CMAKE_CURRENT_LIST_DIR}/kompozTargets.cmake)
+
+if(@KOMPOZ_PACKAGE_SDL3@)
+    set_and_check(KOMPOZ_ASSETS_DIR "@PACKAGE_CMAKE_INSTALL_DATADIR@/kompoz/assets")
+    function(kompoz_copy_assets target)
+        add_custom_command(TARGET ${target} POST_BUILD
+                           COMMAND ${CMAKE_COMMAND} -E copy_directory ${KOMPOZ_ASSETS_DIR} $<TARGET_FILE_DIR:${target}>)
+    endfunction()
+endif()
+check_required_components(kompoz)

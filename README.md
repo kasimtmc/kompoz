@@ -286,8 +286,23 @@ set(KOMPOZ_BUILD_TESTS OFF)
 add_subdirectory(kompoz)        # a clone or a git submodule
 
 add_executable(myapp main.cpp)  # the example at the top
-target_link_libraries(myapp PRIVATE kompoz_sdl3)
+target_link_libraries(myapp PRIVATE kompoz::sdl3)
 kompoz_copy_assets(myapp)       # the fonts and the licenses next to the binary
+```
+
+Or install Kompoz once and find it as a package (Linux and macOS, built with the system's SDL3, FreeType and HarfBuzz):
+
+```bash
+cmake -S kompoz -B kompoz/build -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_BUILD_EXAMPLES=OFF -DKOMPOZ_BUILD_TESTS=OFF
+cmake --build kompoz/build -j
+cmake --install kompoz/build --prefix ~/.local
+```
+
+```cmake
+find_package(kompoz 0.1 REQUIRED)  # -DCMAKE_PREFIX_PATH=~/.local, if that isn't searched already
+add_executable(myapp main.cpp)
+target_link_libraries(myapp PRIVATE kompoz::sdl3)
+kompoz_copy_assets(myapp)
 ```
 
 `main.cpp` defines `kompoz::createApplication` (see the example at the top); the backend owns `main`. For Android and

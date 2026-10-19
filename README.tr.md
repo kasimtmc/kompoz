@@ -285,8 +285,23 @@ set(KOMPOZ_BUILD_TESTS OFF)
 add_subdirectory(kompoz)        # bir klon ya da git submodule
 
 add_executable(myapp main.cpp)  # en baştaki örnek
-target_link_libraries(myapp PRIVATE kompoz_sdl3)
+target_link_libraries(myapp PRIVATE kompoz::sdl3)
 kompoz_copy_assets(myapp)       # fontlar ve lisanslar ikilinin yanına
+```
+
+Ya da Kompoz'u bir kez kurup paket olarak bulun (Linux ve macOS; sistemin SDL3, FreeType ve HarfBuzz'ıyla derlenmiş):
+
+```bash
+cmake -S kompoz -B kompoz/build -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_BUILD_EXAMPLES=OFF -DKOMPOZ_BUILD_TESTS=OFF
+cmake --build kompoz/build -j
+cmake --install kompoz/build --prefix ~/.local
+```
+
+```cmake
+find_package(kompoz 0.1 REQUIRED)  # -DCMAKE_PREFIX_PATH=~/.local, orası zaten aranmıyorsa
+add_executable(myapp main.cpp)
+target_link_libraries(myapp PRIVATE kompoz::sdl3)
+kompoz_copy_assets(myapp)
 ```
 
 `main.cpp` `kompoz::createApplication`'ı tanımlar (en baştaki örneğe bakın); `main` arka ucundur. Android ve web için

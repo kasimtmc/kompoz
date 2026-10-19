@@ -47,11 +47,26 @@ set(KOMPOZ_BUILD_TESTS OFF)
 add_subdirectory(kompoz)        # a clone or a git submodule
 
 add_executable(myapp main.cpp)
-target_link_libraries(myapp PRIVATE kompoz_sdl3)
+target_link_libraries(myapp PRIVATE kompoz::sdl3)
 kompoz_copy_assets(myapp)       # the fonts and the licenses next to the binary
 ```
 
 `kompoz_copy_assets`, her uygulamanın birlikte dağıttığı şeyleri, yani gömülü Noto Sans fontlarını ve lisansları, her derlemede programınızın yanına kopyalar.
+
+Ya da Kompoz'u bir kez kurup paket olarak bulun (Linux ve macOS; sistemin SDL3, FreeType ve HarfBuzz'ıyla derlenmiş):
+
+```bash
+cmake -S kompoz -B kompoz/build -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_BUILD_EXAMPLES=OFF -DKOMPOZ_BUILD_TESTS=OFF
+cmake --build kompoz/build -j
+cmake --install kompoz/build --prefix ~/.local
+```
+
+```cmake
+find_package(kompoz 0.1 REQUIRED)  # -DCMAKE_PREFIX_PATH=~/.local, orası zaten aranmıyorsa
+add_executable(myapp main.cpp)
+target_link_libraries(myapp PRIVATE kompoz::sdl3)
+kompoz_copy_assets(myapp)
+```
 
 `main.cpp`'niz `main` yerine `kompoz::createApplication`'ı tanımlar:
 

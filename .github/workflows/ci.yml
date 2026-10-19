@@ -95,7 +95,7 @@ jobs:
         run: build/kompoz_platform_tests.exe
 
   macos:
-    name: "macOS (headless tests; the backend only built)"
+    name: "macOS (headless tests, the package, an app run offscreen)"
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -107,6 +107,23 @@ jobs:
         run: cmake --build build
       - name: Tests
         run: build/kompoz_tests
+      - name: Install, and build an app against the package
+        run: |
+          cmake --install build --prefix "$PWD/install"
+          cmake -S tests/package -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/install"
+          cmake --build build-package
+      - name: Run it (offscreen), click its button, take a screenshot
+        working-directory: build-package
+        env:
+          SDL_VIDEO_DRIVER: offscreen
+          KOMPOZ_SCRIPT: wait 5;click 70 70;wait 5;shot shot.png;quit
+        run: ./demo && test -s shot.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-screenshot
+          path: build-package/shot.png
+          if-no-files-found: ignore
 
   android:
     name: Android (the showcase's APK)

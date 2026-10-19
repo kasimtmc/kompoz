@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+include(GNUInstallDirs)
 
 # Mobile platforms, the web and Windows have no system SDL3/FreeType packages, so build them
 # from source.
@@ -101,7 +102,10 @@ add_library(kompoz_core STATIC
     src/viewmodel.cpp
     src/wavy_progress.cpp
     src/widgets.cpp)
-target_include_directories(kompoz_core PUBLIC include)
+target_include_directories(kompoz_core PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                                              $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+set_target_properties(kompoz_core PROPERTIES EXPORT_NAME core)
+add_library(kompoz::core ALIAS kompoz_core)
 target_link_libraries(kompoz_core PUBLIC Threads::Threads)
 if(MSVC)
     target_compile_options(kompoz_core PRIVATE /W4)
@@ -160,6 +164,8 @@ if(KOMPOZ_BUILD_SDL3)
     # Android/iOS), which must always end up in the final binary.
     add_library(kompoz_sdl3 OBJECT platform/sdl3/sdl3_app.cpp platform/sdl3/image_loader.cpp)
     target_link_libraries(kompoz_sdl3 PUBLIC kompoz_core SDL3::SDL3 Freetype::Freetype)
+    set_target_properties(kompoz_sdl3 PROPERTIES EXPORT_NAME sdl3)
+    add_library(kompoz::sdl3 ALIAS kompoz_sdl3)
     # Images (AsyncImage): Android, Windows and the web decode and download with the platform's
     # own; elsewhere libjpeg-turbo, libwebp and libcurl, where they are installed.
     if(WIN32)
@@ -236,4 +242,40 @@ if(KOMPOZ_BUILD_SDL3)
     if(KOMPOZ_BUILD_EXAMPLES)
         add_subdirectory(examples/showcase)
     endif()
+endif()
+
+# cmake --install: the headers, the libraries and the assets, and a package for find_package(kompoz)
+# (kompoz::core, kompoz::sdl3, kompoz_copy_assets). Built against the system's SDL3, FreeType and
+# HarfBuzz only: vendored ones (Windows, the mobile platforms, the web) aren't installed with it.
+if(KOMPOZ_VENDORED_DEPS)
+    set(kompoz_install_default OFF)
+else()
+    set(kompoz_install_default ${PROJECT_IS_TOP_LEVEL})
+endif()
+option(KOMPOZ_INSTALL "Install rules and a CMake package (needs the system's SDL3, FreeType and HarfBuzz)" ${kompoz_install_default})
+if(KOMPOZ_INSTALL)
+    if(KOMPOZ_VENDORED_DEPS)
+        message(FATAL_ERROR "KOMPOZ_INSTALL needs the system's SDL3, FreeType and HarfBuzz (KOMPOZ_VENDORED_DEPS=OFF)")
+    endif()
+    include(CMakePackageConfigHelpers)
+    set(kompoz_cmake_dir ${CMAKE_INSTALL_LIBDIR}/cmake/kompoz)
+    install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+    install(TARGETS kompoz_core EXPORT kompozTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    set(KOMPOZ_PACKAGE_SDL3 OFF)
+    if(TARGET kompoz_sdl3)
+        set(KOMPOZ_PACKAGE_SDL3 ON)
+        install(TARGETS kompoz_sdl3 EXPORT kompozTargets OBJECTS DESTINATION ${CMAKE_INSTALL_LIBDIR}/kompoz)
+        install(DIRECTORY assets/ DESTINATION ${CMAKE_INSTALL_DATADIR}/kompoz/assets)
+    endif()
+    install(EXPORT kompozTargets NAMESPACE kompoz:: DESTINATION ${kompoz_cmake_dir})
+    # What the package finds again: kompoz_sdl3's dependencies, as they were found here.
+    set(KOMPOZ_PACKAGE_HARFBUZZ ${harfbuzz_FOUND})
+    foreach(dep TURBOJPEG WEBP CURL)
+        set(KOMPOZ_PACKAGE_${dep} ${KOMPOZ_${dep}_FOUND})
+    endforeach()
+    configure_package_config_file(cmake/kompozConfig.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/kompozConfig.cmake
+                                  INSTALL_DESTINATION ${kompoz_cmake_dir} PATH_VARS CMAKE_INSTALL_DATADIR)
+    write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/kompozConfigVersion.cmake COMPATIBILITY SameMinorVersion)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/kompozConfig.cmake ${CMAKE_CURRENT_BINARY_DIR}/kompozConfigVersion.cmake
+            DESTINATION ${kompoz_cmake_dir})
 endif()
