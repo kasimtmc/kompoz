@@ -21,5 +21,39 @@
       "name": "vcpkg-cmake-config",
       "host": true
     }
-  ]
+  ],
+  "default-features": [
+    "curl",
+    "jpeg",
+    "webp"
+  ],
+  "features": {
+    "curl": {
+      "description": "AsyncImage downloads http(s) images with libcurl (Linux, macOS; Windows uses WinINet)",
+      "dependencies": [
+        {
+          "name": "curl",
+          "platform": "!windows"
+        }
+      ]
+    },
+    "jpeg": {
+      "description": "AsyncImage decodes JPEG with libjpeg-turbo (Linux, macOS; Windows uses WIC)",
+      "dependencies": [
+        {
+          "name": "libjpeg-turbo",
+          "platform": "!windows"
+        }
+      ]
+    },
+    "webp": {
+      "description": "AsyncImage decodes WebP with libwebp (Linux, macOS; Windows uses WIC)",
+      "dependencies": [
+        {
+          "name": "libwebp",
+          "platform": "!windows"
+        }
+      ]
+    }
+  }
 }

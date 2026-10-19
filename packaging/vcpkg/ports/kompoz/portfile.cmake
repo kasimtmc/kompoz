@@ -1,17 +1,25 @@
 # An overlay port that builds Kompoz from the repository it is in:
 #   vcpkg install kompoz --overlay-ports=<kompoz>/packaging/vcpkg/ports
-# AsyncImage's optional JPEG and WebP decoders and HTTP downloads on Linux and macOS (libturbojpeg,
-# libwebp, libcurl, found with pkg-config) are left out here, so that nothing comes from outside
-# vcpkg; Windows decodes and downloads with its own.
+# Its features (on by default) are AsyncImage's libraries on Linux and macOS: curl (HTTP),
+# jpeg (libjpeg-turbo), webp (libwebp); Windows decodes and downloads with its own.
 set(SOURCE_PATH "${CMAKE_CURRENT_LIST_DIR}/../../../..")
+
+vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
+    FEATURES
+        curl KOMPOZ_WITH_CURL
+        jpeg KOMPOZ_WITH_JPEG
+        webp KOMPOZ_WITH_WEBP
+)
 
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
+        ${FEATURE_OPTIONS}
         -DKOMPOZ_VENDORED_DEPS=OFF
         -DKOMPOZ_INSTALL=ON
         -DKOMPOZ_BUILD_TESTS=OFF
         -DKOMPOZ_BUILD_EXAMPLES=OFF
+        # vcpkg's own CMake packages only, never a system library through pkg-config.
         -DCMAKE_DISABLE_FIND_PACKAGE_PkgConfig=ON
 )
 vcpkg_cmake_install()
