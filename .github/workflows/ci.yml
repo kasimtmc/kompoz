@@ -1,7 +1,8 @@
-# Builds Kompoz on every platform it runs on and runs its tests where they can run: the headless
-# tests everywhere but Android and the web, the platform tests on Linux (the wallpaper's colors,
-# AT-SPI on a D-Bus of their own) and Windows (UI Automation). macOS is built and tested here too,
-# although its backend hasn't been tried on a Mac.
+# Builds Kompoz on every platform it runs on and runs what can run there: the headless tests (all
+# but Android and the web), the platform tests (Linux: the wallpaper's colors, images, AT-SPI on a
+# D-Bus of their own; Windows: UI Automation), and an app (tests/package, the README's first
+# example) built against Kompoz as it is installed (cmake --install, vcpkg, Conan), run, clicked
+# and photographed: offscreen on Linux, in a real window on Windows and macOS.
 name: CI
 
 on:
@@ -16,6 +17,10 @@ permissions:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  # What the app does when it runs: waits for its first frames, clicks its button, photographs the result.
+  KOMPOZ_SCRIPT_RUN: wait 30;click 70 70;wait 30;shot shot.png;quit
 
 jobs:
   linux:
@@ -56,13 +61,27 @@ jobs:
       - name: "Dependencies (SDL3, FreeType, HarfBuzz from source: no SDL3 package here)"
         run: scripts/fetch-deps.sh
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_VENDORED_DEPS=ON -DCMAKE_CXX_FLAGS="${{ matrix.flags }}"
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_VENDORED_DEPS=ON \
+            -DKOMPOZ_WITH_JPEG=ON -DKOMPOZ_WITH_WEBP=ON -DKOMPOZ_WITH_CURL=ON -DCMAKE_CXX_FLAGS="${{ matrix.flags }}"
       - name: Build
         run: cmake --build build
       - name: Tests
         run: build/kompoz_tests
       - name: Platform tests
         run: build/kompoz_platform_tests
+      - name: Install (with the SDL3, FreeType and HarfBuzz built here), and build an app against it
+        run: |
+          cmake --install build --prefix "$PWD/install"
+          cmake -S tests/package -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/install" \
+            -DCMAKE_CXX_FLAGS="${{ matrix.flags }}" -DCMAKE_EXE_LINKER_FLAGS="${{ matrix.flags }}"
+          cmake --build build-package
+      - name: Run it offscreen, click its button, take a screenshot
+        working-directory: build-package
+        env:
+          SDL_VIDEO_DRIVER: offscreen
+          SDL_RENDER_DRIVER: software
+        run: KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo && test -s shot.png
 
   windows:
     name: Windows (MinGW-w64)
@@ -93,112 +112,146 @@ jobs:
         run: build/kompoz_tests.exe
       - name: Platform tests (UI Automation)
         run: build/kompoz_platform_tests.exe
+      - name: Install (with the SDL3, FreeType and HarfBuzz built here), and build an app against it
+        run: |
+          cmake --install build --prefix "$PWD/install"
+          cmake -S tests/package -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/install"
+          cmake --build build-package
+      - name: Run it in a window, click its button, take a screenshot
+        working-directory: build-package
+        run: KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo.exe && test -s shot.png
 
   macos:
-    name: "macOS (headless tests, the package, an app run offscreen)"
+    name: macOS
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: Packages
         run: brew install ninja sdl3 freetype harfbuzz jpeg-turbo webp
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_WITH_JPEG=ON -DKOMPOZ_WITH_WEBP=ON -DKOMPOZ_WITH_CURL=ON
       - name: Build
         run: cmake --build build
       - name: Tests
         run: build/kompoz_tests
-      - name: Install, and build an app against the package
+      - name: Install, and build an app against it
         run: |
           cmake --install build --prefix "$PWD/install"
           cmake -S tests/package -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/install"
           cmake --build build-package
-      - name: Run it offscreen (software rendering), click its button, take a screenshot
+      # (In a real window: SDL's offscreen driver wants EGL on macOS, which it hasn't.)
+      - name: Run it in a window (Cocoa, Metal), click its button, take a screenshot
         working-directory: build-package
-        env:
-          SDL_VIDEO_DRIVER: offscreen
-          SDL_RENDER_DRIVER: software  # (offscreen would want EGL for OpenGL, which macOS hasn't)
-          KOMPOZ_SCRIPT: wait 5;click 70 70;wait 5;shot offscreen.png;quit
-        run: |
-          ./demo || echo "demo exited with $?"
-          ls -la
-          test -s offscreen.png
-      - name: Run it in a real window (Cocoa, Metal), the same
-        if: success() || failure()
-        working-directory: build-package
-        continue-on-error: true  # (first tries: whether the runner's session gives it a window)
-        env:
-          KOMPOZ_SCRIPT: wait 30;click 70 70;wait 30;shot cocoa.png;quit
-        run: |
-          ./demo || echo "demo exited with $?"
-          ls -la
-          test -s cocoa.png
+        run: KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo && test -s shot.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: macos-screenshots
-          path: build-package/*.png
+          name: macos-screenshot
+          path: build-package/shot.png
           if-no-files-found: ignore
 
   vcpkg:
-    name: vcpkg (the overlay port, and an app built with it)
-    runs-on: ubuntu-24.04
+    name: vcpkg (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            triplet: x64-linux
+          - os: windows-latest
+            triplet: x64-windows  # (MSVC)
+          - os: macos-latest
+            triplet: arm64-osx
+    defaults:
+      run:
+        shell: bash
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-cache
     steps:
       - uses: actions/checkout@v4
-      - name: Packages (what SDL needs from the system to build)
+      - name: Packages (what vcpkg's SDL3 and its dependencies need from the system)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ninja-build g++-14 \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
             libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
             libwayland-dev wayland-protocols libdecor-0-dev libdbus-1-dev libibus-1.0-dev libudev-dev \
-            libasound2-dev libpulse-dev autoconf autoconf-archive automake libtool pkg-config
+            libasound2-dev libpulse-dev autoconf autoconf-archive automake libtool libltdl-dev pkg-config \
+            bison flex gettext python3-jinja2
+          echo "CC=gcc-14" >> "$GITHUB_ENV"
+          echo "CXX=g++-14" >> "$GITHUB_ENV"
+      - name: vcpkg
+        run: |
+          if [ -z "$VCPKG_INSTALLATION_ROOT" ] || { [ ! -x "$VCPKG_INSTALLATION_ROOT/vcpkg" ] && [ ! -x "$VCPKG_INSTALLATION_ROOT/vcpkg.exe" ]; }; then
+            git clone --depth 1 https://github.com/microsoft/vcpkg "$RUNNER_TEMP/vcpkg"
+            "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+            echo "VCPKG_INSTALLATION_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
+          fi
+          mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+      - uses: actions/cache@v4
+        with:
+          path: vcpkg-cache
+          key: vcpkg-${{ matrix.triplet }}-${{ hashFiles('packaging/vcpkg/**') }}
+          restore-keys: vcpkg-${{ matrix.triplet }}-
       - name: Install Kompoz with vcpkg
-        env:
-          CC: gcc-14
-          CXX: g++-14
         run: |
           "$VCPKG_INSTALLATION_ROOT/vcpkg" install kompoz --overlay-ports=packaging/vcpkg/ports \
-            --x-install-root="$PWD/vcpkg_installed" --triplet x64-linux
+            --x-install-root="$PWD/vcpkg_installed" --triplet ${{ matrix.triplet }}
       - name: Build an app against it
-        env:
-          CC: gcc-14
-          CXX: g++-14
         run: |
-          cmake -S tests/package -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release \
+          cmake -S tests/package -B build-package -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
-            -DVCPKG_INSTALLED_DIR="$PWD/vcpkg_installed" -DVCPKG_MANIFEST_MODE=OFF
-          cmake --build build-package
-      - name: Run it offscreen, click its button, take a screenshot
-        working-directory: build-package
-        env:
-          SDL_VIDEO_DRIVER: offscreen
-          SDL_RENDER_DRIVER: software
-          KOMPOZ_SCRIPT: wait 5;click 70 70;wait 5;shot vcpkg.png;quit
-        run: ./demo && test -s vcpkg.png
+            -DVCPKG_INSTALLED_DIR="$PWD/vcpkg_installed" -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} -DVCPKG_MANIFEST_MODE=OFF
+          cmake --build build-package --config Release
+      - name: Run it, click its button, take a screenshot (offscreen on Linux, in a window elsewhere)
+        run: |
+          app=$(find build-package -type f \( -name demo -o -name demo.exe \) | head -1)
+          cd "$(dirname "$app")"
+          if [ "$RUNNER_OS" = Linux ]; then export SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software; fi
+          KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" "./$(basename "$app")" && test -s shot.png
       - name: The logs of what failed
         if: failure()
-        run: find "$VCPKG_INSTALLATION_ROOT/buildtrees" -name '*-err.log' -newer packaging -exec tail -40 {} + 2>/dev/null | tail -200
+        run: find "$VCPKG_INSTALLATION_ROOT/buildtrees" -name '*-err.log' -mmin -120 -exec tail -40 {} + 2>/dev/null | tail -200
 
   conan:
-    name: Conan (the recipe, and an app built with it)
-    runs-on: ubuntu-24.04
-    env:
-      CC: gcc-14
-      CXX: g++-14
+    name: Conan (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - name: Conan
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends g++-14 ninja-build
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends g++-14 ninja-build
+            echo "CC=gcc-14" >> "$GITHUB_ENV"
+            echo "CXX=g++-14" >> "$GITHUB_ENV"
+            export CC=gcc-14 CXX=g++-14
+          fi
           pipx install conan
           conan profile detect
+      - uses: actions/cache@v4
+        with:
+          path: ~/.conan2/p
+          key: conan-${{ matrix.os }}-${{ hashFiles('packaging/conan/conanfile.py') }}
+          restore-keys: conan-${{ matrix.os }}-
       - name: Create the package and test it (packaging/conan/test_package)
         run: |
-          conan create packaging/conan --build=missing -s compiler.cppstd=20 -s build_type=Release \
-            -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True \
-            -c tools.build:compiler_executables='{"c": "gcc-14", "cpp": "g++-14"}' \
-            -c tools.cmake.cmaketoolchain:generator=Ninja
+          extra=()
+          if [ "$RUNNER_OS" = Linux ]; then
+            extra=(-c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
+                   -c 'tools.build:compiler_executables={"c": "gcc-14", "cpp": "g++-14"}'
+                   -c core.net.http:cacert_path=/etc/ssl/certs/ca-certificates.crt)
+          fi
+          conan create packaging/conan --build=missing -s compiler.cppstd=20 -s build_type=Release "${extra[@]}"
 
   android:
     name: Android (the showcase's APK)
