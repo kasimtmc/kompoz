@@ -172,6 +172,27 @@ jobs:
         if: failure()
         run: find "$VCPKG_INSTALLATION_ROOT/buildtrees" -name '*-err.log' -newer packaging -exec tail -40 {} + 2>/dev/null | tail -200
 
+  conan:
+    name: Conan (the recipe, and an app built with it)
+    runs-on: ubuntu-24.04
+    env:
+      CC: gcc-14
+      CXX: g++-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Conan
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends g++-14 ninja-build
+          pipx install conan
+          conan profile detect
+      - name: Create the package and test it (packaging/conan/test_package)
+        run: |
+          conan create packaging/conan --build=missing -s compiler.cppstd=20 -s build_type=Release \
+            -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True \
+            -c tools.build:compiler_executables='{"c": "gcc-14", "cpp": "g++-14"}' \
+            -c tools.cmake.cmaketoolchain:generator=Ninja
+
   android:
     name: Android (the showcase's APK)
     runs-on: ubuntu-24.04
