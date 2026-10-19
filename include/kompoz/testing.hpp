@@ -192,6 +192,19 @@ public:
         pushLayer(bounds, CornerRadii(), alpha, t);
     }
     void pushClip(const Rect& r) override { clips.push_back(moved(r)); }
+    // Each pushClipRoundRect's and pushClipPath's: its bounds (where it is), corners, path and op.
+    struct ClipShape {
+        Rect bounds;
+        CornerRadii radii;
+        std::optional<Path> path;  // (around the origin it was clipped at)
+        ClipOp op;
+    };
+    std::vector<ClipShape> clipShapes;
+    void pushClipRoundRect(const Rect& r, const CornerRadii& radii, ClipOp op) override { clipShapes.push_back({moved(r), radii, {}, op}); }
+    void pushClipPath(const Path& path, Offset origin, ClipOp op) override {
+        Rect b = path.bounds();
+        clipShapes.push_back({moved({b.x + origin.x, b.y + origin.y, b.width, b.height}), {}, path, op});
+    }
     void popClip() override {}
     void pushTranslation(Offset by) override {
         translations.push_back(by);

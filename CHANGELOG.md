@@ -45,6 +45,11 @@
   `withTransform` go through it (with `rotateRad`, `scale(s)`, `inset(horizontal, vertical)` and
   `DrawTransform::transform(matrix)` added), so, as in Compose, what they draw isn't clipped to the drawing's area
   any more. The display list follows transforms (perspective too) for damage and culling.
+- **Clips of any shape**: `GraphicsContext::pushClipRoundRect` and `pushClipPath`, inside or outside (`ClipOp`, now
+  in graphics.hpp); `DrawScope::clipPath` and `clipRect(…, op)` go through them instead of a layer whose outside is
+  erased. On the GPU a rounded rect clip is worked out in the shader, a path clip read from the coverage mask. With
+  SDL's software renderer `clipPath` drew the area it erased black (that renderer has no DstOut); it is now masked on
+  the CPU.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

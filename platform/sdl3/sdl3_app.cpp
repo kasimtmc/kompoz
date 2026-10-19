@@ -274,9 +274,26 @@ public:
         if (!clips_.empty() && !SDL_GetRectIntersection(&rect, &clips_.back(), &rect)) rect = {0, 0, 0, 0};
         clips_.push_back(rect);
         SDL_SetRenderClipRect(renderer_, &rect);
+        clipLayers_.push_back(false);
+    }
+
+    // A clip that isn't a rect: what is drawn goes into a layer over what can show, which, before
+    // it is composited, keeps only what is inside the shape (or outside it): the shape is drawn
+    // white into a mask, and the layer's pixels multiplied by its coverage (or by what it leaves).
+    void pushClipRoundRect(const Rect& r, const CornerRadii& radii, ClipOp op) override {
+        if (op == ClipOp::Intersect && radii.max() <= 0) return pushClip(r);
+        pushClipLayer(op == ClipOp::Intersect ? r : visibleArea(), {1, r, radii, {}, {}, op == ClipOp::Difference});
+    }
+    void pushClipPath(const Path& path, Offset origin, ClipOp op) override {
+        Rect b = path.bounds();
+        pushClipLayer(op == ClipOp::Intersect ? Rect{b.x + origin.x, b.y + origin.y, b.width, b.height} : visibleArea(),
+                      {2, {}, {}, path, origin, op == ClipOp::Difference});
     }
 
     void popClip() override {
+        bool layer = !clipLayers_.empty() && clipLayers_.back();
+        if (!clipLayers_.empty()) clipLayers_.pop_back();
+        if (layer) return popLayer();
         clips_.pop_back();
         SDL_SetRenderClipRect(renderer_, clips_.empty() ? nullptr : &clips_.back());
     }
@@ -342,6 +359,12 @@ public:
         transformLayers_.pop_back();
         if (layer) popLayer();
         else popTranslation();
+    }
+
+    // What can show (visibleRect) in dp.
+    Rect visibleArea() const {
+        SDL_Rect v = visibleRect();
+        return {(float(v.x) + ox_) / scale, (float(v.y) + oy_) / scale, float(v.w) / scale, float(v.h) / scale};
     }
 
     // The clip, or else the whole target (the layer's texture or the window).
@@ -708,10 +731,82 @@ public:
         for (size_t k = 1; k < chain.size(); ++k) release(chain[k].texture);
     }
 
+    // A clip's shape: a rounded rect (kind 1) or a path at `origin` (kind 2), dp; `outside`:
+    // ClipOp::Difference.
+    struct ClipMask {
+        int kind;
+        Rect rect;
+        CornerRadii radii;
+        Path path;
+        Offset origin;
+        bool outside;
+    };
+    std::vector<bool> clipLayers_;  // each clip pushed: a layer (else a rect, in clips_)
+    void pushClipLayer(const Rect& bounds, ClipMask mask) {
+        pushLayer(bounds.intersect(visibleArea()), CornerRadii(), 1, {});
+        layers_.back().clip = std::move(mask);
+        clipLayers_.push_back(true);
+    }
+
+    // A clip's layer keeps what is inside its shape (or outside it): the blend unit multiplies its
+    // pixels by the mask's alpha where the renderer can blend that way, the CPU where it can't
+    // (the software renderer).
+    void keepClipped(SDL_Texture* texture, SDL_Rect rect, const ClipMask& m) {
+        int w = rect.w, h = rect.h, mw = 0, mh = 0;
+        SDL_Texture* mask = acquire(w, h, &mw, &mh);
+        if (!mask) return;
+        // The shape, white, in the layer's pixels (the origin is still the layer's), as it is.
+        std::vector<ColorFilter> filters = std::exchange(filters_, {});
+        std::vector<BlendMode> blends = std::exchange(blends_, {});
+        applyBlend();
+        SDL_SetRenderTarget(renderer_, mask);
+        SDL_SetRenderClipRect(renderer_, nullptr);
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+        SDL_RenderClear(renderer_);
+        if (m.kind == 1) fillRoundRect(m.rect, m.radii, colors::White);
+        else drawPath(m.path, m.origin, Brush::solid(colors::White), {}, {});
+        filters_ = std::move(filters);
+        blends_ = std::move(blends);
+        applyBlend();
+        SDL_SetRenderTarget(renderer_, texture);
+        SDL_BlendFactor keep = m.outside ? SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA : SDL_BLENDFACTOR_SRC_ALPHA;
+        SDL_BlendMode multiply = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ZERO, keep, SDL_BLENDOPERATION_ADD, SDL_BLENDFACTOR_ZERO, keep,
+                                                            SDL_BLENDOPERATION_ADD);
+        SDL_FRect all{0, 0, float(w), float(h)};
+        if (!software_ && SDL_SetTextureBlendMode(mask, multiply) && SDL_RenderTexture(renderer_, mask, &all, &all)) {
+            release(mask);
+            return;
+        }
+        SDL_Rect area{0, 0, w, h};
+        SDL_Surface* pixels = SDL_RenderReadPixels(renderer_, &area);
+        SDL_SetRenderTarget(renderer_, mask);
+        SDL_Surface* coverage = SDL_RenderReadPixels(renderer_, &area);
+        SDL_SetRenderTarget(renderer_, texture);
+        SDL_Surface* p = pixels ? SDL_ConvertSurface(pixels, SDL_PIXELFORMAT_RGBA32) : nullptr;
+        SDL_Surface* c = coverage ? SDL_ConvertSurface(coverage, SDL_PIXELFORMAT_RGBA32) : nullptr;
+        if (p && c) {
+            for (int y = 0; y < h; ++y) {
+                uint8_t* row = static_cast<uint8_t*>(p->pixels) + size_t(y) * size_t(p->pitch);
+                const uint8_t* cov = static_cast<const uint8_t*>(c->pixels) + size_t(y) * size_t(c->pitch);
+                for (int x = 0; x < w; ++x) {
+                    int a = m.outside ? 255 - cov[x * 4 + 3] : cov[x * 4 + 3];
+                    for (int k = 0; k < 4; ++k) row[x * 4 + k] = uint8_t((row[x * 4 + k] * a + 127) / 255);
+                }
+            }
+            SDL_UpdateTexture(texture, &area, p->pixels, p->pitch);
+        }
+        SDL_DestroySurface(p);
+        SDL_DestroySurface(c);
+        SDL_DestroySurface(pixels);
+        SDL_DestroySurface(coverage);
+        release(mask);
+    }
+
     void popLayer() override {
         Layer layer = std::move(layers_.back());
         layers_.pop_back();
         if (!layer.texture) return;  // drawn directly: the clips never changed
+        if (layer.clip) keepClipped(layer.texture, layer.rect, *layer.clip);
         if (layer.blurX > 0 || layer.blurY > 0) blurLayer(layer.texture, layer.rect.w, layer.rect.h, layer.blurX, layer.blurY);
         SDL_SetRenderTarget(renderer_, layer.previous);
         ox_ = layer.ox;
@@ -1067,6 +1162,7 @@ private:
         float blurX = 0, blurY = 0;       // px: blurred as it is composited
         std::array<float, 9> matrix{};    // pushTransform's, in the parent's pixels (row by row), if matrixSet
         bool matrixSet = false;
+        std::optional<ClipMask> clip;     // a clip's layer: kept only inside (or outside) this
     };
     std::vector<bool> transformLayers_;  // each pushTransform: drawn through a layer (else a translation)
     struct ImageTexture {

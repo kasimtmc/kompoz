@@ -59,6 +59,7 @@ struct Uniforms {
 [[vk::binding(2, 0)]] Sampler2D texture1;
 [[vk::binding(3, 0)]] Sampler2D texture2;
 [[vk::binding(4, 0)]] Sampler2D texture3;
+[[vk::binding(5, 0)]] Sampler2D texture4;  // the coverage mask, for the clips' paths
 
 struct Instance {
     float4 bounds : BOUNDS;  // the quad: x0, y0, x1, y1
@@ -421,21 +422,30 @@ float4 arcCap(float2 q, float radius, float halfSize, float start, float sweep, 
 }
 
 // The clips a primitive is drawn in, from row `row` of the table: how much of the pixel at
-// `pixel` (the target's) is inside all of them. Each takes six texels: kind and op (x: 0 a rounded
-// rect; y: 1 for what is outside it), the rect and its radii in its own space, and the rows of the
-// map from the target's pixels to that space.
+// `pixel` (the target's) is inside all of them. Each takes six texels: its kind (x: 0 a rounded
+// rect, 1 a path), whether it keeps what is outside it (y), and the path's fill rule (z: 1
+// even-odd); a rounded rect has its rect and radii in its own space and the rows of the map from
+// the target's pixels to that space; a path, where its coverage mask (texture4) has texel (0, 0)
+// in the target's pixels, and the pixels its part of the mask covers.
 float clipCoverage(float2 pixel, int count, float row) {
     float inside = 1;
     for (int i = 0; i < count; ++i) {
         float x = float(i * 6);
-        float4 head = tableTexel(x, row), rect = tableTexel(x + 1, row), radii = tableTexel(x + 2, row);
-        float3 r0 = tableTexel(x + 3, row).xyz, r1 = tableTexel(x + 4, row).xyz, r2 = tableTexel(x + 5, row).xyz;
-        float3 h = float3(pixel, 1);
-        float3 q = float3(dot(r0, h), dot(r1, h), dot(r2, h));
-        float2 p = q.xy / q.z;
-        // A pixel's steps in its space (the map's derivative there).
-        float2 dx = float2(r0.x - r2.x * p.x, r1.x - r2.x * p.y) / q.z, dy = float2(r0.y - r2.y * p.x, r1.y - r2.y * p.y) / q.z;
-        float c = q.z > 0 ? roundRectCoverage(p, rect, radii, dx, dy) : 0;
+        float4 head = tableTexel(x, row), a = tableTexel(x + 1, row), b = tableTexel(x + 2, row);
+        float c = 0;
+        if (head.x > 0.5) {
+            bool within = all(pixel >= b.xy) && all(pixel < b.zw);
+            float sum = texture4.SampleLevel(maskTexcoord(pixel - a.xy), 0).r;
+            c = within ? pathCoverage(sum, head.z > 0.5) : 0;
+        } else {
+            float3 r0 = tableTexel(x + 3, row).xyz, r1 = tableTexel(x + 4, row).xyz, r2 = tableTexel(x + 5, row).xyz;
+            float3 h = float3(pixel, 1);
+            float3 q = float3(dot(r0, h), dot(r1, h), dot(r2, h));
+            float2 p = q.xy / q.z;
+            // A pixel's steps in its space (the map's derivative there).
+            float2 dx = float2(r0.x - r2.x * p.x, r1.x - r2.x * p.y) / q.z, dy = float2(r0.y - r2.y * p.x, r1.y - r2.y * p.y) / q.z;
+            c = q.z > 0 ? roundRectCoverage(p, a, b, dx, dy) : 0;
+        }
         inside *= head.y > 0.5 ? 1 - c : c;
     }
     return inside;

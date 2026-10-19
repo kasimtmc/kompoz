@@ -301,19 +301,9 @@ void DrawScope::drawOval(const Brush& brush, Offset topLeft, std::optional<Size>
 }
 
 void DrawScope::clipPath(const Path& path, const std::function<void(DrawScope&)>& block, ClipOp op) {
-    if (bounds_.width <= 0 || bounds_.height <= 0) return;
-    context_->pushLayer(bounds_, 0, 1, {});
+    context_->pushClipPath(path, {bounds_.x, bounds_.y}, op);
     block(*this);
-    // What goes is erased (DstOut): outside the path, or inside it. (A DstIn mask would leave
-    // alone whatever the path's drawing doesn't cover at all.)
-    if (op == ClipOp::Intersect) {
-        Path area;
-        area.addRect({0, 0, bounds_.width, bounds_.height});
-        drawPath(Path::combine(PathOperation::Difference, area, path), colors::Black, Fill, BlendMode::DstOut);
-    } else {
-        drawPath(path, colors::Black, Fill, BlendMode::DstOut);
-    }
-    context_->popLayer();
+    context_->popClip();
 }
 
 void DrawScope::withTransform(const std::function<void(DrawTransform&)>& transform, const std::function<void(DrawScope&)>& block) {
@@ -345,15 +335,16 @@ void DrawTransform::transform(const Matrix& matrix) {
 void DrawTransform::inset(float left, float top, float right, float bottom) {
     steps_.push_back([=](DrawScope& d, const std::function<void(DrawScope&)>& next) { d.inset(left, top, right, bottom, next); });
 }
-void DrawTransform::clipRect(Offset topLeft, Size size) {
-    steps_.push_back([=](DrawScope& d, const std::function<void(DrawScope&)>& next) { d.clipRect(topLeft, size, next); });
+void DrawTransform::clipRect(Offset topLeft, Size size, ClipOp op) {
+    steps_.push_back([=](DrawScope& d, const std::function<void(DrawScope&)>& next) { d.clipRect(topLeft, size, next, op); });
 }
 void DrawTransform::clipPath(const Path& path, ClipOp op) {
     steps_.push_back([=](DrawScope& d, const std::function<void(DrawScope&)>& next) { d.clipPath(path, next, op); });
 }
 
-void DrawScope::clipRect(Offset topLeft, Size size, const std::function<void(DrawScope&)>& block) {
-    context_->pushClip(local(topLeft, size));
+void DrawScope::clipRect(Offset topLeft, Size size, const std::function<void(DrawScope&)>& block, ClipOp op) {
+    if (op == ClipOp::Intersect) context_->pushClip(local(topLeft, size));
+    else context_->pushClipRoundRect(local(topLeft, size), CornerRadii(), op);
     block(*this);
     context_->popClip();
 }

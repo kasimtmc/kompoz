@@ -857,6 +857,9 @@ struct Shadow {
     }
 };
 
+// How a clip clips (Compose's ClipOp): to what is inside its shape, or to what is outside it.
+enum class ClipOp { Intersect, Difference };
+
 // A transform of points (Compose's Matrix): 4x4, `values[row * 4 + column]`, a point taken as the
 // row (x, y, z, 1) times it, so row 3 is the translation and column 3 the perspective. As in
 // Compose, translate, scale and rotateZ come before what the matrix did already (as a Canvas's
@@ -949,6 +952,11 @@ public:
     virtual void pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform = {}) = 0;
     virtual void popLayer() = 0;
     virtual void pushClip(const Rect& rect) = 0;
+    // Draws until popClip() only inside a rounded rect, or a path placed at `origin` (by its fill
+    // type), or with ClipOp::Difference only outside it; within the clips already set, their
+    // edges anti-aliased (Compose's Canvas.clipRect, clipRoundRect and clipPath).
+    virtual void pushClipRoundRect(const Rect& rect, const CornerRadii& radii, ClipOp op = ClipOp::Intersect) = 0;
+    virtual void pushClipPath(const Path& path, Offset origin, ClipOp op = ClipOp::Intersect) = 0;
     virtual void popClip() = 0;
     // Everything drawn until popTranslation() moves by `by` dp, without a layer: clips set
     // before stay where they are, those set inside move along.

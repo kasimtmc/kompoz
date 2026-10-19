@@ -26,9 +26,6 @@ struct TextStyle;
 class GraphicsLayer;
 class DrawScope;
 
-// How clipPath clips (Compose's ClipOp): to what is inside the path, or to what is outside it.
-enum class ClipOp { Intersect, Difference };
-
 // What withTransform does before the drawing, in order, each inside the one before (Compose's
 // DrawTransform): withTransform([](DrawTransform& t) { t.translate(10, 0); t.rotate(45); }, ...).
 class DrawTransform {
@@ -43,7 +40,7 @@ public:
     void inset(float left, float top, float right, float bottom);
     void inset(float horizontal, float vertical) { inset(horizontal, vertical, horizontal, vertical); }
     void inset(float all) { inset(all, all, all, all); }
-    void clipRect(Offset topLeft, Size size);
+    void clipRect(Offset topLeft, Size size, ClipOp op = ClipOp::Intersect);
     void clipPath(const Path& path, ClipOp op = ClipOp::Intersect);
 
 private:
@@ -117,7 +114,7 @@ public:
     void inset(float horizontal, float vertical, const std::function<void(DrawScope&)>& block) {
         inset(horizontal, vertical, horizontal, vertical, block);
     }
-    void clipRect(Offset topLeft, Size size, const std::function<void(DrawScope&)>& block);
+    void clipRect(Offset topLeft, Size size, const std::function<void(DrawScope&)>& block, ClipOp op = ClipOp::Intersect);
     void rotate(float degrees, const std::function<void(DrawScope&)>& block, std::optional<Offset> pivot = {});
     void rotateRad(float radians, const std::function<void(DrawScope&)>& block, std::optional<Offset> pivot = {});
     void scale(float scaleX, float scaleY, const std::function<void(DrawScope&)>& block,
@@ -125,8 +122,8 @@ public:
     void scale(float scale, const std::function<void(DrawScope&)>& block, std::optional<Offset> pivot = {}) {
         this->scale(scale, scale, block, pivot);
     }
-    // What `block` draws, only inside `path` (or outside it: ClipOp::Difference), any path, its
-    // edge antialiased: drawn in a layer, then what is outside (inside) the path erased (DstOut).
+    // What `block` draws, only inside `path` (or outside it: ClipOp::Difference), any path by its
+    // fill type, its edge anti-aliased.
     void clipPath(const Path& path, const std::function<void(DrawScope&)>& block, ClipOp op = ClipOp::Intersect);
     // Several of the above at once (Compose's withTransform).
     void withTransform(const std::function<void(DrawTransform&)>& transform, const std::function<void(DrawScope&)>& block);

@@ -59,6 +59,8 @@ public:
     void pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform = {}) override;
     void popLayer() override;
     void pushClip(const Rect& rect) override;
+    void pushClipRoundRect(const Rect& rect, const CornerRadii& radii, ClipOp op) override;
+    void pushClipPath(const Path& path, Offset origin, ClipOp op) override;
     void popClip() override;
     void pushTranslation(Offset by) override;
     void popTranslation() override;
@@ -121,18 +123,25 @@ private:
         IRect scissor;
         int chain = -1;
     };
-    // A rounded rect a primitive's coverage is cut to (or to what is outside it): in its own space,
-    // which `toLocal` maps the target's pixels to.
+    // What a primitive's coverage is cut to (or to what is outside it): a rounded rect in its own
+    // space, which `toLocal` maps the target's pixels to; or a path, its polygons in the target's
+    // pixels, filled by the non-zero or even-odd rule, rasterized into the pass's coverage mask
+    // within `region` (the pixels they reach, within the clips around).
     struct ClipElement {
-        float rect[4], radii[4];
+        float rect[4]{}, radii[4]{};
         Projective toLocal;
         bool outside = false;
+        std::shared_ptr<const std::vector<Contour>> polygons;  // a path's (shared by the chains inside it)
+        bool evenOdd = false;
+        IRect region;
     };
     // The clips in effect, outermost first, and their row in this frame's table once a primitive
-    // in them is drawn.
+    // in them is drawn (a chain with paths gets a row for each mask generation it is drawn in).
     struct ClipChain {
         std::vector<ClipElement> elements;
+        bool paths = false;
         int row = -1;
+        uint32_t generation = 0;  // the row's
     };
     // What pushTranslation and pushTransform change: the pixel origin, and the transform after it.
     struct Placement {
@@ -180,6 +189,14 @@ private:
     // pixels, or nothing if the region is empty.
     std::optional<Offset> rasterize(const std::vector<Contour>& contours, IRect region);
     void fillContours(const std::vector<Contour>& contours, bool evenOdd, const Prim& paint);
+    // A path's polygons in the target's pixels (its stroke's outline if `stroke` has a width),
+    // through the current transform.
+    std::vector<Contour> polygonsOf(const Path& path, Offset origin, const PathStroke& stroke);
+    // rasterize() for a primitive about to be added: in the same mask generation as the paths of
+    // the clips it is drawn in.
+    std::optional<Offset> rasterizeInClips(const std::vector<Contour>& contours, IRect region);
+    // A clip in the chain inside the current one: a new chain, the clips it leaves (whole pixels).
+    void pushChain(ClipElement element, const IRect& scissor);
     // A prim painted with `brush` over `area` (dp): its color, or its gradient (at `alpha`), in
     // pixels `enlarged` times.
     Prim painted(const Brush& brush, const Rect& area, float alpha = 1, float enlarged = 1);

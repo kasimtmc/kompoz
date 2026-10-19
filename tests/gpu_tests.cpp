@@ -1154,6 +1154,112 @@ void transformedEdgesAreExact(Gpu& g) {
     CHECK(skippedPlain && !skipped);
 }
 
+// Clips of any shape cut what is drawn in them as that shape covers: a fill clipped to a rounded
+// rect or a path (either fill rule) is the shape filled; clipped to what is outside it, the fill
+// with the shape over it in the background's color; clips inside clips multiply; a path clip
+// turned is the path turned; and the paths of many clips that fill the coverage mask more than
+// once (a new generation of it) are each still where they are.
+void clipsCutAsTheirShapes(Gpu& g) {
+    Color red{0.9f, 0.1f, 0.1f, 1};
+    Rect all{-10, -10, 100, 100}, box{10.3f, 12.6f, 44, 30};
+    CornerRadii radii{12, 3, 0, 20};
+    Path star1 = star(36, 36, 30), star2 = star(36, 36, 30);
+    star2.fillType = Path::FillType::EvenOdd;
+    auto same = [&](const char* what, const std::function<void(GraphicsContext&)>& a, const std::function<void(GraphicsContext&)>& b, int size = 72) {
+        Pixels pa = g.render(size, size, 1, a), pb = g.render(size, size, 1, b);
+        int worst = worstAgainst(pa, [&](int x, int y) { return pb.at(x, y); });
+        CHECK(worst <= 2);
+        if (worst > 2) std::printf("  %s: off by %d at (%g, %g)\n", what, worst, worstAt.x, worstAt.y);
+    };
+    same("rounded rect", [&](GraphicsContext& c) {
+        c.pushClipRoundRect(box, radii);
+        c.fillRoundRect(all, 0, red);
+        c.popClip();
+    }, [&](GraphicsContext& c) { c.fillRoundRect(box, radii, red); });
+    same("outside a rounded rect", [&](GraphicsContext& c) {
+        c.pushClipRoundRect(box, radii, ClipOp::Difference);
+        c.fillRoundRect(all, 0, red);
+        c.popClip();
+    }, [&](GraphicsContext& c) {
+        c.fillRoundRect(all, 0, red);
+        c.fillRoundRect(box, radii, colors::White);
+    });
+    for (const Path* p : {&star1, &star2}) {
+        same("path", [&](GraphicsContext& c) {
+            c.pushClipPath(*p, {});
+            c.fillRoundRect(all, 0, red);
+            c.popClip();
+        }, [&](GraphicsContext& c) { c.drawPath(*p, {}, Brush::solid(red), {}, {}); });
+        same("outside a path", [&](GraphicsContext& c) {
+            c.pushClipPath(*p, {2, 1}, ClipOp::Difference);
+            c.fillRoundRect(all, 0, red);
+            c.popClip();
+        }, [&](GraphicsContext& c) {
+            c.fillRoundRect(all, 0, red);
+            c.drawPath(*p, {2, 1}, Brush::solid(colors::White), {}, {});
+        });
+    }
+    // Inside each other: the coverages multiply.
+    Pixels a = g.render(72, 72, 1, [&](GraphicsContext& c) { c.drawPath(star1, {}, Brush::solid(red), {}, {}); });
+    Pixels b = g.render(72, 72, 1, [&](GraphicsContext& c) { c.fillRoundRect(box, radii, red); });
+    Pixels both = g.render(72, 72, 1, [&](GraphicsContext& c) {
+        c.pushClipPath(star1, {});
+        c.pushClipRoundRect(box, radii);
+        c.fillRoundRect(all, 0, red);
+        c.popClip();
+        c.popClip();
+    });
+    int worst = 0;
+    for (int y = 0; y < 72; ++y)
+        for (int x = 0; x < 72; ++x) {
+            float ca = float(255 - a.at(x, y)[1]) / (255 - 25.5f), cb = float(255 - b.at(x, y)[1]) / (255 - 25.5f);
+            int want = int(std::lround(255 - ca * cb * (255 - 25.5f)));
+            worst = std::max(worst, std::abs(int(both.at(x, y)[1]) - want));
+        }
+    CHECK(worst <= 2);
+    if (worst > 2) std::printf("  clips inside clips: off by %d\n", worst);
+    // Turned: the path turned.
+    Matrix turn = about(36, 36, [](Matrix& m) { m.rotateZ(25); m.scale(1.2f, 0.8f); });
+    same("turned path", [&](GraphicsContext& c) {
+        c.pushTransform(turn);
+        c.pushClipPath(star1, {});
+        c.fillRoundRect(all, 0, red);
+        c.popClip();
+        c.popTransform();
+    }, [&](GraphicsContext& c) {
+        c.pushTransform(turn);
+        c.drawPath(star1, {}, Brush::solid(red), {}, {});
+        c.popTransform();
+    });
+    // Thirty clips each a disc 500 px across, a disc 5 px bigger filled in each (its own coverage
+    // in the same generation as the clip's): two generations of the coverage mask (2048 px
+    // square: sixteen such discs), each as the disc drawn.
+    auto discs = [&](bool clipped) {
+        return [clipped, red](GraphicsContext& c) {
+            Path first;  // (one more first, so that a generation fills up as a clip's path goes in)
+            first.addOval({400, 400, 500, 500});
+            c.drawPath(first, {}, Brush::solid(Color{0.5f, 0.5f, 0.5f, 1}), {}, {});
+            for (int i = 0; i < 30; ++i) {
+                Path disc;
+                float x = float(i % 6) * 90, y = float(i / 6) * 90;
+                disc.addOval({x, y, 500, 500});
+                Color color{float(i) / 30, 0.5f, 1 - float(i) / 30, 1};
+                if (clipped) {
+                    Path bigger;
+                    bigger.addOval({x - 5, y - 5, 510, 510});
+                    c.pushClipPath(disc, {});
+                    c.drawPath(bigger, {}, Brush::solid(color), {}, {});
+                    c.popClip();
+                } else {
+                    c.drawPath(disc, {}, Brush::solid(color), {}, {});
+                }
+            }
+            (void)red;
+        };
+    };
+    same("many clips", discs(true), discs(false), 960);
+}
+
 // Curves cut into lines stay within kTolerance of the curve, in the target's pixels.
 void curvesAreFlattenedClosely() {
     Path circle;
@@ -1259,6 +1365,7 @@ int main() {
             colorFiltersMatchApply(g);
             transformsCarryEverything(g);
             transformedEdgesAreExact(g);
+            clipsCutAsTheirShapes(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
             std::printf("%d checks, %d failed\n", checks, failures);

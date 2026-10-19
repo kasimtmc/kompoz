@@ -4541,6 +4541,48 @@ TEST(display_list_follows_transforms) {
     list.end();
 }
 
+// A clip inside its shape keeps what it clips from damaging anything past the shape; one outside
+// it doesn't; replayed, each is pushed again as it was.
+TEST(display_list_follows_clips_of_any_shape) {
+    testing::FakeTextMeasurer measurer;
+    DisplayList list(measurer);
+    int node = 0;
+    Path tri;
+    tri.moveTo(50, 0);
+    tri.lineTo(100, 80);
+    tri.lineTo(0, 80);
+    tri.close();
+    auto frame = [&](Color color, ClipOp op, bool rounded) {
+        list.begin({400, 400}, 1);
+        list.beginNode(&node);
+        if (rounded) list.pushClipRoundRect({100, 100, 60, 40}, 12, op);
+        else list.pushClipPath(tri, {200, 200}, op);
+        list.fillRoundRect({0, 0, 400, 400}, 0, color);
+        list.popClip();
+        list.endNode();
+        return list.end();
+    };
+    Color red{1, 0, 0, 1}, blue{0, 0, 1, 1};
+    frame(red, ClipOp::Intersect, false);
+    auto d = frame(blue, ClipOp::Intersect, false);  // only where the triangle is (200..300, 200..280)
+    CHECK(d && d->x >= 196 && d->x <= 200 && d->right() >= 300 && d->right() <= 304 && d->bottom() <= 284);
+    frame(red, ClipOp::Intersect, true);
+    d = frame(blue, ClipOp::Intersect, true);
+    CHECK(d && d->x >= 96 && d->right() <= 164 && d->y >= 96 && d->bottom() <= 144);
+    frame(red, ClipOp::Difference, true);
+    d = frame(blue, ClipOp::Difference, true);  // outside it: anywhere
+    CHECK(d && d->x <= 0 && d->right() >= 400);
+    testing::RecordingCanvas replayed;
+    list.replay(replayed);
+    CHECK(replayed.clipShapes.size() == 1 && replayed.clipShapes[0].op == ClipOp::Difference && !replayed.clipShapes[0].path &&
+          replayed.clipShapes[0].radii == CornerRadii(12));
+    frame(red, ClipOp::Intersect, false);
+    testing::RecordingCanvas withPath;
+    list.replay(withPath);
+    CHECK(withPath.clipShapes.size() == 1 && withPath.clipShapes[0].path && *withPath.clipShapes[0].path == tri &&
+          withPath.clipShapes[0].op == ClipOp::Intersect && withPath.clipShapes[0].bounds.x == 200);
+}
+
 TEST(lazy_column_items_keep_saveable_state_when_scrolled_away) {
     LazyListState list;
     ComposeTestRule rule([&] {
@@ -10171,7 +10213,7 @@ TEST(paths_take_arcs_and_draw_scopes_clip_to_paths) {
     curves.translate({5, -5});  // control points too
     CHECK(at({curves.commands()[1].x1, curves.commands()[1].y1}, 25, 5) && at({curves.commands()[2].x2, curves.commands()[2].y2}, 35, 25) &&
           at(end(curves), 35, 15));
-    // Drawing: an oval; clipped to a triangle (in a layer, what is outside it erased — or inside);
+    // Drawing: an oval; clipped to a triangle, inside it or outside (the context's clip, no layer);
     // transforms in order.
     Path triangle;
     triangle.moveTo(50, 20);
@@ -10195,11 +10237,14 @@ TEST(paths_take_arcs_and_draw_scopes_clip_to_paths) {
     });
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
-    // (The whole area but the triangle erased; then the triangle.)
-    CHECK(canvas.paths.size() == 3 && sameRect(canvas.paths[0], {10, 10, 80, 40}) && sameRect(canvas.paths[1], {0, 0, 100, 100}) &&
-          sameRect(canvas.paths[2], {20, 20, 60, 60}));
-    CHECK((canvas.pathBlends == std::vector<BlendMode>{BlendMode::SrcOver, BlendMode::DstOut, BlendMode::DstOut}));
-    CHECK(canvas.layerBounds.size() == 2 && canvas.translations.size() == 1 && near(canvas.translations[0].x, 10) &&
+    CHECK(canvas.paths.size() == 1 && sameRect(canvas.paths[0], {10, 10, 80, 40}));
+    CHECK(canvas.clipShapes.size() == 2);
+    if (canvas.clipShapes.size() == 2) {  // the triangle where it is, then outside it
+        CHECK(canvas.clipShapes[0].path && canvas.clipShapes[0].op == ClipOp::Intersect && sameRect(canvas.clipShapes[0].bounds, {20, 20, 60, 60}));
+        CHECK(canvas.clipShapes[1].path && canvas.clipShapes[1].op == ClipOp::Difference);
+    }
+    CHECK(canvas.rects.size() == 4 && canvas.layers == 0);  // the two clipped fills, the turned one, the inset one
+    CHECK(canvas.translations.size() == 1 && near(canvas.translations[0].x, 10) &&
           near(canvas.translations[0].y, 20) && canvas.transforms.size() == 1);
     if (canvas.transforms.size() == 1) {  // turned 45 degrees about the middle, inside the translation
         Offset right = canvas.transforms[0].map(Offset{60, 50});
@@ -23882,6 +23927,8 @@ TEST(shadow_default_draws_fading_rings_and_display_list_damage_reaches_the_blur)
         void pushColorFilter(const ColorFilter&) override {}
         void popColorFilter() override {}
         void pushClip(const Rect&) override {}
+        void pushClipRoundRect(const Rect&, const CornerRadii&, ClipOp) override {}
+        void pushClipPath(const Path&, Offset, ClipOp) override {}
         void popClip() override {}
         void pushTranslation(Offset) override {}
         void popTranslation() override {}

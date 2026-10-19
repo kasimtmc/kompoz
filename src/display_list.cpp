@@ -290,6 +290,32 @@ void DisplayList::pushClip(const Rect& rect) {
     states_.push_back({s.m, area, uint32_t(recording_.size() - 1)});
 }
 
+void DisplayList::pushClipRoundRect(const Rect& rect, const CornerRadii& radii, ClipOp op) {
+    State s = states_.back();
+    // Inside: where the rect is; outside: anywhere the clips around it leave.
+    Rect area = op == ClipOp::Intersect ? grown(s.m.map(rect), pixel_).intersect(s.clip) : s.clip;
+    Command& c = add(Kind::PushClip);
+    c.rect = rect;
+    c.radii = radii;
+    c.f1 = 1;
+    c.flag = op == ClipOp::Difference;
+    c.bounds = area;
+    states_.push_back({s.m, area, uint32_t(recording_.size() - 1)});
+}
+
+void DisplayList::pushClipPath(const Path& path, Offset origin, ClipOp op) {
+    State s = states_.back();
+    Rect b = path.bounds();
+    Rect area = op == ClipOp::Intersect ? grown(s.m.map({b.x + origin.x, b.y + origin.y, b.width, b.height}), pixel_).intersect(s.clip) : s.clip;
+    Command& c = add(Kind::PushClip);
+    c.path = path;
+    c.p1 = origin;
+    c.f1 = 2;
+    c.flag = op == ClipOp::Difference;
+    c.bounds = area;
+    states_.push_back({s.m, area, uint32_t(recording_.size() - 1)});
+}
+
 void DisplayList::pushTranslation(Offset by) {
     State s = states_.back();
     Projective moved = compose(s.m, Projective{{1, 0, by.x, 0, 1, by.y, 0, 0, 1}});
@@ -433,6 +459,8 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
             if (c.kind == Kind::PushLayer && !c.path.isEmpty()) canvas.pushOutlineLayer(c.rect, c.path, c.f2, c.transform);
             else if (c.kind == Kind::PushLayer && (c.p2.x > 0 || c.p2.y > 0)) canvas.pushBlurLayer(c.rect, c.p2.x, c.p2.y);
             else if (c.kind == Kind::PushLayer) canvas.pushLayer(c.rect, c.radii, c.f2, c.transform);
+            else if (c.kind == Kind::PushClip && c.f1 == 1) canvas.pushClipRoundRect(c.rect, c.radii, c.flag ? ClipOp::Difference : ClipOp::Intersect);
+            else if (c.kind == Kind::PushClip && c.f1 == 2) canvas.pushClipPath(c.path, c.p1, c.flag ? ClipOp::Difference : ClipOp::Intersect);
             else if (c.kind == Kind::PushClip) canvas.pushClip(c.rect);
             else if (c.kind == Kind::PushBlend) canvas.pushBlendMode(BlendMode(int(c.f1)));
             else if (c.kind == Kind::PushFilter) canvas.pushColorFilter(*c.filter);

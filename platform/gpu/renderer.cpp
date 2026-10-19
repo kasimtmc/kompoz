@@ -57,7 +57,7 @@ Pipeline& Renderer::pipeline(Format target, const BlendState& blend) {
     desc.fragment = &kFragment;
     for (uint32_t i = 0; i < 12; ++i) desc.instanceAttributes.push_back({i, VertexFormat::Float4, i * 16});
     desc.instanceStride = sizeof(Prim);
-    desc.textures = 4;
+    desc.textures = 5;
     desc.blend = blend;
     desc.target = target;
     pipelines_.emplace_back(key, device_.createPipeline(desc));
@@ -158,19 +158,51 @@ std::optional<Rect> Renderer::mapped(float x0, float y0, float x1, float y1) con
 
 int Renderer::clipRow(int chain) {
     ClipChain& c = clipChains_[size_t(chain)];
-    if (c.row >= 0) return c.row;
+    MaskShelf& shelf = passes_[targets_.back().pass].shelf;
+    if (c.row >= 0 && (!c.paths || c.generation == shelf.generation)) return c.row;
+    // Its paths in this generation's coverage mask, all of them (one that starts a new generation
+    // starts them all over in it).
+    std::vector<Offset> origins(c.elements.size());
+    for (int attempt = 0; attempt < 4; ++attempt) {
+        uint32_t generation = shelf.generation;
+        for (size_t i = 0; i < c.elements.size(); ++i)
+            if (c.elements[i].polygons) origins[i] = rasterize(*c.elements[i].polygons, c.elements[i].region).value_or(Offset{});
+        if (shelf.generation == generation) break;
+    }
+    c.generation = shelf.generation;
     c.row = int(stops_.size() / (kStopsWidth * 4));
     size_t at = stops_.size();
     stops_.resize(at + kStopsWidth * 4, 0.f);
     for (size_t i = 0; i < c.elements.size() && i < kStopsWidth / 6; ++i) {  // six texels each (see clipCoverage)
         const ClipElement& e = c.elements[i];
         float* t = &stops_[at + i * 24];
+        t[0] = e.polygons ? 1.f : 0.f;
         t[1] = e.outside ? 1.f : 0.f;
-        std::copy(std::begin(e.rect), std::end(e.rect), t + 4);
-        std::copy(std::begin(e.radii), std::end(e.radii), t + 8);
-        for (int r = 0; r < 3; ++r) std::copy(e.toLocal.m + r * 3, e.toLocal.m + r * 3 + 3, t + 12 + r * 4);
+        t[2] = e.evenOdd ? 1.f : 0.f;
+        if (e.polygons) {
+            t[4] = origins[i].x, t[5] = origins[i].y;
+            const IRect& r = e.region;
+            t[8] = float(r.x), t[9] = float(r.y), t[10] = float(r.x + r.width), t[11] = float(r.y + r.height);
+        } else {
+            std::copy(std::begin(e.rect), std::end(e.rect), t + 4);
+            std::copy(std::begin(e.radii), std::end(e.radii), t + 8);
+            for (int r = 0; r < 3; ++r) std::copy(e.toLocal.m + r * 3, e.toLocal.m + r * 3 + 3, t + 12 + r * 4);
+        }
     }
     return c.row;
+}
+
+std::optional<Offset> Renderer::rasterizeInClips(const std::vector<Contour>& contours, IRect region) {
+    int chain = clips_.empty() ? -1 : clips_.back().chain;
+    MaskShelf& shelf = passes_[targets_.back().pass].shelf;
+    std::optional<Offset> origin;
+    for (int attempt = 0; attempt < 4; ++attempt) {
+        if (chain >= 0) clipRow(chain);
+        uint32_t generation = shelf.generation;
+        origin = rasterize(contours, region);
+        if (shelf.generation == generation) break;  // (else in a new one: the clips' paths go there too)
+    }
+    return origin;
 }
 
 void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Mask mask, Texture* texture1) {
@@ -381,6 +413,8 @@ void Renderer::execute(Pass& pass) {
             readsTarget = readsTarget || planFor(b.blend, b.opaque).readsTarget;
         }
         if (stopsTexture_) reads.push_back(stopsTexture_.get());
+        // (The clips' paths are read from the coverage mask by any primitive in them.)
+        if (masked && std::find(reads.begin(), reads.end(), mask_.get()) == reads.end()) reads.push_back(mask_.get());
         if (readsTarget) {
             if (!dstCopy_ || dstCopy_->width() < pass.target->width() || dstCopy_->height() < pass.target->height() ||
                 dstCopy_->format() != pass.target->format())
@@ -413,6 +447,7 @@ void Renderer::execute(Pass& pass) {
                 device_.setTexture(1, *b.texture1, Sampler{});
             device_.setTexture(2, stopsTexture_ ? *stopsTexture_ : *white_, nearest);
             device_.setTexture(3, readsTarget ? *dstCopy_ : *white_, nearest);
+            device_.setTexture(4, masked ? *mask_ : *white_, nearest);
             if (!plan.readsTarget) {
                 device_.setScissor(b.scissor);
                 device_.draw({prims.buffer, prims.offset + uint64_t(b.first) * sizeof(Prim)}, 6, b.count);
@@ -732,7 +767,7 @@ void Renderer::fillContours(const std::vector<Contour>& contours, bool evenOdd, 
     if (x0 > x1) return;
     IRect bounds{int(std::floor(x0)), int(std::floor(y0)), int(std::ceil(x1)) - int(std::floor(x0)), int(std::ceil(y1)) - int(std::floor(y0))};
     IRect region = intersect(bounds, scissor());
-    std::optional<Offset> origin = rasterize(contours, region);
+    std::optional<Offset> origin = rasterizeInClips(contours, region);
     if (!origin) return;
     Prim p = paint;
     set(p.bounds, float(region.x), float(region.y), float(region.x + region.width), float(region.y + region.height));
@@ -740,8 +775,7 @@ void Renderer::fillContours(const std::vector<Contour>& contours, bool evenOdd, 
     add(PATH, p, nullptr, false, Mask::Texture0);
 }
 
-void Renderer::drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& area, const PathStroke& stroke) {
-    if (path.isEmpty()) return;
+std::vector<Contour> Renderer::polygonsOf(const Path& path, Offset origin, const PathStroke& stroke) {
     PathPlacement place{origin, scale, {ox_, oy_}};
     bool transformed = !transform_.identity();
     if (transformed) {
@@ -754,14 +788,16 @@ void Renderer::drawPath(const Path& path, Offset origin, const Brush& brush, con
         place.tolerance = kTolerance / std::clamp(most, 1.f, 64.f);
     }
     std::vector<Contour> contours = flattenPath(path.commands(), place);
-    bool evenOdd = false;
-    if (stroke.width > 0)
-        contours = strokeOutline(contours, stroke.width * scale, stroke.cap, stroke.join, stroke.miter, place.tolerance);
-    else
-        evenOdd = path.fillType == Path::FillType::EvenOdd;
+    if (stroke.width > 0) contours = strokeOutline(contours, stroke.width * scale, stroke.cap, stroke.join, stroke.miter, place.tolerance);
+    return transformed ? project(contours, transform_) : contours;
+}
+
+void Renderer::drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& area, const PathStroke& stroke) {
+    if (path.isEmpty()) return;
+    std::vector<Contour> contours = polygonsOf(path, origin, stroke);
+    bool evenOdd = stroke.width <= 0 && path.fillType == Path::FillType::EvenOdd;
     Prim paint = painted(brush, area);
-    if (transformed) {
-        contours = project(contours, transform_);
+    if (!transform_.identity()) {
         if (paint.paint[0] != 0) {  // a gradient: worked out where each pixel is in the path's space
             Projective back = transform_.inverse();
             set(paint.radii, back.m[0], back.m[1], back.m[2], 0);
@@ -812,6 +848,51 @@ void Renderer::pushClip(const Rect& r) {
     }
     if (!clips_.empty()) clip.scissor = intersect(clip.scissor, clips_.back().scissor);
     clips_.push_back(clip);
+}
+
+void Renderer::pushChain(ClipElement element, const IRect& scissor) {
+    ClipChain chain;
+    int outer = clips_.empty() ? -1 : clips_.back().chain;
+    if (outer >= 0) chain.elements = clipChains_[size_t(outer)].elements, chain.paths = clipChains_[size_t(outer)].paths;
+    chain.paths = chain.paths || element.polygons;
+    chain.elements.push_back(std::move(element));
+    clipChains_.push_back(std::move(chain));
+    clips_.push_back({clips_.empty() ? scissor : intersect(scissor, clips_.back().scissor), int(clipChains_.size()) - 1});
+}
+
+void Renderer::pushClipRoundRect(const Rect& r, const CornerRadii& radii, ClipOp op) {
+    if (op == ClipOp::Intersect && radii.max() <= 0) return pushClip(r);
+    float x0 = r.x * scale - ox_, y0 = r.y * scale - oy_, x1 = r.right() * scale - ox_, y1 = r.bottom() * scale - oy_;
+    float half = std::max(0.f, std::min(x1 - x0, y1 - y0) / 2);
+    auto px = [&](float v) { return std::clamp(v * scale, 0.f, half); };
+    ClipElement e;
+    set(e.rect, x0, y0, x1, y1);
+    set(e.radii, px(radii.topLeft), px(radii.topRight), px(radii.bottomRight), px(radii.bottomLeft));
+    e.toLocal = transform_.inverse();
+    e.outside = op == ClipOp::Difference;
+    // Inside: the pixels it reaches; outside: all the clips around it leave.
+    IRect reach = scissor();
+    if (op == ClipOp::Intersect)
+        if (std::optional<Rect> on = mapped(x0, y0, x1, y1))
+            reach = {int(std::floor(on->x)), int(std::floor(on->y)), int(std::ceil(on->right())) - int(std::floor(on->x)),
+                     int(std::ceil(on->bottom())) - int(std::floor(on->y))};
+    pushChain(std::move(e), reach);
+}
+
+void Renderer::pushClipPath(const Path& path, Offset origin, ClipOp op) {
+    auto polygons = std::make_shared<std::vector<Contour>>(polygonsOf(path, origin, {}));
+    float l = 1e30f, t = 1e30f, r = -1e30f, b = -1e30f;
+    for (const Contour& c : *polygons)
+        for (Offset q : c.points) l = std::min(l, q.x), t = std::min(t, q.y), r = std::max(r, q.x), b = std::max(b, q.y);
+    IRect around = scissor();
+    IRect region = l > r ? IRect{} : intersect({int(std::floor(l)), int(std::floor(t)), int(std::ceil(r)) - int(std::floor(l)),
+                                                 int(std::ceil(b)) - int(std::floor(t))}, around);
+    ClipElement e;
+    e.polygons = std::move(polygons);
+    e.evenOdd = path.fillType == Path::FillType::EvenOdd;
+    e.region = region;
+    e.outside = op == ClipOp::Difference;
+    pushChain(std::move(e), op == ClipOp::Intersect ? region : around);
 }
 
 void Renderer::popClip() {
@@ -898,7 +979,7 @@ void Renderer::popLayer() {
     std::optional<Offset> outline;
     if (layer.outline) {
         std::vector<Contour> contours = flattenPath(layer.outline->commands(), {{0, 0}, scale * res, {-b.x, -b.y}});
-        outline = rasterize(contours, layer.rect);
+        outline = rasterizeInClips(contours, layer.rect);
         if (!outline) return;
         square = true;  // (its pixels, cut by the mask)
     }

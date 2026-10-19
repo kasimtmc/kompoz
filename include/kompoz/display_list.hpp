@@ -60,6 +60,8 @@ public:
     void pushBlurLayer(const Rect& bounds, float radiusX, float radiusY) override;
     void popLayer() override;
     void pushClip(const Rect& rect) override;
+    void pushClipRoundRect(const Rect& rect, const CornerRadii& radii, ClipOp op) override;
+    void pushClipPath(const Path& path, Offset origin, ClipOp op) override;
     void pushBlendMode(BlendMode mode) override;
     void popBlendMode() override;
     void pushColorFilter(const ColorFilter& filter) override;
@@ -89,11 +91,11 @@ private:
     struct Command {
         Kind kind{};
         Rect rect, rect2;     // the shape; an image's source, a brush's area
-        float f1 = 0, f2 = 0, f3 = 0;  // width, angles, alpha
+        float f1 = 0, f2 = 0, f3 = 0;  // width, angles, alpha; a clip's kind (0 a rect, 1 a rounded rect, 2 a path)
         CornerRadii radii;             // a rounded rect's, a layer's
         Color color;
         Offset p1, p2;
-        bool flag = false;    // rtl, round cap
+        bool flag = false;    // rtl, round cap; a clip's ClipOp::Difference
         std::string text;
         Font font;
         ImageVector vector;

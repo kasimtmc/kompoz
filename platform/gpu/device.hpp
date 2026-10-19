@@ -96,7 +96,7 @@ struct BlendState {
 // shaders), and one buffer of per-instance attributes (no per-vertex ones: the vertex shader
 // makes each instance's vertices from the vertex index).
 constexpr size_t kMaxUniforms = 128;
-constexpr int kMaxTextures = 4;
+constexpr int kMaxTextures = 5;
 struct PipelineDesc {
     const ShaderCode* vertex = nullptr;
     const ShaderCode* fragment = nullptr;
