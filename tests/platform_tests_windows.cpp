@@ -206,7 +206,24 @@ void uiaBridgeServesTheTree() {
         }
         return ids;
     };
-    CHECK((childIds(window.p) == std::vector<std::string>{"OK", "Agree", "Name", "Volume", "List", "Password", "Tab", "Title", "Card"}));
+    {
+        // The window's own frame (its title bar, on Windows) aside.
+        std::vector<std::string> ids;
+        IUIAutomationElement* child = nullptr;
+        walker->GetFirstChildElement(window.p, &child);
+        while (child) {
+            CONTROLTYPEID type = 0;
+            child->get_CurrentControlType(&type);
+            if (type != UIA_TitleBarControlTypeId && type != UIA_MenuBarControlTypeId) ids.push_back(idOf(child));
+            IUIAutomationElement* next = nullptr;
+            walker->GetNextSiblingElement(child, &next);
+            child->Release();
+            child = next;
+        }
+        CHECK((ids == std::vector<std::string>{"OK", "Agree", "Name", "Volume", "List", "Password", "Tab", "Title", "Card"}));
+        if (ids.size() != 9)
+            for (const auto& id : ids) std::printf("    child: [%s]\n", id.c_str());
+    }
     // Each node by its name, walked to (Wine has no FindFirst).
     std::function<IUIAutomationElement*(IUIAutomationElement*, const std::string&)> search = [&](IUIAutomationElement* parent,
                                                                                                  const std::string& wanted) {
