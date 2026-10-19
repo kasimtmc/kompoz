@@ -515,6 +515,11 @@ bir de baştan çizip pikselleri karşılaştırır (fark varsa loglar), `KOMPOZ
 8. Kütüphanenin kendi metinleri (`LocalStrings`) yalnız İngilizce ve Türkçe; başka dildeki bir uygulama kendi
    `Strings`'ini verir.
 
+## Katkı
+
+Hata bildirimleri, düzeltmeler ve başka platformlara uyarlamalar memnuniyetle karşılanır; bkz.
+[CONTRIBUTING.tr.md](CONTRIBUTING.tr.md). Mac'iniz varsa, en çok yardım gereken yer macOS ve iOS uyarlaması.
+
 ## Lisans
 
 Kompoz [Apache Lisansı 2.0](LICENSE) ile lisanslıdır; bkz. [NOTICE](NOTICE). Jetpack Compose'un ve Material Color

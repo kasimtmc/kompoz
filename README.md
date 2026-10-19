@@ -519,6 +519,11 @@ that looks the same) is neither drawn nor shown. `KOMPOZ_DAMAGE_SHOW=1` outlines
 8. The library's own texts (`LocalStrings`) come in English and Turkish only; an app in another language provides
    its own `Strings`.
 
+## Contributing
+
+Bug reports, fixes and ports are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). If you have a Mac, the macOS and iOS
+port is where help is needed most.
+
 ## License
 
 Kompoz is licensed under the [Apache License, Version 2.0](LICENSE); see [NOTICE](NOTICE). It follows the behavior

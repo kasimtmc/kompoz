@@ -1,0 +1,17 @@
+name: Feature request
+description: A Compose API Kompoz lacks, or something new (you may write in Turkish too).
+labels: [enhancement]
+body:
+  - type: input
+    id: compose
+    attributes:
+      label: Compose counterpart
+      description: The Jetpack Compose API this corresponds to, if any.
+      placeholder: e.g. Modifier.onPlaced, SegmentedButton
+  - type: textarea
+    id: what
+    attributes:
+      label: What it should do
+      description: How you would use it, with a short example if you can.
+    validations:
+      required: true

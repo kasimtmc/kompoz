@@ -1,0 +1,35 @@
+name: Bug report
+description: Something doesn't work as it should (you may write in Turkish too).
+labels: [bug]
+body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      multiple: true
+      options: [Linux, Windows, macOS, Android, Web, iOS]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Kompoz version or commit
+      placeholder: 0.1.1, or a commit hash
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: Code that shows it
+      description: A few lines are best; a ComposeTestRule test is ideal.
+      render: cpp
+  - type: textarea
+    id: log
+    attributes:
+      label: Output or screenshots
+      description: Compiler errors, the app's log (KOMPOZ_TRACE=1 for recompositions), screenshots.
