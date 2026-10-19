@@ -105,7 +105,9 @@ ImageBitmap decodeWithWic(const std::vector<uint8_t>& bytes, const ImageRequestS
 #endif
 
 #ifdef KOMPOZ_TURBOJPEG
-// libjpeg-turbo scales by 1/2, 1/4 or 1/8 as it decodes (and much faster for it).
+// libjpeg-turbo scales by 1/2, 1/4 or 1/8 as it decodes (and much faster for it). Its TurboJPEG 3
+// API where it has it (3.0 and later), else the one before.
+#ifdef KOMPOZ_TURBOJPEG3
 ImageBitmap decodeJpeg(const std::vector<uint8_t>& bytes, const ImageRequestSize& size) {
     tjhandle tj = tj3Init(TJINIT_DECOMPRESS);
     if (!tj) return {};
@@ -128,6 +130,33 @@ ImageBitmap decodeJpeg(const std::vector<uint8_t>& bytes, const ImageRequestSize
     tj3Destroy(tj);
     return scaleDown(image, rest);
 }
+#else
+ImageBitmap decodeJpeg(const std::vector<uint8_t>& bytes, const ImageRequestSize& size) {
+    tjhandle tj = tjInitDecompress();
+    if (!tj) return {};
+    ImageBitmap image;
+    int rest = 1, w = 0, h = 0, subsampling = 0, colorspace = 0;
+    auto* data = const_cast<unsigned char*>(bytes.data());  // (2.x takes them as not const)
+    auto length = static_cast<unsigned long>(bytes.size());
+    if (tjDecompressHeader3(tj, data, length, &w, &h, &subsampling, &colorspace) == 0) {
+        int sample = w > 0 && h > 0 ? imageSampleSize(w, h, size) : 1;
+        // The smallest of its 1/n factors that the sample allows (it has 1/2, 1/4 and 1/8).
+        tjscalingfactor factor{1, 1};
+        int count = 0;
+        if (tjscalingfactor* factors = tjGetScalingFactors(&count))
+            for (int i = 0; i < count; ++i)
+                if (factors[i].num == 1 && factors[i].denom <= std::min(sample, 8) && factors[i].denom > factor.denom)
+                    factor = factors[i];
+        rest = sample / factor.denom;
+        int sw = TJSCALED(w, factor), sh = TJSCALED(h, factor);
+        std::vector<uint8_t> pixels(size_t(std::max(sw, 0)) * size_t(std::max(sh, 0)) * 4);
+        if (sw > 0 && sh > 0 && tjDecompress2(tj, data, length, pixels.data(), sw, sw * 4, sh, TJPF_RGBA, 0) == 0)
+            image = ImageBitmap::fromPixels(sw, sh, std::move(pixels));
+    }
+    tjDestroy(tj);
+    return scaleDown(image, rest);
+}
+#endif
 #endif
 
 #ifdef KOMPOZ_WEBP
