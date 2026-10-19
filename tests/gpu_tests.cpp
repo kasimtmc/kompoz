@@ -540,6 +540,127 @@ void pathsAreCoveredExactly(Gpu& g) {
     CHECK(near(p.at(20, 29), 255, 255, 255));
 }
 
+// How much of each pixel of a w x h picture polygons (each closed) cover by the non-zero rule:
+// along 64 lines across each row of pixels, exactly where each line is inside.
+std::vector<float> coverageOf(const std::vector<gpu::Contour>& polygons, int w, int h) {
+    std::vector<float> out(size_t(w) * size_t(h), 0.f);
+    std::vector<std::pair<float, int>> crossings;
+    for (int y = 0; y < h; ++y)
+        for (int j = 0; j < 64; ++j) {
+            float line = float(y) + (float(j) + 0.5f) / 64;
+            crossings.clear();
+            for (const gpu::Contour& c : polygons)
+                for (size_t i = 0, n = c.points.size(); i < n; ++i) {
+                    Offset a = c.points[i], b = c.points[(i + 1) % n];
+                    if ((a.y <= line) != (b.y <= line)) crossings.push_back({a.x + (b.x - a.x) * (line - a.y) / (b.y - a.y), b.y > a.y ? 1 : -1});
+                }
+            std::sort(crossings.begin(), crossings.end());
+            int winding = 0;
+            for (size_t k = 0; k + 1 < crossings.size(); ++k) {
+                winding += crossings[k].second;
+                if (winding == 0) continue;
+                float from = std::max(crossings[k].first, 0.f), to = std::min(crossings[k + 1].first, float(w));
+                for (int x = int(std::floor(from)); x < w && float(x) < to; ++x)
+                    out[size_t(y) * size_t(w) + size_t(x)] += (std::min(to, float(x + 1)) - std::max(from, float(x))) / 64;
+            }
+        }
+    return out;
+}
+
+// A stroke covers each pixel as much as what its outline encloses does by the non-zero rule:
+// round a curve, along a gently bending line, its outline doesn't cross itself
+// on the inside of the turns, which would count twice there and darken the inner edge.
+void strokesCoverOnce(Gpu& g) {
+    Path ring, wave;
+    ring.addOval({6, 6, 40, 40});
+    wave.moveTo(52, 40);
+    wave.cubicTo(62, 4, 76, 60, 90, 12);
+    struct Stroke {
+        const Path* path;
+        float width;
+    } strokes[] = {{&ring, 5}, {&wave, 7}};
+    Pixels p = g.render(96, 52, 1, [&](GraphicsContext& c) {
+        for (const Stroke& k : strokes) c.drawPath(*k.path, {}, Brush::solid(Color{1, 0, 0, 1}), {}, {k.width, StrokeCap::Butt, StrokeJoin::Round, 4});
+    });
+    std::vector<gpu::Contour> outline;
+    for (const Stroke& k : strokes) {
+        std::vector<gpu::Contour> o = gpu::strokeOutline(gpu::flattenPath(k.path->commands(), {{0, 0}, 1, {0, 0}}), k.width, StrokeCap::Butt,
+                                                         StrokeJoin::Round, 4);
+        outline.insert(outline.end(), o.begin(), o.end());
+    }
+    std::vector<float> want = coverageOf(outline, p.width, p.height);
+    int worst = 0, wx = 0, wy = 0;
+    for (int y = 0; y < p.height; ++y)
+        for (int x = 0; x < p.width; ++x) {
+            int d = std::abs(int(p.at(x, y)[1]) - int(std::lround(255 * (1 - std::min(want[size_t(y * p.width + x)], 1.f)))));
+            if (d > worst) worst = d, wx = x, wy = y;
+        }
+    CHECK(worst <= 3);
+    if (worst > 3) std::printf("  strokes: off by %d at (%d, %d)\n", worst, wx, wy);
+    // Sharp turns, thick, beveled: a zigzag covers what its segments' rects and its bevels'
+    // triangles do (its inner offsets meet within the segments, each folding back past the other).
+    auto sharp = [&](const std::vector<Offset>& zig, int tolerance) {
+        Path zigPath;
+        zigPath.moveTo(zig[0].x, zig[0].y);
+        for (size_t i = 1; i < zig.size(); ++i) zigPath.lineTo(zig[i].x, zig[i].y);
+        const float half = 5;
+        Pixels z = g.render(48, 52, 1, [&](GraphicsContext& c) {
+            c.drawPath(zigPath, {}, Brush::solid(Color{1, 0, 0, 1}), {}, {2 * half, StrokeCap::Butt, StrokeJoin::Bevel, 4});
+        });
+        std::vector<gpu::Contour> pieces;
+        auto unit = [](Offset a, Offset b) {
+            float l = std::hypot(b.x - a.x, b.y - a.y);
+            return Offset{(b.x - a.x) / l, (b.y - a.y) / l};
+        };
+        for (size_t i = 0; i + 1 < zig.size(); ++i) {
+            Offset d = unit(zig[i], zig[i + 1]), n{d.y * half, -d.x * half};
+            pieces.push_back({{{zig[i].x + n.x, zig[i].y + n.y}, {zig[i + 1].x + n.x, zig[i + 1].y + n.y},
+                               {zig[i + 1].x - n.x, zig[i + 1].y - n.y}, {zig[i].x - n.x, zig[i].y - n.y}},
+                              true});
+            if (i == 0) continue;
+            Offset in = unit(zig[i - 1], zig[i]);
+            float side = in.x * d.y - in.y * d.x > 0 ? 1.f : -1.f;  // the outside of the turn: to the left of travel when turning right
+            Offset a{zig[i].x + side * in.y * half, zig[i].y - side * in.x * half}, b{zig[i].x + side * d.y * half, zig[i].y - side * d.x * half};
+            pieces.push_back({{zig[i], a, b}, true});
+        }
+        std::vector<float> want = coverageOf(pieces, z.width, z.height);
+        int worstZig = 0, zx = 0, zy = 0;
+        for (int y = 0; y < z.height; ++y)
+            for (int x = 0; x < z.width; ++x) {
+                int d = std::abs(int(z.at(x, y)[1]) - int(std::lround(255 * (1 - std::min(want[size_t(y * z.width + x)], 1.f)))));
+                if (d > worstZig) worstZig = d, zx = x, zy = y;
+            }
+        CHECK(worstZig <= tolerance);
+        if (worstZig > tolerance) std::printf("  sharp turns: off by %d at (%d, %d)\n", worstZig, zx, zy);
+    };
+    sharp({{8, 46}, {16, 8}, {22, 46}, {32, 8}, {40, 46}}, 3);
+    // Narrow Vs of short legs, either way round, and a thin triangle stroked either way round:
+    // there the inner offsets would meet past the segments, so the outline goes through the
+    // vertices; every point of it lies in what the stroke covers (within half its width of a
+    // segment). (Its coverage is heavier where both legs' ends overlap: what a path covers twice
+    // counts twice in a pixel its edge crosses, as in FreeType's rasterizer.)
+    auto within = [](std::vector<Offset> pts, bool closed) {
+        std::vector<gpu::Contour> outline = gpu::strokeOutline({{pts, closed}}, 10, StrokeCap::Butt, StrokeJoin::Bevel, 4);
+        if (closed) pts.push_back(pts.front());
+        float farthest = 0;
+        for (const gpu::Contour& c : outline)
+            for (Offset q : c.points) {
+                float nearest = 1e30f;
+                for (size_t i = 0; i + 1 < pts.size(); ++i) {
+                    Offset a = pts[i], b = pts[i + 1];
+                    float t = std::clamp(((q.x - a.x) * (b.x - a.x) + (q.y - a.y) * (b.y - a.y)) / ((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y)), 0.f, 1.f);
+                    nearest = std::min(nearest, std::hypot(q.x - (a.x + (b.x - a.x) * t), q.y - (a.y + (b.y - a.y) * t)));
+                }
+                farthest = std::max(farthest, nearest);
+            }
+        return !outline.empty() && farthest <= 5.001f;
+    };
+    CHECK(within({{17, 30}, {20, 8}, {22, 30}}, false));
+    CHECK(within({{22, 30}, {20, 8}, {17, 30}}, false));
+    CHECK(within({{17, 40}, {20, 6}, {23, 40}}, true));
+    CHECK(within({{23, 40}, {20, 6}, {17, 40}}, true));
+}
+
 // Every pixel of a gradient fill is Brush::colorAt at its middle (over white): each kind, each
 // tile mode, hard stops, uneven stops, see-through ones.
 void gradientsMatchColorAt(Gpu& g) {
@@ -1063,6 +1184,7 @@ int main() {
             layerAlphaIsExact(g);
             clipsAndTranslationsAreExact(g);
             pathsAreCoveredExactly(g);
+            strokesCoverOnce(g);
             curvesAreFlattenedClosely();
             projectionsAreExact();
             gradientsMatchColorAt(g);

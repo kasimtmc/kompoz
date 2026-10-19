@@ -45,20 +45,35 @@ void arc(std::vector<Offset>& out, Offset center, Offset from, float angle, floa
 }
 
 // The points one side of a stroke takes round the vertex p where it turns from `in` to `out`
-// (unit directions), that side being to the left of travel `half` px off the line.
-void join(std::vector<Offset>& points, Offset p, Offset in, Offset out, float half, StrokeJoin kind, float miterLimit, float tolerance) {
+// (unit directions), that side being to the left of travel `half` px off the line; the segments
+// on either side are `inLength` and `outLength` long.
+void join(std::vector<Offset>& points, Offset p, Offset in, Offset out, float inLength, float outLength, float half, StrokeJoin kind,
+          float miterLimit, float tolerance) {
     Offset nIn = leftOf(in) * half, nOut = leftOf(out) * half;
     float turn = cross(in, out), along = dot(in, out);
     if (std::abs(turn) < 1e-6f && along > 0) {  // straight on
         points.push_back(p + nIn);
         return;
     }
-    points.push_back(p + nIn);
-    if (turn < 0) {  // the inner side: through the vertex, so that it winds the same way
+    if (turn < 0) {
+        // The inner side. Where the two offset lines meet within both segments, that point:
+        // the outline doesn't cross itself (whatever it covered twice would count twice in a
+        // pixel's coverage, and an edge would look heavier). Two such points on a segment that
+        // pass each other fold the outline back along its offset, which covers nothing. Otherwise
+        // (a segment shorter than the turn needs) round through the vertex, so that it winds the
+        // same way.
+        Offset mid = (nIn + nOut) * 0.5f;
+        float m = length(mid), reach = half * std::abs(turn) / (1 + along);  // half tan(turn / 2)
+        if (along > -0.99f && m > 1e-6f && reach <= std::min(inLength, outLength)) {
+            points.push_back(p + mid * (half * half / (m * m)));
+            return;
+        }
+        points.push_back(p + nIn);
         points.push_back(p);
         points.push_back(p + nOut);
         return;
     }
+    points.push_back(p + nIn);
     switch (kind) {
     case StrokeJoin::Miter: {
         Offset mid = (nIn + nOut) * 0.5f;
@@ -157,12 +172,16 @@ std::vector<Contour> strokeOutline(const std::vector<Contour>& contours, float w
         if (c.closed && n >= 2) {
             // Two loops, one each side, going opposite ways: what lies between them is covered.
             std::vector<Offset> dirs(n);
-            for (size_t i = 0; i < n; ++i) dirs[i] = normalized(p[(i + 1) % n] - p[i]);
+            std::vector<float> lengths(n);
+            for (size_t i = 0; i < n; ++i) dirs[i] = normalized(p[(i + 1) % n] - p[i]), lengths[i] = length(p[(i + 1) % n] - p[i]);
             Contour left{{}, true}, right{{}, true};
-            for (size_t i = 0; i < n; ++i) join(left.points, p[i], dirs[(i + n - 1) % n], dirs[i], half, joinKind, miterLimit, tolerance);
+            for (size_t i = 0; i < n; ++i) {
+                size_t before = (i + n - 1) % n;
+                join(left.points, p[i], dirs[before], dirs[i], lengths[before], lengths[i], half, joinKind, miterLimit, tolerance);
+            }
             for (size_t k = 0; k < n; ++k) {
-                size_t i = n - 1 - k;  // backwards: its left is the other side
-                join(right.points, p[i], dirs[i] * -1, dirs[(i + n - 1) % n] * -1, half, joinKind, miterLimit, tolerance);
+                size_t i = n - 1 - k, before = (i + n - 1) % n;  // backwards: its left is the other side
+                join(right.points, p[i], dirs[i] * -1, dirs[before] * -1, lengths[i], lengths[before], half, joinKind, miterLimit, tolerance);
             }
             out.push_back(std::move(left));
             out.push_back(std::move(right));
@@ -170,17 +189,18 @@ std::vector<Contour> strokeOutline(const std::vector<Contour>& contours, float w
         }
         // Open: one side forwards, the end's cap, the other side backwards, the start's cap.
         std::vector<Offset> dirs(n - 1);
-        for (size_t i = 0; i + 1 < n; ++i) dirs[i] = normalized(p[i + 1] - p[i]);
+        std::vector<float> lengths(n - 1);
+        for (size_t i = 0; i + 1 < n; ++i) dirs[i] = normalized(p[i + 1] - p[i]), lengths[i] = length(p[i + 1] - p[i]);
         Contour outline{{}, true};
         auto& o = outline.points;
         o.push_back(p[0] + leftOf(dirs[0]) * half);
-        for (size_t i = 1; i + 1 < n; ++i) join(o, p[i], dirs[i - 1], dirs[i], half, joinKind, miterLimit, tolerance);
+        for (size_t i = 1; i + 1 < n; ++i) join(o, p[i], dirs[i - 1], dirs[i], lengths[i - 1], lengths[i], half, joinKind, miterLimit, tolerance);
         o.push_back(p[n - 1] + leftOf(dirs[n - 2]) * half);
         cap(o, p[n - 1], dirs[n - 2], half, capKind, tolerance);
         o.push_back(p[n - 1] - leftOf(dirs[n - 2]) * half);
         for (size_t k = 1; k + 1 < n; ++k) {
             size_t i = n - 1 - k;
-            join(o, p[i], dirs[i] * -1, dirs[i - 1] * -1, half, joinKind, miterLimit, tolerance);
+            join(o, p[i], dirs[i] * -1, dirs[i - 1] * -1, lengths[i], lengths[i - 1], half, joinKind, miterLimit, tolerance);
         }
         o.push_back(p[0] - leftOf(dirs[0]) * half);
         cap(o, p[0], dirs[0] * -1, half, capKind, tolerance);

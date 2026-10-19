@@ -21,7 +21,8 @@
 - **Kompoz's own GPU renderer**, being built (`KOMPOZ_GPU=vulkan`): one core over a thin layer per native graphics
   API, Vulkan first (Direct3D 12, Metal, OpenGL ES 3 / WebGL 2 and WebGPU to come). Rounded rects, borders, lines, arcs,
   shadows, text, images, clips and layers are drawn on the GPU with exact anti-aliasing, and paths too: filled by the
-  non-zero or even-odd rule and stroked with every cap and join, their coverage summed on the GPU exactly as FreeType's
+  non-zero or even-odd rule and stroked with every cap and join (the inside of a turn outlined without crossing itself,
+  so a curve's inner edge is as light as its outer one), their coverage summed on the GPU exactly as FreeType's
   rasterizer works it out, curves within 0.2 px; layers can be cut to any outline. Gradients (linear, radial, sweep,
   every tile mode) are worked out per pixel from their stops, on fills, paths and text alike, as `Brush::colorAt`
   does (`Brush::geometry` says where one lies). All 29 blend modes are drawn, those the blend unit can't do worked out
