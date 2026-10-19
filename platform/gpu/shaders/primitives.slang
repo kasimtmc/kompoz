@@ -134,7 +134,9 @@ float2 maskTexcoord(float2 texel) {
 }
 
 // The paint at p: `color`, or the gradient's color there (as Brush::colorAt works it out: the
-// stops' straight colors mixed, then premultiplied) at the color's alpha.
+// stops' straight colors mixed, then premultiplied) at the color's alpha. (Written without a
+// return in a branch after the first: llvmpipe on LLVM 20 crashes compiling the tile modes'
+// branches with one.)
 float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
     int kind = int(paint.x + 0.5);
     if (kind == 0) return color;
@@ -152,34 +154,35 @@ float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
         t = a / (2 * pi);
     }
     int tile = int(paint.y + 0.5);
-    if (tile == 0) {
+    float shown = tile == 3 && (t < 0 || t > 1) ? 0 : 1;  // decal: nothing past its ends
+    if (tile == 0 || tile == 3) {
         t = saturate(t);
     } else if (tile == 1) {
         t -= floor(t);
-    } else if (tile == 2) {
+    } else {
         t = abs(t) - 2 * floor(abs(t) / 2);
-        if (t > 1) t = 2 - t;
-    } else if (t < 0 || t > 1) {
-        return float4(0, 0, 0, 0);  // decal: nothing past its ends
+        t = t > 1 ? 2 - t : t;
     }
+    // The stop t falls after and the one it falls before (straight colors), mixed.
     int count = int(paint.z + 0.5);
     float v = (paint.w + 0.5) * uniforms.texels.w;
-    float4 straight = texture2.SampleLevel(float2(0.5 * uniforms.texels.z, v), 0);
+    float4 previous = texture2.SampleLevel(float2(0.5 * uniforms.texels.z, v), 0);
     float before = texture2.SampleLevel(float2(1.5 * uniforms.texels.z, v), 0).x;
-    if (t > before) {
-        for (int i = 1; i < count; ++i) {
-            float4 next = texture2.SampleLevel(float2((2 * i + 0.5) * uniforms.texels.z, v), 0);
-            float offset = texture2.SampleLevel(float2((2 * i + 1.5) * uniforms.texels.z, v), 0).x;
-            if (t <= offset || i == count - 1) {
-                float span = offset - before;
-                straight = t > offset ? next : lerp(straight, next, span > 0 ? (t - before) / span : 1);
-                break;
-            }
-            straight = next;
-            before = offset;
+    float4 straight = previous;
+    bool found = t <= before;
+    for (int i = 1; i < count; ++i) {
+        float4 next = texture2.SampleLevel(float2((2 * i + 0.5) * uniforms.texels.z, v), 0);
+        float offset = texture2.SampleLevel(float2((2 * i + 1.5) * uniforms.texels.z, v), 0).x;
+        if (!found && t <= offset) {
+            float span = offset - before;
+            straight = lerp(previous, next, span > 0 ? (t - before) / span : 1);
+            found = true;
         }
+        previous = next;
+        before = offset;
     }
-    return float4(straight.rgb * straight.a, straight.a) * color.a;
+    straight = found ? straight : previous;  // past the last stop: its color
+    return float4(straight.rgb * straight.a, straight.a) * color.a * shown;
 }
 
 // A Gaussian's integral, approximated (Abramowitz and Stegun 7.1.25).
