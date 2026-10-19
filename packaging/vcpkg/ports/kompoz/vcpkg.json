@@ -14,6 +14,10 @@
     },
     "sdl3",
     {
+      "name": "vulkan-headers",
+      "platform": "!osx & !ios & !emscripten"
+    },
+    {
       "name": "vcpkg-cmake",
       "host": true
     },

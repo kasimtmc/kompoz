@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Downloads the sources Kompoz builds itself on platforms without system packages
-# (Android, iOS, Windows without vcpkg): SDL3, FreeType and HarfBuzz, at pinned versions, and applies
-# the fixes in scripts/patches/<name>-*.patch.
+# (Android, iOS, Windows without vcpkg): SDL3, FreeType, HarfBuzz and the Vulkan headers, at pinned
+# versions, and applies the fixes in scripts/patches/<name>-*.patch.
 # Usage: scripts/fetch-deps.sh
 set -euo pipefail
 
@@ -51,3 +51,8 @@ fetch freetype 2.14.3 \
 fetch harfbuzz 14.5.0 \
     https://github.com/harfbuzz/harfbuzz/releases/download/14.5.0/harfbuzz-14.5.0.tar.xz \
     b7132e148358a45185c9feafd049dbaf243649d3c44414b3534d9c95d18592b9
+
+# The GPU renderer's Vulkan backend: the API's headers, for where the system has none.
+fetch Vulkan-Headers 1.4.363.0 \
+    https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/vulkan-sdk-1.4.363.0.tar.gz \
+    4a078be12bef21cfebc09d878b77a63cff9d68f899254a0b00d0e37ef73e7f7e

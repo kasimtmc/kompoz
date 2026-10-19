@@ -216,6 +216,29 @@ if(KOMPOZ_BUILD_SDL3)
         endif()
         message(STATUS "Kompoz: images: JPEG ${KOMPOZ_JPEG_HOW} ${KOMPOZ_JPEG_VERSION}, WebP ${KOMPOZ_WEBP_HOW}, HTTP ${KOMPOZ_CURL_HOW} (libjpeg-turbo, libwebp, libcurl; empty: not used)")
     endif()
+    # The GPU renderer (platform/gpu): its core everywhere, and the Vulkan backend wherever Vulkan
+    # is a GPU API (Linux, Android, Windows). Vulkan's headers come from the system or the package
+    # manager, else from third_party/ (scripts/fetch-deps.sh); the Vulkan Memory Allocator is in
+    # platform/gpu/external/. Neither is needed by apps: Vulkan itself is loaded at run time.
+    target_sources(kompoz_sdl3 PRIVATE platform/gpu/device.cpp platform/gpu/renderer.cpp)
+    if(NOT APPLE AND NOT EMSCRIPTEN)
+        find_package(VulkanHeaders CONFIG QUIET)
+        if(TARGET Vulkan::Headers)
+            get_target_property(kompoz_vulkan_include Vulkan::Headers INTERFACE_INCLUDE_DIRECTORIES)
+        elseif(ANDROID OR EXISTS /usr/include/vulkan/vulkan.h OR EXISTS ${CMAKE_SYSROOT}/usr/include/vulkan/vulkan.h)
+            set(kompoz_vulkan_include "")  # the NDK's, or the system's
+        elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/Vulkan-Headers/include/vulkan/vulkan.h)
+            set(kompoz_vulkan_include ${CMAKE_CURRENT_SOURCE_DIR}/third_party/Vulkan-Headers/include)
+        else()
+            message(FATAL_ERROR "Kompoz's Vulkan backend needs Vulkan's headers: install them (vulkan-headers, libvulkan-dev) "
+                                "or run scripts/fetch-deps.sh")
+        endif()
+        target_sources(kompoz_sdl3 PRIVATE platform/gpu/vulkan_device.cpp platform/gpu/vma.cpp)
+        target_include_directories(kompoz_sdl3 PRIVATE $<BUILD_INTERFACE:${kompoz_vulkan_include}>
+                                   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/platform/gpu/external>)
+        target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_GPU_VULKAN=1)
+        set_source_files_properties(platform/gpu/vma.cpp PROPERTIES COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang>:-w>")  # (its warnings)
+    endif()
     # Text is shaped with HarfBuzz when it is there: ligatures, kerning, Arabic joining, Indic
     # scripts, emoji sequences.
     if(TARGET harfbuzz::harfbuzz)

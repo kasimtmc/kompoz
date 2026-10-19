@@ -6,5 +6,7 @@ other assets (into the APK on Android, into the page's data on the web): keep th
   OFL.txt                         the Noto Sans fonts (assets/fonts)
   SDL.txt, FreeType-FTL.txt,      the vendored libraries, in builds that contain them (Android, iOS,
   HarfBuzz.txt                    Windows, the web)
+  VulkanMemoryAllocator.txt       the GPU renderer's Vulkan backend's allocator (Linux, Android,
+                                  Windows)
 
 Kompoz.txt and NOTICE.txt are copies of LICENSE and NOTICE at the repository's root.

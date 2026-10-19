@@ -19,9 +19,13 @@
 #include <kompoz/host.hpp>
 #include <kompoz/preview.hpp>
 
+#include "../gpu/renderer.hpp"
 #include "font_system.hpp"
 #include "image_loader.hpp"
 #include "raster.hpp"
+#ifdef KOMPOZ_GPU_VULKAN
+#include <SDL3/SDL_vulkan.h>
+#endif
 #ifdef KOMPOZ_DESKTOP_ACCENT
 #include "desktop_accent.hpp"
 #endif
@@ -1397,6 +1401,14 @@ struct App {
     SDL_Renderer* renderer = nullptr;
     std::unique_ptr<FontSystem> fonts;
     std::unique_ptr<SdlCanvas> canvas;
+    // KOMPOZ_GPU=vulkan: Kompoz's GPU renderer instead of SDL_Renderer (gpu/renderer.hpp), with
+    // the kept frame in a texture of its own.
+    std::unique_ptr<gpu::Device> gpu;
+    std::unique_ptr<gpu::Renderer> gpuCanvas;
+    std::unique_ptr<gpu::Texture> gpuFrame;
+    bool gpuInFrame = false;
+    GraphicsContext& graphics() { return gpuCanvas ? static_cast<GraphicsContext&>(*gpuCanvas) : *canvas; }
+    float pixelScale() const { return gpuCanvas ? gpuCanvas->scale : canvas->scale; }
     std::unique_ptr<ComposeHost> host;
     float scale = 1, pointToDp = 1;
     Uint32 wakeEvent = 0;
@@ -1458,6 +1470,9 @@ struct App {
 #endif
         host.reset();  // runs effect cleanups while the window still exists
         canvas.reset();
+        gpuFrame.reset();
+        gpuCanvas.reset();
+        gpu.reset();
         fonts.reset();
         for (auto* cursor : cursors)
             if (cursor) SDL_DestroyCursor(cursor);
@@ -1514,7 +1529,10 @@ void probeMedia(App& app) {
 
 void updateMetrics(App& app) {
     int pw = 0, ph = 0;
-    SDL_GetRenderOutputSize(app.renderer, &pw, &ph);
+    if (app.renderer)
+        SDL_GetRenderOutputSize(app.renderer, &pw, &ph);
+    else
+        SDL_GetWindowSizeInPixels(app.window, &pw, &ph);
     float scale = SDL_GetWindowDisplayScale(app.window);
     float density = SDL_GetWindowPixelDensity(app.window);
 #ifndef SDL_PLATFORM_ANDROID
@@ -1525,7 +1543,8 @@ void updateMetrics(App& app) {
     app.scale = scale;
     app.pointToDp = density / scale;
     app.fonts->setScale(scale);
-    app.canvas->scale = scale;
+    if (app.canvas) app.canvas->scale = scale;
+    if (app.gpuCanvas) app.gpuCanvas->scale = scale;
     float fontScale = 1;
 #ifdef SDL_PLATFORM_ANDROID
     fontScale = kompoz::android_ime::fontScale();  // Settings > Display > Font size
@@ -1651,7 +1670,36 @@ using DrawInto = std::function<void(SDL_Texture*, const std::optional<Rect>&)>;
 // GraphicsLayer::toImageBitmap: `draw` into a texture of `size` dp at the window's density, read
 // back. A target starts transparent and blending leaves premultiplied colors: they are divided
 // back out.
+// Pixels read back from a target (RGBA, premultiplied) as an image: the colors divided back out.
+ImageBitmap unpremultipliedImage(int w, int h, std::vector<uint8_t> pixels) {
+    if (pixels.size() != size_t(w) * size_t(h) * 4) return {};
+    for (size_t i = 0; i < pixels.size(); i += 4)
+        if (uint8_t a = pixels[i + 3]; a > 0 && a < 255)
+            for (int k = 0; k < 3; ++k) pixels[i + size_t(k)] = uint8_t(std::min(255, int(pixels[i + size_t(k)]) * 255 / a));
+    return ImageBitmap::fromPixels(w, h, std::move(pixels));
+}
+
+ImageBitmap renderImageGpu(App& app, Size size, const std::function<void(GraphicsContext&)>& draw) {
+    gpu::Renderer& r = *app.gpuCanvas;
+    int w = std::max(1, int(std::ceil(size.width * r.scale))), h = std::max(1, int(std::ceil(size.height * r.scale)));
+    if (w > maxImageDimension || h > maxImageDimension) return {};
+    bool ownFrame = !app.gpuInFrame;  // (asked for between frames: a frame of its own)
+    if (ownFrame) app.gpu->beginFrame();
+    std::unique_ptr<gpu::Texture> target = app.gpu->createTexture(w, h, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+    std::vector<uint8_t> pixels;
+    if (target) {
+        r.beginTarget(*target, gpu::ClearColor{});
+        draw(r);
+        r.endTarget();
+        r.flush();
+        pixels = app.gpu->readPixels(*target, {0, 0, w, h});
+    }
+    if (ownFrame) app.gpu->endFrame(false);
+    return unpremultipliedImage(w, h, std::move(pixels));
+}
+
 ImageBitmap renderImage(App& app, Size size, const std::function<void(GraphicsContext&)>& draw) {
+    if (app.gpuCanvas) return renderImageGpu(app, size, draw);
     float scale = app.canvas->scale;
     int w = std::max(1, int(std::ceil(size.width * scale))), h = std::max(1, int(std::ceil(size.height * scale)));
     if (w > maxImageDimension || h > maxImageDimension) return {};
@@ -1675,16 +1723,36 @@ ImageBitmap renderImage(App& app, Size size, const std::function<void(GraphicsCo
     for (int y = 0; y < rgba->h; ++y)
         std::memcpy(pixels.data() + size_t(y) * size_t(rgba->w) * 4,
                     static_cast<const uint8_t*>(rgba->pixels) + size_t(y) * size_t(rgba->pitch), size_t(rgba->w) * 4);
-    for (size_t i = 0; i < pixels.size(); i += 4)
-        if (uint8_t a = pixels[i + 3]; a > 0 && a < 255)
-            for (int k = 0; k < 3; ++k) pixels[i + size_t(k)] = uint8_t(std::min(255, int(pixels[i + size_t(k)]) * 255 / a));
-    ImageBitmap image = ImageBitmap::fromPixels(rgba->w, rgba->h, std::move(pixels));
+    ImageBitmap image = unpremultipliedImage(rgba->w, rgba->h, std::move(pixels));
     SDL_DestroySurface(rgba);
     return image;
 }
 
-// KOMPOZ_DAMAGE_CHECK: the kept pixels, with only what changed drawn again, against all of it
-// drawn afresh. Differences are logged: they would be stale pixels on the screen.
+// KOMPOZ_DAMAGE_CHECK: the kept pixels (a), with only what changed drawn again, against all of
+// the frame drawn afresh (b), w x h, rows `pitch` bytes apart. Differences are logged: they would
+// be stale pixels on the screen.
+void compareDamage(App& app, const Rect& damage, const uint8_t* a, int pitchA, const uint8_t* b, int pitchB, int w, int h) {
+    ++app.damageFrames;
+    int count = 0, x0 = w, y0 = h, x1 = -1, y1 = -1, worst = 0;
+    for (int y = 0; y < h; ++y) {
+        const uint8_t* ra = a + size_t(y) * size_t(pitchA);
+        const uint8_t* rb = b + size_t(y) * size_t(pitchB);
+        for (int x = 0; x < w; ++x) {
+            int d = 0;
+            for (int k = 0; k < 4; ++k) d = std::max(d, std::abs(int(ra[x * 4 + k]) - int(rb[x * 4 + k])));
+            if (d == 0) continue;
+            ++count, worst = std::max(worst, d);
+            x0 = std::min(x0, x), y0 = std::min(y0, y), x1 = std::max(x1, x), y1 = std::max(y1, y);
+        }
+    }
+    if (count) {
+        ++app.damageWrong;
+        float s = app.pixelScale();
+        SDL_Log("kompoz: damage check: %d pixels differ (by up to %d) in %d,%d %dx%d px; drawn again: %.0f,%.0f %.0fx%.0f px",
+                count, worst, x0, y0, x1 - x0 + 1, y1 - y0 + 1, damage.x * s, damage.y * s, damage.width * s, damage.height * s);
+    }
+}
+
 void checkDamage(App& app, const Rect& damage, const DrawInto& drawInto) {
     SDL_Texture* full = SDL_CreateTexture(app.renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, app.frameW, app.frameH);
     if (!full) return;
@@ -1696,27 +1764,9 @@ void checkDamage(App& app, const Rect& damage, const DrawInto& drawInto) {
         return pixels;
     };
     SDL_Surface *kept = read(app.frame), *fresh = read(full);
-    ++app.damageFrames;
-    if (kept && fresh && kept->w == fresh->w && kept->h == fresh->h) {
-        int count = 0, x0 = kept->w, y0 = kept->h, x1 = -1, y1 = -1, worst = 0;
-        for (int y = 0; y < kept->h; ++y) {
-            auto* a = static_cast<const uint8_t*>(kept->pixels) + y * kept->pitch;
-            auto* b = static_cast<const uint8_t*>(fresh->pixels) + y * fresh->pitch;
-            for (int x = 0; x < kept->w; ++x) {
-                int d = 0;
-                for (int k = 0; k < 4; ++k) d = std::max(d, std::abs(int(a[x * 4 + k]) - int(b[x * 4 + k])));
-                if (d == 0) continue;
-                ++count, worst = std::max(worst, d);
-                x0 = std::min(x0, x), y0 = std::min(y0, y), x1 = std::max(x1, x), y1 = std::max(y1, y);
-            }
-        }
-        if (count) {
-            ++app.damageWrong;
-            float s = app.canvas->scale;
-            SDL_Log("kompoz: damage check: %d pixels differ (by up to %d) in %d,%d %dx%d px; drawn again: %.0f,%.0f %.0fx%.0f px",
-                    count, worst, x0, y0, x1 - x0 + 1, y1 - y0 + 1, damage.x * s, damage.y * s, damage.width * s, damage.height * s);
-        }
-    }
+    if (kept && fresh && kept->w == fresh->w && kept->h == fresh->h)
+        compareDamage(app, damage, static_cast<const uint8_t*>(kept->pixels), kept->pitch, static_cast<const uint8_t*>(fresh->pixels),
+                      fresh->pitch, kept->w, kept->h);
     SDL_DestroySurface(kept);
     SDL_DestroySurface(fresh);
     SDL_DestroyTexture(full);
@@ -1741,7 +1791,81 @@ struct Drawn {
     bool shown = false;  // to present
     float area = 0;      // drawn again, of the screen (-1: all of it, straight; render targets are missing)
 };
+// A screenshot from pixels read back (RGBA, top row first).
+void savePixels(const std::string& path, int w, int h, std::vector<uint8_t>& pixels) {
+    SDL_Surface* surface = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_RGBA32, pixels.data(), w * 4);
+    if (!surface) return;
+    bool ok;
+#if SDL_VERSION_ATLEAST(3, 4, 0)
+    ok = path.ends_with(".png") ? SDL_SavePNG(surface, path.c_str()) : SDL_SaveBMP(surface, path.c_str());
+#else
+    ok = SDL_SaveBMP(surface, path.c_str());
+#endif
+    SDL_Log("kompoz: screenshot %s %s", path.c_str(), ok ? "saved" : SDL_GetError());
+    SDL_DestroySurface(surface);
+}
+
+// drawFrame on the GPU renderer: the same, its kept frame a texture drawn into in a frame of the
+// device's (begun by the caller), copied onto the swapchain image.
+Drawn drawFrameGpu(App& app, const std::string& shot) {
+    gpu::Device& device = *app.gpu;
+    gpu::Renderer& r = *app.gpuCanvas;
+    int pw = 0, ph = 0;
+    SDL_GetWindowSizeInPixels(app.window, &pw, &ph);
+    pw = std::max(pw, 1), ph = std::max(ph, 1);
+    if (!app.gpuFrame || app.gpuFrame->width() != pw || app.gpuFrame->height() != ph) {
+        app.gpuFrame = device.createTexture(pw, ph, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+        app.display->invalidate();
+        app.showFrame = true;
+    }
+    r.layerCount = 0;
+    float scale = r.scale;
+    Size screen{float(pw) / scale, float(ph) / scale};
+    app.display->begin(screen, 1 / scale);
+    app.host->draw(*app.display);
+    if (app.fullRedraw) app.display->invalidate();
+    std::optional<Rect> damage = app.display->end();
+    // Drawn again: the area made white, then what touches it, clipped to it.
+    auto drawInto = [&](gpu::Texture& target, const std::optional<Rect>& area) {
+        r.beginTarget(target);
+        if (area) r.pushClip(*area);
+        r.fillOpaque({0, 0, target.width(), target.height()}, colors::White);
+        app.display->replay(r, area);
+        if (area) r.popClip();
+        r.endTarget();
+    };
+    if (damage) drawInto(*app.gpuFrame, damage);
+    if (damage && app.damageCheck) {
+        auto full = device.createTexture(pw, ph, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+        drawInto(*full, std::nullopt);
+        r.flush();
+        std::vector<uint8_t> kept = device.readPixels(*app.gpuFrame, {0, 0, pw, ph}), fresh = device.readPixels(*full, {0, 0, pw, ph});
+        if (kept.size() == fresh.size() && !kept.empty()) compareDamage(app, *damage, kept.data(), pw * 4, fresh.data(), pw * 4, pw, ph);
+    }
+    float area = damage ? std::max(1e-4f, damage->width * damage->height / (screen.width * screen.height)) : 0;
+    if (!damage && shot.empty() && !app.showFrame) {
+        r.flush();
+        return {false, 0};
+    }
+    gpu::Texture* swapchain = device.swapchainTexture();
+    if (swapchain) {
+        app.showFrame = false;
+        r.beginTarget(*swapchain);
+        r.blit(*app.gpuFrame);
+        if (damage && app.damageShow)  // what was drawn again, outlined (only in the window, not the kept pixels)
+            r.strokeRoundRect(*damage, CornerRadii(), 3 / scale, Color{1, 0, 80 / 255.f, 1});
+        r.endTarget();
+    }
+    r.flush();
+    if (!shot.empty()) {
+        std::vector<uint8_t> pixels = device.readPixels(*app.gpuFrame, {0, 0, pw, ph});
+        savePixels(shot, pw, ph, pixels);
+    }
+    return {swapchain != nullptr, area};
+}
+
 Drawn drawFrame(App& app, const std::string& shot) {
+    if (app.gpuCanvas) return drawFrameGpu(app, shot);
     int pw = 0, ph = 0;
     SDL_GetRenderOutputSize(app.renderer, &pw, &ph);
     if (!app.frame || app.frameW != pw || app.frameH != ph) {
@@ -1812,7 +1936,8 @@ void profileFrame(App& app, uint64_t start, uint64_t composed, uint64_t drawn, u
         ++p.slow;
         SDL_Log("kompoz: frame %.1f ms after the last: input %.1f, compose+layout %.1f, draw %.1f, present %.1f ms; %d layers, %d glyphs, "
                 "%.0f%% drawn again",
-                interval, events, compose, draw, present, app.canvas->layerCount, glyphs, (area < 0 ? 1 : area) * 100);
+                interval, events, compose, draw, present, app.gpuCanvas ? app.gpuCanvas->layerCount : app.canvas->layerCount, glyphs,
+                (area < 0 ? 1 : area) * 100);
     }
     if (start - p.summaryStart >= 1'000'000'000) {
         SDL_Log("kompoz: %d frames in %.0f ms (%d changed nothing on the screen; %.0f%% of it drawn again on average), work avg %.1f "
@@ -2100,7 +2225,7 @@ void handleEvent(App& app, const SDL_Event& e) {
         updateMetrics(app);
         break;
     case SDL_EVENT_RENDER_DEVICE_RESET:
-        app.canvas->reset();  // (the atlas's pages are kept on the CPU: uploaded again)
+        if (app.canvas) app.canvas->reset();  // (the atlas's pages are kept on the CPU: uploaded again)
         if (app.frame) SDL_DestroyTexture(app.frame);
         app.frame = nullptr;
         host.requestRedraw();
@@ -2316,6 +2441,16 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
         if (dir) app->profile = app->profile || SDL_GetPathInfo((std::string(dir) + "/kompoz-profile").c_str(), nullptr);
 #endif
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    const char* gpuChoice = SDL_getenv("KOMPOZ_GPU");  // vulkan: Kompoz's GPU renderer
+    bool useGpu = gpuChoice && std::string_view(gpuChoice) == "vulkan";
+#ifdef KOMPOZ_GPU_VULKAN
+    if (useGpu) flags |= SDL_WINDOW_VULKAN;
+#else
+    if (useGpu) {
+        SDL_Log("kompoz: KOMPOZ_GPU=%s: this build has no Vulkan backend", gpuChoice);
+        useGpu = false;
+    }
+#endif
 #ifdef SDL_PLATFORM_EMSCRIPTEN
     flags |= SDL_WINDOW_FILL_DOCUMENT;  // the whole page, resized with the browser window
     kompoz_web_watch_wheel();
@@ -2328,7 +2463,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     // On the offscreen driver the window starts without a graphics API, as it does elsewhere: on
     // macOS SDL would make it an OpenGL window, which offscreen means EGL, which macOS hasn't, so
     // even the software renderer couldn't start. A GL renderer still makes it an OpenGL window.
-    if (const char* driver = SDL_GetCurrentVideoDriver(); driver && std::string_view(driver) == "offscreen")
+    if (const char* driver = SDL_GetCurrentVideoDriver(); driver && std::string_view(driver) == "offscreen" && !useGpu)
         SDL_SetBooleanProperty(windowProps, SDL_PROP_WINDOW_CREATE_EXTERNAL_GRAPHICS_CONTEXT_BOOLEAN, true);
     app->window = SDL_CreateWindowWithProperties(windowProps);
     SDL_DestroyProperties(windowProps);
@@ -2343,14 +2478,39 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
                           int(std::lround(app->config.height * pointsPerDp)));
 
     if (const char* driver = SDL_GetCurrentVideoDriver()) app->pinchSinceStart = std::string_view(driver) == "wayland";
-    app->renderer = SDL_CreateRenderer(app->window, nullptr);
-    if (!app->renderer) {
-        SDL_Log("kompoz: SDL_CreateRenderer failed: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
+    if (useGpu) {
+#ifdef KOMPOZ_GPU_VULKAN
+        kompoz::gpu::setLogger([](const char* message) { SDL_Log("%s", message); });
+        kompoz::gpu::Surface surface;
+        Uint32 count = 0;
+        if (const char* const* names = SDL_Vulkan_GetInstanceExtensions(&count)) surface.vulkanInstanceExtensions.assign(names, names + count);
+        surface.vulkanGetInstanceProcAddr = reinterpret_cast<void* (*)(void*, const char*)>(SDL_Vulkan_GetVkGetInstanceProcAddr());
+        SDL_Window* window = app->window;
+        surface.createVulkanSurface = [window](void* instance, uint64_t* out) {
+            VkSurfaceKHR made{};
+            if (!SDL_Vulkan_CreateSurface(window, static_cast<VkInstance>(instance), nullptr, &made)) return false;
+            std::memcpy(out, &made, sizeof made);
+            return true;
+        };
+        surface.drawableSize = [window](int* w, int* h) { SDL_GetWindowSizeInPixels(window, w, h); };
+        std::string error;
+        app->gpu = kompoz::gpu::Device::create(kompoz::gpu::Backend::Vulkan, surface, &error);
+        if (!app->gpu) {
+            SDL_Log("kompoz: no Vulkan device: %s", error.c_str());
+            return SDL_APP_FAILURE;
+        }
+        SDL_Log("kompoz: renderer: Kompoz on %s (%s)", kompoz::gpu::backendName(app->gpu->backend()), app->gpu->deviceName().c_str());
+#endif
+    } else {
+        app->renderer = SDL_CreateRenderer(app->window, nullptr);
+        if (!app->renderer) {
+            SDL_Log("kompoz: SDL_CreateRenderer failed: %s", SDL_GetError());
+            return SDL_APP_FAILURE;
+        }
+        SDL_Log("kompoz: renderer: %s", SDL_GetRendererName(app->renderer));
+        SDL_SetRenderVSync(app->renderer, 1);
+        SDL_SetRenderDrawBlendMode(app->renderer, SDL_BLENDMODE_BLEND);
     }
-    SDL_Log("kompoz: renderer: %s", SDL_GetRendererName(app->renderer));
-    SDL_SetRenderVSync(app->renderer, 1);
-    SDL_SetRenderDrawBlendMode(app->renderer, SDL_BLENDMODE_BLEND);
 
     app->fonts = std::make_unique<kompoz::sdl::FontSystem>();
     if (!app->fonts->load(kompoz::FontWeight::Normal, app->config.fontPath)) {
@@ -2359,7 +2519,10 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     }
     app->fonts->load(kompoz::FontWeight::Bold, app->config.boldFontPath);  // optional
     app->fonts->load(kompoz::FontWeight::Medium, app->config.mediumFontPath);  // optional
-    app->canvas = std::make_unique<kompoz::sdl::SdlCanvas>(app->renderer, *app->fonts);
+    if (app->gpu)
+        app->gpuCanvas = std::make_unique<kompoz::gpu::Renderer>(*app->gpu, *app->fonts);
+    else
+        app->canvas = std::make_unique<kompoz::sdl::SdlCanvas>(app->renderer, *app->fonts);
     app->display = std::make_unique<kompoz::DisplayList>(*app->fonts);
     app->host = std::make_unique<kompoz::ComposeHost>(*app->fonts, app->config.content);
 #ifdef KOMPOZ_DESKTOP_ACCENT
@@ -2636,13 +2799,21 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
     }
     kompoz::sdl::Drawn drawn;
     if (redraw || !shot.empty() || app.showFrame) {
+        if (app.gpu) {
+            app.gpu->beginFrame();
+            app.gpuInFrame = true;
+        }
         drawn = kompoz::sdl::drawFrame(app, shot);
         t2 = app.profile ? SDL_GetTicksNS() : 0;
-        if (drawn.shown) {
+        if (app.gpu) {
+            app.gpu->endFrame(drawn.shown);
+            app.gpuInFrame = false;
+            app.gpuCanvas->endFrame();
+        } else if (drawn.shown) {
             SDL_RenderPresent(app.renderer);
             app.canvas->endFrame();
-            if (!app.mediaProbed) kompoz::sdl::probeMedia(app);
         }
+        if (drawn.shown && !app.mediaProbed) kompoz::sdl::probeMedia(app);
         app.fonts->endFrame();
         t3 = app.profile ? SDL_GetTicksNS() : 0;
     }

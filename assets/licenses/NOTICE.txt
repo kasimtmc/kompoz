@@ -19,3 +19,7 @@ Builds made with the vendored dependencies (Android, iOS, Windows, the web) also
   (www.freetype.org). All rights reserved. FreeType License (licenses/FreeType-FTL.txt).
 - HarfBuzz 14.5.0: "Old MIT" license (licenses/HarfBuzz.txt).
 On Linux and other desktops the system's libraries are used instead, under their own licenses.
+
+Builds with the GPU renderer's Vulkan backend (Linux, Android, Windows) contain:
+- Vulkan Memory Allocator 3.4.0 (platform/gpu/external): Copyright (c) 2017-2026 Advanced Micro
+  Devices, Inc., MIT license (licenses/VulkanMemoryAllocator.txt).

@@ -38,6 +38,8 @@ class KompozConan(ConanFile):
         self.requires("sdl/[>=3.2 <4]")
         self.requires("freetype/[>=2.13]")
         self.requires("harfbuzz/[>=8]")
+        if self.settings.os not in ("Macos", "iOS", "Emscripten"):  # the GPU renderer's Vulkan backend
+            self.requires("vulkan-headers/[>=1.3]")
         if self.settings.os != "Windows":
             if self.options.with_jpeg:
                 self.requires("libjpeg-turbo/[>=2.1]")

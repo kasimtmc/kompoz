@@ -18,7 +18,7 @@
 
 namespace kompoz::sdl {
 
-class FontSystem final : public TextMeasurer {
+class FontSystem final : public TextMeasurer, public gpu::TextSource {
 public:
     FontSystem();
     ~FontSystem() override;
@@ -38,12 +38,12 @@ public:
     // The glyphs of text drawn from the pen at (xPx, baselinePx), appended to `out`. `shadow`:
     // only the glyphs that take a color (no emoji), blurred by `blurPx`.
     void layout(std::string_view text, float xPx, float baselinePx, const Font& font, bool rtl, std::vector<gpu::GlyphQuad>& out,
-                bool shadow = false, int blurPx = 0);
+                bool shadow = false, int blurPx = 0) override;
     // `vector` filled into the px rect (x, y, w, h): rasterized once per size by FreeType's
     // anti-aliasing outline rasterizer. False if there is nothing to draw.
-    bool vectorQuad(const ImageVector& vector, float x, float y, float w, float h, gpu::GlyphQuad& out);
+    bool vectorQuad(const ImageVector& vector, float x, float y, float w, float h, gpu::GlyphQuad& out) override;
 
-    gpu::GlyphAtlas& atlas();
+    gpu::GlyphAtlas& atlas() override;
     // After each frame (the atlas reuses pages not drawn from for a while).
     void endFrame();
 

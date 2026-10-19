@@ -8,9 +8,12 @@
 // for reuse between frames, never during one (a frame's glyphs stay where they were put until it
 // has been drawn).
 
+#include <kompoz/graphics.hpp>
+
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -45,6 +48,8 @@ public:
     const uint8_t* pixels() const { return rgba_.data(); }
     // What changed since the last call (the whole page at first, and after it was cleared).
     DirtyRect takeDirty() { return std::exchange(dirty_, {}); }
+    // All of it is to be uploaded again (a renderer's texture for it was new, or lost).
+    void markAllDirty() { dirty_ = {0, 0, kSize, kSize}; }
     // Cleared each time it is reused: what was cached on it is gone.
     uint64_t generation() const { return generation_; }
 
@@ -131,6 +136,20 @@ private:
     std::vector<std::unique_ptr<AtlasPage>> pages_;
     int current_ = 0;
     uint64_t frame_ = 1;
+};
+
+// Where a renderer's text comes from: the platform's font system lays text out as glyphs on the
+// atlas, and rasterizes ImageVectors there.
+class TextSource {
+public:
+    virtual ~TextSource() = default;
+    // The glyphs of text drawn from the pen at (xPx, baselinePx), appended to `out`. `shadow`:
+    // only the glyphs that take a color (no emoji), blurred by `blurPx`.
+    virtual void layout(std::string_view text, float xPx, float baselinePx, const Font& font, bool rtl, std::vector<GlyphQuad>& out,
+                        bool shadow = false, int blurPx = 0) = 0;
+    // `vector` filled into the px rect (x, y, w, h); false if there is nothing to draw.
+    virtual bool vectorQuad(const ImageVector& vector, float x, float y, float w, float h, GlyphQuad& out) = 0;
+    virtual GlyphAtlas& atlas() = 0;
 };
 
 } // namespace kompoz::gpu

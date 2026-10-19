@@ -48,7 +48,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ninja-build g++-14 clang-19 lld-19 dbus \
-            libturbojpeg0-dev libwebp-dev libcurl4-openssl-dev
+            libturbojpeg0-dev libwebp-dev libcurl4-openssl-dev libvulkan-dev
           # What SDL's own README lists for Linux
           sudo apt-get install -y --no-install-recommends libasound2-dev libpulse-dev libpipewire-0.3-dev \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
@@ -100,7 +100,7 @@ jobs:
           update: true
           install: >-
             mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja
-            patch tar xz curl
+            mingw-w64-ucrt-x86_64-vulkan-headers patch tar xz curl
       - uses: actions/cache@v4
         with:
           path: third_party/.downloads
