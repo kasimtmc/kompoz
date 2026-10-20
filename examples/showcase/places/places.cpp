@@ -38,7 +38,7 @@ void PlacesScreen(Modifier modifier, CallSite site) {
                     Size s = d.size();
                     d.drawRect(cs.surfaceContainerHighest);
                     d.drawRect(Color::hex(0x4F8FBF, 0.45f), {0, s.height * 0.62f}, Size{s.width, s.height * 0.38f});
-                    d.drawRoundRect(Color::hex(0x6FAF6F, 0.5f), 24, {s.width * 0.55f, s.height * 0.12f}, Size{s.width * 0.3f, s.height * 0.2f});
+                    d.drawRoundRect(Color::hex(0x6FAF6F, 0.5f), {s.width * 0.55f, s.height * 0.12f}, Size{s.width * 0.3f, s.height * 0.2f}, CornerRadius(24));
                     for (int i = 1; i < 6; ++i) {
                         d.drawLine(cs.outlineVariant, {s.width * float(i) / 6, 0}, {s.width * float(i) / 6 - 40, s.height}, 6);
                         d.drawLine(cs.outlineVariant, {0, s.height * float(i) / 8}, {s.width, s.height * float(i) / 8 + 30}, 4);

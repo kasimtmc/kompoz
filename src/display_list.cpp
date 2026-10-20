@@ -14,7 +14,9 @@ bool same(const LayerTransform& a, const LayerTransform& b) {
     return a.scaleX == b.scaleX && a.scaleY == b.scaleY && a.rotationZ == b.rotationZ && a.translationX == b.translationX &&
            a.translationY == b.translationY && same(a.origin, b.origin);
 }
-bool same(const PathStroke& a, const PathStroke& b) { return a.width == b.width && a.cap == b.cap && a.join == b.join && a.miter == b.miter; }
+bool same(const PathStroke& a, const PathStroke& b) {
+    return a.width == b.width && a.cap == b.cap && a.join == b.join && a.miter == b.miter && a.hairline == b.hairline;
+}
 
 bool empty(const Rect& r) { return r.width <= 0 || r.height <= 0; }
 bool overlaps(const Rect& a, const Rect& b) { return a.x < b.right() && b.x < a.right() && a.y < b.bottom() && b.y < a.bottom(); }
@@ -243,9 +245,9 @@ void DisplayList::drawShapeShadow(const Rect& rect, const Shape& shape, bool rtl
     }
 }
 
-void DisplayList::drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha) {
+void DisplayList::drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha, FilterQuality quality) {
     if (image.empty() || alpha <= 0) return;
-    if (Command* c = draw(Kind::Image, dst, 0)) c->image = image, c->rect = dst, c->rect2 = src, c->f1 = alpha;
+    if (Command* c = draw(Kind::Image, dst, 0)) c->image = image, c->rect = dst, c->rect2 = src, c->f1 = alpha, c->f2 = float(int(quality));
 }
 
 void DisplayList::fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& brush, const Rect& brushArea) {
@@ -259,7 +261,9 @@ void DisplayList::drawPath(const Path& path, Offset origin, const Brush& brush, 
     b.y += origin.y;
     // A stroke reaches half its width out, more at mitered corners and square caps.
     float pad = 0;
-    if (stroke.width > 0) {
+    if (stroke.hairline) {
+        pad = 1;  // (a pixel, which is at most a dp)
+    } else if (stroke.width > 0) {
         float reach = stroke.join == StrokeJoin::Miter ? std::max(1.f, stroke.miter) : 1.f;
         if (stroke.cap == StrokeCap::Square) reach = std::max(reach, std::numbers::sqrt2_v<float>);
         pad = stroke.width / 2 * reach;
@@ -567,7 +571,7 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
             case Kind::ShapeShadow: canvas.drawShapeShadow(c.rect, c.shaped->first, c.flag, c.shaped->second, c.f1 != 0); break;
             case Kind::Vector: canvas.drawVector(c.vector, c.rect, c.color); break;
             case Kind::Arc: canvas.drawArc(c.rect, c.f1, c.f2, c.f3, c.color, c.flag); break;
-            case Kind::Image: canvas.drawImage(c.image, c.rect2, c.rect, c.f1); break;
+            case Kind::Image: canvas.drawImage(c.image, c.rect2, c.rect, c.f1, FilterQuality(int(c.f2))); break;
             case Kind::Gradient: canvas.fillGradient(c.rect, c.radii, *c.brush, c.rect2); break;
             case Kind::Path: canvas.drawPath(c.path, c.p1, *c.brush, c.rect2, c.stroke); break;
             default: break;

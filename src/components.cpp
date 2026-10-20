@@ -240,7 +240,7 @@ void RadioButton(bool selected, std::function<void()> onClick, const Modifier& m
             std::move(onClick), {.enabled = enabled, .interactionSource = std::move(interactionSource), .indication = ripple(false, 20)});
     Box(m.size(24)
             .drawBehind([ring, dot](DrawScope& d) {
-                d.drawCircle(ring, 9.f, {}, Stroke(2));  // 20 dp
+                d.drawCircle(ring, 9.f, {}, 1, Stroke(2));  // 20 dp
                 if (dot > 1) d.drawCircle(ring, dot - 1);
             }));
 }
@@ -564,7 +564,7 @@ void ClassicTrack(const SliderState& state, CallSite site) {
                 auto at = [&](float f) { return flipped ? length * (1 - f) : length * f; };
                 auto bar = [&](Color col, float from, float to) {
                     float lo = std::min(from, to), hi = std::max(from, to);
-                    d.drawRoundRect(col, 2, vertical ? Offset{0, lo} : Offset{lo, 0}, vertical ? Size{4, hi - lo} : Size{hi - lo, 4});
+                    d.drawRoundRect(col, vertical ? Offset{0, lo} : Offset{lo, 0}, vertical ? Size{4, hi - lo} : Size{hi - lo, 4}, CornerRadius(2));
                 };
                 bar(colors.track(enabled, false), 0, length);
                 bar(colors.track(enabled, true), at(0), at(fraction));
@@ -867,7 +867,7 @@ void ClassicTrack(const RangeSliderState& state, CallSite site) {
     Box(Modifier().fillMaxWidth().height(4).drawBehind([=](DrawScope& d) {
         float length = d.size().width;
         auto at = [&](float f) { return flipped ? length * (1 - f) : length * f; };
-        d.drawRoundRect(colors.track(enabled, false), 2, {}, Size{length, 4});
+        d.drawRoundRect(colors.track(enabled, false), {}, Size{length, 4}, CornerRadius(2));
         float a = at(from), b = at(to);
         d.drawRect(colors.track(enabled, true), {std::min(a, b), 0}, Size{std::abs(b - a), 4});
         for (float f : ticks) d.drawCircle(colors.tick(enabled, f >= from && f <= to), 1.f, Offset{at(f), 2});
@@ -1252,7 +1252,7 @@ void tabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs,
         if (secondary)  // Compose 1.4's SecondaryIndicator: 3 dp, the tab's width
             d.drawRect(indicator, {x, h - 3}, Size{width, 3});
         else
-            d.drawRoundRect(indicator, 1.5f, {x, h - 3}, Size{width, 3});
+            d.drawRoundRect(indicator, {x, h - 3}, Size{width, 3}, CornerRadius(1.5f));
     };
     auto row = [&](const Modifier& m) {
         detail::Composer::require().emit(

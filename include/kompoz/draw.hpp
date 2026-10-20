@@ -21,7 +21,10 @@ enum class PointMode { Points, Lines, Polygon };
 
 class TextLayoutResult;
 class TextLayoutMeasurer;
+class AnnotatedString;
 struct TextStyle;
+enum class TextOverflow;
+enum class TextDecoration;
 
 class GraphicsLayer;
 class DrawScope;
@@ -51,52 +54,109 @@ private:
 
 class DrawScope {
 public:
-    DrawScope(GraphicsContext& context, Rect bounds, TextMeasurer* measurer = nullptr)
-        : context_(&context), bounds_(bounds), measurer_(measurer) {}
+    DrawScope(GraphicsContext& context, Rect bounds, TextMeasurer* measurer = nullptr, Density density = {},
+              LayoutDirection layoutDirection = LayoutDirection::Ltr)
+        : context_(&context), bounds_(bounds), measurer_(measurer), density_(density), layoutDirection_(layoutDirection) {}
+    // Over a node: its text measurer, the screen's density, its layout direction.
+    DrawScope(GraphicsContext& context, Rect bounds, const LayoutNode& node);
 
     Size size() const { return {bounds_.width, bounds_.height}; }
     Offset center() const { return {bounds_.width / 2, bounds_.height / 2}; }
     GraphicsContext& context() const { return *context_; }
     Rect bounds() const { return bounds_; }  // absolute, for GraphicsContext calls
+    // The px in a dp (and the font scale), and the direction it is laid out in (Compose's
+    // DrawScope is a Density and has a layoutDirection; its lengths here are dp already).
+    Density density() const { return density_; }
+    LayoutDirection layoutDirection() const { return layoutDirection_; }
 
-    // Unset sizes and positions cover the whole area. `blendMode`: how it goes onto what is drawn
-    // already (inside a graphicsLayer with CompositingStrategy::Offscreen: the layer's content).
-    // SDL draws SrcOver, DstIn, DstOut, Clear, Src, Dst and Plus; the others as SrcOver.
-    void drawRect(Color color, Offset topLeft = {}, std::optional<Size> size = {}, DrawStyle style = Fill,
+    // As Compose's: each in a color or a brush (a gradient spread over the whole area, as in
+    // Compose), faded by `alpha`, filled or outlined (`style`: Fill, Stroke(...)), its colors
+    // through `colorFilter`, onto what is drawn already by `blendMode` (inside a graphicsLayer
+    // with CompositingStrategy::Offscreen: the layer's content; SDL draws SrcOver, DstIn, DstOut,
+    // Clear, Src, Dst and Plus, the others as SrcOver). An unset size reaches from topLeft to the
+    // area's bottom right; an unset center is its middle. Stroke widths of 0 are hairlines.
+    void drawLine(const Brush& brush, Offset start, Offset end, float strokeWidth = 0, StrokeCap cap = StrokeCap::Butt,
+                  std::optional<PathEffect> pathEffect = {}, float alpha = 1, std::optional<ColorFilter> colorFilter = {},
                   BlendMode blendMode = BlendMode::SrcOver);
-    void drawRoundRect(Color color, float cornerRadius, Offset topLeft = {}, std::optional<Size> size = {},
-                       DrawStyle style = Fill, BlendMode blendMode = BlendMode::SrcOver);
-    // Defaults: the largest circle that fits, centered.
-    void drawCircle(Color color, std::optional<float> radius = {}, std::optional<Offset> center = {},
-                    DrawStyle style = Fill, BlendMode blendMode = BlendMode::SrcOver);
-    // Gradients spread over the whole drawing area, as in Compose.
-    void drawRect(const Brush& brush, Offset topLeft = {}, std::optional<Size> size = {}, BlendMode blendMode = BlendMode::SrcOver);
-    void drawRoundRect(const Brush& brush, float cornerRadius, Offset topLeft = {}, std::optional<Size> size = {},
+    void drawLine(Color color, Offset start, Offset end, float strokeWidth = 0, StrokeCap cap = StrokeCap::Butt,
+                  std::optional<PathEffect> pathEffect = {}, float alpha = 1, std::optional<ColorFilter> colorFilter = {},
+                  BlendMode blendMode = BlendMode::SrcOver);
+    void drawRect(const Brush& brush, Offset topLeft = {}, std::optional<Size> size = {}, float alpha = 1, const DrawStyle& style = Fill,
+                  std::optional<ColorFilter> colorFilter = {}, BlendMode blendMode = BlendMode::SrcOver);
+    void drawRect(Color color, Offset topLeft = {}, std::optional<Size> size = {}, float alpha = 1, const DrawStyle& style = Fill,
+                  std::optional<ColorFilter> colorFilter = {}, BlendMode blendMode = BlendMode::SrcOver);
+    // At its size in pixels (as dp), or the part of it from srcOffset, srcSize pixels (unset: to
+    // its far corner) into the rect from dstOffset, dstSize dp (unset: srcSize's), sampled as
+    // filterQuality says. A stroke style draws it as a fill does (as Android's).
+    void drawImage(const ImageBitmap& image, Offset topLeft = {}, float alpha = 1, const DrawStyle& style = Fill,
+                   std::optional<ColorFilter> colorFilter = {}, BlendMode blendMode = BlendMode::SrcOver);
+    void drawImage(const ImageBitmap& image, IntOffset srcOffset, std::optional<IntSize> srcSize = {}, Offset dstOffset = {},
+                   std::optional<Size> dstSize = {}, float alpha = 1, const DrawStyle& style = Fill, std::optional<ColorFilter> colorFilter = {},
+                   BlendMode blendMode = BlendMode::SrcOver, FilterQuality filterQuality = DefaultFilterQuality);
+    // Corners quarter ellipses of cornerRadius (quarter circles when its x and y are the same).
+    // (In a color, as Compose's: its style before its alpha.)
+    void drawRoundRect(const Brush& brush, Offset topLeft = {}, std::optional<Size> size = {}, CornerRadius cornerRadius = {},
+                       float alpha = 1, const DrawStyle& style = Fill, std::optional<ColorFilter> colorFilter = {},
                        BlendMode blendMode = BlendMode::SrcOver);
-    void drawCircle(const Brush& brush, std::optional<float> radius = {}, std::optional<Offset> center = {},
-                    BlendMode blendMode = BlendMode::SrcOver);
-    void drawPath(const Path& path, Color color, DrawStyle style = Fill, BlendMode blendMode = BlendMode::SrcOver);
-    void drawPath(const Path& path, const Brush& brush, DrawStyle style = Fill, BlendMode blendMode = BlendMode::SrcOver);
-    void drawLine(Color color, Offset start, Offset end, float strokeWidth = 1);
-    void drawLine(Color color, Offset start, Offset end, float strokeWidth, StrokeCap cap, std::optional<PathEffect> pathEffect = {});
-    void drawPoints(const std::vector<Offset>& points, PointMode mode, Color color, float strokeWidth = 1,
-                    StrokeCap cap = StrokeCap::Butt, std::optional<PathEffect> pathEffect = {});
-    // Angles in degrees: 0 = 3 o'clock, clockwise. With Fill (useCenter) it draws a pie slice.
-    // The oval in a rect (Compose's drawOval; unset: the whole area).
-    void drawOval(Color color, Offset topLeft = {}, std::optional<Size> size = {}, DrawStyle style = Fill,
+    void drawRoundRect(Color color, Offset topLeft = {}, std::optional<Size> size = {}, CornerRadius cornerRadius = {},
+                       const DrawStyle& style = Fill, float alpha = 1, std::optional<ColorFilter> colorFilter = {},
+                       BlendMode blendMode = BlendMode::SrcOver);
+    // Unset radius: the largest circle that fits.
+    void drawCircle(const Brush& brush, std::optional<float> radius = {}, std::optional<Offset> center = {}, float alpha = 1,
+                    const DrawStyle& style = Fill, std::optional<ColorFilter> colorFilter = {}, BlendMode blendMode = BlendMode::SrcOver);
+    void drawCircle(Color color, std::optional<float> radius = {}, std::optional<Offset> center = {}, float alpha = 1,
+                    const DrawStyle& style = Fill, std::optional<ColorFilter> colorFilter = {}, BlendMode blendMode = BlendMode::SrcOver);
+    // The oval in a rect.
+    void drawOval(const Brush& brush, Offset topLeft = {}, std::optional<Size> size = {}, float alpha = 1, const DrawStyle& style = Fill,
+                  std::optional<ColorFilter> colorFilter = {}, BlendMode blendMode = BlendMode::SrcOver);
+    void drawOval(Color color, Offset topLeft = {}, std::optional<Size> size = {}, float alpha = 1, const DrawStyle& style = Fill,
+                  std::optional<ColorFilter> colorFilter = {}, BlendMode blendMode = BlendMode::SrcOver);
+    // Part of the oval in a rect: from startAngle through sweepAngle (degrees, 0 at 3 o'clock,
+    // clockwise); useCenter closes it through the center (a pie slice), else straight across
+    // its ends (filled) or not at all (outlined).
+    void drawArc(const Brush& brush, float startAngle, float sweepAngle, bool useCenter, Offset topLeft = {},
+                 std::optional<Size> size = {}, float alpha = 1, const DrawStyle& style = Fill, std::optional<ColorFilter> colorFilter = {},
+                 BlendMode blendMode = BlendMode::SrcOver);
+    void drawArc(Color color, float startAngle, float sweepAngle, bool useCenter, Offset topLeft = {}, std::optional<Size> size = {},
+                 float alpha = 1, const DrawStyle& style = Fill, std::optional<ColorFilter> colorFilter = {},
+                 BlendMode blendMode = BlendMode::SrcOver);
+    void drawPath(const Path& path, Color color, float alpha = 1, const DrawStyle& style = Fill, std::optional<ColorFilter> colorFilter = {},
                   BlendMode blendMode = BlendMode::SrcOver);
-    void drawOval(const Brush& brush, Offset topLeft = {}, std::optional<Size> size = {}, DrawStyle style = Fill,
-                  BlendMode blendMode = BlendMode::SrcOver);
-    void drawArc(Color color, float startAngle, float sweepAngle, Offset topLeft = {}, std::optional<Size> size = {},
-                 DrawStyle style = Fill);
+    void drawPath(const Path& path, const Brush& brush, float alpha = 1, const DrawStyle& style = Fill,
+                  std::optional<ColorFilter> colorFilter = {}, BlendMode blendMode = BlendMode::SrcOver);
+    // Each point a dot (round with StrokeCap::Round, else square), every two a line, or all of
+    // them one line.
+    void drawPoints(const std::vector<Offset>& points, PointMode pointMode, Color color, float strokeWidth = 0,
+                    StrokeCap cap = StrokeCap::Butt, std::optional<PathEffect> pathEffect = {}, float alpha = 1,
+                    std::optional<ColorFilter> colorFilter = {}, BlendMode blendMode = BlendMode::SrcOver);
+    void drawPoints(const std::vector<Offset>& points, PointMode pointMode, const Brush& brush, float strokeWidth = 0,
+                    StrokeCap cap = StrokeCap::Butt, std::optional<PathEffect> pathEffect = {}, float alpha = 1,
+                    std::optional<ColorFilter> colorFilter = {}, BlendMode blendMode = BlendMode::SrcOver);
+    // Text laid out by `measurer` (rememberTextMeasurer) with `style` at topLeft, in `size` (its
+    // width the lines are aligned in; unset: as far as the area's bottom right), cut off as
+    // overflow, softWrap and maxLines say where they are given (else as the style does), cut
+    // to its box where it overflows it (unless TextOverflow::Visible) (Compose's drawText).
+    void drawText(const TextLayoutMeasurer& measurer, const std::string& text, Offset topLeft = {});  // (in the default style)
+    void drawText(const TextLayoutMeasurer& measurer, const std::string& text, Offset topLeft, const TextStyle& style,
+                  std::optional<TextOverflow> overflow = {}, std::optional<bool> softWrap = {}, std::optional<int> maxLines = {},
+                  std::optional<Size> size = {}, BlendMode blendMode = BlendMode::SrcOver);
+    void drawText(const TextLayoutMeasurer& measurer, const AnnotatedString& text, Offset topLeft = {});  // (in the default style)
+    void drawText(const TextLayoutMeasurer& measurer, const AnnotatedString& text, Offset topLeft, const TextStyle& style,
+                  std::optional<TextOverflow> overflow = {}, std::optional<bool> softWrap = {}, std::optional<int> maxLines = {},
+                  std::optional<Size> size = {}, BlendMode blendMode = BlendMode::SrcOver);
+    // Text laid out already, at topLeft: `color` (or `brush`) paints what the text's own style
+    // painted (spans and links keep theirs), faded by alpha (unset: as it is); shadow,
+    // textDecoration and drawStyle, where given, go where the text's style set them.
+    void drawText(const TextLayoutResult& layout, std::optional<Color> color = {}, Offset topLeft = {}, std::optional<float> alpha = {},
+                  std::optional<Shadow> shadow = {}, std::optional<TextDecoration> textDecoration = {},
+                  std::optional<DrawStyle> drawStyle = {}, BlendMode blendMode = BlendMode::SrcOver);
+    void drawText(const TextLayoutResult& layout, const Brush& brush, Offset topLeft = {}, std::optional<float> alpha = {},
+                  std::optional<Shadow> shadow = {}, std::optional<TextDecoration> textDecoration = {},
+                  std::optional<DrawStyle> drawStyle = {}, BlendMode blendMode = BlendMode::SrcOver);
+    // One line in one font at topLeft (its top), and how big it is (Kompoz's own: quick labels).
     void drawText(std::string_view text, Offset topLeft, Font font = {}, Color color = colors::Black);
-    // Text laid out by a TextLayoutMeasurer (text_measure.hpp): all its lines, styles and
-    // alignment, at topLeft; `color` paints all of it instead of its own colors.
-    void drawText(const TextLayoutResult& layout, Offset topLeft = {}, std::optional<Color> color = {});
-    void drawText(const TextLayoutMeasurer& measurer, const std::string& text, Offset topLeft, const TextStyle& style);
     Size measureText(std::string_view text, Font font = {}) const;
-    void drawImage(const ImageBitmap& image, Offset topLeft = {}, std::optional<Size> size = {}, float alpha = 1,
-                   std::optional<ColorFilter> colorFilter = {});
+    // A vector filled in `color` (one in paints of its own in them), in a rect.
     void drawVector(const ImageVector& vector, Color color, Offset topLeft = {}, std::optional<Size> size = {});
     // Records `block` into `layer` instead of drawing it here (Compose's GraphicsLayer.record):
     // what it draws — a ContentDrawScope's drawContent() too — from this scope's top left, in a
@@ -136,11 +196,17 @@ private:
     Offset abs(Offset p) const { return {bounds_.x + p.x, bounds_.y + p.y}; }
     // Draws `block` through `matrix`, which is in this scope's coordinates (its top left the origin).
     void transformed(const Matrix& matrix, const std::function<void(DrawScope&)>& block);
+    void paint(const Path& path, const Brush& brush, float alpha, const DrawStyle& style, const std::optional<ColorFilter>& colorFilter,
+               BlendMode blendMode);
+    void paintRoundRect(const Rect& rect, CornerRadius corner, const Brush& brush, float alpha, const DrawStyle& style,
+                        const std::optional<ColorFilter>& colorFilter, BlendMode blendMode);
     friend class DrawTransform;
 
     GraphicsContext* context_;
     Rect bounds_;
     TextMeasurer* measurer_;
+    Density density_;
+    LayoutDirection layoutDirection_ = LayoutDirection::Ltr;
 };
 
 namespace detail {
@@ -178,6 +244,8 @@ class ContentDrawScope : public DrawScope {
 public:
     ContentDrawScope(GraphicsContext& context, Rect bounds, TextMeasurer* measurer, const std::function<void()>& content)
         : DrawScope(context, bounds, measurer), content_(&content) {}
+    ContentDrawScope(GraphicsContext& context, Rect bounds, const LayoutNode& node, const std::function<void()>& content)
+        : DrawScope(context, bounds, node), content_(&content) {}
     void drawContent() const { (*content_)(); }
 
 private:

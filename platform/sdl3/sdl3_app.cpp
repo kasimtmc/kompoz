@@ -619,7 +619,7 @@ public:
         SDL_RenderTexture(renderer_, t, nullptr, &d);
     }
 
-    void drawImage(const ImageBitmap& unfiltered, const Rect& src, const Rect& dst, float alpha) override {
+    void drawImage(const ImageBitmap& unfiltered, const Rect& src, const Rect& dst, float alpha, FilterQuality quality) override {
         ImageBitmap image = unfiltered;
         for (auto it = filters_.rbegin(); it != filters_.rend(); ++it) image = it->apply(image);
         SDL_Texture* texture = textureFor(image);
@@ -627,6 +627,8 @@ public:
         SDL_FRect s{src.x, src.y, src.width, src.height};
         SDL_FRect d{dst.x * scale - ox_, dst.y * scale - oy_, dst.width * scale, dst.height * scale};
         SDL_SetTextureAlphaModFloat(texture, alpha);
+        // (No mipmaps or cubics here: Medium and High as Low.)
+        SDL_SetTextureScaleMode(texture, quality == FilterQuality::None ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
         SDL_RenderTexture(renderer_, texture, &s, &d);
     }
 
@@ -1178,8 +1180,10 @@ public:
         }
     }
 
-    void drawPath(const Path& path, Offset origin, const Brush& unfiltered, const Rect& area, const PathStroke& stroke) override {
+    void drawPath(const Path& path, Offset origin, const Brush& unfiltered, const Rect& area, const PathStroke& given) override {
         if (path.isEmpty()) return;
+        PathStroke stroke = given;
+        if (stroke.hairline) stroke.width = 1 / scale, stroke.join = StrokeJoin::Round;  // a pixel wide, its corners unfolded
         Brush brush = filtered(unfiltered);
         // Rasterized relative to a whole pixel, with the fraction (in quarter pixels) part of the
         // cache key: moving a path by whole pixels doesn't rasterize it again. One that moves by

@@ -172,8 +172,10 @@ public:
     void drawArc(const Rect& oval, float start, float sweep, float strokeWidth, Color c, bool) override {
         arcs.push_back({moved(oval), start, sweep, strokeWidth, c});
     }
-    void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float) override {
+    std::vector<FilterQuality> imageQualities;  // how each image is sampled
+    void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float, FilterQuality quality) override {
         images.push_back(image.id());
+        imageQualities.push_back(quality);
         imageFilters.push_back(filterStack);
         imageSources.push_back(src);
         imageDestinations.push_back(moved(dst));
@@ -267,7 +269,8 @@ public:
         rectCorners.push_back(radii);
     }
     std::vector<Color> pathColors;   // each drawn path's color (a gradient's at the path's center)
-    std::vector<float> pathStrokes;  // and stroke width (0: filled)
+    std::vector<float> pathStrokes;  // and stroke width (0: filled, unless a hairline)
+    std::vector<PathStroke> pathStrokeStyles;  // and all of its stroke
     std::vector<Path> pathShapes;    // and the path itself (around the origin it was drawn at)
     void drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& area, const PathStroke& stroke) override {
         order += 'p';
@@ -276,6 +279,7 @@ public:
         pathColors.push_back(filtered(brush.colorAt(Rect{b.x + origin.x, b.y + origin.y, b.width, b.height}.center(), area)));
         paths.push_back(moved({b.x + origin.x, b.y + origin.y, b.width, b.height}));
         pathStrokes.push_back(stroke.width);
+        pathStrokeStyles.push_back(stroke);
         pathShapes.push_back(path);
     }
 

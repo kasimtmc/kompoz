@@ -97,6 +97,11 @@ AnnotatedString buildAnnotatedString(const std::function<void(AnnotatedString::B
 
 namespace detail {
 
+void styleGlyphs(Font& font, const DrawStyle& style) {
+    font.stroked = style.isStroke();
+    font.strokeWidth = style.width, font.strokeJoin = style.join, font.strokeMiter = style.miter;
+}
+
 Font styledFont(const TextStyle& style, Font base) {
     Font font = style.font.value_or(base);
     if (style.fontSize) font.size = style.fontSize->resolve(font.size);  // em: of the size it had
@@ -107,7 +112,7 @@ Font styledFont(const TextStyle& style, Font base) {
     if (style.lineHeight) font.lineHeight = style.lineHeight->resolve(font.size);
     if (style.lineHeightStyle) font.lineHeightStyle = *style.lineHeightStyle;
     if (style.fontFeatureSettings) font.features = FontFeatures::id(*style.fontFeatureSettings);
-    if (style.drawStyle) font.strokeWidth = style.drawStyle->strokeWidth, font.strokeJoin = style.drawStyle->join;
+    if (style.drawStyle) styleGlyphs(font, *style.drawStyle);
     if (style.textGeometricTransform) font.scaleX = style.textGeometricTransform->scaleX, font.skewX = style.textGeometricTransform->skewX;
     return font;
 }
@@ -129,6 +134,7 @@ std::vector<TextRun> resolveRuns(const AnnotatedString& text, const Font& base, 
             if (text.links()[k].start <= run.start && run.end <= text.links()[k].end) {
                 run.link = int(k);
                 run.color = linkColor;
+                run.own |= TextRun::OwnPaint;
             }
         // An inner withStyle ends (and is added) before the outer one: apply the widest spans
         // first so nested styles override the ones around them.
@@ -141,16 +147,16 @@ std::vector<TextRun> resolveRuns(const AnnotatedString& text, const Font& base, 
             if (s->style.fontWeight) run.font.weight = *s->style.fontWeight;
             if (s->style.fontStyle) run.font.style = *s->style.fontStyle;
             if (s->style.fontFamily) run.font.family = s->style.fontFamily->id;
-            if (s->style.color) run.color = *s->style.color;
-            if (s->style.textDecoration) run.decoration = *s->style.textDecoration;
+            if (s->style.color) run.color = *s->style.color, run.own |= TextRun::OwnPaint;
+            if (s->style.textDecoration) run.decoration = *s->style.textDecoration, run.own |= TextRun::OwnDecoration;
             if (s->style.background) run.background = s->style.background;
             if (s->style.letterSpacing) run.font.letterSpacing = s->style.letterSpacing->resolve(run.font.size);
             if (s->style.fontFeatureSettings) run.font.features = FontFeatures::id(*s->style.fontFeatureSettings);
             if (s->style.color) run.brush.reset();  // a span's color goes over the text's brush
-            if (s->style.brush) run.brush = s->style.brush;
-            if (s->style.shadow) run.shadow = s->style.shadow;
+            if (s->style.brush) run.brush = s->style.brush, run.own |= TextRun::OwnPaint;
+            if (s->style.shadow) run.shadow = s->style.shadow, run.own |= TextRun::OwnShadow;
             if (s->style.baselineShift) run.baselineShift = *s->style.baselineShift;
-            if (s->style.drawStyle) run.font.strokeWidth = s->style.drawStyle->strokeWidth, run.font.strokeJoin = s->style.drawStyle->join;
+            if (s->style.drawStyle) styleGlyphs(run.font, *s->style.drawStyle), run.own |= TextRun::OwnDrawStyle;
             if (const auto& t = s->style.textGeometricTransform) run.font.scaleX = t->scaleX, run.font.skewX = t->skewX;
         }
         for (size_t k = 0; k < placeholders.size(); ++k)  // inline content: its room, em of the size there

@@ -214,7 +214,7 @@ std::optional<Offset> Renderer::rasterizeInClips(const std::vector<Contour>& con
     return origin;
 }
 
-void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Mask mask, Texture* texture1, bool inTargetPixels) {
+void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Mask mask, Texture* texture1, bool inTargetPixels, Sampler sampler) {
     if (targets_.empty()) return;  // (drawn outside beginTarget/endTarget)
     Pass& pass = passes_[targets_.back().pass];
     IRect clip = scissor();
@@ -295,13 +295,13 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Ma
     if (!pass.batches.empty()) {
         Batch& last = pass.batches.back();
         if (last.texture == texture && last.texture1 == texture1 && last.mask == mask && last.opaque == opaque && last.blend == blend &&
-            last.scissor == clip && last.generation == generation) {
+            last.scissor == clip && last.generation == generation && last.sampler == sampler) {
             pass.prims.push_back(p);
             ++last.count;
             return;
         }
     }
-    pass.batches.push_back({texture, texture1, mask, opaque, blend, clip, generation, uint32_t(pass.prims.size()), 1});
+    pass.batches.push_back({texture, texture1, mask, opaque, blend, clip, generation, uint32_t(pass.prims.size()), 1, sampler});
     pass.prims.push_back(p);
 }
 
@@ -489,7 +489,7 @@ void Renderer::execute(Pass& pass) {
             if (b.mask == Mask::Texture0)
                 device_.setTexture(0, *mask_, nearest);
             else
-                device_.setTexture(0, *b.texture, Sampler{});
+                device_.setTexture(0, *b.texture, b.sampler);
             if (b.mask == Mask::Texture1)  // (a layer's cut, which may be turned: filtered)
                 device_.setTexture(1, *mask_, Sampler{});
             else
@@ -576,14 +576,24 @@ Texture* Renderer::acquire(int width, int height, Format format) {
     return best->texture.get();
 }
 
-Texture* Renderer::imageTexture(const ImageBitmap& image) {
+// Premultiplied, so that what filtering mixes is weighed by how much of it there is (as Skia
+// samples): a transparent pixel's color doesn't bleed into its neighbors.
+Texture* Renderer::imageTexture(const ImageBitmap& image, bool mipmapped) {
     if (image.empty()) return nullptr;
-    if (auto it = images_.find(image.id()); it != images_.end()) return it->second.texture.get();
-    auto t = device_.createTexture(image.width(), image.height(), Format::RGBA8, TextureUsage::Sampled);
+    auto it = images_.find(image.id());
+    if (it != images_.end() && (it->second.mipmapped || !mipmapped)) return it->second.texture.get();
+    int w = image.width(), h = image.height();
+    auto t = device_.createTexture(w, h, Format::RGBA8, uint8_t(TextureUsage::Sampled | (mipmapped ? TextureUsage::Mipmapped : 0)));
     if (!t) return nullptr;
-    device_.upload(*t, {0, 0, image.width(), image.height()}, image.pixels(), size_t(image.width()) * 4);
+    std::vector<uint8_t> premultiplied(image.pixels(), image.pixels() + size_t(w) * size_t(h) * 4);
+    for (size_t i = 0; i < premultiplied.size(); i += 4) {
+        int a = premultiplied[i + 3];
+        for (size_t k = 0; k < 3; ++k) premultiplied[i + k] = uint8_t((premultiplied[i + k] * a + 127) / 255);
+    }
+    device_.upload(*t, {0, 0, w, h}, premultiplied.data(), size_t(w) * 4);
+    if (mipmapped) device_.generateMipmaps(*t);
     Texture* raw = t.get();
-    images_.emplace(image.id(), ImageTexture{std::move(t), image.token()});
+    images_[image.id()] = ImageTexture{std::move(t), image.token(), mipmapped};  // (a mipmapped one in place of one without)
     return raw;
 }
 
@@ -728,8 +738,11 @@ void Renderer::drawArc(const Rect& oval, float start, float sweep, float width, 
     add(ARC, p);
 }
 
-void Renderer::drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha) {
-    Texture* t = imageTexture(image);
+// Sampled as `quality` says: the nearest texel, bilinearly, bilinearly from the mipmap level
+// nearest the size it is drawn at (Skia's Medium), or a Mitchell cubic of the sixteen nearest
+// (Skia's High, in the shader: each texel at its center).
+void Renderer::drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha, FilterQuality quality) {
+    Texture* t = imageTexture(image, quality == FilterQuality::Medium);
     if (!t || alpha <= 0) return;
     float x = dst.x * scale - ox_, y = dst.y * scale - oy_;
     Prim p;
@@ -737,8 +750,11 @@ void Renderer::drawImage(const ImageBitmap& image, const Rect& src, const Rect& 
     std::copy(std::begin(p.bounds), std::end(p.bounds), p.shape);
     float iw = float(image.width()), ih = float(image.height());
     set(p.uv, src.x / iw, src.y / ih, src.right() / iw, src.bottom() / ih);
-    set(p.params, alpha, 0, 0.5f / iw, 0.5f / ih);
-    add(IMAGE, p, t);
+    bool cubic = quality == FilterQuality::High;
+    set(p.params, alpha, cubic ? 1.f : 0.f, 0.5f / iw, 0.5f / ih);
+    Sampler sampler{quality == FilterQuality::None || cubic ? Filter::Nearest : Filter::Linear};
+    sampler.mipmaps = quality == FilterQuality::Medium;
+    add(IMAGE, p, t, false, Mask::None, nullptr, false, sampler);
 }
 
 void Renderer::drawShadow(const Rect& rect, const CornerRadii& radii, const Shadow& shadow, bool inner) {
@@ -837,6 +853,12 @@ std::vector<Contour> Renderer::polygonsOf(const Path& path, Offset origin, const
         place.tolerance = kTolerance / std::clamp(most, 1.f, 64.f);
     }
     std::vector<Contour> contours = flattenPath(path.commands(), place);
+    // A hairline: a pixel wide where it is drawn (through the transform first), its corners
+    // round (Skia's hairlines join nothing: one line per segment).
+    if (stroke.hairline) {
+        if (transformed) contours = project(contours, transform_);
+        return strokeOutline(contours, 1, stroke.cap, StrokeJoin::Round, stroke.miter, place.tolerance);
+    }
     if (stroke.width > 0) contours = strokeOutline(contours, stroke.width * scale, stroke.cap, stroke.join, stroke.miter, place.tolerance);
     return transformed ? project(contours, transform_) : contours;
 }
@@ -844,7 +866,7 @@ std::vector<Contour> Renderer::polygonsOf(const Path& path, Offset origin, const
 void Renderer::drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& area, const PathStroke& stroke) {
     if (path.isEmpty()) return;
     std::vector<Contour> contours = polygonsOf(path, origin, stroke);
-    bool evenOdd = stroke.width <= 0 && path.fillType == Path::FillType::EvenOdd;
+    bool evenOdd = !stroke.strokes() && path.fillType == Path::FillType::EvenOdd;
     Prim paint = painted(brush, area);
     if (!transform_.identity()) {
         if (paint.paint[0] != 0) {  // a gradient: worked out where each pixel is in the path's space

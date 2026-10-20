@@ -55,7 +55,7 @@ public:
     void drawTextShadow(std::string_view utf8, Offset baseline, const Font& font, Color color, float blurRadius, bool rtl) override;
     void drawVector(const ImageVector& vector, const Rect& bounds, Color color) override;
     void drawArc(const Rect& oval, float startDegrees, float sweepDegrees, float strokeWidth, Color color, bool roundCap) override;
-    void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha) override;
+    void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha, FilterQuality quality = DefaultFilterQuality) override;
     void pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform = {}) override;
     void popLayer() override;
     void pushClip(const Rect& rect) override;
@@ -99,6 +99,7 @@ private:
         IRect scissor;
         uint32_t generation;  // the pass's masks it reads (see Pass)
         uint32_t first, count;
+        Sampler sampler;  // texture's (an image's, as its FilterQuality says)
     };
     // One edge of a path in the coverage mask, and the path's part of the mask (shaders/path.slang).
     struct EdgeInstance {
@@ -199,6 +200,7 @@ private:
     struct ImageTexture {
         std::unique_ptr<Texture> texture;
         std::weak_ptr<const void> token;
+        bool mipmapped = false;
     };
     struct PooledTexture {
         std::unique_ptr<Texture> texture;  // (its format: a target's copy has the target's)
@@ -209,7 +211,7 @@ private:
     // Records a primitive: its own transform (the prim's) goes through the current one, unless it
     // is in the target's pixels already (a path's coverage, an opaque fill).
     void add(int kind, const Prim& prim, Texture* texture = nullptr, bool opaque = false, Mask mask = Mask::None, Texture* texture1 = nullptr,
-             bool inTargetPixels = false);
+             bool inTargetPixels = false, Sampler sampler = {});
     // Rasterizes polygons into the current pass's coverage mask, within `region` (px of the
     // target, or of a layer before its transform): where the mask's texel (0, 0) is in those
     // pixels, or nothing if the region is empty.
@@ -254,7 +256,7 @@ private:
     // The current clip's chain, as a table row.
     int clipRow(int chain);
     Texture* pageTexture(int page);
-    Texture* imageTexture(const ImageBitmap& image);
+    Texture* imageTexture(const ImageBitmap& image, bool mipmapped = false);  // its pixels premultiplied
     Texture* acquire(int width, int height, Format format = Format::RGBA8);
     IRect scissor() const;
     Pipeline& pipeline(Format target, const BlendState& blend);

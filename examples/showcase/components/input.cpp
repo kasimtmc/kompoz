@@ -159,7 +159,7 @@ public:
     }
     void draw(ContentDrawScope& d) override {
         d.drawContent();
-        if (float a = alpha_.value(); a > 0) d.drawRoundRect(color_.copy(a), 12, {1.5f, 1.5f}, Size{d.size().width - 3, d.size().height - 3}, Stroke(3));
+        if (float a = alpha_.value(); a > 0) d.drawRoundRect(color_.copy(a), {1.5f, 1.5f}, Size{d.size().width - 3, d.size().height - 3}, CornerRadius(12), Stroke(3));
     }
 
 private:

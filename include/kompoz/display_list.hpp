@@ -55,7 +55,7 @@ public:
     void drawShapeShadow(const Rect& rect, const Shape& shape, bool rtl, const Shadow& shadow, bool inner) override;
     void drawVector(const ImageVector& vector, const Rect& bounds, Color color) override;
     void drawArc(const Rect& oval, float startDegrees, float sweepDegrees, float strokeWidth, Color color, bool roundCap) override;
-    void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha) override;
+    void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha, FilterQuality quality = DefaultFilterQuality) override;
     void pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform = {}) override;
     void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform = {}) override;
     void pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) override;

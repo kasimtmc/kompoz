@@ -2001,6 +2001,132 @@ void pathShadowsAreComposes(Gpu& g) {
     if (worst > 2) std::printf("  a box's shadow: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
 }
 
+// Images are sampled as their FilterQuality says, their texels premultiplied (a transparent
+// texel's color doesn't bleed), against models on the CPU: the nearest texel; bilinear; from the
+// mipmap level the size takes (a 16 x 16 drawn 4 x 4: each pixel its 4 x 4 block's mean);
+// Mitchell's cubic of the sixteen nearest. Hairlines are a pixel wide through any scale.
+void imagesAreSampledAsAsked(Gpu& g) {
+    const int iw = 4, ih = 4, n = 32;
+    std::vector<uint8_t> px(size_t(iw) * ih * 4);
+    for (int i = 0; i < iw * ih; ++i) {
+        uint8_t* q = &px[size_t(i) * 4];
+        bool clear = i % 5 == 2;  // transparent, green underneath
+        q[0] = clear ? 0 : uint8_t(40 + i * 13), q[1] = clear ? 255 : uint8_t(200 - i * 9), q[2] = clear ? 0 : uint8_t(i * 15),
+        q[3] = clear ? 0 : uint8_t(i % 3 == 0 ? 255 : 128);
+    }
+    ImageBitmap image = ImageBitmap::fromPixels(iw, ih, px);
+    auto texel = [&](int x, int y) {  // premultiplied, as uploaded (clamped to the edge)
+        x = std::clamp(x, 0, iw - 1), y = std::clamp(y, 0, ih - 1);
+        const uint8_t* q = &px[(size_t(y) * iw + size_t(x)) * 4];
+        std::array<float, 4> out{};
+        for (int c = 0; c < 3; ++c) out[size_t(c)] = float((q[c] * q[3] + 127) / 255) / 255;
+        out[3] = q[3] / 255.f;
+        return out;
+    };
+    auto modelled = [&](const std::function<std::array<float, 4>(float u, float v)>& sample) {  // u, v in texels
+        Image out{n, n, std::vector<float>(size_t(n) * n * 4, 0.f)};
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x) {
+                auto c = sample((x + 0.5f) * iw / n, (y + 0.5f) * ih / n);
+                std::copy(c.begin(), c.end(), out.at(x, y));
+            }
+        return overWhite(out);
+    };
+    auto drawn = [&](FilterQuality q) {
+        return g.render(n, n, 1, [&](GraphicsContext& c) { c.drawImage(image, {0, 0, float(iw), float(ih)}, {0, 0, float(n), float(n)}, 1, q); });
+    };
+    Pixels nearest = modelled([&](float u, float v) { return texel(int(std::floor(u)), int(std::floor(v))); });
+    Pixels bilinear = modelled([&](float u, float v) {
+        float x = u - 0.5f, y = v - 0.5f, fx = x - std::floor(x), fy = y - std::floor(y);
+        int x0 = int(std::floor(x)), y0 = int(std::floor(y));
+        std::array<float, 4> out{};
+        for (int c = 0; c < 4; ++c)
+            out[size_t(c)] = (texel(x0, y0)[size_t(c)] * (1 - fx) + texel(x0 + 1, y0)[size_t(c)] * fx) * (1 - fy) +
+                             (texel(x0, y0 + 1)[size_t(c)] * (1 - fx) + texel(x0 + 1, y0 + 1)[size_t(c)] * fx) * fy;
+        return out;
+    });
+    auto mitchell = [](float x) {
+        x = std::abs(x);
+        return x < 1 ? (7 * x * x * x - 12 * x * x + 16.f / 3) / 6 : x < 2 ? (-7.f / 3 * x * x * x + 12 * x * x - 20 * x + 32.f / 3) / 6 : 0.f;
+    };
+    Pixels cubic = modelled([&](float u, float v) {
+        float x = u - 0.5f, y = v - 0.5f;
+        int x0 = int(std::floor(x)), y0 = int(std::floor(y));
+        std::array<float, 4> out{};
+        for (int j = -1; j <= 2; ++j)
+            for (int i = -1; i <= 2; ++i) {
+                float w = mitchell(float(x0 + i) - x) * mitchell(float(y0 + j) - y);
+                for (int c = 0; c < 4; ++c) out[size_t(c)] += texel(x0 + i, y0 + j)[size_t(c)] * w;
+            }
+        out[3] = std::clamp(out[3], 0.f, 1.f);
+        for (int c = 0; c < 3; ++c) out[size_t(c)] = std::clamp(out[size_t(c)], 0.f, out[3]);
+        return out;
+    });
+    const std::pair<FilterQuality, const Pixels*> cases[] = {{FilterQuality::None, &nearest}, {FilterQuality::Low, &bilinear},
+                                                             {FilterQuality::High, &cubic}};
+    for (auto [quality, want] : cases) {
+        Pixels got = drawn(quality);
+        int worst = worstAgainst(got, [&](int x, int y) { return want->at(x, y); });
+        CHECK(worst <= 2);
+        if (worst > 2) std::printf("  image sampled at quality %d: off by %d at (%g, %g)\n", int(quality), worst, worstAt.x, worstAt.y);
+    }
+    // Mipmaps: a 16 x 16 drawn 4 x 4 at Medium, each pixel its block's mean (not at Low: the four texels in its middle).
+    const int big = 16;
+    std::vector<uint8_t> fine(size_t(big) * big * 4);
+    for (int y = 0; y < big; ++y)
+        for (int x = 0; x < big; ++x) {
+            uint8_t* q = &fine[(size_t(y) * big + size_t(x)) * 4];
+            bool on = x % 4 == 1 || x % 4 == 2 ? y % 4 == 1 || y % 4 == 2 : false;  // each block's middle (where Low reads)
+            q[0] = on ? 255 : 0, q[1] = uint8_t(x * 16), q[2] = uint8_t(y * 16), q[3] = on ? 255 : 64;
+        }
+    ImageBitmap checkered = ImageBitmap::fromPixels(big, big, fine);
+    Image means{4, 4, std::vector<float>(16 * 4, 0.f)};
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x)
+            for (int j = 0; j < 4; ++j)
+                for (int i = 0; i < 4; ++i) {
+                    const uint8_t* q = &fine[(size_t(y * 4 + j) * big + size_t(x * 4 + i)) * 4];
+                    for (int c = 0; c < 3; ++c) means.at(x, y)[c] += float((q[c] * q[3] + 127) / 255) / 255 / 16;
+                    means.at(x, y)[3] += q[3] / 255.f / 16;
+                }
+    Pixels wantMeans = overWhite(means);
+    auto small = [&](FilterQuality q) {
+        return g.render(4, 4, 1, [&](GraphicsContext& c) { c.drawImage(checkered, {0, 0, float(big), float(big)}, {0, 0, 4, 4}, 1, q); });
+    };
+    int worst = worstAgainst(small(FilterQuality::Medium), [&](int x, int y) { return wantMeans.at(x, y); });
+    CHECK(worst <= 3);
+    if (worst > 3) std::printf("  a mipmapped image: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+    CHECK(worstAgainst(small(FilterQuality::Low), [&](int x, int y) { return wantMeans.at(x, y); }) > 20);
+    // Hairlines: a pixel wide, enlarged three times (by a transform), turned or not; a 1 dp stroke three.
+    for (float turn : {0.f, 30.f}) {
+        for (bool hairline : {true, false}) {
+            Path line;
+            line.moveTo(2, 10.5f);
+            line.lineTo(30, 10.5f);
+            Pixels got = g.render(96, 64, 1, [&](GraphicsContext& c) {
+                Matrix m;
+                m.scale(3, 3);
+                m.translate(16, 10.5f);
+                m.rotateZ(turn);
+                m.translate(-16, -10.5f);
+                c.pushTransform(m);
+                c.drawPath(line, {0, 0}, Brush::solid(colors::Black), {}, hairline ? PathStroke{0, StrokeCap::Butt, StrokeJoin::Miter, 4, true} : PathStroke{1});
+                c.popTransform();
+            });
+            // Ink across the line at its middle (48, 31.5 px), perpendicular to it.
+            float ink = 0, rad = turn * std::numbers::pi_v<float> / 180;
+            for (float t = -6; t <= 6; t += 0.05f) {
+                float x = 48 - std::sin(rad) * t, y = 31.5f + std::cos(rad) * t;
+                int xi = int(x), yi = int(y);
+                ink += (255 - got.at(xi, yi)[0]) / 255.f * 0.05f;
+            }
+            float want = hairline ? 1 : 3;
+            CHECK(std::abs(ink - want) < 0.25f);
+            if (std::abs(ink - want) >= 0.25f) std::printf("  %s turned %g: %g px of ink across, not %g\n", hairline ? "a hairline" : "a stroke", turn, ink, want);
+        }
+    }
+}
+
 // Elevation shadows are Android's: a rounded rect's (of one radius, a rect's, a circle's), flat,
 // through a similarity, as Skia's drawFastShadow and ShadowRRectOp draw it, worked out here per
 // pixel in double: the ambient shadow the outline spread by r = z / 2 px (up to 150), falling off
@@ -2377,6 +2503,7 @@ int main() {
             graphicsLayersCompositeAsCompose(g);
             blursAreGaussian(g);
             pathShadowsAreComposes(g);
+            imagesAreSampledAsAsked(g);
             elevationShadowsAreAndroids(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)

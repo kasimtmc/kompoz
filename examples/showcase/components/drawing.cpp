@@ -32,7 +32,7 @@ void DrawingSection(CallSite site) {
                         const Color colors[] = {primary, Color::hex(0x7D5260), Color::hex(0x625B71)};
                         float start = -90;
                         for (int i = 0; i < 3; ++i) {
-                            d.drawArc(colors[i], start, parts[i] * 360 - 3);
+                            d.drawArc(colors[i], start, parts[i] * 360 - 3, true);
                             start += parts[i] * 360;
                         }
                         d.drawCircle(hole, d.size().width * 0.28f);
@@ -57,7 +57,7 @@ void DrawingSection(CallSite site) {
                                area.lineTo(8, s.height);
                                area.close();
                                d.drawPath(area, Brush::verticalGradient({line.copy(0.35f), line.copy(0)}));
-                               d.drawPath(curve, line, Stroke(3, StrokeCap::Round, StrokeJoin::Round));
+                               d.drawPath(curve, line, 1, Stroke(3, 4, StrokeCap::Round, StrokeJoin::Round));
                                d.drawText("sin(x)", {10, 6}, Font{11}, axis);
                            });
                 });
@@ -68,13 +68,13 @@ void DrawingSection(CallSite site) {
                    [c = cs.primary, o = cs.outline, t = cs.tertiary, traced](DrawScope& d) {
                        Size s = d.size();
                        d.drawLine(o, {12, 10}, {s.width - 12, 10}, 2, StrokeCap::Round, PathEffect::dashPathEffect({8, 6}));
-                       d.drawCircle(c, 22, Offset{40, 50}, Stroke(3, StrokeCap::Round, StrokeJoin::Round, PathEffect::dashPathEffect({7, 5})));
+                       d.drawCircle(c, 22, Offset{40, 50}, 1, Stroke(3, 4, StrokeCap::Round, StrokeJoin::Round, PathEffect::dashPathEffect({7, 5})));
                        Path triangle;
                        triangle.moveTo(100, 72);
                        triangle.lineTo(124, 26);
                        triangle.lineTo(148, 72);
                        triangle.close();
-                       d.drawPath(triangle, t, Stroke(3, StrokeCap::Butt, StrokeJoin::Miter, PathEffect::cornerPathEffect(8)));
+                       d.drawPath(triangle, t, 1, Stroke(3, 4, StrokeCap::Butt, StrokeJoin::Miter, PathEffect::cornerPathEffect(8)));
                        d.drawPoints({{166, 30}, {178, 40}, {166, 50}, {178, 60}, {166, 70}}, PointMode::Points, o, 6, StrokeCap::Round);
                        Path wave;
                        for (int i = 0; i <= 48; ++i) {
@@ -85,7 +85,7 @@ void DrawingSection(CallSite site) {
                        PathMeasure measure(wave);
                        Path part;
                        if (measure.getSegment(0, measure.length() * traced, part))
-                           d.drawPath(part, c, Stroke(3, StrokeCap::Round, StrokeJoin::Round));
+                           d.drawPath(part, c, 1, Stroke(3, 4, StrokeCap::Round, StrokeJoin::Round));
                        d.drawCircle(c, 5, measure.getPosition(measure.length() * traced));
                    });
             // stampedPathEffect: arrows turned along a wave (Rotate), and a short bar bent round a
@@ -106,12 +106,12 @@ void DrawingSection(CallSite site) {
                            float y = 42 - std::sin(float(i) / 48 * 3 * std::numbers::pi_v<float>) * 22;
                            i == 0 ? wave.moveTo(x, y) : wave.lineTo(x, y);
                        }
-                       d.drawPath(wave, c, Stroke(1, StrokeCap::Butt, StrokeJoin::Miter,
+                       d.drawPath(wave, c, 1, Stroke(1, 4, StrokeCap::Butt, StrokeJoin::Miter,
                                                   PathEffect::stampedPathEffect(arrow, 24, slide, StampedPathEffectStyle::Rotate)));
                        Path ring, bar;
                        ring.addOval({s.width - 92, 8, 68, 68});
                        bar.addRect({0, -3, 18, 6});
-                       d.drawPath(ring, t, Stroke(1, StrokeCap::Butt, StrokeJoin::Miter,
+                       d.drawPath(ring, t, 1, Stroke(1, 4, StrokeCap::Butt, StrokeJoin::Miter,
                                                   PathEffect::stampedPathEffect(bar, 26.7f, slide, StampedPathEffectStyle::Morph)));
                    });
             // Path.op: two circles combined four ways (union, intersect, difference, xor).
@@ -158,7 +158,7 @@ void DrawingSection(CallSite site) {
                        d.withTransform([](DrawTransform& tr) {
                            tr.translate(285, 48);
                            tr.rotate(30, Offset{0, 0});
-                       }, [&](DrawScope& in) { in.drawRoundRect(t, 6, {-20, -20}, Size{40, 40}); });
+                       }, [&](DrawScope& in) { in.drawRoundRect(t, {-20, -20}, Size{40, 40}, CornerRadius(6)); });
                    });
             // Brushes: sweep, radial and linear gradients; a star Path built once per size.
             Row(Modifier().fillMaxWidth(),
@@ -188,7 +188,7 @@ void DrawingSection(CallSite site) {
                         Brush fill = Brush::linearGradient({Color::hex(0xFFD54F), Color::hex(0xF4511E)});
                         return cache.onDrawBehind([star, fill](DrawScope& d) {
                             d.drawPath(star, fill);
-                            d.drawPath(star, Color::hex(0xBF360C), Stroke(2, StrokeCap::Round, StrokeJoin::Round));
+                            d.drawPath(star, Color::hex(0xBF360C), 1, Stroke(2, 4, StrokeCap::Round, StrokeJoin::Round));
                         });
                     }));
                     Box(Modifier().weight(1).height(56).background(
@@ -296,7 +296,7 @@ void DrawingSection(CallSite site) {
                             for (int col = 0; col < 15; ++col) {
                                 Offset at{p.x + float(col) * 60 + 4, p.y + float(row) * 60 + 4};
                                 if (at.x > d.size().width || at.y > d.size().height || at.x < -60 || at.y < -60) continue;
-                                d.drawRoundRect(hueColor(row * 15 + col), 10, at, Size{52, 52});
+                                d.drawRoundRect(hueColor(row * 15 + col), at, Size{52, 52}, CornerRadius(10));
                             }
                     }),
                 Alignment::TopEnd, [&] {

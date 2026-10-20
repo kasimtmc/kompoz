@@ -39,8 +39,9 @@ enum class Format : uint8_t { RGBA8, BGRA8, R16F, RGBA32F };
 // A texel's size in bytes.
 constexpr size_t bytesPerTexel(Format f) { return f == Format::RGBA32F ? 16 : f == Format::R16F ? 2 : 4; }
 
+// Mipmapped: copies halved and halved again down to a texel, made by generateMipmaps.
 struct TextureUsage {
-    enum : uint8_t { Sampled = 1, RenderTarget = 2 };
+    enum : uint8_t { Sampled = 1, RenderTarget = 2, Mipmapped = 4 };
 };
 
 class Texture {
@@ -61,9 +62,11 @@ private:
 enum class Filter : uint8_t { Nearest, Linear };
 // Beyond the edges: the edge texel, the texture again, mirrored, or transparent.
 enum class Wrap : uint8_t { Clamp, Repeat, Mirror, Transparent };
+// `mipmaps`: from a mipmapped texture's copy nearest the size it is drawn at (else its full size).
 struct Sampler {
     Filter filter = Filter::Linear;
     Wrap wrapU = Wrap::Clamp, wrapV = Wrap::Clamp;
+    bool mipmaps = false;
     bool operator==(const Sampler&) const = default;
 };
 
@@ -189,6 +192,9 @@ public:
     // `instanceCount` instances of `vertexCount` vertices (triangles), their attributes from `instances`.
     virtual void draw(const BufferRef& instances, uint32_t vertexCount, uint32_t instanceCount) = 0;
     virtual void endPass() = 0;
+    // A mipmapped texture's smaller copies, each from the one before (filtered), after its
+    // pixels are uploaded; outside passes.
+    virtual void generateMipmaps(Texture& texture) = 0;
     // Part of one texture into another of the same format, at (x, y); outside passes.
     virtual void copyTexture(Texture& source, const IRect& region, Texture& destination, int x, int y) = 0;
     // A texture's pixels (RGBA8, top row first), waiting for what was drawn into it so far.

@@ -11,7 +11,7 @@ void Target() {
     Color ring = colorScheme().primary, center = colorScheme().error;
     Canvas(Modifier().size(160), [=](DrawScope& d) {
         d.drawCircle(ring.copy(0.2f));                              // fills the canvas
-        d.drawCircle(ring, d.size().width / 3, std::nullopt, Stroke(6));
+        d.drawCircle(ring, d.size().width / 3, std::nullopt, 1, Stroke(6));
         d.drawCircle(center, 12);                                   // at the center
     });
 }
@@ -23,15 +23,16 @@ The draw lambda runs while drawing, not while composing. Read the colors you nee
 
 | Call | Draws |
 |---|---|
-| `drawRect`, `drawRoundRect`, `drawCircle`, `drawOval`, `drawArc` | Shapes, filled or stroked, with a color or a brush. |
-| `drawLine(color, start, end, width)` | A line; with a `StrokeCap` and a dash `PathEffect`. |
+| `drawRect`, `drawRoundRect`, `drawCircle`, `drawOval` | Shapes, filled or stroked; a rounded rect's `CornerRadius(x, y)` can make its corners quarter ellipses. |
+| `drawArc(color, start, sweep, useCenter, …)` | Part of an oval: a pie slice through its center (`useCenter`), else closed straight across or an open arc. |
+| `drawLine(color, start, end, width, cap, pathEffect)` | A line; with a `StrokeCap` and a dash `PathEffect`. |
 | `drawPoints(points, mode, color, width)` | Points, lines between pairs, or a polyline. |
-| `drawPath(path, color or brush, style)` | Any path. |
-| `drawText(layout, topLeft)` | Text measured with a text measurer (see [Text](text.md#measuring-text)). |
-| `drawImage(image, topLeft, size)` | A bitmap. |
+| `drawPath(path, color, alpha, style)` | Any path. |
+| `drawText(layout, color, topLeft)`, `drawText(measurer, text, topLeft, style)` | Text (see [Text](text.md#measuring-text)). |
+| `drawImage(image, topLeft)`, `drawImage(image, srcOffset, srcSize, dstOffset, dstSize, …, filterQuality)` | A bitmap, or part of it into a rect, sampled as `FilterQuality` says. |
 | `drawVector(vector, color, topLeft, size)` | An `ImageVector`, tinted. |
 
-`DrawStyle` is `Fill` (the default) or `Stroke(width, cap, join)`. Coordinates are in dp from the canvas's top-left corner; `d.size()` and `d.center()` give its size and center.
+They take Compose's parameters, in Compose's order: a color or a brush, then `alpha`, `style`, `colorFilter` and `blendMode` (`d.drawRect(color, {}, size, 0.5f, Stroke(2))`). `DrawStyle` is `Fill` (the default) or `Stroke(width, miter, cap, join, pathEffect)`; a width of 0 is a hairline, one pixel wide whatever the transform. Coordinates are in dp from the canvas's top-left corner; `d.size()` and `d.center()` give its size and center, `d.density()` the pixels in a dp.
 
 ### Transforming
 
@@ -41,7 +42,7 @@ The draw lambda runs while drawing, not while composing. Read the colors you nee
 void Clock(float minutes) {
     Color hand = colorScheme().onSurface;
     Canvas(Modifier().size(120), [=](DrawScope& d) {
-        d.drawCircle(hand, std::nullopt, std::nullopt, Stroke(2));
+        d.drawCircle(hand, std::nullopt, std::nullopt, 1, Stroke(2));
         d.rotate(minutes * 6, [&](DrawScope& r) {          // 6° per minute, around the center
             r.drawLine(hand, r.center(), {r.center().x, 12}, 3, StrokeCap::Round);
         }, d.center());

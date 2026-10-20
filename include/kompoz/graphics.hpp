@@ -73,6 +73,26 @@ struct Rect {
 // A font's weight, 1 to 1000 (Compose's FontWeight): Normal is 400, Medium 500, Bold 700.
 // Text comes in the family's file nearest it, as CSS picks (FontWeight::closest), emboldened
 // when that is too light for a bold weight (FontWeight::synthesizesBold).
+// Whole-pixel positions and sizes (Compose's IntOffset, IntSize): an image's pixels. Each turns
+// into its dp counterpart where one is wanted.
+struct IntOffset {
+    int x = 0, y = 0;
+    constexpr operator Offset() const { return {float(x), float(y)}; }
+    friend constexpr bool operator==(const IntOffset&, const IntOffset&) = default;
+};
+struct IntSize {
+    int width = 0, height = 0;
+    constexpr operator Size() const { return {float(width), float(height)}; }
+    friend constexpr bool operator==(const IntSize&, const IntSize&) = default;
+};
+
+// How an image is sampled where it is drawn bigger or smaller than its pixels (Compose's
+// FilterQuality): the nearest pixel (None), between the four nearest (Low, bilinear), from
+// copies halved and halved again as small as it is drawn (Medium: mipmaps), or a cubic of the
+// sixteen nearest (High: Mitchell's).
+enum class FilterQuality { None, Low, Medium, High };
+inline constexpr FilterQuality DefaultFilterQuality = FilterQuality::Low;
+
 struct FontWeight {
     int weight = 400;
     static const FontWeight Thin, ExtraLight, Light, Normal, Medium, SemiBold, Bold, ExtraBold, Black;
@@ -196,10 +216,13 @@ struct Font {
     float lineHeight = 0;     // sp from a line's baseline to the next's in a paragraph; 0: the font's own
     uint16_t features = 0;    // FontFeatures::id: what the shaper turns on and off
     LineHeightStyle lineHeightStyle;  // where lineHeight puts the room it adds or takes
-    // dp: its glyphs' outlines drawn this wide (centered on them) instead of filled (a text
-    // style's DrawStyle Stroke); color glyphs (emoji) stay as they are.
+    // Its glyphs' outlines drawn instead of filled (a text style's DrawStyle Stroke): strokeWidth
+    // dp wide, centered on them (0: a hairline, one pixel), their corners joined (mitered up to
+    // strokeMiter times the width); color glyphs (emoji) stay as they are.
+    bool stroked = false;
     float strokeWidth = 0;
     StrokeJoin strokeJoin = StrokeJoin::Miter;
+    float strokeMiter = 4;
     // Its glyphs stretched across (their advances too) and slanted: a point y above the baseline
     // moved y * skewX to the right (a text style's TextGeometricTransform).
     float scaleX = 1, skewX = 0;
@@ -512,6 +535,8 @@ public:
     // This gradient sx, sy times as large (a vector's viewport units on its bounds); "the far
     // edge" stays the far edge, a color stays as it is.
     Brush scaled(float sx, float sy) const;
+    // Each of its colors `alpha` times as opaque (as a paint's alpha fades what it paints).
+    Brush faded(float alpha) const;
 
     Kind kind() const { return kind_; }
     bool isSolid() const { return kind_ == Kind::Solid; }
@@ -816,10 +841,12 @@ Shape GenericShape(std::function<void(Path& path, Size size, LayoutDirection lay
 Shape OutlineShape(std::function<Outline(Size size, LayoutDirection layoutDirection)> createOutline);
 
 struct PathStroke {
-    float width = 0;  // 0: fill
+    float width = 0;  // 0: fill (unless a hairline)
     StrokeCap cap = StrokeCap::Butt;
     StrokeJoin join = StrokeJoin::Miter;
     float miter = 4;
+    bool hairline = false;  // stroked one pixel wide, whatever the transform (the width unused)
+    bool strokes() const { return hairline || width > 0; }
 };
 
 // One path of a vector in several paints (Compose's VectorPath), in viewport units: filled with
@@ -953,19 +980,26 @@ struct PathEffect {
     friend bool operator==(const PathEffect&, const PathEffect&) = default;
 };
 
-// Fill, or Stroke(width) to outline (dashed or with rounded corners through a PathEffect).
+// How a shape is drawn (Compose's DrawStyle): filled (Fill), or outlined (Stroke): `width` dp
+// wide, centered on its outline (0: a hairline, one pixel wide whatever the transform), its
+// corners joined (a miter cut off past `miter` times the width), its ends capped, its path
+// through a PathEffect first (dashed, rounded, stamped).
 struct DrawStyle {
-    float strokeWidth = 0;  // 0: fill
+    bool stroke = false;
+    float width = 0;
+    float miter = 4;
     StrokeCap cap = StrokeCap::Butt;
     StrokeJoin join = StrokeJoin::Miter;
     std::optional<PathEffect> pathEffect;
-    constexpr bool isStroke() const { return strokeWidth > 0; }
+    constexpr bool isStroke() const { return stroke; }
+    // As a path's stroke (none for Fill).
+    PathStroke pathStroke() const { return stroke ? PathStroke{width, cap, join, miter, width <= 0} : PathStroke{}; }
     friend bool operator==(const DrawStyle&, const DrawStyle&) = default;
 };
 inline constexpr DrawStyle Fill{};
-constexpr DrawStyle Stroke(float width, StrokeCap cap = StrokeCap::Butt, StrokeJoin join = StrokeJoin::Miter,
+constexpr DrawStyle Stroke(float width = 0, float miter = 4, StrokeCap cap = StrokeCap::Butt, StrokeJoin join = StrokeJoin::Miter,
                            std::optional<PathEffect> pathEffect = {}) {
-    return {width, cap, join, pathEffect};
+    return {true, width, miter, cap, join, pathEffect};
 }
 
 // Lengths along a path (Compose's PathMeasure), contour by contour (curves measured as fine
@@ -1126,8 +1160,10 @@ public:
     // Strokes part of the circle inscribed in `oval`. Angles in degrees, 0 = 3 o'clock, clockwise.
     virtual void drawArc(const Rect& oval, float startDegrees, float sweepDegrees, float strokeWidth, Color color,
                          bool roundCap) = 0;
-    // Draws the `src` pixel rect of `image` into `dst`.
-    virtual void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha) = 0;
+    // Draws the `src` pixel rect of `image` into `dst`, sampled as `quality` says (where the
+    // backend can: SDL's renderer samples Medium and High as Low).
+    virtual void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha,
+                           FilterQuality quality = DefaultFilterQuality) = 0;
     // Everything drawn until popLayer() goes to an offscreen layer that is then composited
     // into `bounds`, clipped to a rounded rect of `radii` and faded by `alpha`.
     virtual void pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform = {}) = 0;
@@ -1182,7 +1218,7 @@ public:
     virtual void fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& brush, const Rect& brushArea) {
         fillRoundRect(rect, radii, brush.colorAt(rect.center(), brushArea));
     }
-    // Fills (stroke.width == 0) or strokes `path` placed at `origin`.
+    // Fills (no stroke) or strokes `path` placed at `origin`.
     virtual void drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& brushArea,
                           const PathStroke& stroke) = 0;
     // A rounded rect's shadow: under it (spread out, moved, blurred), or inside it (`inner`: the

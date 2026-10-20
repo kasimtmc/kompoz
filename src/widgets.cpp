@@ -2960,8 +2960,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
         if (kind == FieldKind::Filled) {
             d.drawRect(indicator, {0, h - indicatorWidth}, Size{s.width, indicatorWidth});
         } else if (shape.pathed()) {  // a shape of its own: all of it, no gap
-            d.drawPath(shape.createOutline({s.width, h}, layoutRtl ? LayoutDirection::Rtl : LayoutDirection::Ltr).asPath(), indicator,
-                       Stroke(indicatorWidth));
+            d.drawPath(shape.createOutline({s.width, h}, layoutRtl ? LayoutDirection::Rtl : LayoutDirection::Ltr).asPath(), indicator, 1, Stroke(indicatorWidth));
         } else {
             // The outline along the shape's corners, with a gap for the floated label.
             float half = indicatorWidth / 2, x0 = half, y0 = half, x1 = s.width - half, y1 = h - half;
@@ -2982,7 +2981,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                 outline.lineTo(gapStart, y0);
             else
                 outline.close();
-            d.drawPath(outline, indicator, Stroke(indicatorWidth));
+            d.drawPath(outline, indicator, 1, Stroke(indicatorWidth));
         }
         if (hasLabel) {
             float rest = (std::min(h, 56.f) - d.measureText(label, Font{16}).height) / 2;  // on the first line

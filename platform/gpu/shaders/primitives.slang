@@ -455,6 +455,25 @@ float clipCoverage(float2 pixel, int count, float row) {
     return inside;
 }
 
+// Mitchell and Netravali's cubic (B = C = 1/3, Skia's for FilterQuality::High) at distance x.
+float mitchell(float x) {
+    x = abs(x);
+    return x < 1 ? (7 * x * x * x - 12 * x * x + 16.0 / 3) / 6 : x < 2 ? (-7.0 / 3 * x * x * x + 12 * x * x - 20 * x + 32.0 / 3) / 6 : 0;
+}
+
+// texture0 (premultiplied, `size` texels) at uv through that cubic: the sixteen nearest texels,
+// each read at its center, weighed; kept a color (its overshoot cut off).
+float4 cubicSample(float2 uv, float2 size) {
+    float2 t = uv * size - 0.5, base = floor(t), f = t - base;
+    float4 sum = 0;
+    for (int j = -1; j <= 2; ++j) {
+        float wy = mitchell(float(j) - f.y);
+        for (int i = -1; i <= 2; ++i) sum += texture0.SampleLevel((base + float2(i, j) + 0.5) / size, 0) * (mitchell(float(i) - f.x) * wy);
+    }
+    sum.a = saturate(sum.a);
+    return float4(clamp(sum.rgb, 0, sum.a), sum.a);
+}
+
 [shader("fragment")]
 float4 fs(Varyings v) : SV_Target {
     int kind = int(v.kind + 0.5);
@@ -521,8 +540,9 @@ float4 fs(Varyings v) : SV_Target {
         src = colored ? float4(texel.rgb * texel.a, texel.a) * v.color.a : paint;
         cover = (colored ? 1 : texel.a) * edge;
     } else if (kind == IMAGE) {
-        float4 texel = texture0.Sample(texcoord);
-        src = float4(texel.rgb * texel.a, texel.a) * v.params.x;
+        // Premultiplied texels; a cubic of the sixteen nearest, each at its center (params.y).
+        float4 texel = v.params.y > 0.5 ? cubicSample(texcoord, 0.5 / v.params.zw) : texture0.Sample(texcoord);
+        src = texel * v.params.x;
         cover = edge;
     } else if (kind == LAYER) {
         float2 texel = clamp(v.local, v.params.xy + 0.5, v.params.zw - 0.5);

@@ -11,7 +11,7 @@ void Target() {
     Color ring = colorScheme().primary, center = colorScheme().error;
     Canvas(Modifier().size(160), [=](DrawScope& d) {
         d.drawCircle(ring.copy(0.2f));                              // canvas'ı doldurur
-        d.drawCircle(ring, d.size().width / 3, std::nullopt, Stroke(6));
+        d.drawCircle(ring, d.size().width / 3, std::nullopt, 1, Stroke(6));
         d.drawCircle(center, 12);                                   // merkezde
     });
 }
@@ -23,15 +23,16 @@ void Target() {
 
 | Çağrı | Çizdiği |
 |---|---|
-| `drawRect`, `drawRoundRect`, `drawCircle`, `drawOval`, `drawArc` | Dolu ya da çizgili, bir renk ya da fırçayla şekiller. |
-| `drawLine(color, start, end, width)` | Bir çizgi; bir `StrokeCap` ve kesikli çizgi için bir `PathEffect` ile. |
+| `drawRect`, `drawRoundRect`, `drawCircle`, `drawOval` | Dolu ya da çizgili şekiller; yuvarlak dikdörtgenin `CornerRadius(x, y)`'si köşelerini çeyrek elips yapabilir. |
+| `drawArc(color, start, sweep, useCenter, …)` | Bir ovalin parçası: merkezinden geçen bir pasta dilimi (`useCenter`), yoksa düz kapatılmış ya da açık bir yay. |
+| `drawLine(color, start, end, width, cap, pathEffect)` | Bir çizgi; bir `StrokeCap` ve kesikli çizgi için bir `PathEffect` ile. |
 | `drawPoints(points, mode, color, width)` | Noktalar, çiftler arasında çizgiler ya da bir çoklu çizgi. |
-| `drawPath(path, color or brush, style)` | Herhangi bir path. |
-| `drawText(layout, topLeft)` | Bir metin ölçerle ölçülmüş metin (bkz. [Metin](text.md#metni-ölçmek)). |
-| `drawImage(image, topLeft, size)` | Bir bitmap. |
+| `drawPath(path, color, alpha, style)` | Herhangi bir path. |
+| `drawText(layout, color, topLeft)`, `drawText(measurer, text, topLeft, style)` | Metin (bkz. [Metin](text.md#metni-ölçmek)). |
+| `drawImage(image, topLeft)`, `drawImage(image, srcOffset, srcSize, dstOffset, dstSize, …, filterQuality)` | Bir bitmap ya da bir parçası bir dikdörtgene, `FilterQuality`'nin dediği gibi örneklenerek. |
 | `drawVector(vector, color, topLeft, size)` | Renklendirilmiş bir `ImageVector`. |
 
-`DrawStyle`, `Fill` (varsayılan) ya da `Stroke(width, cap, join)`'dir. Koordinatlar canvas'ın sol üst köşesinden dp cinsindendir; `d.size()` ve `d.center()` boyutunu ve merkezini verir.
+Compose'un parametrelerini Compose'un sırasıyla alırlar: bir renk ya da fırça, sonra `alpha`, `style`, `colorFilter` ve `blendMode` (`d.drawRect(color, {}, size, 0.5f, Stroke(2))`). `DrawStyle`, `Fill` (varsayılan) ya da `Stroke(width, miter, cap, join, pathEffect)`'tir; 0 genişlik kıl kalınlığındadır, dönüşüm ne olursa olsun bir piksel. Koordinatlar canvas'ın sol üst köşesinden dp cinsindendir; `d.size()` ve `d.center()` boyutunu ve merkezini, `d.density()` bir dp'deki pikselleri verir.
 
 ### Dönüştürmek
 
@@ -41,7 +42,7 @@ void Target() {
 void Clock(float minutes) {
     Color hand = colorScheme().onSurface;
     Canvas(Modifier().size(120), [=](DrawScope& d) {
-        d.drawCircle(hand, std::nullopt, std::nullopt, Stroke(2));
+        d.drawCircle(hand, std::nullopt, std::nullopt, 1, Stroke(2));
         d.rotate(minutes * 6, [&](DrawScope& r) {          // dakika başına 6°, merkez etrafında
             r.drawLine(hand, r.center(), {r.center().x, 12}, 3, StrokeCap::Round);
         }, d.center());

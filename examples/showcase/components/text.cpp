@@ -102,7 +102,7 @@ void TextSection(CallSite site) {
             // drawStyle: Stroke outlines the glyphs (a span's too) instead of filling them.
             Text(buildAnnotatedString([&](AnnotatedString::Builder& b) {
                      b.append("Dolu ");
-                     b.withStyle({.color = cs.primary, .drawStyle = Stroke(1.5f, StrokeCap::Butt, StrokeJoin::Round)}, [&] { b.append("DIŞ HAT"); });
+                     b.withStyle({.color = cs.primary, .drawStyle = Stroke(1.5f, 4, StrokeCap::Butt, StrokeJoin::Round)}, [&] { b.append("DIŞ HAT"); });
                      b.append(" yazı");
                  }),
                  Modifier(), {.font = typography().headlineMedium, .fontWeight = FontWeight::Black});

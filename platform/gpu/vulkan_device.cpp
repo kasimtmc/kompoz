@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <map>
@@ -48,7 +49,7 @@ namespace {
     X(vkUpdateDescriptorSets) X(vkCreateSampler) X(vkDestroySampler) X(vkCmdBeginRenderPass) X(vkCmdEndRenderPass)                         \
     X(vkCmdBindPipeline) X(vkCmdSetViewport) X(vkCmdSetScissor) X(vkCmdPushConstants) X(vkCmdBindDescriptorSets)                           \
     X(vkCmdBindVertexBuffers) X(vkCmdDraw) X(vkCmdPipelineBarrier) X(vkCmdCopyBufferToImage) X(vkCmdCopyImageToBuffer) X(vkCmdCopyImage)                    \
-    X(vkCreatePipelineCache) X(vkDestroyPipelineCache)
+    X(vkCmdBlitImage) X(vkCreatePipelineCache) X(vkDestroyPipelineCache)
 
 struct Api {
     PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
@@ -134,7 +135,8 @@ public:
     VkImage image;
     VkImageView view;
     VmaAllocation allocation;  // null: a swapchain image (the swapchain owns it)
-    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;  // (all its mip levels')
+    uint32_t mipLevels = 1;
     std::vector<std::pair<VkRenderPass, VkFramebuffer>> framebuffers;
 };
 
@@ -422,7 +424,7 @@ public:
         ici.imageType = VK_IMAGE_TYPE_2D;
         ici.format = vkFormat(format);
         ici.extent = {uint32_t(width), uint32_t(height), 1};
-        ici.mipLevels = 1;
+        ici.mipLevels = usage & TextureUsage::Mipmapped ? uint32_t(std::floor(std::log2(std::max(width, height)))) + 1 : 1;
         ici.arrayLayers = 1;
         ici.samples = VK_SAMPLE_COUNT_1_BIT;
         ici.tiling = VK_IMAGE_TILING_OPTIMAL;
@@ -435,16 +437,18 @@ public:
         VkImage image = VK_NULL_HANDLE;
         VmaAllocation allocation = VK_NULL_HANDLE;
         if (vmaCreateImage(allocator, &ici, &aci, &image, &allocation, nullptr) != VK_SUCCESS) return nullptr;
-        VkImageView view = makeView(image, ici.format);
-        return std::make_unique<VulkanTexture>(*this, width, height, format, image, view, allocation);
+        VkImageView view = makeView(image, ici.format, ici.mipLevels);
+        auto t = std::make_unique<VulkanTexture>(*this, width, height, format, image, view, allocation);
+        t->mipLevels = ici.mipLevels;
+        return t;
     }
 
-    VkImageView makeView(VkImage image, VkFormat format) {
+    VkImageView makeView(VkImage image, VkFormat format, uint32_t levels = 1) {
         VkImageViewCreateInfo vci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
         vci.image = image;
         vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
         vci.format = format;
-        vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, levels, 0, 1};
         VkImageView view = VK_NULL_HANDLE;
         vk.vkCreateImageView(device, &vci, nullptr, &view);
         return view;
@@ -565,12 +569,12 @@ public:
             if (desc == s) return vs;
         VkSamplerCreateInfo sci{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
         sci.magFilter = sci.minFilter = s.filter == Filter::Linear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
-        sci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        sci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;  // (Skia's for FilterQuality::Medium)
         sci.addressModeU = vkWrap(s.wrapU);
         sci.addressModeV = vkWrap(s.wrapV);
         sci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         sci.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
-        sci.maxLod = 0;
+        sci.maxLod = s.mipmaps ? VK_LOD_CLAMP_NONE : 0;
         VkSampler vs = VK_NULL_HANDLE;
         vk.vkCreateSampler(device, &sci, nullptr, &vs);
         samplers.emplace_back(s, vs);
@@ -792,9 +796,42 @@ public:
         b.newLayout = layout;
         b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         b.image = t.image;
-        b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, VK_REMAINING_MIP_LEVELS, 0, 1};
         vk.vkCmdPipelineBarrier(cmd, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &b);
         t.layout = layout;
+    }
+
+    void generateMipmaps(Texture& texture) override {
+        auto& t = static_cast<VulkanTexture&>(texture);
+        if (t.mipLevels <= 1) return;
+        transition(t, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        // Each level read once written: from TRANSFER_DST to TRANSFER_SRC, then blitted, halved, into the next.
+        auto toSource = [&](uint32_t level) {
+            VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+            b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            b.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            b.image = t.image;
+            b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, level, 1, 0, 1};
+            vk.vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &b);
+        };
+        int w = t.width(), h = t.height();
+        for (uint32_t level = 1; level < t.mipLevels; ++level) {
+            toSource(level - 1);
+            int nw = std::max(1, w / 2), nh = std::max(1, h / 2);
+            VkImageBlit blit{};
+            blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, level - 1, 0, 1};
+            blit.srcOffsets[1] = {w, h, 1};
+            blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, level, 0, 1};
+            blit.dstOffsets[1] = {nw, nh, 1};
+            vk.vkCmdBlitImage(cmd, t.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, t.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit,
+                              VK_FILTER_LINEAR);
+            w = nw, h = nh;
+        }
+        toSource(t.mipLevels - 1);
+        t.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     }
 
     void upload(Texture& texture, const IRect& region, const void* pixels, size_t rowBytes) override {

@@ -86,6 +86,14 @@
   the shape by default when the elevation is above 0 (it wasn't before: pass `clip = false` to keep it unclipped).
 - **Compose 1.9's `Shadow`**: `brush`, `alpha` and `blendMode` for `dropShadow` and `innerShadow`; a drop shadow ends
   where Compose's bitmap does.
+- **`DrawScope` as Compose's**: every draw call takes Compose's parameters in Compose's order (a color or a brush,
+  `alpha`, `style`, `colorFilter`, `blendMode`; `drawArc`'s `useCenter`, `drawRoundRect`'s `CornerRadius`, `drawImage`'s
+  source and destination rects and `FilterQuality`, `drawText`'s color, brush, alpha, shadow, decoration and draw style);
+  `Stroke(width, miter, cap, join, pathEffect)`, its width 0 a hairline. This changes call sites: `drawRoundRect(color,
+  radius, topLeft, size)` is now `drawRoundRect(color, topLeft, size, CornerRadius(radius))`, a style comes after the
+  alpha, `drawArc` takes `useCenter`, `drawText(layout, topLeft, color)` is `drawText(layout, color, topLeft)`.
+- **Images sampled as `FilterQuality` says** on the GPU renderer (the nearest pixel, bilinear, mipmaps, Mitchell's
+  cubic), from premultiplied texels: a transparent pixel's color no longer bleeds into its scaled neighbors.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

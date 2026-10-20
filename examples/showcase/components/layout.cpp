@@ -160,11 +160,11 @@ void TextMeasureSection(CallSite site) {
                 for (int i = 0; i < 6; ++i) {
                     auto [name, value] = months[i];
                     float x = slot * float(i) + slot * 0.2f, bw = slot * 0.6f, bh = h * float(value) / 100.f;
-                    d.drawRoundRect(bar, 6, {x, bottom - bh}, Size{bw, bh});
+                    d.drawRoundRect(bar, {x, bottom - bh}, Size{bw, bh}, CornerRadius(6));
                     TextLayoutResult v = measurer.measure(std::format("%{}", value), {.fontSize = 12, .fontWeight = FontWeight::Bold});
-                    d.drawText(v, {x + (bw - v.size().width) / 2, bottom - bh - v.size().height - 2}, label);
+                    d.drawText(v, label, {x + (bw - v.size().width) / 2, bottom - bh - v.size().height - 2});
                     TextLayoutResult m = measurer.measure(name, {.fontSize = 12});
-                    d.drawText(m, {x + (bw - m.size().width) / 2, bottom + 4}, faint);
+                    d.drawText(m, faint, {x + (bw - m.size().width) / 2, bottom + 4});
                 }
             });
             Text("Kompoz, Jetpack Compose'un fikirlerini C++20'ye taşır: durum değişince yalnızca onu okuyan parçalar yeniden "

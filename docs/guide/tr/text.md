@@ -175,7 +175,7 @@ void Gauge(int percent) {
     Canvas(Modifier().size(120), [=](DrawScope& d) {
         d.drawCircle(colorScheme().primary.copy(0.2f));
         TextLayoutResult label = measurer.measure(std::to_string(percent) + "%", {.fontSize = 24});
-        d.drawText(label, {d.center().x - label.size().width / 2, d.center().y - label.size().height / 2});
+        d.drawText(label, std::nullopt, {d.center().x - label.size().width / 2, d.center().y - label.size().height / 2});
     });
 }
 ```

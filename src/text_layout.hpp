@@ -48,6 +48,10 @@ struct TextRun {
     // Inline content: room of this size (sp) instead of its text, the nth placeholder of the text.
     std::optional<Placeholder> placeholder;
     int inlineIndex = -1;
+    // What a span (or a link) gave it rather than the text's style: drawText's color (or brush),
+    // shadow, decoration and draw style go only where these aren't.
+    enum : uint8_t { OwnPaint = 1, OwnShadow = 2, OwnDecoration = 4, OwnDrawStyle = 8 };
+    uint8_t own = 0;
 };
 
 struct TextPiece {
@@ -99,6 +103,8 @@ namespace kompoz::detail {
 
 // `base` with what `style` sets (its font, then size, weight, style, family, spacing, line height).
 Font styledFont(const TextStyle& style, Font base);
+// `font`'s glyphs filled or outlined as `style` says.
+void styleGlyphs(Font& font, const DrawStyle& style);
 
 // Runs for `text` with the base style and the spans (and links) applied on top.
 // Inline contents' ranges become placeholder runs (in order: their inline indices).

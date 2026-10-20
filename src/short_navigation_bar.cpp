@@ -22,7 +22,7 @@ Modifier indicator(const Modifier& modifier, Color color, float shown) {
     return modifier.drawBehind([color, shown](DrawScope& d) {
         Size s = d.size();
         float w = s.width * std::clamp(shown, 0.f, 1.f);
-        if (w > 0) d.drawRoundRect(color, s.height / 2, {(s.width - w) / 2, 0}, Size{w, s.height});
+        if (w > 0) d.drawRoundRect(color, {(s.width - w) / 2, 0}, Size{w, s.height}, CornerRadius(s.height / 2));
     });
 }
 

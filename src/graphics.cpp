@@ -126,6 +126,13 @@ Brush Brush::scaled(float sx, float sy) const {
     return b;
 }
 
+Brush Brush::faded(float alpha) const {
+    Brush b = *this;
+    if (alpha < 1)
+        for (ColorStop& s : b.stops_) s.color = s.color.copy(s.color.a * std::max(alpha, 0.f));
+    return b;
+}
+
 Brush::Geometry Brush::geometry(const Rect& area) const {
     auto resolve = [&](float v, float size) { return std::isinf(v) ? size : v; };
     Offset corner{area.x, area.y};

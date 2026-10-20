@@ -573,8 +573,7 @@ void BlendModeSection(CallSite site) {
                         .graphicsLayer([](GraphicsLayerScope& l) { l.compositingStrategy = CompositingStrategy::Offscreen; })
                         .drawWithContent([](ContentDrawScope& d) {
                             d.drawContent();
-                            d.drawRect(Brush::verticalGradient({colors::Transparent, colors::Black, colors::Black, colors::Transparent}), {},
-                                       std::nullopt, BlendMode::DstIn);
+                            d.drawRect(Brush::verticalGradient({colors::Transparent, colors::Black, colors::Black, colors::Transparent}), {}, std::nullopt, 1, Fill, {}, BlendMode::DstIn);
                         }),
                     [&] {
                         LazyColumn(Modifier().fillMaxSize(), {.contentPadding = {0, 16, 0, 16}}, [&](LazyListScope& list) {
@@ -587,7 +586,7 @@ void BlendModeSection(CallSite site) {
                         .graphicsLayer([](GraphicsLayerScope& l) { l.compositingStrategy = CompositingStrategy::Offscreen; })
                         .drawWithContent([](ContentDrawScope& d) {
                             d.drawContent();
-                            d.drawCircle(colors::Black, 36, std::nullopt, Fill, BlendMode::DstOut);
+                            d.drawCircle(colors::Black, 36, std::nullopt, 1, Fill, {}, BlendMode::DstOut);
                         })
                         .background(Brush::linearGradient({cs.primary, cs.tertiary}), RoundedCornerShape(16)),
                     Alignment::BottomCenter, [&] {

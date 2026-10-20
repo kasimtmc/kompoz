@@ -5999,9 +5999,9 @@ TEST(draw_scope_strokes_sit_on_the_outline) {
     // As Compose's: half of the stroke each side of the rect or circle.
     ComposeTestRule rule([] {
         Canvas(Modifier().size(100, 50), [](DrawScope& d) {
-            d.drawCircle(colors::White, 9.f, Offset{20, 25}, Stroke(2));
-            d.drawRect(colors::White, {50, 10}, Size{20, 20}, Stroke(4));
-            d.drawRoundRect(colors::White, 3, {80, 10}, Size{10, 20}, Stroke(2));
+            d.drawCircle(colors::White, 9.f, Offset{20, 25}, 1, Stroke(2));
+            d.drawRect(colors::White, {50, 10}, Size{20, 20}, 1, Stroke(4));
+            d.drawRoundRect(colors::White, {80, 10}, Size{10, 20}, CornerRadius(3), Stroke(2));
         });
     });
     testing::RecordingCanvas canvas;
@@ -6933,7 +6933,7 @@ TEST(brushes_paths_and_draw_with_cache_reach_the_canvas) {
                 Path path;
                 path.moveTo(0, 0);
                 path.lineTo(cache.size().width, cache.size().height);
-                return cache.onDrawBehind([path](DrawScope& d) { d.drawPath(path, colors::Black, Stroke(2)); });
+                return cache.onDrawBehind([path](DrawScope& d) { d.drawPath(path, colors::Black, 1, Stroke(2)); });
             }));
         });
     });
@@ -20398,8 +20398,8 @@ TEST(text_measurer_lays_text_out_for_drawing) {
         measurer = m;
         Canvas(Modifier().size(200, 100).testTag("tuval"), [m, &drawn](DrawScope& d) {
             drawn = m.measure("Merhaba dünya", {.fontSize = 20});
-            d.drawText(*drawn, {10, 20});
-            d.drawText(*drawn, {10, 60}, Color::hex(0xD32F2F));
+            d.drawText(*drawn, std::nullopt, {10, 20});
+            d.drawText(*drawn, Color::hex(0xD32F2F), {10, 60});
             d.drawText(m, "kısa", {150, 0}, {.fontSize = 10});
         });
     });
@@ -22050,14 +22050,14 @@ TEST(text_draw_style_strokes_its_glyphs) {
     ComposeTestRule rule([&] {
         Column([&] {
             Text("dolu");
-            Text("çizgi", {.drawStyle = Stroke(2, StrokeCap::Butt, StrokeJoin::Round)});
+            Text("çizgi", {.drawStyle = Stroke(2, 4, StrokeCap::Butt, StrokeJoin::Round)});
             Text(buildAnnotatedString([&](AnnotatedString::Builder& b) {
                      b.append("bir ");
-                     b.withStyle({.drawStyle = Stroke(3, StrokeCap::Butt, StrokeJoin::Round)}, [&] { b.append("hat"); });
+                     b.withStyle({.drawStyle = Stroke(3, 4, StrokeCap::Butt, StrokeJoin::Round)}, [&] { b.append("hat"); });
                  }),
                  Modifier(), {});
             // Inherited through LocalTextStyle, a span's Fill filling again.
-            ProvideTextStyle({.drawStyle = Stroke(1, StrokeCap::Butt, StrokeJoin::Bevel)}, [&] {
+            ProvideTextStyle({.drawStyle = Stroke(1, 4, StrokeCap::Butt, StrokeJoin::Bevel)}, [&] {
                 Text(buildAnnotatedString([&](AnnotatedString::Builder& b) {
                          b.append("miras ");
                          b.withStyle({.drawStyle = Fill}, [&] { b.append("dolu"); });
@@ -23501,7 +23501,7 @@ TEST(text_shadows_go_under_and_brushes_spread_over_the_text) {
                  }),
                  Modifier(), {.fontSize = 10, .brush = redToBlue});
             TextLayoutResult brushed = rememberTextMeasurer().measure("boya", {.fontSize = 10, .brush = redToBlue});
-            Canvas(Modifier().size(40, 20), [brushed](DrawScope& d) { d.drawText(brushed, {}, Color{0, 1, 0, 1}); });  // a color given wins
+            Canvas(Modifier().size(40, 20), [brushed](DrawScope& d) { d.drawText(brushed, Color{0, 1, 0, 1}); });  // a color given wins
         });
     });
     testing::RecordingCanvas canvas;
@@ -23565,13 +23565,12 @@ TEST(path_effects_dash_and_round_strokes) {
             d.drawLine(colors::Black, {0, 10}, {40, 10}, 2, StrokeCap::Round, PathEffect::dashPathEffect({10, 5}, 5));
             Path square;
             square.addRect({0, 0, 20, 20});
-            d.drawPath(square, colors::Black, Stroke(1, StrokeCap::Butt, StrokeJoin::Miter, PathEffect::cornerPathEffect(4)));
-            d.drawCircle(colors::Black, 10, Offset{50, 50}, Stroke(2, StrokeCap::Butt, StrokeJoin::Miter, dash));
-            d.drawRect(colors::Black, {}, Size{30, 30}, Stroke(2));  // no effect: a stroked rect as before
-            d.drawRoundRect(colors::Black, 0, {}, Size{30, 30},
-                            Stroke(1, StrokeCap::Butt, StrokeJoin::Miter,
+            d.drawPath(square, colors::Black, 1, Stroke(1, 4, StrokeCap::Butt, StrokeJoin::Miter, PathEffect::cornerPathEffect(4)));
+            d.drawCircle(colors::Black, 10, Offset{50, 50}, 1, Stroke(2, 4, StrokeCap::Butt, StrokeJoin::Miter, dash));
+            d.drawRect(colors::Black, {}, Size{30, 30}, 1, Stroke(2));  // no effect: a stroked rect as before
+            d.drawRoundRect(colors::Black, {}, Size{30, 30}, CornerRadius(0), Stroke(1, 4, StrokeCap::Butt, StrokeJoin::Miter,
                                    PathEffect::chainPathEffect(PathEffect::dashPathEffect({4, 4}), PathEffect::cornerPathEffect(6))));
-            d.drawArc(colors::Black, 0, 90, {}, Size{20, 20}, Stroke(1, StrokeCap::Butt, StrokeJoin::Miter, PathEffect::dashPathEffect({3, 3})));
+            d.drawArc(colors::Black, 0, 90, false, {}, Size{20, 20}, 1, Stroke(1, 4, StrokeCap::Butt, StrokeJoin::Miter, PathEffect::dashPathEffect({3, 3})));
         });
     });
     testing::RecordingCanvas canvas;
@@ -23592,6 +23591,153 @@ TEST(path_effects_dash_and_round_strokes) {
     float arcDrawn = arc.length();
     while (arc.nextContour()) arcDrawn += arc.length();
     CHECK(near(arcDrawn, 9, 0.3f));  // a quarter circle (15.7) in 3 on, 3 off: three dashes
+}
+
+TEST(draw_scopes_take_composes_parameters) {
+    Color red{1, 0, 0, 1}, blue{0, 0, 1, 1};
+    Brush ramp = Brush::horizontalGradient({red, blue});
+    ColorFilter tint = ColorFilter::tint(blue);
+    Density seen;
+    LayoutDirection direction = LayoutDirection::Ltr;
+    ComposeTestRule rule([&] {
+        Canvas(Modifier().size(100), [&](DrawScope& d) {
+            seen = d.density(), direction = d.layoutDirection();
+            d.drawRect(red, {}, Size{10, 10}, 0.5f);                                                   // r0: faded
+            d.drawRect(ramp, {10, 0}, Size{10, 10}, 0.5f, Fill, std::nullopt, BlendMode::Multiply);    // r1: a gradient, faded, blended
+            d.drawCircle(red, 5, Offset{30, 5}, 1, Fill, tint);                                        // r2: filtered
+            d.drawRoundRect(red, {40, 0}, Size{10, 10}, CornerRadius(3));                              // r3: circles
+            d.drawRoundRect(red, {50, 0}, Size{10, 10}, CornerRadius(2, 4), Fill, 0.25f);              // p0: ellipses, as a path
+            d.drawRect(red, {60, 0}, Size{10, 10}, 1, Stroke());                                       // p1: a hairline
+            d.drawRect(red, {70, 0}, Size{10, 10}, 1, Stroke(2, 10, StrokeCap::Square, StrokeJoin::Bevel));  // p2: bevelled
+            d.drawLine(ramp, {0, 20}, {40, 20}, 3, StrokeCap::Butt, std::nullopt, 0.5f);              // p3: a brush, as a path
+            d.drawLine(red, {0, 30}, {40, 30});                                                        // p4: a hairline
+            d.drawLine(red, {0, 40}, {40, 40}, 2, StrokeCap::Butt, std::nullopt, 0.5f, std::nullopt, BlendMode::Plus);  // a line
+            d.drawOval(blue, {0, 50}, Size{20, 10}, 0.5f, Stroke(1));                                  // p5
+            d.drawPoints({{80, 80}, {90, 90}}, PointMode::Points, red);                                // p6: hairline dots
+        });
+    });
+    testing::RecordingCanvas canvas;
+    rule.host().draw(canvas);
+    CHECK(seen.density == 1 && direction == LayoutDirection::Ltr);
+    CHECK(canvas.rects.size() == 4 && canvas.paths.size() == 7);
+    if (canvas.rects.size() != 4 || canvas.paths.size() != 7) return;
+    CHECK(near(canvas.rectColors[0].a, 0.5f) && canvas.rectBlends[1] == BlendMode::Multiply && canvas.gradients == 1);
+    CHECK(canvas.rectColors[2] == blue && near(canvas.rectRadii[3], 3));  // tinted; a circle's corners
+    CHECK(near(canvas.pathColors[0].a, 0.25f) && pathText(canvas.pathShapes[0]).find('C') != std::string::npos);
+    CHECK(canvas.pathStrokeStyles[1].hairline && canvas.pathStrokes[1] == 0);
+    const PathStroke& bevel = canvas.pathStrokeStyles[2];
+    CHECK(bevel.width == 2 && bevel.miter == 10 && bevel.cap == StrokeCap::Square && bevel.join == StrokeJoin::Bevel && !bevel.hairline);
+    CHECK(canvas.pathStrokes[3] == 3 && near(canvas.pathColors[3].a, 0.5f));  // the brush's colors faded
+    CHECK(canvas.pathStrokeStyles[4].hairline);
+    CHECK(canvas.lines.size() == 1 && near(canvas.lineColors[0].a, 0.5f));
+    CHECK(near(canvas.pathColors[5].a, 0.5f) && canvas.pathStrokes[5] == 1);
+    CHECK(near(canvas.paths[6].width, 11, 1e-4f) && canvas.pathStrokes[6] == 0);  // two 1 dp dots, 10 apart
+    // Arcs: a pie slice, filled across its ends, its outline through the center, an arc; a turn
+    // and more: a whole oval filled, outlined round and on.
+    ComposeTestRule arcs([&] {
+        Canvas(Modifier().size(100), [&](DrawScope& d) {
+            d.drawArc(red, 0, 90, true, {}, Size{20, 20});
+            d.drawArc(red, 0, 90, false, {}, Size{20, 20});
+            d.drawArc(red, 0, 90, true, {}, Size{20, 20}, 1, Stroke(1));
+            d.drawArc(red, 0, 90, false, {}, Size{20, 20}, 1, Stroke(2, 4, StrokeCap::Round));  // the backend's own
+            d.drawArc(red, 0, 90, false, {}, Size{20, 10}, 1, Stroke(2));                         // an ellipse's: a path
+            d.drawArc(red, 0, 400, false, {}, Size{20, 20});
+            d.drawArc(red, 0, 400, false, {}, Size{20, 20}, 1, Stroke(1, 4, StrokeCap::Square));
+        });
+    });
+    testing::RecordingCanvas a;
+    arcs.host().draw(a);
+    CHECK(a.pathShapes.size() == 6 && a.arcs.size() == 1);
+    if (a.pathShapes.size() != 6) return;
+    CHECK(pathText(a.pathShapes[0]).starts_with("M10,10 L20,10 C") && pathText(a.pathShapes[0]).ends_with("Z"));
+    CHECK(pathText(a.pathShapes[1]).starts_with("M20,10 C") && !pathText(a.pathShapes[1]).ends_with("Z"));
+    CHECK(pathText(a.pathShapes[2]).starts_with("M10,10 L20,10 C") && pathText(a.pathShapes[2]).ends_with("Z") && a.pathStrokes[2] == 1);
+    CHECK(a.arcs[0].sweep == 90 && near(a.arcs[0].strokeWidth, 2));
+    CHECK(pathText(a.pathShapes[3]).starts_with("M20,5 C"));
+    Path oval;
+    oval.addOval({0, 0, 20, 20});
+    CHECK(a.pathShapes[4] == oval);
+    PathMeasure around(a.pathShapes[5]);  // a turn and 40 degrees, in one contour
+    CHECK(near(around.length(), 2 * 3.14159f * 10 * 400 / 360, 0.5f) && !around.nextContour());
+    // Images: at their size; part of one into a rect, sampled as asked.
+    ImageBitmap photo = ImageBitmap::fromPixels(8, 6, std::vector<uint8_t>(8 * 6 * 4, 200));
+    ComposeTestRule images([&] {
+        Canvas(Modifier().size(100), [&](DrawScope& d) {
+            d.drawImage(photo, {5, 5}, 0.5f);
+            d.drawImage(photo, IntOffset{2, 1}, IntSize{4, 3}, {20, 20}, Size{40, 30}, 1, Fill, tint, BlendMode::Src, FilterQuality::None);
+            d.drawImage(photo, IntOffset{2, 1});  // to its far corner, as big as that
+        });
+    });
+    testing::RecordingCanvas im;
+    images.host().draw(im);
+    CHECK(im.images.size() == 3);
+    if (im.images.size() != 3) return;
+    CHECK(sameRect(im.imageSources[0], {0, 0, 8, 6}) && sameRect(im.imageDestinations[0], {5, 5, 8, 6}) && im.imageQualities[0] == FilterQuality::Low);
+    CHECK(sameRect(im.imageSources[1], {2, 1, 4, 3}) && sameRect(im.imageDestinations[1], {20, 20, 40, 30}) &&
+          im.imageQualities[1] == FilterQuality::None && im.imageFilters[1].size() == 1);
+    CHECK(sameRect(im.imageSources[2], {2, 1, 6, 5}) && sameRect(im.imageDestinations[2], {0, 0, 6, 5}));
+    // Through a display list: sampled as asked still, a hairline still one.
+    DisplayList list(images.host().textMeasurer());
+    list.begin({400, 800}, 1);
+    images.host().draw(list);
+    list.end();
+    testing::RecordingCanvas replayed;
+    list.replay(replayed);
+    CHECK(replayed.imageQualities.size() == 3 && replayed.imageQualities[0] == FilterQuality::Low && replayed.imageQualities[1] == FilterQuality::None);
+    DisplayList lines(rule.host().textMeasurer());
+    lines.begin({400, 800}, 1);
+    rule.host().draw(lines);
+    lines.end();
+    testing::RecordingCanvas again;
+    lines.replay(again);
+    CHECK(again.pathStrokeStyles.size() == 7 && again.pathStrokeStyles[1].hairline && again.pathStrokeStyles[2].miter == 10);
+}
+
+TEST(draw_text_paints_what_the_texts_own_style_did) {
+    Color red{1, 0, 0, 1}, green{0, 1, 0, 1}, blue{0, 0, 1, 1};
+    ComposeTestRule rule([&] {
+        auto m = rememberTextMeasurer();
+        AnnotatedString text = buildAnnotatedString([&](AnnotatedString::Builder& b) {
+            b.append("düz ");
+            b.withStyle({.color = green, .shadow = Shadow{red, {1, 1}, 0}}, [&] { b.append("yeşil"); });
+        });
+        TextLayoutResult layout = m.measure(text, {.fontSize = 10, .color = blue});
+        Canvas(Modifier().size(200, 100), [layout, m, text, red](DrawScope& d) {
+            d.drawText(layout, red, {0, 0}, 0.5f, Shadow{Color{0, 0, 0, 1}, {2, 2}, 0}, TextDecoration::Underline, Stroke());
+            d.drawText(layout, Brush::horizontalGradient({Color{1, 1, 0, 1}, Color{0, 1, 1, 1}}), {0, 20});
+            d.drawText(m, text, {0, 40}, TextStyle{.fontSize = 10}, TextOverflow::Ellipsis, std::nullopt, 1, Size{30, 20});
+        });
+    });
+    testing::RecordingCanvas canvas;
+    rule.host().draw(canvas);
+    // First: the plain run red, faded, underlined, outlined (a hairline), the shadow given; the span its own green and shadow,
+    // outlined too (it doesn't set a draw style).
+    std::optional<size_t> plain, span;
+    for (size_t i = 0; i < canvas.texts.size(); ++i) {
+        if (canvas.baselines[i].y > 15) continue;
+        if (canvas.texts[i].starts_with("düz")) plain = i;
+        if (canvas.texts[i] == "yeşil") span = i;
+    }
+    CHECK(plain && span);
+    if (!plain || !span) return;
+    CHECK(canvas.colors[*plain] == red.copy(0.5f) && canvas.fonts[*plain].stroked && canvas.fonts[*plain].strokeWidth == 0);
+    CHECK(canvas.colors[*span] == green && canvas.fonts[*span].stroked);
+    int blackShadows = 0, redShadows = 0;
+    for (size_t i = 0; i < canvas.shadowColors.size(); ++i)
+        if (canvas.shadowBaselines[i].y < 15) (canvas.shadowColors[i] == red ? redShadows : blackShadows) += 1;
+    CHECK(blackShadows == 1 && redShadows == 1);
+    CHECK(!canvas.lines.empty() && canvas.lines[0].first.y < 15);  // the plain run underlined
+    // Second: the brush where the text's style painted, the span still green.
+    int brushed = 0;
+    for (size_t i = 0; i < canvas.texts.size(); ++i)
+        if (canvas.baselines[i].y > 15 && canvas.baselines[i].y < 35) brushed += canvas.colors[i] != green;
+    CHECK(brushed == 1 && canvas.brushAreas.size() == 1);
+    // Third: in 30 dp, wrapped but one line at most, cut with an ellipsis.
+    bool ellipsized = false;
+    std::set<float> lines;
+    for (size_t i = 0; i < canvas.texts.size(); ++i)
+        if (canvas.baselines[i].y > 35) ellipsized = ellipsized || canvas.texts[i].ends_with("…"), lines.insert(canvas.baselines[i].y);
+    CHECK(ellipsized && lines.size() == 1);
 }
 
 TEST(stamped_path_effects_lay_a_shape_along_the_path) {
@@ -23656,7 +23802,7 @@ TEST(stamped_path_effects_lay_a_shape_along_the_path) {
     CHECK(chained.fills() && near(chained.cornerRadius, 4));
     ComposeTestRule rule([&] {
         Canvas(Modifier().size(120, 20), [&](DrawScope& d) {
-            d.drawPath(line, colors::Black, Stroke(3, StrokeCap::Butt, StrokeJoin::Miter, PathEffect::stampedPathEffect(box, 20, 0, StampedPathEffectStyle::Translate)));
+            d.drawPath(line, colors::Black, 1, Stroke(3, 4, StrokeCap::Butt, StrokeJoin::Miter, PathEffect::stampedPathEffect(box, 20, 0, StampedPathEffectStyle::Translate)));
         });
     });
     testing::RecordingCanvas canvas;
@@ -24028,7 +24174,7 @@ TEST(images_draw_through_a_color_filter) {
         Column([&] {
             (void)tick.get();
             Image(photo, "resim", Modifier().size(20, 10), ContentScale::FillBounds, 1, filter.get());
-            Canvas(Modifier().size(20, 10), [&](DrawScope& d) { d.drawImage(photo, {}, Size{20, 10}, 1, ColorFilter::lighting(Color{0, 0, 0, 1}, Color{})); });
+            Canvas(Modifier().size(20, 10), [&](DrawScope& d) { d.drawImage(photo, IntOffset{}, std::nullopt, {}, Size{20, 10}, 1, Fill, ColorFilter::lighting(Color{0, 0, 0, 1}, Color{})); });
         });
     });
     // The image itself is drawn, the filter in effect around it (the backend applies it per pixel).
@@ -24125,7 +24271,7 @@ TEST(shadow_default_draws_fading_rings_and_display_list_damage_reaches_the_blur)
         void drawText(std::string_view, Offset, const Font&, Color, bool) override {}
         void drawVector(const ImageVector&, const Rect&, Color) override {}
         void drawArc(const Rect&, float, float, float, Color, bool) override {}
-        void drawImage(const ImageBitmap&, const Rect&, const Rect&, float) override {}
+        void drawImage(const ImageBitmap&, const Rect&, const Rect&, float, FilterQuality) override {}
         void pushLayer(const Rect&, const CornerRadii&, float, const LayerTransform&) override {}
         void popLayer() override {}
         void pushColorFilter(const ColorFilter&) override {}
@@ -25062,11 +25208,11 @@ TEST(blend_modes_fade_an_offscreen_layer) {
                 })
                 .drawWithContent([](ContentDrawScope& d) {
                     d.drawContent();
-                    d.drawRect(Brush::verticalGradient({colors::Black, colors::Transparent}), {}, std::nullopt, BlendMode::DstIn);
+                    d.drawRect(Brush::verticalGradient({colors::Black, colors::Transparent}), {}, std::nullopt, 1, Fill, {}, BlendMode::DstIn);
                     Path corner;
                     corner.addRect({0, 0, 10, 10});
-                    d.drawPath(corner, colors::Black, Fill, BlendMode::Clear);
-                    d.drawCircle(colors::Black, 5, Offset{50, 50}, Fill, BlendMode::DstOut);
+                    d.drawPath(corner, colors::Black, 1, Fill, {}, BlendMode::Clear);
+                    d.drawCircle(colors::Black, 5, Offset{50, 50}, 1, Fill, {}, BlendMode::DstOut);
                 }),
             [&] { Box(Modifier().fillMaxSize().background(cs.primary)); });
     });

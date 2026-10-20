@@ -160,7 +160,7 @@ void ArrowIndicator(float progress, Color color, CallSite site = CallSite::curre
         Color c = color.copy(color.a * alpha);
         float r = kArcRadius + kStrokeWidth / 2;
         Offset o = s.center();
-        s.drawArc(c, start, end - start, {o.x - r, o.y - r}, Size{2 * r, 2 * r}, Stroke(kStrokeWidth));
+        s.drawArc(c, start, end - start, false, {o.x - r, o.y - r}, Size{2 * r, 2 * r}, 1, Stroke(kStrokeWidth));
         // Across the arc's end, pointing the way it grows: a V turned with the end around the center.
         float a = (end - kStrokeWidth) * 3.14159265f / 180, cosA = std::cos(a), sinA = std::sin(a);
         auto at = [&](float x, float y) { return Offset{o.x + x * cosA - y * sinA, o.y + x * sinA + y * cosA}; };
@@ -170,7 +170,7 @@ void ArrowIndicator(float progress, Color color, CallSite site = CallSite::curre
         arrow.moveTo(left.x, left.y);
         arrow.lineTo(tip.x, tip.y);
         arrow.lineTo(right.x, right.y);
-        s.drawPath(arrow, c, Stroke(kStrokeWidth));
+        s.drawPath(arrow, c, 1, Stroke(kStrokeWidth));
     });
 }
 } // namespace

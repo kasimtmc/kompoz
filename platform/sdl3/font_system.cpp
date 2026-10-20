@@ -227,7 +227,8 @@ struct FontSystem::Impl {
         } restore{scale_, scale_};
         if (scale > 0) scale_ = scale;
         int px = pixelSize(font);
-        GlyphStyle style{font.strokeWidth > 0 ? std::max(1, int(std::lround(font.strokeWidth * scale_))) : 0, font.strokeJoin, font.scaleX, font.skewX};
+        GlyphStyle style{font.stroked ? std::max(1, int(std::lround(font.strokeWidth * scale_))) : 0, font.strokeJoin, font.scaleX, font.skewX,
+                         font.strokeMiter};
         std::shared_ptr<const Shaped> shape = shaped(text, font, rtl);
         for (const ShapedGlyph& sg : shape->glyphs) {
             if (shadow && !sg.face) continue;
@@ -643,18 +644,20 @@ struct FontSystem::Impl {
         int strokePx = 0;
         StrokeJoin join = StrokeJoin::Miter;
         float scaleX = 1, skewX = 0;
+        float miter = 4;  // a miter join's limit, times the stroke's width
         bool plain() const { return strokePx == 0 && scaleX == 1 && skewX == 0; }
     };
     struct StyledGlyphKey {
         uint64_t glyph;  // glyphAt's key
         int strokePx, join, scaleX, skewX;  // the last two in thousandths
         int blur = 0;                       // px: a shadow's (blurredGlyph)
+        int miter = 4000;                   // thousandths
         bool operator==(const StyledGlyphKey&) const = default;
     };
     struct StyledGlyphHash {
         size_t operator()(const StyledGlyphKey& k) const {
             uint64_t h = k.glyph * 0x9E3779B97F4A7C15ull;
-            for (int v : {k.strokePx, k.join, k.scaleX, k.skewX, k.blur}) h = (h ^ uint64_t(uint32_t(v))) * 0x100000001B3ull;
+            for (int v : {k.strokePx, k.join, k.scaleX, k.skewX, k.blur, k.miter}) h = (h ^ uint64_t(uint32_t(v))) * 0x100000001B3ull;
             return size_t(h);
         }
     };
@@ -690,7 +693,7 @@ struct FontSystem::Impl {
                            style.join == StrokeJoin::Round   ? FT_STROKER_LINEJOIN_ROUND
                            : style.join == StrokeJoin::Bevel ? FT_STROKER_LINEJOIN_BEVEL
                                                              : FT_STROKER_LINEJOIN_MITER,
-                           FT_Fixed(4 * 65536));
+                           FT_Fixed(style.miter * 65536));
             if (FT_Glyph_Stroke(&glyph, stroker, 1) == 0 && FT_Glyph_To_Bitmap(&glyph, FT_RENDER_MODE_LIGHT, nullptr, 1) == 0) {
                 const FT_BitmapGlyph bitmap = reinterpret_cast<FT_BitmapGlyph>(glyph);
                 use(bitmap->bitmap, bitmap->left, bitmap->top);
@@ -710,7 +713,8 @@ struct FontSystem::Impl {
     }
     StyledGlyphKey styledKey(const Face& face, uint32_t index, int px, bool synthBold, bool synthItalic, const GlyphStyle& style, int blur) const {
         return {(uint64_t(face.id) << 48) | (uint64_t(px & 0xFFF) << 36) | (uint64_t(synthBold) << 35) | (uint64_t(synthItalic) << 34) | uint64_t(index),
-                style.strokePx, int(style.join), int(std::lround(style.scaleX * 1000)), int(std::lround(style.skewX * 1000)), blur};
+                style.strokePx, int(style.join), int(std::lround(style.scaleX * 1000)), int(std::lround(style.skewX * 1000)), blur,
+                int(std::lround(style.miter * 1000))};
     }
 
     // A glyph drawn in a style (see GlyphStyle), rasterized once. Color glyphs are drawn as they are.

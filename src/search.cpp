@@ -204,7 +204,7 @@ void ExpandedFullScreenSearchBar(const SearchBarState& state, const Content& inp
             [&] {
                 Box(Modifier().drawBehind([d, back, surface](DrawScope& draw) {  // round as the bar, square once grown
                     back->last.get();
-                    draw.drawRoundRect(surface, 28 * std::max(1 - d->progress.value(), back->progress()));
+                    draw.drawRoundRect(surface, {}, {}, CornerRadius(28 * std::max(1 - d->progress.value(), back->progress())));
                 }));
                 Box(Modifier().padding(insets.start, 0, insets.end, 0), Alignment::CenterStart, inputField);
                 Column(Modifier().padding(insets.start, 0, insets.end, insets.bottom).graphicsLayer([d](GraphicsLayerScope& l) {

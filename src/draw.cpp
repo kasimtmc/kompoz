@@ -254,128 +254,314 @@ struct Blending {
 
 } // namespace
 
-void DrawScope::drawRect(Color color, Offset topLeft, std::optional<Size> size, DrawStyle style, BlendMode blendMode) {
-    drawRoundRect(color, 0, topLeft, size, style, blendMode);
-}
+DrawScope::DrawScope(GraphicsContext& context, Rect bounds, const LayoutNode& node)
+    : DrawScope(context, bounds, &node.textMeasurer(), node.host() ? node.host()->density() : Density{},
+                node.rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr) {}
 
-void DrawScope::drawRoundRect(Color color, float cornerRadius, Offset topLeft, std::optional<Size> size,
-                              DrawStyle style, BlendMode blendMode) {
-    Rect r = local(topLeft, size);
-    if (style.isStroke() && style.pathEffect) {  // as a path, for the effect to work on
-        Path outline;
-        outline.addRoundRect({r.x - bounds_.x, r.y - bounds_.y, r.width, r.height}, cornerRadius);
-        return drawPath(outline, color, style, blendMode);
+namespace {
+
+// A color faded by a paint's alpha.
+Color faded(Color c, float alpha) { return alpha < 1 ? c.copy(c.a * std::max(alpha, 0.f)) : c; }
+
+// The path Skia draws for an arc (SkPathPriv::CreateDrawArcPath): a whole oval for a filled
+// sweep of a turn or more; else through the center first if useCenter (and back to it), the
+// sweep in half turns while it is a turn or more (arcTo goes round only once).
+Path arcPath(const Rect& oval, float start, float sweep, bool useCenter, bool fillNoEffect) {
+    Path p;
+    if (fillNoEffect && std::abs(sweep) >= 360) {
+        p.addOval(oval);
+        return p;
     }
+    if (useCenter) p.moveTo(oval.x + oval.width / 2, oval.y + oval.height / 2);
+    bool forceMoveTo = !useCenter;
+    for (float half : {-180.f, 180.f})
+        while (half < 0 ? sweep <= -360 : sweep >= 360) {
+            p.arcTo(oval, start, half, forceMoveTo);
+            start += half;
+            p.arcTo(oval, start, half, false);
+            start += half;
+            forceMoveTo = false;
+            sweep -= 2 * half;
+        }
+    p.arcTo(oval, start, sweep, forceMoveTo);
+    if (useCenter) p.close();
+    return p;
+}
+
+} // namespace
+
+// A path (this scope's coordinates) in a brush, faded, filled or stroked (through the style's
+// path effect first), its colors filtered, blended.
+void DrawScope::paint(const Path& path, const Brush& brush, float alpha, const DrawStyle& style, const std::optional<ColorFilter>& colorFilter,
+                      BlendMode blendMode) {
+    if (path.isEmpty() || alpha <= 0) return;
     Blending blending(*context_, blendMode);
-    if (style.isStroke()) {
-        // On the outline, half of it each side (as Compose's); strokeRoundRect strokes inside.
-        float half = style.strokeWidth / 2;
-        context_->strokeRoundRect({r.x - half, r.y - half, r.width + 2 * half, r.height + 2 * half}, cornerRadius > 0 ? cornerRadius + half : 0,
-                                  style.strokeWidth, color);
-    } else
-        context_->fillRoundRect(r, cornerRadius, color);
-}
-
-void DrawScope::drawCircle(Color color, std::optional<float> radius, std::optional<Offset> center, DrawStyle style,
-                           BlendMode blendMode) {
-    float r = radius.value_or(std::min(bounds_.width, bounds_.height) / 2);
-    Offset c = center.value_or(this->center());
-    drawRoundRect(color, r, {c.x - r, c.y - r}, Size{2 * r, 2 * r}, style, blendMode);
-}
-
-void DrawScope::drawRect(const Brush& brush, Offset topLeft, std::optional<Size> size, BlendMode blendMode) {
-    drawRoundRect(brush, 0, topLeft, size, blendMode);
-}
-
-void DrawScope::drawRoundRect(const Brush& brush, float cornerRadius, Offset topLeft, std::optional<Size> size, BlendMode blendMode) {
-    Blending blending(*context_, blendMode);
-    context_->fillGradient(local(topLeft, size), cornerRadius, brush, bounds_);
-}
-
-void DrawScope::drawCircle(const Brush& brush, std::optional<float> radius, std::optional<Offset> center, BlendMode blendMode) {
-    float r = radius.value_or(std::min(bounds_.width, bounds_.height) / 2);
-    Offset c = center.value_or(this->center());
-    drawRoundRect(brush, r, {c.x - r, c.y - r}, Size{2 * r, 2 * r}, blendMode);
-}
-
-void DrawScope::drawPath(const Path& path, Color color, DrawStyle style, BlendMode blendMode) {
-    drawPath(path, Brush::solid(color), style, blendMode);
-}
-
-void DrawScope::drawPath(const Path& path, const Brush& brush, DrawStyle style, BlendMode blendMode) {
-    if (path.isEmpty()) return;
-    Blending blending(*context_, blendMode);
+    detail::Filtering filtering(*context_, colorFilter);
+    Brush b = brush.faded(alpha);
+    PathStroke stroke = style.pathStroke();
     if (style.isStroke() && style.pathEffect) {
         Path effected = style.pathEffect->apply(path);
         if (effected.isEmpty()) return;
-        PathStroke stroke{style.strokeWidth, style.cap, style.join, 4};
-        if (style.pathEffect->fills()) stroke.width = 0;  // stamped shapes are filled
-        context_->drawPath(effected, {bounds_.x, bounds_.y}, brush, bounds_, stroke);
+        if (style.pathEffect->fills()) stroke = {};  // stamped shapes are filled
+        context_->drawPath(effected, {bounds_.x, bounds_.y}, b, bounds_, stroke);
         return;
     }
-    context_->drawPath(path, {bounds_.x, bounds_.y}, brush, bounds_,
-                       {style.strokeWidth, style.cap, style.join, 4});
+    context_->drawPath(path, {bounds_.x, bounds_.y}, b, bounds_, stroke);
 }
 
-void DrawScope::drawLine(Color color, Offset start, Offset end, float strokeWidth) {
-    context_->drawLine(abs(start), abs(end), strokeWidth, color);
+// A rounded rect (this scope's), as the backend draws one where it can: filled, or stroked
+// along it (half each side) where its corners are circles and the stroke's joins can't show
+// (curved corners, or square ones mitered); else as a path.
+void DrawScope::paintRoundRect(const Rect& r, CornerRadius corner, const Brush& brush, float alpha, const DrawStyle& style,
+                               const std::optional<ColorFilter>& colorFilter, BlendMode blendMode) {
+    if (alpha <= 0) return;
+    bool circular = corner.x == corner.y;
+    float radius = std::max(0.f, corner.x);
+    bool plain = !style.isStroke() || (style.width > 0 && !style.pathEffect && (radius > 0 || style.join == StrokeJoin::Miter));
+    if (!circular || !plain || (style.isStroke() && !brush.isSolid())) {
+        Path outline;
+        outline.addRoundRect(RoundRect{{r.x - bounds_.x, r.y - bounds_.y, r.width, r.height}, corner, corner, corner, corner});
+        return paint(outline, brush, alpha, style, colorFilter, blendMode);
+    }
+    Blending blending(*context_, blendMode);
+    detail::Filtering filtering(*context_, colorFilter);
+    if (style.isStroke()) {
+        float half = style.width / 2;
+        context_->strokeRoundRect({r.x - half, r.y - half, r.width + 2 * half, r.height + 2 * half}, radius > 0 ? radius + half : 0, style.width,
+                                  faded(brush.stops().front().color, alpha));
+    } else if (brush.isSolid()) {
+        context_->fillRoundRect(r, radius, faded(brush.stops().front().color, alpha));
+    } else {
+        context_->fillGradient(r, radius, brush.faded(alpha), bounds_);
+    }
 }
 
-void DrawScope::drawLine(Color color, Offset start, Offset end, float strokeWidth, StrokeCap cap, std::optional<PathEffect> pathEffect) {
-    if (cap == StrokeCap::Butt && !pathEffect) return drawLine(color, start, end, strokeWidth);
+void DrawScope::drawLine(const Brush& brush, Offset start, Offset end, float strokeWidth, StrokeCap cap, std::optional<PathEffect> pathEffect,
+                         float alpha, std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
+    if (brush.isSolid() && strokeWidth > 0 && cap == StrokeCap::Butt && !pathEffect) {
+        if (alpha <= 0) return;
+        Blending blending(*context_, blendMode);
+        detail::Filtering filtering(*context_, colorFilter);
+        context_->drawLine(abs(start), abs(end), strokeWidth, faded(brush.stops().front().color, alpha));
+        return;
+    }
     Path line;
     line.moveTo(start.x, start.y);
     line.lineTo(end.x, end.y);
-    drawPath(line, color, Stroke(strokeWidth, cap, StrokeJoin::Miter, pathEffect));
+    paint(line, brush, alpha, Stroke(strokeWidth, 4, cap, StrokeJoin::Miter, pathEffect), colorFilter, blendMode);
 }
 
-void DrawScope::drawPoints(const std::vector<Offset>& points, PointMode mode, Color color, float strokeWidth, StrokeCap cap,
-                           std::optional<PathEffect> pathEffect) {
-    if (points.empty() || strokeWidth <= 0) return;
-    Path path;
-    if (mode == PointMode::Points) {  // dots as wide as the stroke, filled
-        float r = strokeWidth / 2;
-        for (Offset p : points) {
-            Rect dot{p.x - r, p.y - r, strokeWidth, strokeWidth};
-            cap == StrokeCap::Round ? path.addOval(dot) : path.addRect(dot);
-        }
-        return drawPath(path, color, Fill);
-    }
-    for (size_t i = 0; i < points.size(); ++i) {
-        bool start = mode == PointMode::Polygon ? i == 0 : i % 2 == 0;
-        if (mode == PointMode::Lines && start && i + 1 == points.size()) break;  // an odd one out has no partner
-        start ? path.moveTo(points[i].x, points[i].y) : path.lineTo(points[i].x, points[i].y);
-    }
-    drawPath(path, color, Stroke(strokeWidth, cap, StrokeJoin::Miter, pathEffect));
+void DrawScope::drawLine(Color color, Offset start, Offset end, float strokeWidth, StrokeCap cap, std::optional<PathEffect> pathEffect,
+                         float alpha, std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
+    drawLine(Brush::solid(color), start, end, strokeWidth, cap, pathEffect, alpha, colorFilter, blendMode);
 }
 
-void DrawScope::drawArc(Color color, float startAngle, float sweepAngle, Offset topLeft, std::optional<Size> size,
-                        DrawStyle style) {
+void DrawScope::drawRect(const Brush& brush, Offset topLeft, std::optional<Size> size, float alpha, const DrawStyle& style,
+                         std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
+    paintRoundRect(local(topLeft, size), {}, brush, alpha, style, colorFilter, blendMode);
+}
+
+void DrawScope::drawRect(Color color, Offset topLeft, std::optional<Size> size, float alpha, const DrawStyle& style,
+                         std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
+    paintRoundRect(local(topLeft, size), {}, Brush::solid(color), alpha, style, colorFilter, blendMode);
+}
+
+void DrawScope::drawImage(const ImageBitmap& image, Offset topLeft, float alpha, const DrawStyle& style, std::optional<ColorFilter> colorFilter,
+                          BlendMode blendMode) {
+    drawImage(image, IntOffset{}, std::nullopt, topLeft, std::nullopt, alpha, style, colorFilter, blendMode);
+}
+
+void DrawScope::drawImage(const ImageBitmap& image, IntOffset srcOffset, std::optional<IntSize> srcSize, Offset dstOffset,
+                          std::optional<Size> dstSize, float alpha, const DrawStyle& style, std::optional<ColorFilter> colorFilter,
+                          BlendMode blendMode, FilterQuality filterQuality) {
+    (void)style;  // (an image is drawn the same either way, as on Android)
+    if (image.empty() || alpha <= 0) return;
+    IntSize from = srcSize.value_or(IntSize{image.width() - srcOffset.x, image.height() - srcOffset.y});
+    Rect src{float(srcOffset.x), float(srcOffset.y), float(from.width), float(from.height)};
+    Blending blending(*context_, blendMode);
+    detail::Filtering filtering(*context_, colorFilter);
+    context_->drawImage(image, src, local(dstOffset, dstSize.value_or(Size(from))), std::min(alpha, 1.f), filterQuality);
+}
+
+void DrawScope::drawRoundRect(const Brush& brush, Offset topLeft, std::optional<Size> size, CornerRadius cornerRadius, float alpha,
+                              const DrawStyle& style, std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
+    paintRoundRect(local(topLeft, size), cornerRadius, brush, alpha, style, colorFilter, blendMode);
+}
+
+void DrawScope::drawRoundRect(Color color, Offset topLeft, std::optional<Size> size, CornerRadius cornerRadius, const DrawStyle& style,
+                              float alpha, std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
+    paintRoundRect(local(topLeft, size), cornerRadius, Brush::solid(color), alpha, style, colorFilter, blendMode);
+}
+
+void DrawScope::drawCircle(const Brush& brush, std::optional<float> radius, std::optional<Offset> center, float alpha, const DrawStyle& style,
+                           std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
+    float r = radius.value_or(std::min(bounds_.width, bounds_.height) / 2);
+    Offset c = center.value_or(this->center());
+    paintRoundRect(local({c.x - r, c.y - r}, Size{2 * r, 2 * r}), r, brush, alpha, style, colorFilter, blendMode);
+}
+
+void DrawScope::drawCircle(Color color, std::optional<float> radius, std::optional<Offset> center, float alpha, const DrawStyle& style,
+                           std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
+    drawCircle(Brush::solid(color), radius, center, alpha, style, colorFilter, blendMode);
+}
+
+void DrawScope::drawOval(const Brush& brush, Offset topLeft, std::optional<Size> size, float alpha, const DrawStyle& style,
+                         std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
+    Rect r = local(topLeft, size);
+    if (r.width == r.height) return paintRoundRect(r, r.width / 2, brush, alpha, style, colorFilter, blendMode);
+    Path oval;
+    oval.addOval({r.x - bounds_.x, r.y - bounds_.y, r.width, r.height});
+    paint(oval, brush, alpha, style, colorFilter, blendMode);
+}
+
+void DrawScope::drawOval(Color color, Offset topLeft, std::optional<Size> size, float alpha, const DrawStyle& style,
+                         std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
+    drawOval(Brush::solid(color), topLeft, size, alpha, style, colorFilter, blendMode);
+}
+
+void DrawScope::drawArc(const Brush& brush, float startAngle, float sweepAngle, bool useCenter, Offset topLeft, std::optional<Size> size,
+                        float alpha, const DrawStyle& style, std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
     Rect oval = local(topLeft, size);
-    if (style.isStroke() && style.pathEffect) {  // the arc as a path (a point every degree or so)
-        Path arc;
-        int steps = std::max(2, int(std::ceil(std::abs(sweepAngle))));
-        float cx = oval.x - bounds_.x + oval.width / 2, cy = oval.y - bounds_.y + oval.height / 2;
-        for (int i = 0; i <= steps; ++i) {
-            float a = (startAngle + sweepAngle * float(i) / float(steps)) * 3.14159265f / 180.f;
-            float x = cx + std::cos(a) * oval.width / 2, y = cy + std::sin(a) * oval.height / 2;
-            i == 0 ? arc.moveTo(x, y) : arc.lineTo(x, y);
-        }
-        return drawPath(arc, color, style);
-    }
-    if (style.isStroke()) {
-        context_->drawArc(oval, startAngle, sweepAngle, style.strokeWidth, color, style.cap == StrokeCap::Round);
+    // An arc of a circle, stroked butt or round, in a color: as the backend draws one.
+    if (style.isStroke() && !useCenter && style.width > 0 && !style.pathEffect && style.cap != StrokeCap::Square && brush.isSolid() &&
+        oval.width == oval.height && std::abs(sweepAngle) < 360) {
+        if (alpha <= 0) return;
+        Blending blending(*context_, blendMode);
+        detail::Filtering filtering(*context_, colorFilter);
+        context_->drawArc(oval, startAngle, sweepAngle, style.width, faded(brush.stops().front().color, alpha), style.cap == StrokeCap::Round);
         return;
     }
-    // A pie slice is an arc stroked at half the radius, as wide as the radius.
-    float r = std::min(oval.width, oval.height) / 2;
-    Offset c = oval.center();
-    context_->drawArc({c.x - r / 2, c.y - r / 2, r, r}, startAngle, sweepAngle, r, color, false);
+    Rect at{oval.x - bounds_.x, oval.y - bounds_.y, oval.width, oval.height};
+    paint(arcPath(at, startAngle, sweepAngle, useCenter, !style.isStroke()), brush, alpha, style, colorFilter, blendMode);
 }
 
-Size DrawScope::measureText(std::string_view text, Font font) const {
-    if (!measurer_) return {};
-    return {measurer_->measureWidth(text, font), measurer_->metrics(font).lineHeight};
+void DrawScope::drawArc(Color color, float startAngle, float sweepAngle, bool useCenter, Offset topLeft, std::optional<Size> size, float alpha,
+                        const DrawStyle& style, std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
+    drawArc(Brush::solid(color), startAngle, sweepAngle, useCenter, topLeft, size, alpha, style, colorFilter, blendMode);
+}
+
+void DrawScope::drawPath(const Path& path, Color color, float alpha, const DrawStyle& style, std::optional<ColorFilter> colorFilter,
+                         BlendMode blendMode) {
+    paint(path, Brush::solid(color), alpha, style, colorFilter, blendMode);
+}
+
+void DrawScope::drawPath(const Path& path, const Brush& brush, float alpha, const DrawStyle& style, std::optional<ColorFilter> colorFilter,
+                         BlendMode blendMode) {
+    paint(path, brush, alpha, style, colorFilter, blendMode);
+}
+
+// As Skia's drawPoints: dots as wide as the stroke (a hairline's: a pixel), round with a round
+// cap, square otherwise; lines between each two; one line through them all.
+void DrawScope::drawPoints(const std::vector<Offset>& points, PointMode pointMode, const Brush& brush, float strokeWidth, StrokeCap cap,
+                           std::optional<PathEffect> pathEffect, float alpha, std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
+    if (points.empty()) return;
+    Path path;
+    if (pointMode == PointMode::Points) {
+        float w = strokeWidth > 0 ? strokeWidth : 1 / density_.density, r = w / 2;
+        for (Offset p : points) {
+            Rect dot{p.x - r, p.y - r, w, w};
+            cap == StrokeCap::Round ? path.addOval(dot) : path.addRect(dot);
+        }
+        return paint(path, brush, alpha, Fill, colorFilter, blendMode);
+    }
+    for (size_t i = 0; i < points.size(); ++i) {
+        bool start = pointMode == PointMode::Polygon ? i == 0 : i % 2 == 0;
+        if (pointMode == PointMode::Lines && start && i + 1 == points.size()) break;  // an odd one out has no partner
+        start ? path.moveTo(points[i].x, points[i].y) : path.lineTo(points[i].x, points[i].y);
+    }
+    paint(path, brush, alpha, Stroke(strokeWidth, 4, cap, StrokeJoin::Miter, pathEffect), colorFilter, blendMode);
+}
+
+void DrawScope::drawPoints(const std::vector<Offset>& points, PointMode pointMode, Color color, float strokeWidth, StrokeCap cap,
+                           std::optional<PathEffect> pathEffect, float alpha, std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
+    drawPoints(points, pointMode, Brush::solid(color), strokeWidth, cap, pathEffect, alpha, colorFilter, blendMode);
+}
+
+void DrawScope::drawText(const TextLayoutMeasurer& measurer, const std::string& text, Offset topLeft) {
+    drawText(measurer, AnnotatedString(text), topLeft, TextStyle{});
+}
+
+void DrawScope::drawText(const TextLayoutMeasurer& measurer, const AnnotatedString& text, Offset topLeft) {
+    drawText(measurer, text, topLeft, TextStyle{});
+}
+
+void DrawScope::drawText(const TextLayoutMeasurer& measurer, const std::string& text, Offset topLeft, const TextStyle& style,
+                         std::optional<TextOverflow> overflow, std::optional<bool> softWrap, std::optional<int> maxLines,
+                         std::optional<Size> size, BlendMode blendMode) {
+    drawText(measurer, AnnotatedString(text), topLeft, style, overflow, softWrap, maxLines, size, blendMode);
+}
+
+void DrawScope::drawText(const TextLayoutMeasurer& measurer, const AnnotatedString& text, Offset topLeft, const TextStyle& style,
+                         std::optional<TextOverflow> overflow, std::optional<bool> softWrap, std::optional<int> maxLines,
+                         std::optional<Size> size, BlendMode blendMode) {
+    TextStyle s = style;
+    if (overflow) s.overflow = *overflow;
+    if (softWrap) s.softWrap = *softWrap;
+    if (maxLines) s.maxLines = *maxLines == std::numeric_limits<int>::max() ? 0 : *maxLines;
+    // In a size: its width the lines align in (as Compose's fixed constraints); else as far as the area goes.
+    float maxWidth = size ? size->width : std::max(0.f, bounds_.width - topLeft.x);
+    float maxHeight = size ? size->height : std::max(0.f, bounds_.height - topLeft.y);
+    TextLayoutResult layout = measurer.measure(text, s, maxWidth, maxHeight);
+    if (size && layout.data_) {
+        const TextLayoutResult::Data& d = *layout.data_;
+        layout = detail::makeTextLayoutResult(d.layout, d.text, *d.measurer, d.align, d.overflow, size->width, d.maxWidth, d.maxHeight);
+    }
+    drawText(layout, std::nullopt, topLeft, std::nullopt, std::nullopt, std::nullopt, std::nullopt, blendMode);
+}
+
+namespace {
+
+// `runs` as drawText paints them: what the text's own style gave them (not a span or a link)
+// in `paint` (a color, or a brush, faded by `alpha`), with the shadow, decoration and draw style
+// given.
+void repaintRuns(std::vector<detail::TextRun>& runs, const std::function<void(detail::TextRun&)>& paint, const std::optional<Shadow>& shadow,
+                 const std::optional<TextDecoration>& decoration, const std::optional<DrawStyle>& drawStyle) {
+    using detail::TextRun;
+    for (TextRun& run : runs) {
+        if (!(run.own & TextRun::OwnPaint)) paint(run);
+        if (shadow && !(run.own & TextRun::OwnShadow)) run.shadow = shadow;
+        if (decoration && !(run.own & TextRun::OwnDecoration)) run.decoration = *decoration;
+        if (drawStyle && !(run.own & TextRun::OwnDrawStyle)) detail::styleGlyphs(run.font, *drawStyle);
+    }
+}
+
+} // namespace
+
+// As Compose's: a color (unset: the text's own) faded by alpha where it isn't 1 (unset: as it
+// is); unset over a brushed text, its brush at alpha (unset: as it is).
+void DrawScope::drawText(const TextLayoutResult& layout, std::optional<Color> color, Offset topLeft, std::optional<float> alpha,
+                         std::optional<Shadow> shadow, std::optional<TextDecoration> textDecoration, std::optional<DrawStyle> drawStyle,
+                         BlendMode blendMode) {
+    if (!layout.data_) return;
+    const TextLayoutResult::Data& d = *layout.data_;
+    Rect at{bounds_.x + topLeft.x, bounds_.y + topLeft.y, d.width, d.layout.height};
+    Blending blending(*context_, blendMode);
+    if (!color && !alpha && !shadow && !textDecoration && !drawStyle) return detail::drawStyledText(*context_, d.layout, at, d.align, d.overflow);
+    detail::StyledTextLayout painted = d.layout;
+    repaintRuns(
+        painted.runs,
+        [&](detail::TextRun& run) {
+            if (run.brush && !color) {
+                if (alpha) run.brush = run.brush->faded(*alpha);
+                return;
+            }
+            run.color = faded(color.value_or(run.color), alpha.value_or(1)), run.brush.reset();
+        },
+        shadow, textDecoration, drawStyle);
+    detail::drawStyledText(*context_, painted, at, d.align, d.overflow);
+}
+
+void DrawScope::drawText(const TextLayoutResult& layout, const Brush& brush, Offset topLeft, std::optional<float> alpha,
+                         std::optional<Shadow> shadow, std::optional<TextDecoration> textDecoration, std::optional<DrawStyle> drawStyle,
+                         BlendMode blendMode) {
+    if (!layout.data_) return;
+    const TextLayoutResult::Data& d = *layout.data_;
+    Rect at{bounds_.x + topLeft.x, bounds_.y + topLeft.y, d.width, d.layout.height};
+    Blending blending(*context_, blendMode);
+    detail::StyledTextLayout painted = d.layout;
+    Brush b = brush.faded(alpha.value_or(1));
+    repaintRuns(painted.runs, [&](detail::TextRun& run) { run.brush = b; }, shadow, textDecoration, drawStyle);
+    detail::drawStyledText(*context_, painted, at, d.align, d.overflow);
 }
 
 void DrawScope::drawText(std::string_view text, Offset topLeft, Font font, Color color) {
@@ -384,26 +570,9 @@ void DrawScope::drawText(std::string_view text, Offset topLeft, Font font, Color
     context_->drawText(text, abs({topLeft.x, topLeft.y + m.ascent}), font, color, bidi::firstStrongIsRtl(text));
 }
 
-void DrawScope::drawText(const TextLayoutResult& layout, Offset topLeft, std::optional<Color> color) {
-    if (!layout.data_) return;
-    const TextLayoutResult::Data& d = *layout.data_;
-    Rect at{bounds_.x + topLeft.x, bounds_.y + topLeft.y, d.width, d.layout.height};
-    if (!color) return detail::drawStyledText(*context_, d.layout, at, d.align, d.overflow);
-    detail::StyledTextLayout painted = d.layout;
-    for (auto& run : painted.runs) run.color = *color, run.brush.reset();
-    detail::drawStyledText(*context_, painted, at, d.align, d.overflow);
-}
-
-void DrawScope::drawText(const TextLayoutMeasurer& measurer, const std::string& text, Offset topLeft, const TextStyle& style) {
-    drawText(measurer.measure(text, style, bounds_.width - topLeft.x, bounds_.height - topLeft.y), topLeft);
-}
-
-void DrawScope::drawImage(const ImageBitmap& image, Offset topLeft, std::optional<Size> size, float alpha,
-                          std::optional<ColorFilter> colorFilter) {
-    if (image.empty()) return;
-    Rect dst = local(topLeft, size.value_or(Size{float(image.width()), float(image.height())}));
-    detail::Filtering filtering(*context_, colorFilter);
-    context_->drawImage(image, {0, 0, float(image.width()), float(image.height())}, dst, alpha);
+Size DrawScope::measureText(std::string_view text, Font font) const {
+    if (!measurer_) return {};
+    return {measurer_->measureWidth(text, font), measurer_->metrics(font).lineHeight};
 }
 
 void DrawScope::drawVector(const ImageVector& vector, Color color, Offset topLeft, std::optional<Size> size) {
@@ -422,17 +591,6 @@ void DrawScope::inset(float left, float top, float right, float bottom, const st
                      std::max(0.f, bounds_.height - top - bottom)},
                     measurer_);
     block(inner);
-}
-
-void DrawScope::drawOval(Color color, Offset topLeft, std::optional<Size> size, DrawStyle style, BlendMode blendMode) {
-    drawOval(Brush::solid(color), topLeft, size, style, blendMode);
-}
-
-void DrawScope::drawOval(const Brush& brush, Offset topLeft, std::optional<Size> size, DrawStyle style, BlendMode blendMode) {
-    Size s = size.value_or(Size{bounds_.width - topLeft.x, bounds_.height - topLeft.y});
-    Path oval;
-    oval.addOval({topLeft.x, topLeft.y, s.width, s.height});
-    drawPath(oval, brush, style, blendMode);
 }
 
 void DrawScope::clipPath(const Path& path, const std::function<void(DrawScope&)>& block, ClipOp op) {
@@ -551,7 +709,7 @@ public:
     void drawText(std::string_view, Offset, const Font&, Color, bool) override {}
     void drawVector(const ImageVector&, const Rect&, Color) override {}
     void drawArc(const Rect&, float, float, float, Color, bool) override {}
-    void drawImage(const ImageBitmap&, const Rect&, const Rect&, float) override {}
+    void drawImage(const ImageBitmap&, const Rect&, const Rect&, float, FilterQuality) override {}
     void drawPath(const Path&, Offset, const Brush&, const Rect&, const PathStroke&) override {}
     void fillGradient(const Rect&, const CornerRadii&, const Brush&, const Rect&) override {}
     void drawShadow(const Rect&, const CornerRadii&, const Shadow&, bool) override {}
