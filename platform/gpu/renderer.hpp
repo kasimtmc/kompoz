@@ -76,6 +76,7 @@ public:
     void popColorFilter() override;
     void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform = {}) override;
     void pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) override;
+    void drawBackdrop(const Rect& bounds, const RenderEffect& effect, float alpha) override;
 
 private:
     // One quad: what shaders/primitives.slang's Instance says.
@@ -126,6 +127,7 @@ private:
         std::vector<uint32_t> edgeGenerations;  // the generation each edge is in
         MaskShelf shelf;
         std::optional<EffectDraw> effect;  // set: this instead of the rest
+        std::optional<std::pair<Texture*, IRect>> copy;  // set: that part of that texture copied to the target's top left, instead
     };
     // A clip in effect: the pixels it leaves (whole ones), and the clips that cut them finer (a
     // rect turned, say), if any: their chain.
@@ -152,6 +154,7 @@ private:
         bool paths = false;
         int row = -1;
         uint32_t generation = 0;  // the row's
+        size_t pass = SIZE_MAX;   // and its pass's (a pass split by a backdrop starts its mask anew)
     };
     // What pushTranslation and pushTransform change: the pixel origin, and the transform after it.
     struct Placement {
@@ -196,14 +199,15 @@ private:
         std::weak_ptr<const void> token;
     };
     struct PooledTexture {
-        std::unique_ptr<Texture> texture;
+        std::unique_ptr<Texture> texture;  // (its format: a target's copy has the target's)
         bool inUse = false;
         int idleFrames = 0;
     };
 
     // Records a primitive: its own transform (the prim's) goes through the current one, unless it
     // is in the target's pixels already (a path's coverage, an opaque fill).
-    void add(int kind, const Prim& prim, Texture* texture = nullptr, bool opaque = false, Mask mask = Mask::None, Texture* texture1 = nullptr);
+    void add(int kind, const Prim& prim, Texture* texture = nullptr, bool opaque = false, Mask mask = Mask::None, Texture* texture1 = nullptr,
+             bool inTargetPixels = false);
     // Rasterizes polygons into the current pass's coverage mask, within `region` (px of the
     // target, or of a layer before its transform): where the mask's texel (0, 0) is in those
     // pixels, or nothing if the region is empty.
@@ -249,7 +253,7 @@ private:
     int clipRow(int chain);
     Texture* pageTexture(int page);
     Texture* imageTexture(const ImageBitmap& image);
-    Texture* acquire(int width, int height);
+    Texture* acquire(int width, int height, Format format = Format::RGBA8);
     IRect scissor() const;
     Pipeline& pipeline(Format target, const BlendState& blend);
     void execute(Pass& pass);

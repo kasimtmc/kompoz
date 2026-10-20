@@ -25264,6 +25264,109 @@ TEST(blur_with_a_radius_spec_is_a_layer_as_composes) {
     CHECK(compositions == 1 && e.layerEffects.size() == 1 && e.layerEffects[0] == BlurRadiusSpec::radialGradient(9, 0).createRenderEffect({80, 40}, TileMode::Clamp));
 }
 
+TEST(blur_types_blur_the_node_what_it_draws_or_what_is_behind) {
+    Color red{1, 0, 0, 1}, blue{0, 0, 1, 1}, green{0, 1, 0, 1};
+    auto type = mutableStateOf(BlurType::Self);
+    auto edges = mutableStateOf(BlurredEdgeTreatment::Rectangle);
+    ComposeTestRule rule([&] {
+        Box(Modifier().offset(20, 20).size(100), [&] {
+            Box(Modifier().background(green).size(100));  // behind
+            Box(Modifier().size(80).blur(6, edges.get(), type.get()).padding(10).clip(RoundedCornerShape(8))
+                    .graphicsLayer({.alpha = 0.5f}).background(red),
+                [&] { Box(Modifier().size(20).background(blue)); });
+        });
+    });
+    auto draw = [&] {
+        testing::RecordingCanvas c;
+        rule.host().draw(c);
+        return c;
+    };
+    // Self: what the node draws itself (its background, in its clip and faded) through the blur's
+    // layer; its child after it, out of it, sharp, but in the clip and faded as the elements in
+    // between have it.
+    testing::RecordingCanvas c = draw();
+    CHECK(c.rects.size() == 3 && c.rectColors[1].r == 1 && c.rectColors[2].b == 1);
+    CHECK(c.layerEffects.size() == 3 && c.layerEffects[0] == BlurEffect(6, 6, TileMode::Clamp) && !c.layerEffects[1] && !c.layerEffects[2]);
+    CHECK(c.rectDepths.size() == 3 && c.rectDepths[0] == 0 && c.rectDepths[1] == 2 && c.rectDepths[2] == 1);  // the child in the faded layer alone
+    CHECK(near(c.layerAlphas[1], 0.5f) && near(c.layerAlphas[2], 0.5f));
+    CHECK(c.clipShapes.size() == 2 && sameRect(c.clipShapes[0].bounds, {30, 30, 60, 60}) && sameRect(c.clipShapes[1].bounds, {30, 30, 60, 60}));
+    CHECK(sameRect(c.rects[2], {30, 30, 20, 20}) && c.backdrops.empty());
+    // Morph: what is behind blurred within the node's shape, then the node over it, sharp.
+    type.set(BlurType::Morph);
+    rule.waitForIdle();
+    c = draw();
+    CHECK(c.backdrops.size() == 1 && sameRect(c.backdrops[0].bounds, {20, 20, 80, 80}) && c.backdrops[0].effect == BlurEffect(6, 6, TileMode::Clamp));
+    CHECK(near(c.backdrops[0].alpha, 1) && c.order == "rbrr" && c.clips.size() == 1 && sameRect(c.clips[0], {20, 20, 80, 80}));
+    CHECK(c.layerEffects.size() == 1 && !c.layerEffects[0]);  // (the graphicsLayer's, faded)
+    // Unbounded: not cut, spreading out.
+    edges.set(BlurredEdgeTreatment::Unbounded);
+    rule.waitForIdle();
+    c = draw();
+    CHECK(c.backdrops.size() == 1 && c.backdrops[0].effect == BlurEffect(6, 6, TileMode::Decal) && c.clips.empty());
+    // Family: as Compose's.
+    type.set(BlurType::Family);
+    rule.waitForIdle();
+    c = draw();
+    CHECK(c.backdrops.empty() && c.layerEffects.size() == 2 && c.layerEffects[0] == BlurEffect(6, 6, TileMode::Decal) && c.rectDepths[2] == 2);
+    // With a spec (and a block): its alpha on what is behind; types compared.
+    ComposeTestRule glass([&] {
+        Box(Modifier().size(100).blur([](BlurScope& b) {
+            b.blurRadiusSpec = BlurRadiusSpec::verticalGradient(0, 10);
+            b.alpha = 0.4f;
+            b.type = BlurType::Morph;
+        }));
+    });
+    testing::RecordingCanvas d;
+    glass.host().draw(d);
+    CHECK(d.backdrops.size() == 1 && near(d.backdrops[0].alpha, 0.4f) && d.layers == 0 &&
+          d.backdrops[0].effect == BlurRadiusSpec::verticalGradient(0, 10).createRenderEffect({100, 100}, TileMode::Clamp));
+    CHECK(!(Modifier().blur(4, BlurredEdgeTreatment::Rectangle, BlurType::Morph) == Modifier().blur(4, BlurredEdgeTreatment::Rectangle, BlurType::Self)));
+    CHECK(Modifier().blur(4, BlurredEdgeTreatment::Rectangle, BlurType::Morph) == Modifier().blur(4, BlurredEdgeTreatment::Rectangle, BlurType::Morph));
+}
+
+TEST(display_list_backdrops_are_drawn_anew_with_what_is_behind) {
+    auto behind = mutableStateOf(0.f), over = mutableStateOf(0.f), far = mutableStateOf(0.f);
+    ComposeTestRule rule([&] {
+        Box(Modifier().fillMaxSize(), [&] {
+            Box(Modifier().offset(100, 100).size(10).background(Color{behind.get(), 0, 1, 1}));  // near the glass: what it reads
+            Box(Modifier().offset(300, 300).size(10).background(Color{far.get(), 0, 1, 1}));   // far from it
+            Box(Modifier().offset(120, 120).size(100).blur(10, BlurredEdgeTreatment::Rectangle, BlurType::Morph), [&] {
+                Box(Modifier().size(10).background(Color{over.get(), 1, 0, 1}));  // on the glass
+            });
+        });
+    }, {400, 400});
+    DisplayList list(rule.host().textMeasurer());
+    auto frame = [&] {
+        list.begin({400, 400}, 1);
+        rule.host().draw(list);
+        return list.end();
+    };
+    frame();
+    // What it reads: from three sigmas past it (the half pixel taken as up to 2.5 dp); it shows
+    // within it (clipped).
+    float reach = 3 * 0.57735f * 10 + 2.5f;
+    auto whole = [&](const std::optional<Rect>& d) {
+        return d && d->x <= 120 - reach && d->y <= 120 - reach && d->right() >= 220 + reach && d->bottom() >= 220 + reach;
+    };
+    behind.set(1);  // changed behind it, outside it: it changes, and all it reads is drawn anew
+    rule.waitForIdle();
+    CHECK(whole(frame()));
+    over.set(1);  // on it: the same
+    rule.waitForIdle();
+    CHECK(whole(frame()));
+    far.set(1);  // nowhere near: only that
+    rule.waitForIdle();
+    std::optional<Rect> d = frame();
+    CHECK(d && d->x >= 290 && d->y >= 290);
+    // Replayed where something behind it changed: it too.
+    behind.set(0.5f);
+    rule.waitForIdle();
+    d = frame();
+    testing::RecordingCanvas c;
+    if (d) list.replay(c, *d);
+    CHECK(c.backdrops.size() == 1 && sameRect(c.backdrops[0].bounds, {120, 120, 100, 100}));
+}
+
 TEST(graphics_layer_render_effect_draws_through_an_effect_layer) {
     Color red{1, 0, 0, 1};
     auto look = [](const std::function<void()>& content) {

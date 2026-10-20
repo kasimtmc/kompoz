@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cmath>
 #include <numeric>
+#include <utility>
 
 namespace kompoz {
 
@@ -1843,6 +1844,11 @@ GraphicsContext*& detail::recordingInto() {
     return into;
 }
 
+detail::DrawPart& detail::drawPart() {
+    thread_local DrawPart part;
+    return part;
+}
+
 void LayoutNode::drawLayer(GraphicsContext& canvas, size_t index) {
     const auto& elements = modifier.elements();
     // A scroll container draws its overscroll effect around its content, in its viewport.
@@ -1865,6 +1871,19 @@ void LayoutNode::drawLayer(GraphicsContext& canvas, size_t index) {
         if (elements[index]->clipsContent() && canvas.quickReject(elements[index]->clipBounds(layers_[index].bounds))) return;
         elements[index]->draw(canvas, layers_[index].bounds, *this,
                               [&] { drawLayer(detail::recordingInto() ? *detail::recordingInto() : canvas, index + 1); });
+        return;
+    }
+    detail::DrawPart& part = detail::drawPart();
+    if (part.node == this) {  // one part (the children draw whole)
+        detail::DrawPart drawing = std::exchange(part, {});
+        if (drawing.own && drawContent) drawContent(canvas, contentBounds_, *this);
+        if (!drawing.own) {
+            GraphicsContext* placing = std::exchange(detail::recordingInto(), drawing.recording);
+            for (auto* child : childrenInDrawOrder())
+                if (child->isPlaced()) child->draw(*drawing.children);
+            detail::recordingInto() = placing;
+        }
+        part = drawing;
         return;
     }
     if (drawContent) drawContent(canvas, contentBounds_, *this);

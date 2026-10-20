@@ -20,7 +20,8 @@ static const int IMAGE = 6;        // an image's texels at uv, at alpha params.x
 static const int LAYER = 7;        // a layer's texture: texel (0, 0) at params.xy, uv.zw a texel's size, its pixels within
                                    // params.xy..params.zw; at alpha color.a, cut to the rounded rect (shape, radii), or
                                    // with flags & 1 to the path whose coverage mask (texture1, linearly filtered) has
-                                   // texel (0, 0) at radii.xy
+                                   // texel (0, 0) at radii.xy; with flags & 8 its alpha goes into the coverage (a
+                                   // backdrop drawn in place of what is there: Src, mixed by it)
 static const int PATH = 8;         // a path: its coverage mask (texture0) has texel (0, 0) at params.xy; params.z: even-odd;
                                    // drawn in the target's pixels, with flags & 4 its paint where the pixel is in its
                                    // own space (radii, uv and shape: the rows of the map there)
@@ -522,10 +523,12 @@ float4 fs(Varyings v) : SV_Target {
         cover = edge;
     } else if (kind == LAYER) {
         float2 texel = clamp(v.local, v.params.xy + 0.5, v.params.zw - 0.5);
-        src = texture0.Sample((texel - v.params.xy) * v.uv.zw) * v.color.a;
+        bool mixed = (flags & 8) != 0;
+        src = texture0.Sample((texel - v.params.xy) * v.uv.zw) * (mixed ? 1 : v.color.a);
         // (Filtered where it is: a turned or scaled layer's pixels fall between the mask's texels.)
         cover = (flags & 1) != 0 ? pathCoverage(texture1.SampleLevel((v.local - v.radii.xy) * uniforms.texels.xy, 0).r, false)
                                  : roundRectCoverage(v.local, v.shape, v.radii, dx, dy);
+        if (mixed) cover *= v.color.a;
     } else if (kind == PATH) {
         cover = pathCoverage(texture0.SampleLevel(maskTexcoord(v.local - v.params.xy), 0).r, v.params.z > 0.5);
     }

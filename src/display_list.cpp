@@ -289,6 +289,19 @@ void DisplayList::pushEffectLayer(const Rect& bounds, const RenderEffect& effect
     states_.push_back({s.m, grown(s.m.map(grown(bounds, pixel_)), 2 * pixel_), uint32_t(recording_.size() - 1)});
 }
 
+// It shows where the effect takes what is under it, and reads that from as far around it as the
+// effect reaches (rect2: there on the screen): end() widens damage that reaches either to both, as
+// what is under it has to be drawn anew before it is read.
+void DisplayList::drawBackdrop(const Rect& bounds, const RenderEffect& effect, float alpha) {
+    Rect reads = effect.outputBounds(bounds);
+    if (Command* c = draw(Kind::Backdrop, effect.outputBounds(reads), 0)) {
+        c->rect = bounds;
+        c->effect = effect;
+        c->f2 = alpha;
+        c->rect2 = grown(states_.back().m.map(reads), 2 * pixel_);
+    }
+}
+
 void DisplayList::pushClip(const Rect& rect) {
     State s = states_.back();
     Rect area = grown(s.m.map(rect), pixel_).intersect(s.clip);  // backends round it to pixels
@@ -439,6 +452,19 @@ std::optional<Rect> DisplayList::end() {
         }
         for (uint32_t i = 0; i < frameSegments_.size(); ++i)
             if (!matched_[i]) addDamage(damage, frame_, frameSegments_[i].first, frameSegments_[i].count);
+        // A backdrop that damage reaches (what it reads, or where it shows) is drawn anew with all
+        // that is under what it reads.
+        for (bool widened = damage.has_value(); widened;) {
+            widened = false;
+            for (const Command& c : recording_) {
+                if (c.kind != Kind::Backdrop) continue;
+                Rect all = united(c.bounds, c.rect2);
+                if (!overlaps(*damage, all)) continue;
+                Rect more = united(*damage, all);
+                widened = widened || !same(more, *damage);
+                damage = more;
+            }
+        }
         if (damage) {
             *damage = damage->intersect(screen);
             if (empty(*damage)) damage.reset();
@@ -495,6 +521,7 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
             case Kind::TextShadow: canvas.drawTextShadow(c.text, c.p1, c.font, c.color, c.f1, c.flag); break;
             case Kind::Shadow: canvas.drawShadow(c.rect, c.radii, {c.color, c.p1, c.f1, c.f2}, c.flag); break;
             case Kind::ShadowPath: canvas.drawShadowPath(c.path, c.p2, {c.color, c.p1, c.f1, c.f2}, c.flag); break;
+            case Kind::Backdrop: canvas.drawBackdrop(c.rect, *c.effect, c.f2); break;
             case Kind::Vector: canvas.drawVector(c.vector, c.rect, c.color); break;
             case Kind::Arc: canvas.drawArc(c.rect, c.f1, c.f2, c.f3, c.color, c.flag); break;
             case Kind::Image: canvas.drawImage(c.image, c.rect2, c.rect, c.f1); break;

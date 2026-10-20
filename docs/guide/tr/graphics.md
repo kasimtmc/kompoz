@@ -195,6 +195,15 @@ Box(Modifier().size(120).blur([](BlurScope& b) {
 }).background(colorScheme().primary, CircleShape));
 ```
 
+Kompoz'un `blur`'u neyin bulanıklaşacağını da alır (`BlurType`). Varsayılan `Family`, Compose'unki gibi düğümü ve çocuklarını bulanıklaştırır. `Morph` düğümün arkasında çizileni şekli içinde bulanıklaştırır ve düğümü üstüne keskin çizer: buzlu cam. `Self` yalnızca düğümün kendi çizdiğini (arka planı, kenarlığı, resmi) bulanıklaştırır ve çocuklarını üstüne keskin çizer:
+
+```cpp body
+Box(Modifier().size(200, 72)
+        .blur(16, BlurredEdgeTreatment{RoundedCornerShape(16)}, BlurType::Morph)
+        .background(colors::White.copy(0.2f), RoundedCornerShape(16)),
+    Alignment::Center, [] { Text("Frosted glass"); });
+```
+
 ## Resimler
 
 `Image` bir bitmap gösterir; `imageResource(path)` uygulamanın varlıklarından bir tane yükler, bir kez:

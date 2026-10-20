@@ -28,6 +28,7 @@
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <numbers>
 #include <string>
 #include <vector>
 
@@ -1785,6 +1786,79 @@ void blursAreGaussian(Gpu& g) {
         for (int x = 0; x < n; ++x)
             if (x - 5 >= 0 && y + 3 < n) std::copy_n(then.at(x - 5, y + 3), 4, thenMoved.at(x, y));
     report("progressive, blurred, moved", chained, overWhite(thenMoved), 2);
+    // Backdrops: what is drawn so far under a rect blurred (from all around it), drawn back in a
+    // clip to it, and what is drawn after over it sharp; faded; in a turned clip; in a path's clip
+    // (a pass ended for it, the clip's mask made again for the next); in a layer, that layer's.
+    auto backdrop = [&](float alpha, const std::function<void(GraphicsContext&)>& clip, const std::function<void(GraphicsContext&)>& unclip) {
+        return g.render(n, n, 1, [&](GraphicsContext& c) {
+            for (const auto& [r, col] : fills) c.fillRoundRect({float(r.x), float(r.y), float(r.width), float(r.height)}, 0, col);
+            clip(c);
+            c.drawBackdrop({30, 30, 40, 36}, BlurEffect(4, 4), alpha);
+            c.fillRoundRect({46, 44, 8, 8}, 0, Color{1, 1, 1, 1});  // over it, sharp
+            unclip(c);
+        });
+    };
+    Image behind = gaussian(base, {0, 0, n, n}, TileMode::Clamp, sigmaOf(4), sigmaOf(4));
+    auto glass = [&](float alpha, const std::function<bool(int, int)>& in) {
+        Image want = base;
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x) {
+                if (!in(x, y)) continue;
+                for (int k = 0; k < 4; ++k) want.at(x, y)[k] = want.at(x, y)[k] * (1 - alpha) + behind.at(x, y)[k] * alpha;
+                if (x >= 46 && x < 54 && y >= 44 && y < 52) std::fill_n(want.at(x, y), 4, 1.f);
+            }
+        return overWhite(want);
+    };
+    auto rect = [](int x, int y) { return x >= 30 && x < 70 && y >= 30 && y < 66; };
+    auto clipRect = [](GraphicsContext& c) { c.pushClip({30, 30, 40, 36}); };
+    auto unclip = [](GraphicsContext& c) { c.popClip(); };
+    report("backdrop", backdrop(1, clipRect, unclip), glass(1, rect), 2);
+    report("backdrop, faded", backdrop(0.5f, clipRect, unclip), glass(0.5f, rect), 2);
+    Path ring;
+    ring.addOval({28, 26, 44, 44});
+    auto inRing = [](int x, int y) { return std::hypot(x + 0.5 - 50, y + 0.5 - 48) < 22; };
+    report("backdrop in a path's clip", backdrop(1, [&](GraphicsContext& c) {
+        c.pushClipPath(ring, {0, 0});
+        c.fillRoundRect({50, 56, 10, 10}, 0, Color{0.1f, 0.7f, 0.2f, 1});  // (in the clip before it: as it is, the clip's mask made for it)
+    }, unclip), glass(1, inRing), 2,
+           [&](int x, int y) { return std::abs(std::hypot(x + 0.5 - 50, y + 0.5 - 48) - 22) < 1.5; });  // (its edge: coverage)
+    Pixels turned = backdrop(1, [](GraphicsContext& c) {
+        Matrix m;
+        m.translate(50, 48);
+        m.rotateZ(30);
+        m.translate(-50, -48);
+        c.pushTransform(m);
+        c.pushClip({30, 30, 40, 36});
+    }, [](GraphicsContext& c) {
+        c.popClip();
+        c.popTransform();
+    });
+    // (Inside the turned rect, well in from its edges, the blur of what is behind on the screen; the
+    // white square turned with it: left out.)
+    auto inTurned = [](int x, int y) {
+        double dx = x + 0.5 - 50, dy = y + 0.5 - 48, c = std::cos(-std::numbers::pi / 6), s = std::sin(-std::numbers::pi / 6);
+        double u = dx * c - dy * s + 50, v = dx * s + dy * c + 48;
+        return u > 32 && u < 68 && v > 32 && v < 64 && !(u > 44 && u < 56 && v > 42 && v < 54);
+    };
+    report("backdrop in a turned clip", turned, overWhite(behind), 2, [&](int x, int y) { return !inTurned(x, y); });
+    Pixels layered = g.render(n, n, 1, [&](GraphicsContext& c) {
+        c.fillRoundRect({0, 0, 96, 96}, 0, Color{0, 0, 0, 1});  // under the layer: not what it reads
+        c.pushLayer({0, 0, 96, 96}, 0, 1);
+        for (const auto& [r, col] : fills) c.fillRoundRect({float(r.x), float(r.y), float(r.width), float(r.height)}, 0, col);
+        c.pushClip({30, 30, 40, 36});
+        c.drawBackdrop({30, 30, 40, 36}, BlurEffect(4, 4), 1);
+        c.popClip();
+        c.popLayer();
+    });
+    Image inLayer = base;
+    for (int y = 0; y < n; ++y)
+        for (int x = 0; x < n; ++x) {
+            float* q = inLayer.at(x, y);
+            if (rect(x, y)) std::copy_n(behind.at(x, y), 4, q);
+            for (int k = 0; k < 3; ++k) q[k] += 0 * (1 - q[3]);  // over black
+            q[3] = 1;
+        }
+    report("backdrop in a layer", layered, overWhite(inLayer), 2);
     // Faded, and cut by a rounded clip around it: what the blur made, cut.
     Pixels cut = g.render(n, n, 1, [&](GraphicsContext& c) {
         c.pushClipRoundRect({24, 24, 48, 48}, 16);

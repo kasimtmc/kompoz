@@ -676,6 +676,102 @@ public:
         for (const auto& [at, radius] : p.stops) most = std::max(most, radius);
         return std::min(most * scale, 150.f);
     }
+    // A backdrop: what it reads put together from what the targets hold so far (the window's or the
+    // frame's, then each layer's over it as it would be composited, but for its mask: what is
+    // drawn behind; a transform's layer, in a space of its own, left out), through the effect as an
+    // effect layer's texture, drawn back in place of what is there (what is there taken off by the
+    // alpha, the backdrop added at it).
+    void drawBackdrop(const Rect& bounds, const RenderEffect& effect, float alpha) override {
+        if (alpha <= 0) return;
+        SDL_Texture* current = SDL_GetRenderTarget(renderer_);
+        SDL_Texture* bottom = layers_.empty() ? current : layers_.front().previous;
+        float bx = layers_.empty() ? ox_ : layers_.front().ox, by = layers_.empty() ? oy_ : layers_.front().oy;
+        Rect reads = effect.outputBounds(bounds);
+        int x0 = int(std::floor(reads.x * scale - bx)), y0 = int(std::floor(reads.y * scale - by));
+        int x1 = int(std::ceil(reads.right() * scale - bx)), y1 = int(std::ceil(reads.bottom() * scale - by));
+        int tw = 0, th = 0;
+        if (float w = 0, h = 0; bottom && SDL_GetTextureSize(bottom, &w, &h)) {
+            tw = int(w), th = int(h);
+        } else if (!bottom) {
+            SDL_SetRenderTarget(renderer_, nullptr);
+            SDL_GetCurrentRenderOutputSize(renderer_, &tw, &th);
+            SDL_SetRenderTarget(renderer_, current);
+        }
+        x0 = std::max(x0, 0), y0 = std::max(y0, 0), x1 = std::min(x1, tw), y1 = std::min(y1, th);
+        if (x1 <= x0 || y1 <= y0) return;
+        SDL_Rect region{x0, y0, x1 - x0, y1 - y0};
+        Layer layer{nullptr, current, ox_, oy_, {}, SDL_Rect{int(std::lround(float(x0) + bx - ox_)), int(std::lround(float(y0) + by - oy_)), region.w, region.h},
+                    SDL_FRect{}, CornerRadii(), alpha, {}};
+        layer.texture = acquire(region.w, region.h, &layer.texW, &layer.texH);
+        if (!layer.texture) return;
+        SDL_FRect all{0, 0, float(region.w), float(region.h)};
+        if (bottom) {
+            SDL_SetRenderTarget(renderer_, layer.texture);
+            SDL_SetRenderClipRect(renderer_, nullptr);
+            SDL_SetTextureBlendMode(bottom, SDL_BLENDMODE_NONE);
+            SDL_FRect src{float(x0), float(y0), float(region.w), float(region.h)};
+            SDL_RenderTexture(renderer_, bottom, &src, &all);
+        } else {  // the window: read back
+            SDL_SetRenderTarget(renderer_, nullptr);
+            if (SDL_Surface* read = SDL_RenderReadPixels(renderer_, &region)) {
+                if (SDL_Surface* rgba = SDL_ConvertSurface(read, SDL_PIXELFORMAT_RGBA32)) {
+                    SDL_Rect to{0, 0, region.w, region.h};
+                    SDL_UpdateTexture(layer.texture, &to, rgba->pixels, rgba->pitch);
+                    SDL_DestroySurface(rgba);
+                }
+                SDL_DestroySurface(read);
+            }
+            SDL_SetRenderTarget(renderer_, layer.texture);
+            SDL_SetRenderClipRect(renderer_, nullptr);
+        }
+        for (const Layer& over : layers_) {
+            if (!over.texture || over.matrixSet || over.texture == current) continue;
+            // Its texel (0, 0) is at the parent's px over.rect.xy: the bottom's over.ox + rect.x - bx.
+            float lx = over.ox + float(over.rect.x) - bx - float(x0), ly = over.oy + float(over.rect.y) - by - float(y0);
+            SDL_FRect src{0, 0, float(over.rect.w), float(over.rect.h)}, dst{lx, ly, float(over.rect.w), float(over.rect.h)};
+            SDL_SetTextureBlendMode(over.texture, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
+            SDL_SetTextureColorModFloat(over.texture, over.alpha, over.alpha, over.alpha);
+            SDL_SetTextureAlphaModFloat(over.texture, over.alpha);
+            SDL_RenderTexture(renderer_, over.texture, &src, &dst);
+            SDL_SetTextureColorModFloat(over.texture, 1, 1, 1);
+            SDL_SetTextureAlphaModFloat(over.texture, 1);
+        }
+        if (current && current != bottom) {  // (what this target holds so far, the innermost: over the rest)
+            float lx = ox_ - bx - float(x0), ly = oy_ - by - float(y0);
+            float cw = 0, ch = 0;
+            SDL_GetTextureSize(current, &cw, &ch);
+            SDL_FRect src{0, 0, cw, ch}, dst{lx, ly, cw, ch};
+            SDL_SetTextureBlendMode(current, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
+            SDL_RenderTexture(renderer_, current, &src, &dst);
+        }
+        SDL_SetRenderTarget(renderer_, current);
+        layer.effect = effect;
+        layer.content = {0, 0, region.w, region.h};
+        layer.bounds = bounds;
+        float sx = ox_, sy = oy_;
+        ox_ = layer.ox + float(layer.rect.x), oy_ = layer.oy + float(layer.rect.y);  // (the copy's, as a layer's in its pop)
+        applyEffect(layer);
+        ox_ = sx, oy_ = sy;
+        SDL_SetRenderTarget(renderer_, current);
+        SDL_SetRenderClipRect(renderer_, clips_.empty() ? nullptr : &clips_.back());
+        Offset moved;
+        for (const RenderEffect::Step& step : effect.steps())
+            if (step.kind == RenderEffect::Step::Kind::Offset) moved = {moved.x + step.offset.x, moved.y + step.offset.y};
+        SDL_FRect at{float(layer.rect.x) + moved.x * scale, float(layer.rect.y) + moved.y * scale, float(region.w), float(region.h)};
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD,
+                                                                         SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD));
+        SDL_SetRenderDrawColorFloat(renderer_, 0, 0, 0, alpha);
+        SDL_RenderFillRect(renderer_, &at);
+        applyBlend();
+        SDL_SetTextureBlendMode(layer.texture, SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD,
+                                                                           SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD));
+        SDL_SetTextureColorModFloat(layer.texture, alpha, alpha, alpha);
+        SDL_SetTextureAlphaModFloat(layer.texture, alpha);
+        SDL_RenderTexture(renderer_, layer.texture, &all, &at);
+        SDL_SetTextureColorModFloat(layer.texture, 1, 1, 1);
+        SDL_SetTextureAlphaModFloat(layer.texture, 1);
+        release(layer.texture);
+    }
     // How far a blur of `radius` dp spreads (px): three of Android's sigmas, whole pixels.
     float spread(float radius) const { return radius > 0 ? std::ceil(3 * (0.57735f * radius * scale + 0.5f)) : 0; }
 

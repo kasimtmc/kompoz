@@ -164,7 +164,7 @@ std::optional<Rect> Renderer::mapped(float x0, float y0, float x1, float y1) con
 int Renderer::clipRow(int chain) {
     ClipChain& c = clipChains_[size_t(chain)];
     MaskShelf& shelf = passes_[targets_.back().pass].shelf;
-    if (c.row >= 0 && (!c.paths || c.generation == shelf.generation)) return c.row;
+    if (c.row >= 0 && (!c.paths || (c.generation == shelf.generation && c.pass == targets_.back().pass))) return c.row;
     // Its paths in this generation's coverage mask, all of them (one that starts a new generation
     // starts them all over in it).
     std::vector<Offset> origins(c.elements.size());
@@ -175,6 +175,7 @@ int Renderer::clipRow(int chain) {
         if (shelf.generation == generation) break;
     }
     c.generation = shelf.generation;
+    c.pass = targets_.back().pass;
     c.row = int(stops_.size() / (kStopsWidth * 4));
     size_t at = stops_.size();
     stops_.resize(at + kStopsWidth * 4, 0.f);
@@ -210,7 +211,7 @@ std::optional<Offset> Renderer::rasterizeInClips(const std::vector<Contour>& con
     return origin;
 }
 
-void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Mask mask, Texture* texture1) {
+void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Mask mask, Texture* texture1, bool inTargetPixels) {
     if (targets_.empty()) return;  // (drawn outside beginTarget/endTarget)
     Pass& pass = passes_[targets_.back().pass];
     IRect clip = scissor();
@@ -219,7 +220,7 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Ma
     if (blend == BlendMode::Dst) return;  // (changes nothing)
     Prim p = prim;
     p.extra[2] = float(kind);
-    if (kind != PATH && !opaque && !transform_.identity()) {
+    if (kind != PATH && !opaque && !inTargetPixels && !transform_.identity()) {
         // Its own transform, then the current one.
         Projective own{{p.xform[0], p.xform[2], p.extra[0], p.xform[1], p.xform[3], p.extra[1], p.projection[0], p.projection[1], p.projection[2]}};
         Projective t = transform_ * own;
@@ -365,6 +366,10 @@ void Renderer::flush() {
 }
 
 void Renderer::execute(Pass& pass) {
+    if (pass.copy) {
+        device_.copyTexture(*pass.copy->first, pass.copy->second, *pass.target, 0, 0);
+        return;
+    }
     if (pass.effect) {
         const EffectDraw& e = *pass.effect;
         if (!effectPipeline_) {
@@ -546,19 +551,19 @@ void Renderer::endFrame() {
     });
 }
 
-// A layer target at least w x h, not used yet this frame (one that is would still be read by the
+// A layer target (or a target's copy, in its format) at least w x h, not used yet this frame (one that is would still be read by the
 // pass that composites it, which runs later). Sizes go up in 32 px steps, and a free texture up
 // to 64 px bigger is reused, so a layer moving by fractions doesn't make a texture each frame.
-Texture* Renderer::acquire(int width, int height) {
+Texture* Renderer::acquire(int width, int height, Format format) {
     PooledTexture* best = nullptr;
     for (auto& p : pool_) {
         int w = p.texture->width(), h = p.texture->height();
-        if (!p.inUse && w >= width && h >= height && w <= width + 64 && h <= height + 64 &&
+        if (!p.inUse && p.texture->format() == format && w >= width && h >= height && w <= width + 64 && h <= height + 64 &&
             (!best || w * h < best->texture->width() * best->texture->height()))
             best = &p;
     }
     if (!best) {
-        auto t = device_.createTexture((width + 31) / 32 * 32, (height + 31) / 32 * 32, Format::RGBA8,
+        auto t = device_.createTexture((width + 31) / 32 * 32, (height + 31) / 32 * 32, format,
                                        TextureUsage::Sampled | TextureUsage::RenderTarget);
         if (!t) return nullptr;
         pool_.push_back({std::move(t)});
@@ -1031,6 +1036,53 @@ void Renderer::pushEffectLayer(const Rect& bounds, const RenderEffect& effect, f
     }
     pushLayer(bounds, CornerRadii(), alpha, {}, within);
     if (layers_.back().texture) layers_.back().effect = effect;
+}
+
+// The pass drawn into the target so far runs first (ended here: what follows goes into a pass of its
+// own after), then what it reads is copied out, goes through the effect as a layer's texture would
+// (in the target's pixels: at the px per dp, whatever the transform), and is drawn back where the
+// effect takes it in place of what is there (Src, mixed by the alpha), in the clips (which cut it
+// to its shape).
+void Renderer::drawBackdrop(const Rect& bounds, const RenderEffect& effect, float alpha) {
+    if (targets_.empty() || alpha <= 0) return;
+    Rect reads = effect.outputBounds(bounds);
+    Target& t = targets_.back();
+    Texture* target = passes_[t.pass].target;
+    IRect all{0, 0, target->width(), target->height()};
+    auto pixels = [&](const Rect& r) {  // the px it covers through the transform (all of them if behind the eye)
+        std::optional<Rect> on = mapped(r.x * scale - ox_, r.y * scale - oy_, r.right() * scale - ox_, r.bottom() * scale - oy_);
+        return on ? *on : Rect{0, 0, float(all.width), float(all.height)};
+    };
+    Rect on = pixels(reads), shape = pixels(bounds);
+    IRect region = intersect({int(std::floor(on.x)), int(std::floor(on.y)), int(std::ceil(on.right())) - int(std::floor(on.x)),
+                              int(std::ceil(on.bottom())) - int(std::floor(on.y))}, all);
+    if (region.empty()) return;
+    Texture* copy = acquire(region.width, region.height, target->format());
+    if (!copy) return;
+    order_.push_back(t.pass);
+    Pass copying{copy, std::nullopt, {}, {}};
+    copying.copy = std::pair{target, region};
+    order_.push_back(passes_.size());
+    passes_.push_back(std::move(copying));
+    t.pass = passes_.size();
+    passes_.push_back({target, std::nullopt, {}, {}});
+    Layer layer{copy, region, shape, CornerRadii(), alpha, {}, 1, scale};
+    layer.effect = effect;
+    EffectImage image = applyEffect(layer);
+    const Texture& from = *image.texture;
+    float x0 = float(image.shown.x) + image.offsetX, y0 = float(image.shown.y) + image.offsetY;
+    float x1 = x0 + float(image.shown.width), y1 = y0 + float(image.shown.height);
+    float tx = float(image.originX) + image.offsetX, ty = float(image.originY) + image.offsetY;
+    Prim p;
+    set(p.bounds, x0 - 1, y0 - 1, x1 + 1, y1 + 1);
+    set(p.shape, x0, y0, x1, y1);
+    set(p.params, tx, ty, tx + float(image.texelsX * image.stepX), ty + float(image.texelsY * image.stepY));
+    set(p.uv, 0, 0, 1 / float(from.width() * image.stepX), 1 / float(from.height() * image.stepY));
+    set(p.color, 0, 0, 0, alpha);
+    p.extra[3] = 8;  // (in place of what is there, mixed with it by the alpha)
+    blends_.push_back(BlendMode::Src);
+    add(LAYER, p, image.texture, false, Mask::None, nullptr, true);
+    blends_.pop_back();
 }
 
 void Renderer::effectPass(Texture& target, Texture& source, const IRect& rect, const float (&uniforms)[32], bool linear, bool table) {

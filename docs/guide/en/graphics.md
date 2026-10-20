@@ -195,6 +195,15 @@ Box(Modifier().size(120).blur([](BlurScope& b) {
 }).background(colorScheme().primary, CircleShape));
 ```
 
+Kompoz's `blur` also takes what to blur (`BlurType`). `Family`, the default, blurs the node and its children, as Compose's does. `Morph` blurs what is drawn behind the node, within its shape, and draws the node over it sharp: frosted glass. `Self` blurs only what the node draws itself (its background, border, image) and draws its children over it sharp:
+
+```cpp body
+Box(Modifier().size(200, 72)
+        .blur(16, BlurredEdgeTreatment{RoundedCornerShape(16)}, BlurType::Morph)
+        .background(colors::White.copy(0.2f), RoundedCornerShape(16)),
+    Alignment::Center, [] { Text("Frosted glass"); });
+```
+
 ## Images
 
 `Image` shows a bitmap; `imageResource(path)` loads one from the app's assets, once:

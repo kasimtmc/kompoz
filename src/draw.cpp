@@ -91,6 +91,18 @@ Plane rotation(float x, float y, float z, float degrees) {
             t * x * z - s * y, t * y * z + s * x, t * z * z + c};
 }
 
+// A clip to `o` (from the top left of `bounds`): a rect, a rounded rect whose corners are circles
+// as such, any other outline as a path.
+void pushOutlineClip(GraphicsContext& g, const Outline& o, const Rect& bounds) {
+    Rect ob = o.bounds();
+    Rect at{bounds.x + ob.x, bounds.y + ob.y, ob.width, ob.height};
+    bool rounded = o.kind == Outline::Kind::Rectangle || (o.kind == Outline::Kind::Rounded && o.roundRect.circular());
+    CornerRadii radii = o.kind == Outline::Kind::Rounded ? o.roundRect.radii() : CornerRadii();
+    if (rounded && radii.max() <= 0) g.pushClip(at);
+    else if (rounded) g.pushClipRoundRect(at, radii);
+    else g.pushClipPath(o.asPath(), {bounds.x, bounds.y});
+}
+
 } // namespace
 
 namespace detail {
@@ -136,11 +148,7 @@ void drawThroughLayer(GraphicsContext& g, const LayerDraw& l, const std::functio
         bool rounded = o.kind == Outline::Kind::Rectangle || (o.kind == Outline::Kind::Rounded && o.roundRect.circular());
         CornerRadii radii = o.kind == Outline::Kind::Rounded ? o.roundRect.radii() : CornerRadii();
         // Cut to its outline where it goes, as what it draws there is.
-        auto pushClip = [&] {
-            if (rounded && radii.max() <= 0) g.pushClip(at);
-            else if (rounded) g.pushClipRoundRect(at, radii);
-            else g.pushClipPath(o.asPath(), {l.bounds.x, l.bounds.y});
-        };
+        auto pushClip = [&] { pushOutlineClip(g, o, l.bounds); };
         if (offscreen) {
             std::optional<detail::Filtering> filtering;
             if (l.colorFilter) filtering.emplace(g, l.colorFilter);
@@ -509,22 +517,58 @@ Modifier Modifier::drawWithCache(std::function<DrawResult(CacheDrawScope&)> buil
     return then(std::move(e));
 }
 
-// As Compose's: a graphicsLayer, blurred only when both radii are (a BlurEffect's), Clamp at the
-// edges when it is clipped to a shape, Decal when it spreads out.
-Modifier Modifier::blur(float radiusX, float radiusY, const BlurredEdgeTreatment& edgeTreatment) const {
-    bool clip = edgeTreatment.shape.has_value();
-    if (!((radiusX > 0 && radiusY > 0) || clip)) return *this;
-    GraphicsLayerScope layer;
-    if (radiusX > 0 && radiusY > 0) layer.renderEffect = BlurEffect(radiusX, radiusY, clip ? TileMode::Clamp : TileMode::Decal);
-    layer.shape = edgeTreatment.shape.value_or(RectangleShape);
-    layer.clip = clip;
-    return graphicsLayer(layer);
-}
-
 namespace {
-// Modifier::blur with a BlurRadiusSpec (Compose's BlurNode): a layer with the spec's effect for the
-// node's size, its alpha, clipped to the edge treatment's shape (Clamp then, else Decal).
-struct BlurSpecElement final : ModifierElement {
+// Passes on to `to` only what changes how things are drawn (clips, transforms, layers, blend
+// modes, filters), nothing drawn: what the elements between a Self blur and the node's children
+// do to them.
+class StateOnly final : public GraphicsContext {
+public:
+    explicit StateOnly(GraphicsContext& to) : to_(to) {}
+    void fillRoundRect(const Rect&, const CornerRadii&, Color) override {}
+    void strokeRoundRect(const Rect&, const CornerRadii&, float, Color) override {}
+    void drawLine(Offset, Offset, float, Color) override {}
+    void drawText(std::string_view, Offset, const Font&, Color, bool) override {}
+    void drawVector(const ImageVector&, const Rect&, Color) override {}
+    void drawArc(const Rect&, float, float, float, Color, bool) override {}
+    void drawImage(const ImageBitmap&, const Rect&, const Rect&, float) override {}
+    void drawPath(const Path&, Offset, const Brush&, const Rect&, const PathStroke&) override {}
+    void fillGradient(const Rect&, const CornerRadii&, const Brush&, const Rect&) override {}
+    void drawShadow(const Rect&, const CornerRadii&, const Shadow&, bool) override {}
+    void drawShadowPath(const Path&, Offset, const Shadow&, bool) override {}
+    void drawBackdrop(const Rect&, const RenderEffect&, float) override {}
+    void pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform) override {
+        to_.pushLayer(bounds, radii, alpha, transform);
+    }
+    void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform) override {
+        to_.pushOutlineLayer(bounds, outline, alpha, transform);
+    }
+    void pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) override { to_.pushEffectLayer(bounds, effect, alpha); }
+    void popLayer() override { to_.popLayer(); }
+    void pushClip(const Rect& rect) override { to_.pushClip(rect); }
+    void pushClipRoundRect(const Rect& rect, const CornerRadii& radii, ClipOp op) override { to_.pushClipRoundRect(rect, radii, op); }
+    void pushClipPath(const Path& path, Offset origin, ClipOp op) override { to_.pushClipPath(path, origin, op); }
+    void popClip() override { to_.popClip(); }
+    void pushTranslation(Offset by) override { to_.pushTranslation(by); }
+    void popTranslation() override { to_.popTranslation(); }
+    void pushTransform(const Matrix& matrix) override { to_.pushTransform(matrix); }
+    void popTransform() override { to_.popTransform(); }
+    void pushBlendMode(BlendMode mode) override { to_.pushBlendMode(mode); }
+    void popBlendMode() override { to_.popBlendMode(); }
+    void pushColorFilter(const ColorFilter& filter) override { to_.pushColorFilter(filter); }
+    void popColorFilter() override { to_.popColorFilter(); }
+    bool quickReject(const Rect& rect) const override { return to_.quickReject(rect); }
+    void beginNode(const void* node) override { to_.beginNode(node); }
+    void endNode() override { to_.endNode(); }
+
+private:
+    GraphicsContext& to_;
+};
+
+// Modifier::blur's (but Family with radii, a graphicsLayer): its effect (a BlurEffect of the radii,
+// blurred only when both are, or the spec's for the node's size), Clamp at the edges when it is
+// clipped to a shape, Decal when it spreads out; drawn as its type says.
+struct BlurElement final : ModifierElement {
+    std::optional<std::pair<float, float>> radii;  // else scope's spec
     BlurScope scope;
     std::function<void(BlurScope&)> block;  // evaluated at draw time when set, from the defaults
 
@@ -533,34 +577,83 @@ struct BlurSpecElement final : ModifierElement {
         BlurScope b = block ? BlurScope{} : scope;
         b.size = {bounds.width, bounds.height};
         if (block) block(b);
+        bool clip = b.edgeTreatment.shape.has_value();
+        TileMode edges = clip ? TileMode::Clamp : TileMode::Decal;
         detail::LayerDraw d;
         d.bounds = bounds;
         d.geometry.pivot = bounds.center();
-        bool clip = b.edgeTreatment.shape.has_value();
-        if (!(b.blurRadiusSpec == BlurRadiusSpec::uniform(0)))
-            d.renderEffect = b.blurRadiusSpec.createRenderEffect(b.size, clip ? TileMode::Clamp : TileMode::Decal);
+        if (radii && radii->first > 0 && radii->second > 0) d.renderEffect = BlurEffect(radii->first, radii->second, edges);
+        else if (!radii && !(b.blurRadiusSpec == BlurRadiusSpec::uniform(0))) d.renderEffect = b.blurRadiusSpec.createRenderEffect(b.size, edges);
         d.alpha = b.alpha;
         d.clip = clip;
-        if (clip) d.outline = b.edgeTreatment.shape->createOutline(b.size, node.rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr);
-        detail::drawThroughLayer(g, d, drawContent);
+        d.outline = clip ? b.edgeTreatment.shape->createOutline(b.size, node.rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr)
+                         : Outline::Rectangle({0, 0, bounds.width, bounds.height});
+        detail::DrawPart& part = detail::drawPart();
+        switch (b.type) {
+        case BlurType::Family: return detail::drawThroughLayer(g, d, drawContent);
+        case BlurType::Self: {
+            // What the node draws itself through the layer; then its children over it, sharp, placed
+            // as the elements in between place them.
+            detail::DrawPart outer = std::exchange(part, {&node, true, nullptr});
+            detail::drawThroughLayer(g, d, drawContent);
+            StateOnly placing(g);
+            part = {&node, false, &g, detail::recordingInto()};
+            GraphicsContext* into = std::exchange(detail::recordingInto(), &placing);
+            drawContent();
+            detail::recordingInto() = into;
+            part = outer;
+            return;
+        }
+        case BlurType::Morph: {
+            // What is behind, blurred, within its shape; the node over it, sharp.
+            float alpha = std::clamp(b.alpha, 0.f, 1.f);
+            if (d.renderEffect && alpha > 0 && !g.quickReject(d.renderEffect->outputBounds(bounds))) {
+                if (clip) pushOutlineClip(g, d.outline, bounds);
+                g.drawBackdrop(bounds, *d.renderEffect, alpha);
+                if (clip) g.popClip();
+            }
+            return drawContent();
+        }
+        }
     }
     bool equals(const ModifierElement& other) const override {
-        auto* o = dynamic_cast<const BlurSpecElement*>(&other);
-        return o && !block && !o->block && o->scope == scope;
+        auto* o = dynamic_cast<const BlurElement*>(&other);
+        return o && !block && !o->block && o->radii == radii && o->scope == scope;
     }
 };
 } // namespace
 
-Modifier Modifier::blur(const BlurRadiusSpec& blurRadiusSpec, const BlurredEdgeTreatment& edgeTreatment, float alpha) const {
-    auto e = std::make_shared<BlurSpecElement>();
+// Family is Compose's: a graphicsLayer, blurred only when both radii are (a BlurEffect's), Clamp at
+// the edges when it is clipped to a shape, Decal when it spreads out.
+Modifier Modifier::blur(float radiusX, float radiusY, const BlurredEdgeTreatment& edgeTreatment, BlurType type) const {
+    bool clip = edgeTreatment.shape.has_value();
+    if (!((radiusX > 0 && radiusY > 0) || clip)) return *this;
+    if (type != BlurType::Family) {
+        auto e = std::make_shared<BlurElement>();
+        e->radii = std::pair{radiusX, radiusY};
+        e->scope.edgeTreatment = edgeTreatment;
+        e->scope.type = type;
+        return then(std::move(e));
+    }
+    GraphicsLayerScope layer;
+    if (radiusX > 0 && radiusY > 0) layer.renderEffect = BlurEffect(radiusX, radiusY, clip ? TileMode::Clamp : TileMode::Decal);
+    layer.shape = edgeTreatment.shape.value_or(RectangleShape);
+    layer.clip = clip;
+    return graphicsLayer(layer);
+}
+
+// As Compose's BlurNode (Family): always a layer, its alpha.
+Modifier Modifier::blur(const BlurRadiusSpec& blurRadiusSpec, const BlurredEdgeTreatment& edgeTreatment, float alpha, BlurType type) const {
+    auto e = std::make_shared<BlurElement>();
     e->scope.blurRadiusSpec = blurRadiusSpec;
     e->scope.edgeTreatment = edgeTreatment;
     e->scope.alpha = alpha;
+    e->scope.type = type;
     return then(std::move(e));
 }
 
 Modifier Modifier::blur(std::function<void(BlurScope&)> block) const {
-    auto e = std::make_shared<BlurSpecElement>();
+    auto e = std::make_shared<BlurElement>();
     e->block = std::move(block);
     return then(std::move(e));
 }

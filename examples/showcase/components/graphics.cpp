@@ -598,7 +598,8 @@ void BlendModeSection(CallSite site) {
 }
 
 // Modifier.blur: a photo blurred as much as the slider says, kept to its bounds or spreading out;
-// another blurred progressively, more towards the bottom.
+// another blurred progressively, more towards the bottom; a frosted glass panel (Morph) and a card
+// whose picture alone is blurred (Self).
 // TileMode: a 60 dp gradient across 300 dp, past its end as each mode goes.
 void TileModeSection(CallSite site) {
     composable(site, [=] {
@@ -650,6 +651,22 @@ void BlurSection(CallSite site) {
                           .clip(RoundedCornerShape(16)),
                       ContentScale::Crop);
             });
+            // Morph: what is behind a glass panel blurred, the panel's text sharp; Self: a card's
+            // own picture blurred, its text sharp.
+            Text("Morph: arkadaki bulanık, cam keskin · Self: kartın resmi bulanık, yazısı keskin",
+                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+            Box(Modifier().fillMaxWidth().height(160).padding(16), Alignment::Center, [&] {
+                Image(photo, "Manzara", Modifier().fillMaxSize().clip(RoundedCornerShape(16)), ContentScale::Crop);
+                Box(Modifier().size(200, 72)
+                        .blur(radius.get(), BlurredEdgeTreatment{RoundedCornerShape(16)}, BlurType::Morph)
+                        .background(colors::White.copy(0.18f), RoundedCornerShape(16))
+                        .border(1, colors::White.copy(0.5f), RoundedCornerShape(16)),
+                    Alignment::Center, [&] { Text("Buzlu cam", {.font = typography().titleMedium, .color = colors::White}); });
+            });
+            Box(Modifier().fillMaxWidth().height(120).padding(16, 0, 16, 16)
+                    .blur(radius.get(), BlurredEdgeTreatment{RoundedCornerShape(16)}, BlurType::Self)
+                    .paint(BitmapPainter(photo), false, Alignment::Center, ContentScale::Crop),
+                Alignment::Center, [&] { Text("Yazı keskin kalır", {.font = typography().headlineSmall, .color = colors::White}); });
         });
     });
 }

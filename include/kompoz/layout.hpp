@@ -387,10 +387,22 @@ struct ApproachMeasureScope {
     Constraints lookaheadConstraints;
 };
 
+class LayoutNode;
+
 namespace detail {
 // While a GraphicsLayer records (DrawScope::record): where a modifier's drawContent() draws
 // instead of the canvas it was given, so the content goes into the recording.
 GraphicsContext*& recordingInto();
+// While Modifier::blur(BlurType::Self) draws `node` in two parts: what the node draws past its
+// modifier's elements is only its own drawing (`own`), or only its children, drawn onto
+// `children` (the elements' own drawing between swallowed), recordingInto() as it was outside.
+struct DrawPart {
+    const LayoutNode* node = nullptr;
+    bool own = false;
+    GraphicsContext* children = nullptr;
+    GraphicsContext* recording = nullptr;
+};
+DrawPart& drawPart();
 } // namespace detail
 
 // How sharedBounds fits its contents into the moving bounds (Compose's ResizeMode): each laid
@@ -1173,13 +1185,21 @@ struct BlurredEdgeTreatment {
 inline const BlurredEdgeTreatment BlurredEdgeTreatment::Rectangle{RectangleShape};
 inline const BlurredEdgeTreatment BlurredEdgeTreatment::Unbounded{};
 
+// What Modifier::blur blurs: the node and its children (Family, Compose's); what is drawn behind
+// the node, within its shape, the node and its children sharp over it (Morph: frosted glass, as
+// iOS's); or only what the node draws itself (its background, border, image, drawBehind...), its
+// children sharp over it (Self). The alpha goes with what is blurred: all of it, what is behind,
+// what the node draws.
+enum class BlurType { Family, Morph, Self };
+
 // What Modifier::blur's block sets while drawing (Compose's BlurScope), each time from these: how
-// much it blurs where, its edges, its alpha; the node's size (dp) to read.
+// much it blurs where, its edges, its alpha, what it blurs; the node's size (dp) to read.
 struct BlurScope {
     Size size;
     BlurRadiusSpec blurRadiusSpec = BlurRadiusSpec::uniform(0);
     BlurredEdgeTreatment edgeTreatment = BlurredEdgeTreatment::Rectangle;
     float alpha = 1;
+    BlurType type = BlurType::Family;
     friend bool operator==(const BlurScope&, const BlurScope&) = default;
 };
 
@@ -1856,15 +1876,18 @@ public:
     // The content blurred by `radius` dp across and down (Compose's Modifier.blur): a graphicsLayer
     // with a BlurEffect, clipped to the edge treatment's shape if it has one. Unless it is
     // clipped, a radius of 0 either way draws it as it is.
-    Modifier blur(float radius, const BlurredEdgeTreatment& edgeTreatment = BlurredEdgeTreatment::Rectangle) const {
-        return blur(radius, radius, edgeTreatment);
+    // `type`: what it blurs (BlurType; Family: a graphicsLayer, as Compose's).
+    Modifier blur(float radius, const BlurredEdgeTreatment& edgeTreatment = BlurredEdgeTreatment::Rectangle,
+                  BlurType type = BlurType::Family) const {
+        return blur(radius, radius, edgeTreatment, type);
     }
-    Modifier blur(float radiusX, float radiusY, const BlurredEdgeTreatment& edgeTreatment = BlurredEdgeTreatment::Rectangle) const;
+    Modifier blur(float radiusX, float radiusY, const BlurredEdgeTreatment& edgeTreatment = BlurredEdgeTreatment::Rectangle,
+                  BlurType type = BlurType::Family) const;
     // Blurred as much as `blurRadiusSpec` says where (a progressive blur: Compose 1.13's), clipped
     // to the edge treatment's shape if it has one, faded by `alpha`: always a graphicsLayer, which
     // a uniform radius of 0 leaves without an effect.
     Modifier blur(const BlurRadiusSpec& blurRadiusSpec, const BlurredEdgeTreatment& edgeTreatment = BlurredEdgeTreatment::Rectangle,
-                  float alpha = 1) const;
+                  float alpha = 1, BlurType type = BlurType::Family) const;
     // The same, set by `block` while drawing: animated values read there never recompose.
     Modifier blur(std::function<void(BlurScope&)> block) const;
     // Evaluated while drawing: animated values read here never recompose.

@@ -58,6 +58,7 @@ public:
     void pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform = {}) override;
     void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform = {}) override;
     void pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) override;
+    void drawBackdrop(const Rect& bounds, const RenderEffect& effect, float alpha) override;
     void popLayer() override;
     void pushClip(const Rect& rect) override;
     void pushClipRoundRect(const Rect& rect, const CornerRadii& radii, ClipOp op) override;
@@ -87,7 +88,7 @@ public:
 private:
     enum class Kind : uint8_t { FillRoundRect, StrokeRoundRect, Line, Text, TextBrush, TextShadow, Shadow, Vector, Arc, Image, Gradient, Path,
                                 PushLayer, PopLayer, PushClip, PopClip, PushTranslation, PopTranslation, PushBlend, PopBlend,
-                                ShadowPath, PushFilter, PopFilter, PushTransform, PopTransform };
+                                ShadowPath, PushFilter, PopFilter, PushTransform, PopTransform, Backdrop };
     struct Command {
         Kind kind{};
         Rect rect, rect2;     // the shape; an image's source, a brush's area
@@ -102,7 +103,7 @@ private:
         ImageBitmap image;
         std::optional<Brush> brush;
         std::optional<ColorFilter> filter;  // PushFilter's
-        std::optional<RenderEffect> effect;  // an effect layer's
+        std::optional<RenderEffect> effect;  // an effect layer's, a backdrop's
         Path path;
         PathStroke stroke;
         LayerTransform transform;

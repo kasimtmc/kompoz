@@ -76,6 +76,7 @@ public:
     }
     std::vector<BlendMode> blendStack;  // pushBlendMode's in effect
     std::vector<BlendMode> rectBlends;  // each filled rect's (and gradient's) blend mode
+    std::vector<int> rectDepths;        // and how many layers it is drawn in
     std::vector<BlendMode> pathBlends;  // each path's
     BlendMode blend() const { return blendStack.empty() ? BlendMode::SrcOver : blendStack.back(); }
     void pushBlendMode(BlendMode mode) override { blendStack.push_back(mode); }
@@ -84,6 +85,7 @@ public:
     }
     void fillRoundRect(const Rect& r, const CornerRadii& radii, Color c) override {
         order += 'r';
+        rectDepths.push_back(depth);
         rectBlends.push_back(blend());
         rects.push_back(moved(r));
         rectColors.push_back(filtered(c));
@@ -182,6 +184,16 @@ public:
     }
     void popLayer() override { --depth; }
     std::vector<Path> layerOutlines;  // each outline layer's outline (pushOutlineLayer), from its top left
+    struct Backdrop {
+        Rect bounds;
+        RenderEffect effect;
+        float alpha;
+    };
+    std::vector<Backdrop> backdrops;  // drawBackdrop calls
+    void drawBackdrop(const Rect& bounds, const RenderEffect& effect, float alpha) override {
+        order += 'b';
+        backdrops.push_back({moved(bounds), effect, alpha});
+    }
     std::vector<std::optional<RenderEffect>> layerEffects;  // each layer's effect (pushEffectLayer)
     void pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) override {
         pushLayer(bounds, CornerRadii(), alpha, {});
@@ -228,6 +240,7 @@ public:
     }
     void fillGradient(const Rect& r, const CornerRadii& radii, const Brush& brush, const Rect& area) override {
         order += 'r';
+        rectDepths.push_back(depth);
         rectBlends.push_back(blend());
         ++gradients;
         rects.push_back(moved(r));

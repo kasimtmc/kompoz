@@ -1126,6 +1126,11 @@ public:
         (void)effect;
         pushLayer(bounds, CornerRadii(), alpha);
     }
+    // What is drawn so far under `bounds` (into the same target: in an offscreen layer, into the
+    // layer), and around them as far as `effect` reaches (past that as its edge treatment says),
+    // through the effect, drawn back in place of it, mixed with it by `alpha`: a backdrop blur
+    // (frosted glass). Clips set around it cut what shows. The default draws nothing.
+    virtual void drawBackdrop(const Rect& bounds, const RenderEffect& effect, float alpha) { (void)bounds, (void)effect, (void)alpha; }
     // Draws in between go on with `mode` instead of SrcOver (where the backend can: see
     // DrawScope's blendMode).
     virtual void pushBlendMode(BlendMode mode) { (void)mode; }
