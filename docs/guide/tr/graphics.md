@@ -139,7 +139,7 @@ Box(Modifier().size(120, 72).clip(ticket).background(colorScheme().primaryContai
 
 ## Gölgeler
 
-`shadow(elevation, shape)` bir düğümün altına Material tarzı bir gölge çizer. `dropShadow(shape, Shadow{…})` ve `innerShadow(shape, Shadow{…})` kendi renginiz, kaydırmanız, bulanıklık yarıçapınız ve yayılmanızla gölgeler çizer:
+`shadow(elevation, shape)` bir düğümü yükseltir: Compose'unki gibi o `shadowElevation`'lı bir `graphicsLayer`'dır; şeklinin gölgesi Android'in çizdiği gibi, pencerenin üstünden gelen bir ışıkla çizilir (gölgeler ekranın aşağısına doğru uzar), içerik de şekle göre kırpılır (`clip`, yükseklik 0'dan büyükse varsayılan). `dropShadow(shape, Shadow{…})` ve `innerShadow(shape, Shadow{…})` kendi renginiz (ya da `brush`), kaydırmanız, bulanıklık yarıçapınız, yayılmanız, alfanız ve blend modunuzla gölgeler çizer:
 
 ```cpp body
 Box(Modifier().size(120)

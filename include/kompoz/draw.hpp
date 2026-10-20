@@ -153,15 +153,17 @@ struct LayerGeometry {
 };
 // The matrix it is drawn through, as Android's RenderNode makes it.
 Matrix layerMatrix(const LayerGeometry& geometry);
-// Draws `content` (over `bounds`) through such a layer: its matrix, its clip to `outline` (from the
-// bounds' top left), its alpha, blend mode, color filter and render effect, offscreen only where
-// it has to be.
+// Draws `content` (over `bounds`) through such a layer: its matrix, its shadow, its clip to
+// `outline` (from the bounds' top left), its alpha, blend mode, color filter and render effect,
+// offscreen only where it has to be.
 struct LayerDraw {
     Rect bounds;
     LayerGeometry geometry;
     float alpha = 1;
+    float shadowElevation = 0;  // dp
+    Color ambientShadowColor = DefaultShadowColor, spotShadowColor = DefaultShadowColor;
     bool clip = false;
-    Outline outline;
+    Outline outline;  // (its shadow's too)
     BlendMode blendMode = BlendMode::SrcOver;
     std::optional<ColorFilter> colorFilter;
     std::optional<RenderEffect> renderEffect;
@@ -199,6 +201,8 @@ public:
         float alpha = 1, scaleX = 1, scaleY = 1, translationX = 0, translationY = 0;
         float rotationX = 0, rotationY = 0, rotationZ = 0, cameraDistance = 8;
         std::optional<Offset> pivotOffset;  // what it scales and turns about, dp from its top left (unset: its middle)
+        float shadowElevation = 0;          // dp: its outline's shadow (see GraphicsLayerScope)
+        Color ambientShadowColor = DefaultShadowColor, spotShadowColor = DefaultShadowColor;
         // Clipped to its outline (unset: its bounds; setRectOutline, setRoundRectOutline, setPathOutline).
         bool clip = false;
         std::optional<Outline> outline;

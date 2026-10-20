@@ -136,12 +136,31 @@ void drawThroughLayer(GraphicsContext& g, const LayerDraw& l, const std::functio
     bool offscreen = l.strategy == CompositingStrategy::Offscreen || (alpha < 1 && l.strategy == CompositingStrategy::Auto) ||
                      l.blendMode != BlendMode::SrcOver || l.colorFilter.has_value() || l.renderEffect.has_value();
     bool modulated = !offscreen && alpha < 1;  // ModulateAlpha: each draw faded
-    if (!moved && !offscreen && !modulated && !l.clip) return content();
+    bool shadowed = l.shadowElevation > 0;
+    if (!moved && !offscreen && !modulated && !l.clip && !shadowed) return content();
     if (moved) g.pushTransform(m);
     Rect reach{l.bounds.x - l.outsets.left, l.bounds.y - l.outsets.top, l.bounds.width + l.outsets.left + l.outsets.right,
                l.bounds.height + l.outsets.top + l.outsets.bottom};
+    // Its shadow: how high each point is, as Android works it out (RenderNode's true 3D transform:
+    // turned about x, y and z and scaled about the pivot, raised by the elevation).
+    ElevationShadow shadow;
+    Rect shows = l.renderEffect ? l.renderEffect->outputBounds(reach) : reach;
+    if (shadowed) {
+        const LayerGeometry& q = l.geometry;
+        Plane r = mul(mul(rotation(1, 0, 0, q.rotationX), rotation(0, 1, 0, q.rotationY)), rotation(0, 0, 1, q.rotationZ));
+        float a = r[6] * q.scaleX, b = r[7] * q.scaleY;  // (the z row, times the scale)
+        shadow.plane = {a, b, l.shadowElevation - a * q.pivot.x - b * q.pivot.y};
+        shadow.ambientColor = l.ambientShadowColor, shadow.spotColor = l.spotShadowColor;
+        shadow.alpha = alpha;
+        Rect caster = l.outline.bounds();
+        caster.x += l.bounds.x, caster.y += l.bounds.y;
+        Rect s = shadow.reach(caster, g.light, g.lightCenter());
+        float x0 = std::min(shows.x, s.x), y0 = std::min(shows.y, s.y);
+        shows = {x0, y0, std::max(shows.right(), s.right()) - x0, std::max(shows.bottom(), s.bottom()) - y0};
+    }
     // Nothing of it can show (the transform taken into account): not drawn at all.
-    if (!g.quickReject(l.renderEffect ? l.renderEffect->outputBounds(reach) : reach)) {
+    if (!g.quickReject(shows)) {
+        if (shadowed) g.drawElevationShadow(l.outline, {l.bounds.x, l.bounds.y}, shadow);
         const Outline& o = l.outline;
         Rect ob = o.bounds();
         Rect at{l.bounds.x + ob.x, l.bounds.y + ob.y, ob.width, ob.height};
@@ -204,8 +223,10 @@ struct GraphicsLayerElement final : ModifierElement {
                       {bounds.x + bounds.width * l.transformOrigin.x, bounds.y + bounds.height * l.transformOrigin.y},
                       node.host() ? node.host()->density().density : 1.f};
         d.alpha = l.alpha;
+        d.shadowElevation = l.shadowElevation;
+        d.ambientShadowColor = l.ambientShadowColor, d.spotShadowColor = l.spotShadowColor;
         d.clip = l.clip;
-        if (l.clip) d.outline = l.shape.createOutline(l.size, node.rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr);
+        if (l.clip || l.shadowElevation > 0) d.outline = l.shape.createOutline(l.size, node.rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr);
         d.renderEffect = l.renderEffect;
         d.blendMode = l.blendMode;
         d.colorFilter = l.colorFilter;
@@ -729,6 +750,8 @@ void DrawScope::drawLayer(const GraphicsLayer& layer) {
     l.geometry = {p.scaleX, p.scaleY, p.translationX, p.translationY, p.rotationX, p.rotationY, p.rotationZ, p.cameraDistance,
                   {at.x + pivot.x, at.y + pivot.y}, d.host ? d.host->density().density : 1.f};
     l.alpha = p.alpha;
+    l.shadowElevation = p.shadowElevation;
+    l.ambientShadowColor = p.ambientShadowColor, l.spotShadowColor = p.spotShadowColor;
     l.clip = p.clip;
     l.outline = p.outline.value_or(Outline::Rectangle({0, 0, d.size.width, d.size.height}));
     l.renderEffect = p.renderEffect;

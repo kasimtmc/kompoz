@@ -25,6 +25,9 @@ static const int LAYER = 7;        // a layer's texture: texel (0, 0) at params.
 static const int PATH = 8;         // a path: its coverage mask (texture0) has texel (0, 0) at params.xy; params.z: even-odd;
                                    // drawn in the target's pixels, with flags & 4 its paint where the pixel is in its
                                    // own space (radii, uv and shape: the rows of the map there)
+static const int ELEVATION = 9;    // an elevation shadow's ambient or spot part, as Skia's ShadowRRectOp: Gaussian falloff
+                                   // in from the edge of the rounded rect (shape, radii) over params.x; none further in
+                                   // than params.y (if above 0: under an opaque caster)
 //
 // What covers the shape is `color`, or a gradient (`paint`, `gradient`): a fill, a stroke, a path
 // and a glyph that takes a color can have one, at the color's alpha.
@@ -529,6 +532,10 @@ float4 fs(Varyings v) : SV_Target {
         cover = (flags & 1) != 0 ? pathCoverage(texture1.SampleLevel((v.local - v.radii.xy) * uniforms.texels.xy, 0).r, false)
                                  : roundRectCoverage(v.local, v.shape, v.radii, dx, dy);
         if (mixed) cover *= v.color.a;
+    } else if (kind == ELEVATION) {
+        float d = -roundRectDistance(v.local, v.shape, v.radii);  // in from its edge
+        float t = saturate(d / v.params.x);
+        cover = d > 0 && (v.params.y <= 0 || d < v.params.y) ? max(exp(-4 * (1 - t) * (1 - t)) - 0.018, 0) : 0;
     } else if (kind == PATH) {
         cover = pathCoverage(texture0.SampleLevel(maskTexcoord(v.local - v.params.xy), 0).r, v.params.z > 0.5);
     }

@@ -314,40 +314,6 @@ struct AlphaElement final : ModifierElement {
     }
 };
 
-// Layered translucent rounded rects: a cheap stand-in for a blurred shadow.
-struct ShadowElement final : ModifierElement {
-    float elevation = 0;
-    Shape shape;
-    Color ambient = colors::Black, spot = colors::Black;
-    bool clip = false;
-    void draw(GraphicsContext& canvas, const Rect& b, const LayoutNode& node, const std::function<void()>& drawContent) const override {
-        constexpr int kLayers = 6;
-        CornerRadii radii = shape.radiiFor(b, node.rtl);
-        // In the two colors, as strong as their alphas say (black: as ever).
-        float strength = (ambient.a + spot.a) / 2;
-        Color tint = strength > 0 ? Color{(ambient.r * ambient.a + spot.r * spot.a) / (2 * strength), (ambient.g * ambient.a + spot.g * spot.a) / (2 * strength),
-                                          (ambient.b * ambient.a + spot.b * spot.a) / (2 * strength), 1}
-                                  : colors::Black;
-        for (int i = kLayers; i >= 1; --i) {
-            float t = float(i) / kLayers, grow = elevation * 0.8f * t;
-            Rect r{b.x - grow / 2, b.y - grow / 2 + elevation * 0.4f, b.width + grow, b.height + grow};
-            Color c = tint.copy(0.05f * (1.2f - t) * strength);
-            if (shape.pathed())
-                canvas.fillShape(r, shape, node.rtl, c);  // the outline stretched a little bigger
-            else
-                canvas.fillRoundRect(r, radii.grown(grow / 2), c);
-        }
-        if (!clip) return drawContent();
-        canvas.pushClipShape(b, shape, node.rtl);
-        drawContent();
-        canvas.popClip();
-    }
-    bool equals(const ModifierElement& other) const override {
-        auto* o = as<ShadowElement>(other);
-        return o && o->elevation == elevation && o->shape == shape && o->ambient == ambient && o->spot == spot && o->clip == clip;
-    }
-};
-
 struct ShapeShadowElement final : ModifierElement {
     Shape shape;
     Shadow shadow;
@@ -939,23 +905,15 @@ Modifier Modifier::clip(Shape shape) const {
 Modifier Modifier::alpha(float alpha) const {
     return with<AlphaElement>(*this, [&](auto& e) { e.alpha = std::clamp(alpha, 0.f, 1.f); });
 }
-Modifier Modifier::shadow(float elevation, float cornerRadius) const { return shadow(elevation, RoundedCornerShape(cornerRadius)); }
-Modifier Modifier::shadow(float elevation, Shape shape) const {
-    if (elevation <= 0) return *this;
-    return with<ShadowElement>(*this, [&](auto& e) {
-        e.elevation = elevation;
-        e.shape = shape;
-    });
-}
-Modifier Modifier::shadow(float elevation, Shape shape, bool clip, Color ambientColor, Color spotColor) const {
-    if (elevation <= 0) return clip ? this->clip(shape) : *this;
-    return with<ShadowElement>(*this, [&](auto& e) {
-        e.elevation = elevation;
-        e.shape = shape;
-        e.clip = clip;
-        e.ambient = ambientColor;
-        e.spot = spotColor;
-    });
+Modifier Modifier::shadow(float elevation, Shape shape, std::optional<bool> clip, Color ambientColor, Color spotColor) const {
+    bool clipped = clip.value_or(elevation > 0);
+    if (elevation <= 0 && !clipped) return *this;
+    GraphicsLayerScope layer;
+    layer.shadowElevation = std::max(0.f, elevation);
+    layer.shape = shape;
+    layer.clip = clipped;
+    layer.ambientShadowColor = ambientColor, layer.spotShadowColor = spotColor;
+    return graphicsLayer(layer);
 }
 Modifier Modifier::dropShadow(Shape shape, Shadow shadow) const {
     return with<ShapeShadowElement>(*this, [&](auto& e) {

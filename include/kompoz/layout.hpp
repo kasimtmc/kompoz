@@ -1223,10 +1223,14 @@ struct LayerOutsets {
 // then composited, only where it has to be: alpha below 1 (unless ModulateAlpha, which fades each
 // draw instead), a blend mode other than SrcOver, a color filter, a render effect (what is drawn
 // within its bounds goes through it, then is cut to its shape if clip is set), or
-// CompositingStrategy::Offscreen.
+// CompositingStrategy::Offscreen. With a shadowElevation, its shape's shadow (clipped or not) is
+// drawn first, turned and moved with it, as Android draws a RenderNode's: lit from above the
+// window's top middle (GraphicsContext::light), faded with it.
 struct GraphicsLayerScope {
     float scaleX = 1, scaleY = 1, alpha = 1;
     float translationX = 0, translationY = 0;  // dp
+    float shadowElevation = 0;                 // dp: a shadow of its shape, as Android draws one (GraphicsContext::drawElevationShadow)
+    Color ambientShadowColor = DefaultShadowColor, spotShadowColor = DefaultShadowColor;
     float rotationX = 0, rotationY = 0;        // degrees
     float rotationZ = 0;                       // degrees, clockwise
     float cameraDistance = 8;                  // Compose's DefaultCameraDistance
@@ -1241,7 +1245,8 @@ struct GraphicsLayerScope {
     Size size;  // the layer's (dp): set before a graphicsLayer block runs, to read in it
     friend bool operator==(const GraphicsLayerScope& a, const GraphicsLayerScope& b) {
         return a.scaleX == b.scaleX && a.scaleY == b.scaleY && a.alpha == b.alpha && a.translationX == b.translationX &&
-               a.translationY == b.translationY && a.rotationX == b.rotationX && a.rotationY == b.rotationY && a.rotationZ == b.rotationZ &&
+               a.translationY == b.translationY && a.shadowElevation == b.shadowElevation && a.ambientShadowColor == b.ambientShadowColor &&
+               a.spotShadowColor == b.spotShadowColor && a.rotationX == b.rotationX && a.rotationY == b.rotationY && a.rotationZ == b.rotationZ &&
                a.cameraDistance == b.cameraDistance && a.transformOrigin.x == b.transformOrigin.x &&
                a.transformOrigin.y == b.transformOrigin.y && a.shape == b.shape && a.clip == b.clip && a.renderEffect == b.renderEffect && a.blendMode == b.blendMode &&
                a.colorFilter == b.colorFilter && a.compositingStrategy == b.compositingStrategy && a.outsets == b.outsets &&
@@ -1801,14 +1806,13 @@ public:
     // (Compose's renderInSharedTransitionScopeOverlay): a bottom bar the elements pass under.
     Modifier renderInSharedTransitionScopeOverlay(const SharedTransitionScope& scope, std::function<bool()> renderInOverlay = {},
                                                   float zIndexInOverlay = 0) const;
-    // A soft drop shadow for elevated surfaces (FAB, menus), drawn behind what follows.
-    // A soft shadow below, as from the elevation (dp). Unlike Compose's, these two don't clip
-    // the content; the full form does when asked (Compose's default: clip = elevation > 0).
-    Modifier shadow(float elevation, float cornerRadius = 0) const;
-    Modifier shadow(float elevation, Shape shape) const;
-    // Compose's shadow(elevation, shape, clip, ambientColor, spotColor): the content clipped to
-    // the shape too, the shadow tinted (its colors' alpha making it fainter or stronger).
-    Modifier shadow(float elevation, Shape shape, bool clip, Color ambientColor = colors::Black, Color spotColor = colors::Black) const;
+    // Compose's shadow(elevation, shape, clip, ambientColor, spotColor): a graphicsLayer with that
+    // shadowElevation, shape and shadow colors, clipped to the shape (unless `clip` says otherwise,
+    // when the elevation is above 0). Neither an elevation nor a clip: nothing.
+    Modifier shadow(float elevation, Shape shape = RectangleShape, std::optional<bool> clip = {}, Color ambientColor = DefaultShadowColor,
+                    Color spotColor = DefaultShadowColor) const;
+    // The same with RoundedCornerShape(cornerRadius).
+    Modifier shadow(float elevation, float cornerRadius) const { return shadow(elevation, RoundedCornerShape(cornerRadius)); }
     // Compose 1.9's shadows of a shape, drawn before what comes after: under it (dropShadow:
     // spread out, moved, blurred) or inside it (innerShadow: as if its edge cast it in). The
     // shape's rounded rect (outline shapes: their bounds).

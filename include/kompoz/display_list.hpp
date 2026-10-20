@@ -52,6 +52,7 @@ public:
                         bool rtl = false) override;
     void drawShadow(const Rect& rect, const CornerRadii& radii, const Shadow& shadow, bool inner) override;
     void drawShadowPath(const Path& outline, Offset origin, const Shadow& shadow, bool inner) override;
+    void drawShapeShadow(const Rect& rect, const Shape& shape, bool rtl, const Shadow& shadow, bool inner) override;
     void drawVector(const ImageVector& vector, const Rect& bounds, Color color) override;
     void drawArc(const Rect& oval, float startDegrees, float sweepDegrees, float strokeWidth, Color color, bool roundCap) override;
     void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha) override;
@@ -59,6 +60,8 @@ public:
     void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform = {}) override;
     void pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) override;
     void drawBackdrop(const Rect& bounds, const RenderEffect& effect, float alpha) override;
+    void drawElevationShadow(const Outline& outline, Offset origin, const ElevationShadow& shadow) override;
+    Offset lightCenter() const override;
     void popLayer() override;
     void pushClip(const Rect& rect) override;
     void pushClipRoundRect(const Rect& rect, const CornerRadii& radii, ClipOp op) override;
@@ -88,7 +91,7 @@ public:
 private:
     enum class Kind : uint8_t { FillRoundRect, StrokeRoundRect, Line, Text, TextBrush, TextShadow, Shadow, Vector, Arc, Image, Gradient, Path,
                                 PushLayer, PopLayer, PushClip, PopClip, PushTranslation, PopTranslation, PushBlend, PopBlend,
-                                ShadowPath, PushFilter, PopFilter, PushTransform, PopTransform, Backdrop };
+                                ShadowPath, PushFilter, PopFilter, PushTransform, PopTransform, Backdrop, ElevationShadow, ShapeShadow };
     struct Command {
         Kind kind{};
         Rect rect, rect2;     // the shape; an image's source, a brush's area
@@ -104,6 +107,8 @@ private:
         std::optional<Brush> brush;
         std::optional<ColorFilter> filter;  // PushFilter's
         std::optional<RenderEffect> effect;  // an effect layer's, a backdrop's
+        std::optional<std::pair<Outline, kompoz::ElevationShadow>> elevated;  // an elevation shadow's (at p1)
+        std::optional<std::pair<Shape, Shadow>> shaped;  // a brushed shape shadow's (over rect; rtl in flag, inner in f1)
         Path path;
         PathStroke stroke;
         LayerTransform transform;

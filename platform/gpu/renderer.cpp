@@ -15,7 +15,7 @@ namespace kompoz::gpu {
 namespace {
 
 // shaders/primitives.slang's kinds.
-enum Kind { FILL = 0, STROKE = 1, LINE = 2, ARC = 3, SHADOW = 4, GLYPH = 5, IMAGE = 6, LAYER = 7, PATH = 8 };
+enum Kind { FILL = 0, STROKE = 1, LINE = 2, ARC = 3, SHADOW = 4, GLYPH = 5, IMAGE = 6, LAYER = 7, PATH = 8, ELEVATION = 9 };
 
 constexpr int kMaxLayer = 4096;  // px: a bigger layer is drawn straight into its target
 
@@ -105,10 +105,12 @@ BlendPlan planFor(BlendMode mode, bool opaque) {
 // --- Targets -------------------------------------------------------------------------------------
 
 void Renderer::beginTarget(Texture& target, const std::optional<ClearColor>& clear) {
-    targets_.push_back({passes_.size(), ox_, oy_, transform_, std::move(clips_), std::move(placements_), std::move(blends_), std::move(filters_)});
+    targets_.push_back({passes_.size(), ox_, oy_, transform_, windowFromTarget_, std::move(clips_), std::move(placements_), std::move(blends_),
+                        std::move(filters_)});
     passes_.push_back({&target, clear, {}, {}});
     ox_ = oy_ = 0;
     transform_ = {};
+    windowFromTarget_ = {};  // (a layer's: set by pushLayer)
     clips_.clear();
     placements_.clear();
     blends_.clear();  // (what is drawn into it starts plain: its composite gets the modes and filters outside)
@@ -121,6 +123,7 @@ void Renderer::endTarget() {
     order_.push_back(t.pass);
     ox_ = t.ox, oy_ = t.oy;
     transform_ = t.transform;
+    windowFromTarget_ = t.windowFromTarget;
     clips_ = std::move(t.clips);
     placements_ = std::move(t.placements);
     blends_ = std::move(t.blends);
@@ -1010,6 +1013,16 @@ void Renderer::pushLayer(const Rect& bounds, const CornerRadii& radii, float alp
         scale *= r;
         ox_ = targets_.back().ox * r + float(x0);
         oy_ = targets_.back().oy * r + float(y0);
+        // Its pixels in the parent's before its transform (x / r + the rect's corner), through the
+        // layer's own transform (scaled and turned about its origin, moved), then the parent's.
+        const Target& parent = targets_.back();
+        float ox = (layer.shape.x + layer.shape.width * transform.origin.x) / r, oy = (layer.shape.y + layer.shape.height * transform.origin.y) / r;
+        float rad = transform.rotationZ * std::numbers::pi_v<float> / 180, cs = std::cos(rad), sn = std::sin(rad);
+        float a = cs * transform.scaleX, b = sn * transform.scaleX, c = -sn * transform.scaleY, d = cs * transform.scaleY;
+        Projective own{{a, c, ox - (a * ox + c * oy) + transform.translationX * layer.parentScale, b, d, oy - (b * ox + d * oy) + transform.translationY * layer.parentScale,
+                        0, 0, 1}};
+        Projective fromTexels{{1 / r, 0, float(x0) / r, 0, 1 / r, float(y0) / r, 0, 0, 1}};
+        windowFromTarget_ = parent.windowFromTarget * parent.transform * own * fromTexels;
     }
     layers_.push_back(layer);
 }
@@ -1083,6 +1096,214 @@ void Renderer::drawBackdrop(const Rect& bounds, const RenderEffect& effect, floa
     blends_.push_back(BlendMode::Src);
     add(LAYER, p, image.texture, false, Mask::None, nullptr, true);
     blends_.pop_back();
+}
+
+namespace {
+
+// Skia's SkDrawShadowMetrics::GetSpotParams: a caster `z` above the plane under the light (x, y, lz)
+// of `radius` casts its spot shadow scaled by `scale` about the light's foot and moved by
+// `offset`, blurred by `blur` (all in the same px).
+struct SpotParams {
+    float blur, scale;
+    Offset offset;
+};
+SpotParams spotParams(float z, float lx, float ly, float lz, float radius) {
+    float ratio = lz - z > 0 ? std::clamp(z / (lz - z), 0.f, 0.95f) : 0.95f;
+    float scale = lz - z > 0 ? std::clamp(lz / (lz - z), 1.f, 1.95f) : 1.95f;
+    return {radius * ratio, scale, {-ratio * lx, -ratio * ly}};
+}
+
+// Skia's SkDrawShadowMetrics::GetSpotShadowTransform: the map from the caster's coordinates to the
+// target's px of its spot shadow (cast from the light through its corners onto the plane under
+// it), and its blur; nothing where the light isn't above it.
+std::optional<std::pair<Projective, float>> spotShadowTransform(Offset light, float lz, float radius, const Projective& ctm,
+                                                               const std::array<float, 3>& plane, const Rect& bounds) {
+    auto height = [&](float x, float y) { return plane[0] * x + plane[1] * y + plane[2]; };
+    Offset c = bounds.center();
+    float z = height(c.x, c.y);
+    if (ctm.affine()) {
+        SpotParams p = spotParams(z, light.x, light.y, lz, radius);
+        return std::pair{Projective{{p.scale, 0, p.offset.x, 0, p.scale, p.offset.y, 0, 0, 1}} * ctm, p.blur};
+    }
+    if (bounds.width < 1e-6f || bounds.height < 1e-6f) return std::nullopt;
+    // The bounds' corners in 3D, cast from the light onto z = 0.
+    std::array<std::array<double, 3>, 4> q;
+    const Offset corners[4] = {{bounds.x, bounds.y}, {bounds.right(), bounds.y}, {bounds.right(), bounds.bottom()}, {bounds.x, bounds.bottom()}};
+    for (int i = 0; i < 4; ++i) {
+        float w;
+        Offset d = ctm.apply(corners[i].x, corners[i].y, &w);
+        double h = height(corners[i].x, corners[i].y), dz = lz - h;
+        if (dz <= 1e-6) return std::nullopt;
+        double ratio = h / dz;
+        q[size_t(i)] = {d.x - (light.x - d.x) * ratio, d.y - (light.y - d.y) * ratio, 1};
+    }
+    auto cross = [](const std::array<double, 3>& a, const std::array<double, 3>& b) {
+        return std::array<double, 3>{a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
+    };
+    // The square [-1, 1]^2 onto the cast quad: its edges' crossings the new axes, its diagonals' the origin.
+    auto h0 = cross(cross(q[1], q[0]), cross(q[2], q[3]));
+    auto h1 = cross(cross(q[0], q[3]), cross(q[1], q[2]));
+    auto h2 = cross(cross(q[0], q[2]), cross(q[1], q[3]));
+    if (std::abs(h2[2]) < 1e-12) return std::nullopt;
+    // Which way round: (-1, -1) to the first corner, as Skia means it to (its own check, which
+    // takes the crossing points undivided by their w, leaves the shadow mirrored in some
+    // perspectives: a triangle's, say). Turning an axis round takes it to another of the square's.
+    auto off = [&](double x, double y) {
+        double w = h0[2] * x + h1[2] * y + h2[2];
+        return std::hypot((h0[0] * x + h1[0] * y + h2[0]) / w - q[0][0], (h0[1] * x + h1[1] * y + h2[1]) / w - q[0][1]);
+    };
+    double best = 1e300;
+    int signs = 0;
+    for (int s = 0; s < 4; ++s) {
+        double e = off(s & 1 ? 1 : -1, s & 2 ? 1 : -1);
+        if (e < best) best = e, signs = s;
+    }
+    if (signs & 1) h0 = {-h0[0], -h0[1], -h0[2]};
+    if (signs & 2) h1 = {-h1[0], -h1[1], -h1[2]};
+    Projective toQuad{{float(h0[0] / h2[2]), float(h1[0] / h2[2]), float(h2[0] / h2[2]), float(h0[1] / h2[2]), float(h1[1] / h2[2]),
+                       float(h2[1] / h2[2]), float(h0[2] / h2[2]), float(h1[2] / h2[2]), 1}};
+    float sx = 2 / bounds.width, sy = 2 / bounds.height;
+    Projective toSquare{{sx, 0, -sx * bounds.x - 1, 0, sy, -sy * bounds.y - 1, 0, 0, 1}};
+    float ratio = lz - z > 0 ? std::clamp(z / (lz - z), 0.f, 0.95f) : 0.95f;
+    return std::pair{toQuad * toSquare, radius * ratio};
+}
+
+Matrix matrixOf(const Projective& p) {
+    Matrix m;
+    m.values[Matrix::ScaleX] = p.m[0], m.values[Matrix::SkewX] = p.m[1], m.values[Matrix::TranslateX] = p.m[2];
+    m.values[Matrix::SkewY] = p.m[3], m.values[Matrix::ScaleY] = p.m[4], m.values[Matrix::TranslateY] = p.m[5];
+    m.values[Matrix::Perspective0] = p.m[6], m.values[Matrix::Perspective1] = p.m[7], m.values[Matrix::Perspective2] = p.m[8];
+    return m;
+}
+
+} // namespace
+
+// As Android draws it (HWUI, then Skia's SkShadowUtils on Ganesh), in this target's px (a layer's
+// resolution makes them more than Android's: its lengths, the light's too, taken up with them), the
+// light mapped into them from the window's. A rounded rect of one radius (or a rect, a circle),
+// flat, drawn through a similarity: analytically, as drawFastShadow and ShadowRRectOp do it (an
+// ambient shadow the outline spread by r = z / 2 px, up to 150, its falloff b = r (1 + z / 128)
+// in from there; a spot one the outline cast from the light, spread by its blur and falling off
+// over twice that; each left out under the caster where it is opaque). Otherwise as Skia blurs
+// when it can do nothing better (see GraphicsContext::drawElevationShadow), in the target's px.
+void Renderer::drawElevationShadow(const Outline& outline, Offset origin, const ElevationShadow& shadow) {
+    float alpha = std::clamp(shadow.alpha, 0.f, 1.f);
+    Color ambient = shadow.ambientColor.copy(shadow.ambientColor.a * light.ambientAlpha * alpha);
+    Color spot = shadow.spotColor.copy(shadow.spotColor.a * light.spotAlpha * alpha);
+    if (targets_.empty() || (ambient.a <= 0 && spot.a <= 0)) return;
+    bool transparent = alpha < 1;
+    float k = light.density, u = scale / k;  // the window's px a dp; this target's px an Android px
+    float w = 0;
+    Offset lightPx = windowFromTarget_.inverse().apply(light.center.x * k, light.center.y * k, &w);
+    float lz = light.z * k * u, lr = light.radius * k * u;
+    Rect b = outline.bounds();
+    b.x += origin.x, b.y += origin.y;
+    if (b.width <= 0 || b.height <= 0) return;
+    bool flat = std::abs(shadow.plane[0]) < 1e-6f && std::abs(shadow.plane[1]) < 1e-6f;
+    std::optional<float> radius;
+    if (outline.kind == Outline::Kind::Rectangle) radius = 0;
+    else if (outline.kind == Outline::Kind::Rounded && outline.roundRect.circular()) {
+        CornerRadii r = outline.roundRect.radii();
+        if (std::abs(r.topLeft - r.topRight) < 1e-3f && std::abs(r.topLeft - r.bottomRight) < 1e-3f && std::abs(r.topLeft - r.bottomLeft) < 1e-3f)
+            radius = std::min(r.topLeft, std::min(b.width, b.height) / 2);
+    }
+    const Projective& t = transform_;
+    float a = t.m[0], c = t.m[1], bb = t.m[3], d = t.m[4];
+    float len0 = std::hypot(a, bb), len1 = std::hypot(c, d);
+    bool similar = t.affine() && std::abs(t.m[8] - 1) < 1e-6f && len0 > 0 && std::abs(len0 - len1) < 1e-4f * len0 && std::abs(a * c + bb * d) < 1e-4f * len0 * len0;
+    if (flat && radius && similar && w > 0) {
+        float toLocal = 1 / len0;  // the target's px in the prim's
+        Rect r{b.x * scale - ox_, b.y * scale - oy_, b.width * scale, b.height * scale};
+        float rr = *radius * scale;
+        auto draw = [&](Rect at, float corner, float blur, float hole, Color color) {
+            Prim p;
+            set(p.shape, at.x, at.y, at.right(), at.bottom());
+            set(p.bounds, at.x - 1, at.y - 1, at.right() + 1, at.bottom() + 1);
+            set(p.radii, corner, corner, corner, corner);
+            set(p.params, blur, hole, 0, 0);
+            premultiplied(p.color, color);
+            add(ELEVATION, p);
+        };
+        float zA = shadow.plane[2] * k;  // Android's px
+        if (ambient.a > 0 && zA > 0) {
+            float inset = std::min(zA / 2, 150.f) * u, blur = inset * (1 + zA / 128);
+            float out = inset * toLocal;
+            draw({r.x - out, r.y - out, r.width + 2 * out, r.height + 2 * out}, rr + out, blur * toLocal, transparent ? -1 : out, ambient);
+        }
+        if (spot.a > 0 && zA > 0) {
+            SpotParams sp = spotParams(zA * u, lightPx.x, lightPx.y, lz, lr);
+            Offset off{sp.offset.x + sp.scale * t.m[2], sp.offset.y + sp.scale * t.m[5]};
+            Offset local = t.inverse().apply(off.x, off.y);  // (an affine map's inverse, as a point)
+            Rect cast{r.x * sp.scale + local.x, r.y * sp.scale + local.y, r.width * sp.scale, r.height * sp.scale};
+            float castRadius = rr * sp.scale, blur = sp.blur * toLocal;
+            float maxOffset;
+            if (rr <= 0) {
+                maxOffset = std::max({std::abs(cast.x - r.x), std::abs(cast.y - r.y), std::abs(cast.right() - r.right()), std::abs(cast.bottom() - r.bottom())});
+            } else {
+                float dr = castRadius - rr;
+                Offset upperLeft{cast.x - r.x + dr, cast.y - r.y + dr}, lowerRight{cast.right() - r.right() - dr, cast.bottom() - r.bottom() - dr};
+                maxOffset = std::sqrt(std::max(upperLeft.x * upperLeft.x + upperLeft.y * upperLeft.y, lowerRight.x * lowerRight.x + lowerRight.y * lowerRight.y)) + dr;
+            }
+            float inset = blur + std::max(blur, maxOffset);
+            draw({cast.x - blur, cast.y - blur, cast.width + 2 * blur, cast.height + 2 * blur}, castRadius + blur, 2 * sp.blur * toLocal,
+                 transparent ? -1 : inset, spot);
+        }
+        return;
+    }
+    // Blurred, in the target's px: the outline there, and the map from dp to there.
+    Path path = outline.asPath();
+    std::vector<Contour> device = polygonsOf(path, origin, {});
+    Projective ctm = t * Projective{{scale, 0, -ox_, 0, scale, -oy_, 0, 0, 1}};
+    float s0 = scale, x0 = ox_, y0 = oy_;
+    Projective t0 = transform_;
+    scale = 1, ox_ = 0, oy_ = 0, transform_ = {};
+    Path flatOutline;  // (its px, through the transform: what Skia strokes)
+    float l = 1e30f, top = 1e30f, rgt = -1e30f, bot = -1e30f;
+    for (const Contour& cn : device) {
+        for (size_t i = 0; i < cn.points.size(); ++i) {
+            Offset q = cn.points[i];
+            if (i == 0) flatOutline.moveTo(q.x, q.y);
+            else flatOutline.lineTo(q.x, q.y);
+            l = std::min(l, q.x), top = std::min(top, q.y), rgt = std::max(rgt, q.x), bot = std::max(bot, q.y);
+        }
+        flatOutline.close();
+    }
+    float zA = (shadow.plane[0] * origin.x + shadow.plane[1] * origin.y + shadow.plane[2]) * k;  // (at the outline's origin, as Skia's)
+    if (ambient.a > 0 && zA > 0 && l <= rgt) {
+        float outset = std::min(zA / 2, 150.f) * u, oneOverA = 1 + zA / 128, blur = 0.5f * outset * oneOverA;
+        float stroke = 0.5f * (outset - blur);
+        float grow = std::max(0.f, stroke) * 2;  // (mitered: a little more)
+        Rect at{l - grow, top - grow, rgt - l + 2 * grow, bot - top + 2 * grow};
+        pushEffectLayer(at, BlurEffect(blur, blur, TileMode::Decal), ambient.a);
+        drawPath(flatOutline, {0, 0}, Brush::solid(ambient.copy(1)), at, {});
+        if (stroke > 0) drawPath(flatOutline, {0, 0}, Brush::solid(ambient.copy(1)), at, PathStroke{stroke});
+        popLayer();
+    }
+    if (spot.a > 0) {
+        std::array<float, 3> plane{shadow.plane[0] * k * u, shadow.plane[1] * k * u, shadow.plane[2] * k * u};  // (z in the target's px)
+        Rect pb = path.bounds();
+        pb.x += origin.x, pb.y += origin.y;
+        if (auto cast = spotShadowTransform(lightPx, lz, lr, ctm, plane, pb); cast && w > 0) {
+            Projective m = cast->first;
+            float cl = 1e30f, ct = 1e30f, cr = -1e30f, cb = -1e30f;
+            bool seen = true;
+            for (int i = 0; i < 4 && seen; ++i) {
+                float cw;
+                Offset q = m.apply(i & 1 ? pb.right() : pb.x, i & 2 ? pb.bottom() : pb.y, &cw);
+                seen = cw > 0;
+                cl = std::min(cl, q.x), ct = std::min(ct, q.y), cr = std::max(cr, q.x), cb = std::max(cb, q.y);
+            }
+            if (seen) {
+                Rect at{cl - 1, ct - 1, cr - cl + 2, cb - ct + 2};
+                pushEffectLayer(at, BlurEffect(cast->second, cast->second, TileMode::Decal), spot.a);
+                pushTransform(matrixOf(m));
+                drawPath(path, origin, Brush::solid(spot.copy(1)), pb, {});
+                popTransform();
+                popLayer();
+            }
+        }
+    }
+    scale = s0, ox_ = x0, oy_ = y0, transform_ = t0;
 }
 
 void Renderer::effectPass(Texture& target, Texture& source, const IRect& rect, const float (&uniforms)[32], bool linear, bool table) {

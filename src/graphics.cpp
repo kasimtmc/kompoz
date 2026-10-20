@@ -1464,10 +1464,112 @@ void GraphicsContext::pushClipShape(const Rect& rect, const Shape& shape, bool r
     else pushClipPath(p.outline.asPath(), {rect.x, rect.y}, op);
 }
 
+// As Compose draws a dropShadow or innerShadow: under it, from a bitmap as big as the shape out to
+// its radius and spread, moved (what is past that cut off); painted with its color, or its brush
+// over what it covers (the brush SrcIn the shadow's mask); at its alpha, by its blend mode.
 void GraphicsContext::drawShapeShadow(const Rect& rect, const Shape& shape, bool rtl, const Shadow& shadow, bool inner) {
     Placed p = place(rect, shape, rtl);
-    if (p.rounded) drawShadow(rect, p.radii, shadow, inner);
-    else drawShadowPath(p.outline.asPath(), {rect.x, rect.y}, shadow, inner);
+    Shadow s = shadow;
+    s.brush.reset(), s.alpha = 1, s.blendMode = BlendMode::SrcOver;
+    float alpha = std::clamp(shadow.alpha, 0.f, 1.f);
+    std::optional<Brush> brush = shadow.brush;
+    if (brush && brush->isSolid()) s.color = brush->stops().front().color, brush.reset();
+    auto draw = [&] {
+        if (p.rounded) drawShadow(rect, p.radii, s, inner);
+        else drawShadowPath(p.outline.asPath(), {rect.x, rect.y}, s, inner);
+    };
+    float out = std::max(0.f, shadow.blurRadius) + std::max(0.f, shadow.spread);
+    Rect bitmap{rect.x - out + shadow.offset.x, rect.y - out + shadow.offset.y, rect.width + 2 * out, rect.height + 2 * out};
+    if (!inner) pushClip(bitmap);
+    if (shadow.blendMode != BlendMode::SrcOver) pushBlendMode(shadow.blendMode);
+    if (brush) {
+        Rect area = inner ? rect : bitmap;
+        pushLayer(area, CornerRadii(), alpha);
+        s.color = colors::White;
+        draw();
+        pushBlendMode(BlendMode::SrcIn);
+        fillGradient(area, CornerRadii(), *brush, area);
+        popBlendMode();
+        popLayer();
+    } else {
+        s.color = s.color.copy(s.color.a * alpha);
+        draw();
+    }
+    if (shadow.blendMode != BlendMode::SrcOver) popBlendMode();
+    if (!inner) popClip();
+}
+
+namespace {
+// `path` scaled by `scale` about the origin and moved by `by`.
+Path scaledPath(const Path& path, float scale, Offset by) {
+    Path out;
+    out.fillType = path.fillType;
+    auto x = [&](float v) { return v * scale + by.x; };
+    auto y = [&](float v) { return v * scale + by.y; };
+    for (const PathCommand& c : path.commands()) {
+        switch (c.verb) {
+        case PathCommand::Verb::Move: out.moveTo(x(c.x), y(c.y)); break;
+        case PathCommand::Verb::Line: out.lineTo(x(c.x), y(c.y)); break;
+        case PathCommand::Verb::Quad: out.quadraticTo(x(c.x1), y(c.y1), x(c.x), y(c.y)); break;
+        case PathCommand::Verb::Cubic: out.cubicTo(x(c.x1), y(c.y1), x(c.x2), y(c.y2), x(c.x), y(c.y)); break;
+        case PathCommand::Verb::Close: out.close(); break;
+        }
+    }
+    return out;
+}
+} // namespace
+
+Rect ElevationShadow::reach(const Rect& bounds, const ShadowLight& light, Offset lightCenter) const {
+    auto at = [&](float x, float y) { return plane[0] * x + plane[1] * y + plane[2]; };
+    float z = std::max({at(bounds.x, bounds.y), at(bounds.right(), bounds.y), at(bounds.x, bounds.bottom()), at(bounds.right(), bounds.bottom())});
+    float k = light.density, zp = z * k, lz = light.z * k;
+    float ambient = std::min(zp / 2, 150.f) / k;
+    Rect out{bounds.x - ambient, bounds.y - ambient, bounds.width + 2 * ambient, bounds.height + 2 * ambient};
+    if (lz > zp && zp > 0) {
+        float ratio = std::clamp(zp / (lz - zp), 0.f, 0.95f), scale = std::clamp(lz / (lz - zp), 1.f, 1.95f), blur = light.radius * ratio;
+        Rect spot{bounds.x * scale - ratio * lightCenter.x - blur, bounds.y * scale - ratio * lightCenter.y - blur, bounds.width * scale + 2 * blur,
+                  bounds.height * scale + 2 * blur};
+        float l = std::min(out.x, spot.x), t = std::min(out.y, spot.y), r = std::max(out.right(), spot.right()), b = std::max(out.bottom(), spot.bottom());
+        out = {l, t, r - l, b - t};
+    }
+    return {out.x - 1, out.y - 1, out.width + 2, out.height + 2};
+}
+
+// Skia's SkShadowUtils, when it blurs (SkDevice::drawShadow's last resort), in px: the ambient
+// shadow the outline stroked and filled (stroked 0.5 (r - b) wide, r = z / 2 up to 150, b = 0.5 r
+// (1 + z / 128)) and blurred by b; the spot shadow the outline cast from the light onto the plane
+// under it (scaled by Lz / (Lz - z) about the light's foot) and blurred by its radius z / (Lz - z)
+// times the light's. Both blurred as Android blurs (0.57735 r + 0.5 px), through drawShadow and
+// drawShadowPath (a stroke and fill's spread as a shadow's).
+void GraphicsContext::drawElevationShadow(const Outline& outline, Offset origin, const ElevationShadow& shadow) {
+    float alpha = std::clamp(shadow.alpha, 0.f, 1.f), k = light.density;
+    Rect b = outline.bounds();
+    b.x += origin.x, b.y += origin.y;
+    bool rounded = outline.kind == Outline::Kind::Rectangle || (outline.kind == Outline::Kind::Rounded && outline.roundRect.circular());
+    CornerRadii radii = outline.kind == Outline::Kind::Rounded ? outline.roundRect.radii() : CornerRadii();
+    auto cast = [&](Rect r, CornerRadii corners, Shadow s, float scale, Offset by) {
+        if (rounded) {
+            r = {r.x * scale + by.x, r.y * scale + by.y, r.width * scale, r.height * scale};
+            drawShadow(r, corners.scaled(scale), s, false);
+        } else {
+            Path p = outline.asPath();
+            p.translate(origin);
+            drawShadowPath(scaledPath(p, scale, by), {0, 0}, s, false);
+        }
+    };
+    float flat = shadow.plane[0] * origin.x + shadow.plane[1] * origin.y + shadow.plane[2];  // (at the outline's origin, as Skia's)
+    if (Color c = shadow.ambientColor; c.a * light.ambientAlpha * alpha > 0 && flat > 0) {
+        float z = flat * k, r = std::min(z / 2, 150.f), oneOverA = 1 + z / 128, blur = 0.5f * r * oneOverA;
+        float stroke = std::max(0.f, 0.5f * (r - blur));  // (a negative width strokes nothing)
+        cast(b, radii, Shadow{c.copy(c.a * light.ambientAlpha * alpha), {}, blur / k, stroke / 2 / k}, 1, {});
+    }
+    Offset center = b.center();
+    float z = (shadow.plane[0] * center.x + shadow.plane[1] * center.y + shadow.plane[2]) * k, lz = light.z * k;
+    if (Color c = shadow.spotColor; c.a * light.spotAlpha * alpha > 0 && z > 0 && lz > z) {
+        float ratio = std::clamp(z / (lz - z), 0.f, 0.95f), scale = std::clamp(lz / (lz - z), 1.f, 1.95f);
+        Offset l = lightCenter();
+        cast(b, radii, Shadow{c.copy(c.a * light.spotAlpha * alpha), {}, light.radius * k * ratio / k, 0}, scale, {-ratio * l.x, -ratio * l.y});
+    }
 }
 
 } // namespace kompoz

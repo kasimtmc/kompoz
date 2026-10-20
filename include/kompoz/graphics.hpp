@@ -1001,11 +1001,42 @@ struct Shadow {
     Offset offset;
     float blurRadius = 0;
     float spread = 0;  // not for text
+    // Not for text either (Compose 1.9's dropShadow and innerShadow): a brush painting it instead
+    // of the color (spread over what it covers), its alpha, how it goes onto what is under it.
+    std::optional<Brush> brush;
+    float alpha = 1;
+    BlendMode blendMode = BlendMode::SrcOver;
     friend bool operator==(const Shadow& a, const Shadow& b) {
         return a.color == b.color && a.offset.x == b.offset.x && a.offset.y == b.offset.y && a.blurRadius == b.blurRadius &&
-               a.spread == b.spread;
+               a.spread == b.spread && a.brush == b.brush && a.alpha == b.alpha && a.blendMode == b.blendMode;
     }
 };
+
+// Where elevation shadows' light is, as Android's theme has it: above the window's top middle
+// (`center`, the window's dp), `z` up, `radius` across, the ambient and spot shadows at those
+// alphas; `density` px a dp (Android works shadows out in px). The platform sets the window's.
+struct ShadowLight {
+    Offset center;
+    float z = 500, radius = 800;  // dp
+    float ambientAlpha = 0.039f, spotAlpha = 0.19f;
+    float density = 1;
+    friend bool operator==(const ShadowLight&, const ShadowLight&) = default;
+};
+
+// An elevation shadow (graphicsLayer's shadowElevation): how high its caster is at each point (z =
+// plane[0] x + plane[1] y + plane[2], dp, x and y the drawing's dp: flat but for a layer turned in
+// 3D), its two colors (at their alphas times the light's), and the caster's alpha (below 1 it is
+// seen through, so its shadow shows under it too).
+struct ElevationShadow {
+    std::array<float, 3> plane{0, 0, 0};
+    Color ambientColor{0, 0, 0, 1}, spotColor{0, 0, 0, 1};
+    float alpha = 1;
+    // Where it may reach for a caster over `bounds` (dp), the light's center there `lightCenter`
+    // (as Skia's SkDrawShadowMetrics::GetLocalBounds works it out, before any transform).
+    Rect reach(const Rect& bounds, const ShadowLight& light, Offset lightCenter) const;
+    friend bool operator==(const ElevationShadow&, const ElevationShadow&) = default;
+};
+inline constexpr Color DefaultShadowColor{0, 0, 0, 1};  // Compose's
 
 // How a clip clips (Compose's ClipOp): to what is inside its shape, or to what is outside it.
 enum class ClipOp { Intersect, Difference };
@@ -1170,6 +1201,17 @@ public:
     // other, moved; inside it, the color where a hole (the outline worn away by the spread, moved)
     // blurred isn't. The default draws it through effect layers (pushEffectLayer).
     virtual void drawShadowPath(const Path& outline, Offset origin, const Shadow& shadow, bool inner);
+    // The light elevation shadows have (set by the platform), and its center in the dp drawn in
+    // now: as given (the window's) less what has moved the drawing (a backend that knows its
+    // translations and layers says so; the default takes the drawing's dp for the window's).
+    ShadowLight light;
+    virtual Offset lightCenter() const { return light.center; }
+    // An elevation shadow of `outline` (from `origin`) as Android draws one (a RenderNode's, by
+    // Skia's SkShadowUtils): an ambient shadow all round and a spot shadow cast from the light.
+    // The default draws them as Skia does when it can do nothing better (blurred: the outline
+    // spread and blurred by the elevation, and cast from the light and blurred), through
+    // drawShadow and drawShadowPath, in the dp drawn in (lightCenter()).
+    virtual void drawElevationShadow(const Outline& outline, Offset origin, const ElevationShadow& shadow);
     // A layer clipped to `outline` (from the bounds' top left, any path by its fill type) rather
     // than a rounded rect. The default clips to the bounds.
     virtual void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform = {}) {
@@ -1186,7 +1228,10 @@ public:
     void strokeShape(const Rect& rect, const Shape& shape, bool rtl, float width, const Brush& brush, const Rect& brushArea);
     void pushShapeLayer(const Rect& bounds, const Shape& shape, bool rtl, float alpha, const LayerTransform& transform = {});
     void pushClipShape(const Rect& rect, const Shape& shape, bool rtl, ClipOp op = ClipOp::Intersect);
-    void drawShapeShadow(const Rect& rect, const Shape& shape, bool rtl, const Shadow& shadow, bool inner);
+    // A shape's shadow as Compose's dropShadow and innerShadow draw it (cut where its bitmap ends,
+    // in its blend mode, faded by its alpha), through drawShadow or drawShadowPath; a brush over
+    // what it covers in a layer (SrcIn). A backend may draw a brushed one its own way.
+    virtual void drawShapeShadow(const Rect& rect, const Shape& shape, bool rtl, const Shadow& shadow, bool inner);
     // Around what each layout node draws: a recording canvas lines frames up by them (see
     // display_list.hpp); others ignore them.
     virtual void beginNode(const void* node) { (void)node; }

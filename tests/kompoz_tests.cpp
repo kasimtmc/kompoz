@@ -10376,8 +10376,8 @@ TEST(shadows_take_colors_and_clip_and_borders_take_brushes) {
     Color red{1, 0, 0, 1}, blue{0, 0, 1, 1};
     ComposeTestRule rule([&] {
         Column([&] {
-            Box(Modifier().size(100).shadow(8, RoundedCornerShape(16)));                     // as ever: no layer, black
-            Box(Modifier().size(100).shadow(8, RoundedCornerShape(16), true, red, red));      // red, the content clipped
+            Box(Modifier().size(100).shadow(8, RoundedCornerShape(16)));                     // black, clipped (Compose's default)
+            Box(Modifier().size(100).shadow(8, RoundedCornerShape(16), false, red, red));     // red, not clipped
             Box(Modifier().size(100).shadow(8, RectangleShape, true, blue.copy(0.5f), blue.copy(0.5f)));  // fainter; a plain clip
             Box(Modifier().size(100).border(BorderStroke(2, red), RoundedCornerShape(10)));
             Box(Modifier().size(100).border(BorderStroke(4, Brush::linearGradient({red, blue})), RoundedCornerShape(10)));
@@ -10385,15 +10385,20 @@ TEST(shadows_take_colors_and_clip_and_borders_take_brushes) {
     }, {400, 800});
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
-    // Six shadow rects each.
-    CHECK(canvas.rectColors.size() == 18);
-    if (canvas.rectColors.size() == 18) {
-        Color black = canvas.rectColors[0], tinted = canvas.rectColors[6], faint = canvas.rectColors[12];
-        CHECK(black.r == 0 && black.b == 0 && tinted.r == 1 && tinted.g == 0 && near(tinted.a, black.a, 0.001f));
-        CHECK(faint.b == 1 && near(faint.a, black.a / 2, 0.001f));
+    // An elevation shadow each, of its shape, in its colors.
+    CHECK(canvas.elevationShadows.size() == 3 && canvas.layers == 0);
+    if (canvas.elevationShadows.size() == 3) {
+        const auto& e = canvas.elevationShadows;
+        CHECK(near(e[0].elevation(), 8, 1e-4f) && e[0].shadow.ambientColor == colors::Black && e[0].shadow.spotColor == colors::Black);
+        CHECK(e[0].outline.kind == Outline::Kind::Rounded && near(e[0].outline.roundRect.topLeft.x, 16) && sameRect(e[0].bounds, {0, 0, 100, 100}));
+        CHECK(e[1].shadow.ambientColor == red && e[1].shadow.spotColor == red && sameRect(e[1].bounds, {0, 100, 100, 100}));
+        CHECK(near(e[2].shadow.ambientColor.a, 0.5f, 1e-4f) && e[2].outline.kind == Outline::Kind::Rectangle);
     }
-    CHECK(canvas.clipShapes.size() == 1 && sameRect(canvas.clipShapes[0].bounds, {0, 100, 100, 100}) && near(canvas.clipShapes[0].radii.topLeft, 16));
+    CHECK(canvas.clipShapes.size() == 1 && sameRect(canvas.clipShapes[0].bounds, {0, 0, 100, 100}) && near(canvas.clipShapes[0].radii.topLeft, 16));
     CHECK(canvas.clips.size() == 1 && sameRect(canvas.clips[0], {0, 200, 100, 100}));
+    // No elevation, no clip: nothing; no elevation, a clip: the clip alone.
+    CHECK(Modifier().shadow(0) == Modifier());
+    CHECK(Modifier().shadow(0, RectangleShape, true) == Modifier().graphicsLayer({.clip = true}));
     // A colored border is a stroke; a brush's a path stroked half its width inside.
     CHECK(canvas.strokes.size() == 1 && canvas.strokeColors[0] == red);
     CHECK(canvas.paths.size() == 1 && sameRect(canvas.paths[0], {2, 402, 96, 96}));
@@ -12975,16 +12980,15 @@ TEST(cards_as_compose_1_4) {
     bool clipped = false;
     for (const auto& k : canvas.clipShapes) clipped |= sameRect(k.bounds, card) && near(k.radii.topLeft, 12);
     CHECK(clipped);
-    // The elevated one's shadow the one of 1 dp (spread 0.8 dp at most); none for the others.
-    auto shadowSpread = [&](const char* tag) {
+    // The elevated one's shadow the one of 1 dp; none for the others.
+    auto elevation = [&](const char* tag) {
         Rect r = rule.onNodeWithTag(tag).bounds();
         float most = 0;
-        for (size_t i = 0; i < canvas.rects.size(); ++i)
-            if (canvas.rectColors[i].a < 0.1f && near(canvas.rects[i].center().x, r.center().x, 2) && near(canvas.rects[i].center().y, r.center().y, 2))
-                most = std::max(most, canvas.rects[i].height - r.height);
+        for (const auto& e : canvas.elevationShadows)
+            if (near(e.bounds.center().x, r.center().x, 2) && near(e.bounds.center().y, r.center().y, 2)) most = std::max(most, e.elevation());
         return most;
     };
-    CHECK(near(shadowSpread("yüksek"), 0.8f, 0.05f) && near(shadowSpread("dolu"), 0, 0.01f));
+    CHECK(near(elevation("yüksek"), 1, 0.01f) && near(elevation("dolu"), 0, 0.01f));
 }
 
 TEST(buttons_as_compose_1_4) {
@@ -13047,30 +13051,29 @@ TEST(buttons_as_compose_1_4) {
         return Color{};
     };
     CHECK(strokeOf("çizgili") == cs.outlineVariant && strokeOf("kapalı") == cs.outlineVariant.copy(0.1f));
-    // Elevations: 1 dp (spread 0.8) for the elevated one, none for the filled one; 3 and 1 hovered.
+    // Elevations: 1 dp for the elevated one, none for the filled one; 3 and 1 hovered.
     auto shadowSpread = [&](const char* tag) {
         Rect r = container(tag);
         float most = 0;
-        for (size_t i = 0; i < canvas->rects.size(); ++i)
-            if (canvas->rectColors[i].a < 0.1f && near(canvas->rects[i].center().x, r.center().x, 2) && near(canvas->rects[i].center().y, r.center().y, 2))
-                most = std::max(most, canvas->rects[i].height - r.height);
+        for (const auto& e : canvas->elevationShadows)
+            if (near(e.bounds.center().x, r.center().x, 2) && near(e.bounds.center().y, r.center().y, 2)) most = std::max(most, e.elevation());
         return most;
     };
-    CHECK(near(shadowSpread("yüksek"), 0.8f, 0.05f) && near(shadowSpread("dolu"), 0, 0.01f));
+    CHECK(near(shadowSpread("yüksek"), 1, 0.01f) && near(shadowSpread("dolu"), 0, 0.01f));
     rule.host().pointerMove(rule.onNodeWithTag("yüksek").bounds().center());
     rule.advanceTimeBy(300);
     redraw();
-    CHECK(near(shadowSpread("yüksek"), 2.4f, 0.05f));
+    CHECK(near(shadowSpread("yüksek"), 3, 0.01f));
     rule.host().pointerMove(rule.onNodeWithTag("dolu").bounds().center());
     rule.advanceFrame();
     rule.advanceFrame();
     rule.advanceFrame();
     redraw();
     float easing = shadowSpread("yüksek");
-    CHECK(easing > 0.85f && easing < 2.35f);  // on its way back down
+    CHECK(easing > 1.05f && easing < 2.95f);  // on its way back down
     rule.advanceTimeBy(300);
     redraw();
-    CHECK(near(shadowSpread("yüksek"), 0.8f, 0.05f) && near(shadowSpread("dolu"), 0.8f, 0.05f));
+    CHECK(near(shadowSpread("yüksek"), 1, 0.01f) && near(shadowSpread("dolu"), 1, 0.01f));
     // Pressed: back down, though hovered.
     Offset at = rule.onNodeWithTag("dolu").bounds().center();
     rule.host().pointerDown(at, -1, 0, ComposeHost::PointerType::Mouse);
@@ -13180,25 +13183,24 @@ TEST(fabs_as_compose_1_4) {
     Rect wide = rule.onNodeWithTag("geniş").bounds(), icon = rule.onNodeWithText("Yeni").bounds();  // (the icon says it too)
     CHECK(near(icon.x, wide.x + 16) && near(wide.width, 16 + 24 + 12 + rule.onNodeWithTag("ölçü").bounds().width + 20));
     CHECK(near(rule.onNodeWithTag("kısa").bounds().width, 80));
-    // 6 dp up (a 4.8 dp spread), 8 hovered (6.4), 6 again pressed.
+    // 6 dp up, 8 hovered, 6 again pressed.
     auto spread = [&] {
         testing::RecordingCanvas canvas;
         rule.host().draw(canvas);
         Rect r = rule.onNodeWithTag("fab").bounds();
         float most = 0;
-        for (size_t i = 0; i < canvas.rects.size(); ++i)
-            if (canvas.rectColors[i].a < 0.1f && near(canvas.rects[i].center().x, r.center().x, 2) && near(canvas.rects[i].center().y, r.center().y, 4))
-                most = std::max(most, canvas.rects[i].height - r.height);
+        for (const auto& e : canvas.elevationShadows)
+            if (near(e.bounds.center().x, r.center().x, 2) && near(e.bounds.center().y, r.center().y, 4)) most = std::max(most, e.elevation());
         return most;
     };
-    CHECK(near(spread(), 4.8f, 0.05f));
+    CHECK(near(spread(), 6, 0.01f));
     Offset at = rule.onNodeWithTag("fab").bounds().center();
     rule.host().pointerMove(at);
     rule.advanceTimeBy(300);
-    CHECK(near(spread(), 6.4f, 0.05f));
+    CHECK(near(spread(), 8, 0.01f));
     rule.host().pointerDown(at, -1, 0, ComposeHost::PointerType::Mouse);
     rule.advanceTimeBy(300);
-    CHECK(near(spread(), 4.8f, 0.05f));
+    CHECK(near(spread(), 6, 0.01f));
     rule.host().pointerUp(at);
     rule.waitForIdle();
 }
@@ -15181,19 +15183,17 @@ TEST(shapes_with_corners_of_their_own_reach_the_canvas_mirrored_in_rtl) {
     frame();
     testing::RecordingCanvas drawn;
     list.replay(drawn);  // through a display list, as a screen gets it
-    CHECK(drawn.rectCorners.size() == 7);  // six shadow layers and the background
-    if (drawn.rectCorners.size() == 7) {
-        CHECK(same(drawn.rectCorners[6], {16, 8, 0, 4}) && same(drawn.rectCorners[0], tab.radiiFor(r).grown(0.8f)));
-    }
+    CHECK(drawn.rectCorners.size() == 1 && same(drawn.rectCorners[0], {16, 8, 0, 4}));  // the background
+    CHECK(drawn.elevationShadows.size() == 1 && same(drawn.elevationShadows[0].outline.roundRect.radii(), {16, 8, 0, 4}));  // the shadow's outline
     CHECK(drawn.strokeCorners.size() == 1 && same(drawn.strokeCorners[0], {16, 8, 0, 4}));
-    CHECK(drawn.clipShapes.size() == 1 && same(drawn.clipShapes[0].radii, {16, 8, 0, 4}));
+    CHECK(drawn.clipShapes.size() == 2 && same(drawn.clipShapes[0].radii, {16, 8, 0, 4}) && same(drawn.clipShapes[1].radii, {16, 8, 0, 4}));  // the shadow's, the clip
 
     rule.host().pointerDown({50, 20});
     rule.advanceFrame();
     rule.advanceFrame();
     testing::RecordingCanvas pressed;
     rule.host().draw(pressed);
-    CHECK(pressed.clipShapes.size() == 2 && same(pressed.clipShapes[1].radii, {16, 8, 0, 4}));  // the ripple keeps to the shape
+    CHECK(pressed.clipShapes.size() == 3 && same(pressed.clipShapes[2].radii, {16, 8, 0, 4}));  // the ripple keeps to the shape
     rule.host().pointerUp({50, 20});
     rule.waitForIdle();
     frame();
@@ -15203,9 +15203,10 @@ TEST(shapes_with_corners_of_their_own_reach_the_canvas_mirrored_in_rtl) {
     CHECK(frame().has_value());  // only the corners changed, and that is a change
     testing::RecordingCanvas mirrored;
     list.replay(mirrored);
-    CHECK(mirrored.rectCorners.size() == 7 && same(mirrored.rectCorners.back(), {8, 16, 4, 0}));
+    CHECK(mirrored.rectCorners.size() == 1 && same(mirrored.rectCorners.back(), {8, 16, 4, 0}));
+    CHECK(mirrored.elevationShadows.size() == 1 && same(mirrored.elevationShadows[0].outline.roundRect.radii(), {8, 16, 4, 0}));
     CHECK(mirrored.strokeCorners.size() == 1 && same(mirrored.strokeCorners[0], {8, 16, 4, 0}));
-    CHECK(mirrored.clipShapes.size() == 1 && same(mirrored.clipShapes[0].radii, {8, 16, 4, 0}));
+    CHECK(mirrored.clipShapes.size() == 2 && same(mirrored.clipShapes[1].radii, {8, 16, 4, 0}));
 
     MutableInteractionSource source;  // a graphicsLayer's clip and an indication's ripple
     ComposeTestRule other([&] {
@@ -16476,11 +16477,12 @@ TEST(elevated_chips_cast_a_shadow_and_leading_icon_tabs_sit_side_by_side) {
         rule.host().draw(canvas);
         Rect b = rule.onNodeWithTag(tag).bounds();
         Look l;
+        for (const auto& e : canvas.elevationShadows)
+            if (b.contains(e.bounds.center()) && e.elevation() > 0) ++l.shadows;
         for (size_t i = 0; i < canvas.rects.size(); ++i) {
             Color c = canvas.rectColors[i];
             if (!b.contains(canvas.rects[i].center())) continue;
-            if (c.r == 0 && c.g == 0 && c.b == 0 && c.a > 0 && c.a < 0.1f) ++l.shadows;
-            else if (!l.container && near(canvas.rects[i].width, b.width) && near(canvas.rects[i].height, 32) && near(canvas.rectRadii[i], 8))
+            if (!l.container && near(canvas.rects[i].width, b.width) && near(canvas.rects[i].height, 32) && near(canvas.rectRadii[i], 8))
                 l.container = c;
         }
         for (size_t i = 0; i < canvas.strokes.size(); ++i)
@@ -17071,7 +17073,7 @@ TEST(outline_shapes_fill_stroke_clip_shadow_and_ripple) {
             Column(Modifier().padding(20), [&] {
                 Box(Modifier()
                         .size(100, 50)
-                        .shadow(4, OutlineShape(triangle))
+                        .shadow(4, OutlineShape(triangle), false)
                         .background(Color{1, 0, 0, 1}, OutlineShape(triangle))
                         .border(2, Color{0, 0, 1, 1}, OutlineShape(triangle))
                         .testTag("üçgen"));
@@ -17094,19 +17096,15 @@ TEST(outline_shapes_fill_stroke_clip_shadow_and_ripple) {
     auto c = drawn();
     // The background is the outline filled, stretched over the bounds; the border strokes it inside.
     std::optional<size_t> fill, stroke;
-    int shadows = 0;
     for (size_t i = 0; i < c.paths.size(); ++i) {
         if (c.pathColors[i] == Color{1, 0, 0, 1} && c.pathStrokes[i] == 0) fill = i;
         if (c.pathColors[i] == Color{0, 0, 1, 1} && c.pathStrokes[i] == 2) stroke = i;
-        Color k = c.pathColors[i];
-        if (k.r == 0 && k.g == 0 && k.b == 0 && k.a > 0 && k.a < 0.1f) {
-            ++shadows;
-            CHECK(c.paths[i].width > tri.width && c.paths[i].y > tri.y - 4);  // bigger, a little lower
-        }
     }
     CHECK(fill && sameRect(c.paths[*fill], tri) && c.pathShapes[*fill].commands().size() == 4);  // three points, closed
     CHECK(stroke && sameRect(c.paths[*stroke], {tri.x + 1, tri.y + 1, tri.width - 2, tri.height - 2}));
-    CHECK(shadows == 6);
+    // The shadow: of the outline (a path), 4 dp up.
+    CHECK(c.elevationShadows.size() == 1 && c.elevationShadows[0].outline.kind == Outline::Kind::Generic &&
+          sameRect(c.elevationShadows[0].bounds, tri) && near(c.elevationShadows[0].elevation(), 4, 1e-4f));
     CHECK(std::none_of(c.rectColors.begin(), c.rectColors.end(), [](Color k) { return k == Color{1, 0, 0, 1}; }));
     // Clips: a shape's and a graphics layer's, each its outline as a path clip (no layer).
     CHECK(c.clipShapes.size() == 2 && c.layers == 0);
@@ -18866,13 +18864,13 @@ TEST(tooltips_as_compose_1_4) {
     LayoutNode* text = rule.onNodeWithText("Her gece").node();
     CHECK(near(title->bounds().y + title->alignmentLine(FirstBaseline), card.y + 28) && near(title->bounds().x, card.x + 16));
     CHECK(near(text->bounds().y + text->alignmentLine(FirstBaseline), title->bounds().bottom() + 24));
-    // 3 dp up: its shadow spreads 2.4 dp.
+    // 3 dp up.
     testing::RecordingCanvas shown;
     rule.host().draw(shown);
-    float spread = 0;
-    for (size_t i = 0; i < shown.rects.size(); ++i)
-        if (shown.rectColors[i].a < 0.1f && near(shown.rects[i].center().x, card.center().x, 2)) spread = std::max(spread, shown.rects[i].width - card.width);
-    CHECK(near(spread, 2.4f, 0.05f));
+    float up = 0;
+    for (const auto& e : shown.elevationShadows)
+        if (near(e.bounds.center().x, card.center().x, 2)) up = std::max(up, e.elevation());
+    CHECK(near(up, 3, 1e-4f));
     // Out: still there while it fades, then gone.
     state->dismiss();
     rule.advanceFrame();
@@ -18999,8 +18997,8 @@ TEST(tooltip_caret_points_at_the_anchor) {
     c = caretOf(drawn(), inverse);
     CHECK(c && near(c->x, rule.onNodeWithTag("tip").bounds().x + 4));
     side.set(40);
-    // A rich tooltip's caret has its color, and the card's shadow: drawn after the card's shadow and
-    // before its background, it covers the seams.
+    // A rich tooltip's caret has its color, and a shadow as the card's (of its outline): drawn
+    // after the card's shadow and before its background, it covers the seams.
     rich.set(true);
     top.set(300);
     left.set(150);
@@ -19009,20 +19007,23 @@ TEST(tooltip_caret_points_at_the_anchor) {
     anchor = rule.onNodeWithTag("anchor").bounds();
     c = caretOf(d, container);
     CHECK(c && near(c->center().x, anchor.center().x) && near(c->bottom(), anchor.y - 4));
-    auto shadowy = [](Color k) { return k.r == 0 && k.g == 0 && k.b == 0 && k.a > 0 && k.a < 0.1f; };
-    int caretAt = -1, lastShadowRect = -1, background = -1, shadowPaths = 0;
+    int caretAt = -1, background = -1;
+    std::vector<int> shadows;
     size_t nthRect = 0, nthPath = 0;
     for (int i = 0; i < int(d.order.size()); ++i) {
         char kind = d.order[size_t(i)];
+        if (kind == 'e') shadows.push_back(i);
+        if (kind != 'r' && kind != 'p') continue;
         Color color = kind == 'r' ? d.rectColors[nthRect++] : d.pathColors[nthPath++];
         if (kind == 'p' && color == container) caretAt = i;
-        if (kind == 'p' && shadowy(color)) ++shadowPaths;
-        if (kind == 'r' && shadowy(color) && caretAt < 0) lastShadowRect = i;
         if (kind == 'r' && color == container && caretAt >= 0 && background < 0) background = i;
     }
-    CHECK(shadowPaths == 6 && lastShadowRect >= 0 && lastShadowRect < caretAt && background > caretAt);
-    for (size_t i = 0; i < d.paths.size(); ++i)  // the shadow a little bigger and lower
-        if (shadowy(d.pathColors[i])) CHECK(c && d.paths[i].width > c->width && d.paths[i].bottom() > c->bottom() && d.paths[i].y > c->y + 0.5f);
+    CHECK(shadows.size() == 2 && shadows[1] < caretAt && background > caretAt);  // the card's, the caret's
+    if (d.elevationShadows.size() == 2) {
+        const auto& caretShadow = d.elevationShadows[1];
+        CHECK(caretShadow.outline.kind == Outline::Kind::Generic && near(caretShadow.elevation(), 3, 1e-4f) && c &&
+              near(caretShadow.bounds.center().x, c->center().x, 0.6f));
+    }
     // None asked for: no caret, 4 dp off.
     withCaret.set(false);
     rich.set(false);
@@ -25365,6 +25366,168 @@ TEST(display_list_backdrops_are_drawn_anew_with_what_is_behind) {
     testing::RecordingCanvas c;
     if (d) list.replay(c, *d);
     CHECK(c.backdrops.size() == 1 && sameRect(c.backdrops[0].bounds, {120, 120, 100, 100}));
+}
+
+TEST(elevation_shadows_go_with_graphics_layers) {
+    Color red{1, 0, 0, 1};
+    auto look = [](const std::function<void()>& content, std::optional<Rect> visible = {}) {
+        ComposeTestRule rule(content, {400, 400});
+        auto canvas = std::make_shared<testing::RecordingCanvas>();
+        canvas->visible = visible;
+        rule.host().draw(*canvas);
+        return canvas;
+    };
+    // Flat: its shape's outline, as high as its elevation, before its content, not clipped.
+    auto flat = look([&] {
+        Box(Modifier().offset(20, 30).size(60, 40).graphicsLayer({.shadowElevation = 6, .ambientShadowColor = red, .shape = RoundedCornerShape(8)})
+                .background(red));
+    });
+    CHECK(flat->elevationShadows.size() == 1 && flat->order.substr(0, 2) == "er" && flat->clipShapes.empty() && flat->layers == 0);
+    if (flat->elevationShadows.size() == 1) {
+        const auto& e = flat->elevationShadows[0];
+        CHECK(e.shadow.plane == (std::array<float, 3>{0, 0, 6}) && e.shadow.ambientColor == red && e.shadow.spotColor == DefaultShadowColor);
+        CHECK(sameRect(e.bounds, {20, 30, 60, 40}) && e.outline.kind == Outline::Kind::Rounded && near(e.outline.roundRect.topLeft.x, 8) && e.shadow.alpha == 1);
+    }
+    // Faded: its alpha (seen through), the shadow outside its layer.
+    auto faded = look([&] { Box(Modifier().size(40).graphicsLayer({.alpha = 0.5f, .shadowElevation = 3})); });
+    CHECK(faded->elevationShadows.size() == 1 && near(faded->elevationShadows[0].shadow.alpha, 0.5f, 1e-6f) && faded->layers == 1);
+    // Turned in 3D: each point as high as Android's true 3D transform puts it (turned about x, then
+    // y, about the pivot), raised by the elevation.
+    auto tilted = look([&] { Box(Modifier().offset(100, 100).size(80, 60).graphicsLayer({.shadowElevation = 6, .rotationX = 30, .rotationY = 20})); });
+    CHECK(tilted->elevationShadows.size() == 1);
+    if (tilted->elevationShadows.size() == 1) {
+        const auto& p = tilted->elevationShadows[0].shadow.plane;
+        float a = -std::cos(30 * std::numbers::pi_v<float> / 180) * std::sin(20 * std::numbers::pi_v<float> / 180), b = std::sin(30 * std::numbers::pi_v<float> / 180);
+        CHECK(near(p[0], a, 1e-4f) && near(p[1], b, 1e-4f) && near(p[2], 6 - a * 140 - b * 130, 1e-3f));  // (the pivot: its middle, 140, 130)
+        CHECK(tilted->transforms.size() == 1);
+    }
+    // Off the screen, its shadow on it: drawn (its reach counted); further off: not.
+    auto edge = [&](float x) {
+        return look([&] { Box(Modifier().offset(x, 100).size(40).graphicsLayer({.shadowElevation = 24})); }, Rect{0, 0, 400, 400})->elevationShadows.size();
+    };
+    CHECK(edge(405) == 1 && edge(560) == 0);
+    // A GraphicsLayer's.
+    auto recorded = look([&] {
+        auto layer = rememberGraphicsLayer();
+        Box(Modifier().size(100).drawWithContent([layer](ContentDrawScope& d) {
+            d.record(layer, [&](DrawScope& in) { in.drawRect(Color{0, 0, 1, 1}); }, Size{60, 40});
+            layer.properties().shadowElevation = 5;
+            layer.setRoundRectOutline({0, 0}, {60, 40}, 6);
+            d.drawLayer(layer);
+            layer.properties() = {};
+        }));
+    });
+    CHECK(recorded->elevationShadows.size() == 1 && near(recorded->elevationShadows[0].elevation(), 5, 1e-6f) &&
+          near(recorded->elevationShadows[0].outline.roundRect.topLeft.x, 6));
+    // Modifier::shadow is a graphicsLayer, clipped by default when it is above 0.
+    CHECK(Modifier().shadow(4, CircleShape) == Modifier().graphicsLayer({.shadowElevation = 4, .shape = CircleShape, .clip = true}));
+    CHECK(Modifier().shadow(4, RectangleShape, false, red, Color{0, 0, 1, 1}) ==
+          Modifier().graphicsLayer({.shadowElevation = 4, .ambientShadowColor = red, .spotShadowColor = Color{0, 0, 1, 1}}));
+    CHECK(Modifier().shadow(4, 12) == Modifier().shadow(4, RoundedCornerShape(12)));
+}
+
+TEST(elevation_shadows_blur_as_skia_where_nothing_does_better) {
+    // The default: through drawShadow, in px as Android works them out.
+    testing::RecordingCanvas c;
+    c.light.center = {100, 0};
+    c.light.density = 2;
+    Outline o = Outline::Rounded({{0, 0, 40, 20}, 4, 4, 4, 4});
+    c.GraphicsContext::drawElevationShadow(o, {30, 50}, ElevationShadow{{0, 0, 10}, Color{1, 0, 0, 1}, Color{0, 0, 1, 1}, 1});
+    CHECK(c.shadows.size() == 2);
+    if (c.shadows.size() == 2) {
+        // Ambient: spread by half the stroke (0.5 (r - b), r = z / 2, b = 0.5 r (1 + z / 128)), blurred by b.
+        float z = 20, r = z / 2, b = 0.5f * r * (1 + z / 128), stroke = 0.5f * (r - b);
+        const auto& a = c.shadows[0];
+        CHECK(sameRect(a.rect, {30, 50, 40, 20}) && near(a.shadow.blurRadius, b / 2, 1e-4f) && near(a.shadow.spread, stroke / 2 / 2, 1e-4f));
+        CHECK(a.shadow.color.r == 1 && near(a.shadow.color.a, 0.039f, 1e-6f));
+        // Spot: cast from the light (scaled by Lz / (Lz - z) about its foot), blurred by its radius times z / (Lz - z).
+        float lz = 1000, ratio = z / (lz - z), scale = lz / (lz - z);
+        const auto& s = c.shadows[1];
+        CHECK(near(s.rect.x, 30 * scale - ratio * 100, 1e-3f) && near(s.rect.y, 50 * scale, 1e-3f) && near(s.rect.width, 40 * scale, 1e-3f));
+        CHECK(near(s.radii.topLeft, 4 * scale, 1e-4f) && near(s.shadow.blurRadius, 800 * ratio, 1e-3f) && s.shadow.color.b == 1 &&
+              near(s.shadow.color.a, 0.19f, 1e-6f));
+    }
+    // A display list: the light's center where its transform takes it; the shadow's reach its area.
+    auto up = mutableStateOf(8.f);
+    ComposeTestRule rule([&] { Box(Modifier().offset(50, 60).size(40).graphicsLayer({.shadowElevation = up.get()})); }, {400, 400});
+    DisplayList list(rule.host().textMeasurer());
+    list.light.center = {200, 0};
+    list.light.density = 2;
+    list.begin({400, 400}, 0.5f);
+    list.pushTranslation({10, 20});
+    CHECK(near(list.lightCenter().x, 190, 1e-4f) && near(list.lightCenter().y, -20, 1e-4f));
+    list.popTranslation();
+    rule.host().draw(list);
+    std::optional<Rect> d = list.end();
+    testing::RecordingCanvas replayed;
+    list.replay(replayed);
+    CHECK(replayed.elevationShadows.size() == 1 && near(replayed.elevationShadows[0].elevation(), 8, 1e-6f));
+    ElevationShadow e{{0, 0, 8}};
+    Rect reach = e.reach({50, 60, 40, 40}, list.light, list.light.center);
+    CHECK(reach.x < 50 && reach.right() > 90 && reach.bottom() > 100);
+    // Raised: all it reaches changes.
+    up.set(12);
+    rule.waitForIdle();
+    list.begin({400, 400}, 0.5f);
+    rule.host().draw(list);
+    d = list.end();
+    Rect higher = ElevationShadow{{0, 0, 12}}.reach({50, 60, 40, 40}, list.light, list.light.center);
+    CHECK(d && d->x <= higher.x && d->y <= higher.y && d->right() >= higher.right() && d->bottom() >= higher.bottom());
+}
+
+TEST(drop_shadows_take_brushes_alphas_and_blend_modes) {
+    Color red{1, 0, 0, 1}, blue{0, 0, 1, 1};
+    Brush brush = Brush::linearGradient({red, blue});
+    auto look = [](const std::function<void()>& content) {
+        ComposeTestRule rule(content, {400, 400});
+        auto canvas = std::make_shared<testing::RecordingCanvas>();
+        rule.host().draw(*canvas);
+        return canvas;
+    };
+    // A color: faded by its alpha, its blend mode around it; cut where Compose's bitmap ends (its radius and spread out, moved).
+    auto plain = look([&] {
+        Box(Modifier().offset(20, 20).size(40).dropShadow(RectangleShape, Shadow{.color = red, .offset = {3, 4}, .blurRadius = 6, .spread = 2,
+                                                                                  .alpha = 0.5f, .blendMode = BlendMode::Multiply}));
+    });
+    CHECK(plain->shadows.size() == 1 && near(plain->shadows[0].shadow.color.a, 0.5f, 1e-6f) && plain->layers == 0 &&
+          plain->shadows[0].blend == BlendMode::Multiply);
+    CHECK(plain->clips.size() == 1 && sameRect(plain->clips[0], {20 - 8 + 3, 20 - 8 + 4, 56, 56}));
+    // A brush: in a layer at its alpha, the shadow (white), then the brush SrcIn over it, over what it covers.
+    auto painted = look([&] {
+        Box(Modifier().offset(20, 20).size(40).dropShadow(RectangleShape, Shadow{.color = red, .blurRadius = 6, .brush = brush, .alpha = 0.5f}));
+    });
+    CHECK(painted->layers == 1 && near(painted->layerAlphas[0], 0.5f, 1e-6f) && sameRect(painted->layerBounds[0], {14, 14, 52, 52}));
+    CHECK(painted->shadows.size() == 1 && painted->shadows[0].shadow.color == colors::White && painted->shadows[0].blend == BlendMode::SrcOver);
+    CHECK(painted->gradients == 1 && painted->rectBlends.size() == 1 && painted->rectBlends[0] == BlendMode::SrcIn && sameRect(painted->rects[0], {14, 14, 52, 52}));
+    CHECK(painted->order == "sr");
+    // Inside: the brush over the shape, not cut.
+    auto inner = look([&] { Box(Modifier().offset(20, 20).size(40).innerShadow(RectangleShape, Shadow{.blurRadius = 6, .brush = brush})); });
+    CHECK(inner->layers == 1 && sameRect(inner->layerBounds[0], {20, 20, 40, 40}) && inner->clips.empty());
+    // A solid brush is its color.
+    auto solid = look([&] { Box(Modifier().size(40).dropShadow(RectangleShape, Shadow{.blurRadius = 6, .brush = Brush::solid(blue)})); });
+    CHECK(solid->layers == 0 && solid->shadows.size() == 1 && solid->shadows[0].shadow.color == blue);
+    // A display list keeps a brushed one whole, for a canvas to draw its own way (SDL's), replayed
+    // onto one without as above; a new brush damages as far as its bitmap.
+    CHECK(painted->brushedShadows.size() == 1 && solid->brushedShadows.empty());
+    auto tint = mutableStateOf(red);
+    ComposeTestRule rule([&] {
+        Box(Modifier().offset(20, 20).size(40).dropShadow(RectangleShape, Shadow{.offset = {3, 4}, .blurRadius = 6, .brush = Brush::linearGradient({tint.get(), blue})}));
+    }, {400, 400});
+    DisplayList list(rule.host().textMeasurer());
+    list.begin({400, 400}, 0.5f);
+    rule.host().draw(list);
+    list.end();
+    testing::RecordingCanvas own;
+    list.replay(own);
+    CHECK(own.brushedShadows.size() == 1 && sameRect(own.brushedShadows[0], {20, 20, 40, 40}));
+    CHECK(own.layers == 1 && own.order == "sr" && own.rectBlends.size() == 1 && own.rectBlends[0] == BlendMode::SrcIn);
+    tint.set(Color{0, 1, 0, 1});
+    rule.waitForIdle();
+    list.begin({400, 400}, 0.5f);
+    rule.host().draw(list);
+    std::optional<Rect> d = list.end();
+    Rect bitmap{20 - 6 + 3, 20 - 6 + 4, 52, 52};
+    CHECK(d && d->x <= bitmap.x && d->y <= bitmap.y && d->right() >= bitmap.right() && d->bottom() >= bitmap.bottom() && d->width <= 54 && d->height <= 54);
 }
 
 TEST(graphics_layer_render_effect_draws_through_an_effect_layer) {

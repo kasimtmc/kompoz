@@ -79,6 +79,13 @@
   draws itself, its children sharp over it).
 - **Shadows of any outline drawn as Compose draws them** (`GraphicsContext::drawShadowPath`'s default, through
   effect layers): the GPU renderer no longer draws a heart's or a cookie's shadow as its bounds'.
+- **Elevation shadows as Android draws them**: `graphicsLayer`'s (and `GraphicsLayer`'s) `shadowElevation`,
+  `ambientShadowColor` and `spotShadowColor`, an ambient and a spot shadow lit from above the window's top middle
+  (`GraphicsContext::drawElevationShadow`, `ShadowLight`); on the GPU renderer as Skia's analytic shadow is on Android's
+  GPU, or blurred as Skia does otherwise. `Modifier.shadow` is now Compose's: a `graphicsLayer`, the content clipped to
+  the shape by default when the elevation is above 0 (it wasn't before: pass `clip = false` to keep it unclipped).
+- **Compose 1.9's `Shadow`**: `brush`, `alpha` and `blendMode` for `dropShadow` and `innerShadow`; a drop shadow ends
+  where Compose's bitmap does.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

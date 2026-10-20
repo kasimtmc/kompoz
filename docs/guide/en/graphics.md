@@ -139,7 +139,7 @@ Box(Modifier().size(120, 72).clip(ticket).background(colorScheme().primaryContai
 
 ## Shadows
 
-`shadow(elevation, shape)` draws a Material-style shadow under a node. `dropShadow(shape, Shadow{…})` and `innerShadow(shape, Shadow{…})` draw shadows with your own color, offset, blur radius and spread:
+`shadow(elevation, shape)` raises a node: as Compose's, it is a `graphicsLayer` with that `shadowElevation`, its shape's shadow drawn as Android draws one, lit from above the top of the window (so shadows lengthen down the screen), and the content clipped to the shape (`clip`, by default when the elevation is above 0). `dropShadow(shape, Shadow{…})` and `innerShadow(shape, Shadow{…})` draw shadows with your own color (or `brush`), offset, blur radius, spread, alpha and blend mode:
 
 ```cpp body
 Box(Modifier().size(120)

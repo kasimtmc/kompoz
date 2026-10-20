@@ -51,11 +51,9 @@ Modifier caret(Size size, Color color, float elevation = 0) {
             path.close();
             return path;
         };
-        constexpr int kLayers = 6;  // as Modifier::shadow draws it
-        for (int i = kLayers; i >= 1 && elevation > 0; --i) {
-            float t = float(i) / kLayers, grow = elevation * 0.8f * t;
-            d.drawPath(triangle(grow / 2, elevation * 0.4f), Color{0, 0, 0, 0.05f * (1.2f - t)});
-        }
+        if (elevation > 0)  // its shadow, as the card's (an elevation shadow of its outline)
+            d.context().drawElevationShadow(Outline::Generic(triangle(0, 0)), {d.bounds().x, d.bounds().y},
+                                            ElevationShadow{{0, 0, elevation}, DefaultShadowColor, DefaultShadowColor, 1});
         d.drawPath(triangle(0, 0), color);
     });
 }
@@ -223,7 +221,7 @@ void RichTooltip(const RichTooltipSlots& slots, const Modifier& modifier, Size c
     // Compose 1.4's: 3 dp up, 16 dp at the sides; the title's first baseline 28 dp down, the
     // text's 24 under it (or with an action) and 16 above the bottom (else 4 above and below);
     // the action at least 36 dp tall, 8 above the bottom.
-    Modifier card = modifier.heightIn(24).widthIn(40, 320).shadow(3, 12).then(caret(caretSize, cs.surfaceContainer, 3));
+    Modifier card = modifier.heightIn(24).widthIn(40, 320).shadow(3, RoundedCornerShape(12), false).then(caret(caretSize, cs.surfaceContainer, 3));  // (the caret past it)
     bool spaced = slots.title || slots.action;
     Column(card.background(cs.surfaceContainer, 12).padding(16, 0), [&] {
         if (slots.title)

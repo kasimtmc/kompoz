@@ -405,7 +405,8 @@ public:
         int w = int(std::lround((inner ? rect.width : shape.width) * scale)), h = int(std::lround((inner ? rect.height : shape.height) * scale));
         if (w <= 0 || h <= 0) return;
         int W = inner ? w : w + 2 * pad, H = inner ? h : h + 2 * pad;
-        if (W > 4096 || H > 4096 || double(W) * H > 6e6) return GraphicsContext::drawShadow(rect, radii, original, inner);  // (filtered as it fills)
+        if (W > 4096 || H > 4096 || double(W) * H > 6e6)
+            return unmasked([&] { GraphicsContext::drawShadow(rect, radii, original, inner); });  // (filtered as it fills)
         CornerRadii r = radii.scaled(scale);
         // An inner shadow's hole, in the mask's pixels (from the rect's corner).
         float hx = (shape.x - rect.x + shadow.offset.x) * scale, hy = (shape.y - rect.y + shadow.offset.y) * scale;
@@ -414,19 +415,90 @@ public:
         auto add = [&](float v) { key.append(reinterpret_cast<const char*>(&v), sizeof v); };
         for (float v : {float(w), float(h), r.topLeft, r.topRight, r.bottomRight, r.bottomLeft, blur, float(inner), grow * scale}) add(v);
         if (inner) for (float v : {std::round(hx), std::round(hy), std::round(hw), std::round(hh)}) add(v);
-        auto it = shadowMasks_.find(key);
-        if (it == shadowMasks_.end()) {
-            SDL_Texture* t = shadowMask(w, h, W, H, pad, r, r.grown(grow * scale), blur > 0 ? sigma : 0, inner, std::round(hx), std::round(hy),
-                                        std::round(hw), std::round(hh));
-            it = shadowMasks_.emplace(std::move(key), ShadowMask{t}).first;
-        }
-        it->second.used = true;
-        if (!it->second.texture) return;
-        SDL_SetTextureColorModFloat(it->second.texture, shadow.color.r, shadow.color.g, shadow.color.b);
-        SDL_SetTextureAlphaModFloat(it->second.texture, shadow.color.a);
         SDL_FRect d = inner ? SDL_FRect{float(x0), float(y0), float(W), float(H)}
                             : SDL_FRect{float(x0 - pad), float(y0 - pad), float(W), float(H)};
-        SDL_RenderTexture(renderer_, it->second.texture, nullptr, &d);
+        SDL_Texture* t = maskTexture(std::move(key), d, [&] {
+            return shadowCoverage(w, h, W, H, pad, r, r.grown(grow * scale), blur > 0 ? sigma : 0, inner, std::round(hx), std::round(hy), std::round(hw),
+                                  std::round(hh));
+        });
+        if (!t) return;
+        SDL_SetTextureColorModFloat(t, shadow.color.r, shadow.color.g, shadow.color.b);
+        SDL_SetTextureAlphaModFloat(t, shadow.color.a);
+        SDL_SetTextureBlendMode(t, blend_);  // (the blend mode drawn with)
+        SDL_RenderTexture(renderer_, t, nullptr, &d);
+    }
+
+    // A shadow's mask, cached by its key: its coverage as a white texture to tint, or (while a
+    // brushed shadow is drawn, see drawShapeShadow) white tinted by the brush where each of its
+    // pixels is, its alpha the coverage times the brush's.
+    SDL_Texture* maskTexture(std::string key, const SDL_FRect& at, const std::function<std::vector<float>()>& coverage) {
+        int W = int(at.w), H = int(at.h);
+        if (!shadowBrush_) {
+            auto it = shadowMasks_.find(key);
+            if (it == shadowMasks_.end()) {
+                std::vector<float> a = coverage();
+                it = shadowMasks_.emplace(std::move(key), ShadowMask{a.empty() ? nullptr : coverageTexture(a, W, H)}).first;
+            }
+            it->second.used = true;
+            return it->second.texture;
+        }
+        const auto& [brush, area] = *shadowBrush_;
+        // (The brush's area from the mask's corner: the same mask wherever the shape is.)
+        Rect rel{area.x - (at.x + ox_) / scale, area.y - (at.y + oy_) / scale, area.width, area.height};
+        for (BrushedMask& m : brushedMasks_)
+            if (m.key == key && m.brush == brush && m.area == rel && m.scale == scale) {
+                m.used = true;
+                return m.texture;
+            }
+        std::vector<float> a = coverage();
+        SDL_Texture* tex = nullptr;
+        if (!a.empty() && (tex = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, W, H))) {
+            std::vector<uint8_t> rgba(size_t(W) * size_t(H) * 4);
+            auto byte = [](float v) { return uint8_t(std::lround(std::clamp(v, 0.f, 1.f) * 255)); };
+            for (int y = 0; y < H; ++y)
+                for (int x = 0; x < W; ++x) {
+                    size_t i = size_t(y) * size_t(W) + size_t(x);
+                    Color c = brush.colorAt({(float(x) + 0.5f) / scale, (float(y) + 0.5f) / scale}, rel);
+                    rgba[i * 4] = byte(c.r), rgba[i * 4 + 1] = byte(c.g), rgba[i * 4 + 2] = byte(c.b), rgba[i * 4 + 3] = byte(c.a * a[i]);
+                }
+            SDL_UpdateTexture(tex, nullptr, rgba.data(), W * 4);
+            SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_LINEAR);
+        }
+        brushedMasks_.push_back({std::move(key), brush, rel, scale, tex});
+        return tex;
+    }
+
+    // Too big a shadow for a mask, drawn by the base class: a brushed one's in a layer, the brush
+    // kept where it is (SrcIn: where the renderer can't, the software one, drawn over it).
+    void unmasked(const std::function<void()>& draw) {
+        if (!shadowBrush_) return draw();
+        auto [brush, area] = *std::exchange(shadowBrush_, std::nullopt);
+        pushLayer(area, CornerRadii(), 1, {});
+        draw();
+        pushBlendMode(BlendMode::SrcIn);
+        fillGradient(area, CornerRadii(), brush, area);
+        popBlendMode();
+        popLayer();
+        shadowBrush_.emplace(std::move(brush), area);
+    }
+
+    // A shadow with a brush (not one color): as the base class draws one without (cut where its
+    // bitmap ends, in its blend mode), its mask colored by the brush over what it covers, faded by
+    // its alpha. (The base class's layer and SrcIn would need the layer's alpha, which SDL's
+    // software renderer loses: it blits textures onto it as if it were opaque.)
+    void drawShapeShadow(const Rect& rect, const Shape& shape, bool rtl, const Shadow& shadow, bool inner) override {
+        if (!shadow.brush || shadow.brush->isSolid()) return GraphicsContext::drawShapeShadow(rect, shape, rtl, shadow, inner);
+        float out = std::max(0.f, shadow.blurRadius) + std::max(0.f, shadow.spread);
+        Rect bitmap{rect.x - out + shadow.offset.x, rect.y - out + shadow.offset.y, rect.width + 2 * out, rect.height + 2 * out};
+        Shadow white = shadow;
+        white.brush.reset();
+        white.color = colors::White.copy(std::clamp(shadow.alpha, 0.f, 1.f));
+        white.alpha = 1;
+        shadowBrush_.emplace(filtered(*shadow.brush), inner ? rect : bitmap);
+        std::vector<ColorFilter> filters = std::exchange(filters_, {});  // (the brush's colors are filtered already)
+        GraphicsContext::drawShapeShadow(rect, shape, rtl, white, inner);
+        filters_ = std::move(filters);
+        shadowBrush_.reset();
     }
 
     // How much of a pixel at (x, y) a rounded rect from (0, 0), w x h, covers (its signed distance).
@@ -440,8 +512,8 @@ public:
 
     // `r`: the rect's corners (an inner shadow is cut to them); `shaped`: the shadow's shape's
     // (spread out for a drop shadow, in for an inner one's hole at hx, hy, hw x hh).
-    SDL_Texture* shadowMask(int w, int h, int W, int H, int pad, const CornerRadii& r, const CornerRadii& shaped, float sigma, bool inner,
-                            float hx, float hy, float hw, float hh) {
+    std::vector<float> shadowCoverage(int w, int h, int W, int H, int pad, const CornerRadii& r, const CornerRadii& shaped, float sigma, bool inner,
+                                      float hx, float hy, float hw, float hh) {
         // Drawn on a canvas `pad` bigger all round, blurred, then (inner) cut to the rect.
         int cw = (inner ? w : W) + (inner ? 2 * pad : 0), ch = (inner ? h : H) + (inner ? 2 * pad : 0);
         std::vector<float> a(size_t(cw) * size_t(ch));
@@ -458,7 +530,7 @@ public:
                 out[size_t(y) * size_t(W) + size_t(x)] =
                     inner ? a[size_t(y + pad) * size_t(cw) + size_t(x + pad)] * roundRectCoverage(float(x) + 0.5f, float(y) + 0.5f, float(w), float(h), r)
                           : a[size_t(y) * size_t(cw) + size_t(x)];
-        return coverageTexture(out, W, H);
+        return out;
     }
 
 
@@ -513,24 +585,22 @@ public:
         float fx = std::round((sx - std::floor(sx)) * 4) / 4, fy = std::round((sy - std::floor(sy)) * 4) / 4;  // quarter pixels
         int x0 = int(std::floor(sx)) - margin, y0 = int(std::floor(sy)) - margin;
         int W = int(std::ceil(b.width * scale + fx)) + 2 * margin, H = int(std::ceil(b.height * scale + fy)) + 2 * margin;
-        if (W > 4096 || H > 4096 || double(W) * H > 6e6) return GraphicsContext::drawShadowPath(outline, origin, original, inner);
+        if (W > 4096 || H > 4096 || double(W) * H > 6e6) return unmasked([&] { GraphicsContext::drawShadowPath(outline, origin, original, inner); });
         std::string key = "path";
         auto add = [&](float v) { key.append(reinterpret_cast<const char*>(&v), sizeof v); };
         uint64_t pk = pathKey(outline, PathStroke{});
         key.append(reinterpret_cast<const char*>(&pk), sizeof pk);
         for (float v : {fx, fy, blur, shadow.spread * scale, float(inner), inner ? shadow.offset.x * scale : 0.f, inner ? shadow.offset.y * scale : 0.f, scale})
             add(v);
-        auto it = shadowMasks_.find(key);
-        if (it == shadowMasks_.end()) {
+        SDL_FRect d{float(x0), float(y0), float(W), float(H)};
+        SDL_Texture* t = maskTexture(std::move(key), d, [&] {
             auto at = [&](float dx, float dy) {
                 return [&, dx, dy](float x, float y) { return SDL_FPoint{(x - b.x) * scale + fx + float(margin) + dx, (y - b.y) * scale + fy + float(margin) + dy}; };
             };
-            SDL_Texture* t = nullptr;
             std::vector<float> a = fillCoverage(outline, at(0, 0), W, H);
             if (!a.empty() && !inner) {
                 spreadCoverage(a, W, H, spread, shadow.spread > 0);
                 if (blur > 0) blurCoverage(a, W, H, sigma);
-                t = coverageTexture(a, W, H);
             } else if (!a.empty()) {
                 // Where a hole (the shape moved by the offset, shrunk by the spread) isn't, blurred, inside the shape.
                 std::vector<float> hole = fillCoverage(outline, at(shadow.offset.x * scale, shadow.offset.y * scale), W, H);
@@ -539,16 +609,14 @@ public:
                 for (float& v : hole) v = 1 - v;
                 if (blur > 0) blurCoverage(hole, W, H, sigma);
                 for (size_t i = 0; i < a.size(); ++i) a[i] *= hole[i];
-                t = coverageTexture(a, W, H);
             }
-            it = shadowMasks_.emplace(std::move(key), ShadowMask{t}).first;
-        }
-        it->second.used = true;
-        if (!it->second.texture) return;
-        SDL_SetTextureColorModFloat(it->second.texture, shadow.color.r, shadow.color.g, shadow.color.b);
-        SDL_SetTextureAlphaModFloat(it->second.texture, shadow.color.a);
-        SDL_FRect d{float(x0), float(y0), float(W), float(H)};
-        SDL_RenderTexture(renderer_, it->second.texture, nullptr, &d);
+            return a;
+        });
+        if (!t) return;
+        SDL_SetTextureColorModFloat(t, shadow.color.r, shadow.color.g, shadow.color.b);
+        SDL_SetTextureAlphaModFloat(t, shadow.color.a);
+        SDL_SetTextureBlendMode(t, blend_);  // (the blend mode drawn with)
+        SDL_RenderTexture(renderer_, t, nullptr, &d);
     }
 
     void drawImage(const ImageBitmap& unfiltered, const Rect& src, const Rect& dst, float alpha) override {
@@ -620,6 +688,8 @@ public:
         };
         switch (mode) {
         case BlendMode::DstIn: return custom(SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_SRC_ALPHA, SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_SRC_ALPHA);
+        // (The colors drawn aren't premultiplied: a translucent one comes out brighter.)
+        case BlendMode::SrcIn: return custom(SDL_BLENDFACTOR_DST_ALPHA, SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_DST_ALPHA, SDL_BLENDFACTOR_ZERO);
         case BlendMode::DstOut:
             return custom(SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA);
         case BlendMode::Clear: return custom(SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ZERO);
@@ -771,6 +841,14 @@ public:
         SDL_SetTextureColorModFloat(layer.texture, 1, 1, 1);
         SDL_SetTextureAlphaModFloat(layer.texture, 1);
         release(layer.texture);
+    }
+    // The light's center in the dp drawn in: the window's px less where the layers' textures start
+    // in it, through the translations (a transform's layer taken as unturned).
+    Offset lightCenter() const override {
+        float x = light.center.x * light.density, y = light.center.y * light.density;
+        for (const Layer& l : layers_)
+            if (l.texture) x -= float(l.rect.x), y -= float(l.rect.y);
+        return {(x + ox_) / scale, (y + oy_) / scale};
     }
     // How far a blur of `radius` dp spreads (px): three of Android's sigmas, whole pixels.
     float spread(float radius) const { return radius > 0 ? std::ceil(3 * (0.57735f * radius * scale + 0.5f)) : 0; }
@@ -1177,6 +1255,13 @@ public:
                 ++it;
             }
         }
+        std::erase_if(brushedMasks_, [](BrushedMask& m) {
+            m.idleFrames = m.used ? 0 : m.idleFrames + 1;
+            m.used = false;
+            if (m.idleFrames <= 60) return false;
+            if (m.texture) SDL_DestroyTexture(m.texture);
+            return true;
+        });
         std::erase_if(pathMotion_, [](auto& entry) { return ++entry.second.idleFrames > 60; });
         std::erase_if(gradients_, [](GradientMesh& g) {
             g.idleFrames = g.used ? 0 : g.idleFrames + 1;
@@ -1386,6 +1471,18 @@ private:
         int idleFrames = 0;
     };
     std::unordered_map<std::string, ShadowMask> shadowMasks_;
+    // A brushed shadow's (see maskTexture): its mask's key, the brush, its area from the mask's corner.
+    struct BrushedMask {
+        std::string key;
+        Brush brush;
+        Rect area;
+        float scale;
+        SDL_Texture* texture = nullptr;
+        bool used = true;
+        int idleFrames = 0;
+    };
+    std::vector<BrushedMask> brushedMasks_;
+    std::optional<std::pair<Brush, Rect>> shadowBrush_;  // while a brushed shadow is drawn
     // Where each path was last drawn within a pixel (quarter pixels), and for how many frames.
     struct PathMotion {
         float fx = -1, fy = -1;
@@ -1971,6 +2068,13 @@ void updateMetrics(App& app) {
     app.fonts->setFontScale(fontScale);
     app.host->setDensity({scale, fontScale});
     app.host->setViewportSize({float(pw) / scale, float(ph) / scale});
+    // Elevation shadows' light: above the window's top middle, as Android's (its theme's values).
+    kompoz::ShadowLight light;
+    light.center = {float(pw) / scale / 2, 0};
+    light.density = scale;
+    for (kompoz::GraphicsContext* c : {static_cast<kompoz::GraphicsContext*>(app.canvas.get()), static_cast<kompoz::GraphicsContext*>(app.gpuCanvas.get()),
+                                       static_cast<kompoz::GraphicsContext*>(app.display.get())})
+        if (c) c->light = light;
     const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(app.window));
     app.framePeriodNs = uint64_t(1e9 / (mode && mode->refresh_rate > 0 ? mode->refresh_rate : 60.f));
 

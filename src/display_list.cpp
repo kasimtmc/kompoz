@@ -76,7 +76,8 @@ bool DisplayList::Command::same(const Command& o) const {
            kompoz::same(rect2, o.rect2) && radii == o.radii && f1 == o.f1 && f2 == o.f2 && f3 == o.f3 && color == o.color &&
            kompoz::same(p1, o.p1) && kompoz::same(p2, o.p2) && flag == o.flag && font == o.font && vector == o.vector &&
            image == o.image && kompoz::same(stroke, o.stroke) && kompoz::same(transform, o.transform) && text == o.text &&
-           brush == o.brush && filter == o.filter && effect == o.effect && path == o.path && matrix == o.matrix;
+           brush == o.brush && filter == o.filter && effect == o.effect && elevated == o.elevated && shaped == o.shaped && path == o.path &&
+           matrix == o.matrix;
 }
 
 void DisplayList::begin(Size viewport, float pixel) {
@@ -227,6 +228,21 @@ void DisplayList::drawShadowPath(const Path& outline, Offset origin, const Shado
     }
 }
 
+// A brushed one (not one color) as it is, so that the canvas draws it its own way if it has one;
+// any other as the base class breaks it down. It reaches as far as its bitmap (where it is cut).
+void DisplayList::drawShapeShadow(const Rect& rect, const Shape& shape, bool rtl, const Shadow& shadow, bool inner) {
+    if (!shadow.brush || shadow.brush->isSolid()) return GraphicsContext::drawShapeShadow(rect, shape, rtl, shadow, inner);
+    if (shadow.alpha <= 0 || rect.width <= 0 || rect.height <= 0) return;
+    float out = std::max(0.f, shadow.blurRadius) + std::max(0.f, shadow.spread);
+    Rect area = inner ? rect : Rect{rect.x - out + shadow.offset.x, rect.y - out + shadow.offset.y, rect.width + 2 * out, rect.height + 2 * out};
+    if (Command* c = draw(Kind::ShapeShadow, area, 0)) {
+        c->rect = rect;
+        c->flag = rtl;
+        c->f1 = inner ? 1 : 0;
+        c->shaped = std::pair{shape, shadow};
+    }
+}
+
 void DisplayList::drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha) {
     if (image.empty() || alpha <= 0) return;
     if (Command* c = draw(Kind::Image, dst, 0)) c->image = image, c->rect = dst, c->rect2 = src, c->f1 = alpha;
@@ -299,6 +315,31 @@ void DisplayList::drawBackdrop(const Rect& bounds, const RenderEffect& effect, f
         c->effect = effect;
         c->f2 = alpha;
         c->rect2 = grown(states_.back().m.map(reads), 2 * pixel_);
+    }
+}
+
+// The light's center through the inverse of the transform drawn through (where it isn't one,
+// as given).
+Offset DisplayList::lightCenter() const {
+    const float* m = states_.back().m.m;
+    float a = m[4] * m[8] - m[5] * m[7], b = m[5] * m[6] - m[3] * m[8], c = m[3] * m[7] - m[4] * m[6];
+    float det = m[0] * a + m[1] * b + m[2] * c;
+    if (std::abs(det) < 1e-12f) return light.center;
+    float i[9] = {a, m[2] * m[7] - m[1] * m[8], m[1] * m[5] - m[2] * m[4], b, m[0] * m[8] - m[2] * m[6], m[2] * m[3] - m[0] * m[5],
+                  c, m[1] * m[6] - m[0] * m[7], m[0] * m[4] - m[1] * m[3]};
+    float x = light.center.x, y = light.center.y;  // (the screen's dp, as the transform's)
+    float w = i[6] * x + i[7] * y + i[8];
+    if (!(std::abs(w) > 1e-12f)) return light.center;
+    return {(i[0] * x + i[1] * y + i[2]) / w, (i[3] * x + i[4] * y + i[5]) / w};
+}
+
+// It reaches as far as Skia's bounds for it say (ElevationShadow::reach).
+void DisplayList::drawElevationShadow(const Outline& outline, Offset origin, const kompoz::ElevationShadow& shadow) {
+    Rect b = outline.bounds();
+    b.x += origin.x, b.y += origin.y;
+    if (Command* c = draw(Kind::ElevationShadow, shadow.reach(b, light, lightCenter()), 0)) {
+        c->p1 = origin;
+        c->elevated = std::pair{outline, shadow};
     }
 }
 
@@ -522,6 +563,8 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
             case Kind::Shadow: canvas.drawShadow(c.rect, c.radii, {c.color, c.p1, c.f1, c.f2}, c.flag); break;
             case Kind::ShadowPath: canvas.drawShadowPath(c.path, c.p2, {c.color, c.p1, c.f1, c.f2}, c.flag); break;
             case Kind::Backdrop: canvas.drawBackdrop(c.rect, *c.effect, c.f2); break;
+            case Kind::ElevationShadow: canvas.drawElevationShadow(c.elevated->first, c.p1, c.elevated->second); break;
+            case Kind::ShapeShadow: canvas.drawShapeShadow(c.rect, c.shaped->first, c.flag, c.shaped->second, c.f1 != 0); break;
             case Kind::Vector: canvas.drawVector(c.vector, c.rect, c.color); break;
             case Kind::Arc: canvas.drawArc(c.rect, c.f1, c.f2, c.f3, c.color, c.flag); break;
             case Kind::Image: canvas.drawImage(c.image, c.rect2, c.rect, c.f1); break;

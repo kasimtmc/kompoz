@@ -30,6 +30,7 @@
 #include <memory>
 #include <numbers>
 #include <string>
+#include <tuple>
 #include <vector>
 
 using namespace kompoz;
@@ -1966,6 +1967,29 @@ void pathShadowsAreComposes(Gpu& g) {
         CHECK(worst <= 2);
         if (worst > 2) std::printf("  inner shadow (spread %g): off by %d at (%g, %g)\n", spread, worst, worstAt.x, worstAt.y);
     }
+    // A brush: its color at each pixel over what the shadow covers (out to its radius and spread),
+    // times the shadow (as drawn white), times its alpha.
+    Rect card{24, 30, 40, 26};
+    Brush brush = Brush::linearGradient({Color{0.9f, 0.2f, 0.1f, 1}, Color{0.1f, 0.3f, 0.9f, 1}});
+    Shadow plain{colors::White, {2, 3}, 6, 2};
+    Image white = mask([&](GraphicsContext& c) { c.drawShapeShadow(card, RoundedCornerShape(8), false, plain, false); });
+    Shadow brushed = plain;
+    brushed.brush = brush, brushed.alpha = 0.8f;
+    Pixels gotBrush = g.render(n, n, 1, [&](GraphicsContext& c) { c.drawShapeShadow(card, RoundedCornerShape(8), false, brushed, false); });
+    float out = 6 + 2;
+    Rect area{card.x - out + 2, card.y - out + 3, card.width + 2 * out, card.height + 2 * out};
+    Image wantBrush{n, n, std::vector<float>(size_t(n) * n * 4, 0.f)};
+    for (int y = 0; y < n; ++y)
+        for (int x = 0; x < n; ++x) {
+            Color c = brush.colorAt({x + 0.5f, y + 0.5f}, area);
+            float a = white.at(x, y)[3] * 0.8f;
+            float* q = wantBrush.at(x, y);
+            q[0] = c.r * a, q[1] = c.g * a, q[2] = c.b * a, q[3] = a;
+        }
+    Pixels wantB = overWhite(wantBrush);
+    int brushWorst = worstAgainst(gotBrush, [&](int x, int y) { return wantB.at(x, y); });
+    CHECK(brushWorst <= 2);
+    if (brushWorst > 2) std::printf("  a brushed shadow: off by %d at (%g, %g)\n", brushWorst, worstAt.x, worstAt.y);
     // A shape along its bounds, at fractions of a pixel, not blurred: its edges cut once.
     Path box;
     box.addRect({20.5f, 30.25f, 40.3f, 25.6f});
@@ -1975,6 +1999,270 @@ void pathShadowsAreComposes(Gpu& g) {
     int worst = worstAgainst(got, [&](int x, int y) { return want.at(x, y); });
     CHECK(worst <= 2);
     if (worst > 2) std::printf("  a box's shadow: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+}
+
+// Elevation shadows are Android's: a rounded rect's (of one radius, a rect's, a circle's), flat,
+// through a similarity, as Skia's drawFastShadow and ShadowRRectOp draw it, worked out here per
+// pixel in double: the ambient shadow the outline spread by r = z / 2 px (up to 150), falling off
+// as exp(-4 (1 - t)^2) - 0.018 over b = r (1 + z / 128) in from there; the spot one the outline cast
+// from the light (above the window's top middle, 500 dp up, 800 dp across), spread by its blur
+// and falling off over twice that; each left out under an opaque caster. Then: a layer's the
+// same as the screen's; any other outline, and a perspective, as Skia blurs them.
+void elevationShadowsAreAndroids(Gpu& g) {
+    const int n = 160;
+    float k = 2.625f;  // a phone's px a dp
+    ShadowLight light;
+    light.center = {n / k / 2, 0};
+    light.density = k;
+    g.renderer->light = light;
+    struct Caster {
+        Rect rect;  // dp
+        float radius, elevation, alpha;
+        float turn;  // degrees about its middle
+        Color ambient, spot;
+    };
+    // The model: coverage of a rounded rect's falloff (distances in px), at a px of the target.
+    auto falloff = [](double d, double blur, double hole) {
+        if (d <= 0 || (hole > 0 && d >= hole)) return 0.0;
+        double t = std::clamp(d / blur, 0.0, 1.0);
+        return std::max(std::exp(-4 * (1 - t) * (1 - t)) - 0.018, 0.0);
+    };
+    auto inRoundRect = [](double x, double y, double l, double t, double r, double b, double radius) {  // how far in from its edge
+        double cx = (l + r) / 2, cy = (t + b) / 2, hx = (r - l) / 2, hy = (b - t) / 2;
+        double qx = std::abs(x - cx) - (hx - radius), qy = std::abs(y - cy) - (hy - radius);
+        double outside = std::hypot(std::max(qx, 0.0), std::max(qy, 0.0)) + std::min(std::max(qx, qy), 0.0) - radius;
+        return -outside;
+    };
+    auto expected = [&](const Caster& c) {
+        Image out{n, n, std::vector<float>(size_t(n) * n * 4, 0.f)};
+        double cx = (c.rect.x + c.rect.width / 2) * k, cy = (c.rect.y + c.rect.height / 2) * k;
+        double turn = c.turn * std::numbers::pi / 180, cs = std::cos(turn), sn = std::sin(turn);
+        double l = c.rect.x * k, t = c.rect.y * k, r = c.rect.right() * k, b = c.rect.bottom() * k, rad = std::min<double>(c.radius, std::min(c.rect.width, c.rect.height) / 2) * k;
+        double z = c.elevation * k, alpha = c.alpha;
+        bool opaque = alpha >= 1;
+        // Ambient (device px, the caster's frame: turned back about its middle).
+        double inset = std::min(z / 2, 150.0), blurA = inset * (1 + z / 128);
+        // Spot: cast from the light.
+        double lx = light.center.x * k, ly = light.center.y * k, lz = light.z * k, lr = light.radius * k;
+        double ratio = std::clamp(z / (lz - z), 0.0, 0.95), sc = std::clamp(lz / (lz - z), 1.0, 1.95), blurS = lr * ratio;
+        // The cast caster: its middle cast, its size scaled (a turned rect stays one, turned the same).
+        double ccx = sc * cx - ratio * lx, ccy = sc * cy - ratio * ly;
+        double hw = (r - l) / 2 * sc, hh = (b - t) / 2 * sc, crad = rad * sc;
+        double maxOffset;
+        double ol = ccx - hw, ot = ccy - hh, orr = ccx + hw, ob = ccy + hh;  // (in the caster's frame, about the middle)
+        double dl = (ol - (cx - (r - l) / 2)), dt = (ot - (cy - (b - t) / 2)), dr2 = (orr - (cx + (r - l) / 2)), db = (ob - (cy + (b - t) / 2));
+        // (offsets measured in the caster's frame: its middle's move turned back)
+        double mx = (ccx - cx) * cs + (ccy - cy) * sn, my = -(ccx - cx) * sn + (ccy - cy) * cs;
+        dl = mx - (hw - (r - l) / 2), dr2 = mx + (hw - (r - l) / 2), dt = my - (hh - (b - t) / 2), db = my + (hh - (b - t) / 2);
+        if (rad <= 0) {
+            maxOffset = std::max({std::abs(dl), std::abs(dt), std::abs(dr2), std::abs(db)});
+        } else {
+            double drr = crad - rad;
+            double ux = dl + drr, uy = dt + drr, vx = dr2 - drr, vy = db - drr;
+            maxOffset = std::sqrt(std::max(ux * ux + uy * uy, vx * vx + vy * vy)) + drr;
+        }
+        double insetS = blurS + std::max(blurS, maxOffset);
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x) {
+                double px = x + 0.5, py = y + 0.5;
+                // Into the caster's frame (turned back about its middle).
+                double ax = cx + (px - cx) * cs + (py - cy) * sn, ay = cy - (px - cx) * sn + (py - cy) * cs;
+                double dA = inRoundRect(ax, ay, l - inset, t - inset, r + inset, b + inset, rad + inset);
+                double fa = falloff(dA, blurA, opaque ? inset : -1);
+                double sx = ccx + (px - ccx) * cs + (py - ccy) * sn, sy = ccy - (px - ccx) * sn + (py - ccy) * cs;
+                double dS = inRoundRect(sx, sy, ccx - hw - blurS, ccy - hh - blurS, ccx + hw + blurS, ccy + hh + blurS, crad + blurS);
+                double fs = falloff(dS, 2 * blurS, opaque ? insetS : -1);
+                float* q = out.at(x, y);
+                double aa = c.ambient.a * light.ambientAlpha * alpha * fa, sa = c.spot.a * light.spotAlpha * alpha * fs;
+                // The two over each other (premultiplied).
+                double ra = c.ambient.r * aa, ga = c.ambient.g * aa, ba = c.ambient.b * aa;
+                double rs = c.spot.r * sa, gs = c.spot.g * sa, bs = c.spot.b * sa;
+                q[0] = float(rs + ra * (1 - sa)), q[1] = float(gs + ga * (1 - sa)), q[2] = float(bs + ba * (1 - sa)), q[3] = float(sa + aa * (1 - sa));
+            }
+        return overWhite(out);
+    };
+    auto drawn = [&](const Caster& c) {
+        return g.render(n, n, k, [&](GraphicsContext& ctx) {
+            if (c.turn != 0) {
+                Matrix m;
+                Offset mid = c.rect.center();
+                m.translate(mid.x, mid.y);
+                m.rotateZ(c.turn);
+                m.translate(-mid.x, -mid.y);
+                ctx.pushTransform(m);
+            }
+            Outline o = c.radius > 0 ? Outline::Rounded({{0, 0, c.rect.width, c.rect.height}, c.radius, c.radius, c.radius, c.radius})
+                                     : Outline::Rectangle({0, 0, c.rect.width, c.rect.height});
+            ctx.drawElevationShadow(o, {c.rect.x, c.rect.y}, ElevationShadow{{0, 0, c.elevation}, c.ambient, c.spot, c.alpha});
+            if (c.turn != 0) ctx.popTransform();
+        });
+    };
+    Color black{0, 0, 0, 1}, tint{0.8f, 0.1f, 0.5f, 1};
+    const Caster casters[] = {{{8, 14, 28, 20}, 6, 6, 1, 0, black, black},       // left of the light
+                              {{30, 30, 24, 16}, 6, 12, 1, 0, black, black},     // right of it, higher
+                              {{10, 30, 20, 20}, 10, 8, 1, 0, black, tint},      // a circle; a colored spot
+                              {{12, 12, 30, 20}, 0, 4, 1, 0, black, black},      // a rect
+                              {{14, 16, 26, 22}, 5, 8, 0.6f, 0, black, black},   // seen through: under it too
+                              {{16, 18, 26, 18}, 4, 6, 1, 30, tint, black}};     // turned
+    for (const Caster& c : casters) {
+        Pixels got = drawn(c), want = expected(c);
+        int worst = worstAgainst(got, [&](int x, int y) { return want.at(x, y); });
+        CHECK(worst <= 2);
+        if (worst > 2) std::printf("  elevation shadow (%g dp up, turned %g): off by %d at (%g, %g)\n", c.elevation, c.turn, worst, worstAt.x, worstAt.y);
+    }
+    // In an offscreen layer: the light where the window's is (the layer moved; a narrow light, so
+    // that where it is shows), and in one a transform enlarges, as Android works it out in the
+    // layer's px, then enlarges it (its spot shadow as one drawn at twice the density, the light's
+    // center where it lands: half as many dp).
+    ShadowLight narrow = light;
+    narrow.radius = 30;
+    g.renderer->light = narrow;
+    auto inLayer = [&](bool layered) {
+        return g.render(n, n, k, [&](GraphicsContext& ctx) {
+            if (layered) ctx.pushLayer({7, 9, 40, 34}, 0, 1);
+            ctx.drawElevationShadow(Outline::Rounded({{0, 0, 22, 14}, 4, 4, 4, 4}), {16, 18}, ElevationShadow{{0, 0, 24}, black, black, 1});
+            if (layered) ctx.popLayer();
+        });
+    };
+    Pixels screen = inLayer(false), layer = inLayer(true);
+    g.renderer->light = light;
+    int worst = worstAgainst(layer, [&](int x, int y) { return screen.at(x, y); });
+    CHECK(worst <= 2);
+    if (worst > 2) std::printf("  elevation shadow in a layer: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+    Outline small = Outline::Rounded({{0, 0, 14, 10}, 3, 3, 3, 3});
+    Pixels enlarged = g.render(n, n, k, [&](GraphicsContext& ctx) {
+        Matrix m;
+        m.scale(2, 2);
+        ctx.pushTransform(m);
+        ctx.pushLayer({0, 0, 30, 30}, 0, 1);
+        ctx.drawElevationShadow(small, {6, 8}, ElevationShadow{{0, 0, 6}, colors::Transparent, black, 1});
+        ctx.popLayer();
+        ctx.popTransform();
+    });
+    ShadowLight denser = light;
+    denser.density = 2 * k, denser.center = {light.center.x / 2, light.center.y / 2};
+    g.renderer->light = denser;
+    Pixels twice = g.render(n, n, 2 * k, [&](GraphicsContext& ctx) {
+        ctx.drawElevationShadow(small, {6, 8}, ElevationShadow{{0, 0, 6}, colors::Transparent, black, 1});
+    });
+    g.renderer->light = light;
+    worst = worstAgainst(enlarged, [&](int x, int y) { return twice.at(x, y); });
+    CHECK(worst <= 2);
+    if (worst > 2) std::printf("  elevation shadow in an enlarged layer: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+    // Any other outline: blurred as Skia does (the ambient shadow its outline stroked and filled, the
+    // spot one cast), against those masks drawn sharp here.
+    Path star;
+    for (int i = 0; i < 10; ++i) {
+        double a = i * std::numbers::pi / 5 - std::numbers::pi / 2, r = i % 2 ? 6 : 14;
+        Offset p{float(30 + r * std::cos(a)), float(28 + r * std::sin(a))};
+        if (i == 0) star.moveTo(p.x, p.y);
+        else star.lineTo(p.x, p.y);
+    }
+    star.close();
+    float elevation = 8, z = elevation * k;
+    auto mask = [&](const std::function<void(GraphicsContext&)>& draw) {
+        Pixels p = g.render(n, n, k, draw, {0, 0, 0, 0});
+        Image out{n, n, std::vector<float>(size_t(n) * n * 4, 0.f)};
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x) out.at(x, y)[3] = p.at(x, y)[3] / 255.f;
+        return out;
+    };
+    float outset = std::min(z / 2, 150.f), blurA = 0.5f * outset * (1 + z / 128), stroke = 0.5f * (outset - blurA);
+    Image ambientMask = mask([&](GraphicsContext& c) {
+        c.drawPath(star, {0, 0}, Brush::solid(black), {}, {});
+        if (stroke > 0) c.drawPath(star, {0, 0}, Brush::solid(black), {}, PathStroke{stroke / k});
+    });
+    float lz = light.z * k, ratio = z / (lz - z), sc = lz / (lz - z), blurS = light.radius * k * ratio;
+    Image spotMask = mask([&](GraphicsContext& c) {
+        Matrix m;  // (the cast: scaled about the light's foot, in dp)
+        m.translate(-ratio * light.center.x, -ratio * light.center.y);
+        m.scale(sc, sc);
+        c.pushTransform(m);
+        c.drawPath(star, {0, 0}, Brush::solid(black), {}, {});
+        c.popTransform();
+    });
+    Image a = gaussian(ambientMask, {0, 0, n, n}, TileMode::Decal, sigmaOf(blurA), sigmaOf(blurA));
+    Image sp = gaussian(spotMask, {0, 0, n, n}, TileMode::Decal, sigmaOf(blurS), sigmaOf(blurS));
+    Image both{n, n, std::vector<float>(size_t(n) * n * 4, 0.f)};
+    for (int y = 0; y < n; ++y)
+        for (int x = 0; x < n; ++x) {
+            float aa = a.at(x, y)[3] * light.ambientAlpha, ss = sp.at(x, y)[3] * light.spotAlpha;
+            both.at(x, y)[3] = ss + aa * (1 - ss);
+        }
+    Pixels gotStar = g.render(n, n, k, [&](GraphicsContext& c) { c.drawElevationShadow(Outline::Generic(star), {0, 0}, ElevationShadow{{0, 0, elevation}}); });
+    Pixels wantStar = overWhite(both);
+    worst = worstAgainst(gotStar, [&](int x, int y) { return wantStar.at(x, y); });
+    CHECK(worst <= 2);
+    if (worst > 2) std::printf("  a star's elevation shadow: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+    // Its ambient shadow alone, at full strength (the stroke under the blur showing).
+    ShadowLight bright = light;
+    bright.ambientAlpha = 1;
+    g.renderer->light = bright;
+    Pixels gotAmbient = g.render(n, n, k, [&](GraphicsContext& c) {
+        c.drawElevationShadow(Outline::Generic(star), {0, 0}, ElevationShadow{{0, 0, elevation}, black, colors::Transparent, 1});
+    });
+    g.renderer->light = light;
+    Image ambientOnly{n, n, std::vector<float>(size_t(n) * n * 4, 0.f)};
+    for (int y = 0; y < n; ++y)
+        for (int x = 0; x < n; ++x) ambientOnly.at(x, y)[3] = a.at(x, y)[3];
+    Pixels wantAmbient = overWhite(ambientOnly);
+    worst = worstAgainst(gotAmbient, [&](int x, int y) { return wantAmbient.at(x, y); });
+    CHECK(worst <= 2);
+    if (worst > 2) std::printf("  a star's ambient shadow: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+    // In perspective (further to the right, to the left, down; and turned half round as well): the
+    // spot shadow of a right triangle (mirrored, it wouldn't be the same) its corners cast from the
+    // light (each at its own height), blurred.
+    Rect box{10, 14, 30, 20};
+    auto perspective = [&](int row, float w, float turn) {
+        Matrix m;
+        if (turn != 0) {
+            Offset mid = box.center();
+            m.translate(mid.x, mid.y);
+            m.rotateZ(turn);
+            m.translate(-mid.x, -mid.y);
+        }
+        Matrix seen;
+        seen(row, 3) = w;  // w = 1 + x (or y) * that (dp)
+        seen *= m;
+        return seen;
+    };
+    for (auto [row, w, turn] : {std::tuple{0, 0.004f, 0.f}, std::tuple{0, -0.004f, 0.f}, std::tuple{1, 0.005f, 0.f}, std::tuple{0, 0.004f, 180.f}}) {
+        Matrix seen = perspective(row, w, turn);
+        std::array<Offset, 3> cast;
+        const Offset corners[3] = {{box.x, box.y}, {box.right(), box.y}, {box.x, box.bottom()}};
+        for (int i = 0; i < 3; ++i) {
+            Offset d = seen.map(corners[i]);
+            d = {d.x * k, d.y * k};
+            double lx = light.center.x * k, ly = light.center.y * k, rr = z / (lz - z);
+            cast[size_t(i)] = {float(d.x - (lx - d.x) * rr), float(d.y - (ly - d.y) * rr)};
+        }
+        Image cut = mask([&](GraphicsContext& c) {
+            Path p;
+            p.moveTo(cast[0].x / k, cast[0].y / k);
+            for (int i = 1; i < 3; ++i) p.lineTo(cast[size_t(i)].x / k, cast[size_t(i)].y / k);
+            p.close();
+            c.drawPath(p, {0, 0}, Brush::solid(black), {}, {});
+        });
+        Image cutBlur = gaussian(cut, {0, 0, n, n}, TileMode::Decal, sigmaOf(blurS), sigmaOf(blurS));
+        Image spotOnly{n, n, std::vector<float>(size_t(n) * n * 4, 0.f)};
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x) spotOnly.at(x, y)[3] = cutBlur.at(x, y)[3] * light.spotAlpha;
+        Path triangle;
+        triangle.moveTo(0, 0);
+        triangle.lineTo(box.width, 0);
+        triangle.lineTo(0, box.height);
+        triangle.close();
+        Pixels gotSeen = g.render(n, n, k, [&](GraphicsContext& c) {
+            c.pushTransform(seen);
+            c.drawElevationShadow(Outline::Generic(triangle), {box.x, box.y}, ElevationShadow{{0, 0, elevation}, colors::Transparent, black, 1});
+            c.popTransform();
+        });
+        Pixels wantSeen = overWhite(spotOnly);
+        worst = worstAgainst(gotSeen, [&](int x, int y) { return wantSeen.at(x, y); });
+        CHECK(worst <= 3);
+        if (worst > 3) std::printf("  elevation shadow in perspective (%c %g, turned %g): off by %d at (%g, %g)\n", row ? 'y' : 'x', w, turn, worst, worstAt.x, worstAt.y);
+    }
+    g.renderer->light = {};
 }
 
 // Curves cut into lines stay within kTolerance of the curve, in the target's pixels.
@@ -2089,6 +2377,7 @@ int main() {
             graphicsLayersCompositeAsCompose(g);
             blursAreGaussian(g);
             pathShadowsAreComposes(g);
+            elevationShadowsAreAndroids(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
             std::printf("%d checks, %d failed\n", checks, failures);

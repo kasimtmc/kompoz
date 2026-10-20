@@ -128,6 +128,7 @@ public:
         CornerRadii radii;
         Shadow shadow;
         bool inner = false;
+        BlendMode blend = BlendMode::SrcOver;  // what it was drawn with
     };
     std::vector<ShapeShadow> shadows;  // drawShadow calls (dropShadow, innerShadow)
     struct PathShadow {
@@ -136,13 +137,18 @@ public:
         bool inner = false;
     };
     std::vector<PathShadow> pathShadows;  // drawShadowPath calls (an outline shape's)
+    std::vector<Rect> brushedShadows;     // drawShapeShadow calls with a brush (not one color): where the shape is
+    void drawShapeShadow(const Rect& rect, const Shape& shape, bool rtl, const Shadow& shadow, bool inner) override {
+        if (shadow.brush && !shadow.brush->isSolid()) brushedShadows.push_back(moved(rect));
+        GraphicsContext::drawShapeShadow(rect, shape, rtl, shadow, inner);
+    }
     void drawShadowPath(const Path& outline, Offset origin, const Shadow& shadow, bool inner) override {
         Rect b = outline.bounds();
         pathShadows.push_back({moved({origin.x + b.x, origin.y + b.y, b.width, b.height}), shadow, inner});
     }
     void drawShadow(const Rect& rect, const CornerRadii& radii, const Shadow& shadow, bool inner) override {
         order += 's';
-        shadows.push_back({moved(rect), radii, shadow, inner});
+        shadows.push_back({moved(rect), radii, shadow, inner, blend()});
     }
     std::vector<Rect> brushAreas;  // each text painted with a brush (in texts too, in the color at the area's center)
     void drawTextBrush(std::string_view text, Offset baseline, const Font& font, const Brush& brush, const Rect& area,
@@ -184,6 +190,18 @@ public:
     }
     void popLayer() override { --depth; }
     std::vector<Path> layerOutlines;  // each outline layer's outline (pushOutlineLayer), from its top left
+    struct Elevated {
+        Rect bounds;  // the outline's, where it is
+        Outline outline;
+        ElevationShadow shadow;
+        float elevation() const { return shadow.plane[2]; }  // (flat)
+    };
+    std::vector<Elevated> elevationShadows;  // drawElevationShadow calls
+    void drawElevationShadow(const Outline& outline, Offset origin, const ElevationShadow& shadow) override {
+        order += 'e';
+        Rect b = outline.bounds();
+        elevationShadows.push_back({moved({b.x + origin.x, b.y + origin.y, b.width, b.height}), outline, shadow});
+    }
     struct Backdrop {
         Rect bounds;
         RenderEffect effect;

@@ -455,8 +455,8 @@ void ShapesSection(CallSite site) {
         const ColorScheme& cs = colorScheme();
         auto taps = remember([] { return mutableStateOf(0); });
         Section("Şekiller (OutlineShape)", [&] {
-            // dropShadow / innerShadow: a soft shadow under a card, a colored glow (spread), and a
-            // shadow inside a well, as if its edge cast it.
+            // dropShadow / innerShadow: a soft shadow under a card, a glow (spread) in a gradient
+            // (a brush), and a shadow inside a well, as if its edge cast it.
             Row(Modifier().fillMaxWidth().padding(0, 8), {.horizontalArrangement = Arrangement::SpaceEvenly}, [&] {
                 Box(Modifier()
                         .size(88, 64)
@@ -465,7 +465,8 @@ void ShapesSection(CallSite site) {
                     Alignment::Center, [&] { Text("dropShadow", {.font = typography().labelSmall}); });
                 Box(Modifier()
                         .size(88, 64)
-                        .dropShadow(CircleShape, Shadow{cs.primary.copy(0.6f), {}, 12, 4})
+                        .dropShadow(CircleShape, Shadow{.blurRadius = 12, .spread = 4,
+                                                        .brush = Brush::horizontalGradient({cs.primary, cs.tertiary}), .alpha = 0.7f})
                         .background(cs.primary, CircleShape),
                     Alignment::Center, [&] { Text("parıltı", {.font = typography().labelSmall, .color = cs.onPrimary}); });
                 Box(Modifier()

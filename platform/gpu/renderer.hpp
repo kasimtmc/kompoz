@@ -77,6 +77,7 @@ public:
     void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform = {}) override;
     void pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) override;
     void drawBackdrop(const Rect& bounds, const RenderEffect& effect, float alpha) override;
+    void drawElevationShadow(const Outline& outline, Offset origin, const ElevationShadow& shadow) override;
 
 private:
     // One quad: what shaders/primitives.slang's Instance says.
@@ -166,6 +167,7 @@ private:
         size_t pass;
         float ox, oy;  // the pixel origin
         Projective transform;
+        Projective windowFromTarget;
         std::vector<Clip> clips;
         std::vector<Placement> placements;
         std::vector<BlendMode> blends;
@@ -290,6 +292,7 @@ private:
     std::vector<GlyphQuad> glyphs_;
     float ox_ = 0, oy_ = 0;  // the current target's pixel origin
     Projective transform_;   // the current target's pixels after the origin: what pushTransform makes of them
+    Projective windowFromTarget_;  // where the current target's pixels are in the window's (the light's)
     std::vector<Clip> clips_;
     std::vector<Placement> placements_;  // pushTranslation's and pushTransform's
     std::vector<ClipChain> clipChains_;  // this frame's
