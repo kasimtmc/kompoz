@@ -657,6 +657,7 @@ public:
                 continue;
             }
             float x = spread(step.radiusX) / scale, y = spread(step.radiusY) / scale;
+            if (step.progressive) x = y = std::ceil(widest(*step.progressive) + 1) / scale;
             area = {area.x - x, area.y - y, area.width + 2 * x, area.height + 2 * y};
         }
         pushLayer(area, CornerRadii(), alpha, {});
@@ -666,7 +667,14 @@ public:
         int x0 = int(std::floor(bounds.x * scale - layer.ox)), y0 = int(std::floor(bounds.y * scale - layer.oy));
         int x1 = int(std::ceil(bounds.right() * scale - layer.ox)), y1 = int(std::ceil(bounds.bottom() * scale - layer.oy));
         layer.content = {x0 - layer.rect.x, y0 - layer.rect.y, x1 - x0, y1 - y0};
+        layer.bounds = bounds;
         layer.transform.translationX = moved.x, layer.transform.translationY = moved.y;
+    }
+    // A progressive blur's widest radius (px), as Compose's: no more than 150.
+    float widest(const RenderEffect::Progressive& p) const {
+        float most = 0;
+        for (const auto& [at, radius] : p.stops) most = std::max(most, radius);
+        return std::min(most * scale, 150.f);
     }
     // How far a blur of `radius` dp spreads (px): three of Android's sigmas, whole pixels.
     float spread(float radius) const { return radius > 0 ? std::ceil(3 * (0.57735f * radius * scale + 0.5f)) : 0; }
@@ -1130,6 +1138,7 @@ private:
         int texW = 0, texH = 0;  // the pooled texture can be a little bigger than rect
         std::optional<RenderEffect> effect;  // an effect layer's (pushEffectLayer)
         SDL_Rect content{};               // and the texture's pixels its bounds cover
+        Rect bounds;                      // and those bounds (dp)
         std::array<float, 9> matrix{};    // pushTransform's, in the parent's pixels (row by row), if matrixSet
         bool matrixSet = false;
         std::optional<ClipMask> clip;     // a clip's layer: kept only inside (or outside) this
@@ -1186,6 +1195,10 @@ private:
         SDL_Rect valid = layer.content;
         tileLayer(layer, valid, TileMode::Decal);
         for (const RenderEffect::Step& step : layer.effect->steps()) {
+            if (step.progressive) {
+                progressiveLayer(layer, valid, step);
+                continue;
+            }
             if (step.kind != RenderEffect::Step::Kind::Blur || (step.radiusX <= 0 && step.radiusY <= 0)) continue;
             if (step.edgeTreatment != TileMode::Decal) tileLayer(layer, valid, step.edgeTreatment);
             float bx = step.radiusX * scale, by = step.radiusY * scale;
@@ -1197,6 +1210,66 @@ private:
             valid = {l, t, r - l, b - t};
             tileLayer(layer, valid, TileMode::Decal);
         }
+    }
+    // A progressive blur, roughly: the layer's pixels as they are where it blurs least, blurred by
+    // its widest radius where it blurs most, mixed between by how much it blurs at each pixel (a
+    // mask drawn as a gradient of its stops). The software renderer blurs nothing: as it is.
+    void progressiveLayer(Layer& layer, SDL_Rect& valid, const RenderEffect::Step& step) {
+        const RenderEffect::Progressive& p = *step.progressive;
+        float most = 0;
+        for (const auto& [at, radius] : p.stops) most = std::max(most, radius);
+        int w = layer.rect.w, h = layer.rect.h, tw = 0, th = 0;
+        if (software_ || most <= 0) return;
+        SDL_Texture* sharp = acquire(w, h, &tw, &th);
+        SDL_Texture* mask = sharp ? acquire(w, h, &tw, &th) : nullptr;
+        if (!mask) {
+            if (sharp) release(sharp);
+            return;
+        }
+        SDL_FRect all{0, 0, float(w), float(h)};
+        SDL_SetRenderClipRect(renderer_, nullptr);
+        auto copy = [&](SDL_Texture* from, SDL_Texture* to, SDL_BlendMode mode) {
+            SDL_SetRenderTarget(renderer_, to);
+            SDL_SetTextureBlendMode(from, mode);
+            SDL_RenderTexture(renderer_, from, &all, &all);
+        };
+        SDL_SetRenderTarget(renderer_, sharp);
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+        SDL_RenderClear(renderer_);
+        copy(layer.texture, sharp, SDL_BLENDMODE_NONE);
+        // The mask: white, as opaque as it blurs, in the layer's pixels (its origin still the layer's).
+        std::vector<ColorStop> stops;
+        for (const auto& [at, radius] : p.stops) stops.push_back({at, Color{1, 1, 1, radius / most}});
+        if (stops.size() == 1) stops.push_back({1, stops.front().color});
+        // (Over the texture's area, whose top left its points are from.)
+        Rect area{(float(layer.rect.x) + layer.ox) / scale, (float(layer.rect.y) + layer.oy) / scale, float(w) / scale, float(h) / scale};
+        Offset o{layer.bounds.x - area.x, layer.bounds.y - area.y}, start{o.x + p.start.x, o.y + p.start.y};
+        Brush brush = p.radial ? Brush::radialGradient(stops, start, std::max(p.radius, 1e-3f))
+                               : Brush::linearGradient(stops, start, {o.x + p.end.x, o.y + p.end.y});
+        std::vector<ColorFilter> filters = std::exchange(filters_, {});
+        std::vector<BlendMode> blends = std::exchange(blends_, {});
+        applyBlend();
+        SDL_SetRenderTarget(renderer_, mask);
+        SDL_RenderClear(renderer_);
+        fillGradient(area, CornerRadii(), brush, area);
+        filters_ = std::move(filters);
+        blends_ = std::move(blends);
+        applyBlend();
+        // Blurred where it blurs most, kept by the mask; the sharp pixels where it doesn't; both added up.
+        if (step.edgeTreatment != TileMode::Decal) tileLayer(layer, valid, TileMode::Clamp);
+        blurLayer(layer.texture, w, h, widest(p), widest(p));
+        auto times = [](SDL_BlendFactor keep) {
+            return SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ZERO, keep, SDL_BLENDOPERATION_ADD, SDL_BLENDFACTOR_ZERO, keep, SDL_BLENDOPERATION_ADD);
+        };
+        copy(mask, layer.texture, times(SDL_BLENDFACTOR_SRC_ALPHA));
+        copy(mask, sharp, times(SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA));
+        copy(sharp, layer.texture, SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD, SDL_BLENDFACTOR_ONE,
+                                                              SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD));
+        release(sharp);
+        release(mask);
+        int g = int(std::ceil(widest(p)));
+        int l = std::max(0, valid.x - g), t = std::max(0, valid.y - g);
+        valid = {l, t, std::min(w, valid.x + valid.w + g) - l, std::min(h, valid.y + valid.h + g) - t};
     }
     std::vector<bool> transformLayers_;  // each pushTransform: drawn through a layer (else a translation)
     struct ImageTexture {

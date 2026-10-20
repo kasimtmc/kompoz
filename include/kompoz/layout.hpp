@@ -1173,6 +1173,16 @@ struct BlurredEdgeTreatment {
 inline const BlurredEdgeTreatment BlurredEdgeTreatment::Rectangle{RectangleShape};
 inline const BlurredEdgeTreatment BlurredEdgeTreatment::Unbounded{};
 
+// What Modifier::blur's block sets while drawing (Compose's BlurScope), each time from these: how
+// much it blurs where, its edges, its alpha; the node's size (dp) to read.
+struct BlurScope {
+    Size size;
+    BlurRadiusSpec blurRadiusSpec = BlurRadiusSpec::uniform(0);
+    BlurredEdgeTreatment edgeTreatment = BlurredEdgeTreatment::Rectangle;
+    float alpha = 1;
+    friend bool operator==(const BlurScope&, const BlurScope&) = default;
+};
+
 // How graphicsLayer() composites its content (Compose's CompositingStrategy): Auto uses an
 // offscreen layer only when it needs one (alpha, a transform, a shaped clip); Offscreen always
 // does, so blend modes inside (BlendMode::DstIn to fade an edge) act on the layer alone, not on
@@ -1850,6 +1860,13 @@ public:
         return blur(radius, radius, edgeTreatment);
     }
     Modifier blur(float radiusX, float radiusY, const BlurredEdgeTreatment& edgeTreatment = BlurredEdgeTreatment::Rectangle) const;
+    // Blurred as much as `blurRadiusSpec` says where (a progressive blur: Compose 1.13's), clipped
+    // to the edge treatment's shape if it has one, faded by `alpha`: always a graphicsLayer, which
+    // a uniform radius of 0 leaves without an effect.
+    Modifier blur(const BlurRadiusSpec& blurRadiusSpec, const BlurredEdgeTreatment& edgeTreatment = BlurredEdgeTreatment::Rectangle,
+                  float alpha = 1) const;
+    // The same, set by `block` while drawing: animated values read there never recompose.
+    Modifier blur(std::function<void(BlurScope&)> block) const;
     // Evaluated while drawing: animated values read here never recompose.
     Modifier graphicsLayer(std::function<void(GraphicsLayerScope&)> block) const;
     // `enabled` false: scrolled only in code; `reverseScrolling`: it starts at the end (the bottom,

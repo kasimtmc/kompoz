@@ -1506,6 +1506,69 @@ Pixels overWhite(Image image) {
 }
 float sigmaOf(float radiusPx) { return 0.57735f * radiusPx + 0.5f; }  // Android's
 
+// What Compose's progressive blur makes of a layer's pixels (its BlurShaders, done here in double):
+// across, then down, each pixel by its radius (`widest` px times where it lies between the stops,
+// from `fraction`), the pixels sampled linearly (nothing past the layer's, `bounds`), the taps past
+// the bounds on the axis left out and counted when `decal`. `unit`: pixels a px.
+Image progressiveOf(const Image& in, gpu::IRect bounds, float widest, const std::vector<std::pair<float, float>>& stops,
+                    const std::function<double(double, double)>& fraction, bool decal, double unit = 1) {
+    auto intensity = [&](double t) {
+        if (t <= stops.front().first) return double(stops.front().second);
+        for (size_t i = 0; i + 1 < stops.size(); ++i) {
+            double a = stops[i].first, b = stops[i + 1].first;
+            if (t >= a && t <= b) return stops[i].second + (stops[i + 1].second - stops[i].second) * std::clamp((t - a) / std::max(b - a, 0.0001), 0.0, 1.0);
+        }
+        return double(stops.back().second);
+    };
+    auto pass = [&](const Image& from, bool down) {
+        auto sample = [&](double x, double y, int c) {  // linearly, centers at halves
+            double fx = x - 0.5, fy = y - 0.5;
+            int x0 = int(std::floor(fx)), y0 = int(std::floor(fy));
+            double ax = fx - x0, ay = fy - y0, v = 0;
+            for (int j = 0; j < 2; ++j)
+                for (int i = 0; i < 2; ++i) {
+                    int px = x0 + i, py = y0 + j;
+                    double w = (i ? ax : 1 - ax) * (j ? ay : 1 - ay);
+                    if (px >= 0 && py >= 0 && px < from.w && py < from.h) v += w * from.rgba[(size_t(py) * size_t(from.w) + size_t(px)) * 4 + size_t(c)];
+                }
+            return v;
+        };
+        double low = down ? bounds.y : bounds.x, high = down ? bounds.y + bounds.height : bounds.x + bounds.width;
+        Image out{from.w, from.h, std::vector<float>(from.rgba.size(), 0.f)};
+        for (int y = 0; y < from.h; ++y)
+            for (int x = 0; x < from.w; ++x) {
+                double cx = x + 0.5, cy = y + 0.5;
+                double radius = widest * std::clamp(intensity(fraction(std::max(cx - bounds.x, 0.0), std::max(cy - bounds.y, 0.0))), 0.0, 1.0);
+                double r = std::floor(radius);
+                double sum[4], weights = 1;
+                for (int c = 0; c < 4; ++c) sum[c] = sample(cx, cy, c);
+                if (r >= 1) {
+                    double sigma = std::max(radius / 2, 1.0);
+                    auto g = [&](double d) { return std::exp(-d * d / (2 * sigma * sigma)); };
+                    auto tap = [&](double off, double w) {
+                        for (int side = -1; side <= 1; side += 2) {
+                            double px = cx + (down ? 0 : side * off * unit), py = cy + (down ? side * off * unit : 0);
+                            double along = down ? py : px;
+                            bool in = along >= low && along < high;
+                            weights += w * (in || decal ? 1 : 0);
+                            if (in)
+                                for (int c = 0; c < 4; ++c) sum[c] += w * sample(px, py, c);
+                        }
+                    };
+                    for (double i = 1; i < 150 && i < r; i += 2) tap(i + g(i + 1) / (g(i) + g(i + 1)), g(i) + g(i + 1));
+                    if (int(r) % 2 == 1 && r < 150) tap(r, g(r));
+                }
+                for (int c = 0; c < 4; ++c) out.rgba[(size_t(y) * size_t(out.w) + size_t(x)) * 4 + size_t(c)] = float(sum[c] / weights);
+            }
+        return out;
+    };
+    Image cut{in.w, in.h, std::vector<float>(in.rgba.size(), 0.f)};
+    for (int y = bounds.y; y < bounds.y + bounds.height; ++y)
+        for (int x = bounds.x; x < bounds.x + bounds.width; ++x)
+            for (int c = 0; c < 4; ++c) cut.rgba[(size_t(y) * size_t(in.w) + size_t(x)) * 4 + size_t(c)] = in.rgba[(size_t(y) * size_t(in.w) + size_t(x)) * 4 + size_t(c)];
+    return pass(pass(cut, false), true);
+}
+
 // Effect layers blur as Skia does: the edges as the tile mode says, a Gaussian of Android's sigma,
 // spreading three sigmas; wide ones (scaled down) close to it; offsets, chains, transforms, a
 // clip around them and layers too big for a texture.
@@ -1518,7 +1581,8 @@ void blursAreGaussian(Gpu& g) {
                                                         {{60, 66, 12, 6}, Color{0.95f, 0.8f, 0.1f, 1}}};  // (the bottom unlike the top, the right unlike the left)
     auto content = [&](GraphicsContext& c) {
         for (const auto& [r, col] : fills) c.fillRoundRect({float(r.x), float(r.y), float(r.width), float(r.height)}, 0, col);
-        c.fillRoundRect({0, 0, 96, 10}, 0, Color{0, 0, 0, 1});  // outside the bounds: cut away
+        c.fillRoundRect({0, 0, 96, 20}, 0, Color{0, 0, 0, 1});  // outside the bounds (within a blur's reach): cut away
+        c.fillRoundRect({74, 30, 10, 30}, 0, Color{0, 0, 0, 1});  // (and in the spare pixels of the layer's texture)
     };
     Image base = painted(n, n, fills);
     auto blurredBy = [&](const RenderEffect& effect, float scale = 1) {
@@ -1654,6 +1718,73 @@ void blursAreGaussian(Gpu& g) {
         for (int x = 0; x < n; ++x)
             if (x - 3 >= 0 && y + 2 < n) std::copy_n(big.at(x - 3, y + 2), 4, bigMoved.at(x, y));
     report("enlarged", enlarged, overWhite(bigMoved), 2);
+    // Progressive (Compose's): down from sharp to blurred, out from a center through stops, along a
+    // line across a corner, each edge treatment; at 2 px a dp; wider than 150 px (the radii scaled
+    // down to it); then blurred again as one.
+    auto progressive = [&](const BlurRadiusSpec& spec, TileMode edges, float scale, float widest, const std::vector<std::pair<float, float>>& stops,
+                           const std::function<double(double, double)>& fraction) {
+        Pixels got = g.render(n, n, scale, [&](GraphicsContext& c) {
+            c.pushEffectLayer({24 / scale, 24 / scale, 48 / scale, 48 / scale}, spec.createRenderEffect({48 / scale, 48 / scale}, edges), 1);
+            c.pushTransform([&] {
+                Matrix m;
+                m.scale(1 / scale, 1 / scale);
+                return m;
+            }());
+            content(c);
+            c.popTransform();
+            c.popLayer();
+        });
+        return std::pair{got, overWhite(progressiveOf(base, bounds, widest, stops, fraction, edges == TileMode::Decal))};
+    };
+    auto down = [](double, double y) { return std::clamp(y / 48, 0.0, 1.0); };
+    for (TileMode edges : {TileMode::Clamp, TileMode::Decal}) {
+        auto [got, want] = progressive(BlurRadiusSpec::verticalGradient(0, 12), edges, 1, 12, {{0, 0}, {1, 1}}, down);
+        report("progressive down", got, want, 2);
+    }
+    auto [radial, radialWant] = progressive(BlurRadiusSpec::radialGradient({{0, 8}, {0.5f, 0}, {1, 16}}, Offset{20, 28}, 24.f), TileMode::Clamp, 1,
+                                           16, {{0, 0.5f}, {0.5f, 0}, {1, 1}}, [](double x, double y) { return std::clamp(std::hypot(x - 20, y - 28) / 24, 0.0, 1.0); });
+    report("progressive out from a center", radial, radialWant, 2);
+    // (Radii that no pixel's comes out a whole number of: there a float and a double may round a
+    // tap's worth apart, Compose's as much as ours.)
+    auto [corner, cornerWant] = progressive(BlurRadiusSpec::linearGradient({0, 0}, {47, 37}, 10.3f, 2.1f), TileMode::Decal, 1, 10.3f,
+                                           {{0, 1}, {1, 2.1f / 10.3f}},
+                                           [](double x, double y) { return std::clamp((x * 47 + y * 37) / (47.0 * 47 + 37 * 37), 0.0, 1.0); });
+    report("progressive across a corner", corner, cornerWant, 2);
+    auto [finer, finerWant] = progressive(BlurRadiusSpec::verticalGradient(0, 4), TileMode::Clamp, 2, 8, {{0, 0}, {1, 1}}, down);
+    report("progressive at 2 px a dp", finer, finerWant, 2);
+    auto [wider, widerWant] = progressive(BlurRadiusSpec::horizontalGradient(200, 50), TileMode::Decal, 1, 150, {{0, 1}, {1, 0.25f}},
+                                         [](double x, double) { return std::clamp(x / 48, 0.0, 1.0); });
+    report("progressive wider than 150 px", wider, widerWant, 2);
+    // In a layer a transform enlarges: in the layer's pixels (each two of the screen's), then enlarged.
+    Pixels bigger = g.render(n, n, 1, [&](GraphicsContext& c) {
+        Matrix m;
+        m.scale(2, 2);
+        c.pushTransform(m);
+        c.pushEffectLayer({12, 12, 24, 24}, BlurRadiusSpec::verticalGradient(0, 6).createRenderEffect({24, 24}), 1);
+        c.pushTransform([] {
+            Matrix half;
+            half.scale(0.5f, 0.5f);
+            return half;
+        }());
+        content(c);
+        c.popTransform();
+        c.popLayer();
+        c.popTransform();
+    });
+    report("progressive, enlarged", bigger, overWhite(progressiveOf(base, bounds, 6, {{0, 0}, {1, 1}}, down, false, 2)), 2);
+    // The input of others: blurred, then moved.
+    Pixels chained = g.render(n, n, 1, [&](GraphicsContext& c) {
+        RenderEffect p = BlurRadiusSpec::verticalGradient(0, 12).createRenderEffect({48, 48}, TileMode::Decal);
+        c.pushEffectLayer({24, 24, 48, 48}, OffsetEffect(BlurEffect(p, 2, 2, TileMode::Decal), {5, -3}), 1);
+        content(c);
+        c.popLayer();
+    });
+    Image then = gaussian(progressiveOf(base, bounds, 12, {{0, 0}, {1, 1}}, down, true), {0, 0, n, n}, TileMode::Decal, sigmaOf(2), sigmaOf(2));
+    Image thenMoved{n, n, std::vector<float>(then.rgba.size(), 0.f)};
+    for (int y = 0; y < n; ++y)
+        for (int x = 0; x < n; ++x)
+            if (x - 5 >= 0 && y + 3 < n) std::copy_n(then.at(x - 5, y + 3), 4, thenMoved.at(x, y));
+    report("progressive, blurred, moved", chained, overWhite(thenMoved), 2);
     // Faded, and cut by a rounded clip around it: what the blur made, cut.
     Pixels cut = g.render(n, n, 1, [&](GraphicsContext& c) {
         c.pushClipRoundRect({24, 24, 48, 48}, 16);
@@ -1682,7 +1813,7 @@ void blursAreGaussian(Gpu& g) {
         c.popLayer();
     });
     gpu::IRect tallBounds{24, -6000, 48, 12096};
-    Image tallBase = painted(n, n, {{{0, 0, 96, 10}, Color{0, 0, 0, 1}}});
+    Image tallBase = painted(n, n, {{{0, 0, 96, 20}, Color{0, 0, 0, 1}}});
     for (const auto& [r, col] : fills) tallBase = [&] {
         Image i = tallBase;
         for (int y = r.y; y < r.y + r.height; ++y)

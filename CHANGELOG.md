@@ -70,6 +70,10 @@
   `Modifier.blur` is now Compose's: a `graphicsLayer` with a `BlurEffect`, blurred only when both radii are;
   `BlurredEdgeTreatment` holds a shape (`Rectangle`, `Unbounded`, or any shape to cut the blur to).
   `GraphicsContext::pushEffectLayer` replaces `pushBlurLayer`.
+- **Progressive blurs, as in Compose 1.13**: `BlurRadiusSpec` (`uniform`, `verticalGradient`, `horizontalGradient`,
+  `linearGradient`, `radialGradient`, from one radius to another or through `BlurStop`s) for
+  `Modifier.blur(spec, edgeTreatment, alpha)` and `Modifier.blur { … }` (`BlurScope`, read while drawing), or as a
+  layer's effect (`createRenderEffect`). The GPU renderer draws them as Compose does.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

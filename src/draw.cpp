@@ -521,6 +521,50 @@ Modifier Modifier::blur(float radiusX, float radiusY, const BlurredEdgeTreatment
     return graphicsLayer(layer);
 }
 
+namespace {
+// Modifier::blur with a BlurRadiusSpec (Compose's BlurNode): a layer with the spec's effect for the
+// node's size, its alpha, clipped to the edge treatment's shape (Clamp then, else Decal).
+struct BlurSpecElement final : ModifierElement {
+    BlurScope scope;
+    std::function<void(BlurScope&)> block;  // evaluated at draw time when set, from the defaults
+
+    void draw(GraphicsContext& g, const Rect& bounds, const LayoutNode& node,
+              const std::function<void()>& drawContent) const override {
+        BlurScope b = block ? BlurScope{} : scope;
+        b.size = {bounds.width, bounds.height};
+        if (block) block(b);
+        detail::LayerDraw d;
+        d.bounds = bounds;
+        d.geometry.pivot = bounds.center();
+        bool clip = b.edgeTreatment.shape.has_value();
+        if (!(b.blurRadiusSpec == BlurRadiusSpec::uniform(0)))
+            d.renderEffect = b.blurRadiusSpec.createRenderEffect(b.size, clip ? TileMode::Clamp : TileMode::Decal);
+        d.alpha = b.alpha;
+        d.clip = clip;
+        if (clip) d.outline = b.edgeTreatment.shape->createOutline(b.size, node.rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr);
+        detail::drawThroughLayer(g, d, drawContent);
+    }
+    bool equals(const ModifierElement& other) const override {
+        auto* o = dynamic_cast<const BlurSpecElement*>(&other);
+        return o && !block && !o->block && o->scope == scope;
+    }
+};
+} // namespace
+
+Modifier Modifier::blur(const BlurRadiusSpec& blurRadiusSpec, const BlurredEdgeTreatment& edgeTreatment, float alpha) const {
+    auto e = std::make_shared<BlurSpecElement>();
+    e->scope.blurRadiusSpec = blurRadiusSpec;
+    e->scope.edgeTreatment = edgeTreatment;
+    e->scope.alpha = alpha;
+    return then(std::move(e));
+}
+
+Modifier Modifier::blur(std::function<void(BlurScope&)> block) const {
+    auto e = std::make_shared<BlurSpecElement>();
+    e->block = std::move(block);
+    return then(std::move(e));
+}
+
 Modifier Modifier::graphicsLayer(const GraphicsLayerScope& layer) const {
     auto e = std::make_shared<GraphicsLayerElement>();
     e->layer = layer;

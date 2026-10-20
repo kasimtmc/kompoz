@@ -109,11 +109,13 @@ private:
         int x = 0, y = 0, row = 0;
         uint32_t generation = 0;
     };
-    // A pass of an effect (shaders/effects.slang): `rect` of the target made from `source`.
+    // A pass of an effect (shaders/effects.slang): `rect` of the target made from `source`
+    // (filtered linearly, or not), with this frame's table if it reads stops.
     struct EffectDraw {
         Texture* source;
         IRect rect;
-        float uniforms[20];
+        float uniforms[32];
+        bool linear = false, table = false;
     };
     struct Pass {
         Texture* target;
@@ -221,8 +223,15 @@ private:
     // An effect layer's steps on its texture (in passes that run after its own), and the image
     // they make.
     EffectImage applyEffect(const Layer& layer);
-    // A pass of an effect into `target`, from `source`, as `uniforms` say (all but the first four).
-    void effectPass(Texture& target, Texture& source, const IRect& rect, const float (&uniforms)[20]);
+    // A progressive blur (the first of an effect's steps, as there is nothing it blurs but the
+    // layer) on the layer's texture: cut to its bounds, then across and down.
+    EffectImage progressiveBlur(const Layer& layer, const RenderEffect::Step& step);
+    // A pass of an effect into `target`, from `source`, as `uniforms` say (all but the first four,
+    // and the table texel's size).
+    void effectPass(Texture& target, Texture& source, const IRect& rect, const float (&uniforms)[32], bool linear = false,
+                    bool table = false);
+    // A row of the table: each stop's position and value at a texel of its own.
+    int tableRow(const std::vector<std::pair<float, float>>& stops);
     // A prim painted with `brush` over `area` (dp): its color, or its gradient (at `alpha`), in
     // pixels `enlarged` times.
     Prim painted(const Brush& brush, const Rect& area, float alpha = 1, float enlarged = 1);

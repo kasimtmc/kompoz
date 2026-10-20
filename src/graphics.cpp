@@ -1,5 +1,6 @@
 #include <kompoz/graphics.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <mutex>
 #include <numbers>
@@ -541,11 +542,77 @@ Rect RenderEffect::outputBounds(const Rect& bounds) const {
             r.x += s.offset.x, r.y += s.offset.y;
             continue;
         }
+        if (s.progressive) {  // its taps reach as far as its widest radius
+            float most = 0;
+            for (const auto& [at, radius] : s.progressive->stops) most = std::max(most, radius);
+            float by = most > 0 ? most + 1 : 0;
+            r = {r.x - by, r.y - by, r.width + 2 * by, r.height + 2 * by};
+            continue;
+        }
         // Three sigmas (0.57735 r + 0.5 px), the half pixel taken as up to 2.5 dp (ldpi's 0.75 px a dp, rounded up).
         float x = s.radiusX > 0 ? 3 * 0.57735f * s.radiusX + 2.5f : 0, y = s.radiusY > 0 ? 3 * 0.57735f * s.radiusY + 2.5f : 0;
         r = {r.x - x, r.y - y, r.width + 2 * x, r.height + 2 * y};
     }
     return r;
+}
+
+BlurRadiusSpec::BlurRadiusSpec(Kind kind, std::vector<BlurStop> stops) : kind_(kind), stops_(std::move(stops)) {
+    for (BlurStop& s : stops_) s.fraction = std::clamp(s.fraction, 0.f, 1.f), s.radius = std::max(0.f, s.radius);
+    std::stable_sort(stops_.begin(), stops_.end(), [](const BlurStop& a, const BlurStop& b) { return a.fraction < b.fraction; });
+}
+
+BlurRadiusSpec BlurRadiusSpec::uniform(float radius) { return {Kind::Uniform, {{0, radius}}}; }
+BlurRadiusSpec BlurRadiusSpec::verticalGradient(float startRadius, float endRadius) {
+    return {Kind::Vertical, {{0, startRadius}, {1, endRadius}}};
+}
+BlurRadiusSpec BlurRadiusSpec::verticalGradient(std::vector<BlurStop> stops) { return {Kind::Vertical, std::move(stops)}; }
+BlurRadiusSpec BlurRadiusSpec::horizontalGradient(float startRadius, float endRadius) {
+    return {Kind::Horizontal, {{0, startRadius}, {1, endRadius}}};
+}
+BlurRadiusSpec BlurRadiusSpec::horizontalGradient(std::vector<BlurStop> stops) { return {Kind::Horizontal, std::move(stops)}; }
+BlurRadiusSpec BlurRadiusSpec::linearGradient(Offset start, Offset end, float startRadius, float endRadius) {
+    return linearGradient(start, end, {{0, startRadius}, {1, endRadius}});
+}
+BlurRadiusSpec BlurRadiusSpec::linearGradient(Offset start, Offset end, std::vector<BlurStop> stops) {
+    BlurRadiusSpec s{Kind::Linear, std::move(stops)};
+    s.start_ = start, s.end_ = end;
+    return s;
+}
+BlurRadiusSpec BlurRadiusSpec::radialGradient(float startRadius, float endRadius, std::optional<Offset> center,
+                                              std::optional<float> fallOffRadius) {
+    return radialGradient({{0, startRadius}, {1, endRadius}}, center, fallOffRadius);
+}
+BlurRadiusSpec BlurRadiusSpec::radialGradient(std::vector<BlurStop> stops, std::optional<Offset> center, std::optional<float> fallOffRadius) {
+    BlurRadiusSpec s{Kind::Radial, std::move(stops)};
+    s.center_ = center;
+    if (fallOffRadius && *fallOffRadius > 0 && std::isfinite(*fallOffRadius)) s.fallOff_ = fallOffRadius;
+    return s;
+}
+
+RenderEffect BlurRadiusSpec::createRenderEffect(Size size, TileMode edgeTreatment) const {
+    TileMode edges = edgeTreatment == TileMode::Decal ? TileMode::Decal : TileMode::Clamp;
+    if (kind_ == Kind::Uniform) return BlurEffect(stops_.front().radius, stops_.front().radius, edges);
+    float most = 0;
+    for (const BlurStop& s : stops_) most = std::max(most, s.radius);
+    if (stops_.empty() || most <= 0) return OffsetEffect(0, 0);  // (blurs nothing: as Compose's, an effect that changes nothing)
+    RenderEffect::Progressive p;
+    for (const BlurStop& s : stops_) p.stops.emplace_back(s.fraction, s.radius);
+    switch (kind_) {
+    case Kind::Vertical: p.end = {0, size.height}; break;
+    case Kind::Horizontal: p.end = {size.width, 0}; break;
+    case Kind::Linear: p.start = start_, p.end = end_; break;
+    default:
+        p.radial = true;
+        p.start = center_.value_or(Offset{size.width / 2, size.height / 2});
+        p.radius = fallOff_.value_or(std::min(size.width, size.height) / 2);
+    }
+    RenderEffect e;
+    RenderEffect::Step s;
+    s.kind = RenderEffect::Step::Kind::ProgressiveBlur;
+    s.edgeTreatment = edges;
+    s.progressive = std::move(p);
+    e.steps_.push_back(std::move(s));
+    return e;
 }
 
 void Path::moveTo(float x, float y) {

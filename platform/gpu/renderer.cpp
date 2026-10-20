@@ -373,7 +373,7 @@ void Renderer::execute(Pass& pass) {
             desc.fragment = &kEffectFragment;
             desc.instanceAttributes = {{0, VertexFormat::Float4, 0}};
             desc.instanceStride = 16;
-            desc.textures = 1;
+            desc.textures = 2;
             desc.blend = {false};
             desc.target = pass.target->format();
             effectPipeline_ = device_.createPipeline(desc);
@@ -381,16 +381,19 @@ void Renderer::execute(Pass& pass) {
         BufferRef rect;
         float* r = static_cast<float*>(device_.allocate(16, 16, &rect));
         r[0] = float(e.rect.x), r[1] = float(e.rect.y), r[2] = float(e.rect.x + e.rect.width), r[3] = float(e.rect.y + e.rect.height);
-        float uniforms[20];
+        float uniforms[32];
         std::copy(std::begin(e.uniforms), std::end(e.uniforms), uniforms);
         float w = float(pass.target->width()), h = float(pass.target->height());
         bool yDown = device_.clipYDown();
         uniforms[0] = 2 / w, uniforms[1] = yDown ? 2 / h : -2 / h, uniforms[2] = -1, uniforms[3] = yDown ? -1.f : 1.f;
-        Texture* reads[] = {e.source};
+        Texture* table = e.table && stopsTexture_ ? stopsTexture_.get() : white_.get();
+        uniforms[30] = 1 / float(table->width()), uniforms[31] = 1 / float(table->height());
+        Texture* reads[] = {e.source, table};
         device_.beginPass(*pass.target, ClearColor{}, reads);
         device_.setPipeline(*effectPipeline_);
         device_.setUniforms(uniforms, sizeof uniforms);
-        device_.setTexture(0, *e.source, Sampler{Filter::Nearest});
+        device_.setTexture(0, *e.source, Sampler{e.linear ? Filter::Linear : Filter::Nearest});
+        device_.setTexture(1, *table, Sampler{Filter::Nearest});
         device_.setScissor(e.rect);
         device_.draw(rect, 6, 1);
         device_.endPass();
@@ -1021,22 +1024,18 @@ void Renderer::pushEffectLayer(const Rect& bounds, const RenderEffect& effect, f
         l = std::min(l, q.x), t = std::min(t, q.y), r = std::max(r, q.x), b = std::max(b, q.y);
     }
     if (seen) {
-        float reachX = 0, reachY = 0;
-        for (const RenderEffect::Step& s : effect.steps()) {
-            reachX += s.kind == RenderEffect::Step::Kind::Offset ? std::abs(s.offset.x) * scale
-                                                                 : std::ceil(3 * (0.57735f * s.radiusX * scale + 0.5f)) + 1;
-            reachY += s.kind == RenderEffect::Step::Kind::Offset ? std::abs(s.offset.y) * scale
-                                                                 : std::ceil(3 * (0.57735f * s.radiusY * scale + 0.5f)) + 1;
-        }
+        Rect out = effect.outputBounds(bounds);  // (how far it takes what is drawn, either way)
+        float reachX = std::max({bounds.x - out.x, out.right() - bounds.right(), 0.f}) * scale + 1;
+        float reachY = std::max({bounds.y - out.y, out.bottom() - bounds.bottom(), 0.f}) * scale + 1;
         within = Rect{l - reachX, t - reachY, r - l + 2 * reachX, b - t + 2 * reachY};
     }
     pushLayer(bounds, CornerRadii(), alpha, {}, within);
     if (layers_.back().texture) layers_.back().effect = effect;
 }
 
-void Renderer::effectPass(Texture& target, Texture& source, const IRect& rect, const float (&uniforms)[20]) {
+void Renderer::effectPass(Texture& target, Texture& source, const IRect& rect, const float (&uniforms)[32], bool linear, bool table) {
     Pass pass{&target, std::nullopt, {}, {}};
-    pass.effect = EffectDraw{&source, rect, {}};
+    pass.effect = EffectDraw{&source, rect, {}, linear, table};
     std::copy(std::begin(uniforms), std::end(uniforms), pass.effect->uniforms);
     order_.push_back(passes_.size());
     passes_.push_back(std::move(pass));
@@ -1047,9 +1046,59 @@ void Renderer::effectPass(Texture& target, Texture& source, const IRect& rect, c
 // 4 texels (as Skia's does for a wide one: no more than 25 taps); then a Gaussian across and
 // down. The variance the scaling adds (the mean of each block, and the bilinear filtering that
 // scales the last one back up) is taken off the sigma. Offsets are the composite's.
+int Renderer::tableRow(const std::vector<std::pair<float, float>>& stops) {
+    int row = int(stops_.size() / (kStopsWidth * 4));
+    size_t at = stops_.size();
+    stops_.resize(at + kStopsWidth * 4, 0.f);
+    for (size_t i = 0; i < stops.size() && i < size_t(kStopsWidth); ++i) stops_[at + i * 4] = stops[i].first, stops_[at + i * 4 + 1] = stops[i].second;
+    return row;
+}
+
+// As Compose's: the radius at each pixel the widest one (no more than 150 px) times where it lies
+// between the stops (their radii over the widest); the layer's pixels cut to its bounds first, as
+// what lies past them is none of it; the bounds (its pixels, the layer's own) are where its taps
+// count. What it makes reaches as far as its widest radius past them.
+Renderer::EffectImage Renderer::progressiveBlur(const Layer& layer, const RenderEffect::Step& step) {
+    const RenderEffect::Progressive& p = *step.progressive;
+    float res = layer.resolution, most = 0;
+    for (const auto& [at, radius] : p.stops) most = std::max(most, radius);
+    float widest = std::min(most * scale, 150.f);  // px
+    EffectImage image{layer.texture, layer.rect.x, layer.rect.y, 1, 1, layer.rect.width, layer.rect.height, layer.rect};
+    if (!(widest > 0)) return image;
+    int ext = int(std::floor(widest) * res) + 2;
+    const IRect& crop = layer.rect;
+    IRect region{crop.x - ext, crop.y - ext, crop.width + 2 * ext, crop.height + 2 * ext};
+    Texture* cut = acquire(region.width, region.height);
+    if (!cut) return image;
+    float c[32] = {0, 0, 0, 0, 1, 1, float(region.x - crop.x), float(region.y - crop.y), 0, 0, float(crop.width), float(crop.height),
+                   0, float(int(TileMode::Decal)), 0, 0, 0, 0, 1 / float(layer.texture->width()), 1 / float(layer.texture->height())};
+    effectPass(*cut, *layer.texture, {0, 0, region.width, region.height}, c);
+    std::vector<std::pair<float, float>> stops;
+    for (const auto& [at, radius] : p.stops) stops.emplace_back(at, radius / most);
+    int row = tableRow(stops);
+    float k = scale * res;  // texels a dp
+    float ox = layer.shape.x - float(region.x), oy = layer.shape.y - float(region.y);
+    Texture* from = cut;
+    for (int axis = 0; axis < 2; ++axis) {
+        Texture* to = acquire(region.width, region.height);
+        if (!to) return image;
+        float u[32] = {0, 0, 0, 0, 1, 1, 0, 0,
+                       float(crop.x - region.x), float(crop.y - region.y), float(crop.x + crop.width - region.x), float(crop.y + crop.height - region.y),
+                       2, float(int(step.edgeTreatment)), float(axis), widest, res, 0, 1 / float(from->width()), 1 / float(from->height()),
+                       p.radial ? 2.f : 1.f, float(row), float(std::min<size_t>(stops.size(), kStopsWidth)), 0,
+                       p.start.x * k, p.start.y * k, p.radial ? p.radius * k : p.end.x * k, p.radial ? 0 : p.end.y * k, ox, oy, 0, 0};
+        effectPass(*to, *from, {0, 0, region.width, region.height}, u, true, true);
+        from = to;
+    }
+    return {from, region.x, region.y, 1, 1, region.width, region.height, region};
+}
+
 Renderer::EffectImage Renderer::applyEffect(const Layer& layer) {
     float res = layer.resolution;
     EffectImage image{layer.texture, layer.rect.x, layer.rect.y, 1, 1, layer.rect.width, layer.rect.height, layer.rect};
+    const std::vector<RenderEffect::Step>& steps = layer.effect->steps();
+    size_t first = 0;
+    if (!steps.empty() && steps[0].progressive) image = progressiveBlur(layer, steps[first++]);
     struct Blur {
         float sigmaX, sigmaY;
         int stepX, stepY;
@@ -1061,7 +1110,9 @@ Renderer::EffectImage Renderer::applyEffect(const Layer& layer) {
         while (sigma / float(at) > 4) at *= 2;
         return at;
     };
-    for (const RenderEffect::Step& s : layer.effect->steps()) {
+    for (size_t i = first; i < steps.size(); ++i) {
+        const RenderEffect::Step& s = steps[i];
+        if (s.kind == RenderEffect::Step::Kind::ProgressiveBlur) continue;  // (only ever the first)
         if (s.kind == RenderEffect::Step::Kind::Offset) {
             image.offsetX += s.offset.x * scale * res, image.offsetY += s.offset.y * scale * res;
             continue;
@@ -1117,7 +1168,7 @@ Renderer::EffectImage Renderer::applyEffect(const Layer& layer) {
             int w = (shown.x + shown.width + mx - ox + atX - 1) / atX, h = (shown.y + shown.height + my - oy + atY - 1) / atY;
             Texture* to = acquire(w, h);
             if (!to) return image;
-            float u[20] = {0, 0, 0, 0, float(px), float(py), mapX, mapY, vx0, vy0, vx1, vy1, 0, tile, 0, 0,
+            float u[32] = {0, 0, 0, 0, float(px), float(py), mapX, mapY, vx0, vy0, vx1, vy1, 0, tile, 0, 0,
                            0, 0, 1 / float(from->width()), 1 / float(from->height())};
             effectPass(*to, *from, {0, 0, w, h}, u);
             // The next pass reads all of this one's, nothing past it.
@@ -1129,7 +1180,7 @@ Renderer::EffectImage Renderer::applyEffect(const Layer& layer) {
             if (g <= 0) continue;
             Texture* to = acquire(nx, ny);
             if (!to) return image;
-            float u[20] = {0, 0, 0, 0, 1, 1, 0, 0, 0, 0, float(nx), float(ny), 1, float(int(TileMode::Decal)), float(axis), g,
+            float u[32] = {0, 0, 0, 0, 1, 1, 0, 0, 0, 0, float(nx), float(ny), 1, float(int(TileMode::Decal)), float(axis), g,
                            std::ceil(3 * g), 0, 1 / float(from->width()), 1 / float(from->height())};
             effectPass(*to, *from, {0, 0, nx, ny}, u);
             from = to;

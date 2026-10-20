@@ -25174,6 +25174,96 @@ TEST(render_effects_chain_and_reach_past_the_bounds) {
     CHECK(!(Modifier().graphicsLayer({.renderEffect = OffsetEffect(1, 0)}) == Modifier().graphicsLayer({.renderEffect = OffsetEffect(2, 0)})));
 }
 
+TEST(blur_radius_specs_make_compose_effects) {
+    using Kind = RenderEffect::Step::Kind;
+    auto progressive = [](const RenderEffect& e) { return e.steps().size() == 1 && e.steps()[0].kind == Kind::ProgressiveBlur ? &*e.steps()[0].progressive : nullptr; };
+    auto stops = [](std::vector<std::pair<float, float>> want, const RenderEffect::Progressive* p) { return p && p->stops == want; };
+    // Uniform: the platform's blur, clamped unless decal (repeated and mirrored edges taken as clamped, as Compose's).
+    CHECK(BlurRadiusSpec::uniform(6).createRenderEffect({100, 50}) == BlurEffect(6, 6, TileMode::Clamp));
+    CHECK(BlurRadiusSpec::uniform(6).createRenderEffect({100, 50}, TileMode::Mirror) == BlurEffect(6, 6, TileMode::Clamp));
+    CHECK(BlurRadiusSpec::uniform(6).createRenderEffect({100, 50}, TileMode::Decal) == BlurEffect(6, 6, TileMode::Decal));
+    // Down, across, along a line: from the top, the left, the start; its size's far side.
+    RenderEffect down = BlurRadiusSpec::verticalGradient(0, 12).createRenderEffect({100, 50}, TileMode::Decal);
+    const RenderEffect::Progressive* p = progressive(down);
+    CHECK(p && !p->radial && p->start == (Offset{0, 0}) && p->end == (Offset{0, 50}) && stops({{0, 0}, {1, 12}}, p));
+    CHECK(down.steps()[0].edgeTreatment == TileMode::Decal);
+    RenderEffect across = BlurRadiusSpec::horizontalGradient(4, 2).createRenderEffect({100, 50});
+    p = progressive(across);
+    CHECK(p && p->end == (Offset{100, 0}) && stops({{0, 4}, {1, 2}}, p));
+    RenderEffect along = BlurRadiusSpec::linearGradient({10, 5}, {60, 40}, 3, 9).createRenderEffect({100, 50});
+    p = progressive(along);
+    CHECK(p && p->start == (Offset{10, 5}) && p->end == (Offset{60, 40}));
+    // Out from a center: its middle and half its shorter side unless set (a fall-off that isn't positive as unset).
+    RenderEffect out = BlurRadiusSpec::radialGradient(8, 0).createRenderEffect({100, 50});
+    p = progressive(out);
+    CHECK(p && p->radial && p->start == (Offset{50, 25}) && near(p->radius, 25, 1e-6f));
+    RenderEffect around = BlurRadiusSpec::radialGradient({{0, 2}, {1, 6}}, Offset{10, 10}, 30.f).createRenderEffect({100, 50});
+    p = progressive(around);
+    CHECK(p && p->start == (Offset{10, 10}) && near(p->radius, 30, 1e-6f));
+    CHECK(BlurRadiusSpec::radialGradient(8, 0, std::nullopt, -4.f) == BlurRadiusSpec::radialGradient(8, 0));
+    // Stops sorted by their fractions (stably), the fractions kept to 0..1, radii below 0 taken as 0.
+    RenderEffect sorted = BlurRadiusSpec::verticalGradient({{0.8f, 4}, {0.2f, 8}, {0.2f, 2}, {1.5f, -3}}).createRenderEffect({10, 10});
+    p = progressive(sorted);
+    CHECK(stops({{0.2f, 8}, {0.2f, 2}, {0.8f, 4}, {1, 0}}, p));
+    // Nothing to blur: an effect that changes nothing.
+    CHECK(BlurRadiusSpec::verticalGradient(0, 0).createRenderEffect({10, 10}) == OffsetEffect(0, 0));
+    CHECK(BlurRadiusSpec::verticalGradient(0, 12) == BlurRadiusSpec::verticalGradient({{0, 0}, {1, 12}}));
+    CHECK(!(BlurRadiusSpec::verticalGradient(0, 12) == BlurRadiusSpec::horizontalGradient(0, 12)));
+    // It reaches as far as its widest radius.
+    CHECK(sameRect(down.outputBounds({0, 0, 100, 50}), {-13, -13, 126, 76}));
+}
+
+TEST(blur_with_a_radius_spec_is_a_layer_as_composes) {
+    auto edges = mutableStateOf(BlurredEdgeTreatment::Rectangle);
+    auto alpha = mutableStateOf(1.f);
+    auto spec = mutableStateOf(BlurRadiusSpec::verticalGradient(0, 12));
+    ComposeTestRule rule([&] {
+        Box(Modifier().padding(50).size(100, 60).blur(spec.get(), edges.get(), alpha.get()).background(colors::Black));
+    });
+    auto draw = [&] {
+        testing::RecordingCanvas c;
+        rule.host().draw(c);
+        return c;
+    };
+    testing::RecordingCanvas c = draw();
+    CHECK(c.layers == 1 && c.layerEffects[0] == BlurRadiusSpec::verticalGradient(0, 12).createRenderEffect({100, 60}, TileMode::Clamp));
+    CHECK(c.clips.size() == 1 && sameRect(c.clips[0], {50, 50, 100, 60}) && sameRect(c.layerBounds[0], {50, 50, 100, 60}));
+    edges.set(BlurredEdgeTreatment::Unbounded);
+    alpha.set(0.5f);
+    rule.waitForIdle();
+    c = draw();
+    CHECK(c.layers == 1 && c.layerEffects[0] == BlurRadiusSpec::verticalGradient(0, 12).createRenderEffect({100, 60}, TileMode::Decal));
+    CHECK(c.clips.empty() && near(c.layerAlphas[0], 0.5f));
+    // A uniform 0: no effect; faded, a layer all the same.
+    spec.set(BlurRadiusSpec::uniform(0));
+    rule.waitForIdle();
+    c = draw();
+    CHECK(c.layers == 1 && !c.layerEffects[0] && near(c.layerAlphas[0], 0.5f));
+    // Compared by value; a block isn't, and is read while drawing, with the size.
+    CHECK(Modifier().blur(BlurRadiusSpec::uniform(3)) == Modifier().blur(BlurRadiusSpec::uniform(3)));
+    CHECK(!(Modifier().blur(BlurRadiusSpec::uniform(3)) == Modifier().blur(BlurRadiusSpec::uniform(3), BlurredEdgeTreatment::Rectangle, 0.5f)));
+    auto radius = mutableStateOf(4.f);
+    Size seen;
+    int compositions = 0;
+    ComposeTestRule blocks([&] {
+        ++compositions;
+        Box(Modifier().size(80, 40).blur([&](BlurScope& b) {
+            seen = b.size;
+            b.blurRadiusSpec = BlurRadiusSpec::radialGradient(radius.get(), 0);
+            b.edgeTreatment = BlurredEdgeTreatment{CircleShape};
+        }));
+    });
+    testing::RecordingCanvas d;
+    blocks.host().draw(d);
+    CHECK(d.layers == 1 && d.layerEffects[0] == BlurRadiusSpec::radialGradient(4, 0).createRenderEffect({80, 40}, TileMode::Clamp));
+    CHECK(near(seen.width, 80) && near(seen.height, 40) && d.clipShapes.size() == 1 && near(d.clipShapes[0].radii.topLeft, 20));
+    radius.set(9);
+    blocks.waitForIdle();
+    testing::RecordingCanvas e;
+    blocks.host().draw(e);
+    CHECK(compositions == 1 && e.layerEffects.size() == 1 && e.layerEffects[0] == BlurRadiusSpec::radialGradient(9, 0).createRenderEffect({80, 40}, TileMode::Clamp));
+}
+
 TEST(graphics_layer_render_effect_draws_through_an_effect_layer) {
     Color red{1, 0, 0, 1};
     auto look = [](const std::function<void()>& content) {

@@ -185,6 +185,16 @@ Box(Modifier().size(96).graphicsLayer({.renderEffect = OffsetEffect(BlurEffect(6
 
 What is drawn within the layer's bounds goes through the effect; with `clip` set, what the effect makes is then cut to the layer's shape.
 
+`blur` also blurs progressively, as Compose 1.13's does: more in some places than others, from one radius to another (or through `BlurStop`s) down, across, along a line or out from a center. The form that takes a lambda sets it while drawing:
+
+```cpp body
+Image(imageResource("images/cover.jpg"), "Album cover",
+      Modifier().size(160).blur(BlurRadiusSpec::verticalGradient(0, 16)), ContentScale::Crop);  // sharp at the top
+Box(Modifier().size(120).blur([](BlurScope& b) {
+    b.blurRadiusSpec = BlurRadiusSpec::radialGradient(0, 12);  // sharp in the middle
+}).background(colorScheme().primary, CircleShape));
+```
+
 ## Images
 
 `Image` shows a bitmap; `imageResource(path)` loads one from the app's assets, once:

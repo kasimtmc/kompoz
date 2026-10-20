@@ -13,6 +13,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace kompoz {
@@ -625,12 +626,23 @@ private:
 // those edges; OffsetEffect moves them.
 class RenderEffect {
 public:
+    // A progressive blur's: how far it blurs each pixel (BlurRadiusSpec::createRenderEffect).
+    // Along a line from `start` to `end`, or (radial) out from `start` to `radius`, dp from the
+    // layer's top left; the radius there (dp) between `stops` (fraction along it, radius).
+    struct Progressive {
+        bool radial = false;
+        Offset start, end;
+        float radius = 0;
+        std::vector<std::pair<float, float>> stops;
+        friend bool operator==(const Progressive&, const Progressive&) = default;
+    };
     struct Step {
-        enum class Kind : uint8_t { Blur, Offset };
+        enum class Kind : uint8_t { Blur, Offset, ProgressiveBlur };
         Kind kind = Kind::Blur;
         float radiusX = 0, radiusY = 0;  // Blur
-        TileMode edgeTreatment = TileMode::Clamp;
+        TileMode edgeTreatment = TileMode::Clamp;  // Blur; ProgressiveBlur: Decal or not
         Offset offset;  // Offset
+        std::optional<Progressive> progressive;  // ProgressiveBlur
         friend bool operator==(const Step&, const Step&) = default;
     };
     const std::vector<Step>& steps() const { return steps_; }
@@ -641,6 +653,7 @@ public:
 private:
     friend RenderEffect BlurEffect(const std::optional<RenderEffect>&, float, float, TileMode);
     friend RenderEffect OffsetEffect(const std::optional<RenderEffect>&, Offset);
+    friend class BlurRadiusSpec;
     std::vector<Step> steps_;
 };
 // `renderEffect` blurred (none: the layer's pixels). A radius of 0 leaves that direction as it is.
@@ -655,6 +668,48 @@ inline RenderEffect BlurEffect(float radiusX, float radiusY, TileMode edgeTreatm
 // `renderEffect` moved by `offset` dp.
 RenderEffect OffsetEffect(const std::optional<RenderEffect>& renderEffect, Offset offset);
 inline RenderEffect OffsetEffect(float offsetX, float offsetY) { return OffsetEffect(std::nullopt, {offsetX, offsetY}); }
+
+// A radius along a progressive blur (Compose's BlurStop): `fraction` of the way along it (0..1),
+// `radius` dp.
+struct BlurStop {
+    float fraction = 0, radius = 0;
+    friend bool operator==(const BlurStop&, const BlurStop&) = default;
+};
+
+// How much a blur blurs where (Compose's BlurRadiusSpec, 1.13): the same everywhere (uniform: a
+// BlurEffect), or progressively: from one radius to another (or through stops, sorted by their
+// fractions) down, across, along a line, or out from a center. Lengths are dp from the layer's top
+// left. A progressive one blurs as Compose's does (its own Gaussian of sigma r / 2 px, out to r
+// px, no more than 150 px), across then down, each pixel by its radius. Radii below 0 are taken
+// as 0, fractions kept to 0..1, a fall-off radius that isn't positive as unset.
+class BlurRadiusSpec {
+public:
+    static BlurRadiusSpec uniform(float radius);
+    static BlurRadiusSpec verticalGradient(float startRadius, float endRadius);  // top to bottom
+    static BlurRadiusSpec verticalGradient(std::vector<BlurStop> stops);
+    static BlurRadiusSpec horizontalGradient(float startRadius, float endRadius);  // left to right
+    static BlurRadiusSpec horizontalGradient(std::vector<BlurStop> stops);
+    static BlurRadiusSpec linearGradient(Offset start, Offset end, float startRadius, float endRadius);
+    static BlurRadiusSpec linearGradient(Offset start, Offset end, std::vector<BlurStop> stops);
+    // From `center` (unset: the middle) out to `fallOffRadius` (unset: half the shorter side).
+    static BlurRadiusSpec radialGradient(float startRadius, float endRadius, std::optional<Offset> center = {},
+                                         std::optional<float> fallOffRadius = {});
+    static BlurRadiusSpec radialGradient(std::vector<BlurStop> stops, std::optional<Offset> center = {},
+                                         std::optional<float> fallOffRadius = {});
+    // The effect for a layer of `size` (dp), the pixels past its edges as `edgeTreatment` says
+    // (Decal: none; any other: the edges', as Compose's takes them).
+    RenderEffect createRenderEffect(Size size, TileMode edgeTreatment = TileMode::Clamp) const;
+    friend bool operator==(const BlurRadiusSpec&, const BlurRadiusSpec&) = default;
+
+private:
+    enum class Kind : uint8_t { Uniform, Vertical, Horizontal, Linear, Radial };
+    BlurRadiusSpec(Kind kind, std::vector<BlurStop> stops);
+    Kind kind_;
+    std::vector<BlurStop> stops_;  // (uniform: its radius, the one)
+    Offset start_, end_;
+    std::optional<Offset> center_;
+    std::optional<float> fallOff_;
+};
 
 // How Path::op combines two shapes (Compose's PathOperation): what is in either, in both, in the
 // first but not the second (or the other way round), or in exactly one.

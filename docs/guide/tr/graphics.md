@@ -185,6 +185,16 @@ Box(Modifier().size(96).graphicsLayer({.renderEffect = OffsetEffect(BlurEffect(6
 
 Katmanın sınırları içinde çizilen, effect'in içinden geçer; `clip` açıksa effect'in yaptığı sonra katmanın şekline göre kesilir.
 
+`blur`, Compose 1.13'ünki gibi kademeli de bulanıklaştırır: bazı yerlerde ötekilerden daha çok; bir yarıçaptan ötekine (ya da `BlurStop`'lar üzerinden) aşağı, yana, bir doğru boyunca ya da bir merkezden dışarı. Lambda alan biçimi bunu çizim sırasında ayarlar:
+
+```cpp body
+Image(imageResource("images/cover.jpg"), "Album cover",
+      Modifier().size(160).blur(BlurRadiusSpec::verticalGradient(0, 16)), ContentScale::Crop);  // sharp at the top
+Box(Modifier().size(120).blur([](BlurScope& b) {
+    b.blurRadiusSpec = BlurRadiusSpec::radialGradient(0, 12);  // sharp in the middle
+}).background(colorScheme().primary, CircleShape));
+```
+
 ## Resimler
 
 `Image` bir bitmap gösterir; `imageResource(path)` uygulamanın varlıklarından bir tane yükler, bir kez:

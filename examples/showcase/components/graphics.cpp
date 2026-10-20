@@ -597,7 +597,8 @@ void BlendModeSection(CallSite site) {
     });
 }
 
-// Modifier.blur: a photo blurred as much as the slider says, kept to its bounds or spreading out.
+// Modifier.blur: a photo blurred as much as the slider says, kept to its bounds or spreading out;
+// another blurred progressively, more towards the bottom.
 // TileMode: a 60 dp gradient across 300 dp, past its end as each mode goes.
 void TileModeSection(CallSite site) {
     composable(site, [=] {
@@ -638,6 +639,16 @@ void BlurSection(CallSite site) {
                           .clip(RoundedCornerShape(16)),
                       ContentScale::Crop);
                 Text("Buzlu cam", {.font = typography().headlineSmall, .color = colors::White});
+            });
+            // Progressive (Compose 1.13): sharp at the top, as blurred as the slider says at the bottom.
+            Text("Kademeli: üstte keskin, altta bulanık", {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+            Box(Modifier().fillMaxWidth().height(160).padding(16), [&] {
+                Image(photo, "Manzara",
+                      Modifier().fillMaxSize()
+                          .blur(BlurRadiusSpec::verticalGradient(0, radius.get()),
+                                unbounded.get() ? BlurredEdgeTreatment::Unbounded : BlurredEdgeTreatment::Rectangle)
+                          .clip(RoundedCornerShape(16)),
+                      ContentScale::Crop);
             });
         });
     });
