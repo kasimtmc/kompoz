@@ -645,11 +645,31 @@ public:
         applyBlend();
     }
 
-    void pushBlurLayer(const Rect& bounds, float radiusX, float radiusY) override {
-        pushLayer(bounds, CornerRadii(), 1, {});
-        layers_.back().blurX = radiusX * scale;
-        layers_.back().blurY = radiusY * scale;
+    // An effect layer: a texture as big as the effect's blurs spread its content, which is cut to
+    // the bounds when it pops; then each blur in turn, and the offsets where it is composited
+    // (moving and blurring go either way round).
+    void pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) override {
+        Rect area = bounds;
+        Offset moved;
+        for (const RenderEffect::Step& step : effect.steps()) {
+            if (step.kind == RenderEffect::Step::Kind::Offset) {
+                moved = {moved.x + step.offset.x, moved.y + step.offset.y};
+                continue;
+            }
+            float x = spread(step.radiusX) / scale, y = spread(step.radiusY) / scale;
+            area = {area.x - x, area.y - y, area.width + 2 * x, area.height + 2 * y};
+        }
+        pushLayer(area, CornerRadii(), alpha, {});
+        Layer& layer = layers_.back();
+        if (!layer.texture) return;  // (drawn directly: as it is)
+        layer.effect = effect;
+        int x0 = int(std::floor(bounds.x * scale - layer.ox)), y0 = int(std::floor(bounds.y * scale - layer.oy));
+        int x1 = int(std::ceil(bounds.right() * scale - layer.ox)), y1 = int(std::ceil(bounds.bottom() * scale - layer.oy));
+        layer.content = {x0 - layer.rect.x, y0 - layer.rect.y, x1 - x0, y1 - y0};
+        layer.transform.translationX = moved.x, layer.transform.translationY = moved.y;
     }
+    // How far a blur of `radius` dp spreads (px): three of Android's sigmas, whole pixels.
+    float spread(float radius) const { return radius > 0 ? std::ceil(3 * (0.57735f * radius * scale + 0.5f)) : 0; }
 
     // Blurs a layer's texture in place: scaled down by halves (each a 2x2 average, by linear
     // filtering) about as many times as the radius is pixels wide in powers of two, then back
@@ -761,7 +781,7 @@ public:
         layers_.pop_back();
         if (!layer.texture) return;  // drawn directly: the clips never changed
         if (layer.clip) keepClipped(layer.texture, layer.rect, *layer.clip);
-        if (layer.blurX > 0 || layer.blurY > 0) blurLayer(layer.texture, layer.rect.w, layer.rect.h, layer.blurX, layer.blurY);
+        if (layer.effect) applyEffect(layer);
         SDL_SetRenderTarget(renderer_, layer.previous);
         ox_ = layer.ox;
         oy_ = layer.oy;
@@ -1108,11 +1128,76 @@ private:
         float alpha;
         LayerTransform transform;
         int texW = 0, texH = 0;  // the pooled texture can be a little bigger than rect
-        float blurX = 0, blurY = 0;       // px: blurred as it is composited
+        std::optional<RenderEffect> effect;  // an effect layer's (pushEffectLayer)
+        SDL_Rect content{};               // and the texture's pixels its bounds cover
         std::array<float, 9> matrix{};    // pushTransform's, in the parent's pixels (row by row), if matrixSet
         bool matrixSet = false;
         std::optional<ClipMask> clip;     // a clip's layer: kept only inside (or outside) this
     };
+
+    // An effect layer's texture, its pixels outside `valid` made as `tile` says: the edge's
+    // (Clamp), the valid ones over again (Repeated), mirrored (Mirror), or none (Decal). Copied
+    // into another texture (one can't draw itself), which becomes the layer's.
+    void tileLayer(Layer& layer, const SDL_Rect& valid, TileMode tile) {
+        int w = layer.rect.w, h = layer.rect.h, tw = 0, th = 0;
+        SDL_Texture* to = acquire(w, h, &tw, &th);
+        if (!to) return;
+        SDL_Texture* from = layer.texture;
+        SDL_SetRenderTarget(renderer_, to);
+        SDL_SetRenderClipRect(renderer_, nullptr);
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+        SDL_RenderClear(renderer_);
+        SDL_SetTextureBlendMode(from, SDL_BLENDMODE_NONE);  // premultiplied pixels as they are
+        SDL_SetTextureScaleMode(from, SDL_SCALEMODE_NEAREST);
+        float vx = float(valid.x), vy = float(valid.y), vw = float(valid.w), vh = float(valid.h);
+        auto put = [&](SDL_FRect src, SDL_FRect dst, SDL_FlipMode flip = SDL_FLIP_NONE, double angle = 0) {
+            SDL_RenderTextureRotated(renderer_, from, &src, &dst, angle, nullptr, flip);
+        };
+        if (tile == TileMode::Clamp) {
+            float cx[3][2] = {{0, vx}, {vx, vw}, {vx + vw, float(w) - vx - vw}}, cy[3][2] = {{0, vy}, {vy, vh}, {vy + vh, float(h) - vy - vh}};
+            for (int j = 0; j < 3; ++j)
+                for (int i = 0; i < 3; ++i) {
+                    if (cx[i][1] <= 0 || cy[j][1] <= 0) continue;
+                    // The valid pixels themselves, or the edge's (a row, a column, a corner) stretched.
+                    SDL_FRect src{i == 0 ? vx : i == 2 ? vx + vw - 1 : vx, j == 0 ? vy : j == 2 ? vy + vh - 1 : vy, i == 1 ? vw : 1, j == 1 ? vh : 1};
+                    put(src, {cx[i][0], cy[j][0], cx[i][1], cy[j][1]});
+                }
+        } else if (tile == TileMode::Decal) {
+            put({vx, vy, vw, vh}, {vx, vy, vw, vh});
+        } else {
+            int i0 = int(std::floor(-vx / vw)), i1 = int(std::ceil((float(w) - vx) / vw));
+            int j0 = int(std::floor(-vy / vh)), j1 = int(std::ceil((float(h) - vy) / vh));
+            for (int j = j0; j < j1; ++j)
+                for (int i = i0; i < i1; ++i) {
+                    bool fx = tile == TileMode::Mirror && (i & 1), fy = tile == TileMode::Mirror && (j & 1);
+                    SDL_FRect dst{vx + float(i) * vw, vy + float(j) * vh, vw, vh};
+                    if (fx && fy) put({vx, vy, vw, vh}, dst, SDL_FLIP_NONE, 180);
+                    else put({vx, vy, vw, vh}, dst, fx ? SDL_FLIP_HORIZONTAL : fy ? SDL_FLIP_VERTICAL : SDL_FLIP_NONE);
+                }
+        }
+        SDL_SetTextureScaleMode(from, SDL_SCALEMODE_LINEAR);
+        release(from);
+        layer.texture = to, layer.texW = tw, layer.texH = th;
+    }
+
+    // An effect layer's steps on its texture: cut to its bounds, then each blur (the offsets are
+    // its composite's).
+    void applyEffect(Layer& layer) {
+        SDL_Rect valid = layer.content;
+        tileLayer(layer, valid, TileMode::Decal);
+        for (const RenderEffect::Step& step : layer.effect->steps()) {
+            if (step.kind != RenderEffect::Step::Kind::Blur || (step.radiusX <= 0 && step.radiusY <= 0)) continue;
+            if (step.edgeTreatment != TileMode::Decal) tileLayer(layer, valid, step.edgeTreatment);
+            float bx = step.radiusX * scale, by = step.radiusY * scale;
+            blurLayer(layer.texture, layer.rect.w, layer.rect.h, bx, by);
+            // What it reaches (whole pixels: past them, nothing, as Skia leaves it).
+            int gx = int(spread(step.radiusX)), gy = int(spread(step.radiusY));
+            int l = std::max(0, valid.x - gx), t = std::max(0, valid.y - gy);
+            int r = std::min(layer.rect.w, valid.x + valid.w + gx), b = std::min(layer.rect.h, valid.y + valid.h + gy);
+            valid = {l, t, r - l, b - t};
+            tileLayer(layer, valid, TileMode::Decal);
+        }
+    }
     std::vector<bool> transformLayers_;  // each pushTransform: drawn through a layer (else a translation)
     struct ImageTexture {
         SDL_Texture* texture;

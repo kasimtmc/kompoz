@@ -57,7 +57,7 @@ public:
     void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha) override;
     void pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform = {}) override;
     void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform = {}) override;
-    void pushBlurLayer(const Rect& bounds, float radiusX, float radiusY) override;
+    void pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) override;
     void popLayer() override;
     void pushClip(const Rect& rect) override;
     void pushClipRoundRect(const Rect& rect, const CornerRadii& radii, ClipOp op) override;
@@ -102,6 +102,7 @@ private:
         ImageBitmap image;
         std::optional<Brush> brush;
         std::optional<ColorFilter> filter;  // PushFilter's
+        std::optional<RenderEffect> effect;  // an effect layer's
         Path path;
         PathStroke stroke;
         LayerTransform transform;

@@ -122,25 +122,35 @@ void drawThroughLayer(GraphicsContext& g, const LayerDraw& l, const std::functio
     Matrix m = layerMatrix(l.geometry);
     bool moved = !m.isIdentity();
     bool offscreen = l.strategy == CompositingStrategy::Offscreen || (alpha < 1 && l.strategy == CompositingStrategy::Auto) ||
-                     l.blendMode != BlendMode::SrcOver || l.colorFilter.has_value();
+                     l.blendMode != BlendMode::SrcOver || l.colorFilter.has_value() || l.renderEffect.has_value();
     bool modulated = !offscreen && alpha < 1;  // ModulateAlpha: each draw faded
     if (!moved && !offscreen && !modulated && !l.clip) return content();
     if (moved) g.pushTransform(m);
     Rect reach{l.bounds.x - l.outsets.left, l.bounds.y - l.outsets.top, l.bounds.width + l.outsets.left + l.outsets.right,
                l.bounds.height + l.outsets.top + l.outsets.bottom};
     // Nothing of it can show (the transform taken into account): not drawn at all.
-    if (!g.quickReject(reach)) {
+    if (!g.quickReject(l.renderEffect ? l.renderEffect->outputBounds(reach) : reach)) {
         const Outline& o = l.outline;
         Rect ob = o.bounds();
         Rect at{l.bounds.x + ob.x, l.bounds.y + ob.y, ob.width, ob.height};
         bool rounded = o.kind == Outline::Kind::Rectangle || (o.kind == Outline::Kind::Rounded && o.roundRect.circular());
         CornerRadii radii = o.kind == Outline::Kind::Rounded ? o.roundRect.radii() : CornerRadii();
+        // Cut to its outline where it goes, as what it draws there is.
+        auto pushClip = [&] {
+            if (rounded && radii.max() <= 0) g.pushClip(at);
+            else if (rounded) g.pushClipRoundRect(at, radii);
+            else g.pushClipPath(o.asPath(), {l.bounds.x, l.bounds.y});
+        };
         if (offscreen) {
             std::optional<detail::Filtering> filtering;
             if (l.colorFilter) filtering.emplace(g, l.colorFilter);
             if (l.blendMode != BlendMode::SrcOver) g.pushBlendMode(l.blendMode);
-            // Clipped by the layer itself: to a rounded rect of its bounds, else its outline.
-            if (l.clip && rounded && at == l.bounds && l.outsets == LayerOutsets{}) g.pushLayer(l.bounds, radii, alpha);
+            // Clipped: with an effect, by a clip around it (what the effect makes is cut, not what
+            // it is made of); else by the layer itself, to a rounded rect of its bounds or its outline.
+            bool clipped = l.clip && l.renderEffect;
+            if (clipped) pushClip();
+            if (l.renderEffect) g.pushEffectLayer(reach, *l.renderEffect, alpha);
+            else if (l.clip && rounded && at == l.bounds && l.outsets == LayerOutsets{}) g.pushLayer(l.bounds, radii, alpha);
             else if (l.clip) {
                 Path p = o.asPath();  // (from the layer's top left, which the outsets move)
                 p.translate({l.bounds.x - reach.x, l.bounds.y - reach.y});
@@ -150,6 +160,7 @@ void drawThroughLayer(GraphicsContext& g, const LayerDraw& l, const std::functio
             }
             content();
             g.popLayer();
+            if (clipped) g.popClip();
             if (l.blendMode != BlendMode::SrcOver) g.popBlendMode();
         } else {
             std::optional<detail::Filtering> fading;
@@ -158,11 +169,7 @@ void drawThroughLayer(GraphicsContext& g, const LayerDraw& l, const std::functio
                 fade.setToScale(1, 1, 1, alpha);
                 fading.emplace(g, ColorFilter::colorMatrix(fade));
             }
-            if (l.clip) {
-                if (rounded && radii.max() <= 0) g.pushClip(at);
-                else if (rounded) g.pushClipRoundRect(at, radii);
-                else g.pushClipPath(o.asPath(), {l.bounds.x, l.bounds.y});
-            }
+            if (l.clip) pushClip();
             content();
             if (l.clip) g.popClip();
         }
@@ -191,6 +198,7 @@ struct GraphicsLayerElement final : ModifierElement {
         d.alpha = l.alpha;
         d.clip = l.clip;
         if (l.clip) d.outline = l.shape.createOutline(l.size, node.rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr);
+        d.renderEffect = l.renderEffect;
         d.blendMode = l.blendMode;
         d.colorFilter = l.colorFilter;
         d.strategy = l.compositingStrategy;
@@ -501,34 +509,16 @@ Modifier Modifier::drawWithCache(std::function<DrawResult(CacheDrawScope&)> buil
     return then(std::move(e));
 }
 
-namespace {
-struct BlurElement final : ModifierElement {
-    float radiusX = 0, radiusY = 0;
-    BlurredEdgeTreatment edges = BlurredEdgeTreatment::Rectangle;
-    void draw(GraphicsContext& g, const Rect& bounds, const LayoutNode&, const std::function<void()>& drawContent) const override {
-        if (radiusX <= 0 && radiusY <= 0) return drawContent();
-        // Unbounded: room for the blur to spread into (about three times its radius).
-        Rect area = bounds;
-        if (edges == BlurredEdgeTreatment::Unbounded)
-            area = {bounds.x - 3 * radiusX, bounds.y - 3 * radiusY, bounds.width + 6 * radiusX, bounds.height + 6 * radiusY};
-        if (g.quickReject(area)) return;
-        g.pushBlurLayer(area, radiusX, radiusY);
-        drawContent();
-        g.popLayer();
-    }
-    bool equals(const ModifierElement& other) const override {
-        auto* o = dynamic_cast<const BlurElement*>(&other);
-        return o && o->radiusX == radiusX && o->radiusY == radiusY && o->edges == edges;
-    }
-};
-} // namespace
-
-Modifier Modifier::blur(float radiusX, float radiusY, BlurredEdgeTreatment edgeTreatment) const {
-    auto e = std::make_shared<BlurElement>();
-    e->radiusX = std::max(0.f, radiusX);
-    e->radiusY = std::max(0.f, radiusY);
-    e->edges = edgeTreatment;
-    return then(std::move(e));
+// As Compose's: a graphicsLayer, blurred only when both radii are (a BlurEffect's), Clamp at the
+// edges when it is clipped to a shape, Decal when it spreads out.
+Modifier Modifier::blur(float radiusX, float radiusY, const BlurredEdgeTreatment& edgeTreatment) const {
+    bool clip = edgeTreatment.shape.has_value();
+    if (!((radiusX > 0 && radiusY > 0) || clip)) return *this;
+    GraphicsLayerScope layer;
+    if (radiusX > 0 && radiusY > 0) layer.renderEffect = BlurEffect(radiusX, radiusY, clip ? TileMode::Clamp : TileMode::Decal);
+    layer.shape = edgeTreatment.shape.value_or(RectangleShape);
+    layer.clip = clip;
+    return graphicsLayer(layer);
 }
 
 Modifier Modifier::graphicsLayer(const GraphicsLayerScope& layer) const {
@@ -604,6 +594,7 @@ void DrawScope::drawLayer(const GraphicsLayer& layer) {
     l.alpha = p.alpha;
     l.clip = p.clip;
     l.outline = p.outline.value_or(Outline::Rectangle({0, 0, d.size.width, d.size.height}));
+    l.renderEffect = p.renderEffect;
     l.blendMode = p.blendMode;
     l.colorFilter = p.colorFilter;
     l.strategy = p.compositingStrategy;

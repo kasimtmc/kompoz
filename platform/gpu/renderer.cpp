@@ -2,6 +2,7 @@
 
 #include "renderer.hpp"
 
+#include "shaders/generated/effects.h"
 #include "shaders/generated/path.h"
 #include "shaders/generated/primitives.h"
 
@@ -26,6 +27,10 @@ const ShaderCode kCoverageVertex{shaders::path_vs_spirv, shaders::path_vs_msl, s
                                  shaders::path_vs_wgsl, "vs"};
 const ShaderCode kCoverageFragment{shaders::path_fs_spirv, shaders::path_fs_msl, shaders::path_fs_glsl,
                                    shaders::path_fs_wgsl, "fs"};
+const ShaderCode kEffectVertex{shaders::effects_vs_spirv, shaders::effects_vs_msl, shaders::effects_vs_glsl,
+                               shaders::effects_vs_wgsl, "vs"};
+const ShaderCode kEffectFragment{shaders::effects_fs_spirv, shaders::effects_fs_msl, shaders::effects_fs_glsl,
+                                 shaders::effects_fs_wgsl, "fs"};
 
 constexpr int kMaskSize = 2048;  // a generation's mask is at least this big each way (px), and at least its target's size
 
@@ -360,6 +365,37 @@ void Renderer::flush() {
 }
 
 void Renderer::execute(Pass& pass) {
+    if (pass.effect) {
+        const EffectDraw& e = *pass.effect;
+        if (!effectPipeline_) {
+            PipelineDesc desc;
+            desc.vertex = &kEffectVertex;
+            desc.fragment = &kEffectFragment;
+            desc.instanceAttributes = {{0, VertexFormat::Float4, 0}};
+            desc.instanceStride = 16;
+            desc.textures = 1;
+            desc.blend = {false};
+            desc.target = pass.target->format();
+            effectPipeline_ = device_.createPipeline(desc);
+        }
+        BufferRef rect;
+        float* r = static_cast<float*>(device_.allocate(16, 16, &rect));
+        r[0] = float(e.rect.x), r[1] = float(e.rect.y), r[2] = float(e.rect.x + e.rect.width), r[3] = float(e.rect.y + e.rect.height);
+        float uniforms[20];
+        std::copy(std::begin(e.uniforms), std::end(e.uniforms), uniforms);
+        float w = float(pass.target->width()), h = float(pass.target->height());
+        bool yDown = device_.clipYDown();
+        uniforms[0] = 2 / w, uniforms[1] = yDown ? 2 / h : -2 / h, uniforms[2] = -1, uniforms[3] = yDown ? -1.f : 1.f;
+        Texture* reads[] = {e.source};
+        device_.beginPass(*pass.target, ClearColor{}, reads);
+        device_.setPipeline(*effectPipeline_);
+        device_.setUniforms(uniforms, sizeof uniforms);
+        device_.setTexture(0, *e.source, Sampler{Filter::Nearest});
+        device_.setScissor(e.rect);
+        device_.draw(rect, 6, 1);
+        device_.endPass();
+        return;
+    }
     // The instances, all at once; then each mask generation: its paths' coverage, then the
     // batches that read it (the target cleared only before the first).
     BufferRef prims;
@@ -939,6 +975,11 @@ bool Renderer::quickReject(const Rect& r) const {
 }
 
 void Renderer::pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform) {
+    pushLayer(bounds, radii, alpha, transform, std::nullopt);
+}
+
+void Renderer::pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform,
+                         const std::optional<Rect>& within) {
     ++layerCount;
     float lx = bounds.x * scale - ox_, ly = bounds.y * scale - oy_, lw = bounds.width * scale, lh = bounds.height * scale;
     // As many texels for each of its pixels as the transform enlarges it by at most (no more than
@@ -948,6 +989,10 @@ void Renderer::pushLayer(const Rect& bounds, const CornerRadii& radii, float alp
     if (r > 1 && std::max(lw, lh) * r > float(kMaxLayer)) r = std::max(1.f, float(kMaxLayer) / std::max(lw, lh));
     int x0 = int(std::floor(lx * r)), y0 = int(std::floor(ly * r));
     int x1 = int(std::ceil((lx + lw) * r)), y1 = int(std::ceil((ly + lh) * r));
+    if (within && (x1 - x0 > kMaxLayer || y1 - y0 > kMaxLayer)) {
+        x0 = std::max(x0, int(std::floor(within->x))), y0 = std::max(y0, int(std::floor(within->y)));
+        x1 = std::min(x1, int(std::ceil(within->right()))), y1 = std::min(y1, int(std::ceil(within->bottom())));
+    }
     Layer layer{nullptr, {x0, y0, std::max(1, x1 - x0), std::max(1, y1 - y0)}, {lx * r, ly * r, lw * r, lh * r}, radii.scaled(scale * r),
                 alpha, transform, r, scale};
     if (layer.rect.width <= kMaxLayer && layer.rect.height <= kMaxLayer) layer.texture = acquire(layer.rect.width, layer.rect.height);
@@ -961,6 +1006,139 @@ void Renderer::pushLayer(const Rect& bounds, const CornerRadii& radii, float alp
     layers_.push_back(layer);
 }
 
+// Too big for a texture: the part around what can show, as far as the effect brings what is
+// there into it (r is 1 then).
+void Renderer::pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) {
+    std::optional<Rect> within;
+    IRect visible = scissor();
+    Projective back = transform_.inverse();
+    float l = 1e30f, t = 1e30f, r = -1e30f, b = -1e30f;
+    bool seen = true;
+    for (int c = 0; c < 4 && seen; ++c) {
+        float w;
+        Offset q = back.apply(float(c & 1 ? visible.x + visible.width : visible.x), float(c & 2 ? visible.y + visible.height : visible.y), &w);
+        seen = w > 0;
+        l = std::min(l, q.x), t = std::min(t, q.y), r = std::max(r, q.x), b = std::max(b, q.y);
+    }
+    if (seen) {
+        float reachX = 0, reachY = 0;
+        for (const RenderEffect::Step& s : effect.steps()) {
+            reachX += s.kind == RenderEffect::Step::Kind::Offset ? std::abs(s.offset.x) * scale
+                                                                 : std::ceil(3 * (0.57735f * s.radiusX * scale + 0.5f)) + 1;
+            reachY += s.kind == RenderEffect::Step::Kind::Offset ? std::abs(s.offset.y) * scale
+                                                                 : std::ceil(3 * (0.57735f * s.radiusY * scale + 0.5f)) + 1;
+        }
+        within = Rect{l - reachX, t - reachY, r - l + 2 * reachX, b - t + 2 * reachY};
+    }
+    pushLayer(bounds, CornerRadii(), alpha, {}, within);
+    if (layers_.back().texture) layers_.back().effect = effect;
+}
+
+void Renderer::effectPass(Texture& target, Texture& source, const IRect& rect, const float (&uniforms)[20]) {
+    Pass pass{&target, std::nullopt, {}, {}};
+    pass.effect = EffectDraw{&source, rect, {}};
+    std::copy(std::begin(uniforms), std::end(uniforms), pass.effect->uniforms);
+    order_.push_back(passes_.size());
+    passes_.push_back(std::move(pass));
+}
+
+// Each blur: its first pass makes the pixels past what it blurs as its tile mode says, within
+// what the blur reads, in a texture scaled down by powers of two until the sigma left is at most
+// 4 texels (as Skia's does for a wide one: no more than 25 taps); then a Gaussian across and
+// down. The variance the scaling adds (the mean of each block, and the bilinear filtering that
+// scales the last one back up) is taken off the sigma. Offsets are the composite's.
+Renderer::EffectImage Renderer::applyEffect(const Layer& layer) {
+    float res = layer.resolution;
+    EffectImage image{layer.texture, layer.rect.x, layer.rect.y, 1, 1, layer.rect.width, layer.rect.height, layer.rect};
+    struct Blur {
+        float sigmaX, sigmaY;
+        int stepX, stepY;
+        TileMode tile;
+    };
+    std::vector<Blur> blurs;
+    int stepX = 1, stepY = 1;
+    auto level = [](float sigma, int at) {
+        while (sigma / float(at) > 4) at *= 2;
+        return at;
+    };
+    for (const RenderEffect::Step& s : layer.effect->steps()) {
+        if (s.kind == RenderEffect::Step::Kind::Offset) {
+            image.offsetX += s.offset.x * scale * res, image.offsetY += s.offset.y * scale * res;
+            continue;
+        }
+        // Android's sigma for the radius in the parent's pixels (no more than Skia's 532), in the layer's.
+        float sx = s.radiusX > 0 ? std::min(0.57735f * s.radiusX * scale + 0.5f, 532.f) * res : 0;
+        float sy = s.radiusY > 0 ? std::min(0.57735f * s.radiusY * scale + 0.5f, 532.f) * res : 0;
+        if (sx <= 0 && sy <= 0) continue;
+        stepX = level(sx, stepX), stepY = level(sy, stepY);
+        blurs.push_back({sx, sy, stepX, stepY, s.edgeTreatment});
+    }
+    // What is left of each sigma at its level: its variance less what scaling down to it adds,
+    // and the last ones less what scaling back up adds (as much of that as each has, the last first).
+    std::vector<float> left(blurs.size() * 2);
+    for (int axis = 0; axis < 2; ++axis) {
+        int last = axis ? stepY : stepX;
+        float up = float(last * last - 1) / 6;
+        for (size_t k = blurs.size(); k-- > 0;) {
+            float sigma = axis ? blurs[k].sigmaY : blurs[k].sigmaX;
+            int step = axis ? blurs[k].stepY : blurs[k].stepX, before = k ? (axis ? blurs[k - 1].stepY : blurs[k - 1].stepX) : 1;
+            float variance = std::max(0.f, sigma * sigma - float(step * step - before * before) / 12);
+            float taken = sigma > 0 ? std::min(variance, up) : 0;
+            up -= taken;
+            left[k * 2 + size_t(axis)] = sigma > 0 ? std::sqrt(variance - taken) / float(step) : 0;
+        }
+    }
+    for (size_t k = 0; k < blurs.size(); ++k) {
+        const Blur& blur = blurs[k];
+        float gx = left[k * 2], gy = left[k * 2 + 1];
+        // What it shows: three sigmas past what it blurs (whole pixels, as Skia's).
+        int ex = blur.sigmaX > 0 ? int(std::ceil(3 * blur.sigmaX)) : 0, ey = blur.sigmaY > 0 ? int(std::ceil(3 * blur.sigmaY)) : 0;
+        IRect shown{image.shown.x - ex, image.shown.y - ey, image.shown.width + 2 * ex, image.shown.height + 2 * ey};
+        // What it works out: the texels the filtering scaling it back up reads (one past what
+        // shows) and as far past them as the kernel reaches, on the image's texels.
+        int mx = (int(std::ceil(3 * gx)) + 1) * blur.stepX, my = (int(std::ceil(3 * gy)) + 1) * blur.stepY;
+        int ox = image.originX + int(std::floor(float(shown.x - mx - image.originX) / float(image.stepX))) * image.stepX;
+        int oy = image.originY + int(std::floor(float(shown.y - my - image.originY) / float(image.stepY))) * image.stepY;
+        int nx = (shown.x + shown.width + mx - ox + blur.stepX - 1) / blur.stepX, ny = (shown.y + shown.height + my - oy + blur.stepY - 1) / blur.stepY;
+        // The image's own texels (whole ones of it).
+        float vx0 = std::floor(float(image.shown.x - image.originX) / float(image.stepX));
+        float vy0 = std::floor(float(image.shown.y - image.originY) / float(image.stepY));
+        float vx1 = std::ceil(float(image.shown.x + image.shown.width - image.originX) / float(image.stepX));
+        float vy1 = std::ceil(float(image.shown.y + image.shown.height - image.originY) / float(image.stepY));
+        // Scaled down at most 8 times each way in a pass, the first one tiling.
+        Texture* from = image.texture;
+        int fx = blur.stepX / image.stepX, fy = blur.stepY / image.stepY, atX = image.stepX, atY = image.stepY;
+        float mapX = float((ox - image.originX) / image.stepX), mapY = float((oy - image.originY) / image.stepY);
+        float tile = float(int(blur.tile));
+        bool first = true;
+        while (first || fx > 1 || fy > 1) {
+            int px = std::min(fx, 8), py = std::min(fy, 8);
+            fx /= px, fy /= py, atX *= px, atY *= py;
+            int w = (shown.x + shown.width + mx - ox + atX - 1) / atX, h = (shown.y + shown.height + my - oy + atY - 1) / atY;
+            Texture* to = acquire(w, h);
+            if (!to) return image;
+            float u[20] = {0, 0, 0, 0, float(px), float(py), mapX, mapY, vx0, vy0, vx1, vy1, 0, tile, 0, 0,
+                           0, 0, 1 / float(from->width()), 1 / float(from->height())};
+            effectPass(*to, *from, {0, 0, w, h}, u);
+            // The next pass reads all of this one's, nothing past it.
+            from = to, mapX = mapY = 0, vx0 = vy0 = 0, vx1 = float(w), vy1 = float(h), tile = float(int(TileMode::Decal));
+            first = false;
+        }
+        for (int axis = 0; axis < 2; ++axis) {
+            float g = axis ? gy : gx;
+            if (g <= 0) continue;
+            Texture* to = acquire(nx, ny);
+            if (!to) return image;
+            float u[20] = {0, 0, 0, 0, 1, 1, 0, 0, 0, 0, float(nx), float(ny), 1, float(int(TileMode::Decal)), float(axis), g,
+                           std::ceil(3 * g), 0, 1 / float(from->width()), 1 / float(from->height())};
+            effectPass(*to, *from, {0, 0, nx, ny}, u);
+            from = to;
+        }
+        image = {from, ox, oy, blur.stepX, blur.stepY, nx, ny, shown, image.offsetX, image.offsetY};
+    }
+    return image;
+}
+
 void Renderer::popLayer() {
     Layer layer = layers_.back();
     layers_.pop_back();
@@ -968,6 +1146,23 @@ void Renderer::popLayer() {
     endTarget();
     scale = layer.parentScale;
     float res = layer.resolution;
+    if (layer.effect) {
+        // What the effect made, its pixels where they show, back in the parent's pixels.
+        EffectImage image = applyEffect(layer);
+        const Texture& t = *image.texture;
+        float x0 = float(image.shown.x) + image.offsetX, y0 = float(image.shown.y) + image.offsetY;
+        float x1 = x0 + float(image.shown.width), y1 = y0 + float(image.shown.height);
+        float tx = float(image.originX) + image.offsetX, ty = float(image.originY) + image.offsetY;
+        Prim p;
+        set(p.bounds, x0 - 1, y0 - 1, x1 + 1, y1 + 1);
+        set(p.shape, x0, y0, x1, y1);
+        set(p.params, tx, ty, tx + float(image.texelsX * image.stepX), ty + float(image.texelsY * image.stepY));
+        set(p.uv, 0, 0, 1 / float(t.width() * image.stepX), 1 / float(t.height() * image.stepY));
+        set(p.color, 0, 0, 0, layer.alpha);
+        set(p.xform, 1 / res, 0, 0, 1 / res);
+        add(LAYER, p, image.texture);
+        return;
+    }
     Texture& t = *layer.texture;
     const Rect& b = layer.shape;
     float half = std::min(b.width, b.height) / 2;

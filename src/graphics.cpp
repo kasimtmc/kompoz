@@ -516,6 +516,38 @@ ImageBitmap ColorFilter::apply(const ImageBitmap& image) const {
     return filtered;
 }
 
+RenderEffect BlurEffect(const std::optional<RenderEffect>& renderEffect, float radiusX, float radiusY, TileMode edgeTreatment) {
+    RenderEffect e = renderEffect.value_or(RenderEffect());
+    RenderEffect::Step s;
+    s.radiusX = std::max(0.f, radiusX), s.radiusY = std::max(0.f, radiusY);
+    s.edgeTreatment = edgeTreatment;
+    e.steps_.push_back(s);
+    return e;
+}
+
+RenderEffect OffsetEffect(const std::optional<RenderEffect>& renderEffect, Offset offset) {
+    RenderEffect e = renderEffect.value_or(RenderEffect());
+    RenderEffect::Step s;
+    s.kind = RenderEffect::Step::Kind::Offset;
+    s.offset = offset;
+    e.steps_.push_back(s);
+    return e;
+}
+
+Rect RenderEffect::outputBounds(const Rect& bounds) const {
+    Rect r = bounds;
+    for (const Step& s : steps_) {
+        if (s.kind == Step::Kind::Offset) {
+            r.x += s.offset.x, r.y += s.offset.y;
+            continue;
+        }
+        // Three sigmas (0.57735 r + 0.5 px), the half pixel taken as up to 2.5 dp (ldpi's 0.75 px a dp, rounded up).
+        float x = s.radiusX > 0 ? 3 * 0.57735f * s.radiusX + 2.5f : 0, y = s.radiusY > 0 ? 3 * 0.57735f * s.radiusY + 2.5f : 0;
+        r = {r.x - x, r.y - y, r.width + 2 * x, r.height + 2 * y};
+    }
+    return r;
+}
+
 void Path::moveTo(float x, float y) {
     commands_.push_back({PathCommand::Verb::Move, 0, 0, 0, 0, x, y});
     current_ = start_ = {x, y};

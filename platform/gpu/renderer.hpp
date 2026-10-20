@@ -75,6 +75,7 @@ public:
     void pushColorFilter(const ColorFilter& filter) override;
     void popColorFilter() override;
     void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform = {}) override;
+    void pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) override;
 
 private:
     // One quad: what shaders/primitives.slang's Instance says.
@@ -108,6 +109,12 @@ private:
         int x = 0, y = 0, row = 0;
         uint32_t generation = 0;
     };
+    // A pass of an effect (shaders/effects.slang): `rect` of the target made from `source`.
+    struct EffectDraw {
+        Texture* source;
+        IRect rect;
+        float uniforms[20];
+    };
     struct Pass {
         Texture* target;
         std::optional<ClearColor> clear;
@@ -116,6 +123,7 @@ private:
         std::vector<EdgeInstance> edges;
         std::vector<uint32_t> edgeGenerations;  // the generation each edge is in
         MaskShelf shelf;
+        std::optional<EffectDraw> effect;  // set: this instead of the rest
     };
     // A clip in effect: the pixels it leaves (whole ones), and the clips that cut them finer (a
     // rect turned, say), if any: their chain.
@@ -170,6 +178,16 @@ private:
         float resolution = 1;
         float parentScale = 1;  // the px per dp outside it
         std::optional<Path> outline;  // cut to this (dp from the bounds' top left) instead of the corners
+        std::optional<RenderEffect> effect;  // an effect layer's (not cut, its own way of compositing)
+    };
+    // What an effect layer's steps make of its texture: `texels` of `texture`, whose texel (0, 0)
+    // is at `origin` in the layer's pixels, each texel `step` of them across and down; it shows
+    // `shown` (whole pixels), moved by `offset`.
+    struct EffectImage {
+        Texture* texture;
+        int originX, originY, stepX = 1, stepY = 1, texelsX, texelsY;
+        IRect shown;
+        float offsetX = 0, offsetY = 0;
     };
     struct ImageTexture {
         std::unique_ptr<Texture> texture;
@@ -197,6 +215,14 @@ private:
     std::optional<Offset> rasterizeInClips(const std::vector<Contour>& contours, IRect region);
     // A clip in the chain inside the current one: a new chain, the clips it leaves (whole pixels).
     void pushChain(ClipElement element, const IRect& scissor);
+    // pushLayer(), a layer too big for a texture cut to `within` (the parent's pixels), if any.
+    void pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform,
+                   const std::optional<Rect>& within);
+    // An effect layer's steps on its texture (in passes that run after its own), and the image
+    // they make.
+    EffectImage applyEffect(const Layer& layer);
+    // A pass of an effect into `target`, from `source`, as `uniforms` say (all but the first four).
+    void effectPass(Texture& target, Texture& source, const IRect& rect, const float (&uniforms)[20]);
     // A prim painted with `brush` over `area` (dp): its color, or its gradient (at `alpha`), in
     // pixels `enlarged` times.
     Prim painted(const Brush& brush, const Rect& area, float alpha = 1, float enlarged = 1);
@@ -234,6 +260,7 @@ private:
     std::vector<std::pair<PipelineKey, std::unique_ptr<Pipeline>>> pipelines_;
     std::unique_ptr<Texture> dstCopy_;  // a target's pixels under a draw whose blend mode reads them
     std::unique_ptr<Pipeline> coveragePipeline_;
+    std::unique_ptr<Pipeline> effectPipeline_;
     std::unique_ptr<Texture> mask_;  // the coverage mask, as big as a generation needed so far
     // Gradients' stops this frame, a row each (see shaders/primitives.slang), and their texture.
     static constexpr int kStopsWidth = 256;  // texels: 128 stops

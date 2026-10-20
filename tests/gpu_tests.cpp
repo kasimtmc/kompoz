@@ -481,6 +481,45 @@ void graphicsLayers(GraphicsContext& c) {  // graphicsLayer's: in 3D, faded, fil
     });
 }
 
+void effects(GraphicsContext& c) {  // render effects: a blur's tile modes, wide, moved, cut, turned
+    static ImageBitmap image = checker();
+    Color a{0.95f, 0.45f, 0.1f, 1}, b{0.3f, 0.1f, 0.7f, 1};
+    auto card = [&](Rect r) {
+        c.fillGradient(r, CornerRadii(8), Brush::linearGradient({a, b}), r);
+        c.drawImage(image, {0, 0, 16, 16}, {r.x + 6, r.y + 6, 18, 18}, 1);
+        c.fillRoundRect({r.x + r.width - 16, r.y + 4, 8, r.height - 8}, 4, colors::White);
+    };
+    auto layer = [&](Rect bounds, const std::function<void(detail::LayerDraw&)>& set) {
+        detail::LayerDraw l;
+        l.bounds = bounds;
+        l.geometry.pivot = bounds.center();
+        set(l);
+        detail::drawThroughLayer(c, l, [&] { card(bounds); });
+    };
+    const TileMode tiles[] = {TileMode::Clamp, TileMode::Decal, TileMode::Repeated, TileMode::Mirror};
+    for (int i = 0; i < 4; ++i)  // each cut to what is around it, to show how its edges go
+        layer({float(12 + i * 44), 12, 36, 30}, [&](detail::LayerDraw& l) {
+            l.renderEffect = BlurEffect(3, 3, tiles[i]);
+            l.clip = true;
+            l.outline = Outline::Rectangle({-4, -4, 44, 38});
+        });
+    layer({16, 62, 70, 40}, [](detail::LayerDraw& l) { l.renderEffect = BlurEffect(18, 6, TileMode::Decal); });
+    layer({112, 62, 56, 40}, [](detail::LayerDraw& l) {
+        l.renderEffect = OffsetEffect(BlurEffect(2, 2, TileMode::Decal), {6, 6});
+        l.alpha = 0.7f;
+    });
+    layer({16, 122, 70, 50}, [](detail::LayerDraw& l) {
+        l.renderEffect = BlurEffect(5, 5);
+        l.clip = true;
+        l.outline = Outline::Rounded({{0, 0, 70, 50}, 25, 25, 25, 25});
+    });
+    layer({108, 122, 64, 50}, [](detail::LayerDraw& l) {
+        l.renderEffect = BlurEffect(2, 2, TileMode::Decal);
+        l.geometry.rotationZ = 20;
+        l.geometry.rotationX = 30;
+    });
+}
+
 void fractionalDensity(GraphicsContext& c) {  // at 2.625 px per dp, as a phone's
     c.fillRoundRect({4, 4, 30, 20}, 6, Color{0.2f, 0.5f, 0.3f, 1});
     c.strokeRoundRect({38, 4, 30, 20}, 6, 1, Color{0.2f, 0.2f, 0.2f, 1});
@@ -1393,6 +1432,272 @@ void graphicsLayersCompositeAsCompose(Gpu& g) {
     CHECK(near(grayed.at(8, 8), int(std::lround(g2.r * 255)), int(std::lround(g2.g * 255)), int(std::lround(g2.b * 255))));
 }
 
+// What Skia makes of a layer's pixels blurred (premultiplied, w x h): the pixels past `valid` as
+// `tile` says, a discrete Gaussian across (weights exp(-i^2 / 2 sigma^2) out to ceil(3 sigma), adding
+// up to 1), then one down; nothing past three sigmas beyond `valid`.
+struct Image {
+    int w, h;
+    std::vector<float> rgba;  // premultiplied
+    float* at(int x, int y) { return &rgba[(size_t(y) * size_t(w) + size_t(x)) * 4]; }
+};
+Image painted(int w, int h, const std::vector<std::pair<gpu::IRect, Color>>& fills) {  // opaque, whole pixels
+    Image out{w, h, std::vector<float>(size_t(w) * size_t(h) * 4, 0.f)};
+    for (const auto& [r, c] : fills)
+        for (int y = std::max(0, r.y); y < std::min(h, r.y + r.height); ++y)
+            for (int x = std::max(0, r.x); x < std::min(w, r.x + r.width); ++x) {
+                float* q = out.at(x, y);
+                q[0] = c.r, q[1] = c.g, q[2] = c.b, q[3] = 1;
+            }
+    return out;
+}
+Image gaussian(Image in, gpu::IRect valid, TileMode tile, float sigmaX, float sigmaY) {
+    auto tiled = [&](int t, int low, int n) {
+        if (t >= low && t < low + n) return t;
+        int m = t - low;
+        switch (tile) {
+        case TileMode::Clamp: return std::clamp(t, low, low + n - 1);
+        case TileMode::Repeated: return low + ((m % n) + n) % n;
+        case TileMode::Mirror: {
+            int k = ((m % (2 * n)) + 2 * n) % (2 * n);
+            return low + (k < n ? k : 2 * n - 1 - k);
+        }
+        default: return -1;
+        }
+    };
+    auto kernel = [](float sigma) {
+        int reach = sigma > 0 ? int(std::ceil(3 * sigma)) : 0;
+        std::vector<double> k(size_t(2 * reach + 1));
+        double sum = 0;
+        for (int i = -reach; i <= reach; ++i) sum += k[size_t(i + reach)] = sigma > 0 ? std::exp(-double(i * i) / (2.0 * sigma * sigma)) : 1;
+        for (double& v : k) v /= sum;
+        return k;
+    };
+    std::vector<double> kx = kernel(sigmaX), ky = kernel(sigmaY);
+    int rx = int(kx.size() / 2), ry = int(ky.size() / 2);
+    auto source = [&](int x, int y, int c) -> double {
+        int sx = tiled(x, valid.x, valid.width), sy = tiled(y, valid.y, valid.height);
+        return sx < 0 || sy < 0 || sx >= in.w || sy >= in.h ? 0.0 : double(in.at(sx, sy)[c]);
+    };
+    Image out{in.w, in.h, std::vector<float>(in.rgba.size(), 0.f)};
+    for (int y = std::max(0, valid.y - ry); y < std::min(in.h, valid.y + valid.height + ry); ++y)
+        for (int x = std::max(0, valid.x - rx); x < std::min(in.w, valid.x + valid.width + rx); ++x)
+            for (int c = 0; c < 4; ++c) {
+                double v = 0;
+                for (int j = -ry; j <= ry; ++j) {
+                    double across = 0;
+                    for (int i = -rx; i <= rx; ++i) across += kx[size_t(i + rx)] * source(x + i, y + j, c);
+                    v += ky[size_t(j + ry)] * across;
+                }
+                out.at(x, y)[c] = float(v);
+            }
+    return out;
+}
+// As drawn over white, 8 bits a channel.
+Pixels overWhite(Image image) {
+    Pixels p{image.w, image.h, std::vector<uint8_t>(size_t(image.w) * size_t(image.h) * 4)};
+    for (int y = 0; y < image.h; ++y)
+        for (int x = 0; x < image.w; ++x) {
+            const float* q = image.at(x, y);
+            uint8_t* o = &p.rgba[(size_t(y) * size_t(image.w) + size_t(x)) * 4];
+            for (int c = 0; c < 3; ++c) o[c] = uint8_t(std::lround(std::clamp(q[c] + (1 - q[3]), 0.f, 1.f) * 255));
+            o[3] = 255;
+        }
+    return p;
+}
+float sigmaOf(float radiusPx) { return 0.57735f * radiusPx + 0.5f; }  // Android's
+
+// Effect layers blur as Skia does: the edges as the tile mode says, a Gaussian of Android's sigma,
+// spreading three sigmas; wide ones (scaled down) close to it; offsets, chains, transforms, a
+// clip around them and layers too big for a texture.
+void blursAreGaussian(Gpu& g) {
+    const int n = 96;
+    gpu::IRect bounds{24, 24, 48, 48};
+    std::vector<std::pair<gpu::IRect, Color>> fills = {{{24, 24, 20, 48}, Color{0.9f, 0.1f, 0.1f, 1}},
+                                                        {{44, 30, 28, 14}, Color{0.1f, 0.2f, 0.9f, 1}},
+                                                        {{50, 56, 10, 10}, Color{0.1f, 0.7f, 0.2f, 1}},
+                                                        {{60, 66, 12, 6}, Color{0.95f, 0.8f, 0.1f, 1}}};  // (the bottom unlike the top, the right unlike the left)
+    auto content = [&](GraphicsContext& c) {
+        for (const auto& [r, col] : fills) c.fillRoundRect({float(r.x), float(r.y), float(r.width), float(r.height)}, 0, col);
+        c.fillRoundRect({0, 0, 96, 10}, 0, Color{0, 0, 0, 1});  // outside the bounds: cut away
+    };
+    Image base = painted(n, n, fills);
+    auto blurredBy = [&](const RenderEffect& effect, float scale = 1) {
+        return g.render(n, n, scale, [&](GraphicsContext& c) {
+            c.pushEffectLayer({24 / scale, 24 / scale, 48 / scale, 48 / scale}, effect, 1);
+            c.pushTransform([&] {
+                Matrix m;
+                m.scale(1 / scale, 1 / scale);
+                return m;
+            }());
+            content(c);
+            c.popTransform();
+            c.popLayer();
+        });
+    };
+    auto report = [&](const char* what, const Pixels& p, const Pixels& want, int tolerance,
+                      const std::function<bool(int, int)>& skip = nullptr) {
+        int worst = worstAgainst(p, [&](int x, int y) { return want.at(x, y); }, skip);
+        if (std::getenv("KOMPOZ_BLUR_WORST")) std::printf("  %s: %d\n", what, worst);
+        CHECK(worst <= tolerance);
+        if (worst > tolerance) std::printf("  %s: off by %d at (%g, %g)\n", what, worst, worstAt.x, worstAt.y);
+        if (worst > tolerance && std::getenv("KOMPOZ_BLUR_WORST")) {
+            Pixels a = p, b = want;
+            savePng(std::string("blur-got.png"), a), savePng(std::string("blur-want.png"), b);
+        }
+    };
+    // Each tile mode, narrow (no scaling down) and each way its own radius; in bounds of another
+    // size too, whose periods a GPU dividing by a reciprocal can come out just under.
+    for (TileMode tile : {TileMode::Clamp, TileMode::Decal, TileMode::Repeated, TileMode::Mirror}) {
+        Pixels p = blurredBy(BlurEffect(4, 2.5f, tile));
+        report("narrow", p, overWhite(gaussian(base, bounds, tile, sigmaOf(4), sigmaOf(2.5f))), 2);
+        gpu::IRect small{30, 30, 36, 30};
+        Pixels q = g.render(n, n, 1, [&](GraphicsContext& c) {
+            c.pushEffectLayer({30, 30, 36, 30}, BlurEffect(3, 3, tile), 1);
+            content(c);
+            c.popLayer();
+        });
+        Image within = base;  // (what is drawn within the bounds)
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x)
+                if (x < small.x || x >= small.x + small.width || y < small.y || y >= small.y + small.height) std::fill_n(within.at(x, y), 4, 0.f);
+        report("narrow, 36 x 30", q, overWhite(gaussian(within, small, tile, sigmaOf(3), sigmaOf(3))), 2);
+    }
+    // One way only; at 2 px per dp (the sigma in px).
+    report("across only", blurredBy(BlurEffect(5, 0)), overWhite(gaussian(base, bounds, TileMode::Clamp, sigmaOf(5), 0)), 2);
+    report("at 2 px a dp", blurredBy(BlurEffect(3, 3, TileMode::Decal), 2),
+           overWhite(gaussian(base, bounds, TileMode::Decal, sigmaOf(6), sigmaOf(6))), 2);
+    // Wide: scaled down 2, 4, 8, 16 times (two passes), close to the Gaussian it stands for (the
+    // means of blocks and the bilinear filtering back up aren't quite Gaussians: within 3).
+    for (float r : {9.f, 20.f, 40.f, 80.f}) {
+        Pixels p = blurredBy(BlurEffect(r, r, TileMode::Decal));
+        report("wide", p, overWhite(gaussian(base, bounds, TileMode::Decal, sigmaOf(r), sigmaOf(r))), 3);
+        Pixels clamped = blurredBy(BlurEffect(r, r));
+        report("wide, clamped", clamped, overWhite(gaussian(base, bounds, TileMode::Clamp, sigmaOf(r), sigmaOf(r))), 3);
+    }
+    // Wide ones have the variance of their Gaussian. Measured across on the edges of half planes
+    // blurred across, each row's a pixel further on (scaling down and back up isn't the same at every phase): the
+    // Gaussian at the level, as its kernel cuts it, and the variances of the blocks' means and of
+    // the bilinear filtering back up add up to what they stand for (which they do before the cut).
+    auto variance = [](const Pixels& p) {
+        double total = 0;
+        for (int y = 0; y < p.height; ++y) {
+            double sum = 0, mean = 0, second = 0;
+            for (int x = 0; x + 1 < p.width; ++x) {
+                double d = (p.at(x + 1, y)[0] - p.at(x, y)[0]) / 255.0;
+                sum += d, mean += d * (x + 1), second += d * (x + 1) * (x + 1);
+            }
+            mean /= sum;
+            total += second / sum - mean * mean;
+        }
+        return total / p.height;
+    };
+    auto truncated = [](double g) {  // a discrete Gaussian's variance out to ceil(3 g)
+        int reach = int(std::ceil(3 * g));
+        double w = 0, m = 0;
+        for (int i = -reach; i <= reach; ++i) w += std::exp(-i * i / (2 * g * g)), m += i * i * std::exp(-i * i / (2 * g * g));
+        return m / w;
+    };
+    struct Wide {
+        RenderEffect effect;
+        int step;
+        double level;  // the sigma at the level
+    };
+    double s30 = sigmaOf(30), s3 = sigmaOf(3), s40 = sigmaOf(40), s80 = sigmaOf(80);
+    for (const Wide& w : {Wide{BlurEffect(40, 0), 8, std::sqrt(s40 * s40 - 63.0 / 12 - 63.0 / 6) / 8},
+                          Wide{BlurEffect(80, 0), 16, std::sqrt(s80 * s80 - 255.0 / 12 - 255.0 / 6) / 16},
+                          // (the second at the first's level, 8: all of its variance gone into scaling back up, the rest from the first)
+                          Wide{BlurEffect(BlurEffect(30, 0), 3, 0), 8, std::sqrt(s30 * s30 - 63.0 / 12 - (63.0 / 6 - s3 * s3)) / 8}}) {
+        Pixels edges = g.render(400, 16, 1, [&](GraphicsContext& c) {
+            c.pushEffectLayer({0, 0, 400, 16}, w.effect, 1);
+            for (int y = 0; y < 16; ++y) c.fillRoundRect({0, float(y), float(200 + y), 1}, 0, Color{0, 0, 0, 1});
+            c.popLayer();
+        });
+        // (Clamp: the rows are as they are above and below, the half plane goes on to the left.)
+        double got = variance(edges), want = truncated(w.level) * w.step * w.step + (w.step * w.step - 1) / 4.0;
+        if (std::getenv("KOMPOZ_BLUR_WORST")) std::printf("  variance: %g, %g\n", got, want);
+        CHECK(std::abs(got - want) < 0.004 * want + 1);  // (8 bits a channel: the far tails' least values gone)
+    }
+    // Moved (before or after the blur: the same), whole pixels and a half.
+    Image moved = gaussian(base, bounds, TileMode::Clamp, sigmaOf(3), sigmaOf(3));
+    Image shifted{n, n, std::vector<float>(moved.rgba.size(), 0.f)};
+    for (int y = 0; y < n; ++y)
+        for (int x = 0; x < n; ++x)
+            if (x - 7 >= 0 && y + 4 < n) std::copy_n(moved.at(x - 7, y + 4), 4, shifted.at(x, y));
+    report("moved, then blurred", blurredBy(BlurEffect(OffsetEffect(7, -4), 3, 3)), overWhite(shifted), 2);
+    report("blurred, then moved", blurredBy(OffsetEffect(BlurEffect(3, 3), {7, -4})), overWhite(shifted), 2);
+    report("moved at 2 px a dp", blurredBy(OffsetEffect(BlurEffect(1.5f, 1.5f), {3.5f, -2}), 2), overWhite(shifted), 2);
+    // Twice: as once by the sum of the variances, the second at what the first spread to.
+    Image twice = gaussian(base, bounds, TileMode::Decal, std::hypot(sigmaOf(3), sigmaOf(4)), std::hypot(sigmaOf(3), sigmaOf(4)));
+    report("twice", blurredBy(BlurEffect(BlurEffect(3, 3, TileMode::Decal), 4, 4, TileMode::Decal)), overWhite(twice), 2);
+    // A narrow one after a wide one: on what that scaled down.
+    float wide = std::hypot(sigmaOf(30), sigmaOf(3));
+    report("narrow after wide", blurredBy(BlurEffect(BlurEffect(30, 30, TileMode::Decal), 3, 3, TileMode::Decal)),
+           overWhite(gaussian(base, bounds, TileMode::Decal, wide, wide)), 3);
+    // Enlarged by a transform: blurred and moved in the layer's pixels, then enlarged (the layer drawn at twice them).
+    Pixels enlarged = g.render(n, n, 1, [&](GraphicsContext& c) {
+        Matrix m;
+        m.scale(2, 2);
+        c.pushTransform(m);
+        c.pushEffectLayer({12, 12, 24, 24}, OffsetEffect(BlurEffect(2, 2, TileMode::Decal), {1.5f, -1}), 1);
+        c.pushTransform([] {
+            Matrix half;
+            half.scale(0.5f, 0.5f);
+            return half;
+        }());
+        content(c);
+        c.popTransform();
+        c.popLayer();
+        c.popTransform();
+    });
+    Image big = gaussian(base, bounds, TileMode::Decal, 2 * sigmaOf(2), 2 * sigmaOf(2)), bigMoved{n, n, std::vector<float>(big.rgba.size(), 0.f)};
+    for (int y = 0; y < n; ++y)
+        for (int x = 0; x < n; ++x)
+            if (x - 3 >= 0 && y + 2 < n) std::copy_n(big.at(x - 3, y + 2), 4, bigMoved.at(x, y));
+    report("enlarged", enlarged, overWhite(bigMoved), 2);
+    // Faded, and cut by a rounded clip around it: what the blur made, cut.
+    Pixels cut = g.render(n, n, 1, [&](GraphicsContext& c) {
+        c.pushClipRoundRect({24, 24, 48, 48}, 16);
+        c.pushEffectLayer({24, 24, 48, 48}, BlurEffect(4, 4), 0.5f);
+        content(c);
+        c.popLayer();
+        c.popClip();
+    });
+    Image half = gaussian(base, bounds, TileMode::Clamp, sigmaOf(4), sigmaOf(4));
+    for (float& v : half.rgba) v *= 0.5f;
+    Pixels wantHalf = overWhite(half);
+    // Inside the clip (a pixel in from its edge) what the blur made; outside it, nothing.
+    auto inside = [](int x, int y, float in) {
+        float cx = std::clamp(float(x) + 0.5f, 24 + 16.f, 72 - 16.f), cy = std::clamp(float(y) + 0.5f, 24 + 16.f, 72 - 16.f);
+        return float(x) + 0.5f > 24 + in && float(x) + 0.5f < 72 - in && float(y) + 0.5f > 24 + in && float(y) + 0.5f < 72 - in &&
+               std::hypot(float(x) + 0.5f - cx, float(y) + 0.5f - cy) < 16 - in;
+    };
+    report("faded, cut", cut, wantHalf, 2, [&](int x, int y) { return !inside(x, y, 1); });
+    int outside = worstAgainst(cut, [&](int, int) { static const uint8_t white[4] = {255, 255, 255, 255}; return white; },
+                               [&](int x, int y) { return inside(x, y, -1); });
+    CHECK(outside == 0);
+    // Too big for a texture: blurred around what shows, the same there.
+    Pixels tall = g.render(n, n, 1, [&](GraphicsContext& c) {
+        c.pushEffectLayer({24, -6000, 48, 12096}, BlurEffect(4, 4, TileMode::Decal), 1);
+        content(c);
+        c.popLayer();
+    });
+    gpu::IRect tallBounds{24, -6000, 48, 12096};
+    Image tallBase = painted(n, n, {{{0, 0, 96, 10}, Color{0, 0, 0, 1}}});
+    for (const auto& [r, col] : fills) tallBase = [&] {
+        Image i = tallBase;
+        for (int y = r.y; y < r.y + r.height; ++y)
+            for (int x = r.x; x < r.x + r.width; ++x) {
+                float* q = i.at(x, y);
+                q[0] = col.r, q[1] = col.g, q[2] = col.b, q[3] = 1;
+            }
+        return i;
+    }();
+    for (int y = 0; y < n; ++y)  // (only what is within its bounds across)
+        for (int x = 0; x < n; ++x)
+            if (x < 24 || x >= 72) std::fill_n(tallBase.at(x, y), 4, 0.f);
+    report("too big for a texture", tall, overWhite(gaussian(tallBase, tallBounds, TileMode::Decal, sigmaOf(4), sigmaOf(4))), 2);
+}
+
 // Curves cut into lines stay within kTolerance of the curve, in the target's pixels.
 void curvesAreFlattenedClosely() {
     Path circle;
@@ -1460,6 +1765,7 @@ void scenesMatchTheirPictures(Gpu& g) {
                             {"paths", 192, 192, 1, paths},   {"outline-layers", 192, 192, 1, outlineLayers},
                             {"gradients", 192, 192, 1, gradients},   {"blend-modes", 192, 192, 1, blendModes},
                             {"transforms", 192, 192, 1, transforms},  {"graphics-layers", 192, 196, 1, graphicsLayers},
+                            {"effects", 192, 192, 1, effects},
                             {"density", 192, 192, 2.625f, fractionalDensity}};
     for (const Scene& s : scenes) {
         Pixels p = g.render(s.w, s.h, s.scale, s.draw);
@@ -1502,6 +1808,7 @@ int main() {
             transformedEdgesAreExact(g);
             clipsCutAsTheirShapes(g);
             graphicsLayersCompositeAsCompose(g);
+            blursAreGaussian(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
             std::printf("%d checks, %d failed\n", checks, failures);

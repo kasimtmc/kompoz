@@ -31,7 +31,8 @@
   in the shader from a copy of what is under the draw, and color filters (matrices, lighting, tints in any mode) are
   applied to each pixel. Everything is drawn through any transform (turned, stretched, skewed, in perspective) sharp
   and exactly anti-aliased: text laid out and layers made at the size they show, paths projected, clips under a turn
-  cut exactly. Blurs come next. Its shaders are written once (Slang) and compiled for every API by
+  cut exactly. Render effects blur as Skia does (a Gaussian of Android's sigma, wide ones scaled down, every tile
+  mode). Its shaders are written once (Slang) and compiled for every API by
   `scripts/shaders.py`; tests draw its scenes on a real device and compare them with pictures.
 - **All of Compose's blend modes**: `BlendMode` gains Overlay, ColorDodge, ColorBurn, Hardlight, Softlight,
   Difference, Exclusion, Hue, Saturation, Color and Luminosity; `blend(source, destination, mode)` works any of the 29
@@ -63,6 +64,12 @@
   `Offscreen`), `ModulateAlpha` fading each draw instead; otherwise the matrix and the clip go straight into the
   drawing. A `GraphicsLayer` drawn takes the same properties, with `pivotOffset` and `setRectOutline` /
   `setRoundRectOutline` / `setPathOutline` as in Compose.
+- **Render effects, as in Compose**: `BlurEffect(radiusX, radiusY, edgeTreatment)` (any `TileMode`) and
+  `OffsetEffect`, each taking another to go through first, as a `graphicsLayer`'s or a `GraphicsLayer`'s
+  `renderEffect`: what is drawn within its bounds goes through it, then is cut to its shape if it clips.
+  `Modifier.blur` is now Compose's: a `graphicsLayer` with a `BlurEffect`, blurred only when both radii are;
+  `BlurredEdgeTreatment` holds a shape (`Rectangle`, `Unbounded`, or any shape to cut the blur to).
+  `GraphicsContext::pushEffectLayer` replaces `pushBlurLayer`.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

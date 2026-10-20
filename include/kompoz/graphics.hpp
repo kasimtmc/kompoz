@@ -617,6 +617,45 @@ private:
     ColorMatrix matrix_;
 };
 
+// What a layer's pixels go through as it is composited (Compose's RenderEffect, set on a
+// graphicsLayer): steps done one after another, each on what the one before it made, the
+// innermost (the input) first. BlurEffect blurs them by a radius across and one down in dp, as
+// Android does (a Gaussian of sigma 0.57735 r + 0.5 px), the pixels past the edges of what it
+// blurs taken as `edgeTreatment` says (Clamp: the edge's), and spreads them out three sigmas past
+// those edges; OffsetEffect moves them.
+class RenderEffect {
+public:
+    struct Step {
+        enum class Kind : uint8_t { Blur, Offset };
+        Kind kind = Kind::Blur;
+        float radiusX = 0, radiusY = 0;  // Blur
+        TileMode edgeTreatment = TileMode::Clamp;
+        Offset offset;  // Offset
+        friend bool operator==(const Step&, const Step&) = default;
+    };
+    const std::vector<Step>& steps() const { return steps_; }
+    // Where what it makes of content within `bounds` may reach (dp; a little further).
+    Rect outputBounds(const Rect& bounds) const;
+    friend bool operator==(const RenderEffect&, const RenderEffect&) = default;
+
+private:
+    friend RenderEffect BlurEffect(const std::optional<RenderEffect>&, float, float, TileMode);
+    friend RenderEffect OffsetEffect(const std::optional<RenderEffect>&, Offset);
+    std::vector<Step> steps_;
+};
+// `renderEffect` blurred (none: the layer's pixels). A radius of 0 leaves that direction as it is.
+RenderEffect BlurEffect(const std::optional<RenderEffect>& renderEffect, float radiusX, float radiusY,
+                        TileMode edgeTreatment = TileMode::Clamp);
+inline RenderEffect BlurEffect(const std::optional<RenderEffect>& renderEffect, float radius) {
+    return BlurEffect(renderEffect, radius, radius);
+}
+inline RenderEffect BlurEffect(float radiusX, float radiusY, TileMode edgeTreatment = TileMode::Clamp) {
+    return BlurEffect(std::nullopt, radiusX, radiusY, edgeTreatment);
+}
+// `renderEffect` moved by `offset` dp.
+RenderEffect OffsetEffect(const std::optional<RenderEffect>& renderEffect, Offset offset);
+inline RenderEffect OffsetEffect(float offsetX, float offsetY) { return OffsetEffect(std::nullopt, {offsetX, offsetY}); }
+
 // How Path::op combines two shapes (Compose's PathOperation): what is in either, in both, in the
 // first but not the second (or the other way round), or in exactly one.
 enum class PathOperation { Difference, Intersect, Union, Xor, ReverseDifference };
@@ -1024,11 +1063,13 @@ public:
     // clipped to where the drawing was.
     virtual void pushTransform(const Matrix& matrix) = 0;
     virtual void popTransform() = 0;
-    // A layer (popLayer ends it) whose content is blurred by `radiusX` x `radiusY` dp when it is
-    // composited; where the backend can't blur, a plain one.
-    virtual void pushBlurLayer(const Rect& bounds, float radiusX, float radiusY) {
-        (void)radiusX, (void)radiusY;
-        pushLayer(bounds, CornerRadii(), 1);
+    // A layer (popLayer ends it) whose content, drawn within `bounds` and cut to them, goes
+    // through `effect` as it is composited (blurred, moved, as far past the bounds as that takes
+    // it), faded by `alpha`; clips set around it cut what shows. The default composites the
+    // content as it is.
+    virtual void pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) {
+        (void)effect;
+        pushLayer(bounds, CornerRadii(), alpha);
     }
     // Draws in between go on with `mode` instead of SrcOver (where the backend can: see
     // DrawScope's blendMode).

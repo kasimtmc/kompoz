@@ -171,7 +171,7 @@ public:
         imageDestinations.push_back(moved(dst));
     }
     void pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& t) override {
-        layerBlurs.push_back({});
+        layerEffects.push_back({});
         layerBounds.push_back(moved(bounds));
         layerCorners.push_back(radii);
         layerAlphas.push_back(alpha);
@@ -182,10 +182,10 @@ public:
     }
     void popLayer() override { --depth; }
     std::vector<Path> layerOutlines;  // each outline layer's outline (pushOutlineLayer), from its top left
-    std::vector<Offset> layerBlurs;  // each layer's blur radii (none: 0, 0)
-    void pushBlurLayer(const Rect& bounds, float radiusX, float radiusY) override {
-        pushLayer(bounds, CornerRadii(), 1, {});
-        layerBlurs.back() = {radiusX, radiusY};
+    std::vector<std::optional<RenderEffect>> layerEffects;  // each layer's effect (pushEffectLayer)
+    void pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) override {
+        pushLayer(bounds, CornerRadii(), alpha, {});
+        layerEffects.back() = effect;
     }
     void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& t) override {
         layerOutlines.push_back(outline);

@@ -154,7 +154,8 @@ struct LayerGeometry {
 // The matrix it is drawn through, as Android's RenderNode makes it.
 Matrix layerMatrix(const LayerGeometry& geometry);
 // Draws `content` (over `bounds`) through such a layer: its matrix, its clip to `outline` (from the
-// bounds' top left), its alpha, blend mode and color filter, offscreen only where it has to be.
+// bounds' top left), its alpha, blend mode, color filter and render effect, offscreen only where
+// it has to be.
 struct LayerDraw {
     Rect bounds;
     LayerGeometry geometry;
@@ -163,6 +164,7 @@ struct LayerDraw {
     Outline outline;
     BlendMode blendMode = BlendMode::SrcOver;
     std::optional<ColorFilter> colorFilter;
+    std::optional<RenderEffect> renderEffect;
     CompositingStrategy strategy = CompositingStrategy::Auto;
     LayerOutsets outsets;
 };
@@ -200,6 +202,7 @@ public:
         // Clipped to its outline (unset: its bounds; setRectOutline, setRoundRectOutline, setPathOutline).
         bool clip = false;
         std::optional<Outline> outline;
+        std::optional<RenderEffect> renderEffect;
         BlendMode blendMode = BlendMode::SrcOver;
         std::optional<ColorFilter> colorFilter;
         CompositingStrategy compositingStrategy = CompositingStrategy::Auto;

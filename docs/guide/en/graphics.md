@@ -149,7 +149,7 @@ Box(Modifier().size(120)
 
 ## graphicsLayer
 
-`graphicsLayer` draws the content scaled, rotated (in 3D too: `rotationX`, `rotationY`), moved, faded, clipped, filtered or blended, without changing its layout. As in Compose it goes through an offscreen layer only where it must (faded, a blend mode, a color filter, or `CompositingStrategy::Offscreen`); otherwise the transform and the clip go straight into the drawing:
+`graphicsLayer` draws the content scaled, rotated (in 3D too: `rotationX`, `rotationY`), moved, faded, clipped, filtered, blended or blurred, without changing its layout. As in Compose it goes through an offscreen layer only where it must (faded, a blend mode, a color filter, a render effect, or `CompositingStrategy::Offscreen`); otherwise the transform and the clip go straight into the drawing:
 
 ```cpp body
 Box(Modifier().size(80).graphicsLayer({.scaleX = 1.2f, .scaleY = 1.2f, .alpha = 0.8f, .rotationZ = 15})
@@ -165,7 +165,25 @@ void Spinner() {
 }
 ```
 
-`alpha(a)`, `scale(s)` and `rotate(degrees)` are shorthands for the common cases, and `blur(radius)` blurs the content.
+`alpha(a)`, `scale(s)` and `rotate(degrees)` are shorthands for the common cases.
+
+### Blur and render effects
+
+`blur(radius)` blurs the content, as Compose's does. By default the blur stays within the node's bounds (`BlurredEdgeTreatment::Rectangle`: the pixels past the edges count as the edges'); `BlurredEdgeTreatment::Unbounded` lets it spread out past them, fading; `BlurredEdgeTreatment{shape}` cuts it to a shape:
+
+```cpp body
+Image(imageResource("images/cover.jpg"), "Album cover",
+      Modifier().size(160).blur(12, BlurredEdgeTreatment{RoundedCornerShape(16)}), ContentScale::Crop);
+```
+
+It is a `graphicsLayer` with a render effect, and you can give one a render effect yourself. `BlurEffect(radiusX, radiusY, edgeTreatment)` blurs its pixels (a Gaussian, Android's for the radius; the `TileMode` says what lies past the edges); `OffsetEffect(x, y)` moves them. Each takes another to go through first:
+
+```cpp body
+Box(Modifier().size(96).graphicsLayer({.renderEffect = OffsetEffect(BlurEffect(6, 6, TileMode::Decal), {0, 4})})
+        .background(colorScheme().primary, CircleShape));
+```
+
+What is drawn within the layer's bounds goes through the effect; with `clip` set, what the effect makes is then cut to the layer's shape.
 
 ## Images
 

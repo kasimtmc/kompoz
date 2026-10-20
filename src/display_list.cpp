@@ -76,7 +76,7 @@ bool DisplayList::Command::same(const Command& o) const {
            kompoz::same(rect2, o.rect2) && radii == o.radii && f1 == o.f1 && f2 == o.f2 && f3 == o.f3 && color == o.color &&
            kompoz::same(p1, o.p1) && kompoz::same(p2, o.p2) && flag == o.flag && font == o.font && vector == o.vector &&
            image == o.image && kompoz::same(stroke, o.stroke) && kompoz::same(transform, o.transform) && text == o.text &&
-           brush == o.brush && filter == o.filter && path == o.path && matrix == o.matrix;
+           brush == o.brush && filter == o.filter && effect == o.effect && path == o.path && matrix == o.matrix;
 }
 
 void DisplayList::begin(Size viewport, float pixel) {
@@ -276,9 +276,17 @@ void DisplayList::pushOutlineLayer(const Rect& bounds, const Path& outline, floa
     recording_.back().path = outline;  // replayed as an outline layer
 }
 
-void DisplayList::pushBlurLayer(const Rect& bounds, float radiusX, float radiusY) {
-    pushLayer(bounds, CornerRadii(), 1);
-    recording_.back().p2 = {radiusX, radiusY};  // replayed as a blur layer
+void DisplayList::pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) {
+    State s = states_.back();
+    Command& c = add(Kind::PushLayer);
+    c.rect = bounds;
+    c.f2 = alpha;
+    c.effect = effect;
+    // It shows where the effect takes what it draws. That is all of what it draws within its
+    // bounds, off the screen too (a blur brings it in): popLayer() makes each of those commands'
+    // area its own, as a change to any of them changes all of it.
+    c.bounds = grown(s.m.map(effect.outputBounds(bounds)), 2 * pixel_).intersect(s.clip);
+    states_.push_back({s.m, grown(s.m.map(grown(bounds, pixel_)), 2 * pixel_), uint32_t(recording_.size() - 1)});
 }
 
 void DisplayList::pushClip(const Rect& rect) {
@@ -331,6 +339,9 @@ void DisplayList::pop(Kind kind) {
     states_.pop_back();
     add(kind);
     recording_[push].end = uint32_t(recording_.size());
+    if (recording_[push].effect)
+        for (uint32_t i = push + 1; i < recording_.size(); ++i)
+            if (!empty(recording_[i].bounds)) recording_[i].bounds = recording_[push].bounds;
 }
 
 void DisplayList::pushBlendMode(BlendMode mode) {
@@ -457,7 +468,7 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
                 continue;
             }
             if (c.kind == Kind::PushLayer && !c.path.isEmpty()) canvas.pushOutlineLayer(c.rect, c.path, c.f2, c.transform);
-            else if (c.kind == Kind::PushLayer && (c.p2.x > 0 || c.p2.y > 0)) canvas.pushBlurLayer(c.rect, c.p2.x, c.p2.y);
+            else if (c.kind == Kind::PushLayer && c.effect) canvas.pushEffectLayer(c.rect, *c.effect, c.f2);
             else if (c.kind == Kind::PushLayer) canvas.pushLayer(c.rect, c.radii, c.f2, c.transform);
             else if (c.kind == Kind::PushClip && c.f1 == 1) canvas.pushClipRoundRect(c.rect, c.radii, c.flag ? ClipOp::Difference : ClipOp::Intersect);
             else if (c.kind == Kind::PushClip && c.f1 == 2) canvas.pushClipPath(c.path, c.p1, c.flag ? ClipOp::Difference : ClipOp::Intersect);

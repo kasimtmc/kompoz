@@ -25105,28 +25105,28 @@ TEST(blend_modes_fade_an_offscreen_layer) {
     CHECK(close(tint(BlendMode::DstOver), {1, 2.f / 3, 2.f / 3, 0.75f}));
 }
 
-TEST(blur_draws_content_through_a_blurred_layer) {
+TEST(blur_is_a_graphics_layer_with_a_blur_effect) {
     auto radius = mutableStateOf(8.f), radiusY = mutableStateOf(8.f);
-    auto unbounded = mutableStateOf(false);
+    auto edges = mutableStateOf(BlurredEdgeTreatment::Rectangle);
     ComposeTestRule rule([&] {
-        Box(Modifier().padding(50).size(100)
-                .blur(radius.get(), radiusY.get(), unbounded.get() ? BlurredEdgeTreatment::Unbounded : BlurredEdgeTreatment::Rectangle)
-                .background(colors::Black));
+        Box(Modifier().padding(50).size(100).blur(radius.get(), radiusY.get(), edges.get()).background(colors::Black));
     });
     auto draw = [&] {
         testing::RecordingCanvas c;
         rule.host().draw(c);
         return c;
     };
-    // Within its bounds: a layer of just them, blurred by 8 dp.
+    // Rectangle: clipped to the bounds, blurred within them, the edges' pixels taken past them.
     testing::RecordingCanvas c = draw();
-    CHECK(c.layerBlurs.size() == 1 && near(c.layerBlurs[0].x, 8) && near(c.layerBlurs[0].y, 8) && sameRect(c.layerBounds[0], {50, 50, 100, 100}));
-    // Unbounded: room around them for the blur to spread into; each way its own radius.
-    unbounded.set(true);
+    CHECK(c.layers == 1 && c.layerEffects.size() == 1 && c.layerEffects[0] == BlurEffect(8, 8, TileMode::Clamp));
+    CHECK(sameRect(c.layerBounds[0], {50, 50, 100, 100}) && c.clips.size() == 1 && sameRect(c.clips[0], {50, 50, 100, 100}));
+    // Unbounded: spreading out, fading past the bounds, nothing clipped; each way its own radius.
+    edges.set(BlurredEdgeTreatment::Unbounded);
     radiusY.set(4);
     rule.waitForIdle();
     c = draw();
-    CHECK(c.layerBlurs.size() == 1 && near(c.layerBlurs[0].y, 4) && sameRect(c.layerBounds[0], {50 - 24, 50 - 12, 100 + 48, 100 + 24}));
+    CHECK(c.layerEffects.size() == 1 && c.layerEffects[0] == BlurEffect(8, 4, TileMode::Decal) && c.clips.empty() && c.clipShapes.empty());
+    CHECK(sameRect(c.layerBounds[0], {50, 50, 100, 100}));
     // Recorded and replayed the same way.
     DisplayList list(rule.host().textMeasurer());
     list.begin({400, 800}, 0.5f);
@@ -25134,13 +25134,114 @@ TEST(blur_draws_content_through_a_blurred_layer) {
     list.end();
     testing::RecordingCanvas replayed;
     list.replay(replayed);
-    CHECK(replayed.layerBlurs.size() == 1 && near(replayed.layerBlurs[0].x, 8) && near(replayed.layerBlurs[0].y, 4));
-    // No radius: no layer at all.
-    radius.set(0);
-    radiusY.set(0);
+    CHECK(replayed.layerEffects.size() == 1 && replayed.layerEffects[0] == BlurEffect(8, 4, TileMode::Decal));
+    // A shape of its own: cut to it.
+    edges.set(BlurredEdgeTreatment{CircleShape});
     rule.waitForIdle();
     c = draw();
-    CHECK(c.layers == 0 && c.rects.size() == 1);
+    CHECK(c.layerEffects.size() == 1 && c.layerEffects[0] == BlurEffect(8, 4, TileMode::Clamp));
+    CHECK(c.clipShapes.size() == 1 && near(c.clipShapes[0].radii.topLeft, 50) && sameRect(c.clipShapes[0].bounds, {50, 50, 100, 100}));
+    // As in Compose, blurred only if both radii are: one of 0 leaves the clip alone.
+    radiusY.set(0);
+    edges.set(BlurredEdgeTreatment::Rectangle);
+    rule.waitForIdle();
+    c = draw();
+    CHECK(c.layers == 0 && c.clips.size() == 1 && c.rects.size() == 1);
+    // Unbounded, nothing to blur: as it is.
+    edges.set(BlurredEdgeTreatment::Unbounded);
+    rule.waitForIdle();
+    c = draw();
+    CHECK(c.layers == 0 && c.clips.empty() && c.rects.size() == 1);
+}
+
+TEST(render_effects_chain_and_reach_past_the_bounds) {
+    RenderEffect e = OffsetEffect(BlurEffect(2, 3, TileMode::Mirror), {5, -1});
+    CHECK(e.steps().size() == 2 && e.steps()[0].kind == RenderEffect::Step::Kind::Blur && e.steps()[1].kind == RenderEffect::Step::Kind::Offset);
+    CHECK(near(e.steps()[0].radiusX, 2, 1e-6f) && near(e.steps()[0].radiusY, 3, 1e-6f) && e.steps()[0].edgeTreatment == TileMode::Mirror);
+    CHECK(near(e.steps()[1].offset.x, 5, 1e-6f) && near(e.steps()[1].offset.y, -1, 1e-6f));
+    CHECK(BlurEffect(std::nullopt, 4) == BlurEffect(4, 4) && !(BlurEffect(4, 4) == BlurEffect(4, 4, TileMode::Decal)));
+    CHECK(OffsetEffect(1, 2) == OffsetEffect(std::nullopt, {1, 2}) && !(OffsetEffect(1, 2) == OffsetEffect(2, 1)));
+    CHECK(BlurEffect(-3, 2).steps()[0].radiusX == 0);  // (none that way)
+    // Where it may reach: three sigmas (0.57735 r + 0.5 px, the half pixel up to 2.5 dp) each way, then moved.
+    Rect out = e.outputBounds({10, 10, 20, 20});
+    float x = 3 * 0.57735f * 2 + 2.5f, y = 3 * 0.57735f * 3 + 2.5f;
+    CHECK(near(out.x, 10 - x + 5, 1e-4f) && near(out.y, 10 - y - 1, 1e-4f) && near(out.width, 20 + 2 * x, 1e-4f) &&
+          near(out.height, 20 + 2 * y, 1e-4f));
+    CHECK(sameRect(BlurEffect(0, 0).outputBounds({1, 2, 3, 4}), {1, 2, 3, 4}));
+    // Modifiers with them compare by them (a composable called with an equal one is skipped).
+    CHECK(Modifier().blur(4) == Modifier().blur(4) && !(Modifier().blur(4) == Modifier().blur(5)));
+    CHECK(!(Modifier().blur(4) == Modifier().blur(4, BlurredEdgeTreatment::Unbounded)));
+    CHECK(!(Modifier().graphicsLayer({.renderEffect = OffsetEffect(1, 0)}) == Modifier().graphicsLayer({.renderEffect = OffsetEffect(2, 0)})));
+}
+
+TEST(graphics_layer_render_effect_draws_through_an_effect_layer) {
+    Color red{1, 0, 0, 1};
+    auto look = [](const std::function<void()>& content) {
+        ComposeTestRule rule(content, {400, 400});
+        auto canvas = std::make_shared<testing::RecordingCanvas>();
+        rule.host().draw(*canvas);
+        return canvas;
+    };
+    // Faded and clipped to a rounded shape: the effect's layer at that alpha, cut by a clip around it.
+    auto rounded = look([&] {
+        Box(Modifier().size(40).graphicsLayer({.alpha = 0.5f, .shape = RoundedCornerShape(8), .clip = true,
+                                               .renderEffect = BlurEffect(3, 3)}).background(red));
+    });
+    CHECK(rounded->layers == 1 && rounded->layerEffects[0] == BlurEffect(3, 3) && near(rounded->layerAlphas[0], 0.5f));
+    CHECK(rounded->clipShapes.size() == 1 && near(rounded->clipShapes[0].radii.topLeft, 8) && rounded->layerCorners[0].max() == 0);
+    // Not clipped: no clip; its outsets give it room.
+    auto spread = look([&] {
+        Box(Modifier().size(40).graphicsLayer({.renderEffect = OffsetEffect(4, 0), .outsets = {2, 2, 2, 2}}).background(red));
+    });
+    CHECK(spread->layers == 1 && spread->layerEffects[0] == OffsetEffect(4, 0) && spread->clips.empty() && spread->clipShapes.empty());
+    CHECK(sameRect(spread->layerBounds[0], {-2, -2, 44, 44}));
+    // Off the screen, but blurred into it: drawn.
+    ComposeTestRule offScreen([&] {
+        Box(Modifier().offset(-60, 0).size(40).graphicsLayer({.renderEffect = BlurEffect(20, 20, TileMode::Decal)}).background(red));
+    }, {400, 400});
+    testing::RecordingCanvas edge;
+    edge.visible = Rect{0, 0, 400, 400};
+    offScreen.host().draw(edge);
+    CHECK(edge.layers == 1);
+    // A GraphicsLayer's.
+    auto recorded = look([&] {
+        auto layer = rememberGraphicsLayer();
+        Box(Modifier().size(100).drawWithContent([layer](ContentDrawScope& d) {
+            d.record(layer, [&](DrawScope& in) { in.drawRect(Color{0, 0, 1, 1}); }, Size{60, 40});
+            layer.properties().renderEffect = BlurEffect(5, 5, TileMode::Decal);
+            d.drawLayer(layer);
+            layer.properties() = {};
+        }));
+    });
+    CHECK(recorded->layers == 1 && recorded->layerEffects[0] == BlurEffect(5, 5, TileMode::Decal) && sameRect(recorded->layerBounds[0], {0, 0, 60, 40}));
+}
+
+TEST(display_list_effect_layers_change_as_a_whole) {
+    auto tint = mutableStateOf(0.f);
+    ComposeTestRule rule([&] {
+        Box(Modifier().offset(-50, 100).size(100).blur(10, BlurredEdgeTreatment::Unbounded), [&] {
+            Box(Modifier().size(10).background(Color{tint.get(), 0, 1, 1}));  // off the screen: still blurred into it
+            Box(Modifier().offset(60, 60).size(10).background(Color{0, 1, 0, 1}));
+        });
+    }, {400, 400});
+    DisplayList list(rule.host().textMeasurer());
+    auto frame = [&] {
+        list.begin({400, 400}, 1);
+        rule.host().draw(list);
+        return list.end();
+    };
+    frame();
+    tint.set(1);
+    rule.waitForIdle();
+    std::optional<Rect> d = frame();
+    // A change off the screen: all of what the blur spreads it over on the screen changes (three
+    // sigmas past the bounds, and two pixels).
+    float reach = 3 * 0.57735f * 10 + 2.5f + 2;
+    CHECK(d && d->x == 0 && near(d->y, 100 - reach, 1.01f) && near(d->right(), 50 + reach, 1.01f) && near(d->bottom(), 200 + reach, 1.01f));
+    // Replaying a part of it replays all that is in it, what is off the screen too.
+    testing::RecordingCanvas part;
+    list.replay(part, Rect{40, 120, 4, 4});
+    CHECK(part.layers == 1 && part.rects.size() == 2);
 }
 
 TEST(bidi_isolates_keep_their_direction_inside_and_stay_out_of_the_way) {

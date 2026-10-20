@@ -149,7 +149,7 @@ Box(Modifier().size(120)
 
 ## graphicsLayer
 
-`graphicsLayer` içeriği, yerleşimini değiştirmeden ölçeklenmiş, döndürülmüş (3B de: `rotationX`, `rotationY`), taşınmış, soldurulmuş, kırpılmış, süzülmüş ya da karıştırılmış olarak çizer. Compose'daki gibi yalnızca gereken yerde ekran dışı bir katmandan geçer (soluk, bir blend modu, bir renk süzgeci ya da `CompositingStrategy::Offscreen`); yoksa dönüşüm ve kırpma doğrudan çizime gider:
+`graphicsLayer` içeriği, yerleşimini değiştirmeden ölçeklenmiş, döndürülmüş (3B de: `rotationX`, `rotationY`), taşınmış, soldurulmuş, kırpılmış, süzülmüş, karıştırılmış ya da bulanıklaştırılmış olarak çizer. Compose'daki gibi yalnızca gereken yerde ekran dışı bir katmandan geçer (soluk, bir blend modu, bir renk süzgeci, bir render effect ya da `CompositingStrategy::Offscreen`); yoksa dönüşüm ve kırpma doğrudan çizime gider:
 
 ```cpp body
 Box(Modifier().size(80).graphicsLayer({.scaleX = 1.2f, .scaleY = 1.2f, .alpha = 0.8f, .rotationZ = 15})
@@ -165,7 +165,25 @@ void Spinner() {
 }
 ```
 
-`alpha(a)`, `scale(s)` ve `rotate(degrees)` sık görülen durumlar için kısaltmalardır; `blur(radius)` ise içeriği bulanıklaştırır.
+`alpha(a)`, `scale(s)` ve `rotate(degrees)` sık görülen durumlar için kısaltmalardır.
+
+### Bulanıklık ve render effect'ler
+
+`blur(radius)` içeriği Compose'unki gibi bulanıklaştırır. Varsayılan olarak bulanıklık düğümün sınırları içinde kalır (`BlurredEdgeTreatment::Rectangle`: kenarların ötesindeki pikseller kenarınki sayılır); `BlurredEdgeTreatment::Unbounded` solarak dışarı yayılmasına izin verir; `BlurredEdgeTreatment{shape}` onu bir şekle göre keser:
+
+```cpp body
+Image(imageResource("images/cover.jpg"), "Album cover",
+      Modifier().size(160).blur(12, BlurredEdgeTreatment{RoundedCornerShape(16)}), ContentScale::Crop);
+```
+
+Bu, render effect'i olan bir `graphicsLayer`'dır; bir katmana render effect'i kendiniz de verebilirsiniz. `BlurEffect(radiusX, radiusY, edgeTreatment)` piksellerini bulanıklaştırır (bir Gauss, yarıçap için Android'inki; `TileMode` kenarların ötesinde ne olduğunu söyler); `OffsetEffect(x, y)` onları taşır. Her biri önce içinden geçilecek bir başkasını alır:
+
+```cpp body
+Box(Modifier().size(96).graphicsLayer({.renderEffect = OffsetEffect(BlurEffect(6, 6, TileMode::Decal), {0, 4})})
+        .background(colorScheme().primary, CircleShape));
+```
+
+Katmanın sınırları içinde çizilen, effect'in içinden geçer; `clip` açıksa effect'in yaptığı sonra katmanın şekline göre kesilir.
 
 ## Resimler
 

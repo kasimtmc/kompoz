@@ -1161,9 +1161,17 @@ struct PaddingValues {
     friend constexpr bool operator==(const PaddingValues&, const PaddingValues&) = default;
 };
 
-// Modifier::blur's edges (Compose's BlurredEdgeTreatment): Rectangle keeps the blur within the
-// bounds (pixels past the edge taken as the edge's), Unbounded lets it spread out around them.
-enum class BlurredEdgeTreatment { Rectangle, Unbounded };
+// Modifier::blur's edges (Compose's BlurredEdgeTreatment): with a shape, the blur is cut to it
+// (Rectangle: the bounds), the pixels past the bounds taken as the edge's (TileMode::Clamp);
+// without one (Unbounded) it spreads out past them, fading (TileMode::Decal).
+struct BlurredEdgeTreatment {
+    std::optional<Shape> shape;
+    static const BlurredEdgeTreatment Rectangle;
+    static const BlurredEdgeTreatment Unbounded;
+    friend bool operator==(const BlurredEdgeTreatment&, const BlurredEdgeTreatment&) = default;
+};
+inline const BlurredEdgeTreatment BlurredEdgeTreatment::Rectangle{RectangleShape};
+inline const BlurredEdgeTreatment BlurredEdgeTreatment::Unbounded{};
 
 // How graphicsLayer() composites its content (Compose's CompositingStrategy): Auto uses an
 // offscreen layer only when it needs one (alpha, a transform, a shaped clip); Offscreen always
@@ -1183,7 +1191,9 @@ struct LayerOutsets {
 // back), y (the right side going back) and z, seen from a camera cameraDistance * 72 px away (as
 // Android draws it), then moved; all about the pivot (transformOrigin). It is drawn offscreen,
 // then composited, only where it has to be: alpha below 1 (unless ModulateAlpha, which fades each
-// draw instead), a blend mode other than SrcOver, a color filter, or CompositingStrategy::Offscreen.
+// draw instead), a blend mode other than SrcOver, a color filter, a render effect (what is drawn
+// within its bounds goes through it, then is cut to its shape if clip is set), or
+// CompositingStrategy::Offscreen.
 struct GraphicsLayerScope {
     float scaleX = 1, scaleY = 1, alpha = 1;
     float translationX = 0, translationY = 0;  // dp
@@ -1193,6 +1203,7 @@ struct GraphicsLayerScope {
     Offset transformOrigin{0.5f, 0.5f};        // fraction of the size
     Shape shape = RectangleShape;              // outline used when clip is set
     bool clip = false;
+    std::optional<RenderEffect> renderEffect;  // what its pixels go through (a blur): drawn offscreen
     BlendMode blendMode = BlendMode::SrcOver;  // how it goes onto what is under it
     std::optional<ColorFilter> colorFilter;    // what its colors go through on the way
     CompositingStrategy compositingStrategy = CompositingStrategy::Auto;
@@ -1202,7 +1213,7 @@ struct GraphicsLayerScope {
         return a.scaleX == b.scaleX && a.scaleY == b.scaleY && a.alpha == b.alpha && a.translationX == b.translationX &&
                a.translationY == b.translationY && a.rotationX == b.rotationX && a.rotationY == b.rotationY && a.rotationZ == b.rotationZ &&
                a.cameraDistance == b.cameraDistance && a.transformOrigin.x == b.transformOrigin.x &&
-               a.transformOrigin.y == b.transformOrigin.y && a.shape == b.shape && a.clip == b.clip && a.blendMode == b.blendMode &&
+               a.transformOrigin.y == b.transformOrigin.y && a.shape == b.shape && a.clip == b.clip && a.renderEffect == b.renderEffect && a.blendMode == b.blendMode &&
                a.colorFilter == b.colorFilter && a.compositingStrategy == b.compositingStrategy && a.outsets == b.outsets &&
                a.size.width == b.size.width && a.size.height == b.size.height;
     }
@@ -1832,12 +1843,13 @@ public:
                    ContentScale contentScale = ContentScale::Inside, float alpha = 1, std::optional<ColorFilter> colorFilter = {}) const;
     // Scales, rotates, moves or fades the content as drawn (through an offscreen layer).
     Modifier graphicsLayer(const GraphicsLayerScope& layer) const;
-    // The content blurred by `radius` dp (Compose's Modifier.blur; 0: not at all). The SDL
-    // backend blurs by scaling it down and back up (smooth, close to a Gaussian, not exact).
-    Modifier blur(float radius, BlurredEdgeTreatment edgeTreatment = BlurredEdgeTreatment::Rectangle) const {
+    // The content blurred by `radius` dp across and down (Compose's Modifier.blur): a graphicsLayer
+    // with a BlurEffect, clipped to the edge treatment's shape if it has one. Unless it is
+    // clipped, a radius of 0 either way draws it as it is.
+    Modifier blur(float radius, const BlurredEdgeTreatment& edgeTreatment = BlurredEdgeTreatment::Rectangle) const {
         return blur(radius, radius, edgeTreatment);
     }
-    Modifier blur(float radiusX, float radiusY, BlurredEdgeTreatment edgeTreatment = BlurredEdgeTreatment::Rectangle) const;
+    Modifier blur(float radiusX, float radiusY, const BlurredEdgeTreatment& edgeTreatment = BlurredEdgeTreatment::Rectangle) const;
     // Evaluated while drawing: animated values read here never recompose.
     Modifier graphicsLayer(std::function<void(GraphicsLayerScope&)> block) const;
     // `enabled` false: scrolled only in code; `reverseScrolling`: it starts at the end (the bottom,
