@@ -1377,6 +1377,58 @@ Path strokedPath(const Rect& rect, const Shape& shape, bool rtl, float width) {
 }
 } // namespace
 
+// As Compose's DropShadowPainter and InnerShadowPainter draw a path's shadow (blurred masks:
+// Android's BlurMaskFilter, Android's sigma for the radius): the masks drawn opaque in layers that
+// blur them (Decal), in one faded by the color's alpha.
+void GraphicsContext::drawShadowPath(const Path& outline, Offset origin, const Shadow& shadow, bool inner) {
+    if (shadow.color.a <= 0 || outline.isEmpty()) return;
+    Rect b = outline.bounds();
+    b.x += origin.x, b.y += origin.y;
+    Color opaque = shadow.color.copy(1);
+    RenderEffect blur = BlurEffect(std::max(0.f, shadow.blurRadius), std::max(0.f, shadow.blurRadius), TileMode::Decal);
+    float spread = std::max(0.f, shadow.spread);
+    PathStroke band{2 * spread};  // (mitered, as a Paint's stroke is by default)
+    Offset moved{origin.x + shadow.offset.x, origin.y + shadow.offset.y};
+    if (!inner) {
+        float grow = spread * band.miter;  // (a miter reaches out that far at most)
+        Rect at{b.x + shadow.offset.x - grow, b.y + shadow.offset.y - grow, b.width + 2 * grow, b.height + 2 * grow};
+        Rect reach = blur.outputBounds(at);
+        if (quickReject(reach)) return;
+        pushLayer(reach, CornerRadii(), shadow.color.a);
+        pushEffectLayer(at, blur, 1);
+        drawPath(outline, moved, Brush::solid(opaque), at, {});
+        popLayer();
+        if (spread > 0) {
+            pushEffectLayer(at, blur, 1);
+            drawPath(outline, moved, Brush::solid(opaque), at, band);
+            popLayer();
+        }
+        popLayer();
+        return;
+    }
+    if (quickReject(b)) return;
+    // The color 2 dp past the bounds (a pixel and a half at the least): what cuts the edge's pixels
+    // is the outline (the clip), not the fill's own edge.
+    Rect at{b.x - 2, b.y - 2, b.width + 4, b.height + 4};
+    pushClipPath(outline, origin);
+    pushLayer(at, CornerRadii(), shadow.color.a);
+    fillRoundRect(at, CornerRadii(), opaque);
+    // Less the hole blurred.
+    Rect hole{at.x + shadow.offset.x, at.y + shadow.offset.y, at.width, at.height};
+    pushBlendMode(BlendMode::DstOut);
+    pushEffectLayer(hole, blur, 1);
+    drawPath(outline, moved, Brush::solid(opaque), hole, {});
+    if (spread > 0) {
+        pushBlendMode(BlendMode::Clear);
+        drawPath(outline, moved, Brush::solid(opaque), hole, band);
+        popBlendMode();
+    }
+    popLayer();
+    popBlendMode();
+    popLayer();
+    popClip();
+}
+
 void GraphicsContext::fillShape(const Rect& rect, const Shape& shape, bool rtl, Color color) {
     Placed p = place(rect, shape, rtl);
     if (p.rounded) fillRoundRect(rect, p.radii, color);

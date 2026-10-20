@@ -77,6 +77,8 @@
 - **What a blur blurs** (`BlurType`, Kompoz's own, on every `Modifier.blur`): `Family` (Compose's), `Morph` (frosted
   glass: what is behind, within the node's shape; `GraphicsContext::drawBackdrop`) and `Self` (only what the node
   draws itself, its children sharp over it).
+- **Shadows of any outline drawn as Compose draws them** (`GraphicsContext::drawShadowPath`'s default, through
+  effect layers): the GPU renderer no longer draws a heart's or a cookie's shadow as its bounds'.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

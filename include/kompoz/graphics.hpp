@@ -1165,12 +1165,11 @@ public:
             if (r.width > 0 && r.height > 0) fillRoundRect(r, radii.grown(grow), shadow.color.copy(shadow.color.a * (1.f - t + 1.f / 6) / 3.5f));
         }
     }
-    // The same for a shape of any outline (`outline` from `origin`): where the backend can't, as
-    // its bounds.
-    virtual void drawShadowPath(const Path& outline, Offset origin, const Shadow& shadow, bool inner) {
-        Rect b = outline.bounds();
-        drawShadow({origin.x + b.x, origin.y + b.y, b.width, b.height}, CornerRadii(), shadow, inner);
-    }
+    // The same for a shape of any outline (`outline` from `origin`), as Compose draws one: under it,
+    // the outline filled and stroked 2 * spread wide (mitered), each blurred, the two over each
+    // other, moved; inside it, the color where a hole (the outline worn away by the spread, moved)
+    // blurred isn't. The default draws it through effect layers (pushEffectLayer).
+    virtual void drawShadowPath(const Path& outline, Offset origin, const Shadow& shadow, bool inner);
     // A layer clipped to `outline` (from the bounds' top left, any path by its fill type) rather
     // than a rounded rect. The default clips to the bounds.
     virtual void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform = {}) {

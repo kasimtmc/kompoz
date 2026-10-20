@@ -1903,6 +1903,80 @@ void blursAreGaussian(Gpu& g) {
     report("too big for a texture", tall, overWhite(gaussian(tallBase, tallBounds, TileMode::Decal, sigmaOf(4), sigmaOf(4))), 2);
 }
 
+// A path's shadows are Compose's: under it, its fill and its stroke 2 * spread wide (mitered) each
+// blurred, the two over each other, moved, faded by the color's alpha; inside it (cut to it), the
+// color where its hole (worn away by the spread, moved) blurred isn't. Against those masks drawn
+// sharp here, blurred on the CPU.
+void pathShadowsAreComposes(Gpu& g) {
+    const int n = 96;
+    Path star;
+    for (int i = 0; i < 10; ++i) {
+        double a = i * std::numbers::pi / 5 - std::numbers::pi / 2, r = i % 2 ? 14 : 32;
+        Offset p{float(48 + r * std::cos(a)), float(46 + r * std::sin(a))};
+        if (i == 0) star.moveTo(p.x, p.y);
+        else star.lineTo(p.x, p.y);
+    }
+    star.close();
+    auto mask = [&](const std::function<void(GraphicsContext&)>& draw) {  // its coverage, sharp
+        Pixels p = g.render(n, n, 1, draw, {0, 0, 0, 0});
+        Image out{n, n, std::vector<float>(size_t(n) * n * 4, 0.f)};
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x) out.at(x, y)[3] = p.at(x, y)[3] / 255.f;
+        return out;
+    };
+    Color color{0.2f, 0.3f, 0.8f, 0.7f};
+    auto painted = [&](const std::vector<float>& alpha) {  // the color at that coverage, over white
+        Image out{n, n, std::vector<float>(size_t(n) * n * 4, 0.f)};
+        for (size_t i = 0; i < alpha.size(); ++i) {
+            float a = alpha[i] * color.a;
+            out.rgba[i * 4] = color.r * a, out.rgba[i * 4 + 1] = color.g * a, out.rgba[i * 4 + 2] = color.b * a, out.rgba[i * 4 + 3] = a;
+        }
+        return overWhite(out);
+    };
+    auto alphaOf = [&](const Image& i) {
+        std::vector<float> a(size_t(n) * n);
+        for (size_t k = 0; k < a.size(); ++k) a[k] = i.rgba[k * 4 + 3];
+        return a;
+    };
+    auto blurred = [&](const Image& i, float radius) { return radius > 0 ? gaussian(i, {0, 0, n, n}, TileMode::Decal, sigmaOf(radius), sigmaOf(radius)) : i; };
+    for (auto [spread, radius] : {std::pair{0.f, 5.f}, std::pair{3.f, 5.f}, std::pair{0.f, 0.f}}) {  // (not blurred: sharp, its edges the path's)
+        Shadow shadow{color, {4, 6}, radius, spread};
+        Offset moved{4, 6};
+        Image fill = mask([&](GraphicsContext& c) { c.drawPath(star, moved, Brush::solid(colors::Black), {}, {}); });
+        Image band = mask([&](GraphicsContext& c) { c.drawPath(star, moved, Brush::solid(colors::Black), {}, PathStroke{2 * spread}); });
+        std::vector<float> f = alphaOf(blurred(fill, radius)), b = alphaOf(blurred(band, radius)), drop(f.size());
+        for (size_t k = 0; k < drop.size(); ++k) drop[k] = spread > 0 ? 1 - (1 - f[k]) * (1 - b[k]) : f[k];
+        Pixels got = g.render(n, n, 1, [&](GraphicsContext& c) { c.drawShadowPath(star, {0, 0}, shadow, false); });
+        int worst = worstAgainst(got, [&, want = painted(drop)](int x, int y) mutable { return want.at(x, y); });
+        CHECK(worst <= 2);
+        if (worst > 2) std::printf("  drop shadow (spread %g): off by %d at (%g, %g)\n", spread, worst, worstAt.x, worstAt.y);
+        // Inside: cut to the star; its hole worn away by the spread.
+        Image clip = mask([&](GraphicsContext& c) { c.drawPath(star, {0, 0}, Brush::solid(colors::Black), {}, {}); });
+        Image hole = mask([&](GraphicsContext& c) {
+            c.drawPath(star, moved, Brush::solid(colors::Black), {}, {});
+            c.pushBlendMode(BlendMode::Clear);
+            if (spread > 0) c.drawPath(star, moved, Brush::solid(colors::Black), {}, PathStroke{2 * spread});
+            c.popBlendMode();
+        });
+        std::vector<float> h = alphaOf(blurred(hole, radius)), in = alphaOf(clip), inside(h.size());
+        for (size_t k = 0; k < inside.size(); ++k) inside[k] = in[k] * (1 - h[k]);
+        Pixels gotIn = g.render(n, n, 1, [&](GraphicsContext& c) { c.drawShadowPath(star, {0, 0}, shadow, true); });
+        Pixels wantIn = painted(inside);
+        worst = worstAgainst(gotIn, [&](int x, int y) { return wantIn.at(x, y); });
+        CHECK(worst <= 2);
+        if (worst > 2) std::printf("  inner shadow (spread %g): off by %d at (%g, %g)\n", spread, worst, worstAt.x, worstAt.y);
+    }
+    // A shape along its bounds, at fractions of a pixel, not blurred: its edges cut once.
+    Path box;
+    box.addRect({20.5f, 30.25f, 40.3f, 25.6f});
+    Image boxed = mask([&](GraphicsContext& c) { c.drawPath(box, {3, 2}, Brush::solid(colors::Black), {}, {}); });
+    Pixels got = g.render(n, n, 1, [&](GraphicsContext& c) { c.drawShadowPath(box, {0, 0}, Shadow{color, {3, 2}, 0, 0}, false); });
+    Pixels want = painted(alphaOf(boxed));
+    int worst = worstAgainst(got, [&](int x, int y) { return want.at(x, y); });
+    CHECK(worst <= 2);
+    if (worst > 2) std::printf("  a box's shadow: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+}
+
 // Curves cut into lines stay within kTolerance of the curve, in the target's pixels.
 void curvesAreFlattenedClosely() {
     Path circle;
@@ -2014,6 +2088,7 @@ int main() {
             clipsCutAsTheirShapes(g);
             graphicsLayersCompositeAsCompose(g);
             blursAreGaussian(g);
+            pathShadowsAreComposes(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
             std::printf("%d checks, %d failed\n", checks, failures);
