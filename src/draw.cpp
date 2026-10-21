@@ -258,6 +258,29 @@ struct Blending {
 
 } // namespace
 
+namespace {
+
+// An image: as it is, or an Alpha8 one as a mask (as Android draws one): `brush` (its paint's
+// color or shader; DrawScope's: black, as Compose's) where it is, as opaque as it is.
+void paintImage(GraphicsContext& g, const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha, FilterQuality quality,
+                const Brush& brush, const Rect& brushArea) {
+    if (image.config() != ImageBitmapConfig::Alpha8) return g.drawImage(image, src, dst, alpha, quality);
+    g.drawImageMask(image, src, dst, brush, brushArea, alpha, quality);
+}
+
+} // namespace
+
+void GraphicsContext::drawImageMask(const ImageBitmap& image, const Rect& src, const Rect& dst, const Brush& brush, const Rect& brushArea,
+                                    float alpha, FilterQuality quality) {
+    pushLayer(dst, CornerRadii(), alpha);  // the brush, kept where the image is
+    if (brush.isSolid()) fillRoundRect(dst, CornerRadii(), brush.stops().empty() ? colors::Transparent : brush.stops().front().color);
+    else fillGradient(dst, CornerRadii(), brush, brushArea);
+    pushBlendMode(BlendMode::DstIn);
+    drawImage(image, src, dst, 1, quality);
+    popBlendMode();
+    popLayer();
+}
+
 DrawScope::DrawScope(GraphicsContext& context, Rect bounds, const LayoutNode& node)
     : DrawScope(context, bounds, &node.textMeasurer(), node.host() ? node.host()->density() : Density{},
                 node.rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr) {}
@@ -282,6 +305,19 @@ void DrawScope::within(const std::function<void(DrawScope&)>& block) {
 }
 
 // --- Canvas ---------------------------------------------------------------------------------------
+
+graphics::Canvas::Canvas(const ImageBitmap& image) : context_(nullptr), image_(image) {
+    recording_ = std::make_shared<DisplayList>(detail::bitmapMeasurer());
+    recording_->begin({float(image.width()), float(image.height())}, 1);
+    context_ = recording_.get();
+}
+
+graphics::Canvas::~Canvas() {
+    restoreTo(0);
+    if (!recording_) return;
+    recording_->end();
+    if (recording_->size() > 0) detail::drawIntoBitmap(image_, recording_);
+}
 
 void graphics::Canvas::save() { stack_.push_back({Saved::Kind::Save}); }
 
@@ -479,14 +515,23 @@ void graphics::Canvas::drawPath(const Path& path, const Paint& paint) {
 
 void graphics::Canvas::drawImage(const ImageBitmap& image, Offset topLeftOffset, const Paint& paint) {
     if (image.empty()) return;
-    scope().drawImage(image, IntOffset{}, std::nullopt, topLeftOffset, std::nullopt, paint.alpha(), Fill, paint.colorFilter, paint.blendMode,
-                      paint.filterQuality);
+    drawImage(image, {0, 0, float(image.width()), float(image.height())},
+              {topLeftOffset.x, topLeftOffset.y, float(image.width()), float(image.height())}, paint);
 }
 
 void graphics::Canvas::drawImageRect(const ImageBitmap& image, IntOffset srcOffset, IntSize srcSize, IntOffset dstOffset, IntSize dstSize,
                            const Paint& paint) {
-    scope().drawImage(image, srcOffset, srcSize, {float(dstOffset.x), float(dstOffset.y)}, Size(dstSize), paint.alpha(), Fill,
-                      paint.colorFilter, paint.blendMode, paint.filterQuality);
+    drawImage(image, {float(srcOffset.x), float(srcOffset.y), float(srcSize.width), float(srcSize.height)},
+              {float(dstOffset.x), float(dstOffset.y), float(dstSize.width), float(dstSize.height)}, paint);
+}
+
+// An image (its paint's alpha; an Alpha8 one in the paint's color or shader), `dst` in this
+// canvas's coordinates.
+void graphics::Canvas::drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, const Paint& paint) {
+    if (image.empty() || paint.alpha() <= 0) return;
+    Blending blending(*context_, paint.blendMode);
+    detail::Filtering filtering(*context_, paint.colorFilter);
+    paintImage(*context_, image, src, at(dst), paint.alpha(), paint.filterQuality, brushOf(paint), {origin_.x, origin_.y, 0, 0});
 }
 
 void graphics::Canvas::drawImageRect(const ImageBitmap& image, const Paint& paint) {
@@ -640,7 +685,8 @@ void DrawScope::drawImage(const ImageBitmap& image, IntOffset srcOffset, std::op
     Rect src{float(srcOffset.x), float(srcOffset.y), float(from.width), float(from.height)};
     Blending blending(*context_, blendMode);
     detail::Filtering filtering(*context_, colorFilter);
-    context_->drawImage(image, src, local(dstOffset, dstSize.value_or(Size(from))), std::min(alpha, 1.f), filterQuality);
+    paintImage(*context_, image, src, local(dstOffset, dstSize.value_or(Size(from))), std::min(alpha, 1.f), filterQuality, Brush::solid(colors::Black),
+               bounds_);
 }
 
 void DrawScope::drawRoundRect(const Brush& brush, Offset topLeft, std::optional<Size> size, CornerRadius cornerRadius, float alpha,
@@ -970,6 +1016,7 @@ public:
     void drawVector(const ImageVector&, const Rect&, Color) override {}
     void drawArc(const Rect&, float, float, float, Color, bool) override {}
     void drawImage(const ImageBitmap&, const Rect&, const Rect&, float, FilterQuality) override {}
+    void drawImageMask(const ImageBitmap&, const Rect&, const Rect&, const Brush&, const Rect&, float, FilterQuality) override {}
     void drawPath(const Path&, Offset, const Brush&, const Rect&, const PathStroke&) override {}
     void drawVertices(const Vertices&, Offset, BlendMode, const Brush&, const Rect&, float) override {}
     void fillGradient(const Rect&, const CornerRadii&, const Brush&, const Rect&) override {}

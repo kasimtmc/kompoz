@@ -952,30 +952,6 @@ bool ImageVector::autoMirror() const { return data_ && data_->autoMirror; }
 
 namespace kompoz {
 
-struct ImageBitmap::Data {
-    int width = 0, height = 0;
-    std::vector<uint8_t> rgba;
-    uint64_t id = 0;
-};
-
-ImageBitmap ImageBitmap::fromPixels(int width, int height, std::vector<uint8_t> rgba) {
-    static std::atomic<uint64_t> nextId{1};
-    ImageBitmap image;
-    if (width <= 0 || height <= 0 || rgba.size() < size_t(width) * size_t(height) * 4) return image;
-    auto data = std::make_shared<Data>();
-    data->width = width;
-    data->height = height;
-    data->rgba = std::move(rgba);
-    data->id = nextId++;
-    image.data_ = std::move(data);
-    return image;
-}
-
-int ImageBitmap::width() const { return data_ ? data_->width : 0; }
-int ImageBitmap::height() const { return data_ ? data_->height : 0; }
-const uint8_t* ImageBitmap::pixels() const { return data_ ? data_->rgba.data() : nullptr; }
-uint64_t ImageBitmap::id() const { return data_ ? data_->id : 0; }
-
 namespace {
 // How much the image would be scaled to meet the size (below 1: it is bigger than needed).
 double scaleFor(int width, int height, const ImageRequestSize& size) {

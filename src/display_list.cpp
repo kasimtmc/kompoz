@@ -8,6 +8,18 @@ namespace kompoz {
 
 namespace {
 
+// What the images in a brush's shader hold (their ids and versions, summed up): one drawn into
+// since is a change.
+uint64_t imagesIn(const Brush& brush, const Rect& area) {
+    if (brush.kind() != Brush::Kind::Shader) return 0;
+    std::function<uint64_t(const Shader&)> walk = [&](const Shader& s) -> uint64_t {
+        if (s.kind() == Shader::Kind::Image) return s.image().id() * 1000003u + s.image().version();
+        if (s.kind() == Shader::Kind::Composite) return walk(s.dst()) * 31u + walk(s.src());
+        return 0;
+    };
+    return walk(brush.createShader({area.width, area.height}));
+}
+
 bool same(const Rect& a, const Rect& b) { return a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height; }
 bool same(Offset a, Offset b) { return a.x == b.x && a.y == b.y; }
 bool same(const LayerTransform& a, const LayerTransform& b) {
@@ -77,7 +89,7 @@ bool DisplayList::Command::same(const Command& o) const {
     return kind == o.kind && kompoz::same(bounds, o.bounds) && m == o.m && kompoz::same(rect, o.rect) &&
            kompoz::same(rect2, o.rect2) && radii == o.radii && f1 == o.f1 && f2 == o.f2 && f3 == o.f3 && color == o.color &&
            kompoz::same(p1, o.p1) && kompoz::same(p2, o.p2) && flag == o.flag && font == o.font && vector == o.vector &&
-           image == o.image && kompoz::same(stroke, o.stroke) && kompoz::same(transform, o.transform) && text == o.text &&
+           image == o.image && imageVersion == o.imageVersion && kompoz::same(stroke, o.stroke) && kompoz::same(transform, o.transform) && text == o.text &&
            brush == o.brush && vertices == o.vertices && filter == o.filter && effect == o.effect && elevated == o.elevated && shaped == o.shaped && path == o.path &&
            matrix == o.matrix;
 }
@@ -165,7 +177,7 @@ void DisplayList::drawText(std::string_view utf8, Offset baseline, const Font& f
 void DisplayList::drawTextBrush(std::string_view utf8, Offset baseline, const Font& font, const Brush& brush, const Rect& brushArea,
                                 bool rtl) {
     if (utf8.empty()) return;
-    if (Command* c = text(Kind::TextBrush, utf8, baseline, font, rtl)) c->brush = brush, c->rect2 = brushArea;
+    if (Command* c = text(Kind::TextBrush, utf8, baseline, font, rtl)) c->brush = brush, c->rect2 = brushArea, c->imageVersion = imagesIn(brush, brushArea);
 }
 
 void DisplayList::drawTextShadow(std::string_view utf8, Offset baseline, const Font& font, Color color, float blurRadius, bool rtl) {
@@ -247,11 +259,23 @@ void DisplayList::drawShapeShadow(const Rect& rect, const Shape& shape, bool rtl
 
 void DisplayList::drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha, FilterQuality quality) {
     if (image.empty() || alpha <= 0) return;
-    if (Command* c = draw(Kind::Image, dst, 0)) c->image = image, c->rect = dst, c->rect2 = src, c->f1 = alpha, c->f2 = float(int(quality));
+    if (Command* c = draw(Kind::Image, dst, 0))
+        c->image = image, c->imageVersion = image.version(), c->rect = dst, c->rect2 = src, c->f1 = alpha, c->f2 = float(int(quality));
+}
+
+void DisplayList::drawImageMask(const ImageBitmap& image, const Rect& src, const Rect& dst, const Brush& brush, const Rect& brushArea,
+                                float alpha, FilterQuality quality) {
+    if (image.empty() || alpha <= 0) return;
+    if (Command* c = draw(Kind::ImageMask, dst, 0)) {
+        c->image = image, c->rect = dst, c->rect2 = src, c->f1 = alpha, c->f2 = float(int(quality)), c->brush = brush, c->p1 = {brushArea.x, brushArea.y};
+        c->p2 = {brushArea.width, brushArea.height};
+        c->imageVersion = image.version() * 1000003u + imagesIn(brush, brushArea);
+    }
 }
 
 void DisplayList::fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& brush, const Rect& brushArea) {
-    if (Command* c = draw(Kind::Gradient, rect, 0)) c->rect = rect, c->radii = radii, c->brush = brush, c->rect2 = brushArea;
+    if (Command* c = draw(Kind::Gradient, rect, 0))
+        c->rect = rect, c->radii = radii, c->brush = brush, c->rect2 = brushArea, c->imageVersion = imagesIn(brush, brushArea);
 }
 
 void DisplayList::drawVertices(const Vertices& vertices, Offset origin, BlendMode blendMode, const Brush& brush, const Rect& brushArea,
@@ -267,6 +291,7 @@ void DisplayList::drawVertices(const Vertices& vertices, Offset origin, BlendMod
         c->f2 = float(int(blendMode));
         c->brush = brush;
         c->rect2 = brushArea;
+        c->imageVersion = imagesIn(brush, brushArea);
     }
 }
 
@@ -289,6 +314,7 @@ void DisplayList::drawPath(const Path& path, Offset origin, const Brush& brush, 
         c->p1 = origin;
         c->brush = brush;
         c->rect2 = brushArea;
+        c->imageVersion = imagesIn(brush, brushArea);
         c->stroke = stroke;
     }
 }
@@ -591,6 +617,9 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
             case Kind::Gradient: canvas.fillGradient(c.rect, c.radii, *c.brush, c.rect2); break;
             case Kind::Path: canvas.drawPath(c.path, c.p1, *c.brush, c.rect2, c.stroke); break;
             case Kind::Vertices: canvas.drawVertices(*c.vertices, c.p1, BlendMode(int(c.f2)), *c.brush, c.rect2, c.f1); break;
+            case Kind::ImageMask:
+                canvas.drawImageMask(c.image, c.rect2, c.rect, *c.brush, {c.p1.x, c.p1.y, c.p2.x, c.p2.y}, c.f1, FilterQuality(int(c.f2)));
+                break;
             default: break;
             }
         }

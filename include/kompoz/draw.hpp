@@ -28,6 +28,7 @@ enum class TextDecoration;
 
 class GraphicsLayer;
 class DrawScope;
+class DisplayList;
 
 // How a Paint paints a shape (Compose's PaintingStyle): filled, or outlined.
 enum class PaintingStyle { Fill, Stroke };
@@ -68,7 +69,11 @@ namespace graphics {
 class Canvas {
 public:
     explicit Canvas(GraphicsContext& context, Offset origin = {}) : context_(&context), origin_(origin) {}
-    ~Canvas() { restoreTo(0); }
+    // Drawing into `image` (Compose's Canvas(ImageBitmap)), a unit a pixel: what it draws is drawn
+    // into it as the canvas goes (by the platform's renderer: see ImageBitmap). An Alpha8 one
+    // keeps the alpha, an Rgb565 one or one without alpha what is drawn over its black.
+    explicit Canvas(const ImageBitmap& image);
+    ~Canvas();
     Canvas(const Canvas&) = delete;
     Canvas& operator=(const Canvas&) = delete;
     GraphicsContext& context() const { return *context_; }
@@ -142,6 +147,7 @@ private:
     int depth() const { return int(stack_.size()); }
     void restoreTo(int depth);  // pops what was pushed past `depth`
     void push(const Matrix& matrix);  // in this canvas's coordinates
+    void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, const Paint& paint);
     Rect at(const Rect& r) const { return {origin_.x + r.x, origin_.y + r.y, r.width, r.height}; }
     DrawScope scope() const;
 
@@ -149,6 +155,8 @@ private:
     Offset origin_;
     Density density_;  // (a DrawScope's: how big a hairline's dot is)
     std::vector<Saved> stack_;
+    std::shared_ptr<DisplayList> recording_;  // a bitmap's canvas: what it draws into `image_`
+    ImageBitmap image_;
 };
 
 } // namespace graphics

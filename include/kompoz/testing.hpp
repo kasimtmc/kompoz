@@ -185,9 +185,11 @@ public:
     }
     std::vector<FilterQuality> imageQualities;  // how each image is sampled
     std::vector<float> imageAlphas;             // and how opaque
+    std::vector<BlendMode> imageBlends;         // and its blend mode
     void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha, FilterQuality quality) override {
         images.push_back(image.id());
         imageAlphas.push_back(alpha);
+        imageBlends.push_back(blend());
         imageQualities.push_back(quality);
         imageFilters.push_back(filterStack);
         imageSources.push_back(src);

@@ -24016,6 +24016,111 @@ TEST(vertices_are_composes) {
           near(replayed.meshes[0].alpha, 0.7f));
 }
 
+// Bitmaps as Compose's: clear (black where they have no alpha), read as ARGB and as a pixel map;
+// what each config keeps of what is drawn (Alpha8 its alpha, Rgb565 5-6-5 over black, F16 half
+// floats); drawn into by a renderer as a canvas goes, or kept until there is one; an Alpha8 one
+// drawn as a mask; a bitmap drawn into since is damage on the screen, in an image and in a shader.
+TEST(bitmaps_are_composes) {
+    auto argbAt = [](const ImageBitmap& b, int x, int y) {
+        uint32_t c = 0;
+        b.readPixels(&c, x, y, 1, 1);
+        return c;
+    };
+    ImageBitmap clear(4, 3);
+    CHECK(clear.config() == ImageBitmapConfig::Argb8888 && clear.hasAlpha() && argbAt(clear, 1, 1) == 0 && clear.version() == 1);
+    CHECK(argbAt(ImageBitmap(4, 3, ImageBitmapConfig::Rgb565), 2, 2) == 0xFF000000u && !ImageBitmap(4, 3, ImageBitmapConfig::Rgb565, true).hasAlpha());
+    CHECK(argbAt(ImageBitmap(4, 3, ImageBitmapConfig::Argb8888, false), 0, 0) == 0xFF000000u);
+    CHECK(argbAt(ImageBitmap(4, 3, ImageBitmapConfig::Alpha8, false), 0, 0) == 0 && ImageBitmap(4, 3, ImageBitmapConfig::Alpha8, false).hasAlpha());
+    CHECK(ImageBitmap(0, 3).empty() && ImageBitmap(maxImageDimension + 1, 3).empty());
+    ImageBitmap two = ImageBitmap::fromPixels(2, 2, {255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 255, 255, 10, 20, 30, 0});
+    std::vector<uint32_t> all(9, 7);
+    two.readPixels(all.data(), 0, 0, 2, 2, 1, 3);  // from the second, rows three apart
+    CHECK(all[0] == 7 && all[1] == 0xFFFF0000u && all[2] == 0x8000FF00u && all[3] == 7 && all[4] == 0xFF0000FFu && all[5] == 0x000A141Eu);
+    two.readPixels(all.data(), 1, 1, 2, 2);  // past its edge: nothing there
+    CHECK(all[0] == 0x000A141Eu && all[1] == 0xFFFF0000u);  // ((2, 1): left as it was)
+    PixelMap map = two.toPixelMap();
+    CHECK(map.width == 2 && map(1, 0) == Color::hex(0x00FF00, 128 / 255.f) && map(0, 1) == Color::hex(0x0000FF));
+    // What each config keeps of what is drawn (premultiplied, as a renderer gives it).
+    auto stored = [&](ImageBitmapConfig config, bool hasAlpha, std::vector<uint8_t> premultiplied) {
+        ImageBitmap b(1, 1, config, hasAlpha);
+        detail::bitmaps::store(b, premultiplied, true);
+        return std::pair{argbAt(b, 0, 0), b.version()};
+    };
+    CHECK(stored(ImageBitmapConfig::Argb8888, true, {100, 50, 0, 200}) == (std::pair{0xC8804000u, uint64_t(2)}));  // (straight: 127.5 and 63.75)
+    CHECK(stored(ImageBitmapConfig::Gpu, true, {100, 50, 0, 200}).first == 0xC8804000u);
+    CHECK(stored(ImageBitmapConfig::Argb8888, false, {100, 50, 0, 200}).first == 0xFF643200u);  // (over black)
+    CHECK(stored(ImageBitmapConfig::Alpha8, true, {100, 50, 0, 200}).first == 0xC8000000u);
+    CHECK(stored(ImageBitmapConfig::Rgb565, true, {100, 50, 0, 200}).first == 0xFF633100u);  // 12/31, 12/63, 0
+    CHECK(stored(ImageBitmapConfig::Rgb565, true, {128, 70, 30, 255}).first == 0xFF844521u);  // rounded (as Skia stores them): 16/31, 17/63, 4/31
+    ImageBitmap fine(1, 1, ImageBitmapConfig::F16);
+    detail::bitmaps::storeFloats(fine, {0.5004f * 0.5f, 2.f * 0.5f, 0, 0.5f}, true);  // (past 1 too)
+    const std::vector<float>& f = detail::bitmaps::floats(fine);
+    CHECK(f.size() == 4 && near(f[0], 1025 / 2048.f, 1e-7f) && near(f[1], 2, 1e-6f) && near(f[3], 0.5f, 1e-7f) && argbAt(fine, 0, 0) == 0x8080FF00u);
+    // Drawn into: kept while there is no renderer, drawn by one as it comes; by one there, as the canvas goes.
+    struct Fake final : detail::BitmapRenderer {
+        std::vector<size_t> drawn;  // each draw's commands
+        void draw(const ImageBitmap& b, const DisplayList& draws) override {
+            drawn.push_back(draws.size());
+            detail::bitmaps::store(b, std::vector<uint8_t>(size_t(b.width()) * size_t(b.height()) * 4, 255), true);
+        }
+        void readBack(const ImageBitmap&) override {}
+    } fake;
+    ImageBitmap target(3, 3);
+    { graphics::Canvas c(target); c.drawRect({0, 0, 1, 1}, Paint{}); c.drawCircle({1, 1}, 1, Paint{}); }
+    { graphics::Canvas c(target); }  // (drew nothing: nothing to do)
+    CHECK(target.version() == 1 && argbAt(target, 0, 0) == 0);
+    detail::setBitmapRenderer(&fake);
+    CHECK(fake.drawn == (std::vector<size_t>{2}) && target.version() == 2 && argbAt(target, 0, 0) == 0xFFFFFFFFu);
+    { graphics::Canvas c(target); c.drawLine({0, 0}, {3, 3}, Paint{.strokeWidth = 1}); }
+    CHECK(fake.drawn == (std::vector<size_t>{2, 1}) && target.version() == 3);
+    {  // a scope over it
+        graphics::Canvas c(target);
+        DrawScope over(c, {3, 3});
+        over.drawRect(colors::Black);
+    }
+    CHECK(fake.drawn.size() == 3);
+    detail::setBitmapRenderer(nullptr);
+    // An Alpha8 bitmap drawn as a mask: in black from a DrawScope (as Compose's), in a canvas's paint.
+    ImageBitmap mask(4, 4, ImageBitmapConfig::Alpha8);
+    testing::RecordingCanvas r;
+    {
+        DrawScope d(r, {10, 10, 20, 20});
+        d.drawImage(mask, {2, 2}, 0.5f);
+        graphics::Canvas c(r, {10, 10});
+        c.drawImage(mask, {0, 0}, Paint{.color = Color{0, 0, 1, 0.75f}});
+        c.drawImage(clear, {0, 0}, Paint{});  // (an Argb8888 one as it is)
+    }
+    CHECK(r.stack == "LBblLBbl" && r.images.size() == 3 && r.rects.size() == 2);
+    CHECK(r.blendStack.empty());
+    if (r.rects.size() == 2 && r.layerAlphas.size() == 2) {
+        CHECK(r.rectColors[0] == colors::Black && r.rectBlends[0] == BlendMode::SrcOver && sameRect(r.rects[0], {12, 12, 4, 4}) && near(r.layerAlphas[0], 0.5f));
+        CHECK(r.order.substr(0, 1) == "r" && r.imageBlends[0] == BlendMode::DstIn && r.imageBlends[2] == BlendMode::SrcOver);  // (the brush first; the mask over it by DstIn)
+        CHECK(r.rectColors[1] == (Color{0, 0, 1, 1}) && near(r.layerAlphas[1], 0.75f) && near(r.imageAlphas[1], 1));
+        CHECK(near(r.imageAlphas[2], 1));
+    }
+    // A bitmap drawn into since: a change where it is drawn, as an image and in a shader.
+    testing::FakeTextMeasurer measurer;
+    DisplayList list(measurer);
+    ImageBitmap shown(2, 2);
+    auto frame = [&] {
+        list.begin({100, 100}, 1);
+        list.drawImage(shown, {0, 0, 2, 2}, {10, 10, 20, 20}, 1);
+        list.fillGradient({50, 50, 10, 10}, CornerRadii(), Brush::shader(ImageShader(shown)), {50, 50, 10, 10});
+        return list.end();
+    };
+    frame();
+    CHECK(!frame());
+    detail::bitmaps::store(shown, std::vector<uint8_t>(16, 255), true);
+    auto damage = frame();
+    CHECK(damage && damage->x <= 10 && damage->right() >= 60);
+    CHECK(!frame());
+    // A color filter's copy of a bitmap made again when it is drawn into.
+    ColorFilter invert = ColorFilter::colorMatrix(ColorMatrix{{-1, 0, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, -1, 0, 1, 0, 0, 0, 1, 0}});
+    CHECK(invert.apply(shown).pixels()[0] == 0);  // (white: black)
+    detail::bitmaps::store(shown, std::vector<uint8_t>{0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255}, true);
+    CHECK(invert.apply(shown).pixels()[0] == 255);
+}
+
 TEST(path_effects_dash_and_round_strokes) {
     auto dash = PathEffect::dashPathEffect({10, 5});
     ComposeTestRule rule([&] {

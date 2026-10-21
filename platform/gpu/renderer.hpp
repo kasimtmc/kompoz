@@ -24,6 +24,10 @@
 #include <unordered_map>
 #include <vector>
 
+namespace kompoz {
+class DisplayList;
+}
+
 namespace kompoz::gpu {
 
 class Renderer final : public GraphicsContext {
@@ -45,6 +49,16 @@ public:
     void flush();
     // After each frame: textures of images that are gone, and layer targets unused for a while, go.
     void endFrame();
+    // A bitmap drawn into (graphics::Canvas(ImageBitmap)): `draws` over what it holds, a unit a
+    // pixel, into a new texture of its own (draws recorded before still read the old one). Kept
+    // here where the bitmap keeps 8 or 16 bits a channel with alpha (Argb8888, Gpu, F16: the bitmap
+    // told only the renderer has what it holds), else read back into it at once (flushing what is
+    // recorded), kept as its config keeps it. flush() submits the drawing.
+    void drawIntoBitmap(const ImageBitmap& bitmap, const DisplayList& draws);
+    // The pixels of a bitmap only this renderer has, read back into it (flushing what is recorded).
+    void readBackBitmap(const ImageBitmap& bitmap);
+    // Every bitmap's that only this renderer has, before it goes.
+    void releaseBitmaps();
 
     void fillRoundRect(const Rect& rect, const CornerRadii& radii, Color color) override;
     void strokeRoundRect(const Rect& rect, const CornerRadii& radii, float width, Color color) override;
@@ -209,6 +223,8 @@ private:
         std::unique_ptr<Texture> texture;
         std::weak_ptr<const void> token;
         bool mipmapped = false;
+        uint64_t version = 0;  // what of the bitmap it holds (ImageBitmap::version)
+        std::weak_ptr<ImageBitmap::Data> kept;  // a bitmap drawn into here: whose pixels only this texture may have
     };
     struct PooledTexture {
         std::unique_ptr<Texture> texture;  // (its format: a target's copy has the target's)
@@ -276,6 +292,7 @@ private:
     bool whiteUploaded_ = false;
     std::vector<std::unique_ptr<Texture>> pages_;  // the glyph atlas's pages
     std::unordered_map<uint64_t, ImageTexture> images_;
+    std::vector<std::unique_ptr<Texture>> retired_;  // bitmaps' textures drawn again: gone after the frame (its draws read them)
     std::vector<PooledTexture> pool_;  // layer targets
     struct PipelineKey {
         Format format;

@@ -15,6 +15,7 @@
 #include "../platform/gpu/renderer.hpp"
 #include "../platform/sdl3/font_system.hpp"
 
+#include <kompoz/display_list.hpp>
 #include <kompoz/draw.hpp>
 
 #include <SDL3/SDL.h>
@@ -2405,6 +2406,138 @@ void meshesDrawAsSkiaDoes(Gpu& g) {
     }
 }
 
+// Bitmaps drawn into (Canvas(ImageBitmap)) by the renderer, as Android draws into them: what is
+// read back is what the same drawing makes on a target of its own; an Argb8888 one kept as the
+// renderer's texture (read back when asked for), drawn into again over what it holds, drawn on
+// the screen before and after in one frame (each time as it was); F16 finer than 8 bits; Alpha8
+// its alpha alone, and drawn in a paint's color; Rgb565 and one without alpha over black,
+// opaque, Rgb565 in 5, 6 and 5 bits.
+void bitmapsAreDrawnIntoAsAndroidDoes(Gpu& g) {
+    struct Hook final : detail::BitmapRenderer {
+        Gpu& g;
+        bool inFrame = false;
+        explicit Hook(Gpu& gpu) : g(gpu) {}
+        void draw(const ImageBitmap& b, const DisplayList& draws) override {
+            if (!inFrame) g.device->beginFrame();
+            g.renderer->drawIntoBitmap(b, draws);
+            if (!inFrame) g.renderer->flush(), g.device->endFrame(false);
+        }
+        void readBack(const ImageBitmap& b) override {
+            if (!inFrame) g.device->beginFrame();
+            g.renderer->readBackBitmap(b);
+            if (!inFrame) g.device->endFrame(false);
+        }
+        TextMeasurer* measurer() override { return g.fonts.get(); }
+    } hook(g);
+    detail::setBitmapRenderer(&hook);
+    const int n = 48;
+    g.fonts->setScale(1);
+    auto scene = [](graphics::Canvas& c) {
+        c.drawRect({4, 4, 30, 20}, Paint{.color = Color{0.9f, 0.2f, 0.1f, 0.6f}});
+        c.drawCircle({30, 28}, 14, Paint{.shader = LinearGradientShader({16, 0}, {44, 0}, {Color{0.1f, 0.6f, 0.9f, 1}, Color{1, 0.9f, 0.2f, 0.5f}})});
+        c.drawLine({2, 44}, {46, 38}, Paint{.color = Color{0.2f, 0.7f, 0.3f, 1}, .strokeWidth = 3});
+    };
+    // What the scene makes on a clear target of its own: straight ARGB, as readPixels gives it.
+    Pixels direct = g.render(n, n, 1, [&](GraphicsContext& ctx) { graphics::Canvas c(ctx); scene(c); }, gpu::ClearColor{0, 0, 0, 0});
+    auto straight = [&](int x, int y) {
+        const uint8_t* p = direct.at(x, y);
+        uint8_t a = p[3];
+        auto un = [&](uint8_t v) { return a ? uint8_t(std::lround(std::min(255.0, v * 255.0 / a))) : uint8_t(0); };
+        return std::array<int, 4>{un(p[0]), un(p[1]), un(p[2]), a};
+    };
+    auto compare = [&](const char* what, const ImageBitmap& b, const std::function<std::array<int, 4>(int, int)>& want, int tolerance) {
+        std::vector<uint32_t> argb(size_t(n) * n);
+        b.readPixels(argb.data());
+        int worst = 0;
+        Offset at;
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x) {
+                uint32_t c = argb[size_t(y) * n + size_t(x)];
+                std::array<int, 4> w = want(x, y), got{int(c >> 16 & 255), int(c >> 8 & 255), int(c & 255), int(c >> 24)};
+                for (int k = 0; k < 4; ++k)
+                    if (std::abs(got[size_t(k)] - w[size_t(k)]) > worst) worst = std::abs(got[size_t(k)] - w[size_t(k)]), at = {float(x), float(y)};
+            }
+        CHECK(worst <= tolerance);
+        if (worst > tolerance) std::printf("  %s: off by %d at (%g, %g)\n", what, worst, at.x, at.y);
+    };
+    // Argb8888: kept as the renderer's texture until it is read back (a unit a pixel, whatever the screen's density).
+    g.renderer->scale = 2.625f;
+    ImageBitmap argb(n, n);
+    uint64_t before = argb.version();
+    { graphics::Canvas c(argb); scene(c); }
+    CHECK(argb.version() == before + 1 && !detail::bitmaps::pixelsCurrent(argb));
+    compare("drawn into an Argb8888 bitmap", argb, straight, 1);
+    CHECK(detail::bitmaps::pixelsCurrent(argb));
+    // Drawn into again, over what it holds; on the screen before and after, in one frame.
+    ImageBitmap shown(n, n);
+    { graphics::Canvas c(shown); c.drawRect({0, 0, float(n), float(n)}, Paint{.color = Color{0.2f, 0.4f, 0.8f, 1}}); }
+    Pixels both = g.render(2 * n, n, 1, [&](GraphicsContext& ctx) {
+        ctx.drawImage(shown, {0, 0, float(n), float(n)}, {0, 0, float(n), float(n)}, 1);
+        hook.inFrame = true;
+        { graphics::Canvas c(shown); c.drawRect({0, 0, float(n), float(n) / 2}, Paint{.color = Color{0.9f, 0.1f, 0.1f, 1}}); }
+        hook.inFrame = false;
+        ctx.drawImage(shown, {0, 0, float(n), float(n)}, {float(n), 0, float(n), float(n)}, 1);
+    });
+    CHECK(near(both.at(10, 10), 51, 102, 204) && near(both.at(n + 10, 10), 230, 26, 26) && near(both.at(n + 10, 40), 51, 102, 204));
+    // F16: finer than 8 bits.
+    ImageBitmap fine(n, n, ImageBitmapConfig::F16);
+    { graphics::Canvas c(fine); c.drawRect({0, 0, float(n), float(n)}, Paint{.color = Color{0.5004f, 0.2f, 0.9f, 1}}); }
+    compare("drawn into an F16 bitmap (8 bits of it)", fine, [](int, int) { return std::array<int, 4>{128, 51, 230, 255}; }, 1);
+    const std::vector<float>& f = detail::bitmaps::floats(fine);
+    // (within a half float's step there, 2^-11: Vulkan may round toward zero as it writes one)
+    CHECK(f.size() == size_t(n) * n * 4 && std::abs(f[0] - 0.5004f) < 0.000489f && std::abs(f[0] - 128 / 255.f) > 0.001f);
+    // Alpha8: its alpha alone; drawn in a paint's color.
+    ImageBitmap mask(n, n, ImageBitmapConfig::Alpha8);
+    { graphics::Canvas c(mask); scene(c); }
+    CHECK(detail::bitmaps::pixelsCurrent(mask));
+    compare("drawn into an Alpha8 bitmap", mask, [&](int x, int y) { return std::array<int, 4>{0, 0, 0, straight(x, y)[3]}; }, 1);
+    Pixels masked = g.render(n, n, 1, [&](GraphicsContext& ctx) { graphics::Canvas c(ctx); c.drawImage(mask, {0, 0}, Paint{.color = Color{0.1f, 0.5f, 0.2f, 1}}); });
+    {
+        int worst = worstAgainst(masked, [&](int x, int y) {
+            static uint8_t want[4];
+            float a = float(straight(x, y)[3]) / 255;  // green, as opaque as the mask, over white
+            want[0] = uint8_t(std::lround((0.1f * a + 1 - a) * 255)), want[1] = uint8_t(std::lround((0.5f * a + 1 - a) * 255));
+            want[2] = uint8_t(std::lround((0.2f * a + 1 - a) * 255)), want[3] = 255;
+            return want;
+        });
+        CHECK(worst <= 2);
+        if (worst > 2) std::printf("  an Alpha8 bitmap in a paint's color: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+    }
+    // Rgb565 and Argb8888 without alpha: over black, opaque; Rgb565 in 5, 6 and 5 bits.
+    auto overBlack = [&](int x, int y, int bits) {
+        const uint8_t* p = direct.at(x, y);
+        auto q = [&](uint8_t v, int levels) {
+            return bits ? int(std::lround(std::lround(v / 255.0 * levels) * 255.0 / levels)) : int(v);
+        };
+        return std::array<int, 4>{q(p[0], 31), q(p[1], 63), q(p[2], 31), 255};
+    };
+    ImageBitmap rgb(n, n, ImageBitmapConfig::Rgb565);
+    { graphics::Canvas c(rgb); scene(c); }
+    CHECK(!rgb.hasAlpha());
+    compare("drawn into an Rgb565 bitmap", rgb, [&](int x, int y) { return overBlack(x, y, 1); }, 9);  // (a 5-bit step: 8; the edges rounded either way)
+    // On the screen, as it holds them now (its texture made again from them).
+    Pixels rgbShown = g.render(n, n, 1, [&](GraphicsContext& ctx) { ctx.drawImage(rgb, {0, 0, float(n), float(n)}, {0, 0, float(n), float(n)}, 1); });
+    {
+        std::vector<uint32_t> held(size_t(n) * n);
+        rgb.readPixels(held.data());
+        int worst = worstAgainst(rgbShown, [&](int x, int y) {
+            static uint8_t want[4];
+            uint32_t c = held[size_t(y) * n + size_t(x)];
+            want[0] = uint8_t(c >> 16), want[1] = uint8_t(c >> 8), want[2] = uint8_t(c), want[3] = 255;
+            return want;
+        });
+        CHECK(worst <= 1);
+        if (worst > 1) std::printf("  an Rgb565 bitmap on the screen: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+    }
+    ImageBitmap opaque(n, n, ImageBitmapConfig::Argb8888, false);
+    { graphics::Canvas c(opaque); scene(c); }
+    compare("drawn into an opaque Argb8888 bitmap", opaque, [&](int x, int y) { return overBlack(x, y, 0); }, 1);
+    detail::setBitmapRenderer(nullptr);
+    g.device->beginFrame();
+    g.renderer->endFrame();
+    g.device->endFrame(false);
+}
+
 // Elevation shadows are Android's: a rounded rect's (of one radius, a rect's, a circle's), flat,
 // through a similarity, as Skia's drawFastShadow and ShadowRRectOp draw it, worked out here per
 // pixel in double: the ambient shadow the outline spread by r = z / 2 px (up to 150), falling off
@@ -2785,6 +2918,7 @@ int main() {
             conicsAreExact(g);
             shadersPaintAsTheyAre(g);
             meshesDrawAsSkiaDoes(g);
+            bitmapsAreDrawnIntoAsAndroidDoes(g);
             elevationShadowsAreAndroids(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)

@@ -627,9 +627,59 @@ public:
         SDL_FRect s{src.x, src.y, src.width, src.height};
         SDL_FRect d{dst.x * scale - ox_, dst.y * scale - oy_, dst.width * scale, dst.height * scale};
         SDL_SetTextureAlphaModFloat(texture, alpha);
+        SDL_SetTextureBlendMode(texture, blend_);  // (the blend mode in effect, as every draw's)
         // (No mipmaps or cubics here: Medium and High as Low.)
         SDL_SetTextureScaleMode(texture, quality == FilterQuality::None ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
         SDL_RenderTexture(renderer_, texture, &s, &d);
+    }
+
+    // A mask (an Alpha8 bitmap): its alpha sampled into each pixel of the rect (nearest with
+    // FilterQuality::None, else bilinearly), the brush's colors through it into a texture: no
+    // blend mode needed (the software renderer has none to keep a layer's pixels by).
+    void drawImageMask(const ImageBitmap& image, const Rect& src, const Rect& dst, const Brush& unfiltered, const Rect& area, float alpha,
+                       FilterQuality quality) override {
+        if (image.empty() || alpha <= 0 || dst.width <= 0 || dst.height <= 0) return;
+        float dx = dst.x * scale - ox_, dy = dst.y * scale - oy_, dw = dst.width * scale, dh = dst.height * scale;
+        float X0 = std::floor(dx), Y0 = std::floor(dy);
+        int W = int(std::ceil(dx + dw) - X0), H = int(std::ceil(dy + dh) - Y0);
+        if (W <= 0 || H <= 0 || W > 4096 || H > 4096) return;
+        const uint8_t* px = image.pixels();
+        int iw = image.width(), ih = image.height();
+        auto alphaAt = [&](int x, int y) { return px[(size_t(std::clamp(y, 0, ih - 1)) * size_t(iw) + size_t(std::clamp(x, 0, iw - 1))) * 4 + 3] / 255.f; };
+        std::vector<uint8_t> coverage(size_t(W) * size_t(H), 0);
+        for (int j = 0; j < H; ++j)
+            for (int i = 0; i < W; ++i) {
+                float cx = X0 + float(i) + 0.5f, cy = Y0 + float(j) + 0.5f;
+                if (cx < dx || cy < dy || cx > dx + dw || cy > dy + dh) continue;
+                float u = src.x + (cx - dx) / dw * src.width, v = src.y + (cy - dy) / dh * src.height;  // (in the image's pixels)
+                float a;
+                if (quality == FilterQuality::None) {
+                    a = alphaAt(int(std::floor(u)), int(std::floor(v)));
+                } else {
+                    float fu = u - 0.5f, fv = v - 0.5f;
+                    int x0 = int(std::floor(fu)), y0 = int(std::floor(fv));
+                    float tx = fu - float(x0), ty = fv - float(y0);
+                    a = (alphaAt(x0, y0) * (1 - tx) + alphaAt(x0 + 1, y0) * tx) * (1 - ty) + (alphaAt(x0, y0 + 1) * (1 - tx) + alphaAt(x0 + 1, y0 + 1) * tx) * ty;
+                }
+                coverage[size_t(j) * size_t(W) + size_t(i)] = uint8_t(std::lround(a * 255));
+            }
+        if (alpha < 1)
+            for (uint8_t& c : coverage) c = uint8_t(std::lround(c * std::clamp(alpha, 0.f, 1.f)));
+        SDL_Texture* t = nullptr;
+        if (!unfiltered.isSolid()) {  // (a gradient's colors too: through its shader)
+            t = shaderTexture(unfiltered, area, X0, Y0, W, H, coverage.data());
+        } else {
+            Color c = filtered(unfiltered.stops().empty() ? colors::Transparent : unfiltered.stops().front().color);
+            std::vector<uint8_t> rgba(size_t(W) * size_t(H) * 4);
+            auto byte = [](float v) { return uint8_t(std::lround(std::clamp(v, 0.f, 1.f) * 255)); };
+            for (size_t k = 0; k < coverage.size(); ++k)
+                rgba[k * 4] = byte(c.r), rgba[k * 4 + 1] = byte(c.g), rgba[k * 4 + 2] = byte(c.b), rgba[k * 4 + 3] = byte(c.a * coverage[k] / 255.f);
+            t = rgbaTexture(std::move(rgba), W, H);
+        }
+        if (!t) return;
+        SDL_FRect d{X0, Y0, float(W), float(H)};
+        SDL_RenderTexture(renderer_, t, nullptr, &d);
+        SDL_DestroyTexture(t);
     }
 
     // Layers render into a target texture. Drawing with normal alpha blending onto a cleared
@@ -1068,8 +1118,10 @@ public:
         if (shaded(unfiltered)) {  // its colors pixel by pixel in a texture, the rounded rect (its edge faded) textured with it
             float X0 = std::floor(x), Y0 = std::floor(y);
             int W = int(std::ceil(x + w) - X0), H = int(std::ceil(y + h) - Y0);
-            SDL_Texture* t = shaderTexture(unfiltered, area, X0, Y0, W, H, nullptr);
+            bool premultiplied = false;
+            SDL_Texture* t = shaderTexture(unfiltered, area, X0, Y0, W, H, nullptr, &premultiplied);
             if (!t) return;
+            SDL_FColor faded = premultiplied ? SDL_FColor{0, 0, 0, 0} : SDL_FColor{1, 1, 1, 0};  // (the edge's outside)
             contour(x, y, w, h, r);
             begin();
             auto uv = [&](SDL_FPoint p) { return SDL_FPoint{(p.x - X0) / float(W), (p.y - Y0) / float(H)}; };
@@ -1084,7 +1136,7 @@ public:
             int outer = int(vertices_.size());
             for (int i = 0; i < n; ++i) {
                 SDL_FPoint q{points_[i].x + normals_[i].x * 0.5f, points_[i].y + normals_[i].y * 0.5f};
-                vertices_.push_back({q, {1, 1, 1, 0}, uv(q)});
+                vertices_.push_back({q, faded, uv(q)});
             }
             for (int i = 0; i < n; ++i) {
                 int a = inner + i, b = inner + (i + 1) % n;
@@ -1295,11 +1347,8 @@ public:
             for (int k = 0; k < 3; ++k) rgba[i + size_t(k)] = byte(a > 0 ? premul[i + size_t(k)] / a : 0);
             rgba[i + 3] = byte(a);
         }
-        SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, W, H);
+        SDL_Texture* texture = rgbaTexture(std::move(rgba), W, H);
         if (!texture) return;
-        SDL_UpdateTexture(texture, nullptr, rgba.data(), W * 4);
-        SDL_SetTextureBlendMode(texture, blend_);
-        SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
         SDL_FRect d{float(X0), float(Y0), float(W), float(H)};
         SDL_RenderTexture(renderer_, texture, nullptr, &d);
         SDL_DestroyTexture(texture);
@@ -1597,6 +1646,7 @@ private:
     struct ImageTexture {
         SDL_Texture* texture;
         std::weak_ptr<const void> token;
+        uint64_t version = 0;  // what of the bitmap it holds
     };
     // A rasterized path: white with coverage in alpha, tinted (or gradient-colored) per vertex.
     struct PathMask {
@@ -1641,14 +1691,21 @@ private:
 
     SDL_Texture* textureFor(const ImageBitmap& image) {
         if (image.empty()) return nullptr;
-        if (auto it = images_.find(image.id()); it != images_.end()) return it->second.texture;
+        uint64_t version = image.version();
+        if (auto it = images_.find(image.id()); it != images_.end()) {
+            if (it->second.version != version) {  // drawn into since: its pixels again
+                SDL_UpdateTexture(it->second.texture, nullptr, image.pixels(), image.width() * 4);
+                it->second.version = version;
+            }
+            return it->second.texture;
+        }
         SDL_Texture* t = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, image.width(),
                                            image.height());
         if (!t) return nullptr;
         SDL_UpdateTexture(t, nullptr, image.pixels(), image.width() * 4);
         SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
         SDL_SetTextureScaleMode(t, SDL_SCALEMODE_LINEAR);
-        images_.emplace(image.id(), ImageTexture{t, image.token()});
+        images_.emplace(image.id(), ImageTexture{t, image.token(), version});
         return t;
     }
 
@@ -1900,7 +1957,8 @@ private:
     // a transform): its colors at the middle of each of W x H px from (x0, y0) (this target's),
     // each through `coverage` where given, as a texture (the caller draws it, then destroys it).
     static bool shaded(const Brush& brush) { return brush.kind() == Brush::Kind::Shader || brush.transform(); }
-    SDL_Texture* shaderTexture(const Brush& brush, const Rect& area, float x0, float y0, int W, int H, const uint8_t* coverage) {
+    SDL_Texture* shaderTexture(const Brush& brush, const Rect& area, float x0, float y0, int W, int H, const uint8_t* coverage,
+                               bool* premultiplied = nullptr) {
         if (W <= 0 || H <= 0 || W > 4096 || H > 4096) return nullptr;
         Shader shader = brush.createShader({area.width, area.height});
         std::vector<uint8_t> rgba(size_t(W) * size_t(H) * 4);
@@ -1913,10 +1971,23 @@ private:
                 float a = c.a * brush.shaderAlpha() * (coverage ? coverage[k] / 255.f : 1.f);
                 rgba[k * 4] = byte(c.r), rgba[k * 4 + 1] = byte(c.g), rgba[k * 4 + 2] = byte(c.b), rgba[k * 4 + 3] = byte(a);
             }
+        return rgbaTexture(std::move(rgba), W, H, premultiplied);
+    }
+
+    // A texture of straight RGBA (its alpha all there is: none added at drawing) drawn by the
+    // blend mode in effect: SrcOver premultiplied (BLEND_PREMULTIPLIED: the software renderer's
+    // BLEND leaves a target's alpha opaque, which a layer's composite then shows), the others as
+    // they are. `premultiplied`: which it is (vertex colors over it fade it the same way).
+    SDL_Texture* rgbaTexture(std::vector<uint8_t> rgba, int W, int H, bool* premultiplied = nullptr) {
+        bool over = blend_ == SDL_BLENDMODE_BLEND;
+        if (over)
+            for (size_t i = 0; i < rgba.size(); i += 4)
+                for (size_t k = 0; k < 3; ++k) rgba[i + k] = uint8_t((rgba[i + k] * rgba[i + 3] + 127) / 255);
+        if (premultiplied) *premultiplied = over;
         SDL_Texture* t = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, W, H);
         if (!t) return nullptr;
         SDL_UpdateTexture(t, nullptr, rgba.data(), W * 4);
-        SDL_SetTextureBlendMode(t, blend_);
+        SDL_SetTextureBlendMode(t, over ? SDL_BLENDMODE_BLEND_PREMULTIPLIED : blend_);
         SDL_SetTextureScaleMode(t, SDL_SCALEMODE_NEAREST);
         return t;
     }
@@ -2089,6 +2160,7 @@ struct App {
     std::unique_ptr<gpu::Renderer> gpuCanvas;
     std::unique_ptr<gpu::Texture> gpuFrame;
     bool gpuInFrame = false;
+    std::unique_ptr<kompoz::detail::BitmapRenderer> bitmaps;  // draws into bitmaps (AppBitmaps)
     GraphicsContext& graphics() { return gpuCanvas ? static_cast<GraphicsContext&>(*gpuCanvas) : *canvas; }
     float pixelScale() const { return gpuCanvas ? gpuCanvas->scale : canvas->scale; }
     std::unique_ptr<ComposeHost> host;
@@ -2151,6 +2223,13 @@ struct App {
         a11y.reset();  // (UI Automation's hooked into the window)
 #endif
         host.reset();  // runs effect cleanups while the window still exists
+        kompoz::detail::setBitmapRenderer(nullptr);
+        if (gpuCanvas) {  // what only it has of bitmaps still about: back into them
+            gpu->beginFrame();
+            gpuCanvas->releaseBitmaps();
+            gpu->endFrame(false);
+        }
+        bitmaps.reset();
         canvas.reset();
         gpuFrame.reset();
         gpuCanvas.reset();
@@ -2386,6 +2465,71 @@ ImageBitmap renderImageGpu(App& app, Size size, const std::function<void(Graphic
     if (ownFrame) app.gpu->endFrame(false);
     return unpremultipliedImage(w, h, std::move(pixels));
 }
+
+// Bitmaps drawn into (graphics::Canvas(ImageBitmap)) by the app's renderer: the GPU renderer
+// (kept as its texture where the bitmap's config lets it), or SDL_Renderer (into a target over
+// what the bitmap holds, premultiplied, then read back into it: 8 bits a channel, an F16 one too).
+class AppBitmaps final : public detail::BitmapRenderer {
+public:
+    explicit AppBitmaps(App& app) : app_(app) {}
+    void draw(const ImageBitmap& bitmap, const DisplayList& draws) override {
+        if (app_.gpuCanvas) {
+            bool ownFrame = !app_.gpuInFrame;  // (between frames: a frame of its own)
+            if (ownFrame) app_.gpu->beginFrame();
+            app_.gpuCanvas->drawIntoBitmap(bitmap, draws);
+            if (ownFrame) {
+                app_.gpuCanvas->flush();
+                app_.gpu->endFrame(false);
+            }
+            return;
+        }
+        int w = bitmap.width(), h = bitmap.height();
+        SDL_Texture* target = SDL_CreateTexture(app_.renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, w, h);
+        SDL_Texture* base = SDL_CreateTexture(app_.renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, w, h);
+        if (!target || !base) {
+            if (target) SDL_DestroyTexture(target);
+            if (base) SDL_DestroyTexture(base);
+            return;
+        }
+        std::vector<uint8_t> premultiplied(bitmap.pixels(), bitmap.pixels() + size_t(w) * size_t(h) * 4);
+        for (size_t i = 0; i < premultiplied.size(); i += 4)
+            for (size_t k = 0; k < 3; ++k) premultiplied[i + k] = uint8_t((premultiplied[i + k] * premultiplied[i + 3] + 127) / 255);
+        SDL_UpdateTexture(base, nullptr, premultiplied.data(), w * 4);
+        SDL_SetTextureBlendMode(base, SDL_BLENDMODE_NONE);
+        SDL_Texture* before = SDL_GetRenderTarget(app_.renderer);
+        SDL_SetRenderTarget(app_.renderer, target);
+        SDL_RenderTexture(app_.renderer, base, nullptr, nullptr);
+        SDL_SetRenderDrawBlendMode(app_.renderer, SDL_BLENDMODE_BLEND);
+        float s0 = app_.canvas->scale;
+        app_.canvas->scale = 1;  // (a unit a pixel)
+        draws.replay(*app_.canvas);
+        app_.canvas->scale = s0;
+        SDL_Surface* surface = SDL_RenderReadPixels(app_.renderer, nullptr);
+        SDL_SetRenderTarget(app_.renderer, before);
+        SDL_DestroyTexture(base);
+        SDL_DestroyTexture(target);
+        SDL_Surface* rgba = surface ? SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32) : nullptr;
+        if (surface) SDL_DestroySurface(surface);
+        if (!rgba) return;
+        std::vector<uint8_t> pixels(size_t(w) * size_t(h) * 4);
+        for (int y = 0; y < std::min(h, rgba->h); ++y)
+            std::memcpy(pixels.data() + size_t(y) * size_t(w) * 4, static_cast<const uint8_t*>(rgba->pixels) + size_t(y) * size_t(rgba->pitch),
+                        size_t(std::min(w, rgba->w)) * 4);
+        SDL_DestroySurface(rgba);
+        detail::bitmaps::store(bitmap, pixels, true);
+    }
+    void readBack(const ImageBitmap& bitmap) override {
+        if (!app_.gpuCanvas) return;  // (SDL_Renderer's are read back as they are drawn)
+        bool ownFrame = !app_.gpuInFrame;
+        if (ownFrame) app_.gpu->beginFrame();
+        app_.gpuCanvas->readBackBitmap(bitmap);
+        if (ownFrame) app_.gpu->endFrame(false);
+    }
+    TextMeasurer* measurer() override { return app_.fonts.get(); }
+
+private:
+    App& app_;
+};
 
 ImageBitmap renderImage(App& app, Size size, const std::function<void(GraphicsContext&)>& draw) {
     if (app.gpuCanvas) return renderImageGpu(app, size, draw);
@@ -3213,6 +3357,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     else
         app->canvas = std::make_unique<kompoz::sdl::SdlCanvas>(app->renderer, *app->fonts);
     app->display = std::make_unique<kompoz::DisplayList>(*app->fonts);
+    app->bitmaps = std::make_unique<kompoz::sdl::AppBitmaps>(*app);
+    kompoz::detail::setBitmapRenderer(app->bitmaps.get());
     app->host = std::make_unique<kompoz::ComposeHost>(*app->fonts, app->config.content);
 #ifdef KOMPOZ_DESKTOP_ACCENT
     app->accent = std::make_unique<kompoz::sdl::DesktopAccent>();  // tells its color as an event, soon

@@ -19,6 +19,7 @@
 #include "graphics.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -56,6 +57,8 @@ public:
     void drawVector(const ImageVector& vector, const Rect& bounds, Color color) override;
     void drawArc(const Rect& oval, float startDegrees, float sweepDegrees, float strokeWidth, Color color, bool roundCap) override;
     void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha, FilterQuality quality = DefaultFilterQuality) override;
+    void drawImageMask(const ImageBitmap& image, const Rect& src, const Rect& dst, const Brush& brush, const Rect& brushArea, float alpha,
+                       FilterQuality quality = DefaultFilterQuality) override;
     void pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform = {}) override;
     void pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform = {}) override;
     void pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) override;
@@ -94,7 +97,7 @@ private:
     enum class Kind : uint8_t { FillRoundRect, StrokeRoundRect, Line, Text, TextBrush, TextShadow, Shadow, Vector, Arc, Image, Gradient, Path,
                                 PushLayer, PopLayer, PushClip, PopClip, PushTranslation, PopTranslation, PushBlend, PopBlend,
                                 ShadowPath, PushFilter, PopFilter, PushTransform, PopTransform, Backdrop, ElevationShadow, ShapeShadow,
-                                Vertices };
+                                Vertices, ImageMask };
     struct Command {
         Kind kind{};
         Rect rect, rect2;     // the shape; an image's source, a brush's area
@@ -107,6 +110,7 @@ private:
         Font font;
         ImageVector vector;
         ImageBitmap image;
+        uint64_t imageVersion = 0;  // what it held (drawn into since: a change); a brush's images', summed up
         std::optional<Brush> brush;
         std::optional<ColorFilter> filter;  // PushFilter's
         std::optional<RenderEffect> effect;  // an effect layer's, a backdrop's
@@ -156,5 +160,41 @@ private:
     Size viewport_, frameViewport_;
     float pixel_ = 1, framePixel_ = 0;
 };
+
+namespace detail {
+
+// What draws into bitmaps (graphics::Canvas(ImageBitmap)): the platform's renderer, set on the UI
+// thread while there is one.
+class BitmapRenderer {
+public:
+    virtual ~BitmapRenderer() = default;
+    // `bitmap` drawn into by `draws` (over what it holds, a unit a pixel), now: its new pixels
+    // stored (bitmaps::store) or kept by the renderer (bitmaps::drawnOnRenderer).
+    virtual void draw(const ImageBitmap& bitmap, const DisplayList& draws) = 0;
+    // Its pixels, which only the renderer has, read back (bitmaps::store).
+    virtual void readBack(const ImageBitmap& bitmap) = 0;
+    virtual TextMeasurer* measurer() { return nullptr; }  // what recordings into bitmaps measure text with
+};
+// Sets it (null: none); what was drawn into bitmaps while there was none is drawn now.
+void setBitmapRenderer(BitmapRenderer* renderer);
+// `draws` drawn into `bitmap`: by the renderer, on the UI thread (waited for from another), or
+// kept for one to come.
+void drawIntoBitmap(const ImageBitmap& bitmap, std::shared_ptr<const DisplayList> draws);
+// What recordings into bitmaps measure text with: the renderer's, or one that knows no fonts.
+TextMeasurer& bitmapMeasurer();
+
+// For renderers: what a bitmap holds, and where.
+namespace bitmaps {
+bool pixelsCurrent(const ImageBitmap& bitmap);  // its pixels hold what it does (else only the renderer has them)
+const std::vector<float>& floats(const ImageBitmap& bitmap);  // F16's, straight RGBA (empty for the others)
+// It holds these (premultiplied RGBA, 8 bits a channel or floats, as drawn), kept as its config
+// keeps them; `drawn`: just drawn into it (what it holds is new).
+void store(const ImageBitmap& bitmap, const std::vector<uint8_t>& premultiplied, bool drawn);
+void storeFloats(const ImageBitmap& bitmap, const std::vector<float>& premultiplied, bool drawn);
+// It was drawn into and only the renderer has what it holds now (read back when it is asked for).
+void drawnOnRenderer(const ImageBitmap& bitmap);
+} // namespace bitmaps
+
+} // namespace detail
 
 } // namespace kompoz

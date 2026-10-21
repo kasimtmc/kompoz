@@ -646,7 +646,8 @@ void TileModeSection(CallSite site) {
 // middle) and restore; a grid skewed; two circles faded together in a layer (saveLayer: where they
 // overlap only the one on top shows); a dashed stroke and a corner-rounded fill in Paints. Meshes
 // (drawVertices): a fan of colors round a white middle, and the photo on a waving strip, its
-// colors multiplied by the vertices'.
+// colors multiplied by the vertices'. Bitmaps drawn into: rings drawn once into one, shown by
+// Image; a star in an Alpha8 one, drawn in two paints' colors.
 void CanvasSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
@@ -729,6 +730,37 @@ void CanvasSection(CallSite site) {
                     Vertices strip(VertexMode::TriangleStrip, at, tex, colors);
                     d.drawIntoCanvas([&](graphics::Canvas& c) {
                         c.drawVertices(strip, BlendMode::Multiply, Paint{.shader = ImageShader(photo)});
+                    });
+                });
+            });
+            // Bitmaps drawn into (Canvas(ImageBitmap)): a pattern drawn once and shown by Image;
+            // an Alpha8 one (its alpha alone) drawn in the paint's color, twice.
+            ImageBitmap pattern = remember([primary = cs.primary, tertiary = cs.tertiary] {
+                ImageBitmap b(96, 96);
+                graphics::Canvas c(b);
+                for (int i = 0; i < 6; ++i)
+                    c.drawCircle({48, 48}, float(48 - i * 8), Paint{.color = i % 2 ? tertiary : primary});
+                c.drawRect({0, 44, 96, 8}, Paint{.color = colors::White.copy(0.8f)});
+                return b;
+            });
+            ImageBitmap stencil = remember([] {
+                ImageBitmap b(96, 96, ImageBitmapConfig::Alpha8);
+                graphics::Canvas c(b);
+                Path star;
+                for (int i = 0; i < 10; ++i) {
+                    float a = float(i) * std::numbers::pi_v<float> / 5 - std::numbers::pi_v<float> / 2, r = i % 2 ? 18.f : 44.f;
+                    i == 0 ? star.moveTo(48 + r * std::cos(a), 48 + r * std::sin(a)) : star.lineTo(48 + r * std::cos(a), 48 + r * std::sin(a));
+                }
+                star.close();
+                c.drawPath(star, Paint{.color = colors::Black.copy(0.9f)});
+                return b;
+            });
+            Row(Modifier().fillMaxWidth().height(96), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
+                Image(pattern, "Bitmap", Modifier().size(96));
+                Canvas(Modifier().size(200, 96), [stencil, primary = cs.primary](DrawScope& d) {
+                    d.drawIntoCanvas([&](graphics::Canvas& c) {
+                        c.drawImage(stencil, {0, 0}, Paint{.color = primary});
+                        c.drawImage(stencil, {100, 0}, Paint{.color = Color::hex(0xFFB300)});
                     });
                 });
             });

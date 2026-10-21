@@ -81,6 +81,7 @@ add_library(kompoz_core STATIC
     src/draw.cpp
     src/dynamic_color.cpp
     src/graphics.cpp
+    src/image_bitmap.cpp
     src/text.cpp
     src/html.cpp
     src/text_measure.cpp

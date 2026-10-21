@@ -1001,7 +1001,7 @@ public:
 
     std::vector<uint8_t> readPixels(Texture& texture, const IRect& region) override {
         auto& t = static_cast<VulkanTexture&>(texture);
-        VkDeviceSize size = VkDeviceSize(region.width) * VkDeviceSize(region.height) * 4;
+        VkDeviceSize size = VkDeviceSize(region.width) * VkDeviceSize(region.height) * bytesPerTexel(t.format());
         VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
         bci.size = size;
         bci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;

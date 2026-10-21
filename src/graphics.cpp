@@ -941,7 +941,7 @@ ImageBitmap ColorFilter::apply(const ImageBitmap& image) const {
     if (image.empty()) return image;
     struct Entry {
         std::weak_ptr<const void> image;
-        uint64_t id;
+        uint64_t id, version;  // (a bitmap drawn into since: filtered again)
         ColorFilter filter;
         ImageBitmap filtered;
     };
@@ -950,7 +950,7 @@ ImageBitmap ColorFilter::apply(const ImageBitmap& image) const {
     std::lock_guard lock(mutex);
     std::erase_if(cache, [](const Entry& e) { return e.image.expired(); });
     for (size_t i = 0; i < cache.size(); ++i)
-        if (cache[i].id == image.id() && cache[i].filter == *this) {
+        if (cache[i].id == image.id() && cache[i].version == image.version() && cache[i].filter == *this) {
             std::rotate(cache.begin() + std::ptrdiff_t(i), cache.begin() + std::ptrdiff_t(i) + 1, cache.end());
             return cache.back().filtered;
         }
@@ -962,7 +962,7 @@ ImageBitmap ColorFilter::apply(const ImageBitmap& image) const {
         out[i + 2] = uint8_t(std::lround(c.b * 255)), out[i + 3] = uint8_t(std::lround(c.a * 255));
     }
     ImageBitmap filtered = ImageBitmap::fromPixels(image.width(), image.height(), std::move(out));
-    cache.push_back({image.token(), image.id(), *this, filtered});
+    cache.push_back({image.token(), image.id(), image.version(), *this, filtered});
     if (cache.size() > 32) cache.erase(cache.begin());
     return filtered;
 }

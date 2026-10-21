@@ -2,6 +2,8 @@
 
 #include "renderer.hpp"
 
+#include <kompoz/display_list.hpp>
+
 #include "shaders/generated/effects.h"
 #include "shaders/generated/path.h"
 #include "shaders/generated/primitives.h"
@@ -565,6 +567,7 @@ void Renderer::execute(Pass& pass) {
 }
 
 void Renderer::endFrame() {
+    retired_.clear();
     stops_.clear();
     stopBrushes_.clear();
     stopRows_.clear();
@@ -606,23 +609,127 @@ Texture* Renderer::acquire(int width, int height, Format format) {
 
 // Premultiplied, so that what filtering mixes is weighed by how much of it there is (as Skia
 // samples): a transparent pixel's color doesn't bleed into its neighbors.
+namespace {
+
+// A float as a half float's bits (rounded to nearest), and back.
+uint16_t toHalf(float v) {
+    uint32_t f;
+    std::memcpy(&f, &v, 4);
+    uint32_t sign = (f >> 16) & 0x8000, e = (f >> 23) & 0xFF;
+    if (e == 0xFF) return uint16_t(sign | 0x7C00 | ((f & 0x7FFFFF) ? 0x200 : 0));
+    float a = std::abs(v);
+    if (a >= 65520.f) return uint16_t(sign | 0x7C00);
+    if (a < 6.103515625e-05f) return uint16_t(sign | uint32_t(std::lround(a * 16777216.f)));  // subnormal: steps of 2^-24
+    int exp;
+    float m = std::frexp(a, &exp);  // a = m 2^exp, m in [0.5, 1)
+    uint32_t mant = uint32_t(std::lround((m * 2 - 1) * 1024));
+    uint32_t he = uint32_t(exp - 1 + 15);
+    if (mant == 1024) mant = 0, ++he;
+    return uint16_t(sign | (he << 10) | mant);
+}
+float fromHalf(uint16_t h) {
+    uint32_t e = (h >> 10) & 0x1F, m = h & 0x3FF;
+    float v = e == 0 ? std::ldexp(float(m), -24) : e == 31 ? (m ? NAN : INFINITY) : std::ldexp(float(m | 0x400), int(e) - 25);
+    return h & 0x8000 ? -v : v;
+}
+
+} // namespace
+
+// Its texture: the one it has here while it holds what the bitmap does (and is mipmapped if
+// that is asked for), else made from its pixels (read back first, where only this renderer had
+// them): premultiplied, 8 bits a channel or (F16) half floats.
 Texture* Renderer::imageTexture(const ImageBitmap& image, bool mipmapped) {
     if (image.empty()) return nullptr;
+    uint64_t version = image.version();
     auto it = images_.find(image.id());
-    if (it != images_.end() && (it->second.mipmapped || !mipmapped)) return it->second.texture.get();
+    if (it != images_.end() && it->second.version == version && (it->second.mipmapped || !mipmapped)) return it->second.texture.get();
     int w = image.width(), h = image.height();
-    auto t = device_.createTexture(w, h, Format::RGBA8, uint8_t(TextureUsage::Sampled | (mipmapped ? TextureUsage::Mipmapped : 0)));
+    bool f16 = image.config() == ImageBitmapConfig::F16;
+    const uint8_t* straight = image.pixels();  // (read back if only this renderer has them)
+    auto t = device_.createTexture(w, h, f16 ? Format::RGBA16F : Format::RGBA8,
+                                   uint8_t(TextureUsage::Sampled | (mipmapped ? TextureUsage::Mipmapped : 0)));
     if (!t) return nullptr;
-    std::vector<uint8_t> premultiplied(image.pixels(), image.pixels() + size_t(w) * size_t(h) * 4);
-    for (size_t i = 0; i < premultiplied.size(); i += 4) {
-        int a = premultiplied[i + 3];
-        for (size_t k = 0; k < 3; ++k) premultiplied[i + k] = uint8_t((premultiplied[i + k] * a + 127) / 255);
+    if (f16) {
+        const std::vector<float>& s = detail::bitmaps::floats(image);
+        std::vector<uint16_t> halves(size_t(w) * size_t(h) * 4);
+        for (size_t i = 0; i + 3 < s.size() && i + 3 < halves.size(); i += 4)
+            for (size_t k = 0; k < 4; ++k) halves[i + k] = toHalf(k < 3 ? s[i + k] * s[i + 3] : s[i + 3]);
+        device_.upload(*t, {0, 0, w, h}, halves.data(), size_t(w) * 8);
+    } else {
+        std::vector<uint8_t> premultiplied(straight, straight + size_t(w) * size_t(h) * 4);
+        for (size_t i = 0; i < premultiplied.size(); i += 4) {
+            int a = premultiplied[i + 3];
+            for (size_t k = 0; k < 3; ++k) premultiplied[i + k] = uint8_t((premultiplied[i + k] * a + 127) / 255);
+        }
+        device_.upload(*t, {0, 0, w, h}, premultiplied.data(), size_t(w) * 4);
     }
-    device_.upload(*t, {0, 0, w, h}, premultiplied.data(), size_t(w) * 4);
     if (mipmapped) device_.generateMipmaps(*t);
     Texture* raw = t.get();
-    images_[image.id()] = ImageTexture{std::move(t), image.token(), mipmapped};  // (a mipmapped one in place of one without)
+    ImageTexture& entry = images_[image.id()];  // (in place of one without mipmaps, or of what it held before)
+    if (entry.texture) retired_.push_back(std::move(entry.texture));
+    entry = ImageTexture{std::move(t), image.token(), mipmapped, version};
     return raw;
+}
+
+void Renderer::drawIntoBitmap(const ImageBitmap& bitmap, const DisplayList& draws) {
+    if (bitmap.empty()) return;
+    int w = bitmap.width(), h = bitmap.height();
+    bool f16 = bitmap.config() == ImageBitmapConfig::F16;
+    bool kept = bitmap.hasAlpha() && (bitmap.config() == ImageBitmapConfig::Argb8888 || bitmap.config() == ImageBitmapConfig::Gpu || f16);
+    Texture* before = imageTexture(bitmap);
+    auto fresh = device_.createTexture(w, h, f16 ? Format::RGBA16F : Format::RGBA8, uint8_t(TextureUsage::Sampled | TextureUsage::RenderTarget));
+    if (!before || !fresh) return;
+    float s0 = scale;
+    scale = 1;  // (a unit a pixel)
+    beginTarget(*fresh, ClearColor{});
+    blit(*before);
+    draws.replay(*this);
+    endTarget();
+    scale = s0;
+    if (kept) {
+        detail::bitmaps::drawnOnRenderer(bitmap);
+        ImageTexture& entry = images_[bitmap.id()];
+        if (entry.texture) retired_.push_back(std::move(entry.texture));
+        entry = ImageTexture{std::move(fresh), bitmap.token(), false, bitmap.version(), bitmap.data_};
+        return;
+    }
+    flush();
+    std::vector<uint8_t> pixels = device_.readPixels(*fresh, {0, 0, w, h});
+    if (f16) {
+        std::vector<float> floats(size_t(w) * size_t(h) * 4);
+        for (size_t i = 0; i < floats.size() && i * 2 + 1 < pixels.size(); ++i)
+            floats[i] = fromHalf(uint16_t(pixels[i * 2] | pixels[i * 2 + 1] << 8));
+        detail::bitmaps::storeFloats(bitmap, floats, true);
+    } else {
+        detail::bitmaps::store(bitmap, pixels, true);
+    }
+    retired_.push_back(std::move(fresh));
+}
+
+void Renderer::releaseBitmaps() {
+    std::vector<ImageBitmap> kept;
+    for (auto& [id, entry] : images_)
+        if (auto data = entry.kept.lock()) {
+            ImageBitmap b;
+            b.data_ = std::move(data);
+            if (!detail::bitmaps::pixelsCurrent(b)) kept.push_back(std::move(b));
+        }
+    for (const ImageBitmap& b : kept) readBackBitmap(b);
+}
+
+void Renderer::readBackBitmap(const ImageBitmap& bitmap) {
+    auto it = images_.find(bitmap.id());
+    if (it == images_.end() || it->second.version != bitmap.version()) return;
+    flush();
+    Texture& t = *it->second.texture;
+    std::vector<uint8_t> pixels = device_.readPixels(t, {0, 0, bitmap.width(), bitmap.height()});
+    if (t.format() == Format::RGBA16F) {
+        std::vector<float> floats(pixels.size() / 2);
+        for (size_t i = 0; i < floats.size(); ++i) floats[i] = fromHalf(uint16_t(pixels[i * 2] | pixels[i * 2 + 1] << 8));
+        detail::bitmaps::storeFloats(bitmap, floats, false);
+    } else {
+        detail::bitmaps::store(bitmap, pixels, false);
+    }
 }
 
 // --- GraphicsContext -----------------------------------------------------------------------------

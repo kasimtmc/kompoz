@@ -111,6 +111,11 @@
 - **`Canvas.drawVertices` and `Vertices`**: triangle meshes as Skia draws them, the paint's shader at the texture
   coordinates through the vertex colors by a blend mode; the GPU renderer draws each triangle as the rasterizer does
   (in perspective too), and works composite shaders out per pixel (before: drawn into a texture first).
+- **Bitmaps to draw into**: `ImageBitmap(width, height, config, hasAlpha)` with every `ImageBitmapConfig` kept as
+  Android keeps it (Alpha8 drawn as a mask in the paint's color), `graphics::Canvas(bitmap)`, `readPixels` and
+  `PixelMap`; the GPU renderer keeps such a bitmap as a texture until its pixels are asked for. **Fixed**: SDL_Renderer
+  drew images without the blend mode in effect, and the software renderer lost the background under translucent
+  shader fills drawn in a layer.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

@@ -302,26 +302,57 @@ private:
     static Brush mapBrush(const Brush& brush, const std::array<float, 6>& m, Size viewport);
 };
 
-// Decoded RGBA pixels (8 bits per channel, straight alpha). Load one with imageResource() or
-// build one in code with fromPixels().
+// How a bitmap keeps its pixels (Compose's ImageBitmapConfig, Android's Bitmap.Config): 8 bits a
+// channel (Argb8888; Gpu: the same, kept by the GPU), alpha alone (Alpha8: drawn in a paint's
+// color as a mask), 5, 6 and 5 bits of red, green and blue and no alpha (Rgb565), half floats
+// (F16: more than 8 bits, and past 0..1).
+enum class ImageBitmapConfig { Argb8888, Alpha8, Rgb565, F16, Gpu };
+
+struct PixelMap;
+
+// A bitmap (Compose's ImageBitmap): decoded pixels (imageResource(), fromPixels()), or pixels to
+// draw into (ImageBitmap(width, height, config), then graphics::Canvas(bitmap)). Copies are the
+// same bitmap: what is drawn into one shows in all. Drawing into it is done by the platform's
+// renderer (on the UI thread) as the canvas goes; without one (tests without a platform) what is
+// drawn into it waits for one.
 class ImageBitmap {
 public:
     ImageBitmap() = default;
-    static ImageBitmap fromPixels(int width, int height, std::vector<uint8_t> rgba);
+    // Its pixels clear (black and opaque where it has no alpha: Rgb565, or hasAlpha false, as
+    // Android clears an opaque bitmap), `config` as it keeps them.
+    ImageBitmap(int width, int height, ImageBitmapConfig config = ImageBitmapConfig::Argb8888, bool hasAlpha = true);
+    static ImageBitmap fromPixels(int width, int height, std::vector<uint8_t> rgba);  // straight RGBA, Argb8888
 
     bool empty() const { return !data_; }
     int width() const;
     int height() const;
+    ImageBitmapConfig config() const;
+    bool hasAlpha() const;  // (Alpha8: yes; Rgb565: no)
+    // Its pixels as straight RGBA, 8 bits a channel (Alpha8's black; F16's kept to 0..1): what it
+    // holds now (read back from the renderer where only it has them).
     const uint8_t* pixels() const;
+    // `width` x `height` of them from (startX, startY) as ARGB (Compose's readPixels), into
+    // `buffer` from `bufferOffset`, rows `stride` apart (unset: width); outside it, nothing.
+    void readPixels(uint32_t* buffer, int startX = 0, int startY = 0, std::optional<int> width = {}, std::optional<int> height = {},
+                    int bufferOffset = 0, std::optional<int> stride = {}) const;
+    PixelMap toPixelMap(int startX = 0, int startY = 0, std::optional<int> width = {}, std::optional<int> height = {}) const;
+    void prepareToDraw() const {}  // (Android's hint to upload it now: the renderer does when it is drawn)
     uint64_t id() const;
+    uint64_t version() const;  // what it holds: another each time it is drawn into
     // Lets backends notice when the image is gone and free its texture.
     std::weak_ptr<const void> token() const { return data_; }
 
     friend bool operator==(const ImageBitmap& a, const ImageBitmap& b) { return a.data_ == b.data_; }
 
-private:
     struct Data;
-    std::shared_ptr<const Data> data_;
+    std::shared_ptr<Data> data_;
+};
+
+// Pixels read from a bitmap (Compose's PixelMap): (x, y) its color.
+struct PixelMap {
+    std::vector<uint32_t> buffer;  // ARGB
+    int width = 0, height = 0, bufferOffset = 0, stride = 0;
+    Color operator()(int x, int y) const;
 };
 
 // How an image (or a Painter) fills a space of another shape (Compose's ContentScale): all of
@@ -1381,6 +1412,11 @@ public:
     // backend can: SDL's renderer samples Medium and High as Low).
     virtual void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha,
                            FilterQuality quality = DefaultFilterQuality) = 0;
+    // An image as a mask (an Alpha8 bitmap, as Android draws one): `brush` (spread over
+    // brushArea) where the `src` pixels of `image` go in `dst`, as opaque as they are, faded by
+    // `alpha`. The default draws the brush in a layer and the image over it by DstIn.
+    virtual void drawImageMask(const ImageBitmap& image, const Rect& src, const Rect& dst, const Brush& brush, const Rect& brushArea,
+                               float alpha, FilterQuality quality = DefaultFilterQuality);
     // Everything drawn until popLayer() goes to an offscreen layer that is then composited
     // into `bounds`, clipped to a rounded rect of `radii` and faded by `alpha`.
     virtual void pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform = {}) = 0;
