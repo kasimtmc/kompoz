@@ -134,7 +134,7 @@ public:
         contour(x, y, w, h, r);
         begin();
         int center = vertex({x + w / 2, y + h / 2}, c);
-        int inner = ring(-0.5f, c), outer = ring(0.5f, clear);
+        int inner = ring(-fringe(), c), outer = ring(fringe(), clear);
         int n = int(points_.size());
         for (int i = 0; i < n; ++i) triangle(center, inner + i, inner + (i + 1) % n);
         strip(inner, outer);
@@ -157,8 +157,9 @@ public:
         SDL_FColor c = toF(color), clear{c.r, c.g, c.b, 0};
         contour(x, y, w, h, {std::max(r.topLeft, sw), std::max(r.topRight, sw), std::max(r.bottomRight, sw), std::max(r.bottomLeft, sw)});
         begin();
-        if (sw >= 1) {
-            int a = ring(0.5f, clear), b = ring(-0.5f, c), d = ring(-(sw - 0.5f), c), e = ring(-(sw + 0.5f), clear);
+        if (sw >= 1 || aliased()) {
+            float f = fringe();
+            int a = ring(f, clear), b = ring(-f, c), d = ring(-(sw - f), c), e = ring(-(sw + f), clear);
             strip(a, b);
             strip(b, d);
             strip(d, e);
@@ -182,8 +183,8 @@ public:
         x0 -= dx * hw, y0 -= dy * hw, x1 += dx * hw, y1 += dy * hw;  // square caps
         float nx = -dy, ny = dx;
         SDL_FColor c = toF(color), clear{c.r, c.g, c.b, 0};
-        if (hw < 0.5f) c.a *= hw * 2;
-        float inner = std::max(hw - 0.5f, 0.f), outer = hw + 0.5f;
+        if (hw < 0.5f && !aliased()) c.a *= hw * 2;
+        float inner = std::max(hw - fringe(), 0.f), outer = hw + fringe();
         begin();
         auto rail = [&](float offset, SDL_FColor col) {
             int first = vertex({x0 + nx * offset, y0 + ny * offset}, col);
@@ -234,8 +235,9 @@ public:
         float r = std::min(oval.width, oval.height) / 2 * scale, hw = width * scale / 2;
         int segments = std::clamp(int(std::abs(sweep) / 360.f * r), 6, 256);
         SDL_FColor c = toF(color), clear{c.r, c.g, c.b, 0};
-        if (hw < 0.5f) c.a *= hw * 2;
-        float rails[4] = {r + hw + 0.5f, r + std::max(hw - 0.5f, 0.f), r - std::max(hw - 0.5f, 0.f), r - hw - 0.5f};
+        if (hw < 0.5f && !aliased()) c.a *= hw * 2;
+        float f = fringe();
+        float rails[4] = {r + hw + f, r + std::max(hw - f, 0.f), r - std::max(hw - f, 0.f), r - hw - f};
         begin();
         for (int i = 0; i <= segments; ++i) {
             float a = (start + sweep * float(i) / float(segments)) * std::numbers::pi_v<float> / 180.f;
@@ -717,6 +719,17 @@ public:
         if (layer.texture) layer.clip = ClipMask{2, {}, {}, outline, {bounds.x, bounds.y}, false};  // (drawn directly: no clip)
     }
 
+    // Anti-aliasing off (a Paint's isAntiAlias false): no faded fringe at the edges (the
+    // renderer's own triangles, all in or out by their pixels' middles), paths by FreeType's
+    // monochrome rasterizer, a pixel rect's edges rounded to pixels (as Skia rounds them).
+    std::vector<bool> antiAlias_;
+    bool aliased() const { return !antiAlias_.empty() && !antiAlias_.back(); }
+    float fringe() const { return aliased() ? 0.f : 0.5f; }  // how far an edge fades either side (px)
+    void pushAntiAlias(bool on) override { antiAlias_.push_back(on); }
+    void popAntiAlias() override {
+        if (!antiAlias_.empty()) antiAlias_.pop_back();
+    }
+
     // Color filters: applied here, to each color, brush and image drawn (the innermost first).
     void pushColorFilter(const ColorFilter& filter) override { filters_.push_back(filter); }
     void popColorFilter() override {
@@ -1099,9 +1112,9 @@ public:
             int center = add({b.x + b.w / 2, b.y + b.h / 2}, c);
             int n = int(points_.size());
             int inner = int(vertices_.size());
-            for (int i = 0; i < n; ++i) add({points_[i].x - normals_[i].x * 0.5f, points_[i].y - normals_[i].y * 0.5f}, c);
+            for (int i = 0; i < n; ++i) add({points_[i].x - normals_[i].x * fringe(), points_[i].y - normals_[i].y * fringe()}, c);
             int outer = int(vertices_.size());
-            for (int i = 0; i < n; ++i) add({points_[i].x + normals_[i].x * 0.5f, points_[i].y + normals_[i].y * 0.5f}, clear);
+            for (int i = 0; i < n; ++i) add({points_[i].x + normals_[i].x * fringe(), points_[i].y + normals_[i].y * fringe()}, clear);
             for (int i = 0; i < n; ++i) triangle(center, inner + i, inner + (i + 1) % n);
             strip(inner, outer);
             SDL_RenderGeometry(renderer_, t, vertices_.data(), int(vertices_.size()), indices_.data(), int(indices_.size()));
@@ -1130,12 +1143,12 @@ public:
             vertices_.push_back({c, {1, 1, 1, 1}, uv(c)});
             int n = int(points_.size()), inner = int(vertices_.size());
             for (int i = 0; i < n; ++i) {
-                SDL_FPoint q{points_[i].x - normals_[i].x * 0.5f, points_[i].y - normals_[i].y * 0.5f};
+                SDL_FPoint q{points_[i].x - normals_[i].x * fringe(), points_[i].y - normals_[i].y * fringe()};
                 vertices_.push_back({q, {1, 1, 1, 1}, uv(q)});
             }
             int outer = int(vertices_.size());
             for (int i = 0; i < n; ++i) {
-                SDL_FPoint q{points_[i].x + normals_[i].x * 0.5f, points_[i].y + normals_[i].y * 0.5f};
+                SDL_FPoint q{points_[i].x + normals_[i].x * fringe(), points_[i].y + normals_[i].y * fringe()};
                 vertices_.push_back({q, faded, uv(q)});
             }
             for (int i = 0; i < n; ++i) {
@@ -1185,14 +1198,14 @@ public:
             float t = float(k) / float(rings);
             first.push_back(int(vertices_.size()));
             for (int i = 0; i < n; ++i) {
-                SDL_FPoint edge{points_[i].x - normals_[i].x * 0.5f, points_[i].y - normals_[i].y * 0.5f};
+                SDL_FPoint edge{points_[i].x - normals_[i].x * fringe(), points_[i].y - normals_[i].y * fringe()};
                 SDL_FPoint p{c.x + (edge.x - c.x) * t, c.y + (edge.y - c.y) * t};
                 vertex(p, colorAt(p));
             }
         }
         int outer = int(vertices_.size());
         for (int i = 0; i < n; ++i) {
-            SDL_FPoint p{points_[i].x + normals_[i].x * 0.5f, points_[i].y + normals_[i].y * 0.5f};
+            SDL_FPoint p{points_[i].x + normals_[i].x * fringe(), points_[i].y + normals_[i].y * fringe()};
             SDL_FColor col = colorAt(p);
             col.a = 0;
             vertex(p, col);
@@ -1740,6 +1753,11 @@ private:
         if (w <= 0 || h <= 0) return;
         SDL_SetRenderDrawColorFloat(renderer_, color.r, color.g, color.b, color.a);
         SDL_FRect rect{x, y, w, h};
+        if (aliased()) {  // the pixels whose middles it holds (its left and top edges out, right and bottom in)
+            float l = std::floor(x + 0.5f), t = std::floor(y + 0.5f), r = std::floor(x + w + 0.5f), b = std::floor(y + h + 0.5f);
+            rect = {l, t, r - l, b - t};
+            if (rect.w <= 0 || rect.h <= 0) return;
+        }
         SDL_RenderFillRect(renderer_, &rect);
     }
 
@@ -1838,6 +1856,7 @@ private:
     const PathMask* pathMask(const Path& path, float fx, float fy, const PathStroke& stroke) {
         uint64_t key = pathKey(path, stroke);
         for (float f : {fx, fy}) key = (key ^ uint64_t(std::lround(f * 4) + 1)) * 1099511628211ull;
+        if (aliased()) key = (key ^ 0xA11A5ull) * 1099511628211ull;
         if (auto it = pathMasks_.find(key); it != pathMasks_.end()) {
             it->second.used = true;
             return &it->second;
@@ -1933,7 +1952,19 @@ private:
         }
         std::vector<unsigned char> gray;
         FT_Bitmap bitmap = grayCanvas(gray, m.width, m.height);
+        std::vector<unsigned char> mono;
+        if (aliased()) {  // a bit a pixel, FreeType's monochrome rasterizer (the pixels whose middles it holds)
+            bitmap.pitch = (m.width + 7) / 8;
+            mono.assign(size_t(bitmap.pitch) * size_t(m.height), 0);
+            bitmap.buffer = mono.data();
+            bitmap.num_grays = 2;
+            bitmap.pixel_mode = FT_PIXEL_MODE_MONO;
+        }
         bool ok = FT_Outline_Get_Bitmap(lib, &outline, &bitmap) == 0;
+        if (ok && aliased())
+            for (int y = 0; y < m.height; ++y)
+                for (int x = 0; x < m.width; ++x)
+                    gray[size_t(y) * size_t(m.width) + size_t(x)] = mono[size_t(y) * size_t(bitmap.pitch) + size_t(x / 8)] & (0x80 >> (x % 8)) ? 255 : 0;
         if (stroked) {
             FT_Outline_Done(lib, &outline);
             FT_Stroker_Done(stroker);

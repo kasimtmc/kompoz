@@ -110,7 +110,7 @@ BlendPlan planFor(BlendMode mode, bool opaque) {
 
 void Renderer::beginTarget(Texture& target, const std::optional<ClearColor>& clear) {
     targets_.push_back({passes_.size(), ox_, oy_, transform_, windowFromTarget_, std::move(clips_), std::move(placements_), std::move(blends_),
-                        std::move(filters_)});
+                        std::move(filters_), std::move(antiAlias_)});
     passes_.push_back({&target, clear, {}, {}});
     ox_ = oy_ = 0;
     transform_ = {};
@@ -119,6 +119,7 @@ void Renderer::beginTarget(Texture& target, const std::optional<ClearColor>& cle
     placements_.clear();
     blends_.clear();  // (what is drawn into it starts plain: its composite gets the modes and filters outside)
     filters_.clear();
+    antiAlias_.clear();
 }
 
 void Renderer::endTarget() {
@@ -132,9 +133,14 @@ void Renderer::endTarget() {
     placements_ = std::move(t.placements);
     blends_ = std::move(t.blends);
     filters_ = std::move(t.filters);
+    antiAlias_ = std::move(t.antiAlias);
 }
 
 void Renderer::pushBlendMode(BlendMode mode) { blends_.push_back(mode); }
+void Renderer::pushAntiAlias(bool on) { antiAlias_.push_back(on); }
+void Renderer::popAntiAlias() {
+    if (!antiAlias_.empty()) antiAlias_.pop_back();
+}
 void Renderer::popBlendMode() {
     if (!blends_.empty()) blends_.pop_back();
 }
@@ -205,14 +211,14 @@ int Renderer::clipRow(int chain) {
     return c.row;
 }
 
-std::optional<Offset> Renderer::rasterizeInClips(const std::vector<Contour>& contours, IRect region) {
+std::optional<Offset> Renderer::rasterizeInClips(const std::vector<Contour>& contours, IRect region, bool aliased) {
     int chain = clips_.empty() ? -1 : clips_.back().chain;
     MaskShelf& shelf = passes_[targets_.back().pass].shelf;
     std::optional<Offset> origin;
     for (int attempt = 0; attempt < 4; ++attempt) {
         if (chain >= 0) clipRow(chain);
         uint32_t generation = shelf.generation;
-        origin = rasterize(contours, region);
+        origin = rasterize(contours, region, aliased);
         if (shelf.generation == generation) break;  // (else in a new one: the clips' paths go there too)
     }
     return origin;
@@ -253,6 +259,21 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Ma
             }
         } else if (!(kind == LAYER && (flags & 1)) && pad > 1) {
             grow(pad - 1);
+        }
+    }
+    if (kind != MESH && aliased()) {  // (a mesh isn't anti-aliased anyway)
+        p.extra[3] = float(int(p.extra[3]) | 16);
+        // A rect square to the pixels: its edges where Skia rounds them, to the nearest pixel
+        // edge (a pixel whose middle is on its left or top edge out, on its right or bottom one
+        // in), in its own coordinates (its transform taken in above): no middle lies on an edge then.
+        bool square = kind == FILL && p.radii[0] <= 0 && p.radii[1] <= 0 && p.radii[2] <= 0 && p.radii[3] <= 0 && p.xform[1] == 0 &&
+                      p.xform[2] == 0 && p.projection[0] == 0 && p.projection[1] == 0 && p.projection[2] == 1 && p.xform[0] != 0 && p.xform[3] != 0;
+        if (square) {
+            auto snap = [](float v, float a, float t) { return (std::floor(a * v + t + 0.5f) - t) / a; };  // (to the device and back)
+            p.shape[0] = snap(p.shape[0], p.xform[0], p.extra[0]), p.shape[2] = snap(p.shape[2], p.xform[0], p.extra[0]);
+            p.shape[1] = snap(p.shape[1], p.xform[3], p.extra[1]), p.shape[3] = snap(p.shape[3], p.xform[3], p.extra[1]);
+            if (p.shape[0] > p.shape[2]) std::swap(p.shape[0], p.shape[2]);
+            if (p.shape[1] > p.shape[3]) std::swap(p.shape[1], p.shape[3]);
         }
     }
     if (!clips_.empty() && clips_.back().chain >= 0 && !opaque) {
@@ -450,7 +471,7 @@ void Renderer::execute(Pass& pass) {
                 PipelineDesc desc;
                 desc.vertex = &kCoverageVertex;
                 desc.fragment = &kCoverageFragment;
-                desc.instanceAttributes = {{0, VertexFormat::Float4, 0}, {1, VertexFormat::Float4, 16}};
+                desc.instanceAttributes = {{0, VertexFormat::Float4, 0}, {1, VertexFormat::Float4, 16}, {2, VertexFormat::Float4, 32}};
                 desc.instanceStride = sizeof(EdgeInstance);
                 desc.blend = {true, BlendFactor::One, BlendFactor::One, BlendFactor::One, BlendFactor::One};
                 desc.target = Format::R16F;
@@ -1149,7 +1170,7 @@ void Renderer::drawShadow(const Rect& rect, const CornerRadii& radii, const Shad
     add(SHADOW, p);
 }
 
-std::optional<Offset> Renderer::rasterize(const std::vector<Contour>& contours, IRect region) {
+std::optional<Offset> Renderer::rasterize(const std::vector<Contour>& contours, IRect region, bool aliased) {
     if (region.empty() || targets_.empty()) return std::nullopt;
     Pass& pass = passes_[targets_.back().pass];
     MaskShelf& shelf = pass.shelf;
@@ -1175,7 +1196,7 @@ std::optional<Offset> Renderer::rasterize(const std::vector<Contour>& contours, 
     float dx = float(mx - region.x), dy = float(my - region.y);
     float r[4] = {float(mx), float(my), float(mx + w), float(my + h)};
     for (const Edge& e : edgeScratch_) {
-        pass.edges.push_back({{e.x0 + dx, e.y0 + dy, e.x1 + dx, e.y1 + dy}, {r[0], r[1], r[2], r[3]}});
+        pass.edges.push_back({{e.x0 + dx, e.y0 + dy, e.x1 + dx, e.y1 + dy}, {r[0], r[1], r[2], r[3]}, {aliased ? 1.f : 0.f, 0, 0, 0}});
         pass.edgeGenerations.push_back(shelf.generation);
     }
     return Offset{float(region.x - mx), float(region.y - my)};
@@ -1190,13 +1211,53 @@ void Renderer::fillContours(const std::vector<Contour>& contours, bool evenOdd, 
     if (x0 > x1) return;
     IRect bounds{int(std::floor(x0)), int(std::floor(y0)), int(std::ceil(x1)) - int(std::floor(x0)), int(std::ceil(y1)) - int(std::floor(y0))};
     IRect region = intersect(bounds, scissor());
-    std::optional<Offset> origin = rasterizeInClips(contours, region);
+    std::optional<Offset> origin = rasterizeInClips(contours, region, aliased());
     if (!origin) return;
     Prim p = paint;
     set(p.bounds, float(region.x), float(region.y), float(region.x + region.width), float(region.y + region.height));
     set(p.params, origin->x, origin->y, evenOdd ? 1.f : 0.f, 0);
     add(PATH, p, nullptr, false, Mask::Texture0);
 }
+
+namespace {
+
+// A hairline not anti-aliased, as Skia draws one: a pixel each step along its longer axis. Each
+// segment a band a pixel across that axis (half a pixel either side, its ends half a pixel further
+// for a square or round cap at the contour's ends), all turned the same way (their winding adds
+// up where they meet): the pixels whose middles they hold.
+std::vector<Contour> aliasedHairline(const std::vector<Contour>& contours, StrokeCap cap) {
+    std::vector<Contour> out;
+    for (const Contour& c : contours) {
+        size_t n = c.points.size();
+        if (n == 0) continue;
+        size_t segments = c.closed ? n : n - 1;
+        for (size_t i = 0; i < std::max<size_t>(segments, 1); ++i) {
+            Offset a = c.points[i], b = c.points[n == 1 ? 0 : (i + 1) % n];
+            float dx = b.x - a.x, dy = b.y - a.y, len = std::hypot(dx, dy);
+            bool across = std::abs(dx) >= std::abs(dy);  // (x the longer axis)
+            if (cap != StrokeCap::Butt && !c.closed) {  // the contour's ends, half a pixel on
+                Offset u = len > 0 ? Offset{dx / len, dy / len} : Offset{1, 0};
+                float ux = across ? (u.x >= 0 ? 0.5f : -0.5f) : 0, uy = across ? 0 : (u.y >= 0 ? 0.5f : -0.5f);
+                if (i == 0) a = {a.x - ux, a.y - uy};
+                if (i + 1 == segments || segments == 0) b = {b.x + ux, b.y + uy};
+            } else if (len == 0) {
+                continue;
+            }
+            Offset o = across ? Offset{0, 0.5f} : Offset{0.5f, 0};
+            Contour band{{{a.x - o.x, a.y - o.y}, {b.x - o.x, b.y - o.y}, {b.x + o.x, b.y + o.y}, {a.x + o.x, a.y + o.y}}, true};
+            float twice = 0;
+            for (size_t k = 0; k < 4; ++k) {
+                Offset p = band.points[k], q = band.points[(k + 1) % 4];
+                twice += p.x * q.y - q.x * p.y;
+            }
+            if (twice < 0) std::reverse(band.points.begin(), band.points.end());
+            out.push_back(std::move(band));
+        }
+    }
+    return out;
+}
+
+} // namespace
 
 std::vector<Contour> Renderer::polygonsOf(const Path& path, Offset origin, const PathStroke& stroke) {
     PathPlacement place{origin, scale, {ox_, oy_}};
@@ -1215,6 +1276,7 @@ std::vector<Contour> Renderer::polygonsOf(const Path& path, Offset origin, const
     // round (Skia's hairlines join nothing: one line per segment).
     if (stroke.hairline) {
         if (transformed) contours = project(contours, transform_);
+        if (aliased()) return aliasedHairline(contours, stroke.cap);
         return strokeOutline(contours, 1, stroke.cap, StrokeJoin::Round, stroke.miter, place.tolerance);
     }
     if (stroke.width > 0) contours = strokeOutline(contours, stroke.width * scale, stroke.cap, stroke.join, stroke.miter, place.tolerance);

@@ -116,6 +116,9 @@
   `PixelMap`; the GPU renderer keeps such a bitmap as a texture until its pixels are asked for. **Fixed**: SDL_Renderer
   drew images without the blend mode in effect, and the software renderer lost the background under translucent
   shader fills drawn in a layer.
+- **`Paint.isAntiAlias = false`**: drawing not anti-aliased, as Skia decides each pixel (its middle inside the shape;
+  a hairline a pixel each step), on the GPU renderer exactly and on SDL_Renderer by its own rasterizers. **Fixed**: a
+  `DrawScope` line with butt ends (the default) was drawn half its width longer at each end, as square ones are.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

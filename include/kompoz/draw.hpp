@@ -37,8 +37,8 @@ enum class PaintingStyle { Fill, Stroke };
 // setAlpha()), or a shader (in the canvas's coordinates) faded by that alpha; filled or stroked
 // (strokeWidth 0: a hairline) with its cap, join and miter limit; its path through pathEffect
 // first (a fill's too, but for dashes: Skia dashes only strokes); its colors through colorFilter;
-// onto what is there by blendMode; images sampled as filterQuality says. isAntiAlias is kept
-// for the renderers to come to (everything is anti-aliased for now).
+// onto what is there by blendMode; images sampled as filterQuality says; not anti-aliased where
+// isAntiAlias is false (each pixel all in or out, as Skia decides it: GraphicsContext::pushAntiAlias).
 struct Paint {
     Color color = colors::Black;
     bool isAntiAlias = true;

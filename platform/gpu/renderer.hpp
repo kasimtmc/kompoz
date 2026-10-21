@@ -87,6 +87,8 @@ public:
     void drawShadow(const Rect& rect, const CornerRadii& radii, const Shadow& shadow, bool inner) override;
     void fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& brush, const Rect& brushArea) override;
     void pushBlendMode(BlendMode mode) override;
+    void pushAntiAlias(bool on) override;
+    void popAntiAlias() override;
     void popBlendMode() override;
     void pushColorFilter(const ColorFilter& filter) override;
     void popColorFilter() override;
@@ -123,7 +125,7 @@ private:
     };
     // One edge of a path in the coverage mask, and the path's part of the mask (shaders/path.slang).
     struct EdgeInstance {
-        float edge[4], region[4];
+        float edge[4], region[4], mode[4];  // (mode.x: not anti-aliased)
     };
     // A pass's paths are rasterized into the coverage mask before it runs. When the mask is full a
     // new generation starts: the mask is made again for the batches recorded after that.
@@ -195,6 +197,7 @@ private:
         std::vector<Placement> placements;
         std::vector<BlendMode> blends;
         std::vector<ColorFilter> filters;
+        std::vector<bool> antiAlias;
     };
     // A layer's texture is in the parent's pixels before the parent's transform, times
     // `resolution` (the transform's scale, so that what it enlarges stays sharp).
@@ -239,14 +242,14 @@ private:
     // Rasterizes polygons into the current pass's coverage mask, within `region` (px of the
     // target, or of a layer before its transform): where the mask's texel (0, 0) is in those
     // pixels, or nothing if the region is empty.
-    std::optional<Offset> rasterize(const std::vector<Contour>& contours, IRect region);
+    std::optional<Offset> rasterize(const std::vector<Contour>& contours, IRect region, bool aliased = false);
     void fillContours(const std::vector<Contour>& contours, bool evenOdd, const Prim& paint);
     // A path's polygons in the target's pixels (its stroke's outline if `stroke` has a width),
     // through the current transform.
     std::vector<Contour> polygonsOf(const Path& path, Offset origin, const PathStroke& stroke);
     // rasterize() for a primitive about to be added: in the same mask generation as the paths of
     // the clips it is drawn in.
-    std::optional<Offset> rasterizeInClips(const std::vector<Contour>& contours, IRect region);
+    std::optional<Offset> rasterizeInClips(const std::vector<Contour>& contours, IRect region, bool aliased = false);
     // A clip in the chain inside the current one: a new chain, the clips it leaves (whole pixels).
     void pushChain(ClipElement element, const IRect& scissor);
     // pushLayer(), a layer too big for a texture cut to `within` (the parent's pixels), if any.
@@ -336,6 +339,8 @@ private:
     std::vector<Placement> placements_;  // pushTranslation's and pushTransform's
     std::vector<ClipChain> clipChains_;  // this frame's
     std::vector<BlendMode> blends_;       // pushBlendMode's in this target, the innermost last
+    std::vector<bool> antiAlias_;         // pushAntiAlias's in this target
+    bool aliased() const { return !antiAlias_.empty() && !antiAlias_.back(); }
     std::vector<ColorFilter> filters_;    // pushColorFilter's in this target, the innermost last
     std::vector<std::vector<ColorFilter>> filterChains_;  // this frame's, a table row each (after the stops')
     std::vector<int> filterRows_;

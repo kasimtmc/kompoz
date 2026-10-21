@@ -3,7 +3,9 @@
 // additive blending into a 16-bit float mask, that is the winding number at the pixel's middle
 // where nothing crosses it, and its exact area coverage where an edge does: shaders/primitives.slang
 // turns it into coverage by the non-zero or even-odd rule. The same arithmetic as FreeType's
-// rasterizer, done per pixel.
+// rasterizer, done per pixel. Not anti-aliased (mode.x): each edge adds its sign to the pixels
+// whose middle lies right of it on a row it crosses (from just below its top to its bottom, as
+// Skia's scan converter rounds an edge's ends), so the sum is the winding number at the middle.
 //
 // Positions are pixels of the mask, y down.
 
@@ -21,11 +23,13 @@ struct Uniforms {
 struct Instance {
     float4 edge : EDGE;      // x0, y0, x1, y1
     float4 region : REGION;  // the path's part of the mask: x0, y0, x1, y1
+    float4 mode : MODE;      // x: not anti-aliased
 };
 
 struct Varyings {
     float4 position : SV_Position;
     nointerpolation float4 edge : EDGE;
+    nointerpolation float aliased : ALIASED;
 };
 
 [shader("vertex")]
@@ -41,6 +45,7 @@ Varyings vs(Instance instance, uint vertex : VERTEX_ID) {
     Varyings out;
     out.position = float4(p * uniforms.toClip.xy + uniforms.toClip.zw, 0, 1);
     out.edge = e;
+    out.aliased = instance.mode.x;
     return out;
 }
 
@@ -54,6 +59,17 @@ float4 fs(Varyings v) : SV_Target {
     float2 cell = floor(v.position.xy);
     float4 e = v.edge;
     float sign = e.w > e.y ? 1 : -1;
+    if (v.aliased > 0.5) {
+        float2 middle = cell + 0.5;
+        float lo = min(e.y, e.w), hi = max(e.y, e.w);
+        float crossing = 0;
+        if (lo < middle.y && middle.y <= hi) {
+            float2 from = abs(e.w - middle.y) < abs(e.y - middle.y) ? e.zw : e.xy;
+            float x = from.x + (middle.y - from.y) * (e.z - e.x) / (e.w - e.y);
+            crossing = x < middle.x ? sign : 0;
+        }
+        return float4(crossing, 0, 0, 0);
+    }
     // The edge within the pixel's row.
     float top = max(min(e.y, e.w), cell.y), bottom = min(max(e.y, e.w), cell.y + 1);
     float height = bottom - top;

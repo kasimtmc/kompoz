@@ -551,6 +551,10 @@ float4 fs(Varyings v) : SV_Target {
     float q = 1 / v.w;
     float2 lq = v.local * q;
     float2 dx = (ddx(lq) - v.local * ddx(q)) / q, dy = (ddy(lq) - v.local * ddy(q)) / q;
+    // Not anti-aliased (flags & 16): coverage at the pixel's middle alone (a pixel shrunk to a
+    // point), all or nothing below.
+    bool aliased = (flags & 16) != 0;
+    if (aliased) dx *= 1e-4, dy *= 1e-4;
     float2 painted = kind == MESH ? v.texcoord : v.local;
     if ((flags & 4) != 0) {
         float3 h = float3(v.local, 1);
@@ -629,6 +633,7 @@ float4 fs(Varyings v) : SV_Target {
         src = (v.params.z > 0.5 ? blendColors(paint, v.vertexColor, int(v.params.x + 0.5)) : paint) * v.params.y;
         cover = 1;
     }
+    if (aliased) cover = cover > 0.5 ? 1 : 0;  // (a rect square to the pixels comes with its edges on them: see Renderer::add)
     cover *= clipCoverage(v.position.xy, int(v.filter.z + 0.5), v.filter.w);
     return finish(applyFilters(src, v.filter), cover, v.position.xy);
 }

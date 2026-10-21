@@ -245,6 +245,20 @@ struct GraphicsLayerElement final : ModifierElement {
 };
 
 // A blend mode other than SrcOver around one drawing.
+// Anti-aliasing off while it is in scope, for a paint that says so (isAntiAlias false).
+struct Aliasing {
+    GraphicsContext& g;
+    bool on;
+    Aliasing(GraphicsContext& context, const Paint& paint) : g(context), on(!paint.isAntiAlias) {
+        if (on) g.pushAntiAlias(false);
+    }
+    ~Aliasing() {
+        if (on) g.popAntiAlias();
+    }
+    Aliasing(const Aliasing&) = delete;
+    Aliasing& operator=(const Aliasing&) = delete;
+};
+
 struct Blending {
     GraphicsContext& g;
     bool on;
@@ -464,11 +478,13 @@ DrawStyle styleOf(const Paint& paint) {
 } // namespace
 
 void graphics::Canvas::drawLine(Offset p1, Offset p2, const Paint& paint) {
+    Aliasing aliasing(*context_, paint);
     scope().drawLine(brushOf(paint), p1, p2, paint.strokeWidth, paint.strokeCap, paint.pathEffect, paint.alpha(), paint.colorFilter,
                      paint.blendMode);
 }
 
 void graphics::Canvas::drawRect(const Rect& rect, const Paint& paint) {
+    Aliasing aliasing(*context_, paint);
     scope().drawRect(brushOf(paint), {rect.x, rect.y}, Size{rect.width, rect.height}, paint.alpha(), styleOf(paint), paint.colorFilter,
                      paint.blendMode);
 }
@@ -478,11 +494,13 @@ void graphics::Canvas::drawRect(float left, float top, float right, float bottom
 }
 
 void graphics::Canvas::drawRoundRect(float left, float top, float right, float bottom, float radiusX, float radiusY, const Paint& paint) {
+    Aliasing aliasing(*context_, paint);
     scope().drawRoundRect(brushOf(paint), {left, top}, Size{right - left, bottom - top}, CornerRadius(radiusX, radiusY), paint.alpha(),
                           styleOf(paint), paint.colorFilter, paint.blendMode);
 }
 
 void graphics::Canvas::drawOval(const Rect& rect, const Paint& paint) {
+    Aliasing aliasing(*context_, paint);
     scope().drawOval(brushOf(paint), {rect.x, rect.y}, Size{rect.width, rect.height}, paint.alpha(), styleOf(paint), paint.colorFilter,
                      paint.blendMode);
 }
@@ -492,10 +510,12 @@ void graphics::Canvas::drawOval(float left, float top, float right, float bottom
 }
 
 void graphics::Canvas::drawCircle(Offset center, float radius, const Paint& paint) {
+    Aliasing aliasing(*context_, paint);
     scope().drawCircle(brushOf(paint), radius, center, paint.alpha(), styleOf(paint), paint.colorFilter, paint.blendMode);
 }
 
 void graphics::Canvas::drawArc(const Rect& rect, float startAngle, float sweepAngle, bool useCenter, const Paint& paint) {
+    Aliasing aliasing(*context_, paint);
     scope().drawArc(brushOf(paint), startAngle, sweepAngle, useCenter, {rect.x, rect.y}, Size{rect.width, rect.height}, paint.alpha(),
                     styleOf(paint), paint.colorFilter, paint.blendMode);
 }
@@ -510,6 +530,7 @@ void graphics::Canvas::drawArcRad(const Rect& rect, float startAngleRad, float s
 }
 
 void graphics::Canvas::drawPath(const Path& path, const Paint& paint) {
+    Aliasing aliasing(*context_, paint);
     scope().drawPath(path, brushOf(paint), paint.alpha(), styleOf(paint), paint.colorFilter, paint.blendMode);
 }
 
@@ -529,6 +550,7 @@ void graphics::Canvas::drawImageRect(const ImageBitmap& image, IntOffset srcOffs
 // canvas's coordinates.
 void graphics::Canvas::drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, const Paint& paint) {
     if (image.empty() || paint.alpha() <= 0) return;
+    Aliasing aliasing(*context_, paint);
     Blending blending(*context_, paint.blendMode);
     detail::Filtering filtering(*context_, paint.colorFilter);
     paintImage(*context_, image, src, at(dst), paint.alpha(), paint.filterQuality, brushOf(paint), {origin_.x, origin_.y, 0, 0});
@@ -541,6 +563,7 @@ void graphics::Canvas::drawImageRect(const ImageBitmap& image, const Paint& pain
 }
 
 void graphics::Canvas::drawPoints(PointMode pointMode, const std::vector<Offset>& points, const Paint& paint) {
+    Aliasing aliasing(*context_, paint);
     scope().drawPoints(points, pointMode, brushOf(paint), paint.strokeWidth, paint.strokeCap, paint.pathEffect, paint.alpha(),
                        paint.colorFilter, paint.blendMode);
 }
@@ -643,7 +666,9 @@ void DrawScope::paintRoundRect(const Rect& r, CornerRadius corner, const Brush& 
 
 void DrawScope::drawLine(const Brush& brush, Offset start, Offset end, float strokeWidth, StrokeCap cap, std::optional<PathEffect> pathEffect,
                          float alpha, std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
-    if (brush.isSolid() && strokeWidth > 0 && cap == StrokeCap::Butt && !pathEffect) {
+    // A square-capped line in a color: as the backend draws one (GraphicsContext::drawLine's
+    // ends are square); else (butt or round ends) the line's path stroked.
+    if (brush.isSolid() && strokeWidth > 0 && cap == StrokeCap::Square && !pathEffect) {
         if (alpha <= 0) return;
         Blending blending(*context_, blendMode);
         detail::Filtering filtering(*context_, colorFilter);

@@ -2538,6 +2538,138 @@ void bitmapsAreDrawnIntoAsAndroidDoes(Gpu& g) {
     g.device->endFrame(false);
 }
 
+// Drawing not anti-aliased (a Paint's isAntiAlias false), as Skia decides it: each pixel all in
+// or all out by its middle: a rect square to the pixels with its left and top edges out and its
+// right and bottom ones in; a turned rect, a circle, a ring, a thick line and a path by whether
+// the middle is inside (a path's winding there, by its fill rule); a hairline a pixel each step
+// along its longer axis. Pixels whose middle lies within a thousandth of a pixel of an edge are
+// left out of the comparison (either side is right), but every pixel must be all or nothing.
+void aliasedDrawingIsSkias(Gpu& g) {
+    const int n = 64;
+    struct Case {
+        const char* what;
+        std::function<void(graphics::Canvas&)> draw;
+        std::function<int(float, float)> inside;  // 1 in, 0 out, -1 too near to say
+        float scale = 1;
+    };
+    auto rectRule = [](float l, float t, float r, float b) {
+        return [=](float x, float y) { return l < x && x <= r && t < y && y <= b ? 1 : 0; };
+    };
+    auto by = [](std::function<float(float, float)> distance) {  // inside where negative
+        return [distance](float x, float y) {
+            float d = distance(x, y);
+            return std::abs(d) < 1e-3f ? -1 : d < 0 ? 1 : 0;
+        };
+    };
+    Paint red{.color = Color{0.8f, 0.1f, 0.2f, 1}, .isAntiAlias = false};
+    Paint stroke = red;
+    stroke.style = PaintingStyle::Stroke;
+    // A point's distance from a segment's side: positive to its right (y down).
+    auto side = [](Offset a, Offset b, float x, float y) {
+        float dx = b.x - a.x, dy = b.y - a.y, len = std::hypot(dx, dy);
+        return ((x - a.x) * dy - (y - a.y) * dx) / len;
+    };
+    Case cases[] = {
+        {"a rect between pixels", [&](graphics::Canvas& c) { c.drawRect({3.3f, 4.7f, 20.2f, 10.5f}, red); }, rectRule(3.3f, 4.7f, 23.5f, 15.2f)},
+        {"a rect on pixel middles", [&](graphics::Canvas& c) { c.drawRect({2.5f, 6.5f, 8, 8}, red); }, rectRule(2.5f, 6.5f, 10.5f, 14.5f)},
+        {"a rect at 2 px a dp", [&](graphics::Canvas& c) { c.drawRect({1.25f, 2.25f, 10, 5}, red); }, rectRule(2.5f, 4.5f, 22.5f, 14.5f), 2},
+        {"a circle", [&](graphics::Canvas& c) { c.drawCircle({30.3f, 29.6f}, 17.7f, red); },
+         by([](float x, float y) { return std::hypot(x - 30.3f, y - 29.6f) - 17.7f; })},
+        {"a ring", [&](graphics::Canvas& c) { Paint p = stroke; p.strokeWidth = 4.4f; c.drawCircle({32.2f, 31.1f}, 20.3f, p); },
+         by([](float x, float y) { return std::abs(std::hypot(x - 32.2f, y - 31.1f) - 20.3f) - 2.2f; })},
+        {"a thick line", [&](graphics::Canvas& c) { Paint p = red; p.strokeWidth = 5.3f; c.drawLine({6.2f, 50.3f}, {57.1f, 13.4f}, p); },
+         by([](float x, float y) {
+             Offset a{6.2f, 50.3f}, b{57.1f, 13.4f};
+             float dx = b.x - a.x, dy = b.y - a.y, len = std::hypot(dx, dy), ux = dx / len, uy = dy / len;
+             float along = (x - a.x) * ux + (y - a.y) * uy, across = (x - a.x) * -uy + (y - a.y) * ux;
+             return std::max(std::abs(across) - 2.65f, std::max(-along, along - len));
+         })},
+        {"a path (even-odd)", [&](graphics::Canvas& c) {
+             Path p;
+             p.fillType = Path::FillType::EvenOdd;
+             p.moveTo(5.3f, 5.6f), p.lineTo(58.2f, 9.1f), p.lineTo(30.4f, 58.7f), p.close();
+             p.moveTo(20.1f, 15.3f), p.lineTo(40.6f, 16.2f), p.lineTo(30.2f, 35.4f), p.close();
+             c.drawPath(p, red);
+         },
+         [&](float x, float y) {
+             auto in = [&](Offset a, Offset b, Offset d) {
+                 float s0 = side(a, b, x, y), s1 = side(b, d, x, y), s2 = side(d, a, x, y);
+                 if (std::min({std::abs(s0), std::abs(s1), std::abs(s2)}) < 1e-3f) return -1;
+                 return (s0 > 0 && s1 > 0 && s2 > 0) || (s0 < 0 && s1 < 0 && s2 < 0) ? 1 : 0;
+             };
+             int outer = in({5.3f, 5.6f}, {58.2f, 9.1f}, {30.4f, 58.7f}), inner = in({20.1f, 15.3f}, {40.6f, 16.2f}, {30.2f, 35.4f});
+             return outer < 0 || inner < 0 ? -1 : outer ^ inner;
+         }},
+        {"a turned rect", [&](graphics::Canvas& c) {
+             c.rotate(30, 32, 32);
+             c.drawRect({14.3f, 22.6f, 35.2f, 18.1f}, red);
+         },
+         by([](float x, float y) {
+             float cs = std::cos(-30 * std::numbers::pi_v<float> / 180), sn = std::sin(-30 * std::numbers::pi_v<float> / 180);
+             float u = 32 + (x - 32) * cs - (y - 32) * sn, v = 32 + (x - 32) * sn + (y - 32) * cs;
+             return std::max(std::max(14.3f - u, u - 49.5f), std::max(22.6f - v, v - 40.7f));
+         })},
+    };
+    for (const Case& c : cases) {
+        Pixels got = g.render(n, n, c.scale, [&](GraphicsContext& ctx) {
+            graphics::Canvas canvas(ctx);
+            c.draw(canvas);
+        });
+        int partial = 0, wrong = 0;
+        Offset at;
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x) {
+                const uint8_t* q = got.at(x, y);
+                bool white = q[0] > 250 && q[1] > 250 && q[2] > 250, painted = near(q, 204, 26, 51, 1);
+                if (!white && !painted) ++partial, at = {float(x), float(y)};
+                int want = c.inside(x + 0.5f, y + 0.5f);
+                if (want >= 0 && (want == 1) != painted && (white || painted)) ++wrong, at = {float(x), float(y)};
+            }
+        CHECK(partial == 0 && wrong == 0);
+        if (partial || wrong) std::printf("  %s: %d pixels partly painted, %d wrong (one at %g, %g)\n", c.what, partial, wrong, at.x, at.y);
+    }
+    // Hairlines: a pixel each step along the longer axis, wherever the line runs.
+    for (Offset end : {Offset{58.6f, 21.3f}, Offset{17.2f, 60.1f}, Offset{60.4f, 60.4f}}) {
+        Offset start{3.4f, 4.6f};
+        Pixels got = g.render(n, n, 1, [&](GraphicsContext& ctx) {
+            graphics::Canvas canvas(ctx);
+            canvas.drawLine(start, end, Paint{.color = Color{0.8f, 0.1f, 0.2f, 1}, .isAntiAlias = false});
+        });
+        bool across = std::abs(end.x - start.x) >= std::abs(end.y - start.y);
+        int bad = 0, partial = 0;
+        for (int i = 0; i < n; ++i) {
+            int count = 0;
+            for (int j = 0; j < n; ++j) {
+                const uint8_t* q = across ? got.at(i, j) : got.at(j, i);
+                bool white = q[0] > 250 && q[1] > 250 && q[2] > 250, painted = near(q, 204, 26, 51, 1);
+                if (!white && !painted) ++partial;
+                if (painted) ++count;
+            }
+            float m = float(i) + 0.5f, lo = across ? std::min(start.x, end.x) : std::min(start.y, end.y), hi = across ? std::max(start.x, end.x) : std::max(start.y, end.y);
+            int want = m > lo && m <= hi ? 1 : m < lo - 0.01f || m > hi + 0.01f ? 0 : -1;
+            if (want >= 0 && count != want) ++bad;
+        }
+        CHECK(bad == 0 && partial == 0);
+        if (bad || partial) std::printf("  a hairline to (%g, %g): %d steps without one pixel, %d pixels partly painted\n", end.x, end.y, bad, partial);
+    }
+    // A hairline that turns back over itself: its two segments' pixels together (no gap where they overlap).
+    Pixels back = g.render(n, n, 1, [&](GraphicsContext& ctx) {
+        graphics::Canvas canvas(ctx);
+        Path p;
+        p.moveTo(4.3f, 30.2f), p.lineTo(60.1f, 31.4f), p.lineTo(4.6f, 32.7f);
+        Paint hair{.color = Color{0.8f, 0.1f, 0.2f, 1}, .isAntiAlias = false, .style = PaintingStyle::Stroke};
+        canvas.drawPath(p, hair);
+    });
+    int gaps = 0;
+    for (int x = 5; x < 59; ++x) {
+        bool any = false;
+        for (int y = 0; y < n; ++y) any = any || near(back.at(x, y), 204, 26, 51, 1);
+        if (!any) ++gaps;
+    }
+    CHECK(gaps == 0);
+    if (gaps) std::printf("  a hairline turning back: %d columns empty\n", gaps);
+}
+
 // Elevation shadows are Android's: a rounded rect's (of one radius, a rect's, a circle's), flat,
 // through a similarity, as Skia's drawFastShadow and ShadowRRectOp draw it, worked out here per
 // pixel in double: the ambient shadow the outline spread by r = z / 2 px (up to 150), falling off
@@ -2919,6 +3051,7 @@ int main() {
             shadersPaintAsTheyAre(g);
             meshesDrawAsSkiaDoes(g);
             bitmapsAreDrawnIntoAsAndroidDoes(g);
+            aliasedDrawingIsSkias(g);
             elevationShadowsAreAndroids(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)

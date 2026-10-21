@@ -647,7 +647,8 @@ void TileModeSection(CallSite site) {
 // overlap only the one on top shows); a dashed stroke and a corner-rounded fill in Paints. Meshes
 // (drawVertices): a fan of colors round a white middle, and the photo on a waving strip, its
 // colors multiplied by the vertices'. Bitmaps drawn into: rings drawn once into one, shown by
-// Image; a star in an Alpha8 one, drawn in two paints' colors.
+// Image; a circle and a line anti-aliased and not (isAntiAlias false); a star in an Alpha8 one,
+// drawn in two paints' colors.
 void CanvasSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
@@ -757,6 +758,18 @@ void CanvasSection(CallSite site) {
             });
             Row(Modifier().fillMaxWidth().height(96), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
                 Image(pattern, "Bitmap", Modifier().size(96));
+                // Not anti-aliased (isAntiAlias false) beside anti-aliased: a circle and a line.
+                Canvas(Modifier().size(72, 96), [tertiary = cs.tertiary](DrawScope& d) {
+                    d.drawIntoCanvas([&](graphics::Canvas& c) {
+                        for (bool smooth : {true, false}) {
+                            float top = smooth ? 0 : 48;
+                            Paint p{.color = tertiary, .isAntiAlias = smooth};
+                            c.drawCircle({20, top + 22}, 17, p);
+                            p.strokeWidth = 2;
+                            c.drawLine({42, top + 40}, {70, top + 6}, p);
+                        }
+                    });
+                });
                 Canvas(Modifier().size(200, 96), [stencil, primary = cs.primary](DrawScope& d) {
                     d.drawIntoCanvas([&](graphics::Canvas& c) {
                         c.drawImage(stencil, {0, 0}, Paint{.color = primary});

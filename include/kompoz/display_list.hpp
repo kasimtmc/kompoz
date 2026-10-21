@@ -71,6 +71,8 @@ public:
     void pushClipPath(const Path& path, Offset origin, ClipOp op) override;
     void pushBlendMode(BlendMode mode) override;
     void popBlendMode() override;
+    void pushAntiAlias(bool on) override;
+    void popAntiAlias() override;
     void pushColorFilter(const ColorFilter& filter) override;
     void popColorFilter() override;
     void popClip() override;
@@ -97,7 +99,7 @@ private:
     enum class Kind : uint8_t { FillRoundRect, StrokeRoundRect, Line, Text, TextBrush, TextShadow, Shadow, Vector, Arc, Image, Gradient, Path,
                                 PushLayer, PopLayer, PushClip, PopClip, PushTranslation, PopTranslation, PushBlend, PopBlend,
                                 ShadowPath, PushFilter, PopFilter, PushTransform, PopTransform, Backdrop, ElevationShadow, ShapeShadow,
-                                Vertices, ImageMask };
+                                Vertices, ImageMask, PushAlias, PopAlias };
     struct Command {
         Kind kind{};
         Rect rect, rect2;     // the shape; an image's source, a brush's area

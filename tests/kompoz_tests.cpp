@@ -23743,7 +23743,7 @@ TEST(canvases_draw_as_composes) {
                 c.drawRect({40, 0, 20, 10}, shaded);               // r2: a shader in the canvas's coordinates
                 c.drawRect({0, 40, 10, 10}, outline);              // p0: stroked as the paint says
                 c.drawLine({0, 60}, {30, 60}, outline);            // p1: a line, round capped
-                c.drawLine({0, 70}, {30, 70}, Paint{.color = red, .strokeWidth = 2});  // a line (filled paint: stroked)
+                c.drawLine({0, 70}, {30, 70}, Paint{.color = red, .strokeWidth = 2, .strokeCap = StrokeCap::Square});  // a line (filled paint: stroked)
                 c.drawRoundRect(0, 80, 20, 100, 4, 6, fill);       // p2: elliptical corners
                 c.drawOval(0, 100, 30, 110, fill);                 // p3
                 c.drawCircle({50, 50}, 5, fill);                   // r3: a circle
@@ -23954,6 +23954,43 @@ TEST(draw_scopes_know_the_density_and_direction) {
 // index out of range left out), texture coordinates and colors that don't match left out, the
 // arrays' form; drawn by a Canvas as Skia draws them (its origin, the paint's shader or opaque
 // color, its alpha, filter and blend mode), recorded and replayed by a display list, equal by value.
+// A paint not anti-aliased (isAntiAlias false): its draws inside pushAntiAlias(false), every
+// kind of them; the display list records it and replays it; a DrawScope's draws stay anti-aliased.
+TEST(paints_turn_anti_aliasing_off) {
+    Paint sharp{.color = Color{1, 0, 0, 1}, .isAntiAlias = false};
+    testing::RecordingCanvas r;
+    {
+        graphics::Canvas c(r);
+        c.drawRect({0, 0, 10, 10}, sharp);
+        c.drawLine({0, 0}, {10, 10}, sharp);
+        c.drawRoundRect(0, 0, 10, 10, 2, 3, sharp);
+        c.drawOval({0, 0, 10, 5}, sharp);
+        c.drawCircle({5, 5}, 5, sharp);
+        c.drawArc({0, 0, 10, 10}, 0, 90, true, sharp);
+        c.drawPath([] { Path p; p.addRect({0, 0, 5, 5}); return p; }(), sharp);
+        c.drawImage(ImageBitmap(2, 2), {0, 0}, sharp);
+        c.drawPoints(PointMode::Points, {{1, 1}}, sharp);
+        c.drawRect({0, 0, 10, 10}, Paint{});  // anti-aliased: nothing pushed
+    }
+    CHECK(r.stack == "AaAaAaAaAaAaAaAaAa");
+    CHECK(r.pathAntiAliased.size() >= 5 && !r.pathAntiAliased[0] && r.antiAliasStack.empty());
+    testing::FakeTextMeasurer measurer;
+    DisplayList list(measurer);
+    list.begin({100, 100}, 1);
+    {
+        graphics::Canvas c(list);
+        c.drawPath([] { Path p; p.addRect({0, 0, 5, 5}); return p; }(), sharp);
+    }
+    list.end();
+    testing::RecordingCanvas replayed;
+    list.replay(replayed);
+    CHECK(replayed.stack == "Aa" && replayed.pathAntiAliased.size() == 1 && !replayed.pathAntiAliased[0]);
+    ComposeTestRule rule([&] { Canvas(Modifier().size(10), [](DrawScope& d) { d.drawPath([] { Path p; p.addRect({0, 0, 5, 5}); return p; }(), colors::Black); }); });
+    testing::RecordingCanvas scope;
+    rule.host().draw(scope);
+    CHECK(scope.stack.find('A') == std::string::npos && scope.pathAntiAliased.size() == 1 && scope.pathAntiAliased[0]);
+}
+
 TEST(vertices_are_composes) {
     Color red{1, 0, 0, 1}, blue{0, 0, 1, 1};
     std::vector<Offset> five{{0, 0}, {10, 0}, {10, 10}, {0, 10}, {5, 15}};
@@ -24180,16 +24217,18 @@ TEST(draw_scopes_take_composes_parameters) {
             d.drawRect(red, {70, 0}, Size{10, 10}, 1, Stroke(2, 10, StrokeCap::Square, StrokeJoin::Bevel));  // p2: bevelled
             d.drawLine(ramp, {0, 20}, {40, 20}, 3, StrokeCap::Butt, std::nullopt, 0.5f);              // p3: a brush, as a path
             d.drawLine(red, {0, 30}, {40, 30});                                                        // p4: a hairline
-            d.drawLine(red, {0, 40}, {40, 40}, 2, StrokeCap::Butt, std::nullopt, 0.5f, std::nullopt, BlendMode::Plus);  // a line
+            d.drawLine(red, {0, 40}, {40, 40}, 2, StrokeCap::Square, std::nullopt, 0.5f, std::nullopt, BlendMode::Plus);  // a line (square ends: the backend's)
             d.drawOval(blue, {0, 50}, Size{20, 10}, 0.5f, Stroke(1));                                  // p5
             d.drawPoints({{80, 80}, {90, 90}}, PointMode::Points, red);                                // p6: hairline dots
+            d.drawLine(red, {0, 60}, {40, 60}, 2);                                                     // p7: butt ends: its path
         });
     });
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
     CHECK(seen.density == 1 && direction == LayoutDirection::Ltr);
-    CHECK(canvas.rects.size() == 4 && canvas.paths.size() == 7);
-    if (canvas.rects.size() != 4 || canvas.paths.size() != 7) return;
+    CHECK(canvas.rects.size() == 4 && canvas.paths.size() == 8);
+    if (canvas.rects.size() != 4 || canvas.paths.size() != 8) return;
+    CHECK(pathText(canvas.pathShapes[7]) == "M0,60 L40,60" && canvas.pathStrokeStyles[7].cap == StrokeCap::Butt && canvas.pathStrokes[7] == 2);
     CHECK(near(canvas.rectColors[0].a, 0.5f) && canvas.rectBlends[1] == BlendMode::Multiply && canvas.gradients == 1);
     CHECK(canvas.rectColors[2] == blue && near(canvas.rectRadii[3], 3));  // tinted; a circle's corners
     CHECK(near(canvas.pathColors[0].a, 0.25f) && pathText(canvas.pathShapes[0]).find('K') != std::string::npos);
@@ -24259,7 +24298,7 @@ TEST(draw_scopes_take_composes_parameters) {
     lines.end();
     testing::RecordingCanvas again;
     lines.replay(again);
-    CHECK(again.pathStrokeStyles.size() == 7 && again.pathStrokeStyles[1].hairline && again.pathStrokeStyles[2].miter == 10);
+    CHECK(again.pathStrokeStyles.size() == 8 && again.pathStrokeStyles[1].hairline && again.pathStrokeStyles[2].miter == 10);
 }
 
 TEST(draw_text_paints_what_the_texts_own_style_did) {
@@ -24793,13 +24832,15 @@ TEST(path_effects_edge_cases) {
 TEST(round_capped_lines_are_drawn_as_paths) {
     ComposeTestRule rule([&] {
         Canvas(Modifier().size(50), [](DrawScope& d) {
-            d.drawLine(colors::Black, {0, 0}, {40, 0}, 4);                     // butt: a plain line
-            d.drawLine(colors::Black, {0, 10}, {40, 10}, 4, StrokeCap::Round);  // its caps need a stroked path
+            d.drawLine(colors::Black, {0, 0}, {40, 0}, 4, StrokeCap::Square);  // square: the backend's line
+            d.drawLine(colors::Black, {0, 10}, {40, 10}, 4, StrokeCap::Round);  // round and butt ends: a stroked path
+            d.drawLine(colors::Black, {0, 20}, {40, 20}, 4);
         });
     });
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
-    CHECK(canvas.pathShapes.size() == 1 && canvas.pathStrokes.size() == 1 && canvas.pathStrokes[0] == 4);
+    CHECK(canvas.lines.size() == 1 && canvas.pathShapes.size() == 2 && canvas.pathStrokes.size() == 2 && canvas.pathStrokes[0] == 4);
+    CHECK(canvas.pathStrokeStyles.size() == 2 && canvas.pathStrokeStyles[0].cap == StrokeCap::Round && canvas.pathStrokeStyles[1].cap == StrokeCap::Butt);
 }
 
 TEST(pointer_events_enter_move_exit_press_release_and_scroll) {

@@ -60,7 +60,7 @@ public:
     std::vector<Color> strokeColors;
     std::string order;  // the fills as they came: 'r' a rect, 'p' a path (the nth of each in rects, paths)
     // What was pushed and popped, in order: a layer (L, l), a clip (C, c), a transform (T, t), a
-    // translation (M, m), a color filter (F, f), a blend mode (B, b).
+    // translation (M, m), a color filter (F, f), a blend mode (B, b), anti-aliasing (A, a).
     std::string stack;
     std::vector<Offset> translations;  // each pushTranslation's
     Offset translation;                // in effect now (their sum)
@@ -86,6 +86,17 @@ public:
     std::vector<int> rectDepths;        // and how many layers it is drawn in
     std::vector<BlendMode> pathBlends;  // each path's
     BlendMode blend() const { return blendStack.empty() ? BlendMode::SrcOver : blendStack.back(); }
+    std::vector<bool> antiAliasStack;  // pushAntiAlias's in effect
+    std::vector<bool> pathAntiAliased;  // each path's (drawn anti-aliased)
+    bool antiAliased() const { return antiAliasStack.empty() || antiAliasStack.back(); }
+    void pushAntiAlias(bool on) override {
+        stack += 'A';
+        antiAliasStack.push_back(on);
+    }
+    void popAntiAlias() override {
+        stack += 'a';
+        if (!antiAliasStack.empty()) antiAliasStack.pop_back();
+    }
     void pushBlendMode(BlendMode mode) override {
         stack += 'B';
         blendStack.push_back(mode);
@@ -322,6 +333,7 @@ public:
     void drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& area, const PathStroke& stroke) override {
         order += 'p';
         pathBlends.push_back(blend());
+        pathAntiAliased.push_back(antiAliased());
         Rect b = path.bounds();
         pathColors.push_back(filtered(brush.colorAt(Rect{b.x + origin.x, b.y + origin.y, b.width, b.height}.center(), area)));
         paths.push_back(moved({b.x + origin.x, b.y + origin.y, b.width, b.height}));

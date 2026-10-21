@@ -1386,6 +1386,7 @@ public:
     // Rounded rects: one radius for all corners, or each its own (CornerRadii).
     virtual void fillRoundRect(const Rect& rect, const CornerRadii& radii, Color color) = 0;
     virtual void strokeRoundRect(const Rect& rect, const CornerRadii& radii, float width, Color color) = 0;
+    // A line `width` dp wide, its ends square (half its width past them).
     virtual void drawLine(Offset from, Offset to, float width, Color color) = 0;
     // `rtl`: the paragraph goes right to left, which orders its stretches of either direction
     // (see bidi.hpp); either way the text starts at baseline.x and goes right.
@@ -1455,6 +1456,11 @@ public:
     // DrawScope's blendMode).
     virtual void pushBlendMode(BlendMode mode) { (void)mode; }
     virtual void popBlendMode() {}
+    // Draws in between not anti-aliased (`on` false: a Paint's isAntiAlias): each pixel all in
+    // or all out, as Skia decides it: its middle inside the shape (a path's winding there), a
+    // hairline a pixel each step along it (where the backend can; the default draws as it is).
+    virtual void pushAntiAlias(bool on) { (void)on; }
+    virtual void popAntiAlias() {}
     // Draws in between have their colors (their paint's, an image's pixels) through `filter`
     // before they go on, an inner filter's first (Compose's ColorFilter on a Paint, an Image, an
     // Icon). Backends apply it; one that draws nothing itself records it.
