@@ -598,13 +598,17 @@ void BlendModeSection(CallSite site) {
 }
 
 // Modifier.blur: a photo blurred as much as the slider says, kept to its bounds or spreading out;
-// another blurred progressively, more towards the bottom; a frosted glass panel (Morph) and a card
-// whose picture alone is blurred (Self).
-// TileMode: a 60 dp gradient across 300 dp, past its end as each mode goes.
+// another blurred progressively, more towards the bottom; one blurred by a shader's alpha, more
+// towards its edges; a frosted glass panel (Morph) and a card whose picture alone is blurred
+// (Self).
+// TileMode: a 60 dp gradient across 300 dp, past its end as each mode goes. Shaders: a photo
+// mirrored as tiles (ImageShader), a gradient lit by a radial one (Brush.composite, Screen), a
+// sweep made for each size (ShaderBrush), turned round its center.
 void TileModeSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
-        Section("Brush · TileMode", [&] {
+        ImageBitmap photo = imageResource("images/landscape.png");
+        Section("Brush · TileMode · Shader", [&] {
             const std::pair<TileMode, const char*> modes[] = {
                 {TileMode::Clamp, "Clamp"}, {TileMode::Repeated, "Repeated"}, {TileMode::Mirror, "Mirror"}, {TileMode::Decal, "Decal"}};
             for (const auto& [mode, name] : modes)
@@ -616,6 +620,24 @@ void TileModeSection(CallSite site) {
                             .border(1, cs.outlineVariant, 8)
                             .background(Brush::horizontalGradient({cs.primary, cs.tertiaryContainer}, 0, 60, mode), RoundedCornerShape(8)));
                 });
+            Row(Modifier().fillMaxWidth().height(72), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
+                Matrix small;
+                small.scale(0.1f, 0.1f);
+                Box(Modifier().weight(1).fillMaxHeight().background(
+                    Brush::shader(ImageShader(photo, TileMode::Mirror, TileMode::Mirror).transformed(small)), RoundedCornerShape(12)));
+                Box(Modifier().weight(1).fillMaxHeight().background(
+                    Brush::composite(Brush::linearGradient({cs.primary, cs.tertiary}),
+                                     Brush::radialGradient({colors::White.copy(0.9f), colors::Transparent}, Offset{24, 20}, 48), BlendMode::Screen),
+                    RoundedCornerShape(12)));
+                Box(Modifier().weight(1).fillMaxHeight().background(
+                    Brush::shader([cs](Size size) {
+                        Matrix turn, center;
+                        turn.rotateZ(-90);
+                        center.translate(size.width / 2, size.height / 2);
+                        return SweepGradientShader({0, 0}, {cs.primary, Color::hex(0xFFB300), cs.tertiary, cs.primary}).transformed(turn).transformed(center);
+                    }),
+                    RoundedCornerShape(12)));
+            });
         });
     });
 }
@@ -647,6 +669,20 @@ void BlurSection(CallSite site) {
                 Image(photo, "Manzara",
                       Modifier().fillMaxSize()
                           .blur(BlurRadiusSpec::verticalGradient(0, radius.get()),
+                                unbounded.get() ? BlurredEdgeTreatment::Unbounded : BlurredEdgeTreatment::Rectangle)
+                          .clip(RoundedCornerShape(16)),
+                      ContentScale::Crop);
+            });
+            // By a shader: sharp in the middle, as blurred as the slider says at the edges.
+            Text("Shader ile: ortası keskin, kenarları bulanık", {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+            Box(Modifier().fillMaxWidth().height(160).padding(16), [&] {
+                Image(photo, "Manzara",
+                      Modifier().fillMaxSize()
+                          .blur(BlurRadiusSpec::shader(radius.get(),
+                                                       [](Density, Size size) {
+                                                           return RadialGradientShader({size.width / 2, size.height / 2}, std::hypot(size.width, size.height) / 2,
+                                                                                       {colors::Transparent, colors::Transparent, colors::Black}, {0, 0.35f, 1});
+                                                       }),
                                 unbounded.get() ? BlurredEdgeTreatment::Unbounded : BlurredEdgeTreatment::Rectangle)
                           .clip(RoundedCornerShape(16)),
                       ContentScale::Crop);

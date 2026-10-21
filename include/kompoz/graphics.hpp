@@ -70,6 +70,15 @@ struct Rect {
     friend constexpr bool operator==(const Rect&, const Rect&) = default;
 };
 
+// The px in a dp, and how much bigger sp are than dp (Compose's Density; LocalDensity).
+struct Density {
+    float density = 1, fontScale = 1;
+    constexpr float toPx(float dp) const { return dp * density; }
+    constexpr float toDp(float px) const { return px / density; }
+    constexpr float spToDp(float sp) const { return sp * fontScale; }
+    friend constexpr bool operator==(const Density&, const Density&) = default;
+};
+
 // A font's weight, 1 to 1000 (Compose's FontWeight): Normal is 400, Medium 500, Bold 700.
 // Text comes in the family's file nearest it, as CSS picks (FontWeight::closest), emboldened
 // when that is too light for a bold weight (FontWeight::synthesizesBold).
@@ -515,10 +524,16 @@ struct ColorStop {
 enum class TileMode { Clamp, Repeated, Mirror, Decal };
 
 class ColorFilter;
+class Shader;
+class Matrix;
+enum class BlendMode;
 
+// What paints: a color, a gradient, or a shader (Compose's Brush: SolidColor, the gradients, a
+// ShaderBrush of your own, Brush.composite), its gradient or shader through a transform if it has
+// one. A gradient spreads over the drawing it paints (its area); a shader is made for that size.
 class Brush {
 public:
-    enum class Kind { Solid, Linear, Radial, Sweep };
+    enum class Kind { Solid, Linear, Radial, Sweep, Shader };
 
     static Brush solid(Color color) { return Brush(Kind::Solid, {{0, color}}); }
     static Brush linearGradient(std::vector<Color> colors, Offset start = {0, 0}, Offset end = {kInfinity, kInfinity},
@@ -534,19 +549,40 @@ public:
     // Clockwise from 3 o'clock.
     static Brush sweepGradient(std::vector<Color> colors, std::optional<Offset> center = {});
     static Brush sweepGradient(std::vector<ColorStop> stops, std::optional<Offset> center = {});
+    // A brush of your own (Compose's ShaderBrush): `createShader` makes its shader for the size of
+    // what it paints (in its dp, from its top left), once for each size; its intrinsic size, if
+    // it has one. Equal only to itself (and its copies).
+    static Brush shader(std::function<Shader(Size size)> createShader, std::optional<Size> intrinsicSize = {});
+    static Brush shader(Shader shader);  // the same shader whatever the size (Compose's ShaderBrush(shader))
+    // `src` composited onto `dst` by `blendMode`, pixel by pixel (Compose's Brush.composite: each
+    // made a shader, a color as a gradient of one color).
+    static Brush composite(const Brush& dst, const Brush& src, BlendMode blendMode);
 
     // This gradient sx, sy times as large (a vector's viewport units on its bounds); "the far
     // edge" stays the far edge, a color stays as it is.
     Brush scaled(float sx, float sy) const;
     // Each of its colors `alpha` times as opaque (as a paint's alpha fades what it paints).
     Brush faded(float alpha) const;
+    // This brush with its gradient or shader through `transform` (Compose's ShaderBrush.transform:
+    // what it paints at p, it paints at transform(p), in the dp of what it paints from its top
+    // left; nothing for a color). Unset: none.
+    Brush withTransform(const std::optional<Matrix>& transform) const;
+    const Matrix* transform() const { return transform_.get(); }
+    float shaderAlpha() const { return shaderAlpha_; }  // a shader brush faded: how opaque what it paints is
+    // Its size where it has one (Compose's intrinsicSize): a linear gradient's from its start to
+    // its end where those are given (NaN across or down where not), a radial one's its
+    // diameter; NaN both ways for the others.
+    Size intrinsicSize() const;
+    // The shader it paints `size` with (Compose's ShaderBrush.createShader), through its transform;
+    // a color's: a gradient of that color.
+    Shader createShader(Size size) const;
 
     Kind kind() const { return kind_; }
     bool isSolid() const { return kind_ == Kind::Solid; }
     const std::vector<ColorStop>& stops() const { return stops_; }
     TileMode tileMode() const { return tileMode_; }
-    // The color at absolute point `p` when painting `area` (absolute).
-    Color colorAt(Offset p, const Rect& area) const { return colorAtParameter(parameterAt(p, area)); }
+    // The color at absolute point `p` when painting `area` (absolute), through its transform.
+    Color colorAt(Offset p, const Rect& area) const;
     // Where `p` is along the gradient before its tile mode: 0 at its start, 1 at its end (a
     // sweep's: 0..1 round its center).
     float parameterAt(Offset p, const Rect& area) const;
@@ -561,11 +597,9 @@ public:
     // The color that far along it, its tile mode applied.
     Color colorAtParameter(float t) const;
 
-    friend bool operator==(const Brush& a, const Brush& b) {
-        return a.kind_ == b.kind_ && a.stops_ == b.stops_ && a.start_.x == b.start_.x && a.start_.y == b.start_.y &&
-               a.end_.x == b.end_.x && a.end_.y == b.end_.y && a.hasCenter_ == b.hasCenter_ && a.radius_ == b.radius_ &&
-               a.tileMode_ == b.tileMode_;
-    }
+    friend bool operator==(const Brush& a, const Brush& b);
+    struct ShaderSource;  // a shader brush's: its maker, or the two it composites
+    friend Brush lerp(const Brush& a, const Brush& b, float t);
 
 private:
     friend class ImageVector;  // a vector's groups and its mirror move its gradients
@@ -578,7 +612,16 @@ private:
     bool hasCenter_ = false;
     float radius_ = kInfinity;
     TileMode tileMode_ = TileMode::Clamp;
+    bool explicitStops_ = true;  // its stops given, not its colors spread evenly (how two are interpolated)
+    float shaderAlpha_ = 1;      // a shader brush's paint alpha (a gradient's goes into its stops)
+    std::shared_ptr<const ShaderSource> shader_;
+    std::shared_ptr<const Matrix> transform_;
+    Color unshaded(Offset p, const Rect& area) const;  // a gradient's color there, no transform
 };
+// Between two brushes (Compose's Interpolatable lerp of Brush): two gradients of a kind mix their
+// colors, stops and geometry (a tile mode switching halfway); a color with a gradient, as that
+// gradient in that color; colors mix; anything else switches halfway.
+Brush lerp(const Brush& a, const Brush& b, float t);
 
 // A border's width and paint (Compose's BorderStroke): a color or a brush, for Modifier::border
 // (a gradient border round a card).
@@ -601,6 +644,49 @@ enum class BlendMode { Src, SrcOver, SrcIn, SrcAtop, DstIn, Modulate, Multiply, 
 
 // `source` drawn onto `destination` with `mode` (both straight colors, as is the result).
 Color blend(Color source, Color destination, BlendMode mode);
+
+// What paints a shape pixel by pixel (Compose's Shader): a gradient, an image (tiled), or two
+// shaders composited; in the dp of what it paints (an image's pixel a dp), through a transform
+// if it has one. Made by LinearGradientShader, RadialGradientShader, SweepGradientShader,
+// ImageShader and CompositeShader; painted by Brush::shader.
+class Shader {
+public:
+    enum class Kind { Linear, Radial, Sweep, Image, Composite };
+    Kind kind() const;
+    // A gradient's stops and tile mode; where it lies: a linear one from `start` to `end`, a
+    // radial one round `start` out to `radius`, a sweep round `start`.
+    const std::vector<ColorStop>& stops() const;
+    TileMode tileMode() const;  // (an image's across)
+    TileMode tileModeY() const;  // an image's down
+    Offset start() const;
+    Offset end() const;
+    float radius() const;
+    const ImageBitmap& image() const;
+    // A composite's two (Compose's dst and src) and how the second goes onto the first.
+    const Shader& dst() const;
+    const Shader& src() const;
+    BlendMode blendMode() const;
+    // Through `matrix` (what it painted at p it paints at matrix(p)), after any it has.
+    Shader transformed(const Matrix& matrix) const;
+    const Matrix* transform() const;
+    // Its color at `p` (straight): an image's bilinearly from its pixels, as Compose's default
+    // sampling does.
+    Color colorAt(Offset p) const;
+    friend bool operator==(const Shader& a, const Shader& b);
+
+    struct Data;
+    std::shared_ptr<const Data> data_;
+};
+// A linear gradient from `from` to `to`: `colors` evenly, or at `colorStops` (each 0..1) where given.
+Shader LinearGradientShader(Offset from, Offset to, std::vector<Color> colors, std::vector<float> colorStops = {},
+                            TileMode tileMode = TileMode::Clamp);
+Shader RadialGradientShader(Offset center, float radius, std::vector<Color> colors, std::vector<float> colorStops = {},
+                            TileMode tileMode = TileMode::Clamp);
+Shader SweepGradientShader(Offset center, std::vector<Color> colors, std::vector<float> colorStops = {});  // clockwise from 3 o'clock
+// `image` from its top left, past its edges as the tile modes say, across and down.
+Shader ImageShader(ImageBitmap image, TileMode tileModeX = TileMode::Clamp, TileMode tileModeY = TileMode::Clamp);
+// `src` onto `dst` by `blendMode`, pixel by pixel.
+Shader CompositeShader(Shader dst, Shader src, BlendMode blendMode);
 
 // A 4x5 matrix over a color's red, green, blue and alpha (0..1), the fifth column added after
 // (Compose's ColorMatrix, row by row).
@@ -662,6 +748,9 @@ public:
         Offset start, end;
         float radius = 0;
         std::vector<std::pair<float, float>> stops;
+        // Or a mask (BlurRadiusSpec::shader): each pixel's radius the widest stop's times the
+        // shader's alpha there (dp from the layer's top left), kept to 0..1.
+        std::optional<Shader> shader;
         friend bool operator==(const Progressive&, const Progressive&) = default;
     };
     struct Step {
@@ -724,19 +813,24 @@ public:
                                          std::optional<float> fallOffRadius = {});
     static BlurRadiusSpec radialGradient(std::vector<BlurStop> stops, std::optional<Offset> center = {},
                                          std::optional<float> fallOffRadius = {});
+    // Each pixel by `maxRadius` times the alpha of the shader `block` makes for the layer (its
+    // size in dp, and the density), in its dp from its top left (Compose's BlurRadiusSpec.shader;
+    // the shader made each time the effect is). Equal only to itself.
+    static BlurRadiusSpec shader(float maxRadius, std::function<Shader(Density density, Size size)> block);
     // The effect for a layer of `size` (dp), the pixels past its edges as `edgeTreatment` says
     // (Decal: none; any other: the edges', as Compose's takes them).
-    RenderEffect createRenderEffect(Size size, TileMode edgeTreatment = TileMode::Clamp) const;
+    RenderEffect createRenderEffect(Size size, TileMode edgeTreatment = TileMode::Clamp, Density density = {}) const;
     friend bool operator==(const BlurRadiusSpec&, const BlurRadiusSpec&) = default;
 
 private:
-    enum class Kind : uint8_t { Uniform, Vertical, Horizontal, Linear, Radial };
+    enum class Kind : uint8_t { Uniform, Vertical, Horizontal, Linear, Radial, Shader };
     BlurRadiusSpec(Kind kind, std::vector<BlurStop> stops);
     Kind kind_;
-    std::vector<BlurStop> stops_;  // (uniform: its radius, the one)
+    std::vector<BlurStop> stops_;  // (uniform: its radius, the one; a shader's: its maximum)
     Offset start_, end_;
     std::optional<Offset> center_;
     std::optional<float> fallOff_;
+    std::shared_ptr<const std::function<Shader(Density, Size)>> shaderBlock_;
 };
 
 // How Path::op combines two shapes (Compose's PathOperation): what is in either, in both, in the

@@ -34,10 +34,13 @@ const char* backendName(Backend backend);
 // 8 bits a channel, not sRGB-encoded: colors are blended as they are stored, as Android and Skia
 // do (and as Kompoz always has). R16F: one 16-bit float channel, drawn into with additive blending
 // (the path renderer's coverage). RGBA32F: four 32-bit floats, uploaded and read with nearest
-// filtering (gradients' stops).
-enum class Format : uint8_t { RGBA8, BGRA8, R16F, RGBA32F };
+// filtering (gradients' stops). RGBA16F: four 16-bit floats, drawn into and blended as RGBA8 is
+// (a progressive blur's mask, finer than 8 bits).
+enum class Format : uint8_t { RGBA8, BGRA8, R16F, RGBA32F, RGBA16F };
 // A texel's size in bytes.
-constexpr size_t bytesPerTexel(Format f) { return f == Format::RGBA32F ? 16 : f == Format::R16F ? 2 : 4; }
+constexpr size_t bytesPerTexel(Format f) {
+    return f == Format::RGBA32F ? 16 : f == Format::RGBA16F ? 8 : f == Format::R16F ? 2 : 4;
+}
 
 // Mipmapped: copies halved and halved again down to a texel, made by generateMipmaps.
 struct TextureUsage {

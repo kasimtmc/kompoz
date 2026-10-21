@@ -85,6 +85,17 @@ Box(Modifier().fillMaxWidth().height(120).background(
 
 `Brush::solid`, `linearGradient`, `horizontalGradient`, `verticalGradient`, `radialGradient` and `sweepGradient` are there, with color stops and tile modes.
 
+A brush of your own is a shader made for the size it paints, as Compose's `ShaderBrush`: a gradient, an image tiled, or two shaders composited.
+
+```cpp body
+Box(Modifier().size(120, 72).background(Brush::shader([](Size size) {
+    return CompositeShader(LinearGradientShader({0, 0}, {size.width, 0}, {Color::hex(0x6750A4), Color::hex(0xB58392)}),
+                           RadialGradientShader({24, 20}, 48, {colors::White.copy(0.9f), colors::Transparent}), BlendMode::Screen);
+})));
+```
+
+`Brush::composite` does the same with two brushes, `withTransform` moves what a gradient or a shader paints, and `lerp` goes from one brush to another as an animation does.
+
 ## Paths
 
 A `Path` describes any outline with lines, curves and arcs:

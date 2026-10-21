@@ -289,19 +289,24 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Ma
         p.filter[0] = float(std::min<size_t>(chain.size(), kStopsWidth / 6));
         p.filter[1] = float(row);
     }
+    Sampler sampler1;
+    if (int(p.paint[0] + 0.5f) == 4 && !texture1 && size_t(p.paint[2]) < paintTextures_.size()) {  // an image paint: its texture
+        texture1 = paintTextures_[size_t(p.paint[2])].texture;
+        sampler1 = paintTextures_[size_t(p.paint[2])].sampler;
+    }
     if (!texture) texture = white_.get();
     if (!texture1) texture1 = white_.get();
     uint32_t generation = pass.shelf.generation;
     if (!pass.batches.empty()) {
         Batch& last = pass.batches.back();
         if (last.texture == texture && last.texture1 == texture1 && last.mask == mask && last.opaque == opaque && last.blend == blend &&
-            last.scissor == clip && last.generation == generation && last.sampler == sampler) {
+            last.scissor == clip && last.generation == generation && last.sampler == sampler && last.sampler1 == sampler1) {
             pass.prims.push_back(p);
             ++last.count;
             return;
         }
     }
-    pass.batches.push_back({texture, texture1, mask, opaque, blend, clip, generation, uint32_t(pass.prims.size()), 1, sampler});
+    pass.batches.push_back({texture, texture1, mask, opaque, blend, clip, generation, uint32_t(pass.prims.size()), 1, sampler, sampler1});
     pass.prims.push_back(p);
 }
 
@@ -394,7 +399,7 @@ void Renderer::execute(Pass& pass) {
         float w = float(pass.target->width()), h = float(pass.target->height());
         bool yDown = device_.clipYDown();
         uniforms[0] = 2 / w, uniforms[1] = yDown ? 2 / h : -2 / h, uniforms[2] = -1, uniforms[3] = yDown ? -1.f : 1.f;
-        Texture* table = e.table && stopsTexture_ ? stopsTexture_.get() : white_.get();
+        Texture* table = e.mask ? e.mask : e.table && stopsTexture_ ? stopsTexture_.get() : white_.get();
         uniforms[30] = 1 / float(table->width()), uniforms[31] = 1 / float(table->height());
         Texture* reads[] = {e.source, table};
         device_.beginPass(*pass.target, ClearColor{}, reads);
@@ -493,7 +498,7 @@ void Renderer::execute(Pass& pass) {
             if (b.mask == Mask::Texture1)  // (a layer's cut, which may be turned: filtered)
                 device_.setTexture(1, *mask_, Sampler{});
             else
-                device_.setTexture(1, *b.texture1, Sampler{});
+                device_.setTexture(1, *b.texture1, b.sampler1);
             device_.setTexture(2, stopsTexture_ ? *stopsTexture_ : *white_, nearest);
             device_.setTexture(3, readsTarget ? *dstCopy_ : *white_, nearest);
             device_.setTexture(4, masked ? *mask_ : *white_, nearest);
@@ -541,6 +546,7 @@ void Renderer::endFrame() {
     stops_.clear();
     stopBrushes_.clear();
     stopRows_.clear();
+    paintTextures_.clear();
     filterChains_.clear();
     filterRows_.clear();
     clipChains_.clear();
@@ -638,7 +644,114 @@ void Renderer::drawLine(Offset from, Offset to, float width, Color color) {
     add(LINE, p);
 }
 
+// A row of the table: `stops` (if any) from its start, then, in its last three texels, the rows of
+// `map` (from the target's px to where the shader is evaluated).
+int Renderer::shaderRow(const std::vector<ColorStop>* stops, const Projective& map) {
+    int row = int(stops_.size() / (kStopsWidth * 4));
+    size_t at = stops_.size();
+    stops_.resize(at + kStopsWidth * 4, 0.f);
+    if (stops)
+        for (size_t i = 0; i < stops->size() && i < kStopsWidth / 2 - 2; ++i) {
+            const ColorStop& stop = (*stops)[i];
+            float* texel = &stops_[at + i * 8];
+            texel[0] = stop.color.r, texel[1] = stop.color.g, texel[2] = stop.color.b, texel[3] = stop.color.a;
+            texel[4] = stop.offset;
+        }
+    for (int r = 0; r < 3; ++r) {
+        float* texel = &stops_[at + size_t(kStopsWidth - 3 + r) * 4];
+        texel[0] = map.m[r * 3], texel[1] = map.m[r * 3 + 1], texel[2] = map.m[r * 3 + 2];
+    }
+    return row;
+}
+
+// A shader's paint: where each pixel is in it (its dp from the area's top left, through its
+// transform taken back) worked out per pixel from the map in its row; a gradient's stops before
+// that, an image in texture1 (premultiplied, sampled bilinearly, tiled as it says); a composite
+// baked first (see bakedShader).
+Renderer::Prim Renderer::paintedShader(const Shader& shader, const Rect& area, float alpha, float enlarged) {
+    Prim p;
+    if (!shader.data_) return p;  // (transparent)
+    float k = enlarged * scale;
+    Projective map{{1 / k, 0, ox_ / scale - area.x, 0, 1 / k, oy_ / scale - area.y, 0, 0, 1}};
+    if (const Matrix* t = shader.transform()) {
+        Matrix back = *t;
+        back.invert();
+        map = Projective::of(back) * map;
+    }
+    set(p.color, 1, 1, 1, alpha);
+    switch (shader.kind()) {
+    case Shader::Kind::Composite: return bakedShader(shader, area, alpha, enlarged);
+    case Shader::Kind::Image: {
+        Texture* t = imageTexture(shader.image());
+        if (!t) return Prim{};
+        auto wrap = [](TileMode m) {
+            return m == TileMode::Repeated ? Wrap::Repeat : m == TileMode::Mirror ? Wrap::Mirror : m == TileMode::Decal ? Wrap::Transparent : Wrap::Clamp;
+        };
+        map = Projective::scaling(1 / float(shader.image().width()), 1 / float(shader.image().height())) * map;  // to its uv
+        paintTextures_.push_back({t, Sampler{Filter::Linear, wrap(shader.tileMode()), wrap(shader.tileModeY())}});
+        set(p.paint, 4, 8, float(paintTextures_.size() - 1), float(shaderRow(nullptr, map)));
+        return p;
+    }
+    default: {
+        int kind = shader.kind() == Shader::Kind::Linear ? 1 : shader.kind() == Shader::Kind::Radial ? 2 : 3;
+        const auto& stops = shader.stops();
+        if (stops.size() < 2) {  // one color (or none)
+            Color c = stops.empty() ? colors::Transparent : stops.front().color;
+            premultiplied(p.color, c.copy(c.a * alpha));
+            return p;
+        }
+        set(p.paint, float(kind), float(int(shader.tileMode()) | 8), float(std::min<size_t>(stops.size(), kStopsWidth / 2 - 2)), float(shaderRow(&stops, map)));
+        set(p.gradient, shader.start().x, shader.start().y, kind == 1 ? shader.end().x : shader.radius(), kind == 1 ? shader.end().y : 0);
+        return p;
+    }
+    }
+}
+
+// A composite baked: what the area covers in this target's px (at most kMaxLayer across, lower
+// in resolution if it would be more) drawn into a texture of its own (in half floats if the
+// target is), the second shader onto the
+// first by its blend mode (the renderer's own blending, a composite in either baked first), then
+// painted from that texture.
+Renderer::Prim Renderer::bakedShader(const Shader& shader, const Rect& area, float alpha, float enlarged) {
+    float k = enlarged * scale;
+    float x0 = (area.x * scale - ox_) * enlarged, y0 = (area.y * scale - oy_) * enlarged, w = area.width * k, h = area.height * k;
+    float r = std::min(1.f, float(kMaxLayer) / std::max({w, h, 1.f}));
+    int W = std::max(1, int(std::ceil(w * r))), H = std::max(1, int(std::ceil(h * r)));
+    bool fine = !targets_.empty() && passes_[targets_.back().pass].target->format() == Format::RGBA16F;
+    Texture* bake = acquire(W, H, fine ? Format::RGBA16F : Format::RGBA8);
+    if (!bake) return Prim{};
+    // Its children, through its own transform (after theirs).
+    Shader dst = shader.dst(), src = shader.src();
+    if (const Matrix* t = shader.transform()) dst = dst.transformed(*t), src = src.transformed(*t);
+    float s0 = scale, ox0 = ox_, oy0 = oy_;
+    beginTarget(*bake, ClearColor{});
+    // The bake's px: the area's px from its top left, r times as many.
+    scale = s0 * enlarged * r;
+    ox_ = (ox0 * enlarged + x0) * r, oy_ = (oy0 * enlarged + y0) * r;
+    auto fill = [&](const Shader& s) {
+        Prim q = paintedShader(s, area, 1, 1);
+        set(q.bounds, -1, -1, float(W) + 1, float(H) + 1);
+        set(q.shape, 0, 0, float(W), float(H));
+        add(FILL, q);
+    };
+    fill(dst);
+    blends_.push_back(shader.blendMode());
+    fill(src);
+    blends_.pop_back();
+    endTarget();
+    scale = s0;
+    // This target's px to the bake's uv.
+    Projective map{{r / float(bake->width()), 0, -x0 * r / float(bake->width()), 0, r / float(bake->height()), -y0 * r / float(bake->height()), 0, 0, 1}};
+    paintTextures_.push_back({bake, Sampler{}});
+    Prim p;
+    set(p.color, 1, 1, 1, alpha);
+    set(p.paint, 4, 8, float(paintTextures_.size() - 1), float(shaderRow(nullptr, map)));
+    return p;
+}
+
 Renderer::Prim Renderer::painted(const Brush& brush, const Rect& area, float alpha, float enlarged) {
+    if (brush.kind() == Brush::Kind::Shader || brush.transform())
+        return paintedShader(brush.createShader({area.width, area.height}), area, alpha * brush.shaderAlpha(), enlarged);
     Prim p;
     if (brush.isSolid() || brush.stops().size() < 2) {
         Color c = brush.stops().empty() ? colors::Transparent : brush.stops().front().color;
@@ -1328,9 +1441,10 @@ void Renderer::drawElevationShadow(const Outline& outline, Offset origin, const 
     scale = s0, ox_ = x0, oy_ = y0, transform_ = t0;
 }
 
-void Renderer::effectPass(Texture& target, Texture& source, const IRect& rect, const float (&uniforms)[32], bool linear, bool table) {
+void Renderer::effectPass(Texture& target, Texture& source, const IRect& rect, const float (&uniforms)[32], bool linear, bool table,
+                          Texture* mask) {
     Pass pass{&target, std::nullopt, {}, {}};
-    pass.effect = EffectDraw{&source, rect, {}, linear, table};
+    pass.effect = EffectDraw{&source, rect, {}, linear, table, mask};
     std::copy(std::begin(uniforms), std::end(uniforms), pass.effect->uniforms);
     order_.push_back(passes_.size());
     passes_.push_back(std::move(pass));
@@ -1352,7 +1466,10 @@ int Renderer::tableRow(const std::vector<std::pair<float, float>>& stops) {
 // As Compose's: the radius at each pixel the widest one (no more than 150 px) times where it lies
 // between the stops (their radii over the widest); the layer's pixels cut to its bounds first, as
 // what lies past them is none of it; the bounds (its pixels, the layer's own) are where its taps
-// count. What it makes reaches as far as its widest radius past them.
+// count. What it makes reaches as far as its widest radius past them. A shader's (a mask) is drawn
+// first into a texture of what the blur makes, in half floats (8 bits would move where a radius
+// reaches a whole pixel), each texel its alpha where it lies (its dp from the layer's top left):
+// the radius there the widest times that.
 Renderer::EffectImage Renderer::progressiveBlur(const Layer& layer, const RenderEffect::Step& step) {
     const RenderEffect::Progressive& p = *step.progressive;
     float res = layer.resolution, most = 0;
@@ -1373,6 +1490,24 @@ Renderer::EffectImage Renderer::progressiveBlur(const Layer& layer, const Render
     int row = tableRow(stops);
     float k = scale * res;  // texels a dp
     float ox = layer.shape.x - float(region.x), oy = layer.shape.y - float(region.y);
+    Texture* mask = nullptr;
+    if (p.shader) {
+        mask = acquire(region.width, region.height, Format::RGBA16F);
+        if (!mask) return image;
+        float s0 = scale;
+        beginTarget(*mask, ClearColor{});
+        // (The region in the layer's dp, its top left where the shader is taken from: a
+        // composite's bake covers all of it.)
+        scale = k, ox_ = -ox, oy_ = -oy;
+        Matrix shift;
+        shift.translate(ox / k, oy / k);
+        Prim q = paintedShader(p.shader->transformed(shift), {-ox / k, -oy / k, float(region.width) / k, float(region.height) / k}, 1, 1);
+        set(q.bounds, -1, -1, float(region.width) + 1, float(region.height) + 1);
+        set(q.shape, 0, 0, float(region.width), float(region.height));
+        add(FILL, q);
+        endTarget();
+        scale = s0;
+    }
     Texture* from = cut;
     for (int axis = 0; axis < 2; ++axis) {
         Texture* to = acquire(region.width, region.height);
@@ -1380,9 +1515,9 @@ Renderer::EffectImage Renderer::progressiveBlur(const Layer& layer, const Render
         float u[32] = {0, 0, 0, 0, 1, 1, 0, 0,
                        float(crop.x - region.x), float(crop.y - region.y), float(crop.x + crop.width - region.x), float(crop.y + crop.height - region.y),
                        2, float(int(step.edgeTreatment)), float(axis), widest, res, 0, 1 / float(from->width()), 1 / float(from->height()),
-                       p.radial ? 2.f : 1.f, float(row), float(std::min<size_t>(stops.size(), kStopsWidth)), 0,
+                       mask ? 3.f : p.radial ? 2.f : 1.f, float(row), float(std::min<size_t>(stops.size(), kStopsWidth)), 0,
                        p.start.x * k, p.start.y * k, p.radial ? p.radius * k : p.end.x * k, p.radial ? 0 : p.end.y * k, ox, oy, 0, 0};
-        effectPass(*to, *from, {0, 0, region.width, region.height}, u, true, true);
+        effectPass(*to, *from, {0, 0, region.width, region.height}, u, true, true, mask);
         from = to;
     }
     return {from, region.x, region.y, 1, 1, region.width, region.height, region};

@@ -9,7 +9,9 @@
 //            own radius, from where it lies along a line or out from a center between stops (the
 //            table's row), its own Gaussian of sigma r / 2 px out to r px, taps in pairs between
 //            texels (linearly filtered); the taps past the layer's bounds (`valid`, on the axis)
-//            left out, and counted (decal) or not (otherwise: the others weigh more).
+//            left out, and counted (decal) or not (otherwise: the others weigh more). Or each
+//            pixel's radius over the widest a mask's alpha there (the table's texture, the
+//            destination's size).
 //
 // Destination texel t reads source texels t * map.xy + map.zw (+ the block's, or the kernel's,
 // offsets); PROGRESSIVE's points p of the destination are p * map.xy + map.zw in the source.
@@ -31,14 +33,14 @@ struct Uniforms {
     float4 valid;     // the source's own texels: x0, y0, x1, y1 (PROGRESSIVE: the bounds, in the destination's)
     float4 params;    // the pass, the tile mode, the axis (0 across, 1 down), sigma (PROGRESSIVE: the widest radius, px)
     float4 extra;     // GAUSS: how many texels each way (PROGRESSIVE: texels a px); a source texel's size (zw)
-    float4 mask;      // PROGRESSIVE: along a line (1) or out from a center (2); the stops' row, how many
+    float4 mask;      // PROGRESSIVE: along a line (1), out from a center (2) or a mask (3); the stops' row, how many
     float4 geometry;  // the line's start and end, or the center and how far out (texels from `origin`)
     float4 origin;    // where the layer's top left is in the destination; a table texel's size (zw)
 };
 [[vk::push_constant]] ConstantBuffer<Uniforms> uniforms;
 
 [[vk::binding(1, 0)]] Sampler2D source;
-[[vk::binding(2, 0)]] Sampler2D table;  // PROGRESSIVE's stops: stop i at texel i (fraction, radius over the widest)
+[[vk::binding(2, 0)]] Sampler2D table;  // PROGRESSIVE's stops: stop i at texel i (fraction, radius over the widest); or its mask
 
 struct Instance {
     float4 rect : RECT;  // what it draws: x0, y0, x1, y1
@@ -117,7 +119,8 @@ float4 progressive(float2 c) {
     float low = dot(uniforms.valid.xy, axis), high = dot(uniforms.valid.zw, axis);
     float unbounded = uniforms.params.y > 2.5 ? 1 : 0;  // decal
     float unit = uniforms.extra.x;
-    float radius = uniforms.params.w * clamp(intensity(fraction(c)), 0, 1);
+    float over = uniforms.mask.x > 2.5 ? table.SampleLevel(c * uniforms.origin.zw, 0).a : intensity(fraction(c));
+    float radius = uniforms.params.w * clamp(over, 0, 1);
     float r = floor(radius);
     float4 sum = content(c);
     if (r < 1) return sum;

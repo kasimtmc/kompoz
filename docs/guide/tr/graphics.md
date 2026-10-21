@@ -85,6 +85,17 @@ Box(Modifier().fillMaxWidth().height(120).background(
 
 Renk durakları ve döşeme modlarıyla `Brush::solid`, `linearGradient`, `horizontalGradient`, `verticalGradient`, `radialGradient` ve `sweepGradient` mevcuttur.
 
+Kendi fırçanız, Compose'un `ShaderBrush`'ı gibi, boyadığı boyut için yapılan bir shader'dır: bir degrade, döşenmiş bir resim ya da birleştirilmiş iki shader.
+
+```cpp body
+Box(Modifier().size(120, 72).background(Brush::shader([](Size size) {
+    return CompositeShader(LinearGradientShader({0, 0}, {size.width, 0}, {Color::hex(0x6750A4), Color::hex(0xB58392)}),
+                           RadialGradientShader({24, 20}, 48, {colors::White.copy(0.9f), colors::Transparent}), BlendMode::Screen);
+})));
+```
+
+`Brush::composite` aynısını iki fırçayla yapar, `withTransform` bir degradenin ya da shader'ın boyadığını taşır, `lerp` de bir animasyonun yaptığı gibi bir fırçadan ötekine geçer.
+
 ## Path'ler
 
 Bir `Path`, çizgiler, eğriler ve yaylarla herhangi bir dış hattı tanımlar:

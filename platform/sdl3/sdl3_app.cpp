@@ -1065,6 +1065,35 @@ public:
         if (rect.width <= 0 || rect.height <= 0) return;
         float x = rect.x * scale - ox_, y = rect.y * scale - oy_, w = rect.width * scale, h = rect.height * scale;
         CornerRadii r = pixelRadii(radii, w, h);
+        if (shaded(unfiltered)) {  // its colors pixel by pixel in a texture, the rounded rect (its edge faded) textured with it
+            float X0 = std::floor(x), Y0 = std::floor(y);
+            int W = int(std::ceil(x + w) - X0), H = int(std::ceil(y + h) - Y0);
+            SDL_Texture* t = shaderTexture(unfiltered, area, X0, Y0, W, H, nullptr);
+            if (!t) return;
+            contour(x, y, w, h, r);
+            begin();
+            auto uv = [&](SDL_FPoint p) { return SDL_FPoint{(p.x - X0) / float(W), (p.y - Y0) / float(H)}; };
+            SDL_FPoint c{x + w / 2, y + h / 2};
+            int center = int(vertices_.size());
+            vertices_.push_back({c, {1, 1, 1, 1}, uv(c)});
+            int n = int(points_.size()), inner = int(vertices_.size());
+            for (int i = 0; i < n; ++i) {
+                SDL_FPoint q{points_[i].x - normals_[i].x * 0.5f, points_[i].y - normals_[i].y * 0.5f};
+                vertices_.push_back({q, {1, 1, 1, 1}, uv(q)});
+            }
+            int outer = int(vertices_.size());
+            for (int i = 0; i < n; ++i) {
+                SDL_FPoint q{points_[i].x + normals_[i].x * 0.5f, points_[i].y + normals_[i].y * 0.5f};
+                vertices_.push_back({q, {1, 1, 1, 0}, uv(q)});
+            }
+            for (int i = 0; i < n; ++i) {
+                int a = inner + i, b = inner + (i + 1) % n;
+                indices_.insert(indices_.end(), {center, a, b, a, outer + i, outer + (i + 1) % n, a, outer + (i + 1) % n, b});
+            }
+            SDL_RenderGeometry(renderer_, t, vertices_.data(), int(vertices_.size()), indices_.data(), int(indices_.size()));
+            SDL_DestroyTexture(t);
+            return;
+        }
         // The mesh only depends on the size and where the brush's area is relative to the rect:
         // built once, then moved along (a scrolling page doesn't color thousands of vertices
         // every frame).
@@ -1203,6 +1232,14 @@ public:
         const PathMask* m = pathMask(path, fx, fy, stroke);
         if (!m || !m->texture) return;
         float x0 = bx + float(m->left), y0 = by + float(m->top), x1 = x0 + float(m->width), y1 = y0 + float(m->height);
+        if (shaded(unfiltered)) {  // its colors pixel by pixel through the coverage
+            SDL_Texture* t = shaderTexture(unfiltered, area, x0, y0, m->width, m->height, m->coverage.data());
+            if (!t) return;
+            SDL_FRect d{x0, y0, x1 - x0, y1 - y0};
+            SDL_RenderTexture(renderer_, t, nullptr, &d);
+            SDL_DestroyTexture(t);
+            return;
+        }
         begin();
         if (brush.isSolid()) {
             SDL_FColor c = toF(brush.stops().front().color);
@@ -1398,7 +1435,8 @@ private:
     }
     // A progressive blur, roughly: the layer's pixels as they are where it blurs least, blurred by
     // its widest radius where it blurs most, mixed between by how much it blurs at each pixel (a
-    // mask drawn as a gradient of its stops). The software renderer blurs nothing: as it is.
+    // mask drawn as a gradient of its stops, or the shader's alpha). The software renderer blurs
+    // nothing: as it is.
     void progressiveLayer(Layer& layer, SDL_Rect& valid, const RenderEffect::Step& step) {
         const RenderEffect::Progressive& p = *step.progressive;
         float most = 0;
@@ -1429,8 +1467,11 @@ private:
         // (Over the texture's area, whose top left its points are from.)
         Rect area{(float(layer.rect.x) + layer.ox) / scale, (float(layer.rect.y) + layer.oy) / scale, float(w) / scale, float(h) / scale};
         Offset o{layer.bounds.x - area.x, layer.bounds.y - area.y}, start{o.x + p.start.x, o.y + p.start.y};
-        Brush brush = p.radial ? Brush::radialGradient(stops, start, std::max(p.radius, 1e-3f))
-                               : Brush::linearGradient(stops, start, {o.x + p.end.x, o.y + p.end.y});
+        Matrix shift;  // (a shader's points from the layer's top left)
+        shift.translate(o.x, o.y);
+        Brush brush = p.shader ? Brush::shader(p.shader->transformed(shift))
+                      : p.radial ? Brush::radialGradient(stops, start, std::max(p.radius, 1e-3f))
+                                 : Brush::linearGradient(stops, start, {o.x + p.end.x, o.y + p.end.y});
         std::vector<ColorFilter> filters = std::exchange(filters_, {});
         std::vector<BlendMode> blends = std::exchange(blends_, {});
         applyBlend();
@@ -1465,6 +1506,7 @@ private:
     struct PathMask {
         SDL_Texture* texture = nullptr;
         int left = 0, top = 0, width = 0, height = 0;  // px, relative to the path's pixel origin
+        std::vector<uint8_t> coverage;                 // (for a shader brush: its texture made through it)
         bool used = true;
         int idleFrames = 0;
     };
@@ -1754,7 +1796,33 @@ private:
             SDL_SetTextureBlendMode(m.texture, SDL_BLENDMODE_BLEND);
             SDL_UpdateTexture(m.texture, nullptr, rgba.data(), m.width * 4);
         }
+        m.coverage = std::move(gray);
         return &m;
+    }
+
+    // A brush whose colors can't be drawn by vertices (a shader of its own, an image, a composite,
+    // a transform): its colors at the middle of each of W x H px from (x0, y0) (this target's),
+    // each through `coverage` where given, as a texture (the caller draws it, then destroys it).
+    static bool shaded(const Brush& brush) { return brush.kind() == Brush::Kind::Shader || brush.transform(); }
+    SDL_Texture* shaderTexture(const Brush& brush, const Rect& area, float x0, float y0, int W, int H, const uint8_t* coverage) {
+        if (W <= 0 || H <= 0 || W > 4096 || H > 4096) return nullptr;
+        Shader shader = brush.createShader({area.width, area.height});
+        std::vector<uint8_t> rgba(size_t(W) * size_t(H) * 4);
+        auto byte = [](float v) { return uint8_t(std::lround(std::clamp(v, 0.f, 1.f) * 255)); };
+        for (int j = 0; j < H; ++j)
+            for (int i = 0; i < W; ++i) {
+                size_t k = size_t(j) * size_t(W) + size_t(i);
+                Offset dp{(x0 + float(i) + 0.5f + ox_) / scale - area.x, (y0 + float(j) + 0.5f + oy_) / scale - area.y};
+                Color c = filtered(shader.colorAt(dp));
+                float a = c.a * brush.shaderAlpha() * (coverage ? coverage[k] / 255.f : 1.f);
+                rgba[k * 4] = byte(c.r), rgba[k * 4 + 1] = byte(c.g), rgba[k * 4 + 2] = byte(c.b), rgba[k * 4 + 3] = byte(a);
+            }
+        SDL_Texture* t = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, W, H);
+        if (!t) return nullptr;
+        SDL_UpdateTexture(t, nullptr, rgba.data(), W * 4);
+        SDL_SetTextureBlendMode(t, blend_);
+        SDL_SetTextureScaleMode(t, SDL_SCALEMODE_NEAREST);
+        return t;
     }
 
     // The glyphs in glyphs_, from their atlas pages (uploaded first where they changed), in

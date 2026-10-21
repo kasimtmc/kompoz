@@ -34,6 +34,9 @@ static const int ELEVATION = 9;    // an elevation shadow's ambient or spot part
 static const int LINEAR = 1;  // paint.x: the kind; from gradient.xy to gradient.zw
 static const int RADIAL = 2;  // round gradient.xy out to gradient.z
 static const int SWEEP = 3;   // round gradient.xy, clockwise from 3 o'clock
+static const int IMAGE_PAINT = 4;  // texture1 (premultiplied) where the map puts the pixel (its uv); paint.z: which (CPU side)
+// paint.y: the tile mode, plus 8 where the pixel is first taken through the map in the last three
+// texels of the paint's row (a shader's: to its own space, through its transform)
 // paint.y: the tile mode (clamp, repeated, mirror, decal); paint.z: how many stops; paint.w: their
 // row in the table (texture2): stop i's straight color at texel 2i, its offset at 2i + 1.
 //
@@ -195,6 +198,17 @@ float2 maskTexcoord(float2 texel) {
 float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
     int kind = int(paint.x + 0.5);
     if (kind == 0) return color;
+    int bits = int(paint.y + 0.5);
+    float v = (paint.w + 0.5) * uniforms.texels.w;
+    if ((bits & 8) != 0) {
+        float3 h = float3(p, 1);
+        float3 r0 = texture2.SampleLevel(float2(1 - 2.5 * uniforms.texels.z, v), 0).xyz;
+        float3 r1 = texture2.SampleLevel(float2(1 - 1.5 * uniforms.texels.z, v), 0).xyz;
+        float3 r2 = texture2.SampleLevel(float2(1 - 0.5 * uniforms.texels.z, v), 0).xyz;
+        float3 q = float3(dot(r0, h), dot(r1, h), dot(r2, h));
+        p = q.xy / q.z;
+    }
+    if (kind == IMAGE_PAINT) return texture1.Sample(p) * color.a;
     const float pi = 3.141592653589793;
     float t = 0;
     if (kind == LINEAR) {
@@ -208,7 +222,7 @@ float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
         if (a < 0) a += 2 * pi;
         t = a / (2 * pi);
     }
-    int tile = int(paint.y + 0.5);
+    int tile = bits & 7;
     float shown = tile == 3 && (t < 0 || t > 1) ? 0 : 1;  // decal: nothing past its ends
     if (tile == 0 || tile == 3) {
         t = saturate(t);
@@ -220,7 +234,6 @@ float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
     }
     // The stop t falls after and the one it falls before (straight colors), mixed.
     int count = int(paint.z + 0.5);
-    float v = (paint.w + 0.5) * uniforms.texels.w;
     float4 previous = texture2.SampleLevel(float2(0.5 * uniforms.texels.z, v), 0);
     float before = texture2.SampleLevel(float2(1.5 * uniforms.texels.z, v), 0).x;
     float4 straight = previous;

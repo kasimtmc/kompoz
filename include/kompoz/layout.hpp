@@ -1394,13 +1394,6 @@ namespace detail {
 WindowInsets systemBarsForVisualComponents();
 } // namespace detail
 
-struct Density {
-    float density = 1, fontScale = 1;
-    constexpr float toPx(float dp) const { return dp * density; }
-    constexpr float toDp(float px) const { return px / density; }
-    constexpr float spToDp(float sp) const { return sp * fontScale; }
-    friend constexpr bool operator==(const Density&, const Density&) = default;
-};
 inline const CompositionLocal<Density> LocalDensity{Density{}};
 
 class SharedContentState;

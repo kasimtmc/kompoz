@@ -21065,6 +21065,162 @@ TEST(gradient_tile_modes_go_on_past_the_ends) {
     CHECK(!(Brush::horizontalGradient({a, b}, 0, 10, TileMode::Mirror) == Brush::horizontalGradient({a, b}, 0, 10)));
 }
 
+// Compose's shaders: gradients at their stops (or evenly) as their tile modes say; an image
+// bilinearly from its pixels, tiled each way; a composite by its blend mode; through transforms,
+// its own first; equal by what they are.
+TEST(shaders_are_composes) {
+    Color red{1, 0, 0, 1}, blue{0, 0, 1, 1}, green{0, 1, 0, 1};
+    auto same = [](Color p, Color q) { return near(p.r, q.r, 0.01f) && near(p.g, q.g, 0.01f) && near(p.b, q.b, 0.01f) && near(p.a, q.a, 0.01f); };
+    Shader even = LinearGradientShader({10, 0}, {30, 0}, {red, green, blue});
+    CHECK(even.kind() == Shader::Kind::Linear && even.stops().size() == 3 && near(even.stops()[1].offset, 0.5f, 1e-6f));
+    CHECK(same(even.colorAt({15, 7}), lerp(red, green, 0.5f)) && same(even.colorAt({0, 0}), red) && same(even.colorAt({40, 0}), blue));
+    Shader placed = LinearGradientShader({0, 0}, {0, 100}, {red, blue}, {0.2f, 0.4f}, TileMode::Mirror);
+    CHECK(same(placed.colorAt({0, 30}), lerp(red, blue, 0.5f)) && same(placed.colorAt({0, 170}), lerp(red, blue, 0.5f)));
+    CHECK(same(LinearGradientShader({0, 0}, {10, 0}, {red, blue}, {}, TileMode::Repeated).colorAt({12.5f, 0}), lerp(red, blue, 0.25f)));
+    CHECK(LinearGradientShader({0, 0}, {10, 0}, {red, blue}, {}, TileMode::Decal).colorAt({12, 0}).a == 0);
+    Shader radial = RadialGradientShader({50, 50}, 20, {red, blue});
+    CHECK(radial.kind() == Shader::Kind::Radial && same(radial.colorAt({50, 60}), lerp(red, blue, 0.5f)) && near(radial.radius(), 20, 1e-6f));
+    Shader sweep = SweepGradientShader({0, 0}, {red, blue});
+    CHECK(same(sweep.colorAt({0, 10}), lerp(red, blue, 0.25f)));  // clockwise from 3 o'clock: 6 o'clock a quarter round
+    // An image: a pixel a dp, bilinearly between pixel centers (premultiplied: a clear pixel adds no color).
+    ImageBitmap img = ImageBitmap::fromPixels(2, 1, {255, 0, 0, 255, 0, 0, 255, 0});
+    Shader clamp = ImageShader(img);
+    CHECK(same(clamp.colorAt({0.5f, 0.5f}), red) && same(clamp.colorAt({1, 0.5f}), red.copy(0.5f)) && same(clamp.colorAt({-3, 0.5f}), red));
+    CHECK(clamp.colorAt({5, 0.5f}).a == 0);
+    CHECK(same(ImageShader(img, TileMode::Repeated).colorAt({2.5f, 0.5f}), red) && ImageShader(img, TileMode::Repeated).colorAt({3.5f, 0.5f}).a == 0);
+    CHECK(ImageShader(img, TileMode::Mirror).colorAt({2.5f, 0.5f}).a == 0);
+    CHECK(same(ImageShader(img, TileMode::Mirror).colorAt({3.5f, 0.5f}), red));
+    CHECK(ImageShader(img, TileMode::Decal).colorAt({-0.5f, 0.5f}).a == 0 && same(ImageShader(img, TileMode::Clamp, TileMode::Decal).colorAt({0.5f, 0.75f}), red.copy(0.75f)));
+    // A composite: src onto dst.
+    Shader both = CompositeShader(LinearGradientShader({0, 0}, {10, 0}, {red, red}), LinearGradientShader({0, 0}, {10, 0}, {blue.copy(0), blue}), BlendMode::SrcOver);
+    CHECK(both.kind() == Shader::Kind::Composite && both.blendMode() == BlendMode::SrcOver && both.dst().stops().front().color == red);
+    CHECK(same(both.colorAt({5, 0}), blend(blue.copy(0.5f), red, BlendMode::SrcOver)) && same(both.colorAt({10, 0}), blue));
+    CHECK(same(CompositeShader(both.dst(), both.src(), BlendMode::DstIn).colorAt({5, 0}), red.copy(0.5f)));
+    // Transforms: what it painted at p, at matrix(p); a second after the first.
+    Matrix right, twice;
+    right.translate(10, 0);
+    twice.scale(2, 2);
+    Shader moved = even.transformed(right);
+    CHECK(moved.transform() && same(moved.colorAt({25, 0}), lerp(red, green, 0.5f)) && !even.transform());
+    CHECK(same(moved.transformed(twice).colorAt({50, 0}), lerp(red, green, 0.5f)));  // (15 + 10) * 2
+    CHECK(same(even.transformed(twice).transformed(right).colorAt({40, 0}), lerp(red, green, 0.5f)));  // 15 * 2 + 10
+    CHECK(even.transformed(Matrix()) == even && !even.transformed(Matrix()).transform());
+    // Equal by what they are.
+    CHECK(LinearGradientShader({10, 0}, {30, 0}, {red, green, blue}) == even && !(even == moved) && !(radial == RadialGradientShader({50, 50}, 21, {red, blue})));
+    CHECK(ImageShader(img) == clamp && !(ImageShader(img, TileMode::Repeated) == clamp) && !(both == CompositeShader(both.dst(), both.src(), BlendMode::DstIn)));
+    CHECK(Shader().colorAt({0, 0}).a == 0 && !(Shader() == even));
+}
+
+// Brushes as Compose's ShaderBrush: a shader made for the size it paints (made again only for
+// another), faded by a paint's alpha, through a transform; composites; intrinsic sizes; lerp.
+TEST(shader_brushes_are_composes) {
+    Color red{1, 0, 0, 1}, blue{0, 0, 1, 1}, green{0, 1, 0, 1};
+    auto same = [](Color p, Color q) { return near(p.r, q.r, 0.01f) && near(p.g, q.g, 0.01f) && near(p.b, q.b, 0.01f) && near(p.a, q.a, 0.01f); };
+    int made = 0;
+    Size madeFor;
+    Brush own = Brush::shader([&](Size size) {
+        ++made, madeFor = size;
+        return LinearGradientShader({0, 0}, {size.width, 0}, {red, blue});
+    }, Size{40, 20});
+    CHECK(own.kind() == Brush::Kind::Shader && !own.isSolid());
+    CHECK(same(own.colorAt({150, 60}, {100, 50, 100, 20}), lerp(red, blue, 0.5f)) && made == 1 && near(madeFor.width, 100, 1e-6f));
+    CHECK(same(own.colorAt({125, 60}, {100, 50, 100, 20}), lerp(red, blue, 0.25f)) && made == 1);  // the same size: not made again
+    CHECK(same(own.colorAt({110, 60}, {100, 50, 20, 20}), lerp(red, blue, 0.5f)) && made == 2);
+    Brush copy = own;
+    CHECK(copy == own && !(own == Brush::shader([](Size) { return Shader(); })));
+    CHECK(near(own.intrinsicSize().width, 40, 1e-6f) && near(own.intrinsicSize().height, 20, 1e-6f));
+    // Faded: what it paints as opaque as the paint's alpha says.
+    Brush half = own.faded(0.5f);
+    CHECK(near(half.shaderAlpha(), 0.5f, 1e-6f) && same(half.colorAt({150, 60}, {100, 50, 100, 20}), lerp(red, blue, 0.5f).copy(0.5f)) && !(half == own));
+    CHECK(near(Brush::horizontalGradient({red, blue}).faded(0.5f).shaderAlpha(), 1, 1e-6f));  // (a gradient's alpha is in its stops)
+    // One shader whatever the size.
+    Shader rings = RadialGradientShader({5, 5}, 5, {red, blue}, {}, TileMode::Repeated);
+    Brush fixed = Brush::shader(rings);
+    CHECK(fixed.createShader({300, 300}) == rings && same(fixed.colorAt({17.5f, 5}, {0, 0, 300, 300}), lerp(red, blue, 0.5f)));
+    // Transforms: a gradient's or a shader's, in the dp of what it paints; a color has none.
+    Matrix down;
+    down.translate(0, 10);
+    Brush h = Brush::horizontalGradient({red, blue}, 0, 20);
+    Brush turned = h.withTransform([] {
+        Matrix m;
+        m.rotateZ(90);
+        return m;
+    }());
+    CHECK(turned.transform() && same(turned.colorAt({100, 55}, {100, 50, 20, 20}), lerp(red, blue, 0.25f)));
+    CHECK(near(turned.parameterAt({100, 55}, {100, 50, 20, 20}), 0.25f, 1e-4f));
+    CHECK(!Brush::solid(red).withTransform(down).transform() && !h.withTransform(Matrix()).transform() && !h.withTransform(std::nullopt).transform());
+    CHECK(h.withTransform(down).createShader({20, 20}) == h.createShader({20, 20}).transformed(down));
+    CHECK(same(fixed.withTransform(down).colorAt({17.5f, 15}, {0, 0, 300, 300}), lerp(red, blue, 0.5f)));
+    CHECK(!(h.withTransform(down) == h) && h.withTransform(down) == h.withTransform(down));
+    // A brush's shader: a gradient's where it lies on that size; a color's a gradient of it.
+    Shader hs = h.createShader({50, 30});
+    CHECK(hs.kind() == Shader::Kind::Linear && hs.start() == (Offset{0, 0}) && hs.end() == (Offset{20, 0}) && hs.stops() == h.stops());
+    Shader solid = Brush::solid(green).createShader({50, 30});
+    CHECK(solid.kind() == Shader::Kind::Linear && same(solid.colorAt({7, 7}), green) && solid.end() == (Offset{0, 30}));
+    Shader r = Brush::radialGradient({red, blue}).createShader({50, 30});
+    CHECK(r.kind() == Shader::Kind::Radial && r.start() == (Offset{25, 15}) && near(r.radius(), 15, 1e-6f));
+    CHECK(Brush::sweepGradient({red, blue}, Offset{3, 4}).createShader({50, 30}).start() == (Offset{3, 4}));
+    // Composites (Brush.composite): their two made shaders composited; equal by what they composite.
+    Brush over = Brush::composite(Brush::solid(red), Brush::horizontalGradient({blue.copy(0), blue}), BlendMode::SrcOver);
+    Shader os = over.createShader({10, 10});
+    CHECK(os.kind() == Shader::Kind::Composite && os.blendMode() == BlendMode::SrcOver && os.dst() == Brush::solid(red).createShader({10, 10}));
+    CHECK(same(over.colorAt({5, 5}, {0, 0, 10, 10}), blend(blue.copy(0.5f), red, BlendMode::SrcOver)));
+    CHECK(over == Brush::composite(Brush::solid(red), Brush::horizontalGradient({blue.copy(0), blue}), BlendMode::SrcOver));
+    CHECK(!(over == Brush::composite(Brush::solid(red), Brush::horizontalGradient({blue.copy(0), blue}), BlendMode::Multiply)));
+    CHECK(!(over == Brush::composite(Brush::solid(green), Brush::horizontalGradient({blue.copy(0), blue}), BlendMode::SrcOver)));
+    // Intrinsic sizes (Compose's): a linear gradient's between its ends where they are given, a radial one's diameter.
+    auto unset = [](float v) { return std::isnan(v); };
+    Size hz = Brush::horizontalGradient({red, blue}, 5, 25).intrinsicSize();
+    CHECK(near(hz.width, 20, 1e-6f) && near(hz.height, 0, 1e-6f));
+    Size far = Brush::horizontalGradient({red, blue}, 5).intrinsicSize();
+    CHECK(unset(far.width) && near(far.height, 0, 1e-6f));
+    CHECK(unset(Brush::linearGradient({red, blue}).intrinsicSize().width) && unset(Brush::linearGradient({red, blue}).intrinsicSize().height));
+    CHECK(near(Brush::radialGradient({red, blue}, std::nullopt, 7).intrinsicSize().width, 14, 1e-6f) && unset(Brush::radialGradient({red, blue}).intrinsicSize().height));
+    CHECK(unset(Brush::sweepGradient({red, blue}).intrinsicSize().width) && unset(Brush::solid(red).intrinsicSize().width) &&
+          unset(Brush::shader(rings).intrinsicSize().width) && unset(over.intrinsicSize().width));
+}
+
+// lerp of brushes (Compose's Interpolatable): colors mix; gradients of a kind mix colors, stops and
+// geometry; a color with a gradient as that gradient in the color; anything else switches halfway.
+TEST(brushes_lerp_as_composes) {
+    Color red{1, 0, 0, 1}, blue{0, 0, 1, 1}, green{0, 1, 0, 1};
+    auto same = [](Color p, Color q) { return near(p.r, q.r, 0.01f) && near(p.g, q.g, 0.01f) && near(p.b, q.b, 0.01f) && near(p.a, q.a, 0.01f); };
+    Brush mixed = lerp(Brush::solid(red), Brush::solid(blue), 0.25f);
+    CHECK(mixed.isSolid() && same(mixed.stops().front().color, lerp(red, blue, 0.25f)));
+    // Two linear gradients: colors index by index, the shorter's last again; ends mixed.
+    Brush a = Brush::linearGradient({red, green}, {0, 0}, {10, 0}), b = Brush::linearGradient({blue, blue, red}, {0, 10}, {20, 0});
+    Brush ab = lerp(a, b, 0.5f);
+    CHECK(ab.kind() == Brush::Kind::Linear && ab.stops().size() == 3);
+    CHECK(same(ab.stops()[0].color, lerp(red, blue, 0.5f)) && same(ab.stops()[1].color, lerp(green, blue, 0.5f)) && same(ab.stops()[2].color, lerp(green, red, 0.5f)));
+    CHECK(near(ab.stops()[1].offset, 0.5f, 1e-6f));  // (colors spread evenly: evenly again)
+    Brush::Geometry g = ab.geometry({0, 0, 100, 100});
+    CHECK(g.start == (Offset{0, 5}) && g.end == (Offset{15, 0}));
+    // Given stops mix offsets; an end at the far edge switches halfway.
+    Brush s1 = Brush::linearGradient(std::vector<ColorStop>{{0, red}, {0.2f, blue}}, {0, 0}, {10, 0});
+    Brush s2 = Brush::linearGradient(std::vector<ColorStop>{{0.4f, red}, {0.6f, blue}}, {0, 0}, {kInfinity, 0});
+    Brush s12 = lerp(s1, s2, 0.25f);
+    CHECK(near(s12.stops()[0].offset, 0.1f, 1e-5f) && near(s12.stops()[1].offset, 0.3f, 1e-5f));
+    CHECK(s12.geometry({0, 0, 100, 100}).end == (Offset{10, 0}) && lerp(s1, s2, 0.75f).geometry({0, 0, 100, 100}).end == (Offset{100, 0}));
+    // Tile modes and unset centers switch halfway; radii mix.
+    Brush r1 = Brush::radialGradient({red, blue}, Offset{10, 10}, 10, TileMode::Repeated), r2 = Brush::radialGradient({red, blue}, Offset{30, 10}, 30);
+    Brush r12 = lerp(r1, r2, 0.25f);
+    CHECK(r12.tileMode() == TileMode::Repeated && lerp(r1, r2, 0.5f).tileMode() == TileMode::Clamp);
+    CHECK(r12.geometry({0, 0, 100, 100}).start == (Offset{15, 10}) && near(r12.geometry({0, 0, 100, 100}).radius, 15, 1e-5f));
+    Brush centered = Brush::radialGradient({red, blue});
+    CHECK(lerp(r1, centered, 0.25f).geometry({0, 0, 100, 100}).start == (Offset{10, 10}) && lerp(r1, centered, 0.75f).geometry({0, 0, 100, 100}).start == (Offset{50, 50}));
+    // A color and a gradient: the gradient, its colors toward the color (either way round).
+    Brush toward = lerp(Brush::solid(green), Brush::horizontalGradient({red, blue}, 0, 10), 0.75f);
+    CHECK(toward.kind() == Brush::Kind::Linear && same(toward.stops()[0].color, lerp(green, red, 0.75f)) && same(toward.stops()[1].color, lerp(green, blue, 0.75f)));
+    CHECK(toward.geometry({0, 0, 100, 100}).end == (Offset{10, 0}));
+    Brush back = lerp(Brush::horizontalGradient({red, blue}, 0, 10), Brush::solid(green), 0.25f);
+    CHECK(same(back.stops()[0].color, lerp(red, green, 0.25f)));
+    // Anything else switches halfway: other kinds, shader brushes.
+    Brush sweep = Brush::sweepGradient({red, blue}), own = Brush::shader(SweepGradientShader({0, 0}, {red, blue}));
+    CHECK(lerp(a, sweep, 0.49f) == a && lerp(a, sweep, 0.5f) == sweep);
+    CHECK(lerp(own, Brush::solid(red), 0.4f) == own && lerp(own, Brush::solid(red), 0.6f) == Brush::solid(red));
+    CHECK(lerp(a, a, 0.3f) == a);
+}
+
 TEST(keep_screen_on_while_laid_out) {
     auto video = mutableStateOf(false);
     auto popup = mutableStateOf(false);
@@ -25638,6 +25794,22 @@ TEST(blur_radius_specs_make_compose_effects) {
     CHECK(!(BlurRadiusSpec::verticalGradient(0, 12) == BlurRadiusSpec::horizontalGradient(0, 12)));
     // It reaches as far as its widest radius.
     CHECK(sameRect(down.outputBounds({0, 0, 100, 50}), {-13, -13, 126, 76}));
+    // A shader's: each pixel by the widest times its alpha, the shader made for the layer's size and density.
+    Size madeFor;
+    Density madeAt;
+    BlurRadiusSpec masked = BlurRadiusSpec::shader(10, [&](Density density, Size size) {
+        madeFor = size, madeAt = density;
+        return LinearGradientShader({0, 0}, {size.width, 0}, {colors::Transparent, colors::Black});
+    });
+    RenderEffect byShader = masked.createRenderEffect({80, 40}, TileMode::Decal, {2.5f, 1.25f});
+    p = progressive(byShader);
+    CHECK(p && p->shader && *p->shader == LinearGradientShader({0, 0}, {80, 0}, {colors::Transparent, colors::Black}) && stops({{0, 10}, {1, 10}}, p));
+    CHECK(near(madeFor.width, 80, 1e-6f) && near(madeFor.height, 40, 1e-6f) && madeAt == (Density{2.5f, 1.25f}));
+    CHECK(byShader.steps()[0].edgeTreatment == TileMode::Decal && sameRect(byShader.outputBounds({0, 0, 80, 40}), {-11, -11, 102, 62}));
+    CHECK(!progressive(down)->shader);
+    CHECK(BlurRadiusSpec::shader(0, [](Density, Size) { return Shader(); }).createRenderEffect({10, 10}) == OffsetEffect(0, 0));
+    BlurRadiusSpec same = masked;
+    CHECK(same == masked && !(masked == BlurRadiusSpec::shader(10, [](Density, Size) { return Shader(); })) && !(masked == BlurRadiusSpec::uniform(10)));
 }
 
 TEST(blur_with_a_radius_spec_is_a_layer_as_composes) {
@@ -25689,6 +25861,18 @@ TEST(blur_with_a_radius_spec_is_a_layer_as_composes) {
     testing::RecordingCanvas e;
     blocks.host().draw(e);
     CHECK(compositions == 1 && e.layerEffects.size() == 1 && e.layerEffects[0] == BlurRadiusSpec::radialGradient(9, 0).createRenderEffect({80, 40}, TileMode::Clamp));
+    // A shader's is made with the node's density.
+    Density madeAt;
+    BlurRadiusSpec masked = BlurRadiusSpec::shader(6, [&](Density density, Size size) {
+        madeAt = density;
+        return LinearGradientShader({0, 0}, {0, size.height}, {colors::Transparent, colors::Black});
+    });
+    ComposeTestRule shaded([&] { Box(Modifier().size(80, 40).blur(masked)); });
+    shaded.host().setDensity({2, 1.5f});
+    shaded.waitForIdle();
+    testing::RecordingCanvas f;
+    shaded.host().draw(f);
+    CHECK(madeAt == (Density{2, 1.5f}) && f.layers == 1 && f.layerEffects[0] == masked.createRenderEffect({80, 40}, TileMode::Clamp, {2, 1.5f}));
 }
 
 TEST(blur_types_blur_the_node_what_it_draws_or_what_is_behind) {

@@ -767,7 +767,8 @@ struct BlurElement final : ModifierElement {
         d.bounds = bounds;
         d.geometry.pivot = bounds.center();
         if (radii && radii->first > 0 && radii->second > 0) d.renderEffect = BlurEffect(radii->first, radii->second, edges);
-        else if (!radii && !(b.blurRadiusSpec == BlurRadiusSpec::uniform(0))) d.renderEffect = b.blurRadiusSpec.createRenderEffect(b.size, edges);
+        else if (!radii && !(b.blurRadiusSpec == BlurRadiusSpec::uniform(0))) d.renderEffect = b.blurRadiusSpec.createRenderEffect(
+                b.size, edges, node.host() ? node.host()->density() : Density{});
         d.alpha = b.alpha;
         d.clip = clip;
         d.outline = clip ? b.edgeTreatment.shape->createOutline(b.size, node.rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr)

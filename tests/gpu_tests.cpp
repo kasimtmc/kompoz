@@ -1757,6 +1757,23 @@ void blursAreGaussian(Gpu& g) {
     auto [wider, widerWant] = progressive(BlurRadiusSpec::horizontalGradient(200, 50), TileMode::Decal, 1, 150, {{0, 1}, {1, 0.25f}},
                                          [](double x, double) { return std::clamp(x / 48, 0.0, 1.0); });
     report("progressive wider than 150 px", wider, widerWant, 2);
+    // A shader's alpha the radius over the widest (Compose's BlurRadiusSpec.shader): a gradient
+    // down as the gradient spec; two gradients' product (a composite, baked) at 2 px a dp, where
+    // 8 bits would put a radius of a whole pixel a pixel further.
+    auto downMask = BlurRadiusSpec::shader(12, [](Density, Size size) {
+        return LinearGradientShader({0, 0}, {0, size.height}, {colors::Transparent, colors::Black});
+    });
+    for (TileMode edges : {TileMode::Clamp, TileMode::Decal}) {
+        auto [got, want] = progressive(downMask, edges, 1, 12, {{0, 0}, {1, 1}}, down);
+        report("progressive by a shader", got, want, 2);
+    }
+    auto productMask = BlurRadiusSpec::shader(4, [](Density, Size size) {
+        return CompositeShader(LinearGradientShader({0, 0}, {0, size.height}, {colors::Transparent, colors::Black}),
+                               LinearGradientShader({0, 0}, {size.width, 0}, {colors::Transparent, colors::Black}), BlendMode::DstIn);
+    });
+    auto [product, productWant] = progressive(productMask, TileMode::Clamp, 2, 8, {{0, 0}, {1, 1}},
+                                             [](double x, double y) { return std::clamp(x / 48, 0.0, 1.0) * std::clamp(y / 48, 0.0, 1.0); });
+    report("progressive by a composite shader at 2 px a dp", product, productWant, 2);
     // In a layer a transform enlarges: in the layer's pixels (each two of the screen's), then enlarged.
     Pixels bigger = g.render(n, n, 1, [&](GraphicsContext& c) {
         Matrix m;
@@ -2152,6 +2169,101 @@ void conicsAreExact(Gpu& g) {
     }
 }
 
+// Shaders paint as they say, against Shader::colorAt on the CPU at each pixel's middle: an image
+// tiled (repeated across, mirrored down) and its decal edge; a gradient through a turned,
+// stretched transform; two composited (multiplied: baked, then painted); an image shader on a path
+// drawn turned.
+void shadersPaintAsTheyAre(Gpu& g) {
+    const int n = 64;
+    std::vector<uint8_t> px(4 * 3 * 4);
+    for (int i = 0; i < 12; ++i) {
+        uint8_t* q = &px[size_t(i) * 4];
+        q[0] = uint8_t(30 + i * 19), q[1] = uint8_t(220 - i * 15), q[2] = uint8_t(i % 3 * 110), q[3] = uint8_t(i % 4 == 1 ? 128 : 255);
+    }
+    ImageBitmap tile = ImageBitmap::fromPixels(4, 3, px);
+    auto model = [&](const std::function<Color(Offset)>& at, const std::function<bool(Offset)>& inside = nullptr) {
+        Image out{n, n, std::vector<float>(size_t(n) * n * 4, 0.f)};
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x) {
+                Offset p{x + 0.5f, y + 0.5f};
+                if (inside && !inside(p)) continue;
+                Color c = at(p);
+                float* q = out.at(x, y);
+                q[0] = c.r * c.a, q[1] = c.g * c.a, q[2] = c.b * c.a, q[3] = c.a;
+            }
+        return overWhite(out);
+    };
+    auto check = [&](const char* what, const Pixels& got, const Pixels& want, int tolerance) {
+        int worst = worstAgainst(got, [&](int x, int y) { return want.at(x, y); });
+        CHECK(worst <= tolerance);
+        if (worst > tolerance) std::printf("  %s: off by %d at (%g, %g)\n", what, worst, worstAt.x, worstAt.y);
+    };
+    Rect area{0, 0, float(n), float(n)};
+    // An image tiled: repeated across, mirrored down; decal: nothing past it.
+    Shader tiled = ImageShader(tile, TileMode::Repeated, TileMode::Mirror);
+    check("an image shader", g.render(n, n, 1, [&](GraphicsContext& c) { c.fillGradient(area, 0, Brush::shader(tiled), area); }),
+          model([&](Offset p) { return tiled.colorAt(p); }), 2);
+    Shader decal = ImageShader(tile, TileMode::Decal, TileMode::Decal).transformed([] {
+        Matrix m;
+        m.translate(20, 20);
+        m.scale(5, 5);
+        return m;
+    }());
+    check("a decal image shader", g.render(n, n, 1, [&](GraphicsContext& c) { c.fillGradient(area, 0, Brush::shader(decal), area); }),
+          model([&](Offset p) { return decal.colorAt(p); }), 2);
+    // A gradient through a turned, stretched transform (the brush's).
+    Matrix turned;
+    turned.translate(32, 32);
+    turned.rotateZ(30);
+    turned.scale(1.5f, 0.6f);
+    turned.translate(-32, -32);
+    Brush plain = Brush::linearGradient({Color{0.9f, 0.1f, 0.2f, 1}, Color{0.1f, 0.4f, 0.9f, 1}, Color{0.2f, 0.8f, 0.3f, 0.6f}}, {16, 0}, {48, 0},
+                                        TileMode::Mirror);
+    Brush stretched = plain.withTransform(turned);
+    Matrix untransformed = turned;
+    untransformed.invert();
+    check("a transformed gradient", g.render(n, n, 1, [&](GraphicsContext& c) { c.fillGradient(area, 0, stretched, area); }),
+          model([&](Offset p) { return plain.colorAt(untransformed.map(p), area); }), 2);
+    // An image through a perspective (the shader's): each pixel where the plane takes it.
+    Matrix leaning;
+    leaning.scale(4, 4);
+    leaning(0, 3) = 0.004f;
+    Shader slanted = ImageShader(tile, TileMode::Repeated, TileMode::Mirror).transformed(leaning);
+    check("an image shader in perspective", g.render(n, n, 1, [&](GraphicsContext& c) { c.fillGradient(area, 0, Brush::shader(slanted), area); }),
+          model([&](Offset p) { return slanted.colorAt(p); }), 3);
+    // Two composited: a radial gradient multiplied by the image.
+    Brush multiplied = Brush::composite(Brush::radialGradient({Color{1, 0.9f, 0.2f, 1}, Color{0.2f, 0.3f, 1, 1}}), Brush::shader(tiled), BlendMode::Multiply);
+    check("a composite shader", g.render(n, n, 1, [&](GraphicsContext& c) { c.fillGradient(area, 0, multiplied, area); }),
+          model([&](Offset p) { return multiplied.colorAt(p, area); }), 3);
+    // An image shader on a path, drawn turned: where each pixel is in the path's space, then in the image.
+    Path disc;
+    disc.addOval({8, 8, 48, 48});
+    Matrix spin;
+    spin.translate(32, 32);
+    spin.rotateZ(20);
+    spin.translate(-32, -32);
+    Matrix back = spin;
+    back.invert();
+    Brush big = Brush::shader(ImageShader(tile, TileMode::Repeated, TileMode::Repeated).transformed([] {
+        Matrix m;
+        m.scale(3, 3);
+        return m;
+    }()));
+    Pixels onPath = g.render(n, n, 1, [&](GraphicsContext& c) {
+        c.pushTransform(spin);
+        c.drawPath(disc, {0, 0}, big, area, {});
+        c.popTransform();
+    });
+    Pixels wantPath = model([&](Offset p) { return big.colorAt(back.map(p), area); },
+                            [&](Offset p) { Offset q = back.map(p); return std::hypot(q.x - 32, q.y - 32) < 23.5f; });
+    int worst = worstAgainst(onPath, [&](int x, int y) { return wantPath.at(x, y); }, [&](int x, int y) {
+        Offset q = back.map(Offset{x + 0.5f, y + 0.5f});
+        return std::abs(std::hypot(q.x - 32, q.y - 32) - 24) < 1.5f;  // (its edge: coverage)
+    });
+    CHECK(worst <= 3);
+    if (worst > 3) std::printf("  an image shader on a turned path: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+}
+
 // Elevation shadows are Android's: a rounded rect's (of one radius, a rect's, a circle's), flat,
 // through a similarity, as Skia's drawFastShadow and ShadowRRectOp draw it, worked out here per
 // pixel in double: the ambient shadow the outline spread by r = z / 2 px (up to 150), falling off
@@ -2530,6 +2642,7 @@ int main() {
             pathShadowsAreComposes(g);
             imagesAreSampledAsAsked(g);
             conicsAreExact(g);
+            shadersPaintAsTheyAre(g);
             elevationShadowsAreAndroids(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)

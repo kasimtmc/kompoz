@@ -99,6 +99,10 @@
   `PathIterator`/`PathSegment`, `PathHitTester`, `contains` exact on curves, and `op` keeping curves. Shapes added whole
   now go counterclockwise by default, as Compose's: pass `Path::Direction::Clockwise` for the old way round; a turn of
   `arcTo` is a point, as Skia's (`addArc` or `addOval` for a whole oval).
+- **Shaders as Compose's**: `LinearGradientShader`, `RadialGradientShader`, `SweepGradientShader`, `ImageShader`
+  (tiled each way) and `CompositeShader`, through transforms; `Brush::shader` (`ShaderBrush`, made again only for
+  another size), `Brush::composite`, `withTransform`, `intrinsicSize`, `createShader`, and `lerp` between brushes;
+  `BlurRadiusSpec::shader` blurs each pixel by a shader's alpha. `Density` moved from `layout.hpp` to `graphics.hpp`.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

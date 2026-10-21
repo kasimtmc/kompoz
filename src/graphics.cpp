@@ -79,7 +79,9 @@ std::vector<ColorStop> Brush::evenly(const std::vector<Color>& colors) {
 }
 
 Brush Brush::linearGradient(std::vector<Color> colors, Offset start, Offset end, TileMode tileMode) {
-    return linearGradient(evenly(colors), start, end, tileMode);
+    Brush b = linearGradient(evenly(colors), start, end, tileMode);
+    b.explicitStops_ = false;
+    return b;
 }
 
 Brush Brush::linearGradient(std::vector<ColorStop> stops, Offset start, Offset end, TileMode tileMode) {
@@ -99,7 +101,9 @@ Brush Brush::verticalGradient(std::vector<Color> colors, float startY, float end
 }
 
 Brush Brush::radialGradient(std::vector<Color> colors, std::optional<Offset> center, float radius, TileMode tileMode) {
-    return radialGradient(evenly(colors), center, radius, tileMode);
+    Brush b = radialGradient(evenly(colors), center, radius, tileMode);
+    b.explicitStops_ = false;
+    return b;
 }
 
 Brush Brush::radialGradient(std::vector<ColorStop> stops, std::optional<Offset> center, float radius, TileMode tileMode) {
@@ -111,7 +115,11 @@ Brush Brush::radialGradient(std::vector<ColorStop> stops, std::optional<Offset> 
     return b;
 }
 
-Brush Brush::sweepGradient(std::vector<Color> colors, std::optional<Offset> center) { return sweepGradient(evenly(colors), center); }
+Brush Brush::sweepGradient(std::vector<Color> colors, std::optional<Offset> center) {
+    Brush b = sweepGradient(evenly(colors), center);
+    b.explicitStops_ = false;
+    return b;
+}
 
 Brush Brush::sweepGradient(std::vector<ColorStop> stops, std::optional<Offset> center) {
     Brush b(Kind::Sweep, std::move(stops));
@@ -132,7 +140,174 @@ Brush Brush::faded(float alpha) const {
     Brush b = *this;
     if (alpha < 1)
         for (ColorStop& s : b.stops_) s.color = s.color.copy(s.color.a * std::max(alpha, 0.f));
+    if (alpha < 1 && kind_ == Kind::Shader) b.shaderAlpha_ *= std::max(alpha, 0.f);
     return b;
+}
+
+struct Brush::ShaderSource {
+    std::function<Shader(Size)> make;  // a brush of its own
+    std::optional<Size> intrinsicSize;
+    std::optional<Brush> dst, src;  // or the two it composites
+    BlendMode blendMode = BlendMode::SrcOver;
+    mutable std::optional<Size> madeFor;  // the size `make` made `made` for (made again only for another, as Compose's)
+    mutable Shader made;
+};
+
+Brush Brush::shader(std::function<Shader(Size size)> createShader, std::optional<Size> intrinsicSize) {
+    Brush b(Kind::Shader, {});
+    b.shader_ = std::make_shared<const ShaderSource>(ShaderSource{std::move(createShader), intrinsicSize, std::nullopt, std::nullopt, BlendMode::SrcOver, {}, {}});
+    return b;
+}
+
+Brush Brush::shader(Shader shader) {
+    return Brush::shader([shader = std::move(shader)](Size) { return shader; });
+}
+
+Brush Brush::composite(const Brush& dst, const Brush& src, BlendMode blendMode) {
+    Brush b(Kind::Shader, {});
+    b.shader_ = std::make_shared<const ShaderSource>(ShaderSource{{}, std::nullopt, dst, src, blendMode, {}, {}});
+    return b;
+}
+
+Brush Brush::withTransform(const std::optional<Matrix>& transform) const {
+    Brush b = *this;
+    b.transform_ = transform && !transform->isIdentity() && kind_ != Kind::Solid ? std::make_shared<const Matrix>(*transform) : nullptr;
+    return b;
+}
+
+Size Brush::intrinsicSize() const {
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    switch (kind_) {
+    case Kind::Linear:
+        return {std::isfinite(start_.x) && std::isfinite(end_.x) ? std::abs(start_.x - end_.x) : nan,
+                std::isfinite(start_.y) && std::isfinite(end_.y) ? std::abs(start_.y - end_.y) : nan};
+    case Kind::Radial: return std::isfinite(radius_) ? Size{radius_ * 2, radius_ * 2} : Size{nan, nan};
+    case Kind::Shader: return shader_ && shader_->intrinsicSize ? *shader_->intrinsicSize : Size{nan, nan};
+    default: return {nan, nan};
+    }
+}
+
+namespace {
+
+Shader gradientShader(Shader::Kind kind, std::vector<ColorStop> stops, Offset start, Offset end, float radius, TileMode tile);
+
+} // namespace
+
+Shader Brush::createShader(Size size) const {
+    Shader s;
+    Rect area{0, 0, size.width, size.height};
+    switch (kind_) {
+    case Kind::Solid: {  // (Compose's: a vertical gradient of the one color)
+        Color c = stops_.empty() ? colors::Transparent : stops_.front().color;
+        s = gradientShader(Shader::Kind::Linear, {{0, c}, {1, c}}, {0, 0}, {0, size.height}, 0, TileMode::Clamp);
+        break;
+    }
+    case Kind::Linear: {
+        Geometry g = geometry(area);
+        s = gradientShader(Shader::Kind::Linear, stops_, g.start, g.end, 0, tileMode_);
+        break;
+    }
+    case Kind::Radial: {
+        Geometry g = geometry(area);
+        s = gradientShader(Shader::Kind::Radial, stops_, g.start, {}, g.radius, tileMode_);
+        break;
+    }
+    case Kind::Sweep: s = gradientShader(Shader::Kind::Sweep, stops_, geometry(area).start, {}, 0, TileMode::Clamp); break;
+    case Kind::Shader:
+        if (shader_->make) {
+            if (shader_->madeFor != size) shader_->made = shader_->make(size), shader_->madeFor = size;
+            s = shader_->made;
+        } else s = CompositeShader(shader_->dst->createShader(size), shader_->src->createShader(size), shader_->blendMode);
+        break;
+    }
+    return transform_ && s.data_ ? s.transformed(*transform_) : s;
+}
+
+Color Brush::colorAt(Offset p, const Rect& area) const {
+    if (kind_ == Kind::Shader || (transform_ && kind_ != Kind::Solid)) {
+        Color c = createShader({area.width, area.height}).colorAt({p.x - area.x, p.y - area.y});
+        return c.copy(c.a * shaderAlpha_);
+    }
+    return colorAtParameter(parameterAt(p, area));
+}
+
+bool operator==(const Brush& a, const Brush& b) {
+    if (a.kind_ != b.kind_ || a.stops_ != b.stops_ || a.start_.x != b.start_.x || a.start_.y != b.start_.y || a.end_.x != b.end_.x ||
+        a.end_.y != b.end_.y || a.hasCenter_ != b.hasCenter_ || a.radius_ != b.radius_ || a.tileMode_ != b.tileMode_ ||
+        a.shaderAlpha_ != b.shaderAlpha_)
+        return false;
+    if ((a.transform_ != nullptr) != (b.transform_ != nullptr) || (a.transform_ && *a.transform_ != *b.transform_)) return false;
+    if (a.shader_ == b.shader_) return true;
+    if (!a.shader_ || !b.shader_) return false;
+    // Composites compare by what they composite (Compose's CompositeShaderBrush); brushes of your own only to themselves.
+    return !a.shader_->make && !b.shader_->make && a.shader_->dst == b.shader_->dst && a.shader_->src == b.shader_->src &&
+           a.shader_->blendMode == b.shader_->blendMode;
+}
+
+namespace {
+
+std::vector<Color> colorsOf(const std::vector<ColorStop>& stops) {
+    std::vector<Color> out;
+    for (const ColorStop& s : stops) out.push_back(s.color);
+    return out;
+}
+
+// Two lists as long as the longer, mixed index by index (the shorter's last again past its end).
+template <class T, class Mix>
+std::vector<T> mixedLists(const std::vector<T>& a, const std::vector<T>& b, Mix mix) {
+    std::vector<T> out;
+    if (a.empty() || b.empty()) return a.empty() ? b : a;
+    for (size_t i = 0; i < std::max(a.size(), b.size()); ++i) out.push_back(mix(a[std::min(i, a.size() - 1)], b[std::min(i, b.size() - 1)]));
+    return out;
+}
+
+} // namespace
+
+Brush lerp(const Brush& a, const Brush& b, float t) {
+    if (a == b) return t < 0.5f ? a : b;
+    // `from` mixed `u` of the way to `to`, if `from` can be (Compose's Interpolatable.lerp of each kind).
+    auto mixed = [](const Brush& from, const Brush& to, float u) -> std::optional<Brush> {
+        auto mixf = [u](float x, float y) { return x + (y - x) * u; };
+        auto colorOf = [](const Brush& c) { return c.stops().empty() ? colors::Transparent : c.stops().front().color; };
+        if (from.isSolid()) {
+            if (to.isSolid()) return Brush::solid(lerp(colorOf(from), colorOf(to), u));
+            return std::nullopt;
+        }
+        if (from.kind() != Brush::Kind::Linear && from.kind() != Brush::Kind::Radial && from.kind() != Brush::Kind::Sweep) return std::nullopt;
+        Brush other = to;
+        if (to.isSolid()) {  // a color: `from` in that color
+            other = from;
+            for (ColorStop& s : other.stops_) s.color = colorOf(to);
+            other.transform_ = nullptr;
+        } else if (to.kind() != from.kind()) {
+            return std::nullopt;
+        }
+        std::vector<Color> colors = mixedLists(colorsOf(from.stops_), colorsOf(other.stops_), [&](Color x, Color y) { return lerp(x, y, u); });
+        std::vector<ColorStop> stops;
+        bool given = from.explicitStops_ && other.explicitStops_;
+        if (given) {
+            std::vector<float> fa, fb;
+            for (const ColorStop& s : from.stops_) fa.push_back(s.offset);
+            for (const ColorStop& s : other.stops_) fb.push_back(s.offset);
+            std::vector<float> offsets = mixedLists(fa, fb, mixf);
+            for (size_t i = 0; i < colors.size(); ++i) stops.push_back({offsets[std::min(i, offsets.size() - 1)], colors[i]});
+        } else {
+            stops = Brush::evenly(colors);
+        }
+        Brush out(from.kind(), std::move(stops));
+        out.explicitStops_ = given;
+        out.tileMode_ = u < 0.5f ? from.tileMode_ : other.tileMode_;
+        auto finite = [](Offset o) { return std::isfinite(o.x) && std::isfinite(o.y); };
+        auto safe = [&](Offset x, Offset y) { return finite(x) && finite(y) ? Offset{mixf(x.x, y.x), mixf(x.y, y.y)} : u < 0.5f ? x : y; };
+        if (from.hasCenter_ == other.hasCenter_) out.start_ = safe(from.start_, other.start_), out.hasCenter_ = from.hasCenter_;  // (unset centers switch halfway)
+        else out.start_ = u < 0.5f ? from.start_ : other.start_, out.hasCenter_ = u < 0.5f ? from.hasCenter_ : other.hasCenter_;
+        out.end_ = safe(from.end_, other.end_);
+        out.radius_ = std::isfinite(from.radius_) && std::isfinite(other.radius_) ? mixf(from.radius_, other.radius_) : u < 0.5f ? from.radius_ : other.radius_;
+        return out;
+    };
+    if (std::optional<Brush> r = mixed(a, b, t)) return *r;
+    if (std::optional<Brush> r = mixed(b, a, 1 - t)) return *r;
+    return t < 0.5f ? a : b;
 }
 
 Brush::Geometry Brush::geometry(const Rect& area) const {
@@ -146,12 +321,19 @@ Brush::Geometry Brush::geometry(const Rect& area) const {
     case Kind::Radial:
         return {{corner.x + center.x, corner.y + center.y}, {}, std::isinf(radius_) ? std::min(area.width, area.height) / 2 : radius_};
     case Kind::Sweep: return {{corner.x + center.x, corner.y + center.y}};
-    case Kind::Solid: break;
+    case Kind::Solid:
+    case Kind::Shader: break;
     }
     return {};
 }
 
 float Brush::parameterAt(Offset p, const Rect& area) const {
+    if (transform_) {  // where the transform takes p from, in what it paints
+        Matrix back = *transform_;
+        back.invert();
+        Offset q = back.map(Offset{p.x - area.x, p.y - area.y});
+        p = {area.x + q.x, area.y + q.y};
+    }
     Geometry g = geometry(area);
     switch (kind_) {
     case Kind::Linear: {
@@ -164,35 +346,209 @@ float Brush::parameterAt(Offset p, const Rect& area) const {
         if (a < 0) a += 2 * std::numbers::pi_v<float>;
         return a / (2 * std::numbers::pi_v<float>);
     }
-    case Kind::Solid: break;
+    case Kind::Solid:
+    case Kind::Shader: break;
     }
     return 0;
 }
 
+namespace {
+Color colorAlong(const std::vector<ColorStop>& stops, TileMode tile, float t);
+} // namespace
+
 Color Brush::colorAtParameter(float t) const {
     if (stops_.empty()) return colors::Transparent;
     if (kind_ == Kind::Solid || stops_.size() == 1) return stops_.front().color;
-    switch (tileMode_) {
+    return colorAlong(stops_, kind_ == Kind::Sweep ? TileMode::Clamp : tileMode_, t);
+}
+
+// --- Shaders ------------------------------------------------------------------------------------
+
+struct Shader::Data {
+    Kind kind = Kind::Linear;
+    std::vector<ColorStop> stops;
+    TileMode tile = TileMode::Clamp, tileY = TileMode::Clamp;
+    Offset start, end;
+    float radius = 0;
+    ImageBitmap image;
+    std::optional<Shader> dst, src;
+    BlendMode blendMode = BlendMode::SrcOver;
+    std::optional<Matrix> transform, back;  // and its inverse
+};
+
+namespace {
+
+Shader gradientShader(Shader::Kind kind, std::vector<ColorStop> stops, Offset start, Offset end, float radius, TileMode tile) {
+    auto d = std::make_shared<Shader::Data>();
+    d->kind = kind, d->stops = std::move(stops), d->start = start, d->end = end, d->radius = radius, d->tile = tile;
+    Shader s;
+    s.data_ = std::move(d);
+    return s;
+}
+
+std::vector<ColorStop> stopsOf(const std::vector<Color>& colors, const std::vector<float>& offsets) {
+    std::vector<ColorStop> out;
+    for (size_t i = 0; i < colors.size(); ++i)
+        out.push_back({offsets.size() == colors.size() ? offsets[i] : colors.size() > 1 ? float(i) / float(colors.size() - 1) : 0.f, colors[i]});
+    return out;
+}
+
+// t along stops past their ends as `tile` says (Decal: nothing).
+Color colorAlong(const std::vector<ColorStop>& stops, TileMode tile, float t) {
+    if (stops.empty()) return colors::Transparent;
+    if (stops.size() == 1) return stops.front().color;
+    switch (tile) {
     case TileMode::Clamp: t = std::clamp(t, 0.f, 1.f); break;
     case TileMode::Repeated: t -= std::floor(t); break;
-    case TileMode::Mirror: {
+    case TileMode::Mirror:
         t = std::fmod(std::abs(t), 2.f);
         if (t > 1) t = 2 - t;
         break;
-    }
     case TileMode::Decal:
         if (t < 0 || t > 1) return colors::Transparent;
         break;
     }
-    if (t <= stops_.front().offset) return stops_.front().color;
-    for (size_t i = 1; i < stops_.size(); ++i) {
-        const ColorStop &a = stops_[i - 1], &b = stops_[i];
+    if (t <= stops.front().offset) return stops.front().color;
+    for (size_t i = 1; i < stops.size(); ++i) {
+        const ColorStop &a = stops[i - 1], &b = stops[i];
         if (t <= b.offset) {
             float span = b.offset - a.offset;
             return lerp(a.color, b.color, span > 0 ? (t - a.offset) / span : 1.f);
         }
     }
-    return stops_.back().color;
+    return stops.back().color;
+}
+
+// Where index i of n falls past the image's edge as `tile` says; -1 for none (Decal).
+int tiled(int i, int n, TileMode tile) {
+    if (i >= 0 && i < n) return i;
+    switch (tile) {
+    case TileMode::Clamp: return std::clamp(i, 0, n - 1);
+    case TileMode::Repeated: return ((i % n) + n) % n;
+    case TileMode::Mirror: {
+        int m = ((i % (2 * n)) + 2 * n) % (2 * n);
+        return m < n ? m : 2 * n - 1 - m;
+    }
+    case TileMode::Decal: return -1;
+    }
+    return -1;
+}
+
+} // namespace
+
+Shader LinearGradientShader(Offset from, Offset to, std::vector<Color> colors, std::vector<float> colorStops, TileMode tileMode) {
+    return gradientShader(Shader::Kind::Linear, stopsOf(colors, colorStops), from, to, 0, tileMode);
+}
+
+Shader RadialGradientShader(Offset center, float radius, std::vector<Color> colors, std::vector<float> colorStops, TileMode tileMode) {
+    return gradientShader(Shader::Kind::Radial, stopsOf(colors, colorStops), center, {}, radius, tileMode);
+}
+
+Shader SweepGradientShader(Offset center, std::vector<Color> colors, std::vector<float> colorStops) {
+    return gradientShader(Shader::Kind::Sweep, stopsOf(colors, colorStops), center, {}, 0, TileMode::Clamp);
+}
+
+Shader ImageShader(ImageBitmap image, TileMode tileModeX, TileMode tileModeY) {
+    auto d = std::make_shared<Shader::Data>();
+    d->kind = Shader::Kind::Image, d->image = std::move(image), d->tile = tileModeX, d->tileY = tileModeY;
+    Shader s;
+    s.data_ = std::move(d);
+    return s;
+}
+
+Shader CompositeShader(Shader dst, Shader src, BlendMode blendMode) {
+    auto d = std::make_shared<Shader::Data>();
+    d->kind = Shader::Kind::Composite, d->dst = std::move(dst), d->src = std::move(src), d->blendMode = blendMode;
+    Shader s;
+    s.data_ = std::move(d);
+    return s;
+}
+
+Shader::Kind Shader::kind() const { return data_ ? data_->kind : Kind::Linear; }
+const std::vector<ColorStop>& Shader::stops() const {
+    static const std::vector<ColorStop> none;
+    return data_ ? data_->stops : none;
+}
+TileMode Shader::tileMode() const { return data_ ? data_->tile : TileMode::Clamp; }
+TileMode Shader::tileModeY() const { return data_ ? data_->tileY : TileMode::Clamp; }
+Offset Shader::start() const { return data_ ? data_->start : Offset{}; }
+Offset Shader::end() const { return data_ ? data_->end : Offset{}; }
+float Shader::radius() const { return data_ ? data_->radius : 0; }
+const ImageBitmap& Shader::image() const {
+    static const ImageBitmap none;
+    return data_ ? data_->image : none;
+}
+const Shader& Shader::dst() const {
+    static const Shader none;
+    return data_ && data_->dst ? *data_->dst : none;
+}
+const Shader& Shader::src() const {
+    static const Shader none;
+    return data_ && data_->src ? *data_->src : none;
+}
+BlendMode Shader::blendMode() const { return data_ ? data_->blendMode : BlendMode::SrcOver; }
+const Matrix* Shader::transform() const { return data_ && data_->transform ? &*data_->transform : nullptr; }
+
+Shader Shader::transformed(const Matrix& matrix) const {
+    if (!data_ || matrix.isIdentity()) return *this;
+    auto d = std::make_shared<Data>(*data_);
+    Matrix m = matrix;
+    if (d->transform) m = Matrix(*d->transform), m *= matrix;  // (its own first, then this one)
+    d->transform = m;
+    Matrix back = m;
+    back.invert();
+    d->back = back;
+    Shader s;
+    s.data_ = std::move(d);
+    return s;
+}
+
+Color Shader::colorAt(Offset p) const {
+    if (!data_) return colors::Transparent;
+    const Data& d = *data_;
+    if (d.back) p = d.back->map(p);
+    switch (d.kind) {
+    case Kind::Linear: {
+        float dx = d.end.x - d.start.x, dy = d.end.y - d.start.y, len2 = dx * dx + dy * dy;
+        return colorAlong(d.stops, d.tile, len2 > 0 ? ((p.x - d.start.x) * dx + (p.y - d.start.y) * dy) / len2 : 0);
+    }
+    case Kind::Radial: return colorAlong(d.stops, d.tile, d.radius > 0 ? std::hypot(p.x - d.start.x, p.y - d.start.y) / d.radius : 0);
+    case Kind::Sweep: {
+        float a = std::atan2(p.y - d.start.y, p.x - d.start.x);
+        if (a < 0) a += 2 * std::numbers::pi_v<float>;
+        return colorAlong(d.stops, TileMode::Clamp, a / (2 * std::numbers::pi_v<float>));
+    }
+    case Kind::Image: {  // bilinearly, from the four pixels round p (premultiplied), each tiled
+        const ImageBitmap& img = d.image;
+        if (img.empty()) return colors::Transparent;
+        int w = img.width(), h = img.height();
+        float u = p.x - 0.5f, v = p.y - 0.5f;
+        int x0 = int(std::floor(u)), y0 = int(std::floor(v));
+        float fx = u - float(x0), fy = v - float(y0);
+        float sum[4] = {0, 0, 0, 0};
+        for (int j = 0; j < 2; ++j)
+            for (int i = 0; i < 2; ++i) {
+                int x = tiled(x0 + i, w, d.tile), y = tiled(y0 + j, h, d.tileY);
+                if (x < 0 || y < 0) continue;
+                const uint8_t* q = img.pixels() + (size_t(y) * size_t(w) + size_t(x)) * 4;
+                float wgt = (i ? fx : 1 - fx) * (j ? fy : 1 - fy), a = q[3] / 255.f;
+                for (int c = 0; c < 3; ++c) sum[c] += q[c] / 255.f * a * wgt;
+                sum[3] += a * wgt;
+            }
+        return sum[3] > 0 ? Color{sum[0] / sum[3], sum[1] / sum[3], sum[2] / sum[3], sum[3]} : colors::Transparent;
+    }
+    case Kind::Composite: return blend(d.src->colorAt(p), d.dst->colorAt(p), d.blendMode);
+    }
+    return colors::Transparent;
+}
+
+bool operator==(const Shader& a, const Shader& b) {
+    if (a.data_ == b.data_) return true;
+    if (!a.data_ || !b.data_) return false;
+    const Shader::Data &x = *a.data_, &y = *b.data_;
+    return x.kind == y.kind && x.stops == y.stops && x.tile == y.tile && x.tileY == y.tileY && x.start == y.start && x.end == y.end &&
+           x.radius == y.radius && x.image == y.image && x.dst == y.dst && x.src == y.src && x.blendMode == y.blendMode &&
+           x.transform == y.transform;
 }
 
 void ColorMatrix::setToSaturation(float s) {
@@ -598,7 +954,13 @@ BlurRadiusSpec BlurRadiusSpec::radialGradient(std::vector<BlurStop> stops, std::
     return s;
 }
 
-RenderEffect BlurRadiusSpec::createRenderEffect(Size size, TileMode edgeTreatment) const {
+BlurRadiusSpec BlurRadiusSpec::shader(float maxRadius, std::function<Shader(Density density, Size size)> block) {
+    BlurRadiusSpec s{Kind::Shader, {{0, maxRadius}, {1, maxRadius}}};
+    s.shaderBlock_ = std::make_shared<const std::function<Shader(Density, Size)>>(std::move(block));
+    return s;
+}
+
+RenderEffect BlurRadiusSpec::createRenderEffect(Size size, TileMode edgeTreatment, Density density) const {
     TileMode edges = edgeTreatment == TileMode::Decal ? TileMode::Decal : TileMode::Clamp;
     if (kind_ == Kind::Uniform) return BlurEffect(stops_.front().radius, stops_.front().radius, edges);
     float most = 0;
@@ -610,6 +972,7 @@ RenderEffect BlurRadiusSpec::createRenderEffect(Size size, TileMode edgeTreatmen
     case Kind::Vertical: p.end = {0, size.height}; break;
     case Kind::Horizontal: p.end = {size.width, 0}; break;
     case Kind::Linear: p.start = start_, p.end = end_; break;
+    case Kind::Shader: p.shader = (*shaderBlock_)(density, size); break;
     default:
         p.radial = true;
         p.start = center_.value_or(Offset{size.width / 2, size.height / 2});

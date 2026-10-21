@@ -100,6 +100,7 @@ private:
         uint32_t generation;  // the pass's masks it reads (see Pass)
         uint32_t first, count;
         Sampler sampler;  // texture's (an image's, as its FilterQuality says)
+        Sampler sampler1;  // texture1's (an image shader's, as its tile modes say)
     };
     // One edge of a path in the coverage mask, and the path's part of the mask (shaders/path.slang).
     struct EdgeInstance {
@@ -113,12 +114,14 @@ private:
         uint32_t generation = 0;
     };
     // A pass of an effect (shaders/effects.slang): `rect` of the target made from `source`
-    // (filtered linearly, or not), with this frame's table if it reads stops.
+    // (filtered linearly, or not), with this frame's table if it reads stops, or a mask of its own
+    // in the table's place.
     struct EffectDraw {
         Texture* source;
         IRect rect;
         float uniforms[32];
         bool linear = false, table = false;
+        Texture* mask = nullptr;
     };
     struct Pass {
         Texture* target;
@@ -237,7 +240,7 @@ private:
     // A pass of an effect into `target`, from `source`, as `uniforms` say (all but the first four,
     // and the table texel's size).
     void effectPass(Texture& target, Texture& source, const IRect& rect, const float (&uniforms)[32], bool linear = false,
-                    bool table = false);
+                    bool table = false, Texture* mask = nullptr);
     // A row of the table: each stop's position and value at a texel of its own.
     int tableRow(const std::vector<std::pair<float, float>>& stops);
     // A prim painted with `brush` over `area` (dp): its color, or its gradient (at `alpha`), in
@@ -284,6 +287,15 @@ private:
     std::vector<float> stops_;
     std::vector<Brush> stopBrushes_;
     std::vector<int> stopRows_;  // each one's row
+    // Image paints' textures this frame (an image shader's, a shader baked), as paint.z indexes them.
+    struct PaintTexture {
+        Texture* texture;
+        Sampler sampler;
+    };
+    std::vector<PaintTexture> paintTextures_;
+    Prim paintedShader(const Shader& shader, const Rect& area, float alpha, float enlarged);
+    Prim bakedShader(const Shader& shader, const Rect& area, float alpha, float enlarged);
+    int shaderRow(const std::vector<ColorStop>* stops, const Projective& map);
     int stopsUploaded_ = 0;  // rows
     std::unique_ptr<Texture> stopsTexture_;
     std::vector<Edge> edgeScratch_;

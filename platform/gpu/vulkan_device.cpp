@@ -71,6 +71,7 @@ VkFormat vkFormat(Format f) {
     case Format::BGRA8: return VK_FORMAT_B8G8R8A8_UNORM;
     case Format::R16F: return VK_FORMAT_R16_SFLOAT;  // (a color attachment that blends, everywhere: Vulkan's required formats)
     case Format::RGBA32F: return VK_FORMAT_R32G32B32A32_SFLOAT;  // (sampled without filtering, everywhere)
+    case Format::RGBA16F: return VK_FORMAT_R16G16B16A16_SFLOAT;  // (a color attachment that blends, filtered: required too)
     }
     return VK_FORMAT_R8G8B8A8_UNORM;
 }
