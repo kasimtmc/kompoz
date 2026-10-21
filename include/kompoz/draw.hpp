@@ -199,7 +199,7 @@ private:
     void paint(const Path& path, const Brush& brush, float alpha, const DrawStyle& style, const std::optional<ColorFilter>& colorFilter,
                BlendMode blendMode);
     void paintRoundRect(const Rect& rect, CornerRadius corner, const Brush& brush, float alpha, const DrawStyle& style,
-                        const std::optional<ColorFilter>& colorFilter, BlendMode blendMode);
+                        const std::optional<ColorFilter>& colorFilter, BlendMode blendMode, bool oval = false);
     friend class DrawTransform;
 
     GraphicsContext* context_;

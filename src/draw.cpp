@@ -269,7 +269,7 @@ Color faded(Color c, float alpha) { return alpha < 1 ? c.copy(c.a * std::max(alp
 Path arcPath(const Rect& oval, float start, float sweep, bool useCenter, bool fillNoEffect) {
     Path p;
     if (fillNoEffect && std::abs(sweep) >= 360) {
-        p.addOval(oval);
+        p.addOval(oval, Path::Direction::Clockwise);
         return p;
     }
     if (useCenter) p.moveTo(oval.x + oval.width / 2, oval.y + oval.height / 2);
@@ -309,18 +309,23 @@ void DrawScope::paint(const Path& path, const Brush& brush, float alpha, const D
     context_->drawPath(path, {bounds_.x, bounds_.y}, b, bounds_, stroke);
 }
 
-// A rounded rect (this scope's), as the backend draws one where it can: filled, or stroked
-// along it (half each side) where its corners are circles and the stroke's joins can't show
-// (curved corners, or square ones mitered); else as a path.
+// A rounded rect (this scope's; `oval`: a circle), as the backend draws one where it can: filled,
+// or stroked along it (half each side) where its corners are circles and the stroke's joins can't
+// show (curved corners, or square ones mitered); else as the path Android's canvas makes of it
+// (Skia's defaults: clockwise, an oval from its right, a rect from its top left, a round rect
+// from its sixth point).
 void DrawScope::paintRoundRect(const Rect& r, CornerRadius corner, const Brush& brush, float alpha, const DrawStyle& style,
-                               const std::optional<ColorFilter>& colorFilter, BlendMode blendMode) {
+                               const std::optional<ColorFilter>& colorFilter, BlendMode blendMode, bool oval) {
     if (alpha <= 0) return;
     bool circular = corner.x == corner.y;
     float radius = std::max(0.f, corner.x);
     bool plain = !style.isStroke() || (style.width > 0 && !style.pathEffect && (radius > 0 || style.join == StrokeJoin::Miter));
     if (!circular || !plain || (style.isStroke() && !brush.isSolid())) {
         Path outline;
-        outline.addRoundRect(RoundRect{{r.x - bounds_.x, r.y - bounds_.y, r.width, r.height}, corner, corner, corner, corner});
+        Rect at{r.x - bounds_.x, r.y - bounds_.y, r.width, r.height};
+        if (oval) outline.addOval(at, Path::Direction::Clockwise);
+        else if (corner.x <= 0 || corner.y <= 0) outline.addRect(at, Path::Direction::Clockwise);
+        else outline.addRoundRect(RoundRect{at, corner, corner, corner, corner}, Path::Direction::Clockwise);
         return paint(outline, brush, alpha, style, colorFilter, blendMode);
     }
     Blending blending(*context_, blendMode);
@@ -397,7 +402,7 @@ void DrawScope::drawCircle(const Brush& brush, std::optional<float> radius, std:
                            std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
     float r = radius.value_or(std::min(bounds_.width, bounds_.height) / 2);
     Offset c = center.value_or(this->center());
-    paintRoundRect(local({c.x - r, c.y - r}, Size{2 * r, 2 * r}), r, brush, alpha, style, colorFilter, blendMode);
+    paintRoundRect(local({c.x - r, c.y - r}, Size{2 * r, 2 * r}), r, brush, alpha, style, colorFilter, blendMode, true);
 }
 
 void DrawScope::drawCircle(Color color, std::optional<float> radius, std::optional<Offset> center, float alpha, const DrawStyle& style,
@@ -408,9 +413,9 @@ void DrawScope::drawCircle(Color color, std::optional<float> radius, std::option
 void DrawScope::drawOval(const Brush& brush, Offset topLeft, std::optional<Size> size, float alpha, const DrawStyle& style,
                          std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
     Rect r = local(topLeft, size);
-    if (r.width == r.height) return paintRoundRect(r, r.width / 2, brush, alpha, style, colorFilter, blendMode);
+    if (r.width == r.height) return paintRoundRect(r, r.width / 2, brush, alpha, style, colorFilter, blendMode, true);
     Path oval;
-    oval.addOval({r.x - bounds_.x, r.y - bounds_.y, r.width, r.height});
+    oval.addOval({r.x - bounds_.x, r.y - bounds_.y, r.width, r.height}, Path::Direction::Clockwise);
     paint(oval, brush, alpha, style, colorFilter, blendMode);
 }
 

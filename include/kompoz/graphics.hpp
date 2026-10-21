@@ -235,10 +235,13 @@ struct FontMetrics {
 
 // A vector path, e.g. a Material icon, in its own viewport coordinates (24x24 for icons).
 // Filled with the non-zero rule, like Compose's PathParser and SVG.
+// One step of a path: a move, a line, a quadratic, a conic (a quadratic whose control point is
+// weighed by w: arcs and ovals, exactly), a cubic, or the close of a contour.
 struct PathCommand {
-    enum class Verb { Move, Line, Quad, Cubic, Close };
+    enum class Verb { Move, Line, Quad, Conic, Cubic, Close };
     Verb verb;
     float x1 = 0, y1 = 0, x2 = 0, y2 = 0, x = 0, y = 0;  // control points (as needed) and end point
+    float w = 1;                                         // a conic's weight
     friend constexpr bool operator==(const PathCommand&, const PathCommand&) = default;
 };
 
@@ -764,45 +767,82 @@ struct RoundRect {
     friend constexpr bool operator==(const RoundRect&, const RoundRect&) = default;
 };
 
+class Matrix;
+class PathIterator;
+// How a path's iterator gives its conics (PathIterator::ConicEvaluation).
+enum class ConicEvaluation { AsConic, AsQuadratics };
+
+// As Compose's (an Android Path, which is Skia's SkPath): ovals, round rects and arcs are made of
+// conics (quarter circles exactly), a shape starts where Skia's does and goes round as asked,
+// drawing after close() starts a new contour from the last one's start.
 class Path {
 public:
     enum class FillType { NonZero, EvenOdd };
+    // Which way a shape added whole goes round (Compose's Path.Direction): its winding.
+    enum class Direction { CounterClockwise, Clockwise };
     FillType fillType = FillType::NonZero;
 
-    void moveTo(float x, float y);
+    void moveTo(float x, float y);  // (one right after another takes its place)
     void lineTo(float x, float y);
+    // From the last point (after close(), from the contour's start).
     void relativeMoveTo(float dx, float dy) { moveTo(current_.x + dx, current_.y + dy); }
     void relativeLineTo(float dx, float dy) { lineTo(current_.x + dx, current_.y + dy); }
     void quadraticTo(float x1, float y1, float x2, float y2);
+    // A conic to (x2, y2), its control point (x1, y1) weighed by w (Skia's conicTo: 1 is a
+    // quadratic, cos(θ / 2) a circle's arc of θ; 0 or less a line).
+    void conicTo(float x1, float y1, float x2, float y2, float w);
     void cubicTo(float x1, float y1, float x2, float y2, float x3, float y3);
     void relativeQuadraticTo(float dx1, float dy1, float dx2, float dy2) {
         quadraticTo(current_.x + dx1, current_.y + dy1, current_.x + dx2, current_.y + dy2);
+    }
+    void relativeConicTo(float dx1, float dy1, float dx2, float dy2, float w) {
+        conicTo(current_.x + dx1, current_.y + dy1, current_.x + dx2, current_.y + dy2, w);
     }
     void relativeCubicTo(float dx1, float dy1, float dx2, float dy2, float dx3, float dy3) {
         cubicTo(current_.x + dx1, current_.y + dy1, current_.x + dx2, current_.y + dy2, current_.x + dx3, current_.y + dy3);
     }
     // Part of the oval in `oval` (Compose's arcTo): from `startAngleDegrees` (0 at the right,
-    // clockwise) through `sweepAngleDegrees`, joined to what is there by a line unless
-    // forceMoveTo (or it is the first thing) starts it on its own.
+    // clockwise) through `sweepAngleDegrees` (a turn at most), joined to what is there by a line
+    // unless forceMoveTo (or it is the first thing) starts it on its own; as conics.
     void arcTo(const Rect& oval, float startAngleDegrees, float sweepAngleDegrees, bool forceMoveTo);
-    void addArc(const Rect& oval, float startAngleDegrees, float sweepAngleDegrees);  // a contour of its own
+    void arcToRad(const Rect& oval, float startAngleRadians, float sweepAngleRadians, bool forceMoveTo);
+    // A contour of its own (a turn or more from a quarter's angle: the whole oval).
+    void addArc(const Rect& oval, float startAngleDegrees, float sweepAngleDegrees);
+    void addArcRad(const Rect& oval, float startAngleRadians, float sweepAngleRadians);
     void close();
-    void addRect(const Rect& r);
-    void addOval(const Rect& r);
-    void addRoundRect(const Rect& r, float radius);
-    void addRoundRect(const RoundRect& r);  // its corners quarter ellipses
+    // Whole shapes as contours of their own, going round as `direction` says: a rect from its
+    // top left, an oval from its right, a round rect from where its bottom left corner meets
+    // its left side (Skia's starts).
+    void addRect(const Rect& r, Direction direction = Direction::CounterClockwise);
+    void addOval(const Rect& r, Direction direction = Direction::CounterClockwise);
+    void addRoundRect(const Rect& r, float radius);  // (counterclockwise, corners of one radius)
+    void addRoundRect(const RoundRect& r, Direction direction = Direction::CounterClockwise);  // its corners quarter ellipses
     void addPath(const Path& path, Offset offset = {});  // its contours, moved by `offset`
     void translate(Offset offset);                       // every point moved
+    // Every point through `matrix`'s plane (as Skia's SkPath::transform): with a perspective,
+    // quadratics and conics become conics (exactly), cubics are split, what passes behind the
+    // eye is cut off.
+    void transform(const Matrix& matrix);
     void reset();
+    void rewind() { reset(); }  // (Compose's: emptied, its memory kept)
+    // A path of these commands as they are (a vector's).
+    static Path fromCommands(std::vector<PathCommand> commands, FillType fillType = FillType::NonZero);
 
     bool isEmpty() const { return commands_.empty(); }
+    // One contour that turns one way all round (Skia's: lines and points are convex too).
+    bool isConvex() const;
     Rect bounds() const;  // of all points, control points included
     const std::vector<PathCommand>& commands() const { return commands_; }
-    // Whether a point is inside, by its fill type (open contours count as closed; curves as fine
-    // polylines).
+    // Its segments (Compose's Path.iterator()): conics as conics, or as quadratics within
+    // `tolerance` dp of them.
+    PathIterator iterator() const;
+    PathIterator iterator(ConicEvaluation conicEvaluation, float tolerance = 0.25f) const;
+    // Whether a point is inside, by its fill type, its curves exact (Skia's contains: open
+    // contours count as closed; a point on the outline is inside).
     bool contains(Offset p) const;
-    // This path becomes `a` combined with `b` (each by its fill type), as closed polylines with
-    // what is inside on their left (curves as fine polylines); false if nothing is left.
+    // This path becomes `a` combined with `b` (each by its fill type): closed contours with what
+    // is inside on their left, made of the pieces of a's and b's segments that bound the result
+    // (a curve's piece the same curve); false if nothing is left.
     bool op(const Path& a, const Path& b, PathOperation operation);
     static Path combine(PathOperation operation, const Path& a, const Path& b);
     friend Path operator+(const Path& a, const Path& b) { return combine(PathOperation::Union, a, b); }
@@ -813,8 +853,58 @@ public:
     friend bool operator==(const Path& a, const Path& b);
 
 private:
+    void ensureMove();  // a move to the last start after close() (or to the origin), before drawing on
     std::vector<PathCommand> commands_;
     Offset current_, start_;
+};
+
+// One segment of a path as its iterator gives it (Compose's PathSegment): its points, the
+// point it starts from first (a move's: its point; a close's: none), and a conic's weight.
+struct PathSegment {
+    enum class Type { Move, Line, Quadratic, Conic, Cubic, Close, Done };
+    Type type = Type::Done;
+    std::vector<Offset> points;
+    float weight = 0;
+    friend bool operator==(const PathSegment&, const PathSegment&) = default;
+};
+
+// A path's segments in order (Compose's PathIterator): conics as they are (AsConic), or each as
+// quadratics within `tolerance` dp of it (AsQuadratics, the default: as Skia approximates them).
+//   for (PathIterator it = path.iterator(); it.hasNext();) { PathSegment s = it.next(); ... }
+class PathIterator {
+public:
+    using ConicEvaluation = kompoz::ConicEvaluation;
+    explicit PathIterator(const Path& path, ConicEvaluation conicEvaluation = ConicEvaluation::AsQuadratics, float tolerance = 0.25f);
+    const Path& path() const { return path_; }
+    ConicEvaluation conicEvaluation() const { return evaluation_; }
+    float tolerance() const { return tolerance_; }
+    // How many segments next() gives in all (conics as the quadratics they become, unless
+    // includeConvertedConics is false: then a conic counts once).
+    int calculateSize(bool includeConvertedConics = true) const;
+    bool hasNext() const;
+    PathSegment next();  // Done when there are no more
+
+private:
+    Path path_;
+    ConicEvaluation evaluation_;
+    float tolerance_;
+    size_t index_ = 0;
+    Offset current_;
+    std::vector<PathSegment> pending_;  // a conic's quadratics yet to give
+};
+
+// Tests points against a path again and again (Compose's PathHitTester), its conics as
+// quadratics within `tolerance` dp.
+class PathHitTester {
+public:
+    PathHitTester() = default;
+    explicit PathHitTester(const Path& path, float tolerance = 0.5f) { updatePath(path, tolerance); }
+    void updatePath(const Path& path, float tolerance = 0.5f);
+    bool contains(Offset position) const;
+
+private:
+    Path path_;
+    Rect bounds_;
 };
 
 // What a Shape is in a size (Compose's Outline): a rect, a rounded rect, or any path, in dp from

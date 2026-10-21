@@ -1,5 +1,7 @@
 #include <kompoz/graphics.hpp>
 
+#include "curves.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <mutex>
@@ -623,24 +625,42 @@ RenderEffect BlurRadiusSpec::createRenderEffect(Size size, TileMode edgeTreatmen
 }
 
 void Path::moveTo(float x, float y) {
-    commands_.push_back({PathCommand::Verb::Move, 0, 0, 0, 0, x, y});
+    if (!commands_.empty() && commands_.back().verb == PathCommand::Verb::Move) commands_.back().x = x, commands_.back().y = y;
+    else commands_.push_back({PathCommand::Verb::Move, 0, 0, 0, 0, x, y});
     current_ = start_ = {x, y};
 }
 
-void Path::lineTo(float x, float y) {
+void Path::ensureMove() {
     if (commands_.empty()) moveTo(0, 0);
+    else if (commands_.back().verb == PathCommand::Verb::Close) moveTo(start_.x, start_.y);
+}
+
+void Path::lineTo(float x, float y) {
+    ensureMove();
     commands_.push_back({PathCommand::Verb::Line, 0, 0, 0, 0, x, y});
     current_ = {x, y};
 }
 
 void Path::quadraticTo(float x1, float y1, float x2, float y2) {
-    if (commands_.empty()) moveTo(0, 0);
+    ensureMove();
     commands_.push_back({PathCommand::Verb::Quad, x1, y1, 0, 0, x2, y2});
     current_ = {x2, y2};
 }
 
+void Path::conicTo(float x1, float y1, float x2, float y2, float w) {
+    ensureMove();
+    if (!(w > 0)) return lineTo(x2, y2);
+    if (w == 1) return quadraticTo(x1, y1, x2, y2);
+    if (!std::isfinite(w)) {  // (Skia's: two lines)
+        lineTo(x1, y1);
+        return lineTo(x2, y2);
+    }
+    commands_.push_back({PathCommand::Verb::Conic, x1, y1, 0, 0, x2, y2, w});
+    current_ = {x2, y2};
+}
+
 void Path::cubicTo(float x1, float y1, float x2, float y2, float x3, float y3) {
-    if (commands_.empty()) moveTo(0, 0);
+    ensureMove();
     commands_.push_back({PathCommand::Verb::Cubic, x1, y1, x2, y2, x3, y3});
     current_ = {x3, y3};
 }
@@ -685,6 +705,12 @@ std::vector<Polyline> flatten(const Path& path) {
                 float t = float(i) / float(n);
                 add(mix(mix(p0, p1, t), mix(p1, end, t), t));
             }
+            break;
+        }
+        case PathCommand::Verb::Conic: {
+            detail::curves::Conic k{{current, {c.x1, c.y1}, end}, c.w};
+            int n = std::clamp(int(std::ceil(distance(k.p[0], k.p[1]) + distance(k.p[1], end))), 4, 1024);
+            for (int i = 1; i <= n; ++i) add(k.at(float(i) / float(n)));
             break;
         }
         case PathCommand::Verb::Cubic: {
@@ -904,36 +930,6 @@ Path PathEffect::apply(const Path& path) const {
 
 namespace {
 
-// Closed polygons of a path: its contours flattened (open ones closed).
-std::vector<std::vector<Offset>> polygonsOf(const Path& path) {
-    std::vector<std::vector<Offset>> out;
-    for (const Polyline& l : flatten(path)) {
-        std::vector<Offset> p = l.points;
-        while (p.size() > 1 && distance(p.front(), p.back()) < 1e-6f) p.pop_back();  // closed: its start again
-        if (p.size() >= 3) out.push_back(std::move(p));
-    }
-    return out;
-}
-
-// How many times the polygons wind round a point (crossing a ray to the right).
-int windingOf(const std::vector<std::vector<Offset>>& polygons, Offset q) {
-    int winding = 0;
-    for (const auto& poly : polygons)
-        for (size_t i = 0; i < poly.size(); ++i) {
-            Offset a = poly[i], b = poly[(i + 1) % poly.size()];
-            if ((a.y <= q.y) != (b.y <= q.y)) {
-                float x = a.x + (q.y - a.y) / (b.y - a.y) * (b.x - a.x);
-                if (x > q.x) winding += b.y > a.y ? 1 : -1;
-            }
-        }
-    return winding;
-}
-
-bool insideOf(const std::vector<std::vector<Offset>>& polygons, Path::FillType fill, Offset q) {
-    int w = windingOf(polygons, q);
-    return fill == Path::FillType::EvenOdd ? (w & 1) != 0 : w != 0;
-}
-
 bool combined(PathOperation op, bool a, bool b) {
     switch (op) {
     case PathOperation::Difference: return a && !b;
@@ -947,18 +943,299 @@ bool combined(PathOperation op, bool a, bool b) {
 
 } // namespace
 
-bool Path::contains(Offset p) const { return insideOf(polygonsOf(*this), fillType, p); }
+bool Path::contains(Offset p) const { return detail::curves::contains(commands_, fillType, p); }
 
+Path Path::fromCommands(std::vector<PathCommand> commands, FillType fillType) {
+    Path p;
+    p.fillType = fillType;
+    p.commands_ = std::move(commands);
+    for (const PathCommand& c : p.commands_) {
+        if (c.verb == PathCommand::Verb::Move) p.start_ = {c.x, c.y};
+        p.current_ = c.verb == PathCommand::Verb::Close ? p.start_ : Offset{c.x, c.y};
+    }
+    return p;
+}
+
+PathIterator Path::iterator() const { return PathIterator(*this); }
+
+PathIterator Path::iterator(ConicEvaluation conicEvaluation, float tolerance) const { return PathIterator(*this, conicEvaluation, tolerance); }
+
+PathIterator::PathIterator(const Path& path, ConicEvaluation conicEvaluation, float tolerance)
+    : path_(path), evaluation_(conicEvaluation), tolerance_(tolerance) {}
+
+int PathIterator::calculateSize(bool includeConvertedConics) const {
+    int size = 0;
+    Offset current;
+    for (const PathCommand& c : path_.commands()) {
+        if (c.verb == PathCommand::Verb::Conic && evaluation_ == ConicEvaluation::AsQuadratics && includeConvertedConics)
+            size += 1 << detail::curves::Conic{{current, {c.x1, c.y1}, {c.x, c.y}}, c.w}.quadPow2(tolerance_);
+        else ++size;
+        if (c.verb != PathCommand::Verb::Close) current = {c.x, c.y};
+    }
+    return size;
+}
+
+bool PathIterator::hasNext() const { return !pending_.empty() || index_ < path_.commands().size(); }
+
+PathSegment PathIterator::next() {
+    using Type = PathSegment::Type;
+    if (!pending_.empty()) {
+        PathSegment s = std::move(pending_.front());
+        pending_.erase(pending_.begin());
+        return s;
+    }
+    if (index_ >= path_.commands().size()) return {};
+    const PathCommand& c = path_.commands()[index_++];
+    Offset end{c.x, c.y}, from = current_;
+    if (c.verb != PathCommand::Verb::Close) current_ = end;
+    switch (c.verb) {
+    case PathCommand::Verb::Move: return {Type::Move, {end}, 0};
+    case PathCommand::Verb::Line: return {Type::Line, {from, end}, 0};
+    case PathCommand::Verb::Quad: return {Type::Quadratic, {from, {c.x1, c.y1}, end}, 0};
+    case PathCommand::Verb::Cubic: return {Type::Cubic, {from, {c.x1, c.y1}, {c.x2, c.y2}, end}, 0};
+    case PathCommand::Verb::Close: return {Type::Close, {}, 0};
+    case PathCommand::Verb::Conic: {
+        if (evaluation_ == ConicEvaluation::AsConic) return {Type::Conic, {from, {c.x1, c.y1}, end}, c.w};
+        detail::curves::Conic conic{{from, {c.x1, c.y1}, end}, c.w};
+        Offset pts[2 * (1 << detail::curves::kMaxConicToQuadPow2) + 1];
+        int quads = conic.chopIntoQuadsPow2(pts, conic.quadPow2(tolerance_));
+        for (int i = 0; i < quads; ++i) pending_.push_back({Type::Quadratic, {pts[2 * i], pts[2 * i + 1], pts[2 * i + 2]}, 0});
+        return next();
+    }
+    }
+    return {};
+}
+
+void PathHitTester::updatePath(const Path& path, float tolerance) {
+    // Its conics as quadratics within the tolerance, as Compose's hit tester takes them.
+    Path quads;
+    quads.fillType = path.fillType;
+    for (PathIterator it(path, ConicEvaluation::AsQuadratics, tolerance); it.hasNext();) {
+        PathSegment s = it.next();
+        switch (s.type) {
+        case PathSegment::Type::Move: quads.moveTo(s.points[0].x, s.points[0].y); break;
+        case PathSegment::Type::Line: quads.lineTo(s.points[1].x, s.points[1].y); break;
+        case PathSegment::Type::Quadratic: quads.quadraticTo(s.points[1].x, s.points[1].y, s.points[2].x, s.points[2].y); break;
+        case PathSegment::Type::Cubic:
+            quads.cubicTo(s.points[1].x, s.points[1].y, s.points[2].x, s.points[2].y, s.points[3].x, s.points[3].y);
+            break;
+        case PathSegment::Type::Close: quads.close(); break;
+        default: break;
+        }
+    }
+    path_ = std::move(quads);
+    bounds_ = path.bounds();
+}
+
+// As Compose's: inside its bounds (their far edges not), wound round by its segments as they are
+// (an open contour not closed, a point on an edge not inside), by its fill type.
+bool PathHitTester::contains(Offset position) const {
+    if (path_.isEmpty() || !bounds_.contains(position)) return false;
+    int w = detail::curves::winding(path_.commands(), position, false);
+    return path_.fillType == Path::FillType::EvenOdd ? (w & 1) != 0 : w != 0;
+}
+
+namespace {
+
+// Where along a segment from `from` (its points p[1..]) a projective map's w crosses `edge`: the
+// roots of w's Bernstein form (a conic's numerator) in (0, 1), sorted.
+std::vector<float> wCrossings(const PathCommand& c, Offset from, const std::array<float, 9>& m, float edge) {
+    auto v = [&](float x, float y) { return m[6] * x + m[7] * y + m[8] - edge; };
+    std::vector<float> out;
+    float v0 = v(from.x, from.y), vEnd = v(c.x, c.y);
+    switch (c.verb) {
+    case PathCommand::Verb::Line:
+        if ((v0 < 0) != (vEnd < 0) && v0 != vEnd) out.push_back(v0 / (v0 - vEnd));
+        break;
+    case PathCommand::Verb::Quad:
+    case PathCommand::Verb::Conic: {
+        float w = c.verb == PathCommand::Verb::Conic ? c.w : 1, v1 = v(c.x1, c.y1);
+        float roots[2];
+        int n = detail::curves::unitQuadRoots(v0 - 2 * w * v1 + vEnd, 2 * (w * v1 - v0), v0, roots);
+        out.assign(roots, roots + n);
+        break;
+    }
+    case PathCommand::Verb::Cubic: {
+        float v1 = v(c.x1, c.y1), v2 = v(c.x2, c.y2);
+        auto at = [&](float t) {
+            float u = 1 - t;
+            return v0 * u * u * u + 3 * v1 * u * u * t + 3 * v2 * u * t * t + vEnd * t * t * t;
+        };
+        const int steps = 32;
+        for (int k = 0; k < steps; ++k) {
+            float a = float(k) / steps, b = float(k + 1) / steps, fa = at(a), fb = at(b);
+            if ((fa < 0) == (fb < 0) || fa == fb) continue;
+            for (int i = 0; i < 40; ++i) {
+                float mid = (a + b) / 2;
+                ((at(mid) < 0) == (fa < 0) ? a : b) = mid;
+            }
+            out.push_back((a + b) / 2);
+        }
+        break;
+    }
+    default: break;
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+// The piece of segment `c` (from `from`) between t0 and t1, appended to `p` (which is at its start).
+void appendPiece(Path& p, const PathCommand& c, Offset from, float t0, float t1) {
+    using namespace detail::curves;
+    switch (c.verb) {
+    case PathCommand::Verb::Line: {
+        Offset e{from.x + (c.x - from.x) * t1, from.y + (c.y - from.y) * t1};
+        p.lineTo(e.x, e.y);
+        break;
+    }
+    case PathCommand::Verb::Quad:
+    case PathCommand::Verb::Conic: {
+        Conic k = Conic{{from, {c.x1, c.y1}, {c.x, c.y}}, c.verb == PathCommand::Verb::Conic ? c.w : 1}.between(t0, t1);
+        p.conicTo(k.p[1].x, k.p[1].y, k.p[2].x, k.p[2].y, k.w);
+        break;
+    }
+    case PathCommand::Verb::Cubic: {
+        Offset src[4] = {from, {c.x1, c.y1}, {c.x2, c.y2}, {c.x, c.y}}, piece[4];
+        chopCubicBetween(src, piece, t0, t1);
+        p.cubicTo(piece[1].x, piece[1].y, piece[2].x, piece[2].y, piece[3].x, piece[3].y);
+        break;
+    }
+    default: break;
+    }
+}
+
+Offset pieceStart(const PathCommand& c, Offset from, float t) {
+    using namespace detail::curves;
+    switch (c.verb) {
+    case PathCommand::Verb::Line: return {from.x + (c.x - from.x) * t, from.y + (c.y - from.y) * t};
+    case PathCommand::Verb::Quad:
+    case PathCommand::Verb::Conic: return Conic{{from, {c.x1, c.y1}, {c.x, c.y}}, c.verb == PathCommand::Verb::Conic ? c.w : 1}.at(t);
+    case PathCommand::Verb::Cubic: {
+        Offset src[4] = {from, {c.x1, c.y1}, {c.x2, c.y2}, {c.x, c.y}};
+        return cubicAt(src, t);
+    }
+    default: return {c.x, c.y};
+    }
+}
+
+// What of `path` is in front of the eye (w at least `edge`, Skia's kW0PlaneDistance): each
+// segment cut where it crosses, the pieces behind left out, the gaps bridged by lines.
+Path inFront(const Path& path, const std::array<float, 9>& m, float edge) {
+    Path out;
+    out.fillType = path.fillType;
+    Offset current, start;
+    bool begun = false;  // the contour has a piece in front so far
+    auto front = [&](Offset q) { return m[6] * q.x + m[7] * q.y + m[8] >= edge; };
+    for (const PathCommand& c : path.commands()) {
+        switch (c.verb) {
+        case PathCommand::Verb::Move:
+            current = start = {c.x, c.y};
+            begun = false;
+            break;
+        case PathCommand::Verb::Close:
+            if (begun) out.close();
+            current = start;
+            begun = false;
+            break;
+        default: {
+            std::vector<float> ts = wCrossings(c, current, m, edge);
+            ts.insert(ts.begin(), 0.f);
+            ts.push_back(1.f);
+            for (size_t k = 0; k + 1 < ts.size(); ++k) {
+                float t0 = ts[k], t1 = ts[k + 1];
+                if (t1 - t0 <= 0 || !front(pieceStart(c, current, (t0 + t1) / 2))) continue;
+                Offset s0 = pieceStart(c, current, t0);
+                if (!begun) out.moveTo(s0.x, s0.y);
+                else if (t0 > 0) out.lineTo(s0.x, s0.y);  // across what was behind (a piece from the start is where the pen is)
+                begun = true;
+                appendPiece(out, c, current, t0, t1);
+            }
+            current = {c.x, c.y};
+        }
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+namespace {
+
+// A segment of a path (a contour's closing line too) and the point it starts from.
+struct Segment {
+    PathCommand c;
+    Offset from;
+};
+
+std::vector<Segment> segmentsOf(const Path& path) {
+    std::vector<Segment> out;
+    Offset current, start;
+    bool open = false;
+    auto closeContour = [&] {
+        if (open && (current.x != start.x || current.y != start.y)) out.push_back({{PathCommand::Verb::Line, 0, 0, 0, 0, start.x, start.y}, current});
+        open = false;
+        current = start;
+    };
+    for (const PathCommand& c : path.commands()) {
+        if (c.verb == PathCommand::Verb::Move) {
+            closeContour();
+            current = start = {c.x, c.y};
+        } else if (c.verb == PathCommand::Verb::Close) {
+            closeContour();
+        } else {
+            out.push_back({c, current});
+            current = {c.x, c.y};
+            open = true;
+        }
+    }
+    closeContour();
+    return out;
+}
+
+// How many chords keep within `tolerance` of a segment (its second differences bound how far a
+// chord strays: d / 8 / n^2 for a quadratic, 3 d / 4 / n^2 for a cubic).
+int chordsFor(const Segment& s, float tolerance) {
+    const PathCommand& c = s.c;
+    auto dd = [](Offset a, Offset b, Offset e) { return std::hypot(a.x - 2 * b.x + e.x, a.y - 2 * b.y + e.y); };
+    float n = 1;
+    switch (c.verb) {
+    case PathCommand::Verb::Quad:
+    case PathCommand::Verb::Conic: n = std::sqrt(dd(s.from, {c.x1, c.y1}, {c.x, c.y}) / (8 * tolerance)); break;
+    case PathCommand::Verb::Cubic:
+        n = std::sqrt(0.75f * std::max(dd(s.from, {c.x1, c.y1}, {c.x2, c.y2}), dd({c.x1, c.y1}, {c.x2, c.y2}, {c.x, c.y})) / tolerance);
+        break;
+    default: break;
+    }
+    return std::clamp(int(std::ceil(n)), 1, 512);
+}
+
+} // namespace
+
+// Done on the segments cut into fine chords (within 0.01 dp of the curves) that remember where
+// along their segment they lie: every chord split where another crosses it, the pieces kept
+// whose two sides differ in the result (by where the segments themselves pass, exactly),
+// turned to have the inside on their left, chained into contours; then each run of pieces of
+// one segment becomes that segment's piece (a curve's the curve between those two places).
 bool Path::op(const Path& a, const Path& b, PathOperation operation) {
-    auto pa = polygonsOf(a), pb = polygonsOf(b);
-    // Every side of both, split where it meets another.
+    std::vector<Segment> segs = segmentsOf(a), more = segmentsOf(b);
+    segs.insert(segs.end(), more.begin(), more.end());
     struct Side {
         Offset from, to;
+        int seg;
+        float t0, t1;
     };
     std::vector<Side> sides;
-    for (const auto* set : {&pa, &pb})
-        for (const auto& poly : *set)
-            for (size_t i = 0; i < poly.size(); ++i) sides.push_back({poly[i], poly[(i + 1) % poly.size()]});
+    constexpr float kTolerance = 0.01f;
+    for (size_t i = 0; i < segs.size(); ++i) {
+        int n = chordsFor(segs[i], kTolerance);
+        Offset prev = segs[i].from;
+        for (int k = 1; k <= n; ++k) {
+            float t = float(k) / float(n);
+            Offset q = k == n ? Offset{segs[i].c.x, segs[i].c.y} : pieceStart(segs[i].c, segs[i].from, t);
+            sides.push_back({prev, q, int(i), float(k - 1) / float(n), t});
+            prev = q;
+        }
+    }
     std::vector<std::vector<float>> cuts(sides.size());  // where along each side (0..1) it is split
     auto cross = [](Offset u, Offset v) { return u.x * v.y - u.y * v.x; };
     constexpr float kEps = 1e-6f;
@@ -987,6 +1264,8 @@ bool Path::op(const Path& a, const Path& b, PathOperation operation) {
         }
     }
     // The pieces whose two sides differ in the result, turned to have the inside on their left.
+    auto inA = [&](Offset q) { return detail::curves::contains(a.commands_, a.fillType, q); };
+    auto inB = [&](Offset q) { return detail::curves::contains(b.commands_, b.fillType, q); };
     std::vector<Side> kept;
     for (size_t i = 0; i < sides.size(); ++i) {
         std::vector<float>& c = cuts[i];
@@ -999,13 +1278,14 @@ bool Path::op(const Path& a, const Path& b, PathOperation operation) {
             Offset p = mix(s.from, s.to, c[k]), q = mix(s.from, s.to, c[k + 1]);
             float len = distance(p, q);
             if (len < 1e-5f) continue;
-            Offset mid = mix(p, q, 0.5f), normal{-(q.y - p.y) / len, (q.x - p.x) / len};  // to the left
+            float ta = s.t0 + (s.t1 - s.t0) * c[k], tb = s.t0 + (s.t1 - s.t0) * c[k + 1];
+            // Either side of the segment itself, where it passes between the two ends.
+            Offset mid = pieceStart(segs[size_t(s.seg)].c, segs[size_t(s.seg)].from, (ta + tb) / 2), normal{-(q.y - p.y) / len, (q.x - p.x) / len};
             float e = std::min(1e-3f, len * 0.25f);
             Offset left{mid.x + normal.x * e, mid.y + normal.y * e}, right{mid.x - normal.x * e, mid.y - normal.y * e};
-            bool inLeft = combined(operation, insideOf(pa, a.fillType, left), insideOf(pb, b.fillType, left));
-            bool inRight = combined(operation, insideOf(pa, a.fillType, right), insideOf(pb, b.fillType, right));
+            bool inLeft = combined(operation, inA(left), inB(left)), inRight = combined(operation, inA(right), inB(right));
             if (inLeft == inRight) continue;
-            kept.push_back(inLeft ? Side{p, q} : Side{q, p});
+            kept.push_back(inLeft ? Side{p, q, s.seg, ta, tb} : Side{q, p, s.seg, tb, ta});
         }
     }
     // The same piece twice (sides the two paths share): one is enough.
@@ -1018,13 +1298,12 @@ bool Path::op(const Path& a, const Path& b, PathOperation operation) {
     reset();
     fillType = FillType::NonZero;
     std::vector<bool> used(pieces.size(), false);
-    for (size_t start = 0; start < pieces.size(); ++start) {
-        if (used[start]) continue;
-        std::vector<Offset> loop{pieces[start].from};
-        used[start] = true;
-        Offset end = pieces[start].to;
-        Offset previous = pieces[start].from;
-        while (!same(end, loop.front())) {
+    for (size_t first = 0; first < pieces.size(); ++first) {
+        if (used[first]) continue;
+        std::vector<size_t> loop{first};
+        used[first] = true;
+        Offset end = pieces[first].to, previous = pieces[first].from;
+        while (!same(end, pieces[first].from)) {
             // Where pieces meet at a point (shapes touching at a corner), the one turning most
             // towards the inside keeps to the same shape: each one gets its own contour.
             size_t next = pieces.size();
@@ -1039,13 +1318,50 @@ bool Path::op(const Path& a, const Path& b, PathOperation operation) {
             }
             if (next == pieces.size()) break;  // shouldn't happen: an open end
             previous = pieces[next].from;
-            loop.push_back(pieces[next].from);
+            loop.push_back(next);
             used[next] = true;
             end = pieces[next].to;
         }
-        if (loop.size() < 3) continue;
-        moveTo(loop[0].x, loop[0].y);
-        for (size_t k = 1; k < loop.size(); ++k) lineTo(loop[k].x, loop[k].y);
+        if (loop.size() < 2) continue;
+        // Started where a run of one segment's pieces starts (not in the middle of one, which would
+        // split it in two).
+        auto continues = [&](const Side& before, const Side& after) {
+            return after.seg == before.seg && std::abs(after.t0 - before.t1) <= 1e-5f && (after.t1 > after.t0) == (before.t1 > before.t0);
+        };
+        for (size_t k = 0; k < loop.size(); ++k)
+            if (!continues(pieces[loop[(k + loop.size() - 1) % loop.size()]], pieces[loop[k]])) {
+                std::rotate(loop.begin(), loop.begin() + std::ptrdiff_t(k), loop.end());
+                break;
+            }
+        // Runs of pieces of one segment, one after another along it: that segment's piece.
+        moveTo(pieces[loop[0]].from.x, pieces[loop[0]].from.y);
+        for (size_t k = 0; k < loop.size();) {
+            const Side& s = pieces[loop[k]];
+            float t0 = s.t0, t1 = s.t1;
+            size_t r = k + 1;
+            while (r < loop.size() && continues(pieces[loop[r - 1]], pieces[loop[r]])) t1 = pieces[loop[r++]].t1;
+            const Segment& seg = segs[size_t(s.seg)];
+            Offset to = pieces[loop[r - 1]].to;
+            if (seg.c.verb == PathCommand::Verb::Line) {
+                lineTo(to.x, to.y);
+            } else {
+                // The curve between the two places (turned round if run backwards), ending where the run does.
+                Path piece;
+                piece.moveTo(0, 0);
+                appendPiece(piece, seg.c, seg.from, std::min(t0, t1), std::max(t0, t1));
+                PathCommand c = piece.commands_.back();
+                if (t1 < t0) {
+                    if (c.verb == PathCommand::Verb::Cubic) std::swap(c.x1, c.x2), std::swap(c.y1, c.y2);
+                }
+                switch (c.verb) {
+                case PathCommand::Verb::Quad: quadraticTo(c.x1, c.y1, to.x, to.y); break;
+                case PathCommand::Verb::Conic: conicTo(c.x1, c.y1, to.x, to.y, c.w); break;
+                case PathCommand::Verb::Cubic: cubicTo(c.x1, c.y1, c.x2, c.y2, to.x, to.y); break;
+                default: lineTo(to.x, to.y); break;
+                }
+            }
+            k = r;
+        }
         close();
     }
     return !isEmpty();
@@ -1121,34 +1437,186 @@ bool PathMeasure::getSegment(float start, float stop, Path& destination, bool st
     return true;
 }
 
-void Path::addRect(const Rect& r) {
-    moveTo(r.x, r.y);
-    lineTo(r.right(), r.y);
-    lineTo(r.right(), r.bottom());
-    lineTo(r.x, r.bottom());
-    close();
+namespace {
+
+constexpr float kRoot2Over2 = 0.707106781f;
+constexpr float kNearlyZeroDp = 1.f / (1 << 12);  // (SK_ScalarNearlyZero)
+
+// The four corners (top left, top right, bottom right, bottom left) or an oval's four extremes
+// (top, right, bottom, left) from `start`, clockwise or not (Skia's SkPath_PointIterator).
+struct Corners {
+    std::array<Offset, 4> points;
+    unsigned at, step;
+    Corners(std::array<Offset, 4> pts, bool clockwise, unsigned start) : points(pts), at(start % 4), step(clockwise ? 1 : 3) {}
+    Offset current() const { return points[at]; }
+    Offset next() { return points[at = (at + step) % 4]; }
+};
+std::array<Offset, 4> cornersOf(const Rect& r) { return {Offset{r.x, r.y}, Offset{r.right(), r.y}, Offset{r.right(), r.bottom()}, Offset{r.x, r.bottom()}}; }
+std::array<Offset, 4> extremesOf(const Rect& r) {
+    float cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+    return {Offset{cx, r.y}, Offset{r.right(), cy}, Offset{cx, r.bottom()}, Offset{r.x, cy}};
 }
 
-void Path::arcTo(const Rect& oval, float startAngleDegrees, float sweepAngleDegrees, bool forceMoveTo) {
-    constexpr float kRadians = 3.14159265f / 180;
-    float cx = oval.x + oval.width / 2, cy = oval.y + oval.height / 2, rx = oval.width / 2, ry = oval.height / 2;
-    float a = startAngleDegrees * kRadians, sweep = std::clamp(sweepAngleDegrees, -360.f, 360.f) * kRadians;
-    Offset start{cx + rx * std::cos(a), cy + ry * std::sin(a)};
-    if (forceMoveTo || commands_.empty()) moveTo(start.x, start.y);
-    else if (start.x != current_.x || start.y != current_.y) lineTo(start.x, start.y);
-    // Cubic pieces of at most a quarter turn each (control points 4/3 tan(θ/4) along the tangents).
-    int pieces = std::max(1, int(std::ceil(std::abs(sweep) / (3.14159265f / 2) - 1e-4f)));
-    float step = sweep / float(pieces), k = 4.f / 3 * std::tan(step / 4);
-    for (int i = 0; i < pieces; ++i, a += step) {
-        float b = a + step;
-        float x0 = cx + rx * std::cos(a), y0 = cy + ry * std::sin(a), x3 = cx + rx * std::cos(b), y3 = cy + ry * std::sin(b);
-        cubicTo(x0 - k * rx * std::sin(a), y0 + k * ry * std::cos(a), x3 + k * rx * std::sin(b), y3 - k * ry * std::cos(b), x3, y3);
+void addRectFrom(Path& p, const Rect& r, bool clockwise, unsigned start) {
+    Corners c(cornersOf(r), clockwise, start);
+    Offset o = c.current();
+    p.moveTo(o.x, o.y);
+    for (int i = 0; i < 3; ++i) o = c.next(), p.lineTo(o.x, o.y);
+    p.close();
+}
+
+void addOvalFrom(Path& p, const Rect& r, bool clockwise, unsigned start) {
+    Corners oval(extremesOf(r), clockwise, start), rect(cornersOf(r), clockwise, start + (clockwise ? 0 : 1));
+    Offset o = oval.current();
+    p.moveTo(o.x, o.y);
+    for (int i = 0; i < 4; ++i) {
+        Offset control = rect.next(), end = oval.next();
+        p.conicTo(control.x, control.y, end.x, end.y, kRoot2Over2);
+    }
+    p.close();
+}
+
+// Skia's SkRRect from a rect's corner radii: a corner with either radius 0 square, the radii
+// fitted (all by one factor); what it is: a rect, an oval or a round rect.
+enum class RRectKind { Rect, Oval, Rounded };
+RRectKind kindOf(const RoundRect& f) {
+    std::array<CornerRadius, 4> r{f.topLeft, f.topRight, f.bottomRight, f.bottomLeft};
+    if (std::all_of(r.begin(), r.end(), [](CornerRadius c) { return c.x == 0 && c.y == 0; })) return RRectKind::Rect;
+    if (std::all_of(r.begin(), r.end(), [&](CornerRadius c) { return c == r[0]; }) && r[0].x >= f.rect.width / 2 && r[0].y >= f.rect.height / 2)
+        return RRectKind::Oval;
+    return RRectKind::Rounded;
+}
+
+// Skia's round rect contour from point `start` of its eight (where each corner meets each
+// side, from the top left one's top end, clockwise), clockwise or not: lines and quarter
+// ellipses (conics), from a line (an odd start clockwise or an even one counterclockwise
+// starts with a conic instead).
+void addRRectFrom(Path& p, const RoundRect& f, bool clockwise, unsigned start) {
+    const Rect& b = f.rect;
+    float L = b.x, T = b.y, R = b.right(), B = b.bottom();
+    std::array<Offset, 8> pts{Offset{L + f.topLeft.x, T},     Offset{R - f.topRight.x, T},    Offset{R, T + f.topRight.y},
+                              Offset{R, B - f.bottomRight.y}, Offset{R - f.bottomRight.x, B}, Offset{L + f.bottomLeft.x, B},
+                              Offset{L, B - f.bottomLeft.y},  Offset{L, T + f.topLeft.y}};
+    unsigned at = start % 8, step = clockwise ? 1 : 7;
+    auto next = [&] { return pts[at = (at + step) % 8]; };
+    Corners rect(cornersOf(b), clockwise, start / 2 + (clockwise ? 0 : 1));
+    bool conicFirst = (start & 1) == (clockwise ? 1u : 0u);
+    Offset o = pts[at];
+    p.moveTo(o.x, o.y);
+    for (int i = 0; i < 4; ++i) {
+        if (!conicFirst) o = next(), p.lineTo(o.x, o.y);
+        Offset control = rect.next(), end = next();
+        p.conicTo(control.x, control.y, end.x, end.y, kRoot2Over2);
+        if (conicFirst && i < 3) o = next(), p.lineTo(o.x, o.y);  // (the last line: close())
+    }
+    p.close();
+}
+
+RoundRect skiaRoundRect(const RoundRect& rr) {
+    auto square = [](CornerRadius c) { return c.x <= 0 || c.y <= 0 ? CornerRadius{} : c; };
+    return RoundRect{rr.rect, square(rr.topLeft), square(rr.topRight), square(rr.bottomRight), square(rr.bottomLeft)}.fitted();
+}
+
+void addRoundRectFrom(Path& p, const RoundRect& rr, bool clockwise, unsigned start) {
+    RoundRect f = skiaRoundRect(rr);
+    switch (kindOf(f)) {  // (SkPathPriv::SimplifyRRect)
+    case RRectKind::Rect: return addRectFrom(p, f.rect, clockwise, (start + 1) / 2);
+    case RRectKind::Oval: return addOvalFrom(p, f.rect, clockwise, start / 2);
+    case RRectKind::Rounded: return addRRectFrom(p, f, clockwise, start);
     }
 }
 
+float sinSnapped(float radians) {
+    float v = std::sin(radians);
+    return std::abs(v) <= kNearlyZeroDp ? 0 : v;
+}
+float cosSnapped(float radians) {
+    float v = std::cos(radians);
+    return std::abs(v) <= kNearlyZeroDp ? 0 : v;
+}
+
+} // namespace
+
+void Path::addRect(const Rect& r, Direction direction) { addRectFrom(*this, r, direction == Direction::Clockwise, 0); }
+
+void Path::addOval(const Rect& r, Direction direction) { addOvalFrom(*this, r, direction == Direction::Clockwise, 1); }
+
+void Path::addRoundRect(const Rect& r, float radius) {
+    CornerRadius c{radius, radius};
+    addRoundRect(RoundRect{r, c, c, c, c});
+}
+
+void Path::addRoundRect(const RoundRect& rr, Direction direction) {
+    bool clockwise = direction == Direction::Clockwise;
+    addRoundRectFrom(*this, rr, clockwise, clockwise ? 6 : 7);
+}
+
+// As Skia's SkPathBuilder::arcTo: a lone point where it is one; the unit circle's arc from the
+// start's direction to the end's as conics, scaled onto the oval; a sweep too small for those a
+// line to its end.
+void Path::arcTo(const Rect& oval, float startAngleDegrees, float sweepAngleDegrees, bool forceMoveTo) {
+    if (oval.width < 0 || oval.height < 0) return;
+    float startAngle = std::fmod(startAngleDegrees, 360.f), sweep = sweepAngleDegrees;
+    if (commands_.empty()) forceMoveTo = true;
+    auto addPoint = [&](Offset q) {
+        if (forceMoveTo) moveTo(q.x, q.y);
+        else if (std::abs(current_.x - q.x) > kNearlyZeroDp || std::abs(current_.y - q.y) > kNearlyZeroDp) lineTo(q.x, q.y);
+    };
+    float cx = oval.x + oval.width / 2, cy = oval.y + oval.height / 2;
+    if (sweep == 0 && (startAngle == 0 || startAngle == 360)) {  // a lone point (moving in and out of ovals)
+        Offset q{oval.right(), cy};
+        return forceMoveTo ? moveTo(q.x, q.y) : lineTo(q.x, q.y);
+    }
+    if (oval.width == 0 && oval.height == 0) {
+        Offset q{oval.right(), oval.y};
+        return forceMoveTo ? moveTo(q.x, q.y) : lineTo(q.x, q.y);
+    }
+    constexpr float kRadians = std::numbers::pi_v<float> / 180;
+    float startRad = startAngle * kRadians, stopRad = (startAngle + sweep) * kRadians;
+    Offset startV{cosSnapped(startRad), sinSnapped(startRad)}, stopV{cosSnapped(stopRad), sinSnapped(stopRad)};
+    if (startV.x == stopV.x && startV.y == stopV.y) {
+        float sw = std::abs(sweep);
+        if (sw < 360 && sw > 359) {  // nearly a turn: nudged back until they differ
+            float delta = std::copysign(1.f / 512, sweep);
+            do {
+                stopRad -= delta;
+                stopV = {cosSnapped(stopRad), sinSnapped(stopRad)};
+            } while (startV.x == stopV.x && startV.y == stopV.y);
+        }
+    }
+    bool clockwise = sweep > 0;
+    float rx = oval.width / 2, ry = oval.height / 2;
+    if (startV.x == stopV.x && startV.y == stopV.y) {  // too small a sweep: its end
+        float end = (startAngle + sweep) * kRadians;
+        return addPoint({cx + rx * std::cos(end), cy + ry * std::sin(end)});
+    }
+    detail::curves::Conic conics[5];
+    int count = detail::curves::Conic::unitArc(startV, stopV, clockwise, {rx, 0, cx, 0, ry, cy}, conics);
+    if (count == 0) return addPoint({rx * stopV.x + cx, ry * stopV.y + cy});
+    addPoint(conics[0].p[0]);
+    for (int i = 0; i < count; ++i) conicTo(conics[i].p[1].x, conics[i].p[1].y, conics[i].p[2].x, conics[i].p[2].y, conics[i].w);
+}
+
+void Path::arcToRad(const Rect& oval, float startAngleRadians, float sweepAngleRadians, bool forceMoveTo) {
+    arcTo(oval, startAngleRadians * 180 / std::numbers::pi_v<float>, sweepAngleRadians * 180 / std::numbers::pi_v<float>, forceMoveTo);
+}
+
+// As Skia's: a turn or more from a quarter's angle is the whole oval, from that quarter.
 void Path::addArc(const Rect& oval, float startAngleDegrees, float sweepAngleDegrees) {
-    if (std::abs(sweepAngleDegrees) >= 360) return addOval(oval);
+    if (oval.width <= 0 || oval.height <= 0 || sweepAngleDegrees == 0) return;
+    if (std::abs(sweepAngleDegrees) >= 360) {
+        float quarters = startAngleDegrees / 90, whole = std::round(quarters);
+        if (std::abs(quarters - whole) <= kNearlyZeroDp) {
+            float index = std::fmod(whole + 1, 4.f);
+            if (index < 0) index += 4;
+            return addOvalFrom(*this, oval, sweepAngleDegrees > 0, unsigned(index));
+        }
+    }
     arcTo(oval, startAngleDegrees, sweepAngleDegrees, true);
+}
+
+void Path::addArcRad(const Rect& oval, float startAngleRadians, float sweepAngleRadians) {
+    addArc(oval, startAngleRadians * 180 / std::numbers::pi_v<float>, sweepAngleRadians * 180 / std::numbers::pi_v<float>);
 }
 
 void Path::addPath(const Path& path, Offset offset) {
@@ -1165,7 +1633,8 @@ void Path::translate(Offset o) {
     for (PathCommand& c : commands_) {
         switch (c.verb) {
         case PathCommand::Verb::Cubic: c.x2 += o.x, c.y2 += o.y; [[fallthrough]];
-        case PathCommand::Verb::Quad: c.x1 += o.x, c.y1 += o.y; [[fallthrough]];
+        case PathCommand::Verb::Quad:
+        case PathCommand::Verb::Conic: c.x1 += o.x, c.y1 += o.y; [[fallthrough]];
         case PathCommand::Verb::Move:
         case PathCommand::Verb::Line: c.x += o.x, c.y += o.y; break;
         case PathCommand::Verb::Close: break;
@@ -1173,55 +1642,6 @@ void Path::translate(Offset o) {
     }
     current_ = {current_.x + o.x, current_.y + o.y};
     start_ = {start_.x + o.x, start_.y + o.y};
-}
-
-void Path::addOval(const Rect& r) {
-    // Four cubic quarter arcs (the usual 0.5523 control-point factor).
-    constexpr float k = 0.5522848f;
-    float cx = r.x + r.width / 2, cy = r.y + r.height / 2, rx = r.width / 2, ry = r.height / 2;
-    moveTo(cx + rx, cy);
-    cubicTo(cx + rx, cy + ry * k, cx + rx * k, cy + ry, cx, cy + ry);
-    cubicTo(cx - rx * k, cy + ry, cx - rx, cy + ry * k, cx - rx, cy);
-    cubicTo(cx - rx, cy - ry * k, cx - rx * k, cy - ry, cx, cy - ry);
-    cubicTo(cx + rx * k, cy - ry, cx + rx, cy - ry * k, cx + rx, cy);
-    close();
-}
-
-void Path::addRoundRect(const Rect& r, float radius) {
-    float rr = std::clamp(radius, 0.f, std::min(r.width, r.height) / 2);
-    if (rr <= 0) return addRect(r);
-    constexpr float k = 0.5522848f;
-    float x0 = r.x, y0 = r.y, x1 = r.right(), y1 = r.bottom(), c = rr * (1 - k);
-    moveTo(x0 + rr, y0);
-    lineTo(x1 - rr, y0);
-    cubicTo(x1 - c, y0, x1, y0 + c, x1, y0 + rr);
-    lineTo(x1, y1 - rr);
-    cubicTo(x1, y1 - c, x1 - c, y1, x1 - rr, y1);
-    lineTo(x0 + rr, y1);
-    cubicTo(x0 + c, y1, x0, y1 - c, x0, y1 - rr);
-    lineTo(x0, y0 + rr);
-    cubicTo(x0, y0 + c, x0 + c, y0, x0 + rr, y0);
-    close();
-}
-
-void Path::addRoundRect(const RoundRect& rr) {
-    RoundRect f = rr.fitted();
-    const Rect& r = f.rect;
-    if (f.topLeft == CornerRadius() && f.topRight == CornerRadius() && f.bottomRight == CornerRadius() && f.bottomLeft == CornerRadius())
-        return addRect(r);
-    constexpr float k = 1 - 0.5522848f;  // quarter ellipses as cubics
-    float x0 = r.x, y0 = r.y, x1 = r.right(), y1 = r.bottom();
-    CornerRadius tl = f.topLeft, tr = f.topRight, br = f.bottomRight, bl = f.bottomLeft;
-    moveTo(x0 + tl.x, y0);
-    lineTo(x1 - tr.x, y0);
-    cubicTo(x1 - tr.x * k, y0, x1, y0 + tr.y * k, x1, y0 + tr.y);
-    lineTo(x1, y1 - br.y);
-    cubicTo(x1, y1 - br.y * k, x1 - br.x * k, y1, x1 - br.x, y1);
-    lineTo(x0 + bl.x, y1);
-    cubicTo(x0 + bl.x * k, y1, x0, y1 - bl.y * k, x0, y1 - bl.y);
-    lineTo(x0, y0 + tl.y);
-    cubicTo(x0, y0 + tl.y * k, x0 + tl.x * k, y0, x0 + tl.x, y0);
-    close();
 }
 
 void Path::reset() {
@@ -1273,7 +1693,8 @@ Rect Path::bounds() const {
     for (const PathCommand& c : commands_) {
         switch (c.verb) {
         case PathCommand::Verb::Cubic: add(c.x2, c.y2); [[fallthrough]];
-        case PathCommand::Verb::Quad: add(c.x1, c.y1); [[fallthrough]];
+        case PathCommand::Verb::Quad:
+        case PathCommand::Verb::Conic: add(c.x1, c.y1); [[fallthrough]];
         case PathCommand::Verb::Move:
         case PathCommand::Verb::Line: add(c.x, c.y); break;
         case PathCommand::Verb::Close: break;
@@ -1282,14 +1703,70 @@ Rect Path::bounds() const {
     return {x0, y0, x1 - x0, y1 - y0};
 }
 
-bool operator==(const Path& a, const Path& b) {
-    if (a.fillType != b.fillType || a.commands_.size() != b.commands_.size()) return false;
-    for (size_t i = 0; i < a.commands_.size(); ++i) {
-        const PathCommand &p = a.commands_[i], &q = b.commands_[i];
-        if (p.verb != q.verb || p.x1 != q.x1 || p.y1 != q.y1 || p.x2 != q.x2 || p.y2 != q.y2 || p.x != q.x || p.y != q.y)
-            return false;
+bool Path::isConvex() const { return detail::curves::convex(commands_); }
+
+bool operator==(const Path& a, const Path& b) { return a.fillType == b.fillType && a.commands_ == b.commands_; }
+
+
+// As Skia's SkPath::transform: affinely, every point; in perspective, first cut to what is in
+// front of the eye, then quadratics and conics as conics (their weights through the map:
+// exact), cubics in four (approximate), every point divided by its w.
+void Path::transform(const Matrix& matrix) {
+    if (matrix.isIdentity() || commands_.empty()) return;
+    const auto& v = matrix.values;
+    std::array<float, 9> m{v[Matrix::ScaleX], v[Matrix::SkewX],        v[Matrix::TranslateX], v[Matrix::SkewY],       v[Matrix::ScaleY],
+                           v[Matrix::TranslateY], v[Matrix::Perspective0], v[Matrix::Perspective1], v[Matrix::Perspective2]};
+    auto map = [&](float x, float y) {
+        float w = m[6] * x + m[7] * y + m[8];
+        return Offset{(m[0] * x + m[1] * y + m[2]) / w, (m[3] * x + m[4] * y + m[5]) / w};
+    };
+    bool perspective = m[6] != 0 || m[7] != 0 || m[8] != 1;
+    if (!perspective) {
+        for (PathCommand& c : commands_) {
+            for (auto [x, y] : {std::pair{&c.x, &c.y}, std::pair{&c.x1, &c.y1}, std::pair{&c.x2, &c.y2}}) {
+                Offset q = map(*x, *y);
+                *x = q.x, *y = q.y;
+            }
+        }
+        current_ = map(current_.x, current_.y), start_ = map(start_.x, start_.y);
+        return;
     }
-    return true;
+    constexpr float kW0PlaneDistance = 1.f / (1 << 14);
+    Path src = inFront(*this, m, kW0PlaneDistance);
+    FillType fill = fillType;
+    reset();
+    fillType = fill;
+    Offset current, start;
+    for (const PathCommand& c : src.commands_) {
+        Offset end = map(c.x, c.y);
+        switch (c.verb) {
+        case PathCommand::Verb::Move: moveTo(end.x, end.y), current = start = {c.x, c.y}; continue;
+        case PathCommand::Verb::Line: lineTo(end.x, end.y); break;
+        case PathCommand::Verb::Quad:
+        case PathCommand::Verb::Conic: {
+            Offset pts[3] = {current, {c.x1, c.y1}, {c.x, c.y}};
+            float w = detail::curves::Conic::transformedWeight(pts, c.verb == PathCommand::Verb::Conic ? c.w : 1, m);
+            Offset control = map(c.x1, c.y1);
+            conicTo(control.x, control.y, end.x, end.y, w);
+            break;
+        }
+        case PathCommand::Verb::Cubic: {
+            Offset src4[4] = {current, {c.x1, c.y1}, {c.x2, c.y2}, {c.x, c.y}}, halves[7], quarters[7];
+            detail::curves::chopCubicAt(src4, halves, 0.5f);
+            for (int h = 0; h < 2; ++h) {
+                detail::curves::chopCubicAt(halves + 3 * h, quarters, 0.5f);
+                for (int q = 0; q < 2; ++q) {
+                    const Offset* k = quarters + 3 * q;
+                    Offset a = map(k[1].x, k[1].y), b = map(k[2].x, k[2].y), e = map(k[3].x, k[3].y);
+                    cubicTo(a.x, a.y, b.x, b.y, e.x, e.y);
+                }
+            }
+            break;
+        }
+        case PathCommand::Verb::Close: close(), current = start; continue;
+        }
+        current = {c.x, c.y};
+    }
 }
 
 // ---- Shapes ------------------------------------------------------------------------------------
@@ -1518,6 +1995,7 @@ Path scaledPath(const Path& path, float scale, Offset by) {
         case PathCommand::Verb::Move: out.moveTo(x(c.x), y(c.y)); break;
         case PathCommand::Verb::Line: out.lineTo(x(c.x), y(c.y)); break;
         case PathCommand::Verb::Quad: out.quadraticTo(x(c.x1), y(c.y1), x(c.x), y(c.y)); break;
+        case PathCommand::Verb::Conic: out.conicTo(x(c.x1), y(c.y1), x(c.x), y(c.y), c.w); break;
         case PathCommand::Verb::Cubic: out.cubicTo(x(c.x1), y(c.y1), x(c.x2), y(c.y2), x(c.x), y(c.y)); break;
         case PathCommand::Verb::Close: out.close(); break;
         }

@@ -2127,6 +2127,31 @@ void imagesAreSampledAsAsked(Gpu& g) {
     }
 }
 
+// A path's conics are drawn as the curves they are: a circle as addOval makes it (four quarter
+// conics), flat and through a perspective (its conics' weights through the map), as the renderer's
+// own circle, within what flattening a path leaves (a fifth of a pixel at its edge: 60 / 255; a
+// conic drawn as the quadratic of its points would be pixels off).
+void conicsAreExact(Gpu& g) {
+    const int n = 96;
+    Color ink{0.2f, 0.3f, 0.7f, 1};
+    for (bool seen : {false, true}) {
+        Matrix m;
+        if (seen) m(0, 3) = 0.004f;  // further to the right
+        Pixels circle = g.render(n, n, 2.625f, [&](GraphicsContext& c) {
+            c.pushTransform(m);
+            c.fillRoundRect({4, 4, 28, 28}, 14, ink);
+            c.popTransform();
+        });
+        Path round;
+        round.addOval({4, 4, 28, 28});
+        round.transform(m);  // (the path itself through the map: conics in perspective)
+        Pixels path = g.render(n, n, 2.625f, [&](GraphicsContext& c) { c.drawPath(round, {0, 0}, Brush::solid(ink), {}, {}); });
+        int worst = worstAgainst(path, [&](int x, int y) { return circle.at(x, y); });
+        CHECK(worst <= 60);
+        if (worst > 60) std::printf("  a circle of conics%s: off by %d at (%g, %g)\n", seen ? " in perspective" : "", worst, worstAt.x, worstAt.y);
+    }
+}
+
 // Elevation shadows are Android's: a rounded rect's (of one radius, a rect's, a circle's), flat,
 // through a similarity, as Skia's drawFastShadow and ShadowRRectOp draw it, worked out here per
 // pixel in double: the ambient shadow the outline spread by r = z / 2 px (up to 150), falling off
@@ -2504,6 +2529,7 @@ int main() {
             blursAreGaussian(g);
             pathShadowsAreComposes(g);
             imagesAreSampledAsAsked(g);
+            conicsAreExact(g);
             elevationShadowsAreAndroids(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)

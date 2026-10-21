@@ -127,6 +127,15 @@ std::vector<Contour> flattenPath(const std::vector<PathCommand>& commands, const
             }
             break;
         }
+        case PathCommand::Verb::Conic: {  // (as a quadratic bounds how many pieces; each point on the conic itself)
+            Offset p0 = current, p1 = place.at(c.x1, c.y1);
+            int n = pieces(length(p0 - p1 * 2 + end), 2, place.tolerance);
+            for (int i = 1; i <= n; ++i) {
+                float t = float(i) / float(n), u = 1 - t, a = u * u, b = 2 * c.w * u * t, d = t * t;
+                add((p0 * a + p1 * b + end * d) * (1 / (a + b + d)));
+            }
+            break;
+        }
         case PathCommand::Verb::Cubic: {
             Offset p0 = current, p1 = place.at(c.x1, c.y1), p2 = place.at(c.x2, c.y2);
             int n = pieces(std::max(length(p0 - p1 * 2 + p2), length(p1 - p2 * 2 + end)), 3, place.tolerance);

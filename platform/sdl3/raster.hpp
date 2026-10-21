@@ -17,9 +17,33 @@ namespace kompoz::sdl {
 
 // A path's (or a vector's) fill as a FreeType outline over `points`, `tags` and `contours` (which
 // must outlive it), each point at pt(x, y); false if it has none (or too many).
+// `commands` with each conic as quadratics within a tenth of a pixel of it where `pt` (to 26.6
+// px) puts them: FreeType has no conics.
+template <class Pt>
+std::vector<PathCommand> withoutConics(const std::vector<PathCommand>& commands, const Pt& pt) {
+    if (std::none_of(commands.begin(), commands.end(), [](const PathCommand& c) { return c.verb == PathCommand::Verb::Conic; })) return commands;
+    FT_Vector o = pt(0, 0), x = pt(1, 0), y = pt(0, 1);
+    float scale = std::max(std::hypot(float(x.x - o.x), float(x.y - o.y)), std::hypot(float(y.x - o.x), float(y.y - o.y))) / 64;
+    std::vector<PathCommand> out;
+    for (PathIterator it(Path::fromCommands(commands), ConicEvaluation::AsQuadratics, 0.1f / std::max(scale, 1e-3f)); it.hasNext();) {
+        PathSegment s = it.next();
+        const auto& p = s.points;
+        switch (s.type) {
+        case PathSegment::Type::Move: out.push_back({PathCommand::Verb::Move, 0, 0, 0, 0, p[0].x, p[0].y}); break;
+        case PathSegment::Type::Line: out.push_back({PathCommand::Verb::Line, 0, 0, 0, 0, p[1].x, p[1].y}); break;
+        case PathSegment::Type::Quadratic: out.push_back({PathCommand::Verb::Quad, p[1].x, p[1].y, 0, 0, p[2].x, p[2].y}); break;
+        case PathSegment::Type::Cubic: out.push_back({PathCommand::Verb::Cubic, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y}); break;
+        case PathSegment::Type::Close: out.push_back({PathCommand::Verb::Close}); break;
+        default: break;
+        }
+    }
+    return out;
+}
+
 template <class Pt, class Tag, class ContourEnd>
-bool fillOutline(const std::vector<PathCommand>& commands, bool evenOdd, const Pt& pt, std::vector<FT_Vector>& points,
+bool fillOutline(const std::vector<PathCommand>& given, bool evenOdd, const Pt& pt, std::vector<FT_Vector>& points,
                  std::vector<Tag>& tags, std::vector<ContourEnd>& contours, FT_Outline& outline) {
+    std::vector<PathCommand> commands = withoutConics(given, pt);
     auto add = [&](float x, float y, int tag) {
         points.push_back(pt(x, y));
         tags.push_back(Tag(tag));
@@ -42,6 +66,7 @@ bool fillOutline(const std::vector<PathCommand>& commands, bool evenOdd, const P
             add(c.x, c.y, FT_CURVE_TAG_ON);
             break;
         case PathCommand::Verb::Close: endContour(); break;
+        default: break;  // (no conics left)
         }
     }
     endContour();

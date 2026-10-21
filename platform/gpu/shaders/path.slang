@@ -59,7 +59,10 @@ float4 fs(Varyings v) : SV_Target {
     float height = bottom - top;
     if (height <= 0) return float4(0, 0, 0, 0);
     float dxdy = (e.z - e.x) / (e.w - e.y);
-    float xa = e.x + (top - e.y) * dxdy - cell.x, xb = e.x + (bottom - e.y) * dxdy - cell.x;
+    // From the end nearer the row (the same whichever way the edge goes: one cut where it passes
+    // behind the eye can be very far away).
+    float2 from = abs(e.w - top) < abs(e.y - top) ? e.zw : e.xy;
+    float xa = from.x + (top - from.y) * dxdy - cell.x, xb = from.x + (bottom - from.y) * dxdy - cell.x;
     // How much of the row's part of the pixel lies right of the edge: the average of
     // clamp(1 - x, 0, 1) along it.
     float covered = abs(xb - xa) < 1e-5 ? saturate(1 - xa) : (rampIntegral(xb) - rampIntegral(xa)) / (xb - xa);

@@ -111,7 +111,7 @@ void Heart() {
 }
 ```
 
-`moveTo`, `lineTo`, `quadraticTo`, `cubicTo`, bunların `relative…` biçimleri, `arcTo`, `addRect`, `addOval`, `addRoundRect` ve `close` path'i kurar. `PathMeasure` uzunluğunu ölçer ve parçalarını verir; bir path'i adım adım çizmek için.
+`moveTo`, `lineTo`, `quadraticTo`, `conicTo`, `cubicTo`, bunların `relative…` biçimleri, `arcTo`, `addRect`, `addOval`, `addRoundRect` ve `close` path'i Compose'unki (bir Android path'i) gibi kurar: bütün olarak eklenen şekiller `Path::Direction::Clockwise` vermezseniz saat yönünün tersine döner, yaylar ve ovaller birebir conic'lerdir. `transform(matrix)` onu taşır, `op` (ya da `a + b`, `a - b`, `a & b`) iki path'i eğrilerini koruyarak birleştirir, `iterator()` segmentlerini gezer, `PathHitTester` noktaları ona tekrar tekrar sınar. `PathMeasure` uzunluğunu ölçer ve parçalarını verir; bir path'i adım adım çizmek için.
 
 ## Şekiller ve kırpma
 

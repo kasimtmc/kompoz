@@ -10304,16 +10304,18 @@ TEST(paths_take_arcs_and_draw_scopes_clip_to_paths) {
     joined.moveTo(0, 0);
     joined.arcTo({0, 0, 100, 100}, 180, 90, false);
     CHECK(joined.commands()[1].verb == PathCommand::Verb::Line && at(end(joined), 50, 0));
-    Path moved;
+    Path moved;  // (a move right after a move takes its place, as Skia's)
     moved.moveTo(0, 0);
     moved.arcTo({0, 0, 100, 100}, 180, 90, true);
-    CHECK(moved.commands()[1].verb == PathCommand::Verb::Move);
-    Path back, wide, whole, oval;
+    CHECK(moved.commands().size() == 2 && moved.commands()[0].verb == PathCommand::Verb::Move && at(end(moved), 50, 0));
+    Path back, wide, whole, lone;
     back.addArc({0, 0, 100, 100}, 0, -90);  // the other way: up to the top
-    wide.addArc({0, 0, 200, 100}, 90, 270);  // three quarters of a wide oval, in three pieces
-    whole.addArc({0, 0, 100, 100}, 30, 360);
-    oval.addOval({0, 0, 100, 100});
-    CHECK(at(end(back), 50, 0) && at(end(wide), 200, 50) && wide.commands().size() == 4 && whole == oval);
+    wide.addArc({0, 0, 200, 100}, 90, 270);  // three quarters of a wide oval, in three conics
+    whole.addArc({0, 0, 100, 100}, 90, 360);  // a turn from a quarter: the oval from there, clockwise
+    lone.addArc({0, 0, 100, 100}, 30, 360);  // a turn from elsewhere: where it starts and ends (Skia's)
+    CHECK(at(end(back), 50, 0) && at(end(wide), 200, 50) && wide.commands().size() == 4);
+    CHECK(whole.commands().size() == 6 && whole.commands()[0].x == 50 && whole.commands()[0].y == 100 && whole.commands()[1].verb == PathCommand::Verb::Conic);
+    CHECK(lone.commands().size() == 1 && lone.commands()[0].verb == PathCommand::Verb::Move);
     CHECK(near(PathMeasure(wide).length(), 3 * PathMeasure(quarter).length() * 1.5f, 15));  // about 3/4 of a 200×100 oval
     // Relative curves, paths added and moved.
     Path curves;
@@ -23550,6 +23552,7 @@ std::string pathText(const Path& path) {
         case PathCommand::Verb::Move: out += "M" + num(c.x) + "," + num(c.y); break;
         case PathCommand::Verb::Line: out += "L" + num(c.x) + "," + num(c.y); break;
         case PathCommand::Verb::Quad: out += "Q" + num(c.x) + "," + num(c.y); break;
+        case PathCommand::Verb::Conic: out += "K" + num(c.x) + "," + num(c.y); break;
         case PathCommand::Verb::Cubic: out += "C" + num(c.x) + "," + num(c.y); break;
         case PathCommand::Verb::Close: out += "Z"; break;
         }
@@ -23579,8 +23582,13 @@ TEST(path_effects_dash_and_round_strokes) {
     if (canvas.pathShapes.size() != 6) return;
     CHECK(pathText(canvas.pathShapes[0]) == "M0,0 L10,0 M15,0 L25,0 M30,0 L40,0" && canvas.pathStrokes[0] == 2);
     CHECK(pathText(canvas.pathShapes[1]) == "M0,10 L5,10 M10,10 L20,10 M25,10 L35,10");  // 5 into the pattern
-    // Each corner cut back 4 and rounded, from the middle of the first side.
-    CHECK(pathText(canvas.pathShapes[2]) == "M10,0 L16,0 Q20,4 L20,16 Q16,20 L4,20 Q0,16 L0,4 Q4,0 L10,0 Z");
+    // Each corner cut back 4 and rounded, from the middle of the first side (counterclockwise, as
+    // Compose's addRect goes: down the left side first).
+    CHECK(pathText(canvas.pathShapes[2]) == "M0,10 L0,16 Q4,20 L16,20 Q20,16 L20,4 Q16,0 L4,0 Q0,4 L0,10 Z");
+    // As Android's canvas makes them, clockwise: the circle from its right (dashed from there,
+    // downwards), the rect from its top left (rounded, then dashed from the middle of its top).
+    CHECK(pathText(canvas.pathShapes[3]).starts_with("M60,50 ") && canvas.pathShapes[3].commands()[1].y > 50);
+    CHECK(pathText(canvas.pathShapes[4]).starts_with("M15,0 L19,0"));
     PathMeasure circle(canvas.pathShapes[3]);  // the dashes around the circle: two thirds of it drawn
     float drawn = circle.length();
     while (circle.nextContour()) drawn += circle.length();
@@ -23623,7 +23631,7 @@ TEST(draw_scopes_take_composes_parameters) {
     if (canvas.rects.size() != 4 || canvas.paths.size() != 7) return;
     CHECK(near(canvas.rectColors[0].a, 0.5f) && canvas.rectBlends[1] == BlendMode::Multiply && canvas.gradients == 1);
     CHECK(canvas.rectColors[2] == blue && near(canvas.rectRadii[3], 3));  // tinted; a circle's corners
-    CHECK(near(canvas.pathColors[0].a, 0.25f) && pathText(canvas.pathShapes[0]).find('C') != std::string::npos);
+    CHECK(near(canvas.pathColors[0].a, 0.25f) && pathText(canvas.pathShapes[0]).find('K') != std::string::npos);
     CHECK(canvas.pathStrokeStyles[1].hairline && canvas.pathStrokes[1] == 0);
     const PathStroke& bevel = canvas.pathStrokeStyles[2];
     CHECK(bevel.width == 2 && bevel.miter == 10 && bevel.cap == StrokeCap::Square && bevel.join == StrokeJoin::Bevel && !bevel.hairline);
@@ -23649,13 +23657,13 @@ TEST(draw_scopes_take_composes_parameters) {
     arcs.host().draw(a);
     CHECK(a.pathShapes.size() == 6 && a.arcs.size() == 1);
     if (a.pathShapes.size() != 6) return;
-    CHECK(pathText(a.pathShapes[0]).starts_with("M10,10 L20,10 C") && pathText(a.pathShapes[0]).ends_with("Z"));
-    CHECK(pathText(a.pathShapes[1]).starts_with("M20,10 C") && !pathText(a.pathShapes[1]).ends_with("Z"));
-    CHECK(pathText(a.pathShapes[2]).starts_with("M10,10 L20,10 C") && pathText(a.pathShapes[2]).ends_with("Z") && a.pathStrokes[2] == 1);
+    CHECK(pathText(a.pathShapes[0]) == "M10,10 L20,10 K10,20 Z");  // a quarter circle: one conic
+    CHECK(pathText(a.pathShapes[1]) == "M20,10 K10,20");
+    CHECK(pathText(a.pathShapes[2]) == "M10,10 L20,10 K10,20 Z" && a.pathStrokes[2] == 1);
     CHECK(a.arcs[0].sweep == 90 && near(a.arcs[0].strokeWidth, 2));
-    CHECK(pathText(a.pathShapes[3]).starts_with("M20,5 C"));
-    Path oval;
-    oval.addOval({0, 0, 20, 20});
+    CHECK(pathText(a.pathShapes[3]) == "M20,5 K10,10");
+    Path oval;  // (as Android's canvas makes it: clockwise, from its right)
+    oval.addOval({0, 0, 20, 20}, Path::Direction::Clockwise);
     CHECK(a.pathShapes[4] == oval);
     PathMeasure around(a.pathShapes[5]);  // a turn and 40 degrees, in one contour
     CHECK(near(around.length(), 2 * 3.14159f * 10 * 400 / 360, 0.5f) && !around.nextContour());
@@ -23866,9 +23874,9 @@ TEST(path_op_combines_shapes) {
 }
 
 TEST(path_measure_lengths_positions_and_segments) {
-    Path square;
-    square.addRect({0, 0, 10, 10});
-    square.addRect({20, 0, 5, 5});
+    Path square;  // (clockwise: along the top first)
+    square.addRect({0, 0, 10, 10}, Path::Direction::Clockwise);
+    square.addRect({20, 0, 5, 5}, Path::Direction::Clockwise);
     PathMeasure m(square);
     CHECK(m.length() == 40);
     Offset p = m.getPosition(15), t = m.getTangent(15);
@@ -23891,6 +23899,278 @@ TEST(path_measure_lengths_positions_and_segments) {
     CHECK(PathMeasure().length() == 0 && PathMeasure(Path()).getPosition(3).x == 0);
 }
 
+TEST(paths_are_skias) {
+    auto pt = [](const PathCommand& c) { return Offset{c.x, c.y}; };
+    auto is = [](Offset p, float x, float y) { return near(p.x, x, 1e-4f) && near(p.y, y, 1e-4f); };
+    const float w45 = 0.707106781f;
+    // Shapes start where Skia's do and go round as asked (counterclockwise by default, as
+    // Compose's): a rect from its top left, an oval from its right as four conics.
+    Path ccw, cw;
+    ccw.addRect({0, 0, 20, 10});
+    cw.addRect({0, 0, 20, 10}, Path::Direction::Clockwise);
+    CHECK(pathText(ccw) == "M0,0 L0,10 L20,10 L20,0 Z" && pathText(cw) == "M0,0 L20,0 L20,10 L0,10 Z");
+    Path oval, ovalCw;
+    oval.addOval({0, 0, 20, 10});
+    ovalCw.addOval({0, 0, 20, 10}, Path::Direction::Clockwise);
+    CHECK(pathText(oval) == "M20,5 K10,0 K0,5 K10,10 K20,5 Z" && pathText(ovalCw) == "M20,5 K10,10 K0,5 K10,0 K20,5 Z");
+    CHECK(oval.commands()[1].w == w45 && is({oval.commands()[1].x1, oval.commands()[1].y1}, 20, 0));
+    // Round rects: from where the top left corner meets the left side counterclockwise (the bottom
+    // left clockwise), lines and quarter ellipses; all corners round: an oval from its left; none: a
+    // rect; a corner with a radius of 0 either way: square.
+    CornerRadius c46{4, 6};
+    Path rounded, roundedCw, circle, square, oneSquare;
+    rounded.addRoundRect(RoundRect{{0, 0, 40, 20}, c46, c46, c46, c46});
+    roundedCw.addRoundRect(RoundRect{{0, 0, 40, 20}, c46, c46, c46, c46}, Path::Direction::Clockwise);
+    CHECK(pathText(rounded) == "M0,6 L0,14 K4,20 L36,20 K40,14 L40,6 K36,0 L4,0 K0,6 Z");
+    CHECK(pathText(roundedCw) == "M0,14 L0,6 K4,0 L36,0 K40,6 L40,14 K36,20 L4,20 K0,14 Z");
+    circle.addRoundRect(RoundRect{{0, 0, 20, 20}, 10, 10, 10, 10});
+    square.addRoundRect(RoundRect{{0, 0, 20, 20}, {}, {}, {}, {}});
+    oneSquare.addRoundRect(RoundRect{{0, 0, 20, 20}, CornerRadius(4, 0), 4, 4, 4});
+    CHECK(pathText(circle) == "M0,10 K10,20 K20,10 K10,0 K0,10 Z" && pathText(square) == "M0,0 L0,20 L20,20 L20,0 Z");
+    CHECK(pathText(oneSquare) == "M0,0 L0,16 K4,20 L16,20 K20,16 L20,4 K16,0 L0,0 K0,0 Z");  // (its corner a conic of no size, as Skia's)
+    // Arcs as conics: a quarter one, 200 degrees in three (the last its 20 degrees: w = cos 10°).
+    Path quarter, wide;
+    quarter.arcTo({0, 0, 20, 20}, 0, 90, true);
+    wide.arcTo({0, 0, 20, 20}, 30, 200, true);
+    CHECK(quarter.commands().size() == 2 && quarter.commands()[1].verb == PathCommand::Verb::Conic && is(pt(quarter.commands()[1]), 10, 20));
+    CHECK(wide.commands().size() == 4 && near(wide.commands()[3].w, std::cos(10 * 3.14159265f / 180), 1e-4f));
+    CHECK(is(pt(wide.commands()[3]), 10 + 10 * std::cos(230 * 3.14159265f / 180), 10 + 10 * std::sin(230 * 3.14159265f / 180)));
+    // A sweep of none from 0 is a lone point (moving into an oval); nearly a turn, nearly a circle;
+    // a turn exactly, a point (arcTo goes round once at most: drawArc halves it).
+    Path lone, there, almost, closest, turn;
+    lone.moveTo(0, 0);
+    lone.arcTo({0, 0, 20, 20}, 0, 0, false);
+    there.moveTo(20, 10);  // (a lone point's line even where the pen is)
+    there.arcTo({0, 0, 20, 20}, 0, 0, false);
+    almost.arcTo({0, 0, 20, 20}, 0, 359.5f, true);
+    closest.arcTo({0, 0, 20, 20}, 0, 359.99f, true);  // its end the start's in floats: nudged back, nearly round
+    turn.arcTo({0, 0, 20, 20}, 0, 360, true);
+    CHECK(pathText(lone) == "M0,0 L20,10" && pathText(there) == "M20,10 L20,10" && almost.commands().size() == 5 && turn.commands().size() == 1);
+    CHECK(closest.commands().size() == 5 && closest.commands()[4].y < 10);
+    // Joined by a line where the arc doesn't start at the pen; not when it does.
+    Path joined, onward;
+    joined.moveTo(0, 0);
+    joined.arcTo({0, 0, 20, 20}, 180, 90, false);
+    onward.moveTo(0, 10);
+    onward.arcTo({0, 0, 20, 20}, 180, 90, false);
+    CHECK(pathText(joined) == "M0,0 L0,10 K10,0" && pathText(onward) == "M0,10 K10,0");
+    // conicTo: a weight of 1 is a quadratic, none a line, an infinite one two lines.
+    Path conics;
+    conics.moveTo(0, 0);
+    conics.conicTo(5, 5, 10, 0, 1);
+    conics.conicTo(15, 5, 20, 0, 0);
+    conics.conicTo(25, 5, 30, 0, kInfinity);
+    CHECK(pathText(conics) == "M0,0 Q10,0 L20,0 L25,5 L30,0");
+    // A move right after a move takes its place; drawing after close() starts from the contour's
+    // start with a move of its own; a relative move after close() is from that start.
+    Path moves;
+    moves.moveTo(1, 1);
+    moves.moveTo(2, 2);
+    moves.lineTo(10, 2);
+    moves.close();
+    moves.lineTo(5, 9);
+    moves.close();
+    moves.relativeMoveTo(1, 1);
+    moves.lineTo(0, 0);
+    CHECK(pathText(moves) == "M2,2 L10,2 Z M2,2 L5,9 Z M3,3 L0,0");
+    CHECK(Path::fromCommands(moves.commands()) == moves);
+    // Through a matrix: affinely every point; in perspective quadratics become conics (their
+    // weight through the map, exactly), cubics four, what is behind the eye cut off.
+    Matrix turned;
+    turned.rotateZ(90);
+    Path t = ccw;
+    t.transform(turned);
+    CHECK(is(pt(t.commands()[1]), -10, 0) && is(pt(t.commands()[2]), -10, 20));
+    Matrix seen;
+    seen(0, 3) = 0.01f;  // w = 1 + x / 100
+    Path q;
+    q.moveTo(0, 0);
+    q.quadraticTo(50, 50, 100, 0);
+    q.transform(seen);
+    float w0 = 1, w1 = 1.5f, w2 = 2;  // the weight w1 / sqrt(w0 w2)
+    CHECK(q.commands()[1].verb == PathCommand::Verb::Conic && near(q.commands()[1].w, w1 / std::sqrt(w0 * w2), 1e-5f) &&
+          is(pt(q.commands()[1]), 50, 0) && is({q.commands()[1].x1, q.commands()[1].y1}, 50 / 1.5f, 50 / 1.5f));
+    Path cubic;
+    cubic.moveTo(0, 0);
+    cubic.cubicTo(10, 20, 30, 20, 40, 0);
+    cubic.transform(seen);
+    CHECK(cubic.commands().size() == 5 && is(pt(cubic.commands()[4]), 40 / 1.4f, 0));
+    Matrix behind;
+    behind(0, 3) = 0.02f;  // w below 0 left of x = -50
+    Path cut;
+    cut.addRect({-100, 0, 140, 10}, Path::Direction::Clockwise);
+    cut.transform(behind);
+    float right = -kInfinity, left = kInfinity;  // (its far left: where w is the plane's 1/16384, Skia's)
+    for (const PathCommand& c : cut.commands())
+        if (c.verb != PathCommand::Verb::Close) right = std::max(right, c.x), left = std::min(left, c.x);
+    CHECK(cut.commands().size() == 5 && near(right, 40 / 1.8f, 1e-3f) && near(left, -50.f * 16384 + 50, 100));
+    for (const PathCommand& c : cut.commands())
+        if (c.verb != PathCommand::Verb::Close) CHECK(std::isfinite(c.x) && std::isfinite(c.y));
+    // Convex: one contour turning one way (a line too); not two contours, nor a dent, nor back and forth thrice.
+    Path triangle, dent, line, zigzag, two = ccw, lines;
+    lines.moveTo(0, 0), lines.lineTo(10, 0), lines.moveTo(20, 0), lines.lineTo(30, 0);  // (two contours, one way all along)
+    triangle.moveTo(0, 0), triangle.lineTo(10, 0), triangle.lineTo(0, 10), triangle.close();
+    dent.moveTo(0, 0), dent.lineTo(10, 0), dent.lineTo(5, 5), dent.lineTo(10, 10), dent.lineTo(0, 10), dent.close();
+    line.moveTo(0, 0), line.lineTo(10, 10);
+    zigzag.moveTo(0, 0), zigzag.lineTo(10, 0), zigzag.lineTo(0, 0), zigzag.lineTo(10, 0);
+    two.addRect({30, 0, 5, 5});
+    CHECK(triangle.isConvex() && oval.isConvex() && rounded.isConvex() && line.isConvex() && Path().isConvex());
+    CHECK(!dent.isConvex() && !two.isConvex() && !zigzag.isConvex() && !lines.isConvex());
+    // Inside, the curves exact: within a hundredth of a dp of a circle's edge, either way; on it, inside.
+    Path round;
+    round.addOval({0, 0, 200, 200});
+    float r = 100, d45 = 0.70710678f;
+    CHECK(round.contains({100 + (r - 0.01f) * d45, 100 + (r - 0.01f) * d45}) && !round.contains({100 + (r + 0.01f) * d45, 100 + (r + 0.01f) * d45}));
+    CHECK(round.contains({200, 100}) && round.contains({100, 0}));
+}
+
+TEST(path_iterators_give_compose_segments) {
+    Path oval;
+    oval.addOval({0, 0, 20, 10});
+    oval.moveTo(30, 0);
+    oval.lineTo(40, 0);
+    oval.cubicTo(40, 5, 35, 10, 30, 10);
+    // As conics: the move, four conics from where each starts, the close; then the line and the cubic.
+    PathIterator conics = oval.iterator(ConicEvaluation::AsConic);
+    CHECK(conics.calculateSize() == 9 && conics.conicEvaluation() == ConicEvaluation::AsConic);
+    std::vector<PathSegment> got;
+    while (conics.hasNext()) got.push_back(conics.next());
+    CHECK(got.size() == 9 && conics.next().type == PathSegment::Type::Done);
+    if (got.size() != 9) return;
+    CHECK((got[0] == PathSegment{PathSegment::Type::Move, {{20, 5}}, 0}));
+    CHECK((got[1].type == PathSegment::Type::Conic && got[1].points == std::vector<Offset>{{20, 5}, {20, 0}, {10, 0}} && got[1].weight == 0.707106781f));
+    CHECK(got[5].type == PathSegment::Type::Close && got[5].points.empty() && got[6].type == PathSegment::Type::Move);
+    CHECK((got[7] == PathSegment{PathSegment::Type::Line, {{30, 0}, {40, 0}}, 0}) && got[8].type == PathSegment::Type::Cubic && got[8].points.size() == 4);
+    // As quadratics (the default): each conic as Skia approximates it within the tolerance, more of them finer.
+    PathIterator quads = oval.iterator();
+    int coarse = quads.calculateSize(), fine = oval.iterator(ConicEvaluation::AsQuadratics, 0.001f).calculateSize();
+    CHECK(quads.conicEvaluation() == ConicEvaluation::AsQuadratics && quads.tolerance() == 0.25f && coarse > 9 && fine > coarse);
+    CHECK(quads.calculateSize(false) == 9);
+    int n = 0;
+    float worst = 0;
+    Offset last;
+    while (quads.hasNext()) {
+        PathSegment s = quads.next();
+        ++n;
+        CHECK(s.type != PathSegment::Type::Conic);
+        if (s.type == PathSegment::Type::Quadratic) {  // each one starts where the last ended, ends on the ellipse
+            CHECK(near(s.points[0].x, last.x, 1e-4f) && near(s.points[0].y, last.y, 1e-4f));
+            Offset e = s.points[2];
+            worst = std::max(worst, std::abs(std::hypot((e.x - 10) / 10, (e.y - 5) / 5) - 1));
+        }
+        if (!s.points.empty()) last = s.points.back();
+    }
+    CHECK(n == coarse && worst < 1e-4f);
+}
+
+TEST(path_hit_testers_are_composes) {
+    // An open contour isn't closed, a point on an edge isn't inside (Compose's), where contains()
+    // closes it and counts the edge (Skia's); the fill type counts.
+    Path open;
+    open.moveTo(0, 0);
+    open.lineTo(20, 0);
+    open.lineTo(20, 20);
+    open.lineTo(0, 20);
+    PathHitTester tester(open);
+    CHECK(open.contains({10, 10}) && !tester.contains({10, 10}));
+    Path box;
+    box.addRect({0, 0, 20, 20});
+    box.addRect({5, 5, 10, 10});
+    tester.updatePath(box);
+    CHECK(tester.contains({2, 2}) && tester.contains({10, 10}) && !tester.contains({25, 10}) && !tester.contains({20, 10}));
+    box.fillType = Path::FillType::EvenOdd;
+    tester.updatePath(box);
+    CHECK(tester.contains({2, 2}) && !tester.contains({10, 10}));
+    CHECK(box.contains({0, 10}) && !PathHitTester(box).contains({0, 10}));
+    // Its conics as quadratics within the tolerance: a circle's edge a hair inside, inside.
+    Path round;
+    round.addOval({0, 0, 200, 200});
+    PathHitTester fine(round, 0.001f);
+    CHECK(fine.contains({100 + 99.9f * 0.7071068f, 100 + 99.9f * 0.7071068f}) && !fine.contains({100 + 100.1f * 0.7071068f, 100 + 100.1f * 0.7071068f}));
+    CHECK(!PathHitTester().contains({0, 0}));
+}
+
+TEST(path_ops_keep_curves) {
+    auto onCircle = [](Offset p, Offset c, float r) { return std::abs(std::hypot(p.x - c.x, p.y - c.y) - r) < 0.02f; };
+    Path a, b;
+    a.addOval({0, 0, 100, 100});
+    b.addOval({50, 0, 100, 100});
+    // Union: conics only (no lines), every point on one circle or the other; inside as either is.
+    Path u = Path::combine(PathOperation::Union, a, b);
+    bool curvesOnly = true, onOne = true;
+    for (const PathCommand& c : u.commands()) {
+        if (c.verb == PathCommand::Verb::Line) curvesOnly = false;
+        if (c.verb == PathCommand::Verb::Move || c.verb == PathCommand::Verb::Conic)
+            onOne = onOne && (onCircle({c.x, c.y}, {50, 50}, 50) || onCircle({c.x, c.y}, {100, 50}, 50));
+    }
+    // Each conic's middle on its circle too (its weight right, not just its ends).
+    for (PathIterator it = u.iterator(ConicEvaluation::AsConic); it.hasNext();) {
+        PathSegment g = it.next();
+        if (g.type != PathSegment::Type::Conic) continue;
+        float w = g.weight;
+        Offset mid{(g.points[0].x + 2 * w * g.points[1].x + g.points[2].x) / (2 + 2 * w), (g.points[0].y + 2 * w * g.points[1].y + g.points[2].y) / (2 + 2 * w)};
+        onOne = onOne && (onCircle(mid, {50, 50}, 50) || onCircle(mid, {100, 50}, 50));
+    }
+    CHECK(curvesOnly && onOne && !u.isEmpty());
+    for (float x = -5; x <= 155; x += 7.3f)
+        for (float y = -5; y <= 105; y += 6.1f) {
+            Offset p{x, y};
+            if (onCircle(p, {50, 50}, 50) || onCircle(p, {100, 50}, 50)) continue;
+            CHECK(u.contains(p) == (a.contains(p) || b.contains(p)));
+        }
+    // Intersect and xor, against the operands; the lens is two arcs.
+    Path lens = Path::combine(PathOperation::Intersect, a, b), xored = Path::combine(PathOperation::Xor, a, b);
+    int arcs = 0;
+    for (const PathCommand& c : lens.commands()) arcs += c.verb == PathCommand::Verb::Conic;
+    CHECK(arcs >= 2 && arcs <= 4);
+    for (float x = 1; x < 150; x += 9.7f)
+        for (float y = 1; y < 100; y += 8.3f) {
+            Offset p{x, y};
+            if (onCircle(p, {50, 50}, 50) || onCircle(p, {100, 50}, 50)) continue;
+            CHECK(lens.contains(p) == (a.contains(p) && b.contains(p)) && xored.contains(p) == (a.contains(p) != b.contains(p)));
+        }
+    // The middle of an arc kept (a piece between two places inside one conic): still on its circle.
+    Path corner;
+    corner.addRect({80, 2, 40, 36});
+    Path bite = Path::combine(PathOperation::Intersect, a, corner);
+    bool middleOn = false;
+    for (PathIterator it = bite.iterator(ConicEvaluation::AsConic); it.hasNext();) {
+        PathSegment g = it.next();
+        if (g.type != PathSegment::Type::Conic) continue;
+        float w = g.weight;
+        Offset mid{(g.points[0].x + 2 * w * g.points[1].x + g.points[2].x) / (2 + 2 * w), (g.points[0].y + 2 * w * g.points[1].y + g.points[2].y) / (2 + 2 * w)};
+        middleOn = onCircle(g.points[0], {50, 50}, 50) && onCircle(g.points[2], {50, 50}, 50) && onCircle(mid, {50, 50}, 50);
+    }
+    CHECK(middleOn);
+    // Where the shapes only touch: a square less the oval inside it, touching its sides, is three
+    // pieces, each bounded by lines and a quarter of the ellipse turned round.
+    Path square, inner;
+    square.addRect({0, 0, 20, 20});
+    inner.addOval({0, 0, 20, 10});
+    Path d = Path::combine(PathOperation::Difference, square, inner);
+    int contours = 0, quarterArcs = 0;
+    for (const PathCommand& c : d.commands()) {
+        contours += c.verb == PathCommand::Verb::Move;
+        quarterArcs += c.verb == PathCommand::Verb::Conic && near(c.w, 0.707106781f, 1e-4f);
+    }
+    CHECK(contours == 3 && quarterArcs == 4);
+    // Cubics keep theirs: a piece of each, still a cubic.
+    Path wave;
+    wave.moveTo(0, 50);
+    wave.cubicTo(30, -20, 70, 120, 100, 50);
+    wave.lineTo(100, 100);
+    wave.lineTo(0, 100);
+    wave.close();
+    Path band;
+    band.addRect({0, 0, 100, 60});
+    Path both = Path::combine(PathOperation::Intersect, wave, band);
+    bool hasCubic = false;
+    for (const PathCommand& c : both.commands()) hasCubic = hasCubic || c.verb == PathCommand::Verb::Cubic;
+    CHECK(hasCubic);
+    for (float x = 2; x < 100; x += 6.7f)
+        for (float y = 2; y < 100; y += 5.9f) CHECK(both.contains({x, y}) == (wave.contains({x, y}) && band.contains({x, y})) || std::abs(y - 60) < 0.05f);
+}
+
 TEST(draw_points_as_dots_lines_or_one_line) {
     std::vector<Offset> points{{0, 0}, {10, 0}, {10, 10}, {0, 10}, {5, 5}};
     ComposeTestRule rule([&] {
@@ -23906,15 +24186,15 @@ TEST(draw_points_as_dots_lines_or_one_line) {
     CHECK(canvas.pathShapes.size() == 4);
     if (canvas.pathShapes.size() != 4) return;
     std::string dots = pathText(canvas.pathShapes[0]);
-    CHECK(std::count(dots.begin(), dots.end(), 'M') == 5 && dots.find('C') != std::string::npos && canvas.pathStrokes[0] == 0);
-    CHECK(pathText(canvas.pathShapes[1]).starts_with("M-2,-2 L2,-2 L2,2 L-2,2 Z") && canvas.pathStrokes[1] == 0);  // squares
+    CHECK(std::count(dots.begin(), dots.end(), 'M') == 5 && dots.find('K') != std::string::npos && canvas.pathStrokes[0] == 0);  // ovals: conics
+    CHECK(pathText(canvas.pathShapes[1]).starts_with("M-2,-2 L-2,2 L2,2 L2,-2 Z") && canvas.pathStrokes[1] == 0);  // squares (counterclockwise)
     CHECK(pathText(canvas.pathShapes[2]) == "M0,0 L10,0 M10,10 L0,10" && canvas.pathStrokes[2] == 2);   // the fifth has no partner
     CHECK(pathText(canvas.pathShapes[3]) == "M0,0 L10,0 L10,10 L0,10 L5,5");
 }
 
 TEST(path_effects_edge_cases) {
     Path square;
-    square.addRect({0, 0, 20, 20});
+    square.addRect({0, 0, 20, 20}, Path::Direction::Clockwise);
     // Dashes come in on/off pairs: an odd last interval is dropped.
     PathEffect odd = PathEffect::dashPathEffect({10, 5, 3});
     CHECK(odd.count == 2);

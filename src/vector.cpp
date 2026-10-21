@@ -844,6 +844,7 @@ void detail::drawImageVector(GraphicsContext& canvas, const ImageVector& vector,
             case PathCommand::Verb::Move: path.moveTo(c.x * sx, c.y * sy); break;
             case PathCommand::Verb::Line: path.lineTo(c.x * sx, c.y * sy); break;
             case PathCommand::Verb::Quad: path.quadraticTo(c.x1 * sx, c.y1 * sy, c.x * sx, c.y * sy); break;
+            case PathCommand::Verb::Conic: path.conicTo(c.x1 * sx, c.y1 * sy, c.x * sx, c.y * sy, c.w); break;
             case PathCommand::Verb::Cubic: path.cubicTo(c.x1 * sx, c.y1 * sy, c.x2 * sx, c.y2 * sy, c.x * sx, c.y * sy); break;
             case PathCommand::Verb::Close: path.close(); break;
             }

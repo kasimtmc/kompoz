@@ -1682,7 +1682,7 @@ private:
                                                               : FT_STROKER_LINEJOIN_MITER,
                            FT_Fixed(stroke.miter * 65536));
             // Each subpath separately: open ones get caps, closed ones are joined all around.
-            const auto& cmds = path.commands();
+            const std::vector<PathCommand> cmds = withoutConics(path.commands(), pt);  // (FreeType has no conics)
             for (size_t i = 0; i < cmds.size();) {
                 if (cmds[i].verb != PathCommand::Verb::Move) {
                     ++i;

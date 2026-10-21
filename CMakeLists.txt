@@ -65,6 +65,7 @@ add_library(kompoz_core STATIC
     src/bottom_sheet.cpp
     src/carousel.cpp
     src/components.cpp
+    src/curves.cpp
     src/coroutines.cpp
     src/date_picker.cpp
     src/disk_cache.cpp

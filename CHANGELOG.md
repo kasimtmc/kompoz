@@ -94,6 +94,11 @@
   alpha, `drawArc` takes `useCenter`, `drawText(layout, topLeft, color)` is `drawText(layout, color, topLeft)`.
 - **Images sampled as `FilterQuality` says** on the GPU renderer (the nearest pixel, bilinear, mipmaps, Mitchell's
   cubic), from premultiplied texels: a transparent pixel's color no longer bleeds into its scaled neighbors.
+- **`Path` as Compose's** (Skia's SkPath): conics (ovals, round rects and arcs exactly), `Path::Direction` with Skia's
+  starting points, `transform(Matrix)` (perspective too), `isConvex()`, `arcToRad`/`addArcRad`, `rewind`,
+  `PathIterator`/`PathSegment`, `PathHitTester`, `contains` exact on curves, and `op` keeping curves. Shapes added whole
+  now go counterclockwise by default, as Compose's: pass `Path::Direction::Clockwise` for the old way round; a turn of
+  `arcTo` is a point, as Skia's (`addArc` or `addOval` for a whole oval).
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.
