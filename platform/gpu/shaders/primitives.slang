@@ -28,6 +28,11 @@ static const int PATH = 8;         // a path: its coverage mask (texture0) has t
 static const int ELEVATION = 9;    // an elevation shadow's ambient or spot part, as Skia's ShadowRRectOp: Gaussian falloff
                                    // in from the edge of the rounded rect (shape, radii) over params.x; none further in
                                    // than params.y (if above 0: under an opaque caster)
+static const int MESH = 10;        // a triangle of a mesh (Canvas.drawVertices), drawn by vsMesh: its three vertices where
+                                   // the target's pixels are (homogeneous), each with its texture coordinate and color
+                                   // (see vsMesh); not anti-aliased, as Skia draws one. Its paint where the texture
+                                   // coordinate is (the color: the paint's, opaque), through the vertex colors by blend
+                                   // mode params.x (if params.z: it has them), the paint the source; faded by params.y
 //
 // What covers the shape is `color`, or a gradient (`paint`, `gradient`): a fill, a stroke, a path
 // and a glyph that takes a color can have one, at the color's alpha.
@@ -35,6 +40,10 @@ static const int LINEAR = 1;  // paint.x: the kind; from gradient.xy to gradient
 static const int RADIAL = 2;  // round gradient.xy out to gradient.z
 static const int SWEEP = 3;   // round gradient.xy, clockwise from 3 o'clock
 static const int IMAGE_PAINT = 4;  // texture1 (premultiplied) where the map puts the pixel (its uv); paint.z: which (CPU side)
+static const int COMPOSITE_PAINT = 5;  // two paints (each of the kinds above) composited where the pixel is: their paint and
+                                       // geometry in texels 0 to 3 of row paint.w (the destination's, then the source's),
+                                       // the blend mode in texel 4; an image destination in texture1, an image source in
+                                       // texture5 (paint.y, paint.z: which, CPU side)
 // paint.y: the tile mode, plus 8 where the pixel is first taken through the map in the last three
 // texels of the paint's row (a shader's: to its own space, through its transform)
 // paint.y: the tile mode (clamp, repeated, mirror, decal); paint.z: how many stops; paint.w: their
@@ -67,6 +76,7 @@ struct Uniforms {
 [[vk::binding(3, 0)]] Sampler2D texture2;
 [[vk::binding(4, 0)]] Sampler2D texture3;
 [[vk::binding(5, 0)]] Sampler2D texture4;  // the coverage mask, for the clips' paths
+[[vk::binding(6, 0)]] Sampler2D texture5;  // a composite paint's source image
 
 struct Instance {
     float4 bounds : BOUNDS;  // the quad: x0, y0, x1, y1
@@ -88,6 +98,7 @@ struct Varyings {
     float2 local : LOCAL;  // the pixel in the instance's own space
     float w : DEPTH_W;     // the transform's w there (1 unless in perspective)
     float2 texcoord : TEXCOORD;
+    float4 vertexColor : VERTEXCOLOR;  // a mesh's (premultiplied), between its vertices
     nointerpolation float4 bounds : BOUNDS;
     nointerpolation float4 shape : SHAPE;
     nointerpolation float4 radii : RADII;
@@ -117,6 +128,7 @@ Varyings vs(Instance instance, uint vertex : VERTEX_ID) {
     int kind = int(instance.extra.z + 0.5);
     float2 across = (kind == GLYPH || kind == IMAGE) ? (local - instance.shape.xy) / (instance.shape.zw - instance.shape.xy) : corner;
     out.texcoord = lerp(instance.uv.xy, instance.uv.zw, across);
+    out.vertexColor = float4(0, 0, 0, 0);
     out.bounds = instance.bounds;
     out.shape = instance.shape;
     out.radii = instance.radii;
@@ -125,6 +137,36 @@ Varyings vs(Instance instance, uint vertex : VERTEX_ID) {
     out.uv = instance.uv;
     out.kind = instance.extra.z;
     out.flags = instance.extra.w;
+    out.paint = instance.paint;
+    out.gradient = instance.gradient;
+    out.filter = instance.filter;
+    return out;
+}
+
+// A mesh's triangle, one instance, its three vertices (vertex % 3) packed into the instance's
+// fields: x, y and w where the target's pixels are (bounds, shape, radii.x: x0 y0 w0 x1, y1 w1 x2
+// y2, w2), the texture coordinates (radii.yzw, uv.xyz: u0 v0 u1, v1 u2 v2), the colors (xform,
+// extra, projection: premultiplied); the paint and the rest as any primitive's. The rasterizer
+// works the texture coordinate and color out between them, in perspective too.
+[shader("vertex")]
+Varyings vsMesh(Instance instance, uint vertex : VERTEX_ID) {
+    int i = int(vertex % 3);
+    float3 placed = i == 0 ? instance.bounds.xyz : i == 1 ? float3(instance.bounds.w, instance.shape.xy) : float3(instance.shape.zw, instance.radii.x);
+    float2 texcoord = i == 0 ? instance.radii.yz : i == 1 ? float2(instance.radii.w, instance.uv.x) : instance.uv.yz;
+    Varyings out;
+    out.position = float4(placed.xy * uniforms.toClip.xy + placed.z * uniforms.toClip.zw, 0, placed.z);
+    out.local = float2(0, 0);
+    out.w = placed.z;
+    out.texcoord = texcoord;
+    out.vertexColor = i == 0 ? instance.xform : i == 1 ? instance.extra : instance.projection;
+    out.bounds = float4(0, 0, 0, 0);
+    out.shape = float4(0, 0, 0, 0);
+    out.radii = float4(0, 0, 0, 0);
+    out.color = instance.color;
+    out.params = instance.params;
+    out.uv = float4(0, 0, 0, 0);
+    out.kind = float(MESH);
+    out.flags = 0;
     out.paint = instance.paint;
     out.gradient = instance.gradient;
     out.filter = instance.filter;
@@ -191,11 +233,11 @@ float2 maskTexcoord(float2 texel) {
     return (floor(texel) + 0.5) * uniforms.texels.xy;
 }
 
-// The paint at p: `color`, or the gradient's color there (as Brush::colorAt works it out: the
-// stops' straight colors mixed, then premultiplied) at the color's alpha. (Written without a
-// return in a branch after the first: llvmpipe on LLVM 20 crashes compiling the tile modes'
-// branches with one.)
-float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
+// One paint at p: `color`, or the gradient's color there (as Brush::colorAt works it out: the
+// stops' straight colors mixed, then premultiplied) at the color's alpha; an image from texture1,
+// or texture5 (`second`: a composite's source). (Written without a return in a branch after the
+// first: llvmpipe on LLVM 20 crashes compiling the tile modes' branches with one.)
+float4 paintOne(float2 p, float4 color, float4 paint, float4 g, bool second) {
     int kind = int(paint.x + 0.5);
     if (kind == 0) return color;
     int bits = int(paint.y + 0.5);
@@ -208,7 +250,7 @@ float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
         float3 q = float3(dot(r0, h), dot(r1, h), dot(r2, h));
         p = q.xy / q.z;
     }
-    if (kind == IMAGE_PAINT) return texture1.Sample(p) * color.a;
+    if (kind == IMAGE_PAINT) return (second ? texture5.Sample(p) : texture1.Sample(p)) * color.a;
     const float pi = 3.141592653589793;
     float t = 0;
     if (kind == LINEAR) {
@@ -487,6 +529,18 @@ float4 cubicSample(float2 uv, float2 size) {
     return float4(clamp(sum.rgb, 0, sum.a), sum.a);
 }
 
+// The paint at p (see paintOne): a composite's two worked out there and blended, the source onto
+// the destination, as Skia's SkShaders::Blend does, at the color's alpha.
+float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
+    if (int(paint.x + 0.5) != COMPOSITE_PAINT) return paintOne(p, color, paint, g, false);
+    float v = (paint.w + 0.5) * uniforms.texels.w;
+    float4 texel[5];
+    for (int i = 0; i < 5; ++i) texel[i] = texture2.SampleLevel(float2((i + 0.5) * uniforms.texels.z, v), 0);
+    float4 one = float4(1, 1, 1, 1);
+    float4 d = paintOne(p, one, texel[0], texel[1], false), s = paintOne(p, one, texel[2], texel[3], true);
+    return blendColors(s, d, int(texel[4].x + 0.5)) * color.a;
+}
+
 [shader("fragment")]
 float4 fs(Varyings v) : SV_Target {
     int kind = int(v.kind + 0.5);
@@ -497,7 +551,7 @@ float4 fs(Varyings v) : SV_Target {
     float q = 1 / v.w;
     float2 lq = v.local * q;
     float2 dx = (ddx(lq) - v.local * ddx(q)) / q, dy = (ddy(lq) - v.local * ddy(q)) / q;
-    float2 painted = v.local;
+    float2 painted = kind == MESH ? v.texcoord : v.local;
     if ((flags & 4) != 0) {
         float3 h = float3(v.local, 1);
         float3 q = float3(dot(v.radii.xyz, h), dot(v.uv.xyz, h), dot(v.shape.xyz, h));
@@ -571,6 +625,9 @@ float4 fs(Varyings v) : SV_Target {
         cover = d > 0 && (v.params.y <= 0 || d < v.params.y) ? max(exp(-4 * (1 - t) * (1 - t)) - 0.018, 0) : 0;
     } else if (kind == PATH) {
         cover = pathCoverage(texture0.SampleLevel(maskTexcoord(v.local - v.params.xy), 0).r, v.params.z > 0.5);
+    } else if (kind == MESH) {
+        src = (v.params.z > 0.5 ? blendColors(paint, v.vertexColor, int(v.params.x + 0.5)) : paint) * v.params.y;
+        cover = 1;
     }
     cover *= clipCoverage(v.position.xy, int(v.filter.z + 0.5), v.filter.w);
     return finish(applyFilters(src, v.filter), cover, v.position.xy);

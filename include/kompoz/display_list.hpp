@@ -78,6 +78,8 @@ public:
     bool quickReject(const Rect& rect) const override;
     void fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& brush, const Rect& brushArea) override;
     void drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& brushArea, const PathStroke& stroke) override;
+    void drawVertices(const Vertices& vertices, Offset origin, BlendMode blendMode, const Brush& brush, const Rect& brushArea,
+                      float alpha) override;
 
     // Maps points of what is drawn inside transforms and layers to the screen: (x, y, 1) to
     // (x', y', w), row by row, the point x' / w, y' / w.
@@ -91,7 +93,8 @@ public:
 private:
     enum class Kind : uint8_t { FillRoundRect, StrokeRoundRect, Line, Text, TextBrush, TextShadow, Shadow, Vector, Arc, Image, Gradient, Path,
                                 PushLayer, PopLayer, PushClip, PopClip, PushTranslation, PopTranslation, PushBlend, PopBlend,
-                                ShadowPath, PushFilter, PopFilter, PushTransform, PopTransform, Backdrop, ElevationShadow, ShapeShadow };
+                                ShadowPath, PushFilter, PopFilter, PushTransform, PopTransform, Backdrop, ElevationShadow, ShapeShadow,
+                                Vertices };
     struct Command {
         Kind kind{};
         Rect rect, rect2;     // the shape; an image's source, a brush's area
@@ -110,6 +113,7 @@ private:
         std::optional<std::pair<Outline, kompoz::ElevationShadow>> elevated;  // an elevation shadow's (at p1)
         std::optional<std::pair<Shape, Shadow>> shaped;  // a brushed shape shadow's (over rect; rtl in flag, inner in f1)
         Path path;
+        std::optional<kompoz::Vertices> vertices;  // (at p1; its blend mode in f2, its alpha f1)
         PathStroke stroke;
         LayerTransform transform;
         Matrix matrix;        // PushTransform's

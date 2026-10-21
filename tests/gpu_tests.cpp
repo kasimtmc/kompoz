@@ -2235,6 +2235,19 @@ void shadersPaintAsTheyAre(Gpu& g) {
     Brush multiplied = Brush::composite(Brush::radialGradient({Color{1, 0.9f, 0.2f, 1}, Color{0.2f, 0.3f, 1, 1}}), Brush::shader(tiled), BlendMode::Multiply);
     check("a composite shader", g.render(n, n, 1, [&](GraphicsContext& c) { c.fillGradient(area, 0, multiplied, area); }),
           model([&](Offset p) { return multiplied.colorAt(p, area); }), 3);
+    // A mode that isn't the same either way round, and one color as one of the two.
+    Brush atop = Brush::composite(Brush::radialGradient({Color{1, 0.9f, 0.2f, 0.9f}, Color{0.2f, 0.3f, 1, 0.3f}}), Brush::shader(tiled), BlendMode::SrcAtop);
+    check("a composite, source atop", g.render(n, n, 1, [&](GraphicsContext& c) { c.fillGradient(area, 0, atop, area); }),
+          model([&](Offset p) { return atop.colorAt(p, area); }), 3);
+    Brush oneColor = Brush::shader(CompositeShader(LinearGradientShader({0, 0}, {1, 0}, {Color{0.2f, 0.6f, 0.9f, 0.8f}}), ImageShader(tile, TileMode::Repeated, TileMode::Repeated),
+                                                   BlendMode::Overlay));
+    check("a composite of one color and an image", g.render(n, n, 1, [&](GraphicsContext& c) { c.fillGradient(area, 0, oneColor, area); }),
+          model([&](Offset p) { return oneColor.colorAt(p, area); }), 3);
+    // A composite of composites (baked, then painted from its texture): the image multiplied, then screened by a gradient.
+    Brush nested = Brush::composite(multiplied, Brush::linearGradient({Color{0.2f, 0.1f, 0.6f, 0.8f}, Color{0.9f, 0.9f, 0.2f, 0.4f}}, {0, 0}, {64, 64}),
+                                    BlendMode::Screen);
+    check("a composite of composites", g.render(n, n, 1, [&](GraphicsContext& c) { c.fillGradient(area, 0, nested, area); }),
+          model([&](Offset p) { return nested.colorAt(p, area); }), 3);
     // An image shader on a path, drawn turned: where each pixel is in the path's space, then in the image.
     Path disc;
     disc.addOval({8, 8, 48, 48});
@@ -2262,6 +2275,134 @@ void shadersPaintAsTheyAre(Gpu& g) {
     });
     CHECK(worst <= 3);
     if (worst > 3) std::printf("  an image shader on a turned path: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+}
+
+// Meshes as Skia draws them (Canvas.drawVertices): each pixel whose middle a triangle holds, not
+// anti-aliased; the paint where the texture coordinate is (or its color, opaque) through the
+// vertex colors (premultiplied between them) by the mode, the paint the source; faded; the
+// triangles over each other in turn. Worked out here per pixel, the texture coordinate and color
+// where the pixel is in the mesh's own plane (through the transform taken back: in perspective
+// too). Pixel middles within a hundredth of a pixel of an edge are left out (either side is right).
+void meshesDrawAsSkiaDoes(Gpu& g) {
+    const int n = 64;
+    std::vector<uint8_t> px(4 * 3 * 4);
+    for (int i = 0; i < 12; ++i) {
+        uint8_t* q = &px[size_t(i) * 4];
+        q[0] = uint8_t(30 + i * 19), q[1] = uint8_t(220 - i * 15), q[2] = uint8_t(i % 3 * 110), q[3] = uint8_t(i % 4 == 1 ? 128 : 255);
+    }
+    ImageBitmap tile = ImageBitmap::fromPixels(4, 3, px);
+    struct Case {
+        const char* what;
+        Vertices vertices;
+        BlendMode mode;
+        Paint paint;
+        std::optional<Matrix> transform;
+        std::optional<Rect> clip;
+        float scale = 1;  // px a dp
+    };
+    auto model = [&](const Case& c) {
+        Image out{n, n, std::vector<float>(size_t(n) * n * 4, 0.f)};
+        std::vector<bool> edgy(size_t(n) * n, false);
+        Matrix back = c.transform.value_or(Matrix());
+        back.invert();
+        const Vertices& v = c.vertices;
+        bool solid = !c.paint.shader;
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x) {
+                Offset q = back.map(Offset{(x + 0.5f) / c.scale, (y + 0.5f) / c.scale});
+                if (c.clip && (x + 0.5f < c.clip->x || x + 0.5f > c.clip->right() || y + 0.5f < c.clip->y || y + 0.5f > c.clip->bottom())) continue;
+                for (const auto& tri : v.triangles()) {
+                    Offset a = v.positions()[size_t(tri[0])], b = v.positions()[size_t(tri[1])], d = v.positions()[size_t(tri[2])];
+                    double twice = double(b.x - a.x) * (d.y - a.y) - double(b.y - a.y) * (d.x - a.x);
+                    if (twice == 0) continue;
+                    auto e = [&](Offset s0, Offset s1) { return (double(s1.x - s0.x) * (q.y - s0.y) - double(s1.y - s0.y) * (q.x - s0.x)) / twice; };
+                    double w[3] = {e(b, d), e(d, a), e(a, b)};
+                    // (how far from an edge, in the target's pixels, roughly: barycentric times the edge's height)
+                    bool in = w[0] >= 0 && w[1] >= 0 && w[2] >= 0;
+                    double margin = 1e30;
+                    const Offset pts[3] = {a, b, d};
+                    for (int k = 0; k < 3; ++k) {
+                        Offset s0 = pts[(k + 1) % 3], s1 = pts[(k + 2) % 3];
+                        double len = std::hypot(s1.x - s0.x, s1.y - s0.y);
+                        margin = std::min(margin, std::abs(w[k] * twice / std::max(len, 1e-9)));
+                    }
+                    if (margin * c.scale < 0.01 * (c.transform ? 0.5 : 1)) edgy[size_t(y) * n + size_t(x)] = true;
+                    if (!in) continue;
+                    Color src = solid ? c.paint.color.copy(1) : Color{};
+                    if (!solid) {
+                        Offset t{};
+                        for (int k = 0; k < 3; ++k) {
+                            Offset tk = v.textureCoordinates().empty() ? v.positions()[size_t(tri[size_t(k)])] : v.textureCoordinates()[size_t(tri[size_t(k)])];
+                            t.x += float(w[k]) * tk.x, t.y += float(w[k]) * tk.y;
+                        }
+                        src = c.paint.shader->colorAt(t);
+                    }
+                    Color col = src;
+                    if (!v.colors().empty()) {
+                        double p4[4] = {};
+                        for (int k = 0; k < 3; ++k) {
+                            Color ck = v.colors()[size_t(tri[size_t(k)])];
+                            p4[0] += w[k] * ck.r * ck.a, p4[1] += w[k] * ck.g * ck.a, p4[2] += w[k] * ck.b * ck.a, p4[3] += w[k] * ck.a;
+                        }
+                        Color dst = p4[3] > 0 ? Color{float(p4[0] / p4[3]), float(p4[1] / p4[3]), float(p4[2] / p4[3]), float(p4[3])} : colors::Transparent;
+                        col = blend(src, dst, c.mode);
+                    }
+                    float alpha = col.a * c.paint.alpha();
+                    float* o = out.at(x, y);
+                    o[0] = col.r * alpha + o[0] * (1 - alpha), o[1] = col.g * alpha + o[1] * (1 - alpha), o[2] = col.b * alpha + o[2] * (1 - alpha);
+                    o[3] = alpha + o[3] * (1 - alpha);
+                }
+            }
+        return std::pair{overWhite(out), edgy};
+    };
+    Color red{0.9f, 0.1f, 0.2f, 1}, green{0.1f, 0.8f, 0.3f, 1}, blue{0.1f, 0.3f, 0.9f, 0.7f}, gold{1, 0.7f, 0.1f, 1};
+    Paint white{.color = colors::White};
+    Paint tiled{.shader = ImageShader(tile, TileMode::Repeated, TileMode::Mirror)};
+    tiled.setAlpha(0.6f);
+    Paint ramp{.shader = LinearGradientShader({4, 0}, {60, 0}, {red, gold, blue}, {}, TileMode::Mirror)};
+    Paint composite{.shader = CompositeShader(LinearGradientShader({0, 0}, {0, 20}, {red, blue}), ImageShader(tile, TileMode::Repeated, TileMode::Repeated),
+                                              BlendMode::Screen)};
+    Paint nestedPaint{.shader = CompositeShader(CompositeShader(RadialGradientShader({10, 10}, 14, {red, blue}), LinearGradientShader({0, 0}, {20, 0}, {gold, green}),
+                                                                BlendMode::Multiply),
+                                                LinearGradientShader({0, 0}, {0, 20}, {Color{1, 1, 1, 0.2f}, Color{0, 0, 0, 0.6f}}), BlendMode::Overlay)};
+    Matrix leaning;
+    leaning.translate(32, 32);
+    leaning(0, 3) = 0.004f;
+    leaning.rotateZ(10);
+    leaning.translate(-32, -32);
+    const Case cases[] = {
+        {"vertex colors, modulated", Vertices(VertexMode::Triangles, {{3.3f, 4.2f}, {60.4f, 6.1f}, {58.7f, 59.6f}, {5.2f, 57.3f}}, {},
+                                                 {red, green, blue, gold}, {0, 1, 2, 0, 2, 3}),
+         BlendMode::Modulate, white, std::nullopt, std::nullopt},
+        {"an image through colors, multiplied, a strip", Vertices(VertexMode::TriangleStrip, {{4.3f, 10.2f}, {6.2f, 50.7f}, {30.1f, 8.4f}, {33.6f, 55.3f}, {59.8f, 12.3f}, {57.1f, 52.6f}},
+                                                               {{0, 0}, {0, 12}, {8, 0}, {8, 12}, {16, 0}, {16, 12}}, {red, green, blue, gold, red, green}),
+         BlendMode::Multiply, tiled, std::nullopt, std::nullopt},
+        {"a gradient where the pixels are, a fan, in perspective", Vertices(VertexMode::TriangleFan, {{32.2f, 31.7f}, {5.3f, 6.1f}, {58.6f, 4.4f}, {60.1f, 58.3f}, {4.7f, 59.2f}, {5.3f, 6.1f}},
+                                                                         {}, {}),
+         BlendMode::SrcOver, ramp, leaning, std::nullopt},
+        {"a composite, clipped, overlapping", Vertices(VertexMode::Triangles, {{2.3f, 3.1f}, {61.2f, 9.4f}, {12.6f, 60.3f}, {58.4f, 2.7f}, {54.3f, 61.1f}, {3.6f, 33.2f}},
+                                                      {{0, 0}, {20, 0}, {0, 20}, {20, 0}, {20, 20}, {0, 10}}, {gold, gold, gold, blue, blue, blue}),
+         BlendMode::Darken, composite, std::nullopt, Rect{8, 8, 48, 44}},
+        {"a composite of composites (baked as finely as it is spread)", Vertices(VertexMode::Triangles, {{4.3f, 5.1f}, {59.2f, 7.4f}, {31.6f, 58.3f}},
+                                                                             {{0, 0}, {20, 0}, {10, 20}}, {}),
+         BlendMode::SrcOver, nestedPaint, std::nullopt, std::nullopt},
+        {"an image through colors at 2 px a dp", Vertices(VertexMode::Triangles, {{2.3f, 3.1f}, {30.2f, 4.4f}, {6.6f, 29.3f}}, {{0, 0}, {12, 0}, {0, 9}},
+                                                         {red, green, blue}),
+         BlendMode::Multiply, tiled, std::nullopt, std::nullopt, 2},
+    };
+    for (const Case& c : cases) {
+        Pixels got = g.render(n, n, c.scale, [&](GraphicsContext& ctx) {
+            graphics::Canvas canvas(ctx);
+            if (c.transform) canvas.concat(*c.transform);
+            if (c.clip) canvas.clipRect(*c.clip);
+            canvas.drawVertices(c.vertices, c.mode, c.paint);
+        });
+        auto [want, edgy] = model(c);
+        int worst = worstAgainst(got, [&](int x, int y) { return want.at(x, y); }, [&](int x, int y) { return edgy[size_t(y) * n + size_t(x)]; });
+        int tolerance = c.paint.shader && c.paint.shader->kind() == Shader::Kind::Composite ? 4 : 3;
+        CHECK(worst <= tolerance);
+        if (worst > tolerance) std::printf("  %s: off by %d at (%g, %g)\n", c.what, worst, worstAt.x, worstAt.y);
+    }
 }
 
 // Elevation shadows are Android's: a rounded rect's (of one radius, a rect's, a circle's), flat,
@@ -2643,6 +2784,7 @@ int main() {
             imagesAreSampledAsAsked(g);
             conicsAreExact(g);
             shadersPaintAsTheyAre(g);
+            meshesDrawAsSkiaDoes(g);
             elevationShadowsAreAndroids(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)

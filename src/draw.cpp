@@ -500,6 +500,13 @@ void graphics::Canvas::drawPoints(PointMode pointMode, const std::vector<Offset>
                        paint.colorFilter, paint.blendMode);
 }
 
+void graphics::Canvas::drawVertices(const Vertices& vertices, BlendMode blendMode, const Paint& paint) {
+    if (paint.alpha() <= 0) return;
+    Blending blending(*context_, paint.blendMode);
+    detail::Filtering filtering(*context_, paint.colorFilter);
+    context_->drawVertices(vertices, origin_, blendMode, brushOf(paint), {origin_.x, origin_.y, 0, 0}, paint.alpha());
+}
+
 void graphics::Canvas::drawRawPoints(PointMode pointMode, const std::vector<float>& points, const Paint& paint) {
     std::vector<Offset> pairs;
     for (size_t i = 0; i + 1 < points.size(); i += 2) pairs.push_back({points[i], points[i + 1]});
@@ -964,6 +971,7 @@ public:
     void drawArc(const Rect&, float, float, float, Color, bool) override {}
     void drawImage(const ImageBitmap&, const Rect&, const Rect&, float, FilterQuality) override {}
     void drawPath(const Path&, Offset, const Brush&, const Rect&, const PathStroke&) override {}
+    void drawVertices(const Vertices&, Offset, BlendMode, const Brush&, const Rect&, float) override {}
     void fillGradient(const Rect&, const CornerRadii&, const Brush&, const Rect&) override {}
     void drawShadow(const Rect&, const CornerRadii&, const Shadow&, bool) override {}
     void drawShadowPath(const Path&, Offset, const Shadow&, bool) override {}

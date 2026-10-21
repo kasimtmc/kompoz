@@ -23950,6 +23950,72 @@ TEST(draw_scopes_know_the_density_and_direction) {
     CHECK(builds == before + 2 && cacheBuilt.density == (Density{3, 1}));
 }
 
+// Compose's Vertices: triangles in each mode, from indices or as they come (a triangle with an
+// index out of range left out), texture coordinates and colors that don't match left out, the
+// arrays' form; drawn by a Canvas as Skia draws them (its origin, the paint's shader or opaque
+// color, its alpha, filter and blend mode), recorded and replayed by a display list, equal by value.
+TEST(vertices_are_composes) {
+    Color red{1, 0, 0, 1}, blue{0, 0, 1, 1};
+    std::vector<Offset> five{{0, 0}, {10, 0}, {10, 10}, {0, 10}, {5, 15}};
+    using T = std::vector<std::array<int, 3>>;
+    CHECK(Vertices(VertexMode::Triangles, five, {}, {}).triangles() == (T{{0, 1, 2}}));
+    CHECK(Vertices(VertexMode::TriangleStrip, five, {}, {}).triangles() == (T{{0, 1, 2}, {1, 2, 3}, {2, 3, 4}}));
+    CHECK(Vertices(VertexMode::TriangleFan, five, {}, {}).triangles() == (T{{0, 1, 2}, {0, 2, 3}, {0, 3, 4}}));
+    CHECK(Vertices(VertexMode::Triangles, five, {}, {}, {0, 2, 3, 0, 9, 1, 4, 3, 2}).triangles() == (T{{0, 2, 3}, {4, 3, 2}}));  // (9: out of range)
+    CHECK(Vertices(VertexMode::TriangleFan, five, {}, {}, {4, 0, 1, -1}).triangles() == (T{{4, 0, 1}}));
+    Vertices odd(VertexMode::Triangles, five, {{0, 0}}, {red, red, red, red, red});
+    CHECK(odd.textureCoordinates().empty() && odd.colors().size() == 5);  // texture coordinates that don't match: left out
+    CHECK(Vertices(VertexMode::Triangles, five, five, {red}).colors().empty());
+    CHECK(sameRect(odd.bounds(), {0, 0, 10, 15}));
+    Vertices raw(VertexMode::TriangleStrip, std::vector<float>{0, 0, 10, 0, 0, 10, 99}, std::vector<float>{0, 0, 1, 0, 0, 1, 7},
+                 std::vector<uint32_t>{0x80FF0000, 0xFF0000FF, 0xFFFFFFFF}, std::vector<int16_t>{2, 1, 0});
+    CHECK(raw.positions().size() == 3 && raw.positions()[2] == (Offset{0, 10}) && raw.indices() == (std::vector<int>{2, 1, 0}));
+    CHECK(raw.textureCoordinates().size() == 3 && raw.textureCoordinates()[1] == (Offset{1, 0}));  // (an odd float left out of each)
+    CHECK(Vertices(VertexMode::Triangles, std::vector<float>{0, 0, 10, 0, 0, 10}, std::vector<float>{0, 0}, std::vector<uint32_t>{}).textureCoordinates().empty());
+    CHECK(raw.colors().size() == 3 && near(raw.colors()[0].a, 128 / 255.f, 1e-6f) && raw.colors()[0].r == 1 && raw.colors()[1] == blue);
+    CHECK(raw.triangles() == (T{{2, 1, 0}}));
+    CHECK(Vertices(VertexMode::Triangles, five, {}, {}) == Vertices(VertexMode::Triangles, five, {}, {}) &&
+          !(Vertices(VertexMode::Triangles, five, {}, {}) == Vertices(VertexMode::TriangleFan, five, {}, {})));
+    // Drawn by a canvas: at its origin, with the paint's shader (or its color, opaque), alpha, filter and blend mode.
+    Vertices mesh(VertexMode::Triangles, {{0, 0}, {20, 0}, {0, 20}}, {{0, 0}, {5, 0}, {0, 5}}, {red, blue, red});
+    testing::RecordingCanvas r;
+    {
+        graphics::Canvas c(r, {30, 40});
+        Paint faded{.color = red.copy(0.5f), .blendMode = BlendMode::Multiply, .colorFilter = ColorFilter::tint(blue)};
+        c.drawVertices(mesh, BlendMode::Screen, faded);
+        c.drawVertices(mesh, BlendMode::Modulate, Paint{.shader = LinearGradientShader({0, 0}, {5, 0}, {red, blue})});
+        c.drawVertices(mesh, BlendMode::Modulate, Paint{.color = red.copy(0)});  // invisible: nothing
+    }
+    CHECK(r.meshes.size() == 2 && r.order == "vv");
+    if (r.meshes.size() == 2) {
+        const auto& m0 = r.meshes[0];
+        CHECK(m0.vertices == mesh && m0.origin == (Offset{30, 40}) && m0.blendMode == BlendMode::Screen && near(m0.alpha, 0.5f));
+        CHECK(m0.brush.isSolid() && m0.brush.stops().front().color == red && m0.paintBlend == BlendMode::Multiply && m0.filters.size() == 1);
+        CHECK(sameRect(m0.brushArea, {30, 40, 0, 0}));
+        CHECK(r.meshes[1].brush.kind() == Brush::Kind::Shader && near(r.meshes[1].alpha, 1));
+    }
+    // A display list records it, replays it, and sees no change in the same one drawn again.
+    testing::FakeTextMeasurer measurer;
+    DisplayList list(measurer);
+    auto frame = [&](Offset at, Color corner = Color{1, 0, 0, 1}) {
+        list.begin({200, 200}, 1);
+        list.drawVertices(Vertices(VertexMode::Triangles, {{0, 0}, {20, 0}, {0, 20}}, {}, {corner, blue, red}), at, BlendMode::Screen,
+                          Brush::solid(blue), {at.x, at.y, 0, 0}, 0.7f);
+        return list.end();
+    };
+    frame({10, 10});
+    CHECK(!frame({10, 10}) && list.size() == 1);
+    auto recolored = frame({10, 10}, blue);  // the same place, another color: where it is
+    CHECK(recolored && recolored->x <= 10 && recolored->right() >= 30);
+    frame({10, 10});
+    auto damage = frame({50, 10});
+    CHECK(damage && damage->x <= 10 && damage->right() >= 70);
+    testing::RecordingCanvas replayed;
+    list.replay(replayed);
+    CHECK(replayed.meshes.size() == 1 && replayed.meshes[0].origin == (Offset{50, 10}) && replayed.meshes[0].blendMode == BlendMode::Screen &&
+          near(replayed.meshes[0].alpha, 0.7f));
+}
+
 TEST(path_effects_dash_and_round_strokes) {
     auto dash = PathEffect::dashPathEffect({10, 5});
     ComposeTestRule rule([&] {
@@ -24955,6 +25021,7 @@ TEST(shadow_default_draws_fading_rings_and_display_list_damage_reaches_the_blur)
         void pushTransform(const Matrix&) override {}
         void popTransform() override {}
         void drawPath(const Path&, Offset, const Brush&, const Rect&, const PathStroke&) override {}
+        void drawVertices(const Vertices&, Offset, BlendMode, const Brush&, const Rect&, float) override {}
     } rings;
     rings.drawShadow({10, 10, 20, 20}, 4, Shadow{Color{0, 0, 0, 1}, {0, 3}, 6, 1}, false);
     CHECK(rings.rects.size() == 6);

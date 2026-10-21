@@ -302,6 +302,21 @@ public:
     std::vector<float> pathStrokes;  // and stroke width (0: filled, unless a hairline)
     std::vector<PathStroke> pathStrokeStyles;  // and all of its stroke
     std::vector<Path> pathShapes;    // and the path itself (around the origin it was drawn at)
+    struct Mesh {  // a drawVertices call
+        Vertices vertices;
+        Offset origin;
+        BlendMode blendMode;
+        Brush brush;
+        Rect brushArea;
+        float alpha;
+        BlendMode paintBlend;              // the blend mode in effect
+        std::vector<ColorFilter> filters;  // and the filters
+    };
+    std::vector<Mesh> meshes;
+    void drawVertices(const Vertices& v, Offset origin, BlendMode mode, const Brush& brush, const Rect& area, float alpha) override {
+        order += 'v';
+        meshes.push_back({v, {origin.x + translation.x, origin.y + translation.y}, mode, brush, area, alpha, blend(), filterStack});
+    }
     void drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& area, const PathStroke& stroke) override {
         order += 'p';
         pathBlends.push_back(blend());

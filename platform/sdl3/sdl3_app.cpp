@@ -1209,6 +1209,102 @@ public:
         }
     }
 
+    // A mesh, worked out on the CPU into a texture of what it covers, as Skia draws one: each pixel
+    // whose middle a triangle holds (its top and left edges' too, not its others: no gaps, nothing
+    // twice), the brush where the texture coordinate is (or its color opaque) through the vertex
+    // colors by the mode, filtered, faded; triangles over the ones before.
+    void drawVertices(const Vertices& vertices, Offset origin, BlendMode blendMode, const Brush& brush, const Rect& area,
+                      float alpha) override {
+        std::vector<std::array<int, 3>> triangles = vertices.triangles();
+        if (triangles.empty() || alpha <= 0) return;
+        const std::vector<Offset>& at = vertices.positions();
+        const std::vector<Offset>& tex = vertices.textureCoordinates();
+        const std::vector<Color>& colors = vertices.colors();
+        std::vector<SDL_FPoint> px(at.size());
+        float l = 1e30f, t = 1e30f, r = -1e30f, b = -1e30f;
+        for (size_t i = 0; i < at.size(); ++i) {
+            px[i] = {(origin.x + at[i].x) * scale - ox_, (origin.y + at[i].y) * scale - oy_};
+            l = std::min(l, px[i].x), t = std::min(t, px[i].y), r = std::max(r, px[i].x), b = std::max(b, px[i].y);
+        }
+        int X0 = int(std::floor(l)), Y0 = int(std::floor(t)), W = int(std::ceil(r)) - X0 + 1, H = int(std::ceil(b)) - Y0 + 1;
+        if (W <= 0 || H <= 0 || W > 4096 || H > 4096) return;
+        bool solid = brush.isSolid() || (brush.kind() != Brush::Kind::Shader && !brush.transform() && brush.stops().size() < 2);
+        Color opaque = (brush.stops().empty() ? colors::Transparent : brush.stops().front().color).copy(1);
+        Shader shader = solid ? Shader() : brush.createShader({area.width, area.height});
+        std::vector<float> premul(size_t(W) * size_t(H) * 4, 0.f);
+        for (const auto& tri : triangles) {
+            SDL_FPoint a = px[size_t(tri[0])], p1 = px[size_t(tri[1])], p2 = px[size_t(tri[2])];
+            float twice = (p1.x - a.x) * (p2.y - a.y) - (p1.y - a.y) * (p2.x - a.x);
+            if (twice == 0) continue;
+            float sign = twice > 0 ? 1.f : -1.f;
+            // Edge i is opposite vertex i: inside where its function is above 0, or 0 on a top or left edge.
+            const SDL_FPoint v[3] = {a, p1, p2};
+            auto edge = [&](int i, float x, float y) {
+                SDL_FPoint s0 = v[(i + 1) % 3], s1 = v[(i + 2) % 3];
+                return sign * ((s1.x - s0.x) * (y - s0.y) - (s1.y - s0.y) * (x - s0.x));
+            };
+            auto topLeft = [&](int i) {
+                SDL_FPoint s0 = v[(i + 1) % 3], s1 = v[(i + 2) % 3];
+                float dx = (s1.x - s0.x) * sign, dy = (s1.y - s0.y) * sign;
+                return (dy == 0 && dx < 0) || dy > 0;  // (y down, the triangle counterclockwise on the screen)
+            };
+            int x0 = std::max(X0, int(std::floor(std::min({a.x, p1.x, p2.x})))), x1 = std::min(X0 + W - 1, int(std::ceil(std::max({a.x, p1.x, p2.x}))));
+            int y0 = std::max(Y0, int(std::floor(std::min({a.y, p1.y, p2.y})))), y1 = std::min(Y0 + H - 1, int(std::ceil(std::max({a.y, p1.y, p2.y}))));
+            for (int y = y0; y <= y1; ++y)
+                for (int x = x0; x <= x1; ++x) {
+                    float cx = float(x) + 0.5f, cy = float(y) + 0.5f, e[3];
+                    bool in = true;
+                    for (int i = 0; i < 3 && in; ++i) {
+                        e[i] = edge(i, cx, cy);
+                        in = e[i] > 0 || (e[i] == 0 && topLeft(i));
+                    }
+                    if (!in) continue;
+                    float w[3] = {e[0] / std::abs(twice), e[1] / std::abs(twice), e[2] / std::abs(twice)};
+                    Color src = opaque;
+                    if (!solid) {
+                        Offset q{};
+                        for (int k = 0; k < 3; ++k) {
+                            size_t i = size_t(tri[size_t(k)]);
+                            Offset tk = tex.empty() ? at[i] : tex[i];
+                            q.x += w[k] * (origin.x + tk.x), q.y += w[k] * (origin.y + tk.y);
+                        }
+                        src = shader.colorAt({q.x - area.x, q.y - area.y});
+                    }
+                    Color c = src;
+                    if (!colors.empty()) {  // the colors between the vertices, premultiplied
+                        float d[4] = {};
+                        for (int k = 0; k < 3; ++k) {
+                            Color ck = colors[size_t(tri[size_t(k)])];
+                            d[0] += w[k] * ck.r * ck.a, d[1] += w[k] * ck.g * ck.a, d[2] += w[k] * ck.b * ck.a, d[3] += w[k] * ck.a;
+                        }
+                        Color dst = d[3] > 0 ? Color{d[0] / d[3], d[1] / d[3], d[2] / d[3], d[3]} : colors::Transparent;
+                        c = blend(src, dst, blendMode);
+                    }
+                    c = filtered(c);
+                    float ca = std::clamp(c.a * alpha, 0.f, 1.f);
+                    float* out = &premul[(size_t(y - Y0) * size_t(W) + size_t(x - X0)) * 4];
+                    float keep = 1 - ca;
+                    out[0] = c.r * ca + out[0] * keep, out[1] = c.g * ca + out[1] * keep, out[2] = c.b * ca + out[2] * keep;
+                    out[3] = ca + out[3] * keep;
+                }
+        }
+        std::vector<uint8_t> rgba(premul.size());
+        auto byte = [](float v) { return uint8_t(std::lround(std::clamp(v, 0.f, 1.f) * 255)); };
+        for (size_t i = 0; i < premul.size(); i += 4) {
+            float a = premul[i + 3];
+            for (int k = 0; k < 3; ++k) rgba[i + size_t(k)] = byte(a > 0 ? premul[i + size_t(k)] / a : 0);
+            rgba[i + 3] = byte(a);
+        }
+        SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, W, H);
+        if (!texture) return;
+        SDL_UpdateTexture(texture, nullptr, rgba.data(), W * 4);
+        SDL_SetTextureBlendMode(texture, blend_);
+        SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
+        SDL_FRect d{float(X0), float(Y0), float(W), float(H)};
+        SDL_RenderTexture(renderer_, texture, nullptr, &d);
+        SDL_DestroyTexture(texture);
+    }
+
     void drawPath(const Path& path, Offset origin, const Brush& unfiltered, const Rect& area, const PathStroke& given) override {
         if (path.isEmpty()) return;
         PathStroke stroke = given;

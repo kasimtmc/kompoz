@@ -15,7 +15,7 @@ namespace kompoz::gpu {
 namespace {
 
 // shaders/primitives.slang's kinds.
-enum Kind { FILL = 0, STROKE = 1, LINE = 2, ARC = 3, SHADOW = 4, GLYPH = 5, IMAGE = 6, LAYER = 7, PATH = 8, ELEVATION = 9 };
+enum Kind { FILL = 0, STROKE = 1, LINE = 2, ARC = 3, SHADOW = 4, GLYPH = 5, IMAGE = 6, LAYER = 7, PATH = 8, ELEVATION = 9, MESH = 10 };
 
 constexpr int kMaxLayer = 4096;  // px: a bigger layer is drawn straight into its target
 
@@ -23,6 +23,8 @@ const ShaderCode kVertex{shaders::primitives_vs_spirv, shaders::primitives_vs_ms
                          shaders::primitives_vs_glsl, shaders::primitives_vs_wgsl, "vs"};
 const ShaderCode kFragment{shaders::primitives_fs_spirv, shaders::primitives_fs_msl,
                            shaders::primitives_fs_glsl, shaders::primitives_fs_wgsl, "fs"};
+const ShaderCode kMeshVertex{shaders::primitives_vsMesh_spirv, shaders::primitives_vsMesh_msl,
+                             shaders::primitives_vsMesh_glsl, shaders::primitives_vsMesh_wgsl, "vsMesh"};
 const ShaderCode kCoverageVertex{shaders::path_vs_spirv, shaders::path_vs_msl, shaders::path_vs_glsl,
                                  shaders::path_vs_wgsl, "vs"};
 const ShaderCode kCoverageFragment{shaders::path_fs_spirv, shaders::path_fs_msl, shaders::path_fs_glsl,
@@ -53,16 +55,16 @@ Renderer::Renderer(Device& device, TextSource& text) : device_(device), text_(te
 
 Renderer::~Renderer() { device_.waitIdle(); }
 
-Pipeline& Renderer::pipeline(Format target, const BlendState& blend) {
-    PipelineKey key{target, blend};
+Pipeline& Renderer::pipeline(Format target, const BlendState& blend, bool mesh) {
+    PipelineKey key{target, blend, mesh};
     for (auto& [k, p] : pipelines_)
         if (k == key) return *p;
     PipelineDesc desc;
-    desc.vertex = &kVertex;
+    desc.vertex = mesh ? &kMeshVertex : &kVertex;
     desc.fragment = &kFragment;
     for (uint32_t i = 0; i < 12; ++i) desc.instanceAttributes.push_back({i, VertexFormat::Float4, i * 16});
     desc.instanceStride = sizeof(Prim);
-    desc.textures = 5;
+    desc.textures = 6;
     desc.blend = blend;
     desc.target = target;
     pipelines_.emplace_back(key, device_.createPipeline(desc));
@@ -222,8 +224,8 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Ma
     BlendMode blend = blends_.empty() || opaque ? BlendMode::SrcOver : blends_.back();
     if (blend == BlendMode::Dst) return;  // (changes nothing)
     Prim p = prim;
-    p.extra[2] = float(kind);
-    if (kind != PATH && !opaque && !inTargetPixels && !transform_.identity()) {
+    if (kind != MESH) p.extra[2] = float(kind);  // (a mesh's extra is a vertex's color: vsMesh knows what it is)
+    if (kind != PATH && kind != MESH && !opaque && !inTargetPixels && !transform_.identity()) {
         // Its own transform, then the current one.
         Projective own{{p.xform[0], p.xform[2], p.extra[0], p.xform[1], p.xform[3], p.extra[1], p.projection[0], p.projection[1], p.projection[2]}};
         Projective t = transform_ * own;
@@ -289,24 +291,34 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Ma
         p.filter[0] = float(std::min<size_t>(chain.size(), kStopsWidth / 6));
         p.filter[1] = float(row);
     }
-    Sampler sampler1;
-    if (int(p.paint[0] + 0.5f) == 4 && !texture1 && size_t(p.paint[2]) < paintTextures_.size()) {  // an image paint: its texture
-        texture1 = paintTextures_[size_t(p.paint[2])].texture;
-        sampler1 = paintTextures_[size_t(p.paint[2])].sampler;
+    Sampler sampler1, sampler5;
+    Texture* texture5 = nullptr;
+    int paintKind = int(p.paint[0] + 0.5f);
+    auto image = [&](float index, Texture*& t, Sampler& s) {  // an image paint's texture
+        if (index < 0 || size_t(index) >= paintTextures_.size()) return;
+        t = paintTextures_[size_t(index)].texture, s = paintTextures_[size_t(index)].sampler;
+    };
+    if (paintKind == 4 && !texture1) image(p.paint[2], texture1, sampler1);
+    if (paintKind == 5) {  // (a composite's: its destination's, its source's)
+        if (!texture1) image(p.paint[1], texture1, sampler1);
+        image(p.paint[2], texture5, sampler5);
     }
+    if (!texture5) texture5 = white_.get();
     if (!texture) texture = white_.get();
     if (!texture1) texture1 = white_.get();
     uint32_t generation = pass.shelf.generation;
     if (!pass.batches.empty()) {
         Batch& last = pass.batches.back();
         if (last.texture == texture && last.texture1 == texture1 && last.mask == mask && last.opaque == opaque && last.blend == blend &&
-            last.scissor == clip && last.generation == generation && last.sampler == sampler && last.sampler1 == sampler1) {
+            last.scissor == clip && last.generation == generation && last.sampler == sampler && last.sampler1 == sampler1 &&
+            last.mesh == (kind == MESH) && last.texture5 == texture5 && last.sampler5 == sampler5) {
             pass.prims.push_back(p);
             ++last.count;
             return;
         }
     }
-    pass.batches.push_back({texture, texture1, mask, opaque, blend, clip, generation, uint32_t(pass.prims.size()), 1, sampler, sampler1});
+    pass.batches.push_back({texture, texture1, mask, opaque, blend, clip, generation, uint32_t(pass.prims.size()), 1, sampler, sampler1,
+                            kind == MESH, texture5, sampler5});
     pass.prims.push_back(p);
 }
 
@@ -460,7 +472,7 @@ void Renderer::execute(Pass& pass) {
         bool readsTarget = false;
         for (size_t i = firstBatch; i < batch; ++i) {
             const Batch& b = pass.batches[i];
-            for (Texture* t : {b.mask == Mask::Texture0 ? mask_.get() : b.texture, b.mask == Mask::Texture1 ? mask_.get() : b.texture1})
+            for (Texture* t : {b.mask == Mask::Texture0 ? mask_.get() : b.texture, b.mask == Mask::Texture1 ? mask_.get() : b.texture1, b.texture5})
                 if (std::find(reads.begin(), reads.end(), t) == reads.end()) reads.push_back(t);
             readsTarget = readsTarget || planFor(b.blend, b.opaque).readsTarget;
         }
@@ -489,8 +501,9 @@ void Renderer::execute(Pass& pass) {
             BlendPlan plan = planFor(b.blend, b.opaque);
             uniforms[8] = float(int(b.blend));
             uniforms[9] = float(plan.how);
-            device_.setPipeline(pipeline(pass.target->format(), plan.state));
+            device_.setPipeline(pipeline(pass.target->format(), plan.state, b.mesh));
             device_.setUniforms(uniforms, sizeof uniforms);
+            uint32_t corners = b.mesh ? 3 : 6;
             if (b.mask == Mask::Texture0)
                 device_.setTexture(0, *mask_, nearest);
             else
@@ -502,9 +515,10 @@ void Renderer::execute(Pass& pass) {
             device_.setTexture(2, stopsTexture_ ? *stopsTexture_ : *white_, nearest);
             device_.setTexture(3, readsTarget ? *dstCopy_ : *white_, nearest);
             device_.setTexture(4, masked ? *mask_ : *white_, nearest);
+            device_.setTexture(5, *b.texture5, b.sampler5);
             if (!plan.readsTarget) {
                 device_.setScissor(b.scissor);
-                device_.draw({prims.buffer, prims.offset + uint64_t(b.first) * sizeof(Prim)}, 6, b.count);
+                device_.draw({prims.buffer, prims.offset + uint64_t(b.first) * sizeof(Prim)}, corners, b.count);
                 continue;
             }
             // Each one on what is there just before it: the pass ends, the pixels under it are copied,
@@ -515,9 +529,17 @@ void Renderer::execute(Pass& pass) {
                                   q.projection[2]}};
                 float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f;
                 bool behind = false;  // part of it behind the eye: all of the scissor
-                for (int c = 0; c < 4; ++c) {
+                for (int c = 0; c < (b.mesh ? 3 : 4); ++c) {
                     float w;
-                    Offset d = place.apply(q.bounds[c & 1 ? 2 : 0], q.bounds[c & 2 ? 3 : 1], &w);
+                    Offset d;
+                    if (b.mesh) {  // (a triangle's vertices, where they are: x, y and w)
+                        const float xyw[3][3] = {{q.bounds[0], q.bounds[1], q.bounds[2]}, {q.bounds[3], q.shape[0], q.shape[1]},
+                                                 {q.shape[2], q.shape[3], q.radii[0]}};
+                        w = xyw[c][2];
+                        d = {xyw[c][0] / w, xyw[c][1] / w};
+                    } else {
+                        d = place.apply(q.bounds[c & 1 ? 2 : 0], q.bounds[c & 2 ? 3 : 1], &w);
+                    }
                     behind = behind || w <= 0;
                     x0 = std::min(x0, d.x), y0 = std::min(y0, d.y), x1 = std::max(x1, d.x), y1 = std::max(y1, d.y);
                 }
@@ -531,7 +553,7 @@ void Renderer::execute(Pass& pass) {
                 device_.beginPass(*pass.target, std::nullopt, reads);
                 device_.setUniforms(uniforms, sizeof uniforms);
                 device_.setScissor(under);
-                device_.draw({prims.buffer, prims.offset + uint64_t(k) * sizeof(Prim)}, 6, 1);
+                device_.draw({prims.buffer, prims.offset + uint64_t(k) * sizeof(Prim)}, corners, 1);
             }
         }
         device_.endPass();
@@ -666,9 +688,9 @@ int Renderer::shaderRow(const std::vector<ColorStop>* stops, const Projective& m
 
 // A shader's paint: where each pixel is in it (its dp from the area's top left, through its
 // transform taken back) worked out per pixel from the map in its row; a gradient's stops before
-// that, an image in texture1 (premultiplied, sampled bilinearly, tiled as it says); a composite
-// baked first (see bakedShader).
-Renderer::Prim Renderer::paintedShader(const Shader& shader, const Rect& area, float alpha, float enlarged) {
+// that, an image in texture1 (premultiplied, sampled bilinearly, tiled as it says); a composite's
+// two the same, blended where the pixel is (a composite of composites baked first: bakedShader).
+Renderer::Prim Renderer::paintedShader(const Shader& shader, const Rect& area, float alpha, float enlarged, const Projective* before) {
     Prim p;
     if (!shader.data_) return p;  // (transparent)
     float k = enlarged * scale;
@@ -678,9 +700,39 @@ Renderer::Prim Renderer::paintedShader(const Shader& shader, const Rect& area, f
         back.invert();
         map = Projective::of(back) * map;
     }
+    if (before) map = map * *before;
     set(p.color, 1, 1, 1, alpha);
     switch (shader.kind()) {
-    case Shader::Kind::Composite: return bakedShader(shader, area, alpha, enlarged);
+    case Shader::Kind::Composite: {
+        // Worked out where each pixel is (paintAt): the two through the composite's own transform
+        // (after theirs), each a paint (one color a stop of it), in a row of the table; a composite
+        // in either baked.
+        Shader dst = shader.dst(), src = shader.src();
+        if (dst.kind() == Shader::Kind::Composite || src.kind() == Shader::Kind::Composite)
+            return bakedShader(shader, area, alpha, enlarged, before);
+        if (const Matrix* t = shader.transform()) dst = dst.transformed(*t), src = src.transformed(*t);
+        auto child = [&](const Shader& one) {
+            Prim c = paintedShader(one, area, 1, enlarged, before);
+            if (int(c.paint[0] + 0.5f) == 0) {  // one color: a gradient of it
+                std::vector<ColorStop> stop{{0, one.stops().empty() ? colors::Transparent : one.stops().front().color}};
+                set(c.paint, 1, 0, 1, float(shaderRow(&stop, Projective{})));
+                set(c.gradient, 0, 0, 0, 0);
+            }
+            return c;
+        };
+        Prim d = child(dst), sp = child(src);
+        int row = int(stops_.size() / (kStopsWidth * 4));
+        size_t at = stops_.size();
+        stops_.resize(at + kStopsWidth * 4, 0.f);
+        std::copy_n(d.paint, 4, &stops_[at]);
+        std::copy_n(d.gradient, 4, &stops_[at + 4]);
+        std::copy_n(sp.paint, 4, &stops_[at + 8]);
+        std::copy_n(sp.gradient, 4, &stops_[at + 12]);
+        stops_[at + 16] = float(int(shader.blendMode()));
+        auto imageIndex = [](const Prim& c) { return int(c.paint[0] + 0.5f) == 4 ? c.paint[2] : -1.f; };
+        set(p.paint, 5, imageIndex(d), imageIndex(sp), float(row));
+        return p;
+    }
     case Shader::Kind::Image: {
         Texture* t = imageTexture(shader.image());
         if (!t) return Prim{};
@@ -707,12 +759,11 @@ Renderer::Prim Renderer::paintedShader(const Shader& shader, const Rect& area, f
     }
 }
 
-// A composite baked: what the area covers in this target's px (at most kMaxLayer across, lower
-// in resolution if it would be more) drawn into a texture of its own (in half floats if the
-// target is), the second shader onto the
-// first by its blend mode (the renderer's own blending, a composite in either baked first), then
-// painted from that texture.
-Renderer::Prim Renderer::bakedShader(const Shader& shader, const Rect& area, float alpha, float enlarged) {
+// A composite of composites baked: what the area covers in this target's px (at most kMaxLayer
+// across, lower in resolution if it would be more) drawn into a texture of its own (in half floats
+// if the target is), the second shader onto the first by its blend mode (the renderer's own
+// blending, each a paint of its own), then painted from that texture.
+Renderer::Prim Renderer::bakedShader(const Shader& shader, const Rect& area, float alpha, float enlarged, const Projective* before) {
     float k = enlarged * scale;
     float x0 = (area.x * scale - ox_) * enlarged, y0 = (area.y * scale - oy_) * enlarged, w = area.width * k, h = area.height * k;
     float r = std::min(1.f, float(kMaxLayer) / std::max({w, h, 1.f}));
@@ -742,11 +793,98 @@ Renderer::Prim Renderer::bakedShader(const Shader& shader, const Rect& area, flo
     scale = s0;
     // This target's px to the bake's uv.
     Projective map{{r / float(bake->width()), 0, -x0 * r / float(bake->width()), 0, r / float(bake->height()), -y0 * r / float(bake->height()), 0, 0, 1}};
+    if (before) map = map * *before;
     paintTextures_.push_back({bake, Sampler{}});
     Prim p;
     set(p.color, 1, 1, 1, alpha);
     set(p.paint, 4, 8, float(paintTextures_.size() - 1), float(shaderRow(nullptr, map)));
     return p;
+}
+
+// A mesh: each triangle one primitive (vsMesh), its vertices where this target's pixels are
+// (x, y and w, through the transform: the rasterizer clips what is behind the eye and works the
+// texture coordinates and colors out in perspective). The paint: the brush's color opaque, or its
+// shader where the texture coordinates are (dp, through `before` to this target's px and the
+// shader's own map from there).
+void Renderer::drawVertices(const Vertices& vertices, Offset origin, BlendMode blendMode, const Brush& brush, const Rect& brushArea,
+                            float alpha) {
+    std::vector<std::array<int, 3>> triangles = vertices.triangles();
+    if (triangles.empty() || alpha <= 0) return;
+    const std::vector<Offset>& at = vertices.positions();
+    const std::vector<Offset>& tex = vertices.textureCoordinates();
+    const std::vector<Color>& colors = vertices.colors();
+    auto sampled = [&](int i) {
+        Offset t = tex.empty() ? at[size_t(i)] : tex[size_t(i)];
+        return Offset{origin.x + t.x, origin.y + t.y};
+    };
+    Prim paint;
+    if (brush.isSolid() || (brush.kind() != Brush::Kind::Shader && !brush.transform() && brush.stops().size() < 2)) {
+        Color c = brush.stops().empty() ? colors::Transparent : brush.stops().front().color;
+        premultiplied(paint.color, c.copy(1));
+    } else {
+        Shader shader = brush.createShader({brushArea.width, brushArea.height});
+        Rect area = brushArea;
+        float enlarged = 1;
+        bool nested = shader.kind() == Shader::Kind::Composite &&
+                      (shader.dst().kind() == Shader::Kind::Composite || shader.src().kind() == Shader::Kind::Composite);
+        if (nested) {
+            // A composite of composites is baked (see paintedShader): over the texture
+            // coordinates' bounds (its points from the area's top left still), as finely as the
+            // mesh spreads them over the screen (as many texels as px, up to 8 a px of this
+            // target's), sampled between its texels.
+            float l = 1e30f, t = 1e30f, r = -1e30f, b = -1e30f;
+            for (const auto& tri : triangles) {
+                Offset s[3], u[3];
+                bool seen = true;
+                for (int k = 0; k < 3; ++k) {
+                    int i = tri[size_t(k)];
+                    u[k] = sampled(i);
+                    l = std::min(l, u[k].x), t = std::min(t, u[k].y), r = std::max(r, u[k].x), b = std::max(b, u[k].y);
+                    float w;
+                    s[k] = transform_.apply((origin.x + at[size_t(i)].x) * scale - ox_, (origin.y + at[size_t(i)].y) * scale - oy_, &w);
+                    seen = seen && w > 0;
+                }
+                // How far a dp of texture coordinate goes on the screen: the map between them's
+                // size (its Frobenius norm, at least its largest stretch).
+                float a1 = u[1].x - u[0].x, b1 = u[2].x - u[0].x, c1 = u[1].y - u[0].y, d1 = u[2].y - u[0].y, det = a1 * d1 - b1 * c1;
+                if (!seen || std::abs(det) < 1e-12f) continue;
+                float sx1 = s[1].x - s[0].x, sx2 = s[2].x - s[0].x, sy1 = s[1].y - s[0].y, sy2 = s[2].y - s[0].y;
+                float j00 = (sx1 * d1 - sx2 * c1) / det, j01 = (sx2 * a1 - sx1 * b1) / det;
+                float j10 = (sy1 * d1 - sy2 * c1) / det, j11 = (sy2 * a1 - sy1 * b1) / det;
+                enlarged = std::max(enlarged, std::sqrt(j00 * j00 + j01 * j01 + j10 * j10 + j11 * j11) / scale);
+            }
+            enlarged = std::min(enlarged, 8.f);
+            area = {l, t, r - l, b - t};
+            Matrix shift;
+            shift.translate(brushArea.x - area.x, brushArea.y - area.y);
+            shader = shader.transformed(shift);
+        }
+        float k = scale * enlarged;  // (the point the paint is asked for: dp to this target's px, enlarged)
+        Projective toPixels{{k, 0, -ox_ * enlarged, 0, k, -oy_ * enlarged, 0, 0, 1}};
+        paint = paintedShader(shader, area, 1, enlarged, &toPixels);
+    }
+    set(paint.params, float(int(blendMode)), alpha, colors.empty() ? 0.f : 1.f, 0);
+    const float* m = transform_.m;
+    for (const auto& tri : triangles) {
+        Prim p = paint;
+        float xyw[3][3], uv[3][2], rgba[3][4] = {};
+        for (int k = 0; k < 3; ++k) {
+            size_t i = size_t(tri[size_t(k)]);
+            float x = (origin.x + at[i].x) * scale - ox_, y = (origin.y + at[i].y) * scale - oy_;
+            xyw[k][0] = m[0] * x + m[1] * y + m[2], xyw[k][1] = m[3] * x + m[4] * y + m[5], xyw[k][2] = m[6] * x + m[7] * y + m[8];
+            Offset q = sampled(tri[size_t(k)]);
+            uv[k][0] = q.x, uv[k][1] = q.y;
+            if (!colors.empty()) premultiplied(rgba[k], colors[i]);
+        }
+        set(p.bounds, xyw[0][0], xyw[0][1], xyw[0][2], xyw[1][0]);
+        set(p.shape, xyw[1][1], xyw[1][2], xyw[2][0], xyw[2][1]);
+        set(p.radii, xyw[2][2], uv[0][0], uv[0][1], uv[1][0]);
+        set(p.uv, uv[1][1], uv[2][0], uv[2][1], 0);
+        set(p.xform, rgba[0][0], rgba[0][1], rgba[0][2], rgba[0][3]);
+        set(p.extra, rgba[1][0], rgba[1][1], rgba[1][2], rgba[1][3]);
+        set(p.projection, rgba[2][0], rgba[2][1], rgba[2][2], rgba[2][3]);
+        add(MESH, p, nullptr, false, Mask::None, nullptr, true);
+    }
 }
 
 Renderer::Prim Renderer::painted(const Brush& brush, const Rect& area, float alpha, float enlarged) {

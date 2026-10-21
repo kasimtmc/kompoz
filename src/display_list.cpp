@@ -78,7 +78,7 @@ bool DisplayList::Command::same(const Command& o) const {
            kompoz::same(rect2, o.rect2) && radii == o.radii && f1 == o.f1 && f2 == o.f2 && f3 == o.f3 && color == o.color &&
            kompoz::same(p1, o.p1) && kompoz::same(p2, o.p2) && flag == o.flag && font == o.font && vector == o.vector &&
            image == o.image && kompoz::same(stroke, o.stroke) && kompoz::same(transform, o.transform) && text == o.text &&
-           brush == o.brush && filter == o.filter && effect == o.effect && elevated == o.elevated && shaped == o.shaped && path == o.path &&
+           brush == o.brush && vertices == o.vertices && filter == o.filter && effect == o.effect && elevated == o.elevated && shaped == o.shaped && path == o.path &&
            matrix == o.matrix;
 }
 
@@ -252,6 +252,22 @@ void DisplayList::drawImage(const ImageBitmap& image, const Rect& src, const Rec
 
 void DisplayList::fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& brush, const Rect& brushArea) {
     if (Command* c = draw(Kind::Gradient, rect, 0)) c->rect = rect, c->radii = radii, c->brush = brush, c->rect2 = brushArea;
+}
+
+void DisplayList::drawVertices(const Vertices& vertices, Offset origin, BlendMode blendMode, const Brush& brush, const Rect& brushArea,
+                               float alpha) {
+    if (vertices.positions().empty() || alpha <= 0) return;
+    Rect b = vertices.bounds();
+    b.x += origin.x;
+    b.y += origin.y;
+    if (Command* c = draw(Kind::Vertices, b, 1)) {  // (a pixel's reach either way: its edges aren't anti-aliased)
+        c->vertices = vertices;
+        c->p1 = origin;
+        c->f1 = alpha;
+        c->f2 = float(int(blendMode));
+        c->brush = brush;
+        c->rect2 = brushArea;
+    }
 }
 
 void DisplayList::drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& brushArea, const PathStroke& stroke) {
@@ -574,6 +590,7 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
             case Kind::Image: canvas.drawImage(c.image, c.rect2, c.rect, c.f1, FilterQuality(int(c.f2))); break;
             case Kind::Gradient: canvas.fillGradient(c.rect, c.radii, *c.brush, c.rect2); break;
             case Kind::Path: canvas.drawPath(c.path, c.p1, *c.brush, c.rect2, c.stroke); break;
+            case Kind::Vertices: canvas.drawVertices(*c.vertices, c.p1, BlendMode(int(c.f2)), *c.brush, c.rect2, c.f1); break;
             default: break;
             }
         }

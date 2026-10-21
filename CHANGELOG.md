@@ -108,6 +108,9 @@
   `DrawScope` over a `Canvas`. **Fixed**: draw scopes over a node (`drawBehind`, `drawWithContent`, `Canvas`,
   `drawWithCache`, recordings, custom painters) saw a density of 1 and left to right; a `DrawScope`'s shapes of
   negative size weren't drawn (they are sorted, as Skia sorts them).
+- **`Canvas.drawVertices` and `Vertices`**: triangle meshes as Skia draws them, the paint's shader at the texture
+  coordinates through the vertex colors by a blend mode; the GPU renderer draws each triangle as the rasterizer does
+  (in perspective too), and works composite shaders out per pixel (before: drawn into a texture first).
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

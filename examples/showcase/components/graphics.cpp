@@ -644,11 +644,14 @@ void TileModeSection(CallSite site) {
 
 // graphics::Canvas through drawIntoCanvas: twelve spokes each drawn after save, rotate (about the
 // middle) and restore; a grid skewed; two circles faded together in a layer (saveLayer: where they
-// overlap only the one on top shows); a dashed stroke and a corner-rounded fill in Paints.
+// overlap only the one on top shows); a dashed stroke and a corner-rounded fill in Paints. Meshes
+// (drawVertices): a fan of colors round a white middle, and the photo on a waving strip, its
+// colors multiplied by the vertices'.
 void CanvasSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
-        Section("Canvas · Paint", [&] {
+        ImageBitmap photo = imageResource("images/landscape.png");
+        Section("Canvas · Paint · drawVertices", [&] {
             Row(Modifier().fillMaxWidth().height(96), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
                 Canvas(Modifier().weight(1).fillMaxHeight(), [primary = cs.primary, tertiary = cs.tertiary](DrawScope& d) {
                     Size s = d.size();
@@ -693,6 +696,39 @@ void CanvasSection(CallSite site) {
                         c.drawRect({8, s.height / 2 + 4, s.width - 16, s.height / 2 - 12},
                                    Paint{.color = primary, .style = PaintingStyle::Stroke, .strokeWidth = 3,
                                          .pathEffect = PathEffect::dashPathEffect({8, 5})});
+                    });
+                });
+            });
+            Row(Modifier().fillMaxWidth().height(96), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
+                Canvas(Modifier().size(96), [primary = cs.primary, tertiary = cs.tertiary](DrawScope& d) {
+                    std::vector<Offset> at{{48, 48}};
+                    std::vector<Color> colors{colors::White};
+                    const Color ring[] = {primary, Color::hex(0xFFB300), tertiary, Color::hex(0x26A69A), primary};
+                    for (int i = 0; i <= 24; ++i) {
+                        float a = float(i) / 24 * 2 * std::numbers::pi_v<float>;
+                        at.push_back({48 + 44 * std::cos(a), 48 + 44 * std::sin(a)});
+                        float t = float(i) / 24 * 4;
+                        int k = std::min(3, int(t));
+                        colors.push_back(lerp(ring[k], ring[k + 1], t - float(k)));
+                    }
+                    Vertices fan(VertexMode::TriangleFan, at, {}, colors);
+                    d.drawIntoCanvas([&](graphics::Canvas& c) { c.drawVertices(fan, BlendMode::Modulate, Paint{.color = colors::White}); });
+                });
+                Canvas(Modifier().weight(1).fillMaxHeight(), [photo, primary = cs.primary](DrawScope& d) {
+                    if (photo.empty()) return;
+                    Size s = d.size();
+                    std::vector<Offset> at, tex;
+                    std::vector<Color> colors;
+                    for (int i = 0; i <= 16; ++i) {
+                        float t = float(i) / 16, x = 8 + t * (s.width - 16), wave = 8 * std::sin(t * 2 * std::numbers::pi_v<float>);
+                        at.push_back({x, 12 + wave}), at.push_back({x, s.height - 12 + wave});
+                        tex.push_back({t * float(photo.width()), 0}), tex.push_back({t * float(photo.width()), float(photo.height())});
+                        Color c = lerp(colors::White, primary, t);
+                        colors.push_back(c), colors.push_back(c);
+                    }
+                    Vertices strip(VertexMode::TriangleStrip, at, tex, colors);
+                    d.drawIntoCanvas([&](graphics::Canvas& c) {
+                        c.drawVertices(strip, BlendMode::Multiply, Paint{.shader = ImageShader(photo)});
                     });
                 });
             });

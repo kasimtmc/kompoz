@@ -688,6 +688,37 @@ Shader ImageShader(ImageBitmap image, TileMode tileModeX = TileMode::Clamp, Tile
 // `src` onto `dst` by `blendMode`, pixel by pixel.
 Shader CompositeShader(Shader dst, Shader src, BlendMode blendMode);
 
+// How Vertices make triangles (Compose's VertexMode): each three in turn, each three running
+// along a strip (each one with the two before it), or a fan round the first.
+enum class VertexMode { Triangles, TriangleStrip, TriangleFan };
+
+// A triangle mesh for Canvas::drawVertices (Compose's Vertices): where each vertex is, where it
+// samples the paint's shader (its texture coordinate) and its color, in the order `indices` give
+// (none: as they come). Compose throws where the lengths don't match or an index is out of range;
+// here texture coordinates or colors that don't match the positions are left out (the shader
+// sampled where each pixel is; the paint as it is), and a triangle with an index out of range is.
+class Vertices {
+public:
+    Vertices(VertexMode vertexMode, std::vector<Offset> positions, std::vector<Offset> textureCoordinates, std::vector<Color> colors,
+             std::vector<int> indices = {});
+    // As arrays (Compose's other constructor): x, y pairs, and colors as ARGB.
+    Vertices(VertexMode vertexMode, const std::vector<float>& positions, const std::vector<float>& textureCoordinates,
+             const std::vector<uint32_t>& colors, const std::vector<int16_t>& indices = {});
+
+    VertexMode vertexMode() const;
+    const std::vector<Offset>& positions() const;
+    const std::vector<Offset>& textureCoordinates() const;  // (empty if left out)
+    const std::vector<Color>& colors() const;               // (empty if left out)
+    const std::vector<int>& indices() const;
+    // Its triangles, each three indices into positions, in the order they are drawn.
+    std::vector<std::array<int, 3>> triangles() const;
+    Rect bounds() const;  // its positions'
+    friend bool operator==(const Vertices& a, const Vertices& b);
+
+    struct Data;
+    std::shared_ptr<const Data> data_;
+};
+
 // A 4x5 matrix over a color's red, green, blue and alpha (0..1), the fifth column added after
 // (Compose's ColorMatrix, row by row).
 struct ColorMatrix {
@@ -1405,6 +1436,15 @@ public:
         fillRoundRect(rect, radii, brush.colorAt(rect.center(), brushArea));
     }
     // Fills (no stroke) or strokes `path` placed at `origin`.
+    // A triangle mesh (Compose's Canvas.drawVertices, Skia's): its triangles placed at `origin`,
+    // filled without anti-aliasing, as Skia fills them; each pixel the brush (spread over
+    // brushArea, as everywhere) where its texture coordinate is (from `origin` too; none: where
+    // the pixel is), or the brush's color made opaque; that through the vertex colors (worked out
+    // between them, premultiplied) by `blendMode`, the brush the source and the colors the
+    // destination (no colors: the brush as it is); then faded by `alpha`. Triangles that overlap
+    // each go on over the ones before.
+    virtual void drawVertices(const Vertices& vertices, Offset origin, BlendMode blendMode, const Brush& brush, const Rect& brushArea,
+                              float alpha) = 0;
     virtual void drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& brushArea,
                           const PathStroke& stroke) = 0;
     // A rounded rect's shadow: under it (spread out, moved, blurred), or inside it (`inner`: the

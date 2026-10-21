@@ -121,6 +121,13 @@ public:
     void drawImageRect(const ImageBitmap& image, const Paint& paint);  // all of it at its size
     void drawPoints(PointMode pointMode, const std::vector<Offset>& points, const Paint& paint);
     void drawRawPoints(PointMode pointMode, const std::vector<float>& points, const Paint& paint);
+    // A triangle mesh, as Skia draws one (see GraphicsContext::drawVertices): the paint's shader
+    // where each vertex's texture coordinate puts it (in the canvas's coordinates), or its color
+    // opaque, through the vertex colors by `blendMode`, faded by the paint's alpha, its color
+    // filter and blend mode as any draw's. (Compose on Android leaves blendMode out, using
+    // Modulate: Android's Canvas.drawVertices takes none; Compose documents it, and its other
+    // platforms use it, as here.)
+    void drawVertices(const Vertices& vertices, BlendMode blendMode, const Paint& paint);
     // Android lets layers drawn after enableZ reorder by their elevation; Kompoz draws them in
     // order (z order is the layout's: zIndex), so these do nothing.
     void enableZ() {}

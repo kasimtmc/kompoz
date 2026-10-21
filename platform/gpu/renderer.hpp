@@ -68,6 +68,8 @@ public:
     void popTransform() override;
     bool quickReject(const Rect& rect) const override;
     void drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& brushArea, const PathStroke& stroke) override;
+    void drawVertices(const Vertices& vertices, Offset origin, BlendMode blendMode, const Brush& brush, const Rect& brushArea,
+                      float alpha) override;
     void drawShadow(const Rect& rect, const CornerRadii& radii, const Shadow& shadow, bool inner) override;
     void fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& brush, const Rect& brushArea) override;
     void pushBlendMode(BlendMode mode) override;
@@ -101,6 +103,9 @@ private:
         uint32_t first, count;
         Sampler sampler;  // texture's (an image's, as its FilterQuality says)
         Sampler sampler1;  // texture1's (an image shader's, as its tile modes say)
+        bool mesh = false;  // (see below)
+        Texture* texture5 = nullptr;  // a composite paint's source image (white if none)
+        Sampler sampler5;  // its primitives a mesh's triangles (three vertices each, by vsMesh)
     };
     // One edge of a path in the coverage mask, and the path's part of the mask (shaders/path.slang).
     struct EdgeInstance {
@@ -262,7 +267,7 @@ private:
     Texture* imageTexture(const ImageBitmap& image, bool mipmapped = false);  // its pixels premultiplied
     Texture* acquire(int width, int height, Format format = Format::RGBA8);
     IRect scissor() const;
-    Pipeline& pipeline(Format target, const BlendState& blend);
+    Pipeline& pipeline(Format target, const BlendState& blend, bool mesh = false);
     void execute(Pass& pass);
 
     Device& device_;
@@ -275,6 +280,7 @@ private:
     struct PipelineKey {
         Format format;
         BlendState blend;
+        bool mesh;  // vsMesh's triangles, not vs's quads
         bool operator==(const PipelineKey&) const = default;
     };
     std::vector<std::pair<PipelineKey, std::unique_ptr<Pipeline>>> pipelines_;
@@ -293,8 +299,10 @@ private:
         Sampler sampler;
     };
     std::vector<PaintTexture> paintTextures_;
-    Prim paintedShader(const Shader& shader, const Rect& area, float alpha, float enlarged);
-    Prim bakedShader(const Shader& shader, const Rect& area, float alpha, float enlarged);
+    // (`before`: what the point the shader is asked for goes through to be this target's px
+    // first: a mesh's texture coordinates, in dp.)
+    Prim paintedShader(const Shader& shader, const Rect& area, float alpha, float enlarged, const Projective* before = nullptr);
+    Prim bakedShader(const Shader& shader, const Rect& area, float alpha, float enlarged, const Projective* before = nullptr);
     int shaderRow(const std::vector<ColorStop>* stops, const Projective& map);
     int stopsUploaded_ = 0;  // rows
     std::unique_ptr<Texture> stopsTexture_;

@@ -557,6 +557,85 @@ bool operator==(const Shader& a, const Shader& b) {
            x.transform == y.transform;
 }
 
+// --- Vertices ---------------------------------------------------------------------------------------
+
+struct Vertices::Data {
+    VertexMode mode;
+    std::vector<Offset> positions, textureCoordinates;
+    std::vector<Color> colors;
+    std::vector<int> indices;
+};
+
+Vertices::Vertices(VertexMode vertexMode, std::vector<Offset> positions, std::vector<Offset> textureCoordinates, std::vector<Color> colors,
+                   std::vector<int> indices) {
+    auto d = std::make_shared<Data>();
+    d->mode = vertexMode;
+    if (textureCoordinates.size() != positions.size()) textureCoordinates.clear();
+    if (colors.size() != positions.size()) colors.clear();
+    d->positions = std::move(positions), d->textureCoordinates = std::move(textureCoordinates), d->colors = std::move(colors);
+    d->indices = std::move(indices);
+    data_ = std::move(d);
+}
+
+Vertices::Vertices(VertexMode vertexMode, const std::vector<float>& positions, const std::vector<float>& textureCoordinates,
+                   const std::vector<uint32_t>& colors, const std::vector<int16_t>& indices)
+    : Vertices(vertexMode, std::vector<Offset>{}, std::vector<Offset>{}, std::vector<Color>{}, std::vector<int>{}) {
+    auto d = std::make_shared<Data>(*data_);
+    for (size_t i = 0; i + 1 < positions.size(); i += 2) d->positions.push_back({positions[i], positions[i + 1]});
+    if (textureCoordinates.size() == positions.size())
+        for (size_t i = 0; i + 1 < textureCoordinates.size(); i += 2) d->textureCoordinates.push_back({textureCoordinates[i], textureCoordinates[i + 1]});
+    if (colors.size() == d->positions.size())
+        for (uint32_t c : colors) d->colors.push_back(Color::hex(c & 0xFFFFFF, float(c >> 24) / 255.f));
+    for (int16_t i : indices) d->indices.push_back(i);
+    data_ = std::move(d);
+}
+
+VertexMode Vertices::vertexMode() const { return data_->mode; }
+const std::vector<Offset>& Vertices::positions() const { return data_->positions; }
+const std::vector<Offset>& Vertices::textureCoordinates() const { return data_->textureCoordinates; }
+const std::vector<Color>& Vertices::colors() const { return data_->colors; }
+const std::vector<int>& Vertices::indices() const { return data_->indices; }
+
+std::vector<std::array<int, 3>> Vertices::triangles() const {
+    const Data& d = *data_;
+    int n = d.indices.empty() ? int(d.positions.size()) : int(d.indices.size());
+    auto at = [&](int i) { return d.indices.empty() ? i : d.indices[size_t(i)]; };
+    std::vector<std::array<int, 3>> out;
+    auto add = [&](int a, int b, int c) {
+        std::array<int, 3> t{at(a), at(b), at(c)};
+        for (int v : t)
+            if (v < 0 || v >= int(d.positions.size())) return;
+        out.push_back(t);
+    };
+    switch (d.mode) {
+    case VertexMode::Triangles:
+        for (int i = 0; i + 2 < n; i += 3) add(i, i + 1, i + 2);
+        break;
+    case VertexMode::TriangleStrip:
+        for (int i = 0; i + 2 < n; ++i) add(i, i + 1, i + 2);
+        break;
+    case VertexMode::TriangleFan:
+        for (int i = 1; i + 1 < n; ++i) add(0, i, i + 1);
+        break;
+    }
+    return out;
+}
+
+Rect Vertices::bounds() const {
+    const std::vector<Offset>& p = data_->positions;
+    if (p.empty()) return {};
+    float l = p[0].x, t = p[0].y, r = l, b = t;
+    for (Offset q : p) l = std::min(l, q.x), t = std::min(t, q.y), r = std::max(r, q.x), b = std::max(b, q.y);
+    return {l, t, r - l, b - t};
+}
+
+bool operator==(const Vertices& a, const Vertices& b) {
+    if (a.data_ == b.data_) return true;
+    const Vertices::Data &x = *a.data_, &y = *b.data_;
+    return x.mode == y.mode && x.positions == y.positions && x.textureCoordinates == y.textureCoordinates && x.colors == y.colors &&
+           x.indices == y.indices;
+}
+
 void ColorMatrix::setToSaturation(float s) {
     // Rec. 709 luminance, as Android's.
     const float r = 0.213f * (1 - s), g = 0.715f * (1 - s), b = 0.072f * (1 - s);
