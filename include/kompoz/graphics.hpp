@@ -553,7 +553,7 @@ public:
     // what it paints (in its dp, from its top left), once for each size; its intrinsic size, if
     // it has one. Equal only to itself (and its copies).
     static Brush shader(std::function<Shader(Size size)> createShader, std::optional<Size> intrinsicSize = {});
-    static Brush shader(Shader shader);  // the same shader whatever the size (Compose's ShaderBrush(shader))
+    static Brush shader(Shader shader);  // the same shader whatever the size (Compose's ShaderBrush(shader)); equal by it
     // `src` composited onto `dst` by `blendMode`, pixel by pixel (Compose's Brush.composite: each
     // made a shader, a color as a gradient of one color).
     static Brush composite(const Brush& dst, const Brush& src, BlendMode blendMode);
@@ -1159,7 +1159,9 @@ struct PathEffect {
     // (as Skia's).
     static PathEffect stampedPathEffect(const Path& shape, float advance, float phase, StampedPathEffectStyle style);
     static PathEffect chainPathEffect(const PathEffect& outer, const PathEffect& inner);
-    Path apply(const Path& path) const;  // the path the stroke then draws (or fills, stamped)
+    // The path the stroke then draws (or fills, stamped); a fill's (`filled`) without the dashes,
+    // as Skia dashes only strokes.
+    Path apply(const Path& path, bool filled = false) const;
     bool fills() const { return stamp && advance > 0; }  // its path is filled, not stroked
     friend bool operator==(const PathEffect&, const PathEffect&) = default;
 };

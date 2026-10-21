@@ -151,21 +151,25 @@ struct Brush::ShaderSource {
     BlendMode blendMode = BlendMode::SrcOver;
     mutable std::optional<Size> madeFor;  // the size `make` made `made` for (made again only for another, as Compose's)
     mutable Shader made;
+    std::optional<Shader> fixed;  // the one shader whatever the size (Brush::shader(Shader)): what it is equal by
 };
 
 Brush Brush::shader(std::function<Shader(Size size)> createShader, std::optional<Size> intrinsicSize) {
     Brush b(Kind::Shader, {});
-    b.shader_ = std::make_shared<const ShaderSource>(ShaderSource{std::move(createShader), intrinsicSize, std::nullopt, std::nullopt, BlendMode::SrcOver, {}, {}});
+    b.shader_ = std::make_shared<const ShaderSource>(ShaderSource{std::move(createShader), intrinsicSize, std::nullopt, std::nullopt, BlendMode::SrcOver, {}, {}, std::nullopt});
     return b;
 }
 
 Brush Brush::shader(Shader shader) {
-    return Brush::shader([shader = std::move(shader)](Size) { return shader; });
+    Brush b(Kind::Shader, {});
+    b.shader_ = std::make_shared<const ShaderSource>(
+        ShaderSource{[shader](Size) { return shader; }, std::nullopt, std::nullopt, std::nullopt, BlendMode::SrcOver, {}, {}, shader});
+    return b;
 }
 
 Brush Brush::composite(const Brush& dst, const Brush& src, BlendMode blendMode) {
     Brush b(Kind::Shader, {});
-    b.shader_ = std::make_shared<const ShaderSource>(ShaderSource{{}, std::nullopt, dst, src, blendMode, {}, {}});
+    b.shader_ = std::make_shared<const ShaderSource>(ShaderSource{{}, std::nullopt, dst, src, blendMode, {}, {}, std::nullopt});
     return b;
 }
 
@@ -239,7 +243,9 @@ bool operator==(const Brush& a, const Brush& b) {
     if ((a.transform_ != nullptr) != (b.transform_ != nullptr) || (a.transform_ && *a.transform_ != *b.transform_)) return false;
     if (a.shader_ == b.shader_) return true;
     if (!a.shader_ || !b.shader_) return false;
-    // Composites compare by what they composite (Compose's CompositeShaderBrush); brushes of your own only to themselves.
+    // One shader whatever the size compares by it; composites by what they composite (Compose's
+    // CompositeShaderBrush); brushes of your own only to themselves.
+    if (a.shader_->fixed || b.shader_->fixed) return a.shader_->fixed == b.shader_->fixed;
     return !a.shader_->make && !b.shader_->make && a.shader_->dst == b.shader_->dst && a.shader_->src == b.shader_->src &&
            a.shader_->blendMode == b.shader_->blendMode;
 }
@@ -1214,7 +1220,7 @@ Path stampAlong(const Path& path, const PathEffect& e) {
 
 } // namespace
 
-Path PathEffect::apply(const Path& path) const {
+Path PathEffect::apply(const Path& path, bool filled) const {
     Path shaped = path;
     if (cornerRadius > 0) {  // each corner cut back as far as the radius (half a side at most) and joined by a curve
         shaped = Path();
@@ -1248,6 +1254,7 @@ Path PathEffect::apply(const Path& path) const {
         }
     }
     if (fills()) return stampAlong(shaped, *this);
+    if (filled) return shaped;
     float pattern = 0;
     for (int i = 0; i < count; ++i) pattern += intervals[size_t(i)];
     if (count < 2 || pattern <= 0) return shaped;

@@ -103,6 +103,11 @@
   (tiled each way) and `CompositeShader`, through transforms; `Brush::shader` (`ShaderBrush`, made again only for
   another size), `Brush::composite`, `withTransform`, `intrinsicSize`, `createShader`, and `lerp` between brushes;
   `BlurRadiusSpec::shader` blurs each pixel by a shader's alpha. `Density` moved from `layout.hpp` to `graphics.hpp`.
+- **Compose's `Canvas` and `Paint`** (`graphics::Canvas`: the `Canvas` composable has the name): `save`/`restore`,
+  `saveLayer`, transforms with `skew` and `concat`, clips, every draw in a `Paint`; `DrawScope::drawIntoCanvas`, and a
+  `DrawScope` over a `Canvas`. **Fixed**: draw scopes over a node (`drawBehind`, `drawWithContent`, `Canvas`,
+  `drawWithCache`, recordings, custom painters) saw a density of 1 and left to right; a `DrawScope`'s shapes of
+  negative size weren't drawn (they are sorted, as Skia sorts them).
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

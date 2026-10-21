@@ -96,6 +96,26 @@ Box(Modifier().size(120, 72).background(Brush::shader([](Size size) {
 
 `Brush::composite` does the same with two brushes, `withTransform` moves what a gradient or a shader paints, and `lerp` goes from one brush to another as an animation does.
 
+## Canvas and Paint
+
+Under a `DrawScope` is Compose's `Canvas` (`graphics::Canvas` here, since the `Canvas` composable has the name), with its stack of saves and its `Paint`:
+
+```cpp body
+Canvas(Modifier().size(96), [](DrawScope& d) {
+    d.drawIntoCanvas([&](graphics::Canvas& c) {
+        Paint spoke{.color = Color::hex(0x6750A4), .style = PaintingStyle::Stroke, .strokeWidth = 4, .strokeCap = StrokeCap::Round};
+        for (int i = 0; i < 12; ++i) {
+            c.save();
+            c.rotate(float(i) * 30, 48, 48);
+            c.drawLine({48, 30}, {48, 8}, spoke);
+            c.restore();
+        }
+    });
+});
+```
+
+What the canvas leaves saved or transformed holds for the scope's later draws until the block it is in ends, as in Compose.
+
 ## Paths
 
 A `Path` describes any outline with lines, curves and arcs:

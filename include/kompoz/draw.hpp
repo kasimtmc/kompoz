@@ -29,6 +29,123 @@ enum class TextDecoration;
 class GraphicsLayer;
 class DrawScope;
 
+// How a Paint paints a shape (Compose's PaintingStyle): filled, or outlined.
+enum class PaintingStyle { Fill, Stroke };
+
+// What a Canvas draws with (Compose's Paint): a color (its alpha the paint's: alpha(),
+// setAlpha()), or a shader (in the canvas's coordinates) faded by that alpha; filled or stroked
+// (strokeWidth 0: a hairline) with its cap, join and miter limit; its path through pathEffect
+// first (a fill's too, but for dashes: Skia dashes only strokes); its colors through colorFilter;
+// onto what is there by blendMode; images sampled as filterQuality says. isAntiAlias is kept
+// for the renderers to come to (everything is anti-aliased for now).
+struct Paint {
+    Color color = colors::Black;
+    bool isAntiAlias = true;
+    BlendMode blendMode = BlendMode::SrcOver;
+    PaintingStyle style = PaintingStyle::Fill;
+    float strokeWidth = 0;
+    StrokeCap strokeCap = StrokeCap::Butt;
+    StrokeJoin strokeJoin = StrokeJoin::Miter;
+    float strokeMiterLimit = 4;
+    FilterQuality filterQuality = DefaultFilterQuality;
+    std::optional<Shader> shader;
+    std::optional<ColorFilter> colorFilter;
+    std::optional<PathEffect> pathEffect;
+
+    float alpha() const { return color.a; }
+    void setAlpha(float alpha) { color = color.copy(std::clamp(alpha, 0.f, 1.f)); }
+    friend bool operator==(const Paint&, const Paint&) = default;
+};
+
+namespace graphics {
+
+// Drawing as Compose's Canvas does (Android's): a transform and a clip on a stack (save,
+// restore, saveLayer), draws in a Paint. Its coordinates are dp from its origin; what it draws
+// goes through the GraphicsContext's transforms and clips as well as its own. A DrawScope has
+// one (drawIntoCanvas); Canvas(context, origin) makes one over any GraphicsContext. What is still
+// saved when it goes is restored. (In kompoz::graphics, as Compose's is in ui.graphics: the
+// Canvas composable has its name.)
+class Canvas {
+public:
+    explicit Canvas(GraphicsContext& context, Offset origin = {}) : context_(&context), origin_(origin) {}
+    ~Canvas() { restoreTo(0); }
+    Canvas(const Canvas&) = delete;
+    Canvas& operator=(const Canvas&) = delete;
+    GraphicsContext& context() const { return *context_; }
+    Offset origin() const { return origin_; }
+
+    // The transform and clip saved; restore() takes them back (and composites a saveLayer's
+    // layer, faded by its paint's alpha, through its color filter, by its blend mode). A
+    // restore with nothing saved does nothing.
+    void save();
+    void restore();
+    void saveLayer(const Rect& bounds, const Paint& paint);
+    void withSave(const std::function<void()>& block);
+    void withSaveLayer(const Rect& bounds, const Paint& paint, const std::function<void()>& block);
+    // Each before what is there (what is drawn next goes through it first). skew's are factors
+    // (x' = x + sx y, y' = sy x + y), as Android's Canvas and Compose's take them (Compose's
+    // documents degrees); skewRad hands degrees(radians) on as the same. concat leaves out the
+    // matrix's z row and column, as Android does.
+    void translate(float dx, float dy);
+    void scale(float sx, float sy);
+    void scale(float s) { scale(s, s); }
+    void rotate(float degrees);  // clockwise
+    void skew(float sx, float sy);
+    void skewRad(float sxRad, float syRad);
+    void concat(const Matrix& matrix);
+    void rotate(float degrees, float pivotX, float pivotY);
+    void rotateRad(float radians, float pivotX = 0, float pivotY = 0);
+    void scale(float sx, float sy, float pivotX, float pivotY);
+    // Within the clip there is (each rect sorted, as Skia sorts it), or outside it (Difference).
+    void clipRect(const Rect& rect, ClipOp op = ClipOp::Intersect);
+    void clipRect(float left, float top, float right, float bottom, ClipOp op = ClipOp::Intersect);
+    void clipPath(const Path& path, ClipOp op = ClipOp::Intersect);
+
+    // As Android's: a line stroked whatever the style; rects, ovals and arcs sorted; a round
+    // rect's corners quarter ellipses (none if either radius is 0 or less); an image at its
+    // pixels as dp, faded by the paint's alpha (its color and shader left out), or a part of it
+    // into a rect; points as drawPoints draws them (drawRawPoints: x, y pairs).
+    void drawLine(Offset p1, Offset p2, const Paint& paint);
+    void drawRect(const Rect& rect, const Paint& paint);
+    void drawRect(float left, float top, float right, float bottom, const Paint& paint);
+    void drawRoundRect(float left, float top, float right, float bottom, float radiusX, float radiusY, const Paint& paint);
+    void drawOval(const Rect& rect, const Paint& paint);
+    void drawOval(float left, float top, float right, float bottom, const Paint& paint);
+    void drawCircle(Offset center, float radius, const Paint& paint);
+    void drawArc(const Rect& rect, float startAngle, float sweepAngle, bool useCenter, const Paint& paint);
+    void drawArc(float left, float top, float right, float bottom, float startAngle, float sweepAngle, bool useCenter, const Paint& paint);
+    void drawArcRad(const Rect& rect, float startAngleRad, float sweepAngleRad, bool useCenter, const Paint& paint);
+    void drawPath(const Path& path, const Paint& paint);
+    void drawImage(const ImageBitmap& image, Offset topLeftOffset, const Paint& paint);
+    void drawImageRect(const ImageBitmap& image, IntOffset srcOffset, IntSize srcSize, IntOffset dstOffset, IntSize dstSize, const Paint& paint);
+    void drawImageRect(const ImageBitmap& image, const Paint& paint);  // all of it at its size
+    void drawPoints(PointMode pointMode, const std::vector<Offset>& points, const Paint& paint);
+    void drawRawPoints(PointMode pointMode, const std::vector<float>& points, const Paint& paint);
+    // Android lets layers drawn after enableZ reorder by their elevation; Kompoz draws them in
+    // order (z order is the layout's: zIndex), so these do nothing.
+    void enableZ() {}
+    void disableZ() {}
+
+private:
+    friend class kompoz::DrawScope;
+    struct Saved {
+        enum class Kind : uint8_t { Save, Layer, Transform, Clip } kind;
+        bool filtered = false, blended = false;  // a layer's color filter and blend mode
+    };
+    int depth() const { return int(stack_.size()); }
+    void restoreTo(int depth);  // pops what was pushed past `depth`
+    void push(const Matrix& matrix);  // in this canvas's coordinates
+    Rect at(const Rect& r) const { return {origin_.x + r.x, origin_.y + r.y, r.width, r.height}; }
+    DrawScope scope() const;
+
+    GraphicsContext* context_;
+    Offset origin_;
+    Density density_;  // (a DrawScope's: how big a hairline's dot is)
+    std::vector<Saved> stack_;
+};
+
+} // namespace graphics
+
 // What withTransform does before the drawing, in order, each inside the one before (Compose's
 // DrawTransform): withTransform([](DrawTransform& t) { t.translate(10, 0); t.rotate(45); }, ...).
 class DrawTransform {
@@ -59,6 +176,10 @@ public:
         : context_(&context), bounds_(bounds), measurer_(measurer), density_(density), layoutDirection_(layoutDirection) {}
     // Over a node: its text measurer, the screen's density, its layout direction.
     DrawScope(GraphicsContext& context, Rect bounds, const LayoutNode& node);
+    // Over a Canvas, drawing into it from its origin, `size` big (Compose's CanvasDrawScope.draw):
+    // drawIntoCanvas gives that canvas.
+    DrawScope(graphics::Canvas& canvas, Size size, TextMeasurer* measurer = nullptr, Density density = {},
+              LayoutDirection layoutDirection = LayoutDirection::Ltr);
 
     Size size() const { return {bounds_.width, bounds_.height}; }
     Offset center() const { return {bounds_.width / 2, bounds_.height / 2}; }
@@ -68,6 +189,11 @@ public:
     // DrawScope is a Density and has a layoutDirection; its lengths here are dp already).
     Density density() const { return density_; }
     LayoutDirection layoutDirection() const { return layoutDirection_; }
+    // Its canvas (Compose's drawContext.canvas), its origin this scope's top left: what it saves,
+    // transforms and clips holds for what is drawn after it here, until a block it is in ends
+    // (translate, clipRect, withTransform...) or the scope does, as Compose's restores it.
+    graphics::Canvas& canvas();
+    void drawIntoCanvas(const std::function<void(graphics::Canvas&)>& block) { block(canvas()); }
 
     // As Compose's: each in a color or a brush (a gradient spread over the whole area, as in
     // Compose), faded by `alpha`, filled or outlined (`style`: Fill, Stroke(...)), its colors
@@ -193,9 +319,16 @@ private:
         Size s = size.value_or(Size{bounds_.width - topLeft.x, bounds_.height - topLeft.y});
         return {bounds_.x + topLeft.x, bounds_.y + topLeft.y, s.width, s.height};
     }
+    // The same, sorted (a negative size reaching back from topLeft), as Skia sorts a shape's rect.
+    Rect sorted(Offset topLeft, std::optional<Size> size) const {
+        Rect r = local(topLeft, size);
+        return {std::min(r.x, r.right()), std::min(r.y, r.bottom()), std::abs(r.width), std::abs(r.height)};
+    }
     Offset abs(Offset p) const { return {bounds_.x + p.x, bounds_.y + p.y}; }
     // Draws `block` through `matrix`, which is in this scope's coordinates (its top left the origin).
     void transformed(const Matrix& matrix, const std::function<void(DrawScope&)>& block);
+    // `block` drawn here, what it left saved on the canvas restored after it.
+    void within(const std::function<void(DrawScope&)>& block);
     void paint(const Path& path, const Brush& brush, float alpha, const DrawStyle& style, const std::optional<ColorFilter>& colorFilter,
                BlendMode blendMode);
     void paintRoundRect(const Rect& rect, CornerRadius corner, const Brush& brush, float alpha, const DrawStyle& style,
@@ -207,6 +340,7 @@ private:
     TextMeasurer* measurer_;
     Density density_;
     LayoutDirection layoutDirection_ = LayoutDirection::Ltr;
+    std::shared_ptr<graphics::Canvas> canvas_;  // made when it is asked for (or the one it draws into)
 };
 
 namespace detail {
@@ -310,13 +444,18 @@ struct DrawResult {
 
 class CacheDrawScope {
 public:
-    explicit CacheDrawScope(Size size) : size_(size) {}
+    explicit CacheDrawScope(Size size, Density density = {}, LayoutDirection layoutDirection = LayoutDirection::Ltr)
+        : size_(size), density_(density), layoutDirection_(layoutDirection) {}
     Size size() const { return size_; }
+    Density density() const { return density_; }  // (Compose's CacheDrawScope is a Density, and has a layoutDirection)
+    LayoutDirection layoutDirection() const { return layoutDirection_; }
     DrawResult onDrawBehind(std::function<void(DrawScope&)> onDraw) const { return {std::move(onDraw), {}}; }
     DrawResult onDrawWithContent(std::function<void(ContentDrawScope&)> onDraw) const { return {{}, std::move(onDraw)}; }
 
 private:
     Size size_;
+    Density density_;
+    LayoutDirection layoutDirection_;
 };
 
 // A space to draw in: Canvas(Modifier().size(100), [](DrawScope& draw) { ... });
@@ -337,11 +476,13 @@ public:
     bool hasIntrinsicSize() const;
     Size intrinsicSize() const;  // {0, 0} without one
     // Draws into `bounds` (absolute), faded by `alpha` and through `colorFilter`; `rtl`: a
-    // vector that mirrors does.
+    // vector that mirrors does (and drawing of your own is laid out right to left); its draw
+    // scope at `density`.
     void draw(GraphicsContext& canvas, const Rect& bounds, float alpha = 1, const std::optional<ColorFilter>& colorFilter = {},
-              bool rtl = false) const;
+              bool rtl = false, Density density = {}) const;
     void draw(DrawScope& scope, Size size, float alpha = 1, const std::optional<ColorFilter>& colorFilter = {}) const {
-        draw(scope.context(), {scope.bounds().x, scope.bounds().y, size.width, size.height}, alpha, colorFilter);
+        draw(scope.context(), {scope.bounds().x, scope.bounds().y, size.width, size.height}, alpha, colorFilter,
+             scope.layoutDirection() == LayoutDirection::Rtl, scope.density());
     }
     friend bool operator==(const Painter& a, const Painter& b);
 

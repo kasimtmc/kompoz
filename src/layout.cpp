@@ -447,7 +447,7 @@ void ClickableElement::draw(GraphicsContext& canvas, const Rect& bounds, const L
                             const std::function<void()>& drawContent) const {
     if (indication.kind == Indication::Kind::Custom) {  // its own node draws around the content
         if (!enabled || !node.indicationNode) return drawContent();
-        ContentDrawScope scope(canvas, bounds, &node.textMeasurer(), drawContent);
+        ContentDrawScope scope(canvas, bounds, node, drawContent);
         node.indicationNode->draw(scope);
         return;
     }
@@ -1175,7 +1175,7 @@ std::shared_ptr<OverscrollEffect> withoutEventHandling(std::shared_ptr<Overscrol
 
 void OverscrollElement::draw(GraphicsContext& canvas, const Rect& bounds, const LayoutNode& node, const std::function<void()>& drawContent) const {
     if (!effect) return drawContent();
-    ContentDrawScope scope(canvas, bounds, &node.textMeasurer(), drawContent);
+    ContentDrawScope scope(canvas, bounds, node, drawContent);
     effect->draw(scope);
 }
 Modifier Modifier::overscroll(std::shared_ptr<OverscrollEffect> overscrollEffect) const {
@@ -1276,7 +1276,7 @@ void IndicationElement::draw(GraphicsContext& canvas, const Rect& bounds, const 
                              const std::function<void()>& drawContent) const {
     if (indication.kind == Indication::Kind::Custom) {
         if (!node.indicationNode) return drawContent();
-        ContentDrawScope scope(canvas, bounds, &node.textMeasurer(), drawContent);
+        ContentDrawScope scope(canvas, bounds, node, drawContent);
         node.indicationNode->draw(scope);
         return;
     }
@@ -1818,7 +1818,7 @@ void LayoutNode::drawLayer(GraphicsContext& canvas, size_t index) {
                 elements[index]->draw(canvas, view, *this, [&] {
                     GraphicsContext& into = detail::recordingInto() ? *detail::recordingInto() : canvas;
                     std::function<void()> content = [&] { drawLayer(into, index + 1); };
-                    ContentDrawScope scope(into, view, &textMeasurer(), content);
+                    ContentDrawScope scope(into, view, *this, content);
                     effect->draw(scope);
                 });
                 return;

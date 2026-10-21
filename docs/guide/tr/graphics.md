@@ -96,6 +96,26 @@ Box(Modifier().size(120, 72).background(Brush::shader([](Size size) {
 
 `Brush::composite` aynısını iki fırçayla yapar, `withTransform` bir degradenin ya da shader'ın boyadığını taşır, `lerp` de bir animasyonun yaptığı gibi bir fırçadan ötekine geçer.
 
+## Canvas ve Paint
+
+Bir `DrawScope`'un altında kaydetme yığını ve `Paint`'iyle Compose'un `Canvas`'ı vardır (`Canvas` composable'ı adı aldığı için burada `graphics::Canvas`):
+
+```cpp body
+Canvas(Modifier().size(96), [](DrawScope& d) {
+    d.drawIntoCanvas([&](graphics::Canvas& c) {
+        Paint spoke{.color = Color::hex(0x6750A4), .style = PaintingStyle::Stroke, .strokeWidth = 4, .strokeCap = StrokeCap::Round};
+        for (int i = 0; i < 12; ++i) {
+            c.save();
+            c.rotate(float(i) * 30, 48, 48);
+            c.drawLine({48, 30}, {48, 8}, spoke);
+            c.restore();
+        }
+    });
+});
+```
+
+Canvas'ın kaydedip dönüştürdüğü, Compose'daki gibi, içinde bulunduğu blok bitene dek kapsamın sonraki çizimleri için geçerlidir.
+
 ## Path'ler
 
 Bir `Path`, çizgiler, eğriler ve yaylarla herhangi bir dış hattı tanımlar:

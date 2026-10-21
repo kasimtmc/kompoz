@@ -59,6 +59,9 @@ public:
     std::vector<Rect> strokes;  // stroked (rounded) rects: borders, focus rings
     std::vector<Color> strokeColors;
     std::string order;  // the fills as they came: 'r' a rect, 'p' a path (the nth of each in rects, paths)
+    // What was pushed and popped, in order: a layer (L, l), a clip (C, c), a transform (T, t), a
+    // translation (M, m), a color filter (F, f), a blend mode (B, b).
+    std::string stack;
     std::vector<Offset> translations;  // each pushTranslation's
     Offset translation;                // in effect now (their sum)
     std::vector<Matrix> transforms;    // each pushTransform's
@@ -70,8 +73,12 @@ public:
         for (auto it = filterStack.rbegin(); it != filterStack.rend(); ++it) c = it->apply(c);
         return c;
     }
-    void pushColorFilter(const ColorFilter& filter) override { filterStack.push_back(filter); }
+    void pushColorFilter(const ColorFilter& filter) override {
+        stack += 'F';
+        filterStack.push_back(filter);
+    }
     void popColorFilter() override {
+        stack += 'f';
         if (!filterStack.empty()) filterStack.pop_back();
     }
     std::vector<BlendMode> blendStack;  // pushBlendMode's in effect
@@ -79,8 +86,12 @@ public:
     std::vector<int> rectDepths;        // and how many layers it is drawn in
     std::vector<BlendMode> pathBlends;  // each path's
     BlendMode blend() const { return blendStack.empty() ? BlendMode::SrcOver : blendStack.back(); }
-    void pushBlendMode(BlendMode mode) override { blendStack.push_back(mode); }
+    void pushBlendMode(BlendMode mode) override {
+        stack += 'B';
+        blendStack.push_back(mode);
+    }
     void popBlendMode() override {
+        stack += 'b';
         if (!blendStack.empty()) blendStack.pop_back();
     }
     void fillRoundRect(const Rect& r, const CornerRadii& radii, Color c) override {
@@ -173,8 +184,10 @@ public:
         arcs.push_back({moved(oval), start, sweep, strokeWidth, c});
     }
     std::vector<FilterQuality> imageQualities;  // how each image is sampled
-    void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float, FilterQuality quality) override {
+    std::vector<float> imageAlphas;             // and how opaque
+    void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha, FilterQuality quality) override {
         images.push_back(image.id());
+        imageAlphas.push_back(alpha);
         imageQualities.push_back(quality);
         imageFilters.push_back(filterStack);
         imageSources.push_back(src);
@@ -187,10 +200,14 @@ public:
         layerAlphas.push_back(alpha);
         layerTransforms.push_back(t);
         if (!t.identity()) ++transformedLayers;
+        stack += 'L';
         ++layers;
         maxDepth = std::max(maxDepth, ++depth);
     }
-    void popLayer() override { --depth; }
+    void popLayer() override {
+        stack += 'l';
+        --depth;
+    }
     std::vector<Path> layerOutlines;  // each outline layer's outline (pushOutlineLayer), from its top left
     struct Elevated {
         Rect bounds;  // the outline's, where it is
@@ -223,7 +240,10 @@ public:
         layerOutlines.push_back(outline);
         pushLayer(bounds, CornerRadii(), alpha, t);
     }
-    void pushClip(const Rect& r) override { clips.push_back(moved(r)); }
+    void pushClip(const Rect& r) override {
+        stack += 'C';
+        clips.push_back(moved(r));
+    }
     // Each pushClipRoundRect's and pushClipPath's: its bounds (where it is), corners, path and op.
     struct ClipShape {
         Rect bounds;
@@ -232,27 +252,37 @@ public:
         ClipOp op;
     };
     std::vector<ClipShape> clipShapes;
-    void pushClipRoundRect(const Rect& r, const CornerRadii& radii, ClipOp op) override { clipShapes.push_back({moved(r), radii, {}, op}); }
+    void pushClipRoundRect(const Rect& r, const CornerRadii& radii, ClipOp op) override {
+        stack += 'C';
+        clipShapes.push_back({moved(r), radii, {}, op});
+    }
     void pushClipPath(const Path& path, Offset origin, ClipOp op) override {
+        stack += 'C';
         Rect b = path.bounds();
         clipShapes.push_back({moved({b.x + origin.x, b.y + origin.y, b.width, b.height}), {}, path, op});
     }
-    void popClip() override {}
+    void popClip() override { stack += 'c'; }
     void pushTranslation(Offset by) override {
+        stack += 'M';
         translations.push_back(by);
         stack_.push_back(translation);
         translation = {translation.x + by.x, translation.y + by.y};
     }
     void popTranslation() override {
+        stack += 'm';
         if (stack_.empty()) return;
         translation = stack_.back();
         stack_.pop_back();
     }
     void pushTransform(const Matrix& matrix) override {
+        stack += 'T';
         transforms.push_back(matrix);
         ++transformDepth;
     }
-    void popTransform() override { --transformDepth; }
+    void popTransform() override {
+        stack += 't';
+        --transformDepth;
+    }
     std::optional<Rect> visible;  // set: what lies outside isn't drawn (as a real screen culls it)
     bool quickReject(const Rect& rect) const override {
         Rect r = moved(rect);

@@ -642,6 +642,64 @@ void TileModeSection(CallSite site) {
     });
 }
 
+// graphics::Canvas through drawIntoCanvas: twelve spokes each drawn after save, rotate (about the
+// middle) and restore; a grid skewed; two circles faded together in a layer (saveLayer: where they
+// overlap only the one on top shows); a dashed stroke and a corner-rounded fill in Paints.
+void CanvasSection(CallSite site) {
+    composable(site, [=] {
+        const ColorScheme& cs = colorScheme();
+        Section("Canvas · Paint", [&] {
+            Row(Modifier().fillMaxWidth().height(96), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
+                Canvas(Modifier().weight(1).fillMaxHeight(), [primary = cs.primary, tertiary = cs.tertiary](DrawScope& d) {
+                    Size s = d.size();
+                    d.drawIntoCanvas([&](graphics::Canvas& c) {
+                        Paint spoke{.color = primary, .style = PaintingStyle::Stroke, .strokeWidth = 4, .strokeCap = StrokeCap::Round};
+                        for (int i = 0; i < 12; ++i) {
+                            spoke.color = lerp(primary, tertiary, float(i) / 11);
+                            c.save();
+                            c.rotate(float(i) * 30, s.width / 2, s.height / 2);
+                            c.drawLine({s.width / 2, s.height / 2 - 18}, {s.width / 2, s.height / 2 - 40}, spoke);
+                            c.restore();
+                        }
+                    });
+                });
+                Canvas(Modifier().weight(1).fillMaxHeight(), [outline = cs.outline](DrawScope& d) {
+                    d.drawIntoCanvas([&](graphics::Canvas& c) {
+                        Paint line{.color = outline, .style = PaintingStyle::Stroke, .strokeWidth = 1};
+                        c.translate(24, 8);
+                        c.skew(-0.4f, 0);
+                        for (int i = 0; i <= 8; ++i) {
+                            c.drawLine({float(i) * 10, 0}, {float(i) * 10, 80}, line);
+                            c.drawLine({0, float(i) * 10}, {80, float(i) * 10}, line);
+                        }
+                    });
+                });
+                Canvas(Modifier().weight(1).fillMaxHeight().background(cs.secondaryContainer, 12), [primary = cs.primary](DrawScope& d) {
+                    Size s = d.size();
+                    d.drawIntoCanvas([&](graphics::Canvas& c) {
+                        Paint faded;
+                        faded.setAlpha(0.6f);
+                        c.saveLayer({0, 0, s.width, s.height}, faded);
+                        c.drawCircle({s.width / 2 - 14, s.height / 2}, 26, Paint{.color = primary});
+                        c.drawCircle({s.width / 2 + 14, s.height / 2}, 26, Paint{.color = Color::hex(0xFFB300)});
+                        c.restore();
+                    });
+                });
+                Canvas(Modifier().weight(1).fillMaxHeight(), [primary = cs.primary, tertiary = cs.tertiary](DrawScope& d) {
+                    Size s = d.size();
+                    d.drawIntoCanvas([&](graphics::Canvas& c) {
+                        c.drawRect({8, 8, s.width - 16, s.height / 2 - 12},
+                                   Paint{.color = tertiary, .pathEffect = PathEffect::cornerPathEffect(10)});
+                        c.drawRect({8, s.height / 2 + 4, s.width - 16, s.height / 2 - 12},
+                                   Paint{.color = primary, .style = PaintingStyle::Stroke, .strokeWidth = 3,
+                                         .pathEffect = PathEffect::dashPathEffect({8, 5})});
+                    });
+                });
+            });
+        });
+    });
+}
+
 void BlurSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();

@@ -15,6 +15,7 @@ void ComponentsScreen(Modifier modifier, CallSite site) {
                    HorizontalGridSection();
                    BlendModeSection();
                    TileModeSection();
+                   CanvasSection();
                    BlurSection();
                    PointerPassSection();
                    ScrollableSection();

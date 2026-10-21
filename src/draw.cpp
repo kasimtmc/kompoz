@@ -18,7 +18,7 @@ struct DrawBehindElement final : ModifierElement {
     std::function<void(DrawScope&)> onDraw;
     void draw(GraphicsContext& g, const Rect& bounds, const LayoutNode& node,
               const std::function<void()>& drawContent) const override {
-        DrawScope scope(g, bounds, &node.textMeasurer());
+        DrawScope scope(g, bounds, node);
         onDraw(scope);
         drawContent();
     }
@@ -28,7 +28,7 @@ struct DrawWithContentElement final : ModifierElement {
     std::function<void(ContentDrawScope&)> onDraw;
     void draw(GraphicsContext& g, const Rect& bounds, const LayoutNode& node,
               const std::function<void()>& drawContent) const override {
-        ContentDrawScope scope(g, bounds, &node.textMeasurer(), drawContent);
+        ContentDrawScope scope(g, bounds, node, drawContent);
         onDraw(scope);
     }
 };
@@ -39,6 +39,8 @@ struct DrawWithCacheElement final : ModifierElement {
     struct Cache {
         bool valid = false;
         Size size;
+        Density density;
+        bool rtl = false;
         DrawResult result;
     };
     std::shared_ptr<Cache> cache = std::make_shared<Cache>();
@@ -46,20 +48,22 @@ struct DrawWithCacheElement final : ModifierElement {
     void draw(GraphicsContext& g, const Rect& bounds, const LayoutNode& node,
               const std::function<void()>& drawContent) const override {
         Size size{bounds.width, bounds.height};
-        if (!cache->valid || !(cache->size == size)) {
-            CacheDrawScope scope(size);
+        Density density = node.host() ? node.host()->density() : Density{};
+        // Built again for another size, density or layout direction (as Compose's).
+        if (!cache->valid || !(cache->size == size) || !(cache->density == density) || cache->rtl != node.rtl) {
+            CacheDrawScope scope(size, density, node.rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr);
             cache->result = build(scope);
-            cache->size = size;
+            cache->size = size, cache->density = density, cache->rtl = node.rtl;
             cache->valid = true;
         }
         const DrawResult& r = cache->result;
         if (r.withContent) {
-            ContentDrawScope scope(g, bounds, &node.textMeasurer(), drawContent);
+            ContentDrawScope scope(g, bounds, node, drawContent);
             r.withContent(scope);
             return;
         }
         if (r.behind) {
-            DrawScope scope(g, bounds, &node.textMeasurer());
+            DrawScope scope(g, bounds, node);
             r.behind(scope);
         }
         drawContent();
@@ -258,6 +262,250 @@ DrawScope::DrawScope(GraphicsContext& context, Rect bounds, const LayoutNode& no
     : DrawScope(context, bounds, &node.textMeasurer(), node.host() ? node.host()->density() : Density{},
                 node.rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr) {}
 
+DrawScope::DrawScope(graphics::Canvas& canvas, Size size, TextMeasurer* measurer, Density density, LayoutDirection layoutDirection)
+    : DrawScope(canvas.context(), {canvas.origin().x, canvas.origin().y, size.width, size.height}, measurer, density, layoutDirection) {
+    canvas_ = std::shared_ptr<graphics::Canvas>(std::shared_ptr<graphics::Canvas>(), &canvas);  // (not its own: left as it is)
+}
+
+graphics::Canvas& DrawScope::canvas() {
+    if (!canvas_) {
+        canvas_ = std::make_shared<graphics::Canvas>(*context_, Offset{bounds_.x, bounds_.y});
+        canvas_->density_ = density_;
+    }
+    return *canvas_;
+}
+
+void DrawScope::within(const std::function<void(DrawScope&)>& block) {
+    int depth = canvas_ ? canvas_->depth() : 0;
+    block(*this);
+    if (canvas_) canvas_->restoreTo(depth);
+}
+
+// --- Canvas ---------------------------------------------------------------------------------------
+
+void graphics::Canvas::save() { stack_.push_back({Saved::Kind::Save}); }
+
+void graphics::Canvas::restore() {
+    for (size_t i = stack_.size(); i-- > 0;)
+        if (stack_[i].kind == Saved::Kind::Save || stack_[i].kind == Saved::Kind::Layer) return restoreTo(int(i));
+}
+
+void graphics::Canvas::restoreTo(int depth) {
+    while (int(stack_.size()) > std::max(depth, 0)) {
+        Saved s = stack_.back();
+        stack_.pop_back();
+        switch (s.kind) {
+        case Saved::Kind::Save: break;
+        case Saved::Kind::Transform: context_->popTransform(); break;
+        case Saved::Kind::Clip: context_->popClip(); break;
+        case Saved::Kind::Layer:
+            context_->popLayer();
+            if (s.blended) context_->popBlendMode();
+            if (s.filtered) context_->popColorFilter();
+            break;
+        }
+    }
+}
+
+void graphics::Canvas::saveLayer(const Rect& bounds, const Paint& paint) {
+    Saved s{Saved::Kind::Layer, paint.colorFilter.has_value(), paint.blendMode != BlendMode::SrcOver};
+    if (s.filtered) context_->pushColorFilter(*paint.colorFilter);
+    if (s.blended) context_->pushBlendMode(paint.blendMode);
+    Rect r = bounds;
+    context_->pushLayer(at({std::min(r.x, r.right()), std::min(r.y, r.bottom()), std::abs(r.width), std::abs(r.height)}), CornerRadii(),
+                        paint.alpha());
+    stack_.push_back(s);
+}
+
+void graphics::Canvas::withSave(const std::function<void()>& block) {
+    int depth = this->depth();
+    save();
+    block();
+    restoreTo(depth);
+}
+
+void graphics::Canvas::withSaveLayer(const Rect& bounds, const Paint& paint, const std::function<void()>& block) {
+    int depth = this->depth();
+    saveLayer(bounds, paint);
+    block();
+    restoreTo(depth);
+}
+
+// `matrix` (from what is drawn next to this canvas's coordinates) in the context's: from there to
+// this canvas's, through it, and back.
+void graphics::Canvas::push(const Matrix& matrix) {
+    Matrix m;
+    m.translate(-origin_.x, -origin_.y);
+    m *= matrix;
+    Matrix back;
+    back.translate(origin_.x, origin_.y);
+    m *= back;
+    context_->pushTransform(m);
+    stack_.push_back({Saved::Kind::Transform});
+}
+
+void graphics::Canvas::translate(float dx, float dy) {
+    Matrix m;
+    m.translate(dx, dy);
+    push(m);
+}
+
+void graphics::Canvas::scale(float sx, float sy) {
+    Matrix m;
+    m.scale(sx, sy);
+    push(m);
+}
+
+void graphics::Canvas::rotate(float degrees) {
+    Matrix m;
+    m.rotateZ(degrees);
+    push(m);
+}
+
+void graphics::Canvas::skew(float sx, float sy) {
+    Matrix m;
+    m(1, 0) = sx, m(0, 1) = sy;
+    push(m);
+}
+
+void graphics::Canvas::skewRad(float sxRad, float syRad) {
+    skew(sxRad * 180 / std::numbers::pi_v<float>, syRad * 180 / std::numbers::pi_v<float>);
+}
+
+void graphics::Canvas::concat(const Matrix& matrix) {
+    Matrix m;  // (x, y and w: Android's 3x3)
+    for (int r : {0, 1, 3})
+        for (int c : {0, 1, 3}) m(r, c) = matrix(r, c);
+    push(m);
+}
+
+void graphics::Canvas::rotate(float degrees, float pivotX, float pivotY) {
+    if (degrees == 0) return;  // (as Compose's)
+    translate(pivotX, pivotY);
+    rotate(degrees);
+    translate(-pivotX, -pivotY);
+}
+
+void graphics::Canvas::rotateRad(float radians, float pivotX, float pivotY) { rotate(radians * 180 / std::numbers::pi_v<float>, pivotX, pivotY); }
+
+void graphics::Canvas::scale(float sx, float sy, float pivotX, float pivotY) {
+    if (sx == 1 && sy == 1) return;  // (as Compose's)
+    translate(pivotX, pivotY);
+    scale(sx, sy);
+    translate(-pivotX, -pivotY);
+}
+
+void graphics::Canvas::clipRect(const Rect& rect, ClipOp op) {
+    Rect r = at({std::min(rect.x, rect.right()), std::min(rect.y, rect.bottom()), std::abs(rect.width), std::abs(rect.height)});
+    if (op == ClipOp::Intersect) context_->pushClip(r);  // (as DrawScope.clipRect)
+    else context_->pushClipRoundRect(r, CornerRadii(), op);
+    stack_.push_back({Saved::Kind::Clip});
+}
+
+void graphics::Canvas::clipRect(float left, float top, float right, float bottom, ClipOp op) { clipRect({left, top, right - left, bottom - top}, op); }
+
+void graphics::Canvas::clipPath(const Path& path, ClipOp op) {
+    context_->pushClipPath(path, origin_, op);
+    stack_.push_back({Saved::Kind::Clip});
+}
+
+DrawScope graphics::Canvas::scope() const { return DrawScope(*context_, {origin_.x, origin_.y, 0, 0}, nullptr, density_); }
+
+namespace {
+
+// What a paint paints with: its shader (in the canvas's coordinates: a scope's at the canvas's
+// origin) or its color, and how opaque.
+Brush brushOf(const Paint& paint) { return paint.shader ? Brush::shader(*paint.shader) : Brush::solid(paint.color.copy(1)); }
+
+DrawStyle styleOf(const Paint& paint) {
+    if (paint.style == PaintingStyle::Stroke)
+        return Stroke(paint.strokeWidth, paint.strokeMiterLimit, paint.strokeCap, paint.strokeJoin, paint.pathEffect);
+    DrawStyle fill = Fill;
+    fill.pathEffect = paint.pathEffect;
+    return fill;
+}
+
+} // namespace
+
+void graphics::Canvas::drawLine(Offset p1, Offset p2, const Paint& paint) {
+    scope().drawLine(brushOf(paint), p1, p2, paint.strokeWidth, paint.strokeCap, paint.pathEffect, paint.alpha(), paint.colorFilter,
+                     paint.blendMode);
+}
+
+void graphics::Canvas::drawRect(const Rect& rect, const Paint& paint) {
+    scope().drawRect(brushOf(paint), {rect.x, rect.y}, Size{rect.width, rect.height}, paint.alpha(), styleOf(paint), paint.colorFilter,
+                     paint.blendMode);
+}
+
+void graphics::Canvas::drawRect(float left, float top, float right, float bottom, const Paint& paint) {
+    drawRect({left, top, right - left, bottom - top}, paint);
+}
+
+void graphics::Canvas::drawRoundRect(float left, float top, float right, float bottom, float radiusX, float radiusY, const Paint& paint) {
+    scope().drawRoundRect(brushOf(paint), {left, top}, Size{right - left, bottom - top}, CornerRadius(radiusX, radiusY), paint.alpha(),
+                          styleOf(paint), paint.colorFilter, paint.blendMode);
+}
+
+void graphics::Canvas::drawOval(const Rect& rect, const Paint& paint) {
+    scope().drawOval(brushOf(paint), {rect.x, rect.y}, Size{rect.width, rect.height}, paint.alpha(), styleOf(paint), paint.colorFilter,
+                     paint.blendMode);
+}
+
+void graphics::Canvas::drawOval(float left, float top, float right, float bottom, const Paint& paint) {
+    drawOval({left, top, right - left, bottom - top}, paint);
+}
+
+void graphics::Canvas::drawCircle(Offset center, float radius, const Paint& paint) {
+    scope().drawCircle(brushOf(paint), radius, center, paint.alpha(), styleOf(paint), paint.colorFilter, paint.blendMode);
+}
+
+void graphics::Canvas::drawArc(const Rect& rect, float startAngle, float sweepAngle, bool useCenter, const Paint& paint) {
+    scope().drawArc(brushOf(paint), startAngle, sweepAngle, useCenter, {rect.x, rect.y}, Size{rect.width, rect.height}, paint.alpha(),
+                    styleOf(paint), paint.colorFilter, paint.blendMode);
+}
+
+void graphics::Canvas::drawArc(float left, float top, float right, float bottom, float startAngle, float sweepAngle, bool useCenter, const Paint& paint) {
+    drawArc({left, top, right - left, bottom - top}, startAngle, sweepAngle, useCenter, paint);
+}
+
+void graphics::Canvas::drawArcRad(const Rect& rect, float startAngleRad, float sweepAngleRad, bool useCenter, const Paint& paint) {
+    const float degrees = 180 / std::numbers::pi_v<float>;
+    drawArc(rect, startAngleRad * degrees, sweepAngleRad * degrees, useCenter, paint);
+}
+
+void graphics::Canvas::drawPath(const Path& path, const Paint& paint) {
+    scope().drawPath(path, brushOf(paint), paint.alpha(), styleOf(paint), paint.colorFilter, paint.blendMode);
+}
+
+void graphics::Canvas::drawImage(const ImageBitmap& image, Offset topLeftOffset, const Paint& paint) {
+    if (image.empty()) return;
+    scope().drawImage(image, IntOffset{}, std::nullopt, topLeftOffset, std::nullopt, paint.alpha(), Fill, paint.colorFilter, paint.blendMode,
+                      paint.filterQuality);
+}
+
+void graphics::Canvas::drawImageRect(const ImageBitmap& image, IntOffset srcOffset, IntSize srcSize, IntOffset dstOffset, IntSize dstSize,
+                           const Paint& paint) {
+    scope().drawImage(image, srcOffset, srcSize, {float(dstOffset.x), float(dstOffset.y)}, Size(dstSize), paint.alpha(), Fill,
+                      paint.colorFilter, paint.blendMode, paint.filterQuality);
+}
+
+void graphics::Canvas::drawImageRect(const ImageBitmap& image, const Paint& paint) {
+    if (image.empty()) return;
+    IntSize all{image.width(), image.height()};
+    drawImageRect(image, {}, all, {}, all, paint);
+}
+
+void graphics::Canvas::drawPoints(PointMode pointMode, const std::vector<Offset>& points, const Paint& paint) {
+    scope().drawPoints(points, pointMode, brushOf(paint), paint.strokeWidth, paint.strokeCap, paint.pathEffect, paint.alpha(),
+                       paint.colorFilter, paint.blendMode);
+}
+
+void graphics::Canvas::drawRawPoints(PointMode pointMode, const std::vector<float>& points, const Paint& paint) {
+    std::vector<Offset> pairs;
+    for (size_t i = 0; i + 1 < points.size(); i += 2) pairs.push_back({points[i], points[i + 1]});
+    drawPoints(pointMode, pairs, paint);
+}
+
 namespace {
 
 // A color faded by a paint's alpha.
@@ -299,8 +547,8 @@ void DrawScope::paint(const Path& path, const Brush& brush, float alpha, const D
     detail::Filtering filtering(*context_, colorFilter);
     Brush b = brush.faded(alpha);
     PathStroke stroke = style.pathStroke();
-    if (style.isStroke() && style.pathEffect) {
-        Path effected = style.pathEffect->apply(path);
+    if (style.pathEffect) {  // (a fill's: a Canvas's Paint)
+        Path effected = style.pathEffect->apply(path, !style.isStroke());
         if (effected.isEmpty()) return;
         if (style.pathEffect->fills()) stroke = {};  // stamped shapes are filled
         context_->drawPath(effected, {bounds_.x, bounds_.y}, b, bounds_, stroke);
@@ -319,7 +567,7 @@ void DrawScope::paintRoundRect(const Rect& r, CornerRadius corner, const Brush& 
     if (alpha <= 0) return;
     bool circular = corner.x == corner.y;
     float radius = std::max(0.f, corner.x);
-    bool plain = !style.isStroke() || (style.width > 0 && !style.pathEffect && (radius > 0 || style.join == StrokeJoin::Miter));
+    bool plain = !style.pathEffect && (!style.isStroke() || (style.width > 0 && (radius > 0 || style.join == StrokeJoin::Miter)));
     if (!circular || !plain || (style.isStroke() && !brush.isSolid())) {
         Path outline;
         Rect at{r.x - bounds_.x, r.y - bounds_.y, r.width, r.height};
@@ -363,12 +611,12 @@ void DrawScope::drawLine(Color color, Offset start, Offset end, float strokeWidt
 
 void DrawScope::drawRect(const Brush& brush, Offset topLeft, std::optional<Size> size, float alpha, const DrawStyle& style,
                          std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
-    paintRoundRect(local(topLeft, size), {}, brush, alpha, style, colorFilter, blendMode);
+    paintRoundRect(sorted(topLeft, size), {}, brush, alpha, style, colorFilter, blendMode);
 }
 
 void DrawScope::drawRect(Color color, Offset topLeft, std::optional<Size> size, float alpha, const DrawStyle& style,
                          std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
-    paintRoundRect(local(topLeft, size), {}, Brush::solid(color), alpha, style, colorFilter, blendMode);
+    paintRoundRect(sorted(topLeft, size), {}, Brush::solid(color), alpha, style, colorFilter, blendMode);
 }
 
 void DrawScope::drawImage(const ImageBitmap& image, Offset topLeft, float alpha, const DrawStyle& style, std::optional<ColorFilter> colorFilter,
@@ -390,12 +638,12 @@ void DrawScope::drawImage(const ImageBitmap& image, IntOffset srcOffset, std::op
 
 void DrawScope::drawRoundRect(const Brush& brush, Offset topLeft, std::optional<Size> size, CornerRadius cornerRadius, float alpha,
                               const DrawStyle& style, std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
-    paintRoundRect(local(topLeft, size), cornerRadius, brush, alpha, style, colorFilter, blendMode);
+    paintRoundRect(sorted(topLeft, size), cornerRadius, brush, alpha, style, colorFilter, blendMode);
 }
 
 void DrawScope::drawRoundRect(Color color, Offset topLeft, std::optional<Size> size, CornerRadius cornerRadius, const DrawStyle& style,
                               float alpha, std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
-    paintRoundRect(local(topLeft, size), cornerRadius, Brush::solid(color), alpha, style, colorFilter, blendMode);
+    paintRoundRect(sorted(topLeft, size), cornerRadius, Brush::solid(color), alpha, style, colorFilter, blendMode);
 }
 
 void DrawScope::drawCircle(const Brush& brush, std::optional<float> radius, std::optional<Offset> center, float alpha, const DrawStyle& style,
@@ -412,7 +660,7 @@ void DrawScope::drawCircle(Color color, std::optional<float> radius, std::option
 
 void DrawScope::drawOval(const Brush& brush, Offset topLeft, std::optional<Size> size, float alpha, const DrawStyle& style,
                          std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
-    Rect r = local(topLeft, size);
+    Rect r = sorted(topLeft, size);
     if (r.width == r.height) return paintRoundRect(r, r.width / 2, brush, alpha, style, colorFilter, blendMode, true);
     Path oval;
     oval.addOval({r.x - bounds_.x, r.y - bounds_.y, r.width, r.height}, Path::Direction::Clockwise);
@@ -426,7 +674,7 @@ void DrawScope::drawOval(Color color, Offset topLeft, std::optional<Size> size, 
 
 void DrawScope::drawArc(const Brush& brush, float startAngle, float sweepAngle, bool useCenter, Offset topLeft, std::optional<Size> size,
                         float alpha, const DrawStyle& style, std::optional<ColorFilter> colorFilter, BlendMode blendMode) {
-    Rect oval = local(topLeft, size);
+    Rect oval = sorted(topLeft, size);
     // An arc of a circle, stroked butt or round, in a color: as the backend draws one.
     if (style.isStroke() && !useCenter && style.width > 0 && !style.pathEffect && style.cap != StrokeCap::Square && brush.isSolid() &&
         oval.width == oval.height && std::abs(sweepAngle) < 360) {
@@ -437,7 +685,7 @@ void DrawScope::drawArc(const Brush& brush, float startAngle, float sweepAngle, 
         return;
     }
     Rect at{oval.x - bounds_.x, oval.y - bounds_.y, oval.width, oval.height};
-    paint(arcPath(at, startAngle, sweepAngle, useCenter, !style.isStroke()), brush, alpha, style, colorFilter, blendMode);
+    paint(arcPath(at, startAngle, sweepAngle, useCenter, !style.isStroke() && !style.pathEffect), brush, alpha, style, colorFilter, blendMode);
 }
 
 void DrawScope::drawArc(Color color, float startAngle, float sweepAngle, bool useCenter, Offset topLeft, std::optional<Size> size, float alpha,
@@ -586,7 +834,7 @@ void DrawScope::drawVector(const ImageVector& vector, Color color, Offset topLef
 
 void DrawScope::translate(float left, float top, const std::function<void(DrawScope&)>& block) {
     context_->pushTranslation({left, top});  // the content too (drawContent() inside it)
-    block(*this);
+    within(block);
     context_->popTranslation();
 }
 
@@ -594,13 +842,13 @@ void DrawScope::inset(float left, float top, float right, float bottom, const st
     DrawScope inner(*context_,
                     {bounds_.x + left, bounds_.y + top, std::max(0.f, bounds_.width - left - right),
                      std::max(0.f, bounds_.height - top - bottom)},
-                    measurer_);
+                    measurer_, density_, layoutDirection_);
     block(inner);
 }
 
 void DrawScope::clipPath(const Path& path, const std::function<void(DrawScope&)>& block, ClipOp op) {
     context_->pushClipPath(path, {bounds_.x, bounds_.y}, op);
-    block(*this);
+    within(block);
     context_->popClip();
 }
 
@@ -641,9 +889,9 @@ void DrawTransform::clipPath(const Path& path, ClipOp op) {
 }
 
 void DrawScope::clipRect(Offset topLeft, Size size, const std::function<void(DrawScope&)>& block, ClipOp op) {
-    if (op == ClipOp::Intersect) context_->pushClip(local(topLeft, size));
-    else context_->pushClipRoundRect(local(topLeft, size), CornerRadii(), op);
-    block(*this);
+    if (op == ClipOp::Intersect) context_->pushClip(sorted(topLeft, size));
+    else context_->pushClipRoundRect(sorted(topLeft, size), CornerRadii(), op);
+    within(block);
     context_->popClip();
 }
 
@@ -656,7 +904,7 @@ void DrawScope::transformed(const Matrix& matrix, const std::function<void(DrawS
     back.translate(bounds_.x, bounds_.y);
     m *= back;
     context_->pushTransform(m);
-    block(*this);
+    within(block);
     context_->popTransform();
 }
 
@@ -896,7 +1144,7 @@ void DrawScope::record(const GraphicsLayer& layer, const std::function<void(Draw
     d.list->begin(d.size, 1);
     d.list->pushTranslation({-bounds_.x, -bounds_.y});  // drawn where it is, kept from its top left
     GraphicsContext* outer = std::exchange(detail::recordingInto(), d.list.get());
-    DrawScope scope(*d.list, {bounds_.x, bounds_.y, d.size.width, d.size.height}, measurer);
+    DrawScope scope(*d.list, {bounds_.x, bounds_.y, d.size.width, d.size.height}, measurer, density_, layoutDirection_);
     block(scope);
     detail::recordingInto() = outer;
     d.list->popTranslation();
@@ -977,7 +1225,8 @@ Painter BrushPainter(Brush brush) { return painterOf({.kind = Painter::Data::Kin
 bool Painter::hasIntrinsicSize() const { return data_ && data_->intrinsic; }
 Size Painter::intrinsicSize() const { return hasIntrinsicSize() ? *data_->intrinsic : Size{}; }
 
-void Painter::draw(GraphicsContext& canvas, const Rect& b, float alpha, const std::optional<ColorFilter>& colorFilter, bool rtl) const {
+void Painter::draw(GraphicsContext& canvas, const Rect& b, float alpha, const std::optional<ColorFilter>& colorFilter, bool rtl,
+                   Density density) const {
     if (!data_ || alpha <= 0 || b.width <= 0 || b.height <= 0) return;
     const Data& d = *data_;
     using Kind = Data::Kind;
@@ -994,7 +1243,7 @@ void Painter::draw(GraphicsContext& canvas, const Rect& b, float alpha, const st
     case Kind::Custom: {
         bool layer = alpha < 1;
         if (layer) canvas.pushLayer(b, CornerRadii(), alpha);
-        DrawScope scope(canvas, b);
+        DrawScope scope(canvas, b, nullptr, density, rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr);
         if (d.kind == Kind::Gradient) scope.drawRect(*d.brush);
         else if (d.onDraw) d.onDraw(scope);
         if (layer) canvas.popLayer();
@@ -1075,7 +1324,8 @@ struct PainterElement final : ModifierElement {
         Alignment a = alignment;
         if (node.rtl) a.horizontal = -a.horizontal;  // start is on the right
         Offset at = a.align(scaled, {b.width, b.height});
-        painter.draw(canvas, {b.x + at.x, b.y + at.y, scaled.width, scaled.height}, alpha, colorFilter, node.rtl);
+        painter.draw(canvas, {b.x + at.x, b.y + at.y, scaled.width, scaled.height}, alpha, colorFilter, node.rtl,
+                     node.host() ? node.host()->density() : Density{});
         drawContent();
     }
     bool equals(const ModifierElement& other) const override {

@@ -21137,6 +21137,9 @@ TEST(shader_brushes_are_composes) {
     Shader rings = RadialGradientShader({5, 5}, 5, {red, blue}, {}, TileMode::Repeated);
     Brush fixed = Brush::shader(rings);
     CHECK(fixed.createShader({300, 300}) == rings && same(fixed.colorAt({17.5f, 5}, {0, 0, 300, 300}), lerp(red, blue, 0.5f)));
+    CHECK(fixed == Brush::shader(RadialGradientShader({5, 5}, 5, {red, blue}, {}, TileMode::Repeated)) &&
+          !(fixed == Brush::shader(RadialGradientShader({5, 5}, 6, {red, blue}, {}, TileMode::Repeated))) &&
+          !(fixed == Brush::shader([rings](Size) { return rings; })));  // equal by its shader
     // Transforms: a gradient's or a shader's, in the dp of what it paints; a color has none.
     Matrix down;
     down.translate(0, 10);
@@ -23714,6 +23717,237 @@ std::string pathText(const Path& path) {
         }
     }
     return out;
+}
+
+// Compose's Canvas (Android's): over a DrawScope (drawIntoCanvas), its coordinates from the
+// scope's top left; a stack of saves, transforms (each before what is there), clips and layers;
+// draws in a Paint as Android draws them; what it leaves saved held for the scope's later
+// draws, restored where a block ends and where the scope does.
+TEST(canvases_draw_as_composes) {
+    Color red{1, 0, 0, 1}, blue{0, 0, 1, 1};
+    auto at = [](Offset a, Offset b) { return std::abs(a.x - b.x) < 1e-3f && std::abs(a.y - b.y) < 1e-3f; };
+    Paint fill{.color = red};
+    Paint half = fill;
+    half.setAlpha(0.5f);
+    Paint outline{.color = blue, .style = PaintingStyle::Stroke, .strokeWidth = 3, .strokeCap = StrokeCap::Round,
+                  .strokeJoin = StrokeJoin::Bevel, .strokeMiterLimit = 7};
+    Paint shaded{.shader = LinearGradientShader({0, 0}, {100, 0}, {red, blue})};
+    ImageBitmap img = ImageBitmap::fromPixels(4, 2, std::vector<uint8_t>(32, 255));
+    graphics::Canvas* seen = nullptr;
+    ComposeTestRule rule([&] {
+        Canvas(Modifier().padding(20, 10, 0, 0).size(200), [&](DrawScope& d) {
+            d.drawIntoCanvas([&](graphics::Canvas& c) {
+                seen = &c;
+                c.drawRect({1, 2, 10, 10}, fill);                  // r0: from the canvas's origin
+                c.drawRect(30, 30, 10, 20, half);                  // r1: sorted; the paint's alpha
+                c.drawRect({40, 0, 20, 10}, shaded);               // r2: a shader in the canvas's coordinates
+                c.drawRect({0, 40, 10, 10}, outline);              // p0: stroked as the paint says
+                c.drawLine({0, 60}, {30, 60}, outline);            // p1: a line, round capped
+                c.drawLine({0, 70}, {30, 70}, Paint{.color = red, .strokeWidth = 2});  // a line (filled paint: stroked)
+                c.drawRoundRect(0, 80, 20, 100, 4, 6, fill);       // p2: elliptical corners
+                c.drawOval(0, 100, 30, 110, fill);                 // p3
+                c.drawCircle({50, 50}, 5, fill);                   // r3: a circle
+                c.drawArc({0, 120, 20, 20}, 0, 90, true, fill);    // p4: a pie slice
+                c.drawArcRad({0, 120, 20, 20}, std::numbers::pi_v<float> / 2, std::numbers::pi_v<float> / 2, false, outline);  // an arc (the backend's)
+                c.drawPath([] { Path p; p.addRect({100, 0, 10, 10}); return p; }(), fill);  // p5
+                c.drawImage(img, {60, 60}, Paint{.color = red.copy(0.25f), .filterQuality = FilterQuality::None});
+                c.drawImageRect(img, {1, 0}, {2, 2}, {70, 70}, {8, 4}, Paint{});
+                c.drawImageRect(img, Paint{});
+                c.drawPoints(PointMode::Points, {{150, 150}, {160, 150}}, Paint{.color = red, .strokeWidth = 2});  // p6
+                c.drawRawPoints(PointMode::Points, {150, 160, 170, 160, 999}, Paint{.color = red, .strokeWidth = 2});  // p7 (an odd last left out)
+                c.enableZ();
+                c.disableZ();
+            });
+        });
+    });
+    testing::RecordingCanvas r;
+    rule.host().draw(r);
+    CHECK(seen != nullptr);
+    CHECK(r.rects.size() == 4 && r.paths.size() == 8 && r.lines.size() == 1 && r.images.size() == 3 && r.arcs.size() == 1);
+    if (r.rects.size() != 4 || r.paths.size() != 8 || r.images.size() != 3 || r.arcs.size() != 1) return;
+    CHECK(sameRect(r.rects[0], {21, 12, 10, 10}) && r.rectColors[0] == red);
+    CHECK(sameRect(r.rects[1], {30, 30, 20, 10}) && near(r.rectColors[1].a, 0.5f));
+    CHECK(r.gradients == 1 && near(r.rectColors[2].r, 0.5f, 0.02f) && near(r.rectColors[2].b, 0.5f, 0.02f));  // at canvas x 50: halfway
+    CHECK(r.pathStrokes[0] == 3 && r.pathStrokeStyles[0].join == StrokeJoin::Bevel && r.pathStrokeStyles[0].miter == 7);
+    CHECK(r.pathStrokeStyles[1].cap == StrokeCap::Round && r.pathStrokes[1] == 3);
+    CHECK(near(r.lines[0].first.y, 80) && near(r.lines[0].first.x, 20));
+    CHECK(pathText(r.pathShapes[2]).find('K') != std::string::npos && sameRect(r.paths[2], {20, 90, 20, 20}));
+    CHECK(sameRect(r.paths[3], {20, 110, 30, 10}));
+    CHECK(sameRect(r.rects[3], {65, 55, 10, 10}) && near(r.rectRadii[3], 5));
+    CHECK(pathText(r.pathShapes[4]) == "M10,130 L20,130 K10,140 Z");  // (from the origin it is drawn at)
+    CHECK(near(r.arcs[0].start, 90) && near(r.arcs[0].sweep, 90) && near(r.arcs[0].strokeWidth, 3));
+    CHECK(sameRect(r.paths[5], {120, 10, 10, 10}));
+    CHECK(sameRect(r.imageDestinations[0], {80, 70, 4, 2}) && r.imageQualities[0] == FilterQuality::None && near(r.imageAlphas[0], 0.25f));
+    CHECK(sameRect(r.imageSources[1], {1, 0, 2, 2}) && sameRect(r.imageDestinations[1], {90, 80, 8, 4}));
+    CHECK(sameRect(r.imageDestinations[2], {20, 10, 4, 2}) && r.imageQualities[2] == DefaultFilterQuality);
+    CHECK(near(r.paths[6].width, 12, 1e-3f) && near(r.paths[7].width, 22, 1e-3f) && near(r.paths[7].height, 2, 1e-3f));
+    // The stack: saves, transforms before what is there, clips (sorted), layers, restores.
+    ComposeTestRule stacked([&] {
+        Canvas(Modifier().padding(20, 10, 0, 0).size(200), [&](DrawScope& d) {
+            d.drawIntoCanvas([&](graphics::Canvas& c) {
+                c.translate(1, 1);  // (not saved)
+                c.restore();        // nothing saved: nothing
+                c.save();
+                c.translate(10, 0);
+                c.rotate(90);
+                c.clipRect(40, 40, 20, 20, ClipOp::Difference);
+                c.drawRect({0, 0, 1, 1}, fill);
+                c.restore();
+                c.saveLayer({50, 50, -20, -10}, Paint{.color = red.copy(0.5f), .blendMode = BlendMode::Multiply,
+                                                      .colorFilter = ColorFilter::tint(blue)});
+                c.clipPath([] { Path p; p.addOval({0, 0, 10, 10}); return p; }());
+                c.restore();
+                c.withSave([&] { c.skew(0.5f, 0); });
+                c.withSaveLayer({0, 0, 10, 10}, Paint{}, [] {});
+                c.scale(2, 3, 5, 5);  // (not restored: held until the scope ends)
+            });
+            d.drawRect(red, {}, Size{1, 1});
+        });
+    });
+    testing::RecordingCanvas s;
+    stacked.host().draw(s);
+    std::string inside = s.stack;
+    CHECK(inside.find("TTTCcttF") != std::string::npos);  // the first translate kept by both restores
+    CHECK(inside.find("FBLCclbf") != std::string::npos);
+    CHECK(inside.find("TtLl") != std::string::npos);
+    CHECK(inside.find("TTTtttt") != std::string::npos);  // the pivoted scale's three and the first, popped as the scope ends
+    CHECK(s.transforms.size() == 7 && s.layerBounds.size() == 2 && s.clipShapes.size() == 2);
+    if (s.transforms.size() != 7 || s.layerBounds.size() != 2 || s.clipShapes.size() != 2) return;
+    s.transforms.erase(s.transforms.begin());  // (the first: not saved)
+    // In the context's coordinates: what a canvas point goes to, the origin (20, 10) taken in and out.
+    CHECK(at(s.transforms[0].map(Offset{25, 15}), {35, 15}));  // translate
+    CHECK(at(s.transforms[1].map(Offset{30, 10}), {20, 20}));  // a quarter turn clockwise about the origin
+    CHECK(sameRect(s.clipShapes[0].bounds, {40, 30, 20, 20}) && s.clipShapes[0].op == ClipOp::Difference);  // (sorted)
+    CHECK(sameRect(s.layerBounds[0], {50, 50, 20, 10}) && near(s.layerAlphas[0], 0.5f));
+    CHECK(sameRect(s.clipShapes[1].bounds, {20, 10, 10, 10}));
+    CHECK(at(s.transforms[2].map(Offset{20, 30}), {30, 30}));  // skew: x + 0.5 y
+    CHECK(at(s.transforms[3].map(Offset{25, 15}), {30, 20}) && at(s.transforms[4].map(Offset{21, 11}), {22, 13}));  // scale about (5, 5)
+    // concat: the matrix's z row and column left out (Android's 3x3); a skewRad of degrees(radians).
+    {
+        testing::RecordingCanvas z;
+        graphics::Canvas c(z);
+        Matrix m;
+        m.rotateX(30);
+        m.translate(4, 5);
+        c.concat(m);
+        c.skewRad(0.01f, 0);
+        CHECK(z.transforms.size() == 2);
+        if (z.transforms.size() == 2) {
+            const Matrix& got = z.transforms[0];
+            CHECK(got(2, 0) == 0 && got(2, 1) == 0 && got(0, 2) == 0 && got(1, 2) == 0 && got(2, 2) == 1 && got(3, 2) == 0);
+            CHECK(near(got(0, 0), m(0, 0), 1e-6f) && near(got(1, 1), m(1, 1), 1e-6f) && near(got(3, 1), m(3, 1), 1e-6f));
+            CHECK(near(z.transforms[1](1, 0), 0.01f * 180 / std::numbers::pi_v<float>, 1e-4f));
+        }
+        c.save();
+        c.clipRect({0, 0, 5, 5});
+    }  // (gone: what it left restored)
+    // A block of the scope restores what the canvas left inside it, before its own; the scope's
+    // inset keeps its density.
+    Density insetDensity;
+    ComposeTestRule blocks([&] {
+        Canvas(Modifier().size(100), [&](DrawScope& d) {
+            d.translate(5, 0, [&](DrawScope& in) { in.drawIntoCanvas([](graphics::Canvas& c) { c.translate(1, 0); }); });
+            d.clipRect({}, Size{-10, -10}, [&](DrawScope& in) { in.drawIntoCanvas([](graphics::Canvas& c) { c.save(); c.rotate(5); }); });
+            d.inset(10, [&](DrawScope& in) { insetDensity = in.density(); });
+        });
+    });
+    blocks.host().setDensity({2, 1});
+    blocks.waitForIdle();
+    testing::RecordingCanvas b;
+    blocks.host().draw(b);
+    CHECK(b.stack.find("MTtmCTtc") != std::string::npos && insetDensity == (Density{2, 1}));
+    CHECK(b.clips.size() == 1 && sameRect(b.clips.back(), {-10, -10, 10, 10}));  // sorted
+    // A scope over a canvas: from its origin, drawIntoCanvas giving that canvas, what its draws
+    // leave on it left there.
+    testing::RecordingCanvas o;
+    {
+        graphics::Canvas c(o, {100, 50});
+        DrawScope over(c, {20, 20});
+        over.drawRect(red);
+        graphics::Canvas* inner = nullptr;
+        over.drawIntoCanvas([&](graphics::Canvas& k) { inner = &k; });
+        CHECK(inner == &c && o.rects.size() == 1 && sameRect(o.rects[0], {100, 50, 20, 20}));
+        c.drawRect({0, 0, 5, 5}, half);
+        CHECK(o.rects.size() == 2 && sameRect(o.rects[1], {100, 50, 5, 5}));
+    }
+    // Fills with a path effect: rounded where it rounds, never dashed (Skia dashes only strokes).
+    testing::RecordingCanvas e;
+    {
+        graphics::Canvas c(e);
+        c.drawRect({0, 0, 20, 20}, Paint{.pathEffect = PathEffect::cornerPathEffect(4)});
+        c.drawRect({0, 0, 20, 20}, Paint{.pathEffect = PathEffect::dashPathEffect({2, 2})});
+        c.drawRect({0, 0, 20, 20}, Paint{.style = PaintingStyle::Stroke, .strokeWidth = 1, .pathEffect = PathEffect::dashPathEffect({2, 2})});
+    }
+    CHECK(e.pathShapes.size() == 3 && e.rects.empty());
+    if (e.pathShapes.size() == 3) {
+        CHECK(pathText(e.pathShapes[0]).find('Q') != std::string::npos);
+        CHECK(pathText(e.pathShapes[1]) == "M0,0 L20,0 L20,20 L0,20 Z" && e.pathStrokes[1] == 0);
+        CHECK(e.pathShapes[2].commands().size() > 10);
+    }
+    // A paint's alpha is its color's; equal by value.
+    Paint p;
+    p.setAlpha(2);
+    CHECK(p.alpha() == 1 && p.color == colors::Black && p.isAntiAlias && p.filterQuality == DefaultFilterQuality && p.strokeMiterLimit == 4);
+    p.setAlpha(-1);
+    CHECK(p.alpha() == 0 && !(p == Paint{}) && Paint{} == Paint{});
+    // DrawScope's shapes are sorted too, as Skia sorts them.
+    ComposeTestRule back([&] { Canvas(Modifier().size(100), [&](DrawScope& d) { d.drawRect(red, {30, 30}, Size{-10, -20}); }); });
+    testing::RecordingCanvas k;
+    back.host().draw(k);
+    CHECK(k.rects.size() == 1 && sameRect(k.rects.back(), {20, 10, 10, 20}));
+}
+
+// Every draw scope over a node has the screen's density and the node's layout direction, as
+// Compose's: drawBehind, drawWithContent, Canvas, drawWithCache's (built again when either
+// changes), a recording's, a custom painter's.
+TEST(draw_scopes_know_the_density_and_direction) {
+    struct Seen {
+        Density density;
+        LayoutDirection direction = LayoutDirection::Ltr;
+    };
+    Seen behind, content, canvas, cached, cacheBuilt, recorded, painted;
+    int builds = 0;
+    // (Made once, outside the composition: its element, and its cache, kept when it recomposes.)
+    Modifier cachedModifier = Modifier().size(10).drawWithCache([&](CacheDrawScope& c) {
+        ++builds;
+        cacheBuilt = {c.density(), c.layoutDirection()};
+        return c.onDrawBehind([&](DrawScope& d) { cached = {d.density(), d.layoutDirection()}; });
+    });
+    Painter own = Painter::custom([&](DrawScope& d) { painted = {d.density(), d.layoutDirection()}; }, Size{10, 10});
+    auto rtl = mutableStateOf(true);
+    ComposeTestRule rule([&] {
+        CompositionLocalProvider({LocalLayoutDirection.provides(rtl.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
+            auto layer = rememberGraphicsLayer();
+            Column([&] {
+                Box(Modifier().size(10).drawBehind([&](DrawScope& d) { behind = {d.density(), d.layoutDirection()}; }));
+                Box(Modifier().size(10).drawWithContent([&, layer](ContentDrawScope& d) {
+                    content = {d.density(), d.layoutDirection()};
+                    d.record(layer, [&](DrawScope& r) { recorded = {r.density(), r.layoutDirection()}; });
+                }));
+                Canvas(Modifier().size(10), [&](DrawScope& d) { canvas = {d.density(), d.layoutDirection()}; });
+                Box(cachedModifier);
+                Image(own, "", Modifier().size(10));
+            });
+        });
+    });
+    rule.host().setDensity({2.5f, 1.25f});
+    rule.waitForIdle();
+    testing::RecordingCanvas r;
+    rule.host().draw(r);
+    Density want{2.5f, 1.25f};
+    for (const Seen* s : {&behind, &content, &canvas, &cached, &cacheBuilt, &recorded, &painted})
+        CHECK(s->density == want && s->direction == LayoutDirection::Rtl);
+    int before = builds;
+    rule.host().draw(r);
+    CHECK(builds == before);  // the same: kept
+    rtl.set(false);
+    rule.waitForIdle();
+    rule.host().draw(r);
+    CHECK(builds == before + 1 && cacheBuilt.direction == LayoutDirection::Ltr && painted.direction == LayoutDirection::Ltr);
+    rule.host().setDensity({3, 1});
+    rule.waitForIdle();
+    rule.host().draw(r);
+    CHECK(builds == before + 2 && cacheBuilt.density == (Density{3, 1}));
 }
 
 TEST(path_effects_dash_and_round_strokes) {
