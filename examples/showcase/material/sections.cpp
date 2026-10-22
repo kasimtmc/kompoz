@@ -622,7 +622,12 @@ void TimePickerSection(CallSite site) {
                 FilterChip(twelveHour.get(), [twelveHour] { twelveHour.set(!twelveHour.get()); }, [] { Text("12 saat"); });
             });
             std::string text = "Henüz saat seçilmedi.";
-            if (auto t = picked.get()) text = std::format("Seçilen: {:02}:{:02}", t->first, t->second);
+            if (auto t = picked.get()) {
+                const Strings& strings = LocalStrings.current();  // (ÖÖ / ÖS)
+                text = twelveHour.get() ? std::format("Seçilen: {:02}:{:02} {}", t->first % 12 == 0 ? 12 : t->first % 12, t->second,
+                                                      t->first < 12 ? strings.am : strings.pm)
+                                        : std::format("Seçilen: {:02}:{:02}", t->first, t->second);
+            }
             Text(text, {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
             if (open.get()) {
                 auto start = picked.get().value_or(std::pair(12, 0));

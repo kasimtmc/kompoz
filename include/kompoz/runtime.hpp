@@ -604,26 +604,39 @@ struct SaveableRegistry {
     std::unordered_map<uint64_t, SavedValue> restored;  // from a saved state, for values not made yet
     const Group* boundary = nullptr;  // the provider's group
     bool forgetsLeaving = false;      // the host's: a value goes with its composable
+    // A SaveableStateHolder's: the values whose composables left (kept if the provider left
+    // with them, as Compose saves a provider's values as it goes; else gone once the
+    // composition settles, as Compose's leaving rememberSaveable unregisters), and whether
+    // the provider is there.
+    std::vector<uint64_t> leaving;
+    bool present = true;
     SavedValue save() const;
     void restore(const SavedValue& saved);
     void drop(uint64_t key);
 };
+// A holder's value left with its composable (see SaveableRegistry::leaving).
+void noteLeaving(const std::shared_ptr<SaveableRegistry>& registry, uint64_t key);
+// After a composition: the values that left with their composables, not their providers, gone.
+void settleSaveables();
 extern const CompositionLocal<std::shared_ptr<SaveableRegistry>> LocalSaveableRegistry;
 // The current group's position below `boundary`: the keys of the groups in between.
 uint64_t keyBelow(const Group* boundary);
 
-// What rememberSaveable keeps in its group: the value, and for the host's registry, its entry
-// there, dropped when the group goes.
+// What rememberSaveable keeps in its group: the value, and its entry in its registry, which
+// goes with the group: at once from the host's, from a holder's unless its provider goes too.
 template <class T>
 struct SaveableSlot {
     std::shared_ptr<T> value;
-    std::weak_ptr<SaveableRegistry> forget;
+    std::weak_ptr<SaveableRegistry> registry;
     uint64_t key = 0;
-    SaveableSlot(std::shared_ptr<T> v, std::weak_ptr<SaveableRegistry> f, uint64_t k) : value(std::move(v)), forget(std::move(f)), key(k) {}
+    SaveableSlot(std::shared_ptr<T> v, std::weak_ptr<SaveableRegistry> r, uint64_t k) : value(std::move(v)), registry(std::move(r)), key(k) {}
     SaveableSlot(const SaveableSlot&) = delete;
     SaveableSlot& operator=(const SaveableSlot&) = delete;
     ~SaveableSlot() {
-        if (auto r = forget.lock()) r->drop(key);
+        if (auto r = registry.lock()) {
+            if (r->forgetsLeaving) r->drop(key);
+            else noteLeaving(r, key);
+        }
     }
 };
 } // namespace detail
@@ -640,8 +653,11 @@ T& rememberSaveableWith(F& init, const Save& save, const Restore& restore, CallS
     auto make = [&]() -> detail::SaveableSlot<T> {
         if (!registry) return {std::make_shared<T>(init()), {}, 0};
         uint64_t key = detail::keyBelow(registry->boundary);
-        std::weak_ptr<detail::SaveableRegistry> forget;
-        if (registry->forgetsLeaving) forget = registry;
+        std::weak_ptr<detail::SaveableRegistry> forget = registry;
+        if (auto left = std::find(registry->leaving.begin(), registry->leaving.end(), key); left != registry->leaving.end()) {
+            registry->leaving.erase(left);  // (it left with its composable, its provider still there: a new one)
+            registry->drop(key);
+        }
         if (auto it = registry->values.find(key); it != registry->values.end() && registry->types[key] == &typeid(T))
             return {std::static_pointer_cast<T>(it->second), forget, key};  // back again: the value it had
         std::shared_ptr<T> value;

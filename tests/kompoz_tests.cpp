@@ -4762,6 +4762,30 @@ TEST(lazy_column_items_keep_saveable_state_when_scrolled_away) {
     list.scrollToItem(0);
     rule.waitForIdle();
     CHECK(rule.onNodeWithText("satır 3 beğenildi -").exists());  // rememberSaveable came back, remember didn't
+    // One whose composable leaves while its item stays goes with it, as Compose's (its
+    // registration ends): it starts over when it comes back.
+    auto open = mutableStateOf(true);
+    ComposeTestRule inner([&] {
+        LazyColumn(Modifier().fillMaxSize(), {}, [&](LazyListScope& items) {
+            items.items(3, [](int i) { return size_t(i); }, [&](int i) {
+                if (i == 0 && open.get()) {
+                    auto count = rememberSaveable([] { return mutableStateOf(0); });
+                    Button([count] { count.set(count.peek() + 1); }, Modifier().testTag("say"),
+                           [count] { Text(std::format("sayı {}", count.get())); });
+                } else {
+                    Box(Modifier().size(10));
+                }
+            });
+        });
+    }, {400, 800});
+    inner.onNodeWithTag("say").performClick();
+    CHECK(inner.onNodeWithText("sayı 1").exists());
+    open.set(false);
+    inner.waitForIdle();
+    CHECK(!inner.onNodeWithTag("say").exists());
+    open.set(true);
+    inner.waitForIdle();
+    CHECK(inner.onNodeWithText("sayı 0").exists());
 }
 
 TEST(bidi_orders_runs_as_uax9_does) {

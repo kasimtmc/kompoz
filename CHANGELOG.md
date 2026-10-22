@@ -137,6 +137,8 @@
   scale made its icons blurred), and text is laid out at the size it is drawn at (in a scaled layer, in a bitmap).
 - **Fixed**: a double tap crashed when its composable ran again between the taps (the tap detector held on to the
   settings of an element that had been replaced).
+- **Fixed**: a `rememberSaveable` under a `SaveableStateHolder` kept its value when its composable left while its
+  provider stayed, and brought it back; it goes now, as in Compose (the showcase's time picker came back in 24 hours).
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

@@ -138,6 +138,7 @@ bool Composer::recompose(int64_t frameTimeNanos) {
         if (s->invalid) restart(*s);
     }
     parked_.clear();  // movable contents not called again: they leave the composition
+    detail::settleSaveables();
 
     gCurrent = previous;
     // Effects run after the composition is complete, outside of it.
@@ -395,6 +396,24 @@ void SaveableRegistry::drop(uint64_t key) {
     savers.erase(key);
 }
 
+namespace {
+thread_local std::vector<std::weak_ptr<SaveableRegistry>> gLeaving;  // registries with values whose composables left
+}
+
+void noteLeaving(const std::shared_ptr<SaveableRegistry>& registry, uint64_t key) {
+    if (registry->leaving.empty()) gLeaving.push_back(registry);
+    registry->leaving.push_back(key);
+}
+
+void settleSaveables() {
+    for (const auto& weak : std::exchange(gLeaving, {}))
+        if (auto r = weak.lock()) {
+            if (r->present)  // its provider is still there: they are gone
+                for (uint64_t key : r->leaving) r->drop(key);
+            r->leaving.clear();  // (else kept for when it comes back, as Compose saves them)
+        }
+}
+
 } // namespace kompoz::detail
 
 namespace kompoz {
@@ -424,6 +443,14 @@ void SaveableStateHolder::SaveableStateProvider(const std::string& key, const Co
     auto& c = detail::Composer::require();
     c.startGroup(detail::mixKey(detail::keyOf(site), std::hash<std::string>{}(key)));
     registry->boundary = &c.group();  // positions are counted from here down
+    registry->present = true;
+    struct Presence {  // marks the registry's provider gone as its group goes
+        std::weak_ptr<detail::SaveableRegistry> registry;
+        ~Presence() {
+            if (auto r = registry.lock()) r->present = false;
+        }
+    };
+    remember([] { return std::make_shared<Presence>(); })->registry = registry;
     CompositionLocalProvider({detail::LocalSaveableRegistry.provides(registry)}, content);
     c.endGroup();
 }
