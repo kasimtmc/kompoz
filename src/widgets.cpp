@@ -1413,16 +1413,7 @@ void TrailingButtonIcon(bool checked, CallSite site) {
 
 void Icon(const ImageVector& icon, std::string contentDescription, const Modifier& modifier, std::optional<Color> tint,
           CallSite site) {
-    composable(site, icon, contentDescription, modifier, tint, [=] {
-        Color color = tint.value_or(LocalContentColor.current());
-        layoutNode(
-            CallSite::current(), modifier, [](LayoutNode&, const Constraints& c) { return c.constrain({24, 24}); }, {},
-            [icon, color](GraphicsContext& canvas, const Rect& b, const LayoutNode& node) {
-                if (icon.empty() || color.a <= 0) return;
-                detail::drawImageVector(canvas, icon.autoMirror() && node.rtl ? icon.mirrored() : icon, b, color);  // a back arrow points to the start
-            },
-            contentDescription);
-    });
+    composable(site, icon, contentDescription, modifier, tint, [=] { Icon(rememberVectorPainter(icon), contentDescription, modifier, tint); });
 }
 
 void Icon(const Painter& painter, std::string contentDescription, const Modifier& modifier, std::optional<Color> tint,
@@ -1639,23 +1630,19 @@ Painter rememberAnimatedVectorPainter(const AnimatedImageVector& vector, bool at
     float total = float(vector.totalDurationMillis());
     float millis = animateFloatAsState(atEnd ? total : 0.f, tween(total, 0, LinearEasing));
     ImageVector now = vector.vectorAt(millis);
-    auto paths = [&](ImageVector::Builder& b) {
-        for (const VectorPath& p : now.paths()) b.path(p);
-    };
-    return rememberVectorPainter(now.defaultWidth(), now.defaultHeight(), now.viewportWidth(), now.viewportHeight(), paths, now.autoMirror());
+    ImageVector& last = remember([] { return ImageVector(); });
+    if (last.empty() || !(last == now)) last = now;  // (drawn the same: the same vector, its bitmap kept)
+    return VectorPainter(last);
 }
 
 Painter rememberVectorPainter(float defaultWidth, float defaultHeight, float viewportWidth, float viewportHeight,
                               const std::function<void(ImageVector::Builder&)>& content, bool autoMirror, CallSite site) {
     ComposableScope scope(site);  // what the content remembers stays in here
-    ImageVector::Builder builder(defaultWidth, defaultHeight, viewportWidth, viewportHeight);
+    ImageVector::Builder builder(defaultWidth, defaultHeight, viewportWidth, viewportHeight, std::nullopt, BlendMode::SrcIn, autoMirror);
     content(builder);
-    ImageVector made = builder.autoMirror(autoMirror).build();
+    ImageVector made = builder.build();
     ImageVector& last = remember([] { return ImageVector(); });
-    bool same = !last.empty() && last.paths() == made.paths() && last.viewportWidth() == made.viewportWidth() &&
-                last.viewportHeight() == made.viewportHeight() && last.defaultWidth() == made.defaultWidth() &&
-                last.defaultHeight() == made.defaultHeight() && last.autoMirror() == made.autoMirror();
-    if (!same) last = made;
+    if (last.empty() || !(last == made)) last = made;
     return VectorPainter(last);
 }
 

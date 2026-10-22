@@ -14,6 +14,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace kompoz {
@@ -242,8 +243,6 @@ struct FontMetrics {
     float ascent = 0, descent = 0, lineHeight = 0;
 };
 
-// A vector path, e.g. a Material icon, in its own viewport coordinates (24x24 for icons).
-// Filled with the non-zero rule, like Compose's PathParser and SVG.
 // One step of a path: a move, a line, a quadratic, a conic (a quadratic whose control point is
 // weighed by w: arcs and ovals, exactly), a cubic, or the close of a contour.
 struct PathCommand {
@@ -254,53 +253,7 @@ struct PathCommand {
     friend constexpr bool operator==(const PathCommand&, const PathCommand&) = default;
 };
 
-struct VectorPath;
 class Brush;
-
-class ImageVector {
-public:
-    ImageVector() = default;
-    // Parses SVG path data ("M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z").
-    static ImageVector fromSvgPath(std::string_view pathData, float viewportWidth = 24, float viewportHeight = 24);
-    class Builder;  // one of several paths in paints of their own (below)
-    // Reads an Android vector drawable (Compose's ImageVector.vectorResource): <vector> (width,
-    // height, viewport, autoMirrored, alpha), <group>s (rotation, pivot, scale, translate; nested)
-    // and <path>s (pathData, fillColor, strokeColor, strokeWidth, their alphas, line cap, join,
-    // miter limit, fillType, trimPathStart/End/Offset; aapt:attr <gradient>s: linear, radial,
-    // sweep, their items or start, center and end colors, tile mode) and <clip-path>s (clipping
-    // what comes after them in their group). Colors are #RGB, #ARGB, #RRGGBB or #AARRGGBB;
-    // @color references are not read (black). An <animated-vector>'s drawable is read as it
-    // starts. Empty if there is no <vector>.
-    static ImageVector fromVectorXml(std::string_view xml);
-    // Its paths in their own paints (a Builder's); none for a one-path one (fromSvgPath), drawn in
-    // the one color it is given.
-    const std::vector<VectorPath>& paths() const;
-    // Its size where nothing else gives one (an Image's, a VectorPainter's), dp: the Builder's
-    // default size, the viewport's for fromSvgPath.
-    float defaultWidth() const;
-    float defaultHeight() const;
-
-    bool empty() const { return !data_; }
-    const std::vector<PathCommand>& commands() const;
-    float viewportWidth() const;
-    float viewportHeight() const;
-    uint64_t id() const;  // stable and unique: lets backends cache rasterized versions
-    // The same vector flipped left to right (its own id; made once).
-    ImageVector mirrored() const;
-    // One that Icon draws mirrored in a right-to-left layout (Compose's autoMirror: a back
-    // arrow points to the start), and whether it is one.
-    ImageVector autoMirrored() const;
-    bool autoMirror() const;
-
-    friend bool operator==(const ImageVector& a, const ImageVector& b) { return a.data_ == b.data_; }
-
-private:
-    struct Data;
-    std::shared_ptr<const Data> data_;
-    // `brush` through x' = m0 x + m2 y + m4, y' = m1 x + m3 y + m5, its far edges and default
-    // center taken on `viewport` first (a group's transform, a mirror). A sweep isn't turned.
-    static Brush mapBrush(const Brush& brush, const std::array<float, 6>& m, Size viewport);
-};
 
 // How a bitmap keeps its pixels (Compose's ImageBitmapConfig, Android's Bitmap.Config): 8 bits a
 // channel (Argb8888; Gpu: the same, kept by the GPU), alpha alone (Alpha8: drawn in a paint's
@@ -589,9 +542,6 @@ public:
     // made a shader, a color as a gradient of one color).
     static Brush composite(const Brush& dst, const Brush& src, BlendMode blendMode);
 
-    // This gradient sx, sy times as large (a vector's viewport units on its bounds); "the far
-    // edge" stays the far edge, a color stays as it is.
-    Brush scaled(float sx, float sy) const;
     // Each of its colors `alpha` times as opaque (as a paint's alpha fades what it paints).
     Brush faded(float alpha) const;
     // This brush with its gradient or shader through `transform` (Compose's ShaderBrush.transform:
@@ -633,7 +583,6 @@ public:
     friend Brush lerp(const Brush& a, const Brush& b, float t);
 
 private:
-    friend class ImageVector;  // a vector's groups and its mirror move its gradients
     friend class ColorFilter;  // a filter recolors its stops
     Brush(Kind kind, std::vector<ColorStop> stops) : kind_(kind), stops_(std::move(stops)) {}
     static std::vector<ColorStop> evenly(const std::vector<Color>& colors);
@@ -1095,71 +1044,283 @@ struct PathStroke {
     bool strokes() const { return hairline || width > 0; }
 };
 
-// One path of a vector in several paints (Compose's VectorPath), in viewport units: filled with
-// `fill` (unset: not) and stroked with `stroke` `strokeLineWidth` wide (unset or 0: not). A
-// gradient's offsets are in the drawn vector's dp, from its top left.
+class DrawScope;
+class ImageVector;
+namespace detail {
+// Draws `vector` into all of `scope`, faded by `alpha`, as Compose's VectorPainter does: into a
+// bitmap of the scope's size in pixels (kept by the vector for that size, density and config),
+// drawn there through `colorFilter`, else its own tint, else (all of it in one color) in that
+// color; mirrored in a right-to-left scope if it mirrors.
+void drawVector(DrawScope& scope, const ImageVector& vector, float alpha, const std::optional<ColorFilter>& colorFilter);
+// The vector drawn into `bitmap` (its id) by drawVector, 0 if none (for tests).
+uint64_t vectorDrawnInto(const ImageBitmap& bitmap);
+} // namespace detail
+
+// One command of a vector's path data (Compose's PathNode), as SVG path data has them: moves,
+// lines, cubics, quadratics (their reflective ones mirror the last control point) and elliptical
+// arcs, to a point or relative to the current one. Its numbers are in `values` in the order
+// Compose's constructor takes them (an arc's: its two radii, its turn in degrees and where it
+// ends; its two flags apart).
+struct PathNode {
+    enum class Kind : uint8_t {
+        Close, RelativeMoveTo, MoveTo, RelativeLineTo, LineTo, RelativeHorizontalTo, HorizontalTo, RelativeVerticalTo, VerticalTo,
+        RelativeCurveTo, CurveTo, RelativeReflectiveCurveTo, ReflectiveCurveTo, RelativeQuadTo, QuadTo, RelativeReflectiveQuadTo,
+        ReflectiveQuadTo, RelativeArcTo, ArcTo
+    };
+    Kind kind = Kind::Close;
+    std::array<float, 6> values{};
+    bool isMoreThanHalf = false, isPositiveArc = false;  // an arc's
+
+    bool isCurve() const;  // a cubic (what a reflective cubic after it mirrors)
+    bool isQuad() const;   // a quadratic (what a reflective quadratic after it mirrors)
+
+    static PathNode Close() { return {}; }
+    static PathNode RelativeMoveTo(float dx, float dy) { return {Kind::RelativeMoveTo, {dx, dy}}; }
+    static PathNode MoveTo(float x, float y) { return {Kind::MoveTo, {x, y}}; }
+    static PathNode RelativeLineTo(float dx, float dy) { return {Kind::RelativeLineTo, {dx, dy}}; }
+    static PathNode LineTo(float x, float y) { return {Kind::LineTo, {x, y}}; }
+    static PathNode RelativeHorizontalTo(float dx) { return {Kind::RelativeHorizontalTo, {dx}}; }
+    static PathNode HorizontalTo(float x) { return {Kind::HorizontalTo, {x}}; }
+    static PathNode RelativeVerticalTo(float dy) { return {Kind::RelativeVerticalTo, {dy}}; }
+    static PathNode VerticalTo(float y) { return {Kind::VerticalTo, {y}}; }
+    static PathNode RelativeCurveTo(float dx1, float dy1, float dx2, float dy2, float dx3, float dy3) {
+        return {Kind::RelativeCurveTo, {dx1, dy1, dx2, dy2, dx3, dy3}};
+    }
+    static PathNode CurveTo(float x1, float y1, float x2, float y2, float x3, float y3) { return {Kind::CurveTo, {x1, y1, x2, y2, x3, y3}}; }
+    static PathNode RelativeReflectiveCurveTo(float dx1, float dy1, float dx2, float dy2) {
+        return {Kind::RelativeReflectiveCurveTo, {dx1, dy1, dx2, dy2}};
+    }
+    static PathNode ReflectiveCurveTo(float x1, float y1, float x2, float y2) { return {Kind::ReflectiveCurveTo, {x1, y1, x2, y2}}; }
+    static PathNode RelativeQuadTo(float dx1, float dy1, float dx2, float dy2) { return {Kind::RelativeQuadTo, {dx1, dy1, dx2, dy2}}; }
+    static PathNode QuadTo(float x1, float y1, float x2, float y2) { return {Kind::QuadTo, {x1, y1, x2, y2}}; }
+    static PathNode RelativeReflectiveQuadTo(float dx, float dy) { return {Kind::RelativeReflectiveQuadTo, {dx, dy}}; }
+    static PathNode ReflectiveQuadTo(float x, float y) { return {Kind::ReflectiveQuadTo, {x, y}}; }
+    static PathNode RelativeArcTo(float horizontalEllipseRadius, float verticalEllipseRadius, float theta, bool isMoreThanHalf,
+                                  bool isPositiveArc, float arcStartDx, float arcStartDy) {
+        return {Kind::RelativeArcTo, {horizontalEllipseRadius, verticalEllipseRadius, theta, arcStartDx, arcStartDy}, isMoreThanHalf, isPositiveArc};
+    }
+    static PathNode ArcTo(float horizontalEllipseRadius, float verticalEllipseRadius, float theta, bool isMoreThanHalf, bool isPositiveArc,
+                          float arcStartX, float arcStartY) {
+        return {Kind::ArcTo, {horizontalEllipseRadius, verticalEllipseRadius, theta, arcStartX, arcStartY}, isMoreThanHalf, isPositiveArc};
+    }
+    friend bool operator==(const PathNode&, const PathNode&) = default;
+};
+
+// SVG path data ("M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z") as nodes, read as Compose's PathParser
+// reads it: a command letter and as many sets of numbers as follow it (a move's after the first
+// are lines; numbers left over are dropped), an arc's flags a single 0 or 1 each, what can't be
+// read skipped to the next command letter.
+std::vector<PathNode> addPathNodes(std::string_view pathData);
+// The path the nodes draw (Compose's List<PathNode>.toPath): into `target` (emptied, its fill
+// type kept), or a new one. An arc becomes cubics of at most an eighth of a turn, as Compose's
+// (made bigger when its radii can't reach its end; a line where a radius is 0).
+void toPath(const std::vector<PathNode>& nodes, Path& target);
+Path toPath(const std::vector<PathNode>& nodes);
+
+// Compose's PathParser: SVG path data read into nodes it keeps.
+class PathParser {
+public:
+    PathParser& parsePathString(std::string_view pathData);  // its nodes, in place of what it held
+    // `pathData`'s nodes added to `nodes`, which it returns.
+    std::vector<PathNode>& pathStringToNodes(std::string_view pathData, std::vector<PathNode>& nodes);
+    PathParser& addPathNodes(const std::vector<PathNode>& nodes);
+    const std::vector<PathNode>& toNodes() const { return nodes_; }
+    Path toPath() const;
+    void clear() { nodes_.clear(); }
+
+private:
+    std::vector<PathNode> nodes_;
+};
+
+// Path data made by calls (Compose's PathBuilder):
+//   std::vector<PathNode> tick = PathData([](PathBuilder& p) { p.moveTo(5, 12).lineToRelative(5, 5).lineToRelative(9, -10); });
+class PathBuilder {
+public:
+    const std::vector<PathNode>& nodes() const { return nodes_; }
+    PathBuilder& close() { return add(PathNode::Close()); }
+    PathBuilder& moveTo(float x, float y) { return add(PathNode::MoveTo(x, y)); }
+    PathBuilder& moveToRelative(float dx, float dy) { return add(PathNode::RelativeMoveTo(dx, dy)); }
+    PathBuilder& lineTo(float x, float y) { return add(PathNode::LineTo(x, y)); }
+    PathBuilder& lineToRelative(float dx, float dy) { return add(PathNode::RelativeLineTo(dx, dy)); }
+    PathBuilder& horizontalLineTo(float x) { return add(PathNode::HorizontalTo(x)); }
+    PathBuilder& horizontalLineToRelative(float dx) { return add(PathNode::RelativeHorizontalTo(dx)); }
+    PathBuilder& verticalLineTo(float y) { return add(PathNode::VerticalTo(y)); }
+    PathBuilder& verticalLineToRelative(float dy) { return add(PathNode::RelativeVerticalTo(dy)); }
+    PathBuilder& curveTo(float x1, float y1, float x2, float y2, float x3, float y3) { return add(PathNode::CurveTo(x1, y1, x2, y2, x3, y3)); }
+    PathBuilder& curveToRelative(float dx1, float dy1, float dx2, float dy2, float dx3, float dy3) {
+        return add(PathNode::RelativeCurveTo(dx1, dy1, dx2, dy2, dx3, dy3));
+    }
+    PathBuilder& reflectiveCurveTo(float x1, float y1, float x2, float y2) { return add(PathNode::ReflectiveCurveTo(x1, y1, x2, y2)); }
+    PathBuilder& reflectiveCurveToRelative(float dx1, float dy1, float dx2, float dy2) {
+        return add(PathNode::RelativeReflectiveCurveTo(dx1, dy1, dx2, dy2));
+    }
+    PathBuilder& quadTo(float x1, float y1, float x2, float y2) { return add(PathNode::QuadTo(x1, y1, x2, y2)); }
+    PathBuilder& quadToRelative(float dx1, float dy1, float dx2, float dy2) { return add(PathNode::RelativeQuadTo(dx1, dy1, dx2, dy2)); }
+    PathBuilder& reflectiveQuadTo(float x1, float y1) { return add(PathNode::ReflectiveQuadTo(x1, y1)); }
+    PathBuilder& reflectiveQuadToRelative(float dx1, float dy1) { return add(PathNode::RelativeReflectiveQuadTo(dx1, dy1)); }
+    PathBuilder& arcTo(float horizontalEllipseRadius, float verticalEllipseRadius, float theta, bool isMoreThanHalf, bool isPositiveArc,
+                       float x1, float y1) {
+        return add(PathNode::ArcTo(horizontalEllipseRadius, verticalEllipseRadius, theta, isMoreThanHalf, isPositiveArc, x1, y1));
+    }
+    PathBuilder& arcToRelative(float a, float b, float theta, bool isMoreThanHalf, bool isPositiveArc, float dx1, float dy1) {
+        return add(PathNode::RelativeArcTo(a, b, theta, isMoreThanHalf, isPositiveArc, dx1, dy1));
+    }
+
+private:
+    PathBuilder& add(PathNode node) {
+        nodes_.push_back(node);
+        return *this;
+    }
+    std::vector<PathNode> nodes_;
+};
+template <class Block>
+std::vector<PathNode> PathData(Block&& block) {
+    PathBuilder builder;
+    block(builder);
+    return builder.nodes();
+}
+
+// One path of a vector (Compose's VectorPath), in the vector's viewport units: its data, filled
+// with `fill` (unset: not) and stroked with `stroke` (unset: not; a width of 0 is a hairline),
+// each at its alpha, only the piece from trimPathStart to trimPathEnd drawn (fractions of its
+// first contour's length, both moved on by trimPathOffset, wrapping round its end: as Android's).
+// Gradients are in the units it is drawn in, where a far edge is the vector's drawn size.
 struct VectorPath {
-    std::vector<PathCommand> commands;
-    std::optional<Brush> fill = Brush::solid(colors::Black);
+    std::string name;
+    std::vector<PathNode> pathData;
+    Path::FillType pathFillType = Path::FillType::NonZero;
+    std::optional<Brush> fill;
     float fillAlpha = 1;
     std::optional<Brush> stroke;
     float strokeAlpha = 1, strokeLineWidth = 0;
     StrokeCap strokeLineCap = StrokeCap::Butt;
     StrokeJoin strokeLineJoin = StrokeJoin::Miter;
     float strokeLineMiter = 4;
-    Path::FillType pathFillType = Path::FillType::NonZero;
-    std::vector<std::vector<PathCommand>> clipPaths;  // its groups' (viewport units, outermost first): drawn inside all of them
-    // Only this piece of it drawn: from trimPathStart to trimPathEnd (fractions of its length,
-    // every contour's together), both moved on by trimPathOffset, wrapping round its end.
     float trimPathStart = 0, trimPathEnd = 1, trimPathOffset = 0;
-    static std::vector<PathCommand> parse(std::string_view pathData);  // SVG path data
     friend bool operator==(const VectorPath&, const VectorPath&) = default;
 };
 
-// A group of a vector's paths (Compose's ImageVector.Builder.addGroup): what is in it scaled and
-// turned about its pivot, then moved, and clipped to its clip path (in the group's own units).
+class VectorNode;
+// A group of a vector's paths and groups (Compose's VectorGroup): what is in it scaled and
+// turned (degrees, clockwise) about its pivot, then moved, and clipped to its clip path (in its
+// own units), all in its parent's units.
 struct VectorGroup {
-    float rotate = 0, pivotX = 0, pivotY = 0, scaleX = 1, scaleY = 1, translationX = 0, translationY = 0;
-    std::string clipPathData;  // SVG path data; empty: not clipped
+    std::string name;
+    float rotation = 0, pivotX = 0, pivotY = 0, scaleX = 1, scaleY = 1, translationX = 0, translationY = 0;
+    std::vector<PathNode> clipPathData;  // empty: not clipped
+    std::vector<VectorNode> children;    // drawn in order
+    size_t size() const;
+    const VectorNode& operator[](size_t index) const;
+    std::vector<VectorNode>::const_iterator begin() const;
+    std::vector<VectorNode>::const_iterator end() const;
+    friend bool operator==(const VectorGroup& a, const VectorGroup& b);
+};
+// What a group holds (Compose's VectorNode): a path or a group.
+class VectorNode {
+public:
+    VectorNode(VectorPath path) : node_(std::move(path)) {}
+    VectorNode(VectorGroup group) : node_(std::move(group)) {}
+    const VectorPath* path() const { return std::get_if<VectorPath>(&node_); }
+    const VectorGroup* group() const { return std::get_if<VectorGroup>(&node_); }
+    friend bool operator==(const VectorNode& a, const VectorNode& b) { return a.node_ == b.node_; }
+
+private:
+    std::variant<VectorPath, VectorGroup> node_;
+};
+inline size_t VectorGroup::size() const { return children.size(); }  // (here: VectorNode complete)
+inline const VectorNode& VectorGroup::operator[](size_t index) const { return children[index]; }
+inline std::vector<VectorNode>::const_iterator VectorGroup::begin() const { return children.begin(); }
+inline std::vector<VectorNode>::const_iterator VectorGroup::end() const { return children.end(); }
+
+// A vector image (Compose's ImageVector): a tree of paths and groups in a viewport of its own
+// (24 x 24 for Material icons), its size where nothing else gives one (dp), the color it is
+// tinted with and how (unset: it draws in its own colors), and whether it is drawn mirrored in a
+// right-to-left layout (a back arrow points to the start). Equal by all of these (not its id).
+// A painter (VectorPainter, Icon) draws it into a bitmap it keeps for its size and draws that, as
+// Compose does: a vector all in one color (and drawn tinted, or in that color) as an Alpha8
+// bitmap.
+class ImageVector {
+public:
+    ImageVector() = default;
+    // One path of SVG path data filled black (as Compose's Material icons are), its default size
+    // its viewport's.
+    static ImageVector fromSvgPath(std::string_view pathData, float viewportWidth = 24, float viewportHeight = 24);
+    // Reads an Android vector drawable as Compose's ImageVector.vectorResource does: <vector>
+    // (width, height, viewport, autoMirrored, tint, tintMode, alpha), <group>s (name, rotation,
+    // pivot, scale, translate; nested) and <path>s (name, pathData, fillColor, strokeColor,
+    // strokeWidth (1 unset), their alphas, line cap, join, miter limit, fillType, trimPathStart/
+    // End/Offset; aapt:attr <gradient>s: linear, radial, sweep, their items or start, center and
+    // end colors, tile mode) and <clip-path>s (clipping what comes after them in their group).
+    // Colors are #RGB, #ARGB, #RRGGBB or #AARRGGBB; @color references are not read (black). The
+    // vector's alpha fades its paths' fills and strokes. An <animated-vector>'s drawable is read
+    // as it starts. Empty if there is no <vector>.
+    static ImageVector fromVectorXml(std::string_view xml);
+    class Builder;
+
+    bool empty() const { return !data_; }
+    const std::string& name() const;
+    float defaultWidth() const;
+    float defaultHeight() const;
+    float viewportWidth() const;
+    float viewportHeight() const;
+    const VectorGroup& root() const;
+    std::optional<Color> tintColor() const;
+    BlendMode tintBlendMode() const;
+    bool autoMirror() const;
+    uint64_t id() const;  // unique to each one built: the bitmaps drawn of it are kept by it
+
+    friend bool operator==(const ImageVector& a, const ImageVector& b);
+
+    struct Data;
+
+private:
+    std::shared_ptr<const Data> data_;
+    friend void detail::drawVector(DrawScope& scope, const ImageVector& vector, float alpha, const std::optional<ColorFilter>& colorFilter);
 };
 
-// Builds a vector of paths in paints of their own, drawn in order (Compose's ImageVector.Builder):
+// Builds a vector (Compose's ImageVector.Builder): paths drawn in order, in groups (nested) that
+// move, scale, turn and clip what is in them.
 //   ImageVector badge = ImageVector::Builder(48, 48, 24, 24)
-//       .path("M12,2a10,10 0 1,0 0.01,0z", Brush::solid(Color::hex(0x1E88E5)))
-//       .path("M7,12l3,3l7,-7", std::nullopt, Brush::solid(colors::White), 2)
+//       .addPath({.pathData = addPathNodes("M12,2a10,10 0 1,0 0.01,0z"), .fill = Brush::solid(Color::hex(0x1E88E5))})
+//       .group({.rotation = 45, .pivotX = 12, .pivotY = 12}, [](ImageVector::Builder& b) {
+//           b.path({.stroke = Brush::solid(colors::White), .strokeLineWidth = 2},
+//                  [](PathBuilder& p) { p.moveTo(7, 12).lineTo(17, 12); });
+//       })
 //       .build();
-//   Image(VectorPainter(badge), "Onaylı");   // its own colors; Icon(badge, ...) tints it
-// Paths can go in groups, nested, that move, scale, turn and clip them (their gradients and stroke
-// widths too):
-//   .group({.rotate = 45, .pivotX = 12, .pivotY = 12, .clipPathData = "M2,12a10,10 0 1,0 20,0a10,10 0 1,0 -20,0z"},
-//          [](ImageVector::Builder& b) { b.path("M0,10h24v4h-24z", Brush::solid(colors::White)); })
+//   Image(rememberVectorPainter(badge), "Onaylı");   // its own colors; Icon(badge, ...) tints it
 class ImageVector::Builder {
 public:
-    Builder(float defaultWidth, float defaultHeight, float viewportWidth, float viewportHeight);
-    Builder& path(VectorPath path);
-    Builder& path(std::string_view pathData, std::optional<Brush> fill, std::optional<Brush> stroke = std::nullopt,
-                  float strokeLineWidth = 0);
-    // The paths after addGroup go in that group (inside the open ones) until its clearGroup.
-    Builder& addGroup(const VectorGroup& group = {});
+    Builder(float defaultWidth, float defaultHeight, float viewportWidth, float viewportHeight, std::optional<Color> tintColor = {},
+            BlendMode tintBlendMode = BlendMode::SrcIn, bool autoMirror = false)
+        : Builder({}, defaultWidth, defaultHeight, viewportWidth, viewportHeight, tintColor, tintBlendMode, autoMirror) {}
+    Builder(std::string name, float defaultWidth, float defaultHeight, float viewportWidth, float viewportHeight,
+            std::optional<Color> tintColor = {}, BlendMode tintBlendMode = BlendMode::SrcIn, bool autoMirror = false);
+    // What is added after it goes in `group` (after its children, if it has any), inside the
+    // open ones, until its clearGroup.
+    Builder& addGroup(VectorGroup group = {});
     Builder& clearGroup();
+    Builder& addPath(VectorPath path);
     template <class Content>
-    Builder& group(const VectorGroup& group, Content&& content) {
-        addGroup(group);
+    Builder& group(VectorGroup group, Content&& content) {
+        addGroup(std::move(group));
         content(*this);
         return clearGroup();
     }
-    Builder& autoMirror(bool on = true);  // mirrored in a right-to-left layout (see ImageVector::autoMirrored)
-    ImageVector build() const;
+    // A path of what `pathBuilder` makes, in the paints of `path` (Compose's Builder.path).
+    template <class Block>
+    Builder& path(VectorPath path, Block&& pathBuilder) {
+        path.pathData = PathData(std::forward<Block>(pathBuilder));
+        return addPath(std::move(path));
+    }
+    ImageVector build();  // (the groups still open closed)
 
 private:
-    struct Group {
-        std::array<float, 6> transform{1, 0, 0, 1, 0, 0};  // the open groups' together (see ImageVector::mapBrush)
-        std::vector<std::vector<PathCommand>> clips;      // theirs, in viewport units
-    };
+    std::string name_;
     float defaultWidth_, defaultHeight_, viewportWidth_, viewportHeight_;
-    bool autoMirror_ = false;
-    std::vector<VectorPath> paths_;
-    std::vector<Group> groups_;
+    std::optional<Color> tintColor_;
+    BlendMode tintBlendMode_;
+    bool autoMirror_;
+    std::vector<VectorGroup> groups_{VectorGroup{}};  // the root, then the open groups
 };
 
 // An animated vector drawable (Compose's AnimatedImageVector): a vector and how its named
@@ -1191,12 +1352,6 @@ private:
 };
 
 class GraphicsContext;
-namespace detail {
-// Draws `vector` into `bounds`: a one-color one (or a tinted one without strokes) as the
-// backend's cached raster in `tint` (black unset), one in several paints path by path, all in
-// `tint` when one is given; `alpha` over it.
-void drawImageVector(GraphicsContext& canvas, const ImageVector& vector, const Rect& bounds, std::optional<Color> tint, float alpha = 1);
-} // namespace detail
 
 // How stampedPathEffect lays each copy of its shape on the path: moved there, also turned the
 // way the path goes, or bent along it.
@@ -1404,8 +1559,6 @@ public:
         (void)blurRadius;
         drawText(utf8, baseline, font, color, rtl);
     }
-    // Fills `vector` scaled to `bounds`.
-    virtual void drawVector(const ImageVector& vector, const Rect& bounds, Color color) = 0;
     // Strokes part of the circle inscribed in `oval`. Angles in degrees, 0 = 3 o'clock, clockwise.
     virtual void drawArc(const Rect& oval, float startDegrees, float sweepDegrees, float strokeWidth, Color color,
                          bool roundCap) = 0;

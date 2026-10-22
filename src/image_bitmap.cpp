@@ -278,6 +278,12 @@ void drawnOnRenderer(const ImageBitmap& bitmap) {
     ++bitmap.data_->version;
 }
 
+std::vector<std::shared_ptr<const DisplayList>> pending(const ImageBitmap& bitmap) {
+    if (!bitmap.data_) return {};
+    std::lock_guard lock(bitmap.data_->mutex);
+    return bitmap.data_->pending;
+}
+
 } // namespace bitmaps
 
 } // namespace detail

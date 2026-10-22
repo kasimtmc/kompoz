@@ -43,6 +43,7 @@ public:
     std::vector<bool> rtl;          // whether its paragraph goes right to left
     std::vector<uint64_t> vectors;  // ids of drawn ImageVectors
     std::vector<uint64_t> images;
+    std::vector<ImageBitmap> drawnImages;  // each drawn image itself
     std::vector<Rect> imageSources, imageDestinations;
     int layers = 0, depth = 0, maxDepth = 0, transformedLayers = 0, gradients = 0;
     std::vector<Rect> layerBounds;  // each pushLayer's bounds, alpha and transform
@@ -178,12 +179,17 @@ public:
         brushAreas.push_back(moved(area));
         drawText(text, baseline, font, brush.colorAt(area.center(), area), rightToLeft);
     }
-    std::vector<Color> vectorColors;  // each drawn ImageVector's tint
-    std::vector<Rect> vectorBounds;   // and where it went
-    void drawVector(const ImageVector& v, const Rect& bounds, Color c) override {
-        vectors.push_back(v.id());
-        vectorColors.push_back(c);
-        vectorBounds.push_back(moved(bounds));
+    // Each vector drawn (the bitmap a painter drew it into, drawn: see detail::vectorDrawnInto):
+    // its color (a one-color one's, its mask's paint as the filters in effect make it; one in its
+    // own colors, white as they make it), faded by its alpha, and where it went.
+    std::vector<Color> vectorColors;
+    std::vector<Rect> vectorBounds;
+    void vectorDrawn(const ImageBitmap& image, Color c, float alpha, const Rect& dst) {
+        if (uint64_t v = detail::vectorDrawnInto(image)) {
+            vectors.push_back(v);
+            vectorColors.push_back(c.copy(c.a * alpha));
+            vectorBounds.push_back(moved(dst));
+        }
     }
     struct Arc {
         Rect oval;
@@ -198,7 +204,28 @@ public:
     std::vector<float> imageAlphas;             // and how opaque
     std::vector<BlendMode> imageBlends;         // and its blend mode
     void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha, FilterQuality quality) override {
+        vectorDrawn(image, filtered(colors::White), alpha, dst);
         images.push_back(image.id());
+        drawnImages.push_back(image);
+        imageAlphas.push_back(alpha);
+        imageBlends.push_back(blend());
+        imageQualities.push_back(quality);
+        imageFilters.push_back(filterStack);
+        imageSources.push_back(src);
+        imageDestinations.push_back(moved(dst));
+    }
+    // Each mask drawn (an Alpha8 image, drawImageMask: in images too): its paint (a brush's color
+    // at its area's middle, as the filters in effect make it) and alpha.
+    std::vector<Color> maskColors;
+    std::vector<float> maskAlphas;
+    void drawImageMask(const ImageBitmap& image, const Rect& src, const Rect& dst, const Brush& brush, const Rect& brushArea, float alpha,
+                       FilterQuality quality) override {
+        Color c = filtered(brush.colorAt(brushArea.center(), brushArea));
+        vectorDrawn(image, c, alpha, dst);
+        maskColors.push_back(c);
+        maskAlphas.push_back(alpha);
+        images.push_back(image.id());
+        drawnImages.push_back(image);
         imageAlphas.push_back(alpha);
         imageBlends.push_back(blend());
         imageQualities.push_back(quality);

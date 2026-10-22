@@ -54,7 +54,6 @@ public:
     void drawShadow(const Rect& rect, const CornerRadii& radii, const Shadow& shadow, bool inner) override;
     void drawShadowPath(const Path& outline, Offset origin, const Shadow& shadow, bool inner) override;
     void drawShapeShadow(const Rect& rect, const Shape& shape, bool rtl, const Shadow& shadow, bool inner) override;
-    void drawVector(const ImageVector& vector, const Rect& bounds, Color color) override;
     void drawArc(const Rect& oval, float startDegrees, float sweepDegrees, float strokeWidth, Color color, bool roundCap) override;
     void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha, FilterQuality quality = DefaultFilterQuality) override;
     void drawImageMask(const ImageBitmap& image, const Rect& src, const Rect& dst, const Brush& brush, const Rect& brushArea, float alpha,
@@ -96,7 +95,7 @@ public:
     };
 
 private:
-    enum class Kind : uint8_t { FillRoundRect, StrokeRoundRect, Line, Text, TextBrush, TextShadow, Shadow, Vector, Arc, Image, Gradient, Path,
+    enum class Kind : uint8_t { FillRoundRect, StrokeRoundRect, Line, Text, TextBrush, TextShadow, Shadow, Arc, Image, Gradient, Path,
                                 PushLayer, PopLayer, PushClip, PopClip, PushTranslation, PopTranslation, PushBlend, PopBlend,
                                 ShadowPath, PushFilter, PopFilter, PushTransform, PopTransform, Backdrop, ElevationShadow, ShapeShadow,
                                 Vertices, ImageMask, PushAlias, PopAlias };
@@ -110,7 +109,6 @@ private:
         bool flag = false;    // rtl, round cap; a clip's ClipOp::Difference
         std::string text;
         Font font;
-        ImageVector vector;
         ImageBitmap image;
         uint64_t imageVersion = 0;  // what it held (drawn into since: a change); a brush's images', summed up
         std::optional<Brush> brush;
@@ -195,6 +193,8 @@ void store(const ImageBitmap& bitmap, const std::vector<uint8_t>& premultiplied,
 void storeFloats(const ImageBitmap& bitmap, const std::vector<float>& premultiplied, bool drawn);
 // It was drawn into and only the renderer has what it holds now (read back when it is asked for).
 void drawnOnRenderer(const ImageBitmap& bitmap);
+// What was drawn into it with no renderer there, waiting for one (for tests).
+std::vector<std::shared_ptr<const DisplayList>> pending(const ImageBitmap& bitmap);
 } // namespace bitmaps
 
 } // namespace detail

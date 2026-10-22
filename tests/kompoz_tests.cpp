@@ -1710,26 +1710,154 @@ TEST(horizontal_scroll_modifier) {
 
 // ---- Icons ------------------------------------------------------------------------------------
 
-TEST(svg_path_parser_handles_relative_implicit_and_smooth_commands) {
+// A vector's paths (in its groups too), each with where its groups put it (to the viewport, by
+// Compose's group matrices) and the clips it is drawn inside (in viewport units, outermost first).
+struct PlacedPath {
+    const VectorPath* path;
+    Matrix m;
+    std::vector<Path> clips;
+    std::vector<Offset> points() const {  // its path's points (ends of its segments), placed
+        std::vector<Offset> out;
+        Path drawn = toPath(path->pathData);
+        for (const PathCommand& c : drawn.commands())
+            if (c.verb != PathCommand::Verb::Close) out.push_back(m.map(Offset{c.x, c.y}));
+        return out;
+    }
+    Rect box() const {
+        float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+        for (Offset p : points()) x0 = std::min(x0, p.x), y0 = std::min(y0, p.y), x1 = std::max(x1, p.x), y1 = std::max(y1, p.y);
+        return {x0, y0, x1 - x0, y1 - y0};
+    }
+};
+std::vector<PlacedPath> placedPaths(const VectorGroup& g, const Matrix& outer = {}, const std::vector<Path>& clips = {}) {
+    Matrix m;
+    m.translate(g.translationX + g.pivotX, g.translationY + g.pivotY);
+    m.rotateZ(g.rotation);
+    m.scale(g.scaleX, g.scaleY, 1);
+    m.translate(-g.pivotX, -g.pivotY);
+    m *= outer;  // (its own, then its parents')
+    std::vector<Path> in = clips;
+    if (!g.clipPathData.empty()) {
+        in.push_back(toPath(g.clipPathData));
+        in.back().transform(m);
+    }
+    std::vector<PlacedPath> out;
+    for (const VectorNode& n : g) {
+        if (const VectorPath* p = n.path()) {
+            out.push_back({p, m, in});
+        } else {
+            std::vector<PlacedPath> inner = placedPaths(*n.group(), m, in);
+            out.insert(out.end(), inner.begin(), inner.end());
+        }
+    }
+    return out;
+}
+std::vector<PlacedPath> placedPaths(const ImageVector& v) { return placedPaths(v.root()); }
+
+// What a painter draws `v` as into all of a `size` dp scope at `density`: the bitmap it keeps
+// for that size, drawn (`screen`), and what was drawn into it, replayed (`bitmap`, in its
+// pixels; no renderer here, so it waits for one).
+struct VectorDrawing {
+    testing::RecordingCanvas screen, bitmap;
+    ImageBitmap image;
+};
+void drawVectorAt(VectorDrawing& d, const ImageVector& v, Size size, float density = 1, std::optional<ColorFilter> filter = {},
+                  LayoutDirection direction = LayoutDirection::Ltr) {
+    DrawScope scope(d.screen, {0, 0, size.width, size.height}, nullptr, {density}, direction);
+    detail::drawVector(scope, v, 1, filter);
+    if (d.screen.drawnImages.empty()) return;
+    d.image = d.screen.drawnImages.back();
+    for (const auto& list : detail::bitmaps::pending(d.image)) list->replay(d.bitmap);
+}
+// The colors of the paths drawn into the vectors' bitmaps that `canvas` drew.
+std::vector<Color> vectorPathColors(const testing::RecordingCanvas& canvas) {
+    std::vector<Color> colors;
+    for (const ImageBitmap& image : canvas.drawnImages) {
+        if (!detail::vectorDrawnInto(image)) continue;
+        testing::RecordingCanvas drawn;
+        for (const auto& list : detail::bitmaps::pending(image)) list->replay(drawn);
+        colors.insert(colors.end(), drawn.pathColors.begin(), drawn.pathColors.end());
+    }
+    return colors;
+}
+
+TEST(path_data_is_read_as_composes_path_parser_reads_it) {
     using V = PathCommand::Verb;
-    auto add = ImageVector::fromSvgPath("M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z");
-    const auto& c = add.commands();
-    CHECK(c.size() == 14);  // M, 12 lines, Z
-    CHECK(c[0].verb == V::Move && c[0].x == 19 && c[0].y == 13);
-    CHECK(c[1].verb == V::Line && c[1].x == 13 && c[1].y == 13);  // h-6
-    CHECK(c[2].x == 13 && c[2].y == 19);                          // v6
-    CHECK(c.back().verb == V::Close);
-    // "1.41-1.41" is two numbers, "L a b c d" repeats the command, "s" reflects the last control point.
-    auto p = ImageVector::fromSvgPath("M0,0L1.41-1.41 2,2c1,0 2,1 3,1s2,1 3,1zm1,1h2");
-    const auto& d = p.commands();
-    CHECK(d.size() == 8);
-    CHECK(d[1].x == 1.41f && d[1].y == -1.41f);
-    CHECK(d[2].verb == V::Line && d[2].x == 2 && d[2].y == 2);
-    CHECK(d[3].verb == V::Cubic && d[3].x == 5 && d[3].y == 3);
-    CHECK(d[4].verb == V::Cubic && d[4].x1 == 6 && d[4].y1 == 3);  // reflection of (4,3) around (5,3)
-    CHECK(d[6].verb == V::Move && d[6].x == 1 && d[6].y == 1);    // m after z is relative to the subpath start
-    CHECK(d[7].x == 3 && d[7].y == 1);
-    CHECK(add.id() != p.id());
+    std::vector<PathNode> add = addPathNodes("M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z");
+    CHECK(add.size() == 14 && add[0] == PathNode::MoveTo(19, 13) && add[1] == PathNode::RelativeHorizontalTo(-6) &&
+          add[2] == PathNode::RelativeVerticalTo(6) && add[5] == PathNode::HorizontalTo(5) && add[8] == PathNode::VerticalTo(5) && add.back() == PathNode::Close());
+    // "1.41-1.41" is two numbers, a command's sets of numbers repeat it, a move's later pairs are lines.
+    std::vector<PathNode> p = addPathNodes("M0,0L1.41-1.41 2,2c1,0 2,1 3,1s2,1 3,1zm1,1h2");
+    CHECK(p.size() == 8 && p[1] == PathNode::LineTo(1.41f, -1.41f) && p[2] == PathNode::LineTo(2, 2) &&
+          p[3] == PathNode::RelativeCurveTo(1, 0, 2, 1, 3, 1) && p[4] == PathNode::RelativeReflectiveCurveTo(2, 1, 3, 1) && p[5] == PathNode::Close() &&
+          p[6] == PathNode::RelativeMoveTo(1, 1) && p[7] == PathNode::RelativeHorizontalTo(2));
+    CHECK((addPathNodes("M1 2 3 4m1 1 2 2") ==
+           std::vector<PathNode>{PathNode::MoveTo(1, 2), PathNode::LineTo(3, 4), PathNode::RelativeMoveTo(1, 1), PathNode::RelativeLineTo(2, 2)}));
+    // Numbers run together (".5.5" is two; exponents; signs), what is left of a set dropped,
+    // what can't be read skipped to the next command letter.
+    CHECK((addPathNodes("  M.5.5L1e1-2.5E-1 3 # l+1+2 Z ") ==
+           std::vector<PathNode>{PathNode::MoveTo(0.5f, 0.5f), PathNode::LineTo(10, -0.25f), PathNode::RelativeLineTo(1, 2), PathNode::Close()}));
+    CHECK((addPathNodes("Q1 2 3 4q1 2 3 4T5 6t5 6S1 2 3 4") ==
+           std::vector<PathNode>{PathNode::QuadTo(1, 2, 3, 4), PathNode::RelativeQuadTo(1, 2, 3, 4), PathNode::ReflectiveQuadTo(5, 6),
+                                 PathNode::RelativeReflectiveQuadTo(5, 6), PathNode::ReflectiveCurveTo(1, 2, 3, 4)}));
+    CHECK((addPathNodes("C1 2 3 4 5 6v1V2h3H4") == std::vector<PathNode>{PathNode::CurveTo(1, 2, 3, 4, 5, 6), PathNode::RelativeVerticalTo(1),
+                                                                        PathNode::VerticalTo(2), PathNode::RelativeHorizontalTo(3), PathNode::HorizontalTo(4)}));
+    // An arc's flags: a character each, in every set ("01.5.5": 0, 1, .5, .5).
+    CHECK((addPathNodes("a1 1 0 01.5.5 2 2 30 10 2 2A3 4 5 1 1 6 7") ==
+           std::vector<PathNode>{PathNode::RelativeArcTo(1, 1, 0, false, true, 0.5f, 0.5f), PathNode::RelativeArcTo(2, 2, 30, true, false, 2, 2),
+                                 PathNode::ArcTo(3, 4, 5, true, true, 6, 7)}));
+    CHECK(addPathNodes("").empty() && addPathNodes("   ").empty() && addPathNodes("12 3").empty());
+    // As a path: relative to the current point, s reflecting the last control point, m after z
+    // from the contour's start.
+    std::vector<PathCommand> c = toPath(p).commands();
+    CHECK(c.size() == 8);
+    if (c.size() == 8) {
+        CHECK(c[2].verb == V::Line && c[2].x == 2 && c[2].y == 2);
+        CHECK(c[3].verb == V::Cubic && c[3].x1 == 3 && c[3].y1 == 2 && c[3].x2 == 4 && c[3].y2 == 3 && c[3].x == 5 && c[3].y == 3);
+        CHECK(c[4].verb == V::Cubic && c[4].x1 == 6 && c[4].y1 == 3 && c[4].x2 == 7 && c[4].y2 == 4 && c[4].x == 8 && c[4].y == 4);
+        CHECK(c[5].verb == V::Close && c[6].verb == V::Move && c[6].x == 1 && c[6].y == 1 && c[7].x == 3 && c[7].y == 1);
+    }
+    // A reflective curve after anything else starts at the current point; quadratics reflect
+    // their control point (a reflected one too), H and V keep the other coordinate.
+    c = toPath(addPathNodes("M0,0L2,2S3,3 4,4M0,0Q1,2 2,0T4,0t2,0M1,1l0,2s1,0 2,0H5V2h1v1Z")).commands();
+    CHECK(c.size() == 15);
+    if (c.size() == 15) {
+        CHECK(c[2].verb == V::Cubic && c[2].x1 == 2 && c[2].y1 == 2 && c[2].x2 == 3 && c[2].y2 == 3);
+        CHECK(c[5].verb == V::Quad && c[5].x1 == 3 && c[5].y1 == -2 && c[5].x == 4 && c[6].x1 == 5 && c[6].y1 == 2 && c[6].x == 6 && c[6].y == 0);
+        CHECK(c[9].verb == V::Cubic && c[9].x1 == 1 && c[9].y1 == 3 && c[9].x2 == 2 && c[9].y2 == 3 && c[9].x == 3 && c[9].y == 3);
+        CHECK(c[10].x == 5 && c[10].y == 3 && c[11].x == 5 && c[11].y == 2 && c[12].x == 6 && c[12].y == 2 && c[13].x == 6 && c[13].y == 3);
+    }
+    // A relative reflective quadratic's control point what the next one reflects; after z, H and
+    // V from the contour's start.
+    c = toPath(addPathNodes("M0,0Q1,2 2,0t2,0T6,0M2,2h4v4zV10")).commands();
+    CHECK(c.size() >= 9 && c[3].verb == V::Quad && c[3].x1 == 5 && c[3].y1 == 2 && c.back().x == 2 && c.back().y == 10);
+    Path into;  // into a path of one's own: emptied, its fill type kept
+    into.fillType = Path::FillType::EvenOdd;
+    into.addRect({0, 0, 5, 5});
+    toPath(addPathNodes("M1,1h1"), into);
+    CHECK(into.fillType == Path::FillType::EvenOdd && into.commands().size() == 2);
+    // Compose's PathParser keeps its nodes; PathBuilder makes them by calls.
+    PathParser parser;
+    CHECK(parser.parsePathString("M0,0h4").toNodes().size() == 2 && parser.parsePathString("M1,1").toNodes().size() == 1);
+    parser.addPathNodes({PathNode::RelativeLineTo(2, 0)});
+    CHECK(parser.toNodes().size() == 2 && parser.toPath().commands().back().x == 3);
+    std::vector<PathNode> appended{PathNode::Close()};
+    parser.pathStringToNodes("M5,5", appended);
+    CHECK(appended.size() == 2 && appended[1] == PathNode::MoveTo(5, 5) && parser.toNodes().size() == 2);
+    parser.clear();
+    CHECK(parser.toNodes().empty());
+    std::vector<PathNode> built = PathData([](PathBuilder& b) {
+        b.moveTo(1, 2).moveToRelative(1, 1).lineTo(3, 4).lineToRelative(1, 0).horizontalLineTo(5).horizontalLineToRelative(1).verticalLineTo(6)
+            .verticalLineToRelative(1).curveTo(1, 2, 3, 4, 5, 6).curveToRelative(1, 2, 3, 4, 5, 6).reflectiveCurveTo(1, 2, 3, 4)
+            .reflectiveCurveToRelative(1, 2, 3, 4).quadTo(1, 2, 3, 4).quadToRelative(1, 2, 3, 4).reflectiveQuadTo(1, 2).reflectiveQuadToRelative(3, 4)
+            .arcTo(1, 2, 3, true, false, 4, 5).arcToRelative(1, 2, 3, false, true, 4, 5).close();
+    });
+    CHECK((built == addPathNodes("M1,2m1,1L3,4l1,0H5h1V6v1C1,2 3,4 5,6c1,2 3,4 5,6S1,2 3,4s1,2 3,4Q1,2 3,4q1,2 3,4T1,2t3,4A1,2 3 1 0 4,5a1,2 3 0 1 4,5Z")));
+    CHECK(PathNode::CurveTo(0, 0, 0, 0, 0, 0).isCurve() && PathNode::RelativeCurveTo(0, 0, 0, 0, 0, 0).isCurve() &&
+          PathNode::ReflectiveCurveTo(0, 0, 0, 0).isCurve() && PathNode::RelativeReflectiveCurveTo(0, 0, 0, 0).isCurve() &&
+          !PathNode::QuadTo(0, 0, 0, 0).isCurve() && !PathNode::LineTo(0, 0).isCurve());
+    CHECK(PathNode::QuadTo(0, 0, 0, 0).isQuad() && PathNode::RelativeQuadTo(0, 0, 0, 0).isQuad() && PathNode::ReflectiveQuadTo(0, 0).isQuad() &&
+          PathNode::RelativeReflectiveQuadTo(0, 0).isQuad() && !PathNode::CurveTo(0, 0, 0, 0, 0, 0).isQuad() && !PathNode::Close().isQuad());
 }
 
 TEST(icon_sizes_tints_and_draws) {
@@ -14217,21 +14345,21 @@ TEST(rtl_mirrors_arrows_switches_and_sliders) {
             });
         });
     });
-    // The arrow is drawn mirrored (a vector of its own); a star is a star.
-    ImageVector back = Icons::Filled::ArrowBack, mirrored = back.mirrored();
-    CHECK(Icons::AutoMirrored::Filled::ArrowBack.autoMirror() && !back.autoMirror() && mirrored.id() != back.id());
-    CHECK(near(mirrored.commands()[0].x, 24 - back.commands()[0].x) && near(back.mirrored().id(), mirrored.id()));  // made once
-    const auto& heart = Icons::Filled::Favorite.commands();  // curves: their control points too
-    const auto& flipped = Icons::Filled::Favorite.mirrored().commands();
-    auto cubic = std::ranges::find_if(heart, [](const PathCommand& c) { return c.verb == PathCommand::Verb::Cubic; });
-    CHECK(cubic != heart.end());
-    if (cubic != heart.end()) {
-        const PathCommand& m = flipped[size_t(cubic - heart.begin())];
-        CHECK(near(m.x1, 24 - cubic->x1) && near(m.x2, 24 - cubic->x2) && near(m.y1, cubic->y1));
-    }
+    // The arrow is drawn mirrored (about its middle); a star is a star. The arrow that mirrors is a
+    // vector of its own, as Compose's Icons.AutoMirrored are.
+    ImageVector back = Icons::AutoMirrored::Filled::ArrowBack;
+    CHECK(back.autoMirror() && !Icons::Filled::ArrowBack.autoMirror() && back.root() == Icons::Filled::ArrowBack.root() &&
+          back.name() == "AutoMirrored.Filled.ArrowBack" && Icons::Filled::ArrowBack.name() == "Filled.ArrowBack" && Icons::Filled::Star.name() == "Filled.Star");
+    auto mirroredAt = [&](const testing::RecordingCanvas& c) {  // the left edges of what is drawn mirrored
+        std::vector<float> at;
+        for (const Matrix& m : c.transforms)
+            if (near(m.values[Matrix::ScaleX], -1, 0.001f)) at.push_back(m.map(Offset{0, 0}).x / 2);
+        return at;
+    };
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
-    CHECK(canvas.vectors.size() == 2 && canvas.vectors[0] == mirrored.id() && canvas.vectors[1] == Icons::Filled::Star.id());
+    CHECK(canvas.vectors.size() == 2 && canvas.vectors[0] == back.id() && canvas.vectors[1] == Icons::Filled::Star.id());
+    CHECK(mirroredAt(canvas).size() == 1 && canvas.vectorBounds.size() == 2 && near(mirroredAt(canvas)[0], canvas.vectorBounds[0].center().x, 0.01f));
     // A switch that is on has its thumb at the end: the left.
     auto thumbX = [&](const char* tag) {  // the last square drawn inside it
         Rect b = rule.onNodeWithTag(tag).bounds();
@@ -14273,7 +14401,7 @@ TEST(rtl_mirrors_arrows_switches_and_sliders) {
     rule.waitForIdle();
     testing::RecordingCanvas ltr;
     rule.host().draw(ltr);
-    CHECK(!ltr.vectors.empty() && ltr.vectors[0] == back.id());
+    CHECK(!ltr.vectors.empty() && ltr.vectors[0] == back.id() && mirroredAt(ltr).empty());
 }
 
 TEST(rtl_tab_rows_keep_their_indicators_under_the_selected_tab) {
@@ -21721,33 +21849,52 @@ TEST(text_toolbar_of_ones_own_is_told_instead_of_kompoz_drawing_one) {
 
 TEST(path_data_arcs_become_cubics) {
     using V = PathCommand::Verb;
-    // A half circle over the top (y down): two quarter turns, the first ending at its top; the
-    // handles 4/3 tan(pi/8) of the radius long, along the circle.
-    auto half = VectorPath::parse("M0,12A12,12 0 0,1 24,12");
-    CHECK(half.size() == 3 && half[1].verb == V::Cubic && half[2].verb == V::Cubic);
-    CHECK(near(half[1].x, 12) && near(half[1].y, 0) && near(half[2].x, 24) && near(half[2].y, 12));
-    CHECK(near(half[1].x1, 0, 0.01f) && near(half[1].y1, 12 - 6.6274f, 0.01f) && near(half[1].x2, 12 - 6.6274f, 0.01f) && near(half[1].y2, 0, 0.01f));
-    auto under = VectorPath::parse("M0,12A12,12 0 0,0 24,12");  // the other way round: under the bottom
-    CHECK(under.size() == 3 && near(under[1].x, 12) && near(under[1].y, 24));
+    auto cubics = [](const char* data) { return toPath(addPathNodes(data)).commands(); };
+    // Each cubic's middle and end `r` from `center` (the arc on the circle all along).
+    auto onCircle = [](const std::vector<PathCommand>& c, Offset center, float r) {
+        bool all = c.size() > 1;
+        for (size_t i = 1; i < c.size(); ++i) {
+            if (c[i].verb != V::Cubic) return false;
+            Offset a{c[i - 1].x, c[i - 1].y};
+            Offset middle{(a.x + 3 * c[i].x1 + 3 * c[i].x2 + c[i].x) / 8, (a.y + 3 * c[i].y1 + 3 * c[i].y2 + c[i].y) / 8};
+            for (Offset p : {middle, Offset{c[i].x, c[i].y}}) all = all && near(std::hypot(p.x - center.x, p.y - center.y), r, 0.005f);
+        }
+        return all;
+    };
+    // A half circle over the top (y down): four eighths of a turn (as Compose's arcToBezier makes
+    // them), the second ending at its top; the handles sin(θ)(√(4 + 3 tan²(θ/2)) - 1)/3 of the
+    // radius long, along the circle.
+    auto half = cubics("M0,12A12,12 0 0,1 24,12");
+    CHECK(half.size() == 5 && onCircle(half, {12, 12}, 12));
+    if (half.size() == 5) {
+        CHECK(near(half[2].x, 12, 0.001f) && near(half[2].y, 0, 0.001f) && near(half[4].x, 24, 0.001f) && near(half[4].y, 12, 0.001f));
+        CHECK(near(half[1].x1, 0, 0.001f) && near(half[1].y1, 8.81862f, 0.001f));
+    }
+    auto under = cubics("M0,12A12,12 0 0,0 24,12");  // the other way round: under the bottom
+    CHECK(under.size() == 5 && onCircle(under, {12, 12}, 12) && near(under[2].x, 12, 0.001f) && near(under[2].y, 24, 0.001f));
     // Relative, its flags run together: the same half circle.
-    auto compact = VectorPath::parse("M0,12a12,12 0 0124,0");
-    CHECK(compact.size() == 3 && near(compact[1].x, 12) && near(compact[1].y, 0) && near(compact[2].x, 24) && near(compact[2].y, 12));
-    // Radii too small to reach: the smallest that does (5 here).
-    auto small = VectorPath::parse("M0,0A1,1 0 0,1 10,0");
-    CHECK(small.size() == 3 && near(small[1].x, 5) && near(small[1].y, -5));
-    // The large arc: three quarter turns around (12, 12).
-    auto large = VectorPath::parse("M12,0A12,12 0 1,0 24,12");
-    CHECK(large.size() == 4 && near(large[1].x, 0) && near(large[1].y, 12) && near(large[3].x, 24) && near(large[3].y, 12));
-    auto largeOther = VectorPath::parse("M12,0A12,12 0 1,1 24,12");  // the other way: around (24, 0)
-    CHECK(largeOther.size() == 4 && near(largeOther[1].x, 24) && near(largeOther[1].y, -12) && near(largeOther[2].x, 36) && near(largeOther[2].y, 0));
+    auto compact = cubics("M0,12a12,12 0 0124,0");
+    CHECK(compact.size() == 5 && near(compact[2].x, 12, 0.001f) && near(compact[2].y, 0, 0.001f) && near(compact[4].x, 24, 0.001f));
+    // Radii too small to reach: (a hair over) the smallest that does, 5 here.
+    auto small = cubics("M0,0A1,1 0 0,1 10,0");
+    CHECK(small.size() == 5 && near(small[2].x, 5, 0.05f) && near(small[2].y, -5, 0.05f) && near(small[4].x, 10, 0.001f));
+    // The large arc: three quarter turns around (12, 12), six eighths.
+    auto large = cubics("M12,0A12,12 0 1,0 24,12");
+    CHECK(large.size() == 7 && onCircle(large, {12, 12}, 12) && near(large[2].x, 0, 0.001f) && near(large[2].y, 12, 0.001f) &&
+          near(large[6].x, 24, 0.001f) && near(large[6].y, 12, 0.001f));
+    auto largeOther = cubics("M12,0A12,12 0 1,1 24,12");  // the other way: around (24, 0)
+    CHECK(largeOther.size() == 7 && onCircle(largeOther, {24, 0}, 12) && near(largeOther[2].x, 24, 0.001f) && near(largeOther[2].y, -12, 0.001f) &&
+          near(largeOther[4].x, 36, 0.001f) && near(largeOther[4].y, 0, 0.001f));
     // An ellipse turned a quarter: its radii swap places.
-    auto turned = VectorPath::parse("M0,10A10,5 90 0,1 0,30");
-    CHECK(turned.size() == 3 && near(turned[1].x, 5) && near(turned[1].y, 20));
-    // No radius: a line. After it the path goes on from its end.
-    auto flat = VectorPath::parse("M0,0A0,5 0 0,1 10,0h5");
+    auto turned = cubics("M0,10A10,5 90 0,1 0,30");
+    CHECK(turned.size() == 5 && near(turned[2].x, 5, 0.001f) && near(turned[2].y, 20, 0.001f));
+    // No radius: a line (as SVG has it). After it the path goes on from its end. The same
+    // point: nothing.
+    auto flat = cubics("M0,0A0,5 0 0,1 10,0h5");
     CHECK(flat.size() == 3 && flat[1].verb == V::Line && near(flat[2].x, 15));
-    // A circle from two arcs: four quarter turns.
-    CHECK(ImageVector::fromSvgPath("M2,12a10,10 0 1,0 20,0a10,10 0 1,0 -20,0").commands().size() == 5);
+    CHECK(cubics("M3,3A5,5 0 0,1 3,3").size() == 1);
+    // A circle from two arcs: eight eighths.
+    CHECK(onCircle(cubics("M2,12a10,10 0 1,0 20,0a10,10 0 1,0 -20,0"), {12, 12}, 10) && cubics("M2,12a10,10 0 1,0 20,0a10,10 0 1,0 -20,0").size() == 9);
 }
 
 TEST(vector_drawable_xml_becomes_an_image_vector) {
@@ -21772,27 +21919,57 @@ TEST(vector_drawable_xml_becomes_an_image_vector) {
 </vector>)";
     ImageVector v = ImageVector::fromVectorXml(xml);
     CHECK(!v.empty() && near(v.defaultWidth(), 48) && near(v.defaultHeight(), 40) && near(v.viewportWidth(), 24) && near(v.viewportHeight(), 20) &&
-          v.autoMirror());
-    const auto& paths = v.paths();
+          v.autoMirror() && !v.tintColor() && v.tintBlendMode() == BlendMode::SrcIn && v.name().empty());
+    // Its tree as the file has it: a path, a group (a path, a group in it), and the path after
+    // the clip-path in a group of its own that clips it.
+    const VectorGroup& root = v.root();
+    CHECK(root.size() == 3 && root[0].path() && root[1].group() && root[2].group());
+    if (root.size() == 3 && root[1].group() && root[2].group()) {
+        const VectorGroup& moved = *root[1].group();
+        CHECK(near(moved.translationX, 12) && near(moved.translationY, 12) && moved.size() == 2 && moved[0].path() && moved[1].group());
+        if (moved.size() == 2 && moved[1].group()) {
+            const VectorGroup& turn = *moved[1].group();
+            CHECK(near(turn.rotation, 90) && near(turn.pivotX, 6) && near(turn.pivotY, 6) && near(turn.scaleX, 2) && near(turn.scaleY, 1));
+        }
+        CHECK(root[2].group()->clipPathData == addPathNodes("M0,0h24v24h-24z") && root[2].group()->size() == 1);
+    }
+    std::vector<PlacedPath> paths = placedPaths(v);
     CHECK(paths.size() == 4);
     if (paths.size() == 4) {
-        CHECK(paths[0].fill && paths[0].fill->colorAt({}, {}) == Color::hex(0xFF0000) && !paths[0].stroke && paths[0].commands.size() == 5);
-        // Moved by its group; its stroke's color half transparent, then half again.
-        const VectorPath& line = paths[1];
+        const VectorPath& square = *paths[0].path;
+        CHECK(square.fill && *square.fill == Brush::solid(Color::hex(0xFF0000)) && !square.stroke && square.pathData.size() == 5 &&
+              near(square.strokeLineWidth, 1));  // (a stroke's width 1 where it isn't given, as Compose reads it)
+        // In its group; its stroke's color half transparent, then half again.
+        const VectorPath& line = *paths[1].path;
         CHECK(!line.fill && line.stroke && near(line.stroke->colorAt({}, {}).a, 128 / 255.f, 0.01f) && near(line.strokeAlpha, 0.5f) &&
               near(line.strokeLineWidth, 2) && line.strokeLineCap == StrokeCap::Round && line.strokeLineJoin == StrokeJoin::Bevel);
-        CHECK(near(line.commands[0].x, 12) && near(line.commands[0].y, 12) && near(line.commands[1].x, 18) && near(line.commands[1].y, 12));
+        std::vector<Offset> at = paths[1].points();
+        CHECK(near(at[0].x, 12) && near(at[0].y, 12) && near(at[1].x, 18) && near(at[1].y, 12));
         // Turned a quarter clockwise about its pivot (and stretched along x first), inside the moved group.
-        const VectorPath& turned = paths[2];
+        const VectorPath& turned = *paths[2].path;
         CHECK(turned.fill && turned.fill->colorAt({}, {}) == Color::hex(0x00FF00) && turned.pathFillType == Path::FillType::EvenOdd);
-        CHECK(near(turned.commands[0].x, 24) && near(turned.commands[0].y, 18) && near(turned.commands[1].x, 18) && near(turned.commands[1].y, 18));
-        CHECK(near(turned.commands[2].x, 18) && near(turned.commands[2].y, 22));  // 2 right of the pivot, stretched to 4, turned to below it
-        // A gradient no longer than a point: its start color (#ARGB), with its own alpha.
-        CHECK(paths[3].fill && paths[3].fill->kind() == Brush::Kind::Linear && paths[3].fill->colorAt({}, {}) == Color::hex(0xFFFF00, 0x88 / 255.f) &&
-              near(paths[3].fillAlpha, 0.25f));
-        CHECK(near(paths[3].commands[0].x, 0) && near(paths[3].commands[0].y, 16) && near(paths[3].commands[1].x, 4));  // out of both groups
+        std::vector<Offset> t = paths[2].points();
+        CHECK(near(t[0].x, 24) && near(t[0].y, 18) && near(t[1].x, 18) && near(t[1].y, 18) && near(t[2].x, 18) && near(t[2].y, 22));
+        // A gradient no longer than a point: its start color (#ARGB), with its own alpha; clipped.
+        const VectorPath& faded = *paths[3].path;
+        CHECK(faded.fill && faded.fill->kind() == Brush::Kind::Linear && faded.fill->colorAt({}, {}) == Color::hex(0xFFFF00, 0x88 / 255.f) &&
+              near(faded.fillAlpha, 0.25f));
+        CHECK(paths[3].clips.size() == 1 && near(paths[3].box().x, 0) && near(paths[3].box().y, 16) && near(paths[3].box().width, 4));
     }
     CHECK(ImageVector::fromVectorXml("<shape/>").empty() && ImageVector::fromVectorXml("not xml").empty());
+    // Its tint and how (android:tint, android:tintMode), as Compose reads them.
+    auto tinted = [](const char* attributes) {
+        return ImageVector::fromVectorXml(std::string(R"(<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp"
+            android:height="24dp" android:viewportWidth="24" android:viewportHeight="24" )") + attributes +
+                                          R"(><path android:fillColor="#000" android:pathData="M0,0h4v4z"/></vector>)");
+    };
+    ImageVector atop = tinted(R"(android:tint="#80FF0000" android:tintMode="src_atop")");
+    CHECK(atop.tintColor() == Color::hex(0xFF0000, 0x80 / 255.f) && atop.tintBlendMode() == BlendMode::SrcAtop);
+    CHECK(tinted(R"(android:tint="#00F")").tintBlendMode() == BlendMode::SrcIn && tinted(R"(android:tint="#00F")").tintColor() == Color::hex(0x0000FF));
+    CHECK(tinted(R"(android:tintMode="src_over")").tintBlendMode() == BlendMode::SrcOver && !tinted(R"(android:tintMode="src_over")").tintColor());
+    CHECK(tinted(R"(android:tintMode="multiply")").tintBlendMode() == BlendMode::Modulate &&
+          tinted(R"(android:tintMode="screen")").tintBlendMode() == BlendMode::Screen && tinted(R"(android:tintMode="add")").tintBlendMode() == BlendMode::Plus &&
+          tinted(R"(android:tintMode="src_in")").tintBlendMode() == BlendMode::SrcIn);
     // From an asset: read once through the platform.
     int reads = 0;
     auto shown = mutableStateOf(false);
@@ -21851,171 +22028,109 @@ TEST(vector_drawable_gradients_become_brushes) {
     </path>
 </vector>)";
     ImageVector v = ImageVector::fromVectorXml(xml);
-    const auto& paths = v.paths();
+    std::vector<PlacedPath> paths = placedPaths(v);
     CHECK(paths.size() == 5);
     if (paths.size() != 5) return;
     auto same = [](Color a, Color b) { return near(a.r, b.r, 0.01f) && near(a.g, b.g, 0.01f) && near(a.b, b.b, 0.01f) && near(a.a, b.a, 0.01f); };
     const Rect viewport{0, 0, 24, 24};
     // Linear: start, center and end colors from its start point to its end.
-    const Brush& linear = *paths[0].fill;
+    const Brush& linear = *paths[0].path->fill;
     CHECK(linear.kind() == Brush::Kind::Linear && same(linear.colorAt({0, 5}, viewport), Color::hex(0xFF0000)) &&
           same(linear.colorAt({12, 5}, viewport), Color::hex(0x00FF00)) && same(linear.colorAt({24, 5}, viewport), Color::hex(0x0000FF)));
-    // Radial, stroking, of its items, back and forth past its radius; its center moved with its group.
-    CHECK(!paths[1].fill && paths[1].stroke && paths[1].stroke->kind() == Brush::Kind::Radial && paths[1].stroke->tileMode() == TileMode::Mirror);
-    if (paths[1].stroke) {
-        const Brush& radial = *paths[1].stroke;
-        CHECK(same(radial.colorAt({8, 6}, viewport), colors::White) && same(radial.colorAt({9, 6}, viewport), Color::hex(0xFF0000)) &&
-              same(radial.colorAt({8, 10}, viewport), colors::Black) && same(radial.colorAt({15, 6}, viewport), Color::hex(0xFF0000)));
+    // Radial, stroking, of its items, back and forth past its radius; in its path's units (its
+    // group moves it when it is drawn).
+    const VectorPath& ring = *paths[1].path;
+    CHECK(!ring.fill && ring.stroke && ring.stroke->kind() == Brush::Kind::Radial && ring.stroke->tileMode() == TileMode::Mirror);
+    if (ring.stroke) {
+        const Brush& radial = *ring.stroke;
+        CHECK(same(radial.colorAt({4, 4}, viewport), colors::White) && same(radial.colorAt({5, 4}, viewport), Color::hex(0xFF0000)) &&
+              same(radial.colorAt({4, 8}, viewport), colors::Black) && same(radial.colorAt({11, 4}, viewport), Color::hex(0xFF0000)));
     }
-    // Sweep, clockwise from 3 o'clock round its center (scaled with its group): left of it, halfway.
-    const Brush& sweep = *paths[2].fill;
-    CHECK(sweep.kind() == Brush::Kind::Sweep && same(sweep.colorAt({8, 4}, viewport), Color::hex(0xFFFF00)) &&
-          same(sweep.colorAt({0, 4}, viewport), Color{0.5f, 1, 0.5f, 1}));
-    // Its radius scaled too, and repeated past it.
-    const Brush& rings = *paths[3].fill;
-    CHECK(rings.tileMode() == TileMode::Repeated && same(rings.colorAt({5, 4}, viewport), Color{0.5f, 0.5f, 0.5f, 1}));
+    CHECK(near(paths[1].box().x, 4) && near(paths[1].box().y, 2));
+    // Sweep, clockwise from 3 o'clock round its center: left of it, halfway.
+    const Brush& sweep = *paths[2].path->fill;
+    CHECK(sweep.kind() == Brush::Kind::Sweep && same(sweep.colorAt({4, 2}, viewport), Color::hex(0xFFFF00)) &&
+          same(sweep.colorAt({0, 2}, viewport), Color{0.5f, 1, 0.5f, 1}));
+    // Repeated past its radius.
+    const Brush& rings = *paths[3].path->fill;
+    CHECK(rings.tileMode() == TileMode::Repeated && same(rings.colorAt({2.5f, 2}, viewport), Color{0.5f, 0.5f, 0.5f, 1}));
+    CHECK(near(paths[3].box().width, 8));  // (its group scales it twice)
     // A radial one without a radius (Android refuses it): its start color.
-    CHECK(paths[4].fill->kind() == Brush::Kind::Solid && paths[4].fill->colorAt({}, {}) == Color::hex(0xFF0000));
-    // Drawn twice as large as its viewport: its gradients too (the middle of the square, the middle color).
-    ComposeTestRule rule([&] { Image(VectorPainter(v), "degrade", Modifier().testTag("degrade")); }, {200, 200});
-    Rect image = rule.onNodeWithTag("degrade").bounds();
-    testing::RecordingCanvas canvas;
-    rule.host().draw(canvas);
-    bool middle = false;
-    for (size_t i = 0; i < canvas.paths.size(); ++i)
-        if (near(canvas.paths[i].x, image.x) && near(canvas.paths[i].width, 48)) middle = same(canvas.pathColors[i], Color::hex(0x00FF00));
-    CHECK(near(image.width, 48) && middle);
+    CHECK(paths[4].path->fill->kind() == Brush::Kind::Solid && paths[4].path->fill->colorAt({}, {}) == Color::hex(0xFF0000));
+    // Drawn into a bitmap twice its viewport: scaled to it, each gradient with its path (a group's
+    // transform around what it draws), as Compose draws a vector. Not one color: an Argb8888 one.
+    VectorDrawing d;
+    drawVectorAt(d, v, {48, 48});
+    CHECK(d.image.config() == ImageBitmapConfig::Argb8888 && d.image.width() == 48 && d.bitmap.paths.size() == 5 &&
+          same(d.bitmap.pathColors[0], Color::hex(0x00FF00)));  // (the middle of the square in its own units: the middle color)
+    CHECK(!d.bitmap.transforms.empty() && near(d.bitmap.transforms[0].values[Matrix::ScaleX], 2) && near(d.bitmap.transforms[0].values[Matrix::ScaleY], 2));
     // The same with stops of one's own: Brush::radialGradient/sweepGradient(ColorStops).
     Brush ownRadial = Brush::radialGradient({{0, colors::Black}, {0.8f, colors::White}}, Offset{10, 10}, 10);
     CHECK(same(ownRadial.colorAt({14, 10}, viewport), Color{0.5f, 0.5f, 0.5f, 1}) && same(ownRadial.colorAt({19, 10}, viewport), colors::White));
     Brush ownSweep = Brush::sweepGradient({{0, colors::Black}, {0.5f, colors::White}}, Offset{10, 10});
     CHECK(same(ownSweep.colorAt({10, 20}, viewport), Color{0.5f, 0.5f, 0.5f, 1}) && same(ownSweep.colorAt({0, 10}, viewport), colors::White));
-    // Scaled: points and radius, not its far edge.
-    Brush far = Brush::linearGradient({colors::Black, colors::White}).scaled(2, 2);
-    Brush down = Brush::verticalGradient({colors::Black, colors::White}, 0, 10).scaled(2, 2);
-    CHECK(same(down.colorAt({0, 10}, Rect{0, 0, 48, 48}), Color{0.5f, 0.5f, 0.5f, 1}));
-    CHECK(same(far.colorAt({12, 12}, viewport), Color{0.5f, 0.5f, 0.5f, 1}) &&
-          same(ownRadial.scaled(2, 2).colorAt({28, 20}, Rect{0, 0, 48, 48}), Color{0.5f, 0.5f, 0.5f, 1}));
 }
 
 TEST(image_vector_groups_move_and_clip_their_paths) {
     const Color red = Color::hex(0xC03030), blue = Color::hex(0x3050C0);
-    auto box = [](const std::vector<PathCommand>& commands) {  // its points' bounds
-        float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
-        for (const PathCommand& c : commands)
-            if (c.verb != PathCommand::Verb::Close) x0 = std::min(x0, c.x), y0 = std::min(y0, c.y), x1 = std::max(x1, c.x), y1 = std::max(y1, c.y);
-        return Rect{x0, y0, x1 - x0, y1 - y0};
-    };
     auto same = [](Color a, Color b) { return near(a.r, b.r, 0.01f) && near(a.g, b.g, 0.01f) && near(a.b, b.b, 0.01f); };
     ImageVector v = ImageVector::Builder(48, 48, 24, 24)
-                        .group({.rotate = 90, .pivotX = 12, .pivotY = 12, .clipPathData = "M0,0h12v24h-12z"},
+                        .group({.name = "dönen", .rotation = 90, .pivotX = 12, .pivotY = 12, .clipPathData = addPathNodes("M0,0h12v24h-12z")},
                                [&](ImageVector::Builder& b) {
-                                   b.path("M12,2L12,6", std::nullopt, Brush::solid(red), 2);
+                                   b.addPath({.pathData = addPathNodes("M12,2L12,6"), .stroke = Brush::solid(red), .strokeLineWidth = 2});
                                    b.addGroup({.scaleX = 2, .scaleY = 2, .translationX = 1})
-                                       .path("M0,0h2v2h-2z", Brush::linearGradient({colors::Black, colors::White}, {0, 0}, {2, 0}), Brush::solid(red), 1)
+                                       .addPath({.pathData = addPathNodes("M0,0h2v2h-2z"),
+                                                 .fill = Brush::linearGradient({colors::Black, colors::White}, {0, 0}, {2, 0}),
+                                                 .stroke = Brush::solid(red),
+                                                 .strokeLineWidth = 1})
                                        .clearGroup();
                                })
-                        .path("M0,0h4v4h-4z", Brush::solid(blue))
+                        .addPath({.pathData = addPathNodes("M0,0h4v4h-4z"), .fill = Brush::solid(blue)})
                         .build();
-    const auto& paths = v.paths();
+    // A tree: the group (its path, its group), then the path.
+    CHECK(v.root().size() == 2 && v.root()[0].group() && v.root()[0].group()->name == "dönen" && v.root()[0].group()->size() == 2 &&
+          v.root()[1].path());
+    std::vector<PlacedPath> paths = placedPaths(v);
     CHECK(paths.size() == 3);
     if (paths.size() != 3) return;
     // Turned a quarter clockwise about the middle: its line from the top to the right; its clip
     // (the left half) the top half.
-    const VectorPath& line = paths[0];
-    CHECK(near(line.commands[0].x, 22) && near(line.commands[0].y, 12) && near(line.commands[1].x, 18) && near(line.commands[1].y, 12) &&
-          near(line.strokeLineWidth, 2));
-    CHECK(line.clipPaths.size() == 1);
-    if (!line.clipPaths.empty()) {
-        Rect clip = box(line.clipPaths[0]);
+    std::vector<Offset> line = paths[0].points();
+    CHECK(near(line[0].x, 22) && near(line[0].y, 12) && near(line[1].x, 18) && near(line[1].y, 12) && near(paths[0].path->strokeLineWidth, 2));
+    CHECK(paths[0].clips.size() == 1);
+    if (!paths[0].clips.empty()) {
+        Rect clip = paths[0].clips[0].bounds();
         CHECK(near(clip.x, 0) && near(clip.y, 0) && near(clip.width, 24) && near(clip.height, 12));
     }
-    // Inside a group of its own too: scaled twice (its stroke twice as wide), moved, then turned,
-    // its gradient with it (now from the top down); clipped by the outer group still.
-    const VectorPath& square = paths[1];
-    Rect at = box(square.commands);
-    CHECK(near(at.x, 20) && near(at.y, 1) && near(at.width, 4) && near(at.height, 4) && near(square.strokeLineWidth, 2) && square.clipPaths.size() == 1);
-    CHECK(square.fill && same(square.fill->colorAt({0, 3}, {0, 0, 24, 24}), Color{0.5f, 0.5f, 0.5f, 1}) &&
-          same(square.fill->colorAt({0, 1}, {0, 0, 24, 24}), colors::Black));
+    // Inside a group of its own too: scaled twice, moved, then turned; clipped by the outer group
+    // still; its gradient and stroke in its own units (drawn through its groups' transforms).
+    Rect at = paths[1].box();
+    CHECK(near(at.x, 20) && near(at.y, 1) && near(at.width, 4) && near(at.height, 4) && paths[1].clips.size() == 1);
+    CHECK(paths[1].path->fill && same(paths[1].path->fill->colorAt({1, 0}, {0, 0, 24, 24}), Color{0.5f, 0.5f, 0.5f, 1}) &&
+          near(paths[1].path->strokeLineWidth, 1));
     // Out of the groups: as it is.
-    CHECK(near(box(paths[2].commands).x, 0) && near(box(paths[2].commands).width, 4) && paths[2].clipPaths.empty());
-    // Drawn: each clipped path inside a layer clipped to its clip (twice the viewport); tinted, not
-    // as the one-color raster even without strokes (that would leave its clips out).
-    ImageVector half = ImageVector::Builder(24, 24, 24, 24).addGroup({.clipPathData = "M0,0h12v24h-12z"}).path("M0,0h24v24h-24z", Brush::solid(red)).build();
-    ImageVector middle = ImageVector::Builder(24, 24, 24, 24).addGroup({.clipPathData = "M6,6h12v12h-12z"}).path("M0,0h24v24h-24z", Brush::solid(blue)).build();
-    ComposeTestRule rule([&] {
-        Column([&] {
-            Image(VectorPainter(v), "grup", Modifier().testTag("grup"));
-            Icon(half, "ton", Modifier().size(24), Color::hex(0x30A030));
-            Image(VectorPainter(middle), "orta", Modifier().testTag("orta"));
-        });
-    }, {200, 200});
-    Rect image = rule.onNodeWithTag("grup").bounds();
-    testing::RecordingCanvas canvas;
-    rule.host().draw(canvas);
-    CHECK(canvas.depth == 0);  // its layers popped
-    // A clip away from the top left: the layer over it, the outline from the layer's top left.
-    Rect mid = rule.onNodeWithTag("orta").bounds();
-    bool midLayer = false;
-    for (size_t i = 0; i < canvas.layerBounds.size(); ++i) {
-        const Rect& r = canvas.layerBounds[i];
-        midLayer = midLayer || (near(r.x, mid.x + 6) && near(r.y, mid.y + 6) && near(r.width, 12) && near(r.height, 12));
+    CHECK(near(paths[2].box().x, 0) && near(paths[2].box().width, 4) && paths[2].clips.empty());
+    // Drawn into its bitmap as Compose's groups draw: the root scaled to the bitmap, each group
+    // through its matrix and clipped to its clip path, inside the ones it is in.
+    VectorDrawing d;
+    drawVectorAt(d, v, {48, 48});
+    CHECK(d.bitmap.stack == "TTCTtctt" && d.bitmap.transforms.size() == 3 && d.bitmap.clipShapes.size() == 1 && d.bitmap.paths.size() == 4);  // (the square filled and stroked)
+    if (d.bitmap.transforms.size() == 3 && d.bitmap.clipShapes.size() == 1) {
+        Offset top = d.bitmap.transforms[1].map(Offset{12, 2});  // the group's: (12, 2) to (22, 12)
+        Offset inner = d.bitmap.transforms[2].map(Offset{2, 2});  // the inner one's: scaled about 0, moved 1
+        CHECK(near(top.x, 22, 0.001f) && near(top.y, 12, 0.001f) && near(inner.x, 5, 0.001f) && near(inner.y, 4, 0.001f));
+        CHECK(d.bitmap.clipShapes[0].path && d.bitmap.clipShapes[0].path->bounds() == (Rect{0, 0, 12, 24}));  // in the group's own units
     }
-    bool midOutline = false;
-    for (const Path& outline : canvas.layerOutlines) {
-        Rect r = outline.bounds();
-        midOutline = midOutline || (near(r.x, 0) && near(r.y, 0) && near(r.width, 12) && near(r.height, 12));
-    }
-    CHECK(midLayer && midOutline);
-    int clipLayers = 0;
-    for (const Path& outline : canvas.layerOutlines) {
-        Rect r = outline.bounds();
-        if (near(r.x, 0) && near(r.y, 0) && near(r.width, 48) && near(r.height, 24)) ++clipLayers;
-    }
-    CHECK(clipLayers == 2 && std::count(canvas.vectors.begin(), canvas.vectors.end(), half.id()) == 0 &&
-          std::count(canvas.pathColors.begin(), canvas.pathColors.end(), Color::hex(0x30A030)) == 1);
-    bool layerAt = false;
-    for (const Rect& r : canvas.layerBounds) layerAt = layerAt || (near(r.x, image.x) && near(r.y, image.y) && near(r.width, 48) && near(r.height, 24));
-    CHECK(layerAt);
-    // A clip of nothing: its paths not drawn.
-    ImageVector none = ImageVector::Builder(24, 24, 24, 24).addGroup({.clipPathData = "M5,5"}).path("M0,0h4v4h-4z", Brush::solid(red)).build();
-    ComposeTestRule empty([&] { Image(VectorPainter(none), "yok"); }, {100, 100});
-    testing::RecordingCanvas nothing;
-    empty.host().draw(nothing);
-    CHECK(std::count(nothing.pathColors.begin(), nothing.pathColors.end(), red) == 0 && nothing.layerOutlines.empty());
-    // Mirrored: its clips and its gradients too.
-    ImageVector left = ImageVector::Builder(24, 24, 24, 24)
-                           .addGroup({.clipPathData = "M0,0h6v24h-6z"})
-                           .path("M0,0h24v24h-24z", Brush::horizontalGradient({colors::Black, colors::White}),
-                                 Brush::horizontalGradient({colors::Black, colors::White}), 1)
-                           .build()
-                           .mirrored();
-    CHECK(left.paths().size() == 1);
-    if (left.paths().size() == 1) {
-        const VectorPath& p = left.paths()[0];
-        CHECK(p.clipPaths.size() == 1 && near(box(p.clipPaths[0]).x, 18) && near(box(p.clipPaths[0]).width, 6));
-        CHECK(same(p.fill->colorAt({0, 5}, {0, 0, 24, 24}), colors::White) && same(p.fill->colorAt({24, 5}, {0, 0, 24, 24}), colors::Black));
-        CHECK(p.stroke && same(p.stroke->colorAt({0, 5}, {0, 0, 24, 24}), colors::White));
-    }
-    // A path's own clip paths, in a group: moved with it, inside the group's clips. A centered
-    // gradient (the middle, the nearer edge) moved and scaled with its group too.
-    VectorPath own;
-    own.commands = VectorPath::parse("M0,0h4v4h-4z");
-    own.clipPaths = {VectorPath::parse("M0,0h2v2h-2z")};
-    own.fill = Brush::radialGradient({colors::Black, colors::White});
-    ImageVector clipped = ImageVector::Builder(24, 24, 24, 24).group({.scaleX = 0.5f, .scaleY = 0.5f, .translationX = 4, .clipPathData = "M0,0h24v24h-24z"},
-                                                                     [&](ImageVector::Builder& b) { b.path(own); }).build();
-    const VectorPath& inner = clipped.paths()[0];
-    CHECK(inner.clipPaths.size() == 2 && near(box(inner.clipPaths[0]).width, 12) && near(box(inner.clipPaths[1]).x, 4) &&
-          near(box(inner.clipPaths[1]).width, 1));
-    // Its middle (12, 12) to (10, 6), its radius (12) to 6.
-    CHECK(same(inner.fill->colorAt({10, 6}, {0, 0, 24, 24}), colors::Black) && same(inner.fill->colorAt({13, 6}, {0, 0, 24, 24}), Color{0.5f, 0.5f, 0.5f, 1}));
-    // From a vector drawable: a <clip-path> clips what comes after it in its group; a group's
-    // scale widens its strokes.
+    // A group without a transform or a clip draws what is in it as it is.
+    ImageVector plain = ImageVector::Builder(24, 24, 24, 24).addGroup({.name = "boş"}).addPath({.pathData = addPathNodes("M0,0h4v4z"), .fill = Brush::solid(red)}).build();
+    VectorDrawing p;
+    drawVectorAt(p, plain, {24, 24});
+    CHECK(p.bitmap.stack == "Tt" && p.bitmap.paths.size() == 1);
+    // From a vector drawable: a <clip-path> clips what comes after it in its group.
     ImageVector xml = ImageVector::fromVectorXml(R"(<vector xmlns:android="http://schemas.android.com/apk/res/android"
         android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-        <group android:scaleX="2" android:scaleY="2">
-            <clip-path android:pathData="M0,0h6v6h-6z"/>
+        <group android:name="büyük" android:scaleX="2" android:scaleY="2">
+            <clip-path android:name="kırp" android:pathData="M0,0h6v6h-6z"/>
             <path android:strokeColor="#000" android:strokeWidth="1" android:pathData="M1,1h2"/>
             <group android:translateX="1">
                 <clip-path android:pathData="M0,0h2v2h-2z"/>
@@ -22025,50 +22140,52 @@ TEST(image_vector_groups_move_and_clip_their_paths) {
         </group>
         <path android:fillColor="#000" android:pathData="M0,0h1v1h-1z"/>
     </vector>)");
-    const auto& xp = xml.paths();
-    CHECK(xp.size() == 4);
+    std::vector<PlacedPath> xp = placedPaths(xml);
+    CHECK(xp.size() == 4 && xml.root()[0].group() && xml.root()[0].group()->name == "büyük" && xml.root()[0].group()->size() == 1 &&
+          (*xml.root()[0].group())[0].group() && (*xml.root()[0].group())[0].group()->name == "kırp");
     if (xp.size() == 4) {
-        CHECK(xp[0].clipPaths.size() == 1 && near(box(xp[0].clipPaths[0]).width, 12) && near(xp[0].strokeLineWidth, 2));
-        CHECK(xp[1].clipPaths.size() == 2 && near(box(xp[1].clipPaths[1]).x, 2) && near(box(xp[1].clipPaths[1]).width, 4));
-        CHECK(xp[2].clipPaths.size() == 1 && xp[3].clipPaths.empty() && near(box(xp[3].commands).width, 1));
+        CHECK(xp[0].clips.size() == 1 && near(xp[0].clips[0].bounds().width, 12) && near(xp[0].path->strokeLineWidth, 1));
+        CHECK(xp[1].clips.size() == 2 && near(xp[1].clips[1].bounds().x, 2) && near(xp[1].clips[1].bounds().width, 4));
+        CHECK(xp[2].clips.size() == 1 && xp[3].clips.empty() && near(xp[3].box().width, 1));
     }
 }
 
 TEST(vector_paths_trim_and_vectors_come_from_composable_content) {
-    // Trimmed: only a piece of a line (twice the viewport) drawn.
+    // Trimmed: only a piece of a line drawn into the bitmap (in its viewport's units).
     const Color ink = Color::hex(0x2040A0);
     auto drawnBounds = [&](float start, float end, float offset, const char* data = "M0,12h24") {
-        VectorPath line{.commands = VectorPath::parse(data), .fill = std::nullopt, .stroke = Brush::solid(ink), .strokeLineWidth = 1,
-                        .trimPathStart = start, .trimPathEnd = end, .trimPathOffset = offset};
-        ImageVector v = ImageVector::Builder(48, 48, 24, 24).path(line).build();
-        ComposeTestRule rule([&] { Image(VectorPainter(v), "çizgi", Modifier().testTag("çizgi")); }, {100, 100});
-        Rect image = rule.onNodeWithTag("çizgi").bounds();
-        testing::RecordingCanvas canvas;
-        rule.host().draw(canvas);
+        ImageVector v = ImageVector::Builder(48, 48, 24, 24)
+                            .addPath({.pathData = addPathNodes(data), .stroke = Brush::solid(ink), .strokeLineWidth = 1, .trimPathStart = start,
+                                      .trimPathEnd = end, .trimPathOffset = offset})
+                            .build();
+        VectorDrawing d;
+        drawVectorAt(d, v, {48, 48});
         std::optional<Rect> drawn;
-        for (size_t i = 0; i < canvas.paths.size(); ++i)
-            if (canvas.pathColors[i] == ink) drawn = Rect{canvas.paths[i].x - image.x, canvas.paths[i].y - image.y, canvas.paths[i].width, canvas.paths[i].height};
+        for (size_t i = 0; i < d.bitmap.paths.size(); ++i)
+            if (d.bitmap.pathColors[i] == ink && !d.bitmap.pathShapes[i].isEmpty()) drawn = d.bitmap.paths[i];
         return drawn;
     };
-    auto spans = [](std::optional<Rect> r, float x0, float x1) { return r && near(r->x, x0, 0.5f) && near(r->right(), x1, 0.5f); };
-    CHECK(spans(drawnBounds(0, 1, 0), 0, 48));         // untrimmed
-    CHECK(spans(drawnBounds(0, 0.5f, 0), 0, 24));      // its first half
-    CHECK(spans(drawnBounds(0.25f, 0.75f, 0), 12, 36));
-    CHECK(spans(drawnBounds(0, 0.5f, 0.5f), 24, 48));  // moved on: its second half
-    CHECK(spans(drawnBounds(0.5f, 1, 0.25f), 0, 48));  // 0.75 to 1.25: round its end, both ends drawn
-    CHECK(!drawnBounds(0, 0, 0));                      // nothing
-    // Every contour's length together: three quarters of two lines (12 and 24 long), the first and
-    // 15 of the second.
+    auto spans = [](std::optional<Rect> r, float x0, float x1) { return r && near(r->x, x0, 0.01f) && near(r->right(), x1, 0.01f); };
+    CHECK(spans(drawnBounds(0, 1, 0), 0, 24));        // untrimmed
+    CHECK(spans(drawnBounds(0, 1, 0.5f), 0, 24));     // (from its start to its end however far moved on)
+    CHECK(spans(drawnBounds(0, 0.5f, 0), 0, 12));     // its first half
+    CHECK(spans(drawnBounds(0.25f, 0.75f, 0), 6, 18));
+    CHECK(spans(drawnBounds(0.25f, 1, 0), 6, 24));    // (an end of 1 comes round to 0: from the start to the end)
+    CHECK(spans(drawnBounds(0, 0.5f, 0.5f), 12, 24)); // moved on: its second half
+    CHECK(spans(drawnBounds(0.5f, 1, 0.25f), 0, 24)); // 0.75 to 1.25: round its end, both ends drawn
+    CHECK(!drawnBounds(0, 0, 0));                     // nothing
+    // As Android measures it, its first contour alone: three quarters of the first line (12 long).
     std::optional<Rect> two = drawnBounds(0, 0.75f, 0, "M0,0h12M0,12h24");
-    CHECK(two && near(two->width, 30, 0.5f) && near(two->height, 24, 0.5f));
+    CHECK(two && near(two->width, 9, 0.01f) && near(two->height, 0, 0.01f));
     // From a vector drawable.
     ImageVector xml = ImageVector::fromVectorXml(R"(<vector xmlns:android="http://schemas.android.com/apk/res/android"
         android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-        <path android:strokeColor="#000" android:strokeWidth="1" android:pathData="M0,0h4" android:trimPathStart="0.1"
+        <path android:name="kısa" android:strokeColor="#000" android:strokeWidth="1" android:pathData="M0,0h4" android:trimPathStart="0.1"
               android:trimPathEnd="0.6" android:trimPathOffset="0.2"/>
     </vector>)");
-    CHECK(xml.paths().size() == 1 && near(xml.paths()[0].trimPathStart, 0.1f, 0.01f) && near(xml.paths()[0].trimPathEnd, 0.6f, 0.01f) &&
-          near(xml.paths()[0].trimPathOffset, 0.2f, 0.01f));
+    std::vector<PlacedPath> xp = placedPaths(xml);
+    CHECK(xp.size() == 1 && xp[0].path->name == "kısa" && near(xp[0].path->trimPathStart, 0.1f, 0.01f) && near(xp[0].path->trimPathEnd, 0.6f, 0.01f) &&
+          near(xp[0].path->trimPathOffset, 0.2f, 0.01f));
     // Composable content: what it reads makes it again; made the same, the same vector.
     auto turn = mutableStateOf(0.f);
     auto other = mutableStateOf(0);
@@ -22077,11 +22194,16 @@ TEST(vector_paths_trim_and_vectors_come_from_composable_content) {
     ComposeTestRule rule([&] {
         other.get();
         // Two in one composable: each its own.
-        red = rememberVectorPainter(24, 24, 24, 24, [](ImageVector::Builder& v) { v.path("M0,0h4v4h-4z", Brush::solid(Color::hex(0xFF0000))); });
-        blue = rememberVectorPainter(24, 24, 24, 24, [](ImageVector::Builder& v) { v.path("M0,0h4v4h-4z", Brush::solid(Color::hex(0x0000FF))); });
+        red = rememberVectorPainter(24, 24, 24, 24, [](ImageVector::Builder& v) {
+            v.addPath({.pathData = addPathNodes("M0,0h4v4h-4z"), .fill = Brush::solid(Color::hex(0xFF0000))});
+        });
+        blue = rememberVectorPainter(24, 24, 24, 24, [](ImageVector::Builder& v) {
+            v.addPath({.pathData = addPathNodes("M0,0h4v4h-4z"), .fill = Brush::solid(Color::hex(0x0000FF))});
+        });
         seen = rememberVectorPainter(48, 48, 24, 24, [&](ImageVector::Builder& v) {
             remembered = remember([] { static int made = 0; return ++made; });  // kept inside it
-            v.group({.rotate = turn.get(), .pivotX = 12, .pivotY = 12}, [&](ImageVector::Builder& g) { g.path("M12,2L12,6", std::nullopt, Brush::solid(ink), 2); });
+            v.group({.rotation = turn.get(), .pivotX = 12, .pivotY = 12},
+                    [&](ImageVector::Builder& g) { g.addPath({.pathData = addPathNodes("M12,2L12,6"), .stroke = Brush::solid(ink), .strokeLineWidth = 2}); });
         });
         Image(seen, "dönen", Modifier().testTag("dönen"));
     }, {100, 100});
@@ -22094,12 +22216,14 @@ TEST(vector_paths_trim_and_vectors_come_from_composable_content) {
     turn.set(90);
     rule.waitForIdle();
     CHECK(!(seen == first) && remembered == firstRemembered);
-    Rect image = rule.onNodeWithTag("dönen").bounds();
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
-    bool turned = false;  // its line now from the right edge in (18..22, at 12): 36..44 px
-    for (size_t i = 0; i < canvas.paths.size(); ++i)
-        turned = turned || (canvas.pathColors[i] == ink && near(canvas.paths[i].x - image.x, 36, 2.5f) && near(canvas.paths[i].right() - image.x, 44, 2.5f));
+    bool turned = false;  // its group's matrix now a quarter turn: its line from the right edge in
+    for (const ImageBitmap& image : canvas.drawnImages) {
+        testing::RecordingCanvas drawn;
+        for (const auto& list : detail::bitmaps::pending(image)) list->replay(drawn);
+        for (const Matrix& m : drawn.transforms) turned = turned || (near(m.map(Offset{12, 2}).x, 22, 0.001f) && near(m.map(Offset{12, 2}).y, 12, 0.001f));
+    }
     CHECK(turned);
 }
 
@@ -22153,44 +22277,49 @@ TEST(animated_vectors_play_their_animations) {
 </animated-vector>)";
     AnimatedImageVector avd = AnimatedImageVector::fromAnimatedVectorXml(xml);
     CHECK(!avd.empty() && avd.totalDurationMillis() == 300);  // the group's: its longer animator (together), 100 in and 200 long
-    auto box = [](const std::vector<PathCommand>& commands) {
-        float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
-        for (const PathCommand& c : commands)
-            if (c.verb != PathCommand::Verb::Close) x0 = std::min(x0, c.x), y0 = std::min(y0, c.y), x1 = std::max(x1, c.x), y1 = std::max(y1, c.y);
-        return Rect{x0, y0, x1 - x0, y1 - y0};
-    };
     auto same = [](Color a, Color b) { return near(a.r, b.r, 0.01f) && near(a.g, b.g, 0.01f) && near(a.b, b.b, 0.01f); };
-    auto at = [&](float t) { return avd.vectorAt(t).paths(); };
+    std::map<float, ImageVector> kept;  // (what the placed paths point into)
+    auto at = [&](float t) { return placedPaths(kept[t] = avd.vectorAt(t)); };
     // As it starts: the drawable as it is.
-    CHECK(at(0) == avd.imageVector().paths() && at(0).size() == 3);
+    CHECK(avd.vectorAt(0) == avd.imageVector() && at(0).size() == 3);
     if (at(0).size() != 3) return;
-    CHECK(same(at(0)[1].fill->colorAt({}, {}), Color::hex(0xFF0000)) && near(box(at(0)[1].commands).width, 4));
+    CHECK(same(at(0)[1].path->fill->colorAt({}, {}), Color::hex(0xFF0000)) && near(at(0)[1].box().width, 4));
     // Its group turning (linear): 45° at 50; from 100 its second animator (started later, over the
     // first): 112.5° at 150.
-    const PathCommand dot = at(50)[0].commands[0], later = at(150)[0].commands[0];
+    const Offset dot = at(50)[0].points()[0], later = at(150)[0].points()[0];
     CHECK(near(dot.x, 19.07f, 0.05f) && near(dot.y, 4.93f, 0.05f) && near(later.x, 21.24f, 0.05f) && near(later.y, 15.83f, 0.05f));
     // One after the other: the color first (halfway at 50, done at 100), then the shape (halfway at 150).
-    CHECK(same(at(50)[1].fill->colorAt({}, {}), Color{0.5f, 0, 0.5f, 1}) && same(at(100)[1].fill->colorAt({}, {}), Color::hex(0x0000FF)));
-    CHECK(near(box(at(100)[1].commands).width, 4, 0.01f) && near(box(at(150)[1].commands).width, 6, 0.01f) &&
-          near(box(at(220)[1].commands).width, 8, 0.01f));
+    CHECK(same(at(50)[1].path->fill->colorAt({}, {}), Color{0.5f, 0, 0.5f, 1}) && same(at(100)[1].path->fill->colorAt({}, {}), Color::hex(0x0000FF)));
+    CHECK(near(at(100)[1].box().width, 4, 0.01f) && near(at(150)[1].box().width, 6, 0.01f) && near(at(220)[1].box().width, 8, 0.01f));
     // From 100, there and back (repeatMode reverse), holding where it ends; before it starts, its
     // own value. A property without valueFrom starts at its own value.
-    CHECK(near(at(99)[2].trimPathEnd, 1, 0.001f) && near(at(115)[2].trimPathEnd, 0.6f, 0.001f) && near(at(130)[2].trimPathEnd, 0.4f, 0.001f) &&
-          near(at(130)[2].strokeLineWidth, 2, 0.001f));
-    CHECK(near(at(175)[2].trimPathEnd, 0.2f, 0.001f) && near(at(230)[2].trimPathEnd, 0.8f, 0.001f) && near(at(300)[2].trimPathEnd, 0.8f, 0.001f) &&
-          near(at(300)[2].strokeLineWidth, 1, 0.001f));
+    CHECK(near(at(99)[2].path->trimPathEnd, 1, 0.001f) && near(at(115)[2].path->trimPathEnd, 0.6f, 0.001f) &&
+          near(at(130)[2].path->trimPathEnd, 0.4f, 0.001f) && near(at(130)[2].path->strokeLineWidth, 2, 0.001f));
+    CHECK(near(at(175)[2].path->trimPathEnd, 0.2f, 0.001f) && near(at(230)[2].path->trimPathEnd, 0.8f, 0.001f) &&
+          near(at(300)[2].path->trimPathEnd, 0.8f, 0.001f) && near(at(300)[2].path->strokeLineWidth, 1, 0.001f));
     // The vector's alpha, accelerating (t²): a quarter of the way at the halfway mark.
-    CHECK(near(at(100)[1].fillAlpha, 0.875f, 0.005f) && near(at(200)[1].fillAlpha, 0.5f, 0.005f));
+    CHECK(near(at(100)[1].path->fillAlpha, 0.875f, 0.005f) && near(at(200)[1].path->fillAlpha, 0.5f, 0.005f));
     CHECK(AnimatedImageVector::fromAnimatedVectorXml("<vector/>").empty() && AnimatedImageVector::fromAnimatedVectorXml("not xml").empty());
+    // An arc's flags in between: set while anywhere but 0 (Android interpolates them as numbers).
+    AnimatedImageVector arcs = AnimatedImageVector::fromAnimatedVectorXml(R"(<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:aapt="http://schemas.android.com/aapt"><aapt:attr name="android:drawable"><vector android:width="24dp" android:height="24dp"
+        android:viewportWidth="24" android:viewportHeight="24"><path android:name="yay" android:strokeColor="#000" android:pathData="M0,0A5,5 0 0,1 10,0"/>
+        </vector></aapt:attr><target android:name="yay"><aapt:attr name="android:animation"><objectAnimator android:propertyName="pathData"
+        android:valueType="pathType" android:valueFrom="M0,0A5,5 0 0,1 10,0" android:valueTo="M0,0A5,8 0 1,0 10,0" android:duration="100"
+        android:interpolator="@android:interpolator/linear"/></aapt:attr></target></animated-vector>)");
+    std::map<float, ImageVector> arcKept;
+    auto arcAt = [&](float t) { return placedPaths(arcKept[t] = arcs.vectorAt(t))[0].path->pathData[1]; };
+    CHECK(!arcAt(0).isMoreThanHalf && arcAt(0).isPositiveArc && arcAt(50).isMoreThanHalf && arcAt(50).isPositiveArc && near(arcAt(50).values[1], 6.5f, 0.01f));
+    CHECK(arcAt(100).isMoreThanHalf && !arcAt(100).isPositiveArc);
     // A vector drawable read the same way, whether in an animated one or not.
-    CHECK(ImageVector::fromVectorXml(xml).paths() == avd.imageVector().paths());
+    CHECK(ImageVector::fromVectorXml(xml) == avd.imageVector());
     // Painted: at its start, then played to its end, then back.
     auto atEnd = mutableStateOf(false);
     ComposeTestRule rule([&] { Image(rememberAnimatedVectorPainter(avd, atEnd.get()), "canlı", Modifier().size(24)); }, {100, 100});
     auto colors = [&] {
         testing::RecordingCanvas canvas;
         rule.host().draw(canvas);
-        return canvas.pathColors;
+        return vectorPathColors(canvas);
     };
     auto shows = [&](Color c) {
         std::vector<Color> drawn = colors();
@@ -22288,24 +22417,35 @@ TEST(font_variations_pick_a_variable_fonts_instance) {
 
 TEST(image_vector_builder_draws_paths_in_their_own_paints) {
     const Color red = Color::hex(0xC03030), blue = Color::hex(0x3050C0), green = Color::hex(0x30A030);
-    ImageVector two = ImageVector::Builder(48, 48, 24, 24)
-                          .path("M0,0h12v12h-12z", Brush::solid(red))
-                          .path("M12,12h12v12h-12z", std::nullopt, Brush::solid(blue), 2)
+    ImageVector two = ImageVector::Builder("iki", 48, 48, 24, 24)
+                          .addPath({.pathData = addPathNodes("M0,0h12v12h-12z"), .fill = Brush::solid(red)})
+                          .addPath({.pathData = addPathNodes("M12,12h12v12h-12z"), .stroke = Brush::solid(blue), .strokeLineWidth = 2})
                           .build();
-    VectorPath faded;
-    faded.commands = VectorPath::parse("M0,12h12v12h-12z");
-    faded.fill = Brush::solid(red);
-    faded.fillAlpha = 0.5f;
-    ImageVector fills = ImageVector::Builder(24, 24, 24, 24).path("M0,0h12v12h-12z", Brush::solid(red)).path(faded).build();
-    ImageVector arrow = ImageVector::Builder(24, 24, 24, 24).path("M0,0h12v12h-12z", Brush::solid(red)).autoMirror().build();
-    // Its filled paths together, for drawing it tinted in one go (a square: move, three lines, close).
-    CHECK(fills.commands().size() == 10 && two.commands().size() == 5 && two.paths().size() == 2);
+    ImageVector fills = ImageVector::Builder(24, 24, 24, 24)
+                            .addPath({.pathData = addPathNodes("M0,0h12v12h-12z"), .fill = Brush::solid(red)})
+                            .addPath({.pathData = addPathNodes("M0,12h12v12h-12z"), .fill = Brush::solid(red), .fillAlpha = 0.5f})
+                            .build();
+    ImageVector arrow = ImageVector::Builder(24, 24, 24, 24, std::nullopt, BlendMode::SrcIn, true)
+                            .addPath({.pathData = addPathNodes("M0,0h12v12h-12z"), .fill = Brush::solid(red)})
+                            .build();
+    CHECK(two.name() == "iki" && two.root().size() == 2 && !two.autoMirror() && arrow.autoMirror() && !(arrow == fills));
+    // Equal by what it is, not by its id: the same built twice.
+    ImageVector again = ImageVector::Builder("iki", 48, 48, 24, 24)
+                            .addPath({.pathData = addPathNodes("M0,0h12v12h-12z"), .fill = Brush::solid(red)})
+                            .addPath({.pathData = addPathNodes("M12,12h12v12h-12z"), .stroke = Brush::solid(blue), .strokeLineWidth = 2})
+                            .build();
+    CHECK(again == two && again.id() != two.id() && VectorPainter(again) == VectorPainter(two));
+    CHECK(!(ImageVector::Builder("üç", 48, 48, 24, 24).build() == ImageVector::Builder("iki", 48, 48, 24, 24).build()) &&
+          !(ImageVector::Builder(48, 48, 24, 24, colors::Black).build() == ImageVector::Builder(48, 48, 24, 24).build()) &&
+          !(ImageVector::Builder(48, 48, 24, 24, colors::Black, BlendMode::SrcOver).build() == ImageVector::Builder(48, 48, 24, 24, colors::Black).build()) &&
+          !(ImageVector::Builder(48, 40, 24, 24).build() == ImageVector::Builder(48, 48, 24, 24).build()) &&
+          !(ImageVector::Builder(48, 48, 24, 20).build() == ImageVector::Builder(48, 48, 24, 24).build()));
     auto rtl = mutableStateOf(false);
     ComposeTestRule rule([&] {
         Column([&] {
             Image(VectorPainter(two), "iki", Modifier().testTag("resim"));  // its default size, its own paints
             Icon(two, "ton", Modifier().size(24).testTag("ton"), green);     // tinted, its stroke too
-            Icon(fills, "dolgu", Modifier().size(24), green);                // tinted fills only: the cached raster
+            Icon(fills, "dolgu", Modifier().size(24).testTag("dolgu"), green);  // one color: its alpha alone, in the tint
             Image(VectorPainter(fills), "yarı", Modifier().size(24).testTag("yarı"));
             Image(VectorPainter(two), "süzgeç", Modifier().size(24).testTag("süzgeç"), Alignment::Center, ContentScale::Fit, 1,
                   ColorFilter::tint(blue));  // a filter tints it, its stroke too
@@ -22317,44 +22457,84 @@ TEST(image_vector_builder_draws_paths_in_their_own_paints) {
     CHECK(near(image.width, 48) && near(image.height, 48));
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
-    auto inside = [](Rect r, Rect in) { return r.x >= in.x - 0.5f && r.y >= in.y - 0.5f && r.right() <= in.right() + 0.5f && r.bottom() <= in.bottom() + 0.5f; };
-    bool redFill = false, blueStroke = false;
-    for (size_t i = 0; i < canvas.paths.size(); ++i) {
-        if (!inside(canvas.paths[i], image)) continue;
-        Rect r = canvas.paths[i];
-        redFill = redFill || (canvas.pathColors[i] == red && near(canvas.pathStrokes[i], 0) && near(r.x, image.x) && near(r.width, 24));
-        blueStroke = blueStroke || (canvas.pathColors[i] == blue && near(canvas.pathStrokes[i], 4) && near(r.x, image.x + 24) && near(r.width, 24));
+    // Each drawn as the bitmap it was drawn into: one in its own colors as an image (white, as a
+    // filter makes it), a one-color one as a mask in its color (or tinted).
+    auto drawnAs = [&](const char* tag) -> std::optional<std::pair<Color, Rect>> {
+        Rect b = rule.onNodeWithTag(tag).bounds();
+        for (size_t i = 0; i < canvas.vectorBounds.size(); ++i)
+            if (near(canvas.vectorBounds[i].x, b.x) && near(canvas.vectorBounds[i].y, b.y)) return std::pair{canvas.vectorColors[i], canvas.vectorBounds[i]};
+        return std::nullopt;
+    };
+    CHECK(canvas.vectors.size() == 6 && std::count(canvas.vectors.begin(), canvas.vectors.end(), two.id()) == 3 &&
+          std::count(canvas.vectors.begin(), canvas.vectors.end(), fills.id()) == 2);
+    CHECK(drawnAs("resim") && drawnAs("resim")->first == colors::White && near(drawnAs("resim")->second.width, 48));
+    CHECK(drawnAs("ton") && drawnAs("ton")->first == green && drawnAs("dolgu") && drawnAs("dolgu")->first == green);
+    CHECK(drawnAs("yarı") && drawnAs("yarı")->first == red.copy(1) && drawnAs("süzgeç") && drawnAs("süzgeç")->first == blue);
+    CHECK(canvas.maskColors.size() == 3);  // the fills (twice) and the arrow
+    // What was drawn into them: in its own paints, twice the viewport (its stroke in the viewport's units).
+    VectorDrawing d;
+    drawVectorAt(d, two, {48, 48});
+    CHECK(d.image.config() == ImageBitmapConfig::Argb8888 && d.bitmap.paths.size() == 2);
+    if (d.bitmap.paths.size() == 2) {
+        CHECK(d.bitmap.pathColors[0] == red && near(d.bitmap.pathStrokes[0], 0) && near(d.bitmap.paths[0].width, 12));
+        CHECK(d.bitmap.pathColors[1] == blue && near(d.bitmap.pathStrokes[1], 2) && near(d.bitmap.paths[1].x, 12));
     }
-    CHECK(redFill && blueStroke);  // twice the viewport: its stroke twice as wide too
-    Rect tinted = rule.onNodeWithTag("ton").bounds();
-    int greens = 0;
-    for (size_t i = 0; i < canvas.paths.size(); ++i)
-        if (canvas.pathColors[i] == green) greens += inside(canvas.paths[i], tinted) ? 1 : 100;
-    CHECK(greens == 2);  // the tinted one path by path (it has a stroke); the fills-only one not as paths
-    CHECK(std::count(canvas.vectors.begin(), canvas.vectors.end(), fills.id()) == 1);  // but as the cached raster
-    Rect half = rule.onNodeWithTag("yarı").bounds();
-    bool halfAlpha = false;
-    for (size_t i = 0; i < canvas.paths.size(); ++i)
-        if (inside(canvas.paths[i], half) && near(canvas.paths[i].y, half.y + 12)) halfAlpha = near(canvas.pathColors[i].a, red.a * 0.5f, 0.01f);
-    CHECK(halfAlpha);
-    Rect filtered = rule.onNodeWithTag("süzgeç").bounds();
-    int blues = 0;
-    for (size_t i = 0; i < canvas.paths.size(); ++i)
-        if (inside(canvas.paths[i], filtered) && canvas.pathColors[i] == blue) ++blues;
-    CHECK(blues == 2);
-    // Mirrored right to left: its square at the right.
-    auto squareX = [&] {
+    VectorDrawing f;
+    drawVectorAt(f, fills, {24, 24});
+    CHECK(f.image.config() == ImageBitmapConfig::Alpha8 && f.bitmap.paths.size() == 2 && f.bitmap.pathColors.size() == 2 &&
+          near(f.bitmap.pathColors[1].a, 0.5f, 0.01f));
+    // Its bitmap whole pixels around its size, just its size within a hundredth of a pixel of it;
+    // kept for each size and config (the same one again where they are the same).
+    VectorDrawing near48, past48, again48, modulated;
+    drawVectorAt(near48, fills, {24.002f, 24.002f}, 2);
+    drawVectorAt(past48, fills, {24.01f, 24.01f}, 2);
+    drawVectorAt(again48, fills, {24.002f, 24.002f}, 2, ColorFilter::tint(green));
+    drawVectorAt(modulated, fills, {24.002f, 24.002f}, 2, ColorFilter::tint(green, BlendMode::Modulate));
+    CHECK(near48.image.width() == 48 && past48.image.width() == 49 && again48.image == near48.image && again48.bitmap.paths.size() == 2);
+    CHECK(modulated.image.config() == ImageBitmapConfig::Argb8888 && !(modulated.image == near48.image));  // (a filter a mask can't take)
+    // One color however opaque its paths are (the mask holds how much), drawn in that color
+    // opaque; a gradient in a group of its own makes it not one color.
+    ImageVector faint = ImageVector::Builder(24, 24, 24, 24).addPath({.pathData = addPathNodes("M0,0h12v12h-12z"), .fill = Brush::solid(red.copy(0.5f))}).build();
+    ImageVector mixed = ImageVector::Builder(24, 24, 24, 24)
+                            .addPath({.pathData = addPathNodes("M0,0h12v12h-12z"), .fill = Brush::solid(red)})
+                            .group({}, [](ImageVector::Builder& b) {
+                                b.addPath({.pathData = addPathNodes("M12,12h4v4z"), .fill = Brush::horizontalGradient({colors::Black, colors::White})});
+                            })
+                            .build();
+    VectorDrawing faintDrawn, mixedDrawn;
+    drawVectorAt(faintDrawn, faint, {24, 24});
+    drawVectorAt(mixedDrawn, mixed, {24, 24});
+    CHECK(faintDrawn.image.config() == ImageBitmapConfig::Alpha8 && faintDrawn.screen.maskColors.size() == 1 && faintDrawn.screen.maskColors[0] == red);
+    CHECK(mixedDrawn.image.config() == ImageBitmapConfig::Argb8888);
+    // Through the painter's filter, else its own tint (a mask still when it is SrcIn or SrcOver),
+    // else its color.
+    ImageVector tinted = ImageVector::Builder(24, 24, 24, 24, blue, BlendMode::SrcOver)
+                             .addPath({.pathData = addPathNodes("M0,0h12v12h-12z"), .fill = Brush::solid(red)})
+                             .build();
+    ImageVector multiplied = ImageVector::Builder(24, 24, 24, 24, blue, BlendMode::Modulate)
+                                 .addPath({.pathData = addPathNodes("M0,0h12v12h-12z"), .fill = Brush::solid(red)})
+                                 .build();
+    VectorDrawing own, painter, multiply;
+    drawVectorAt(own, tinted, {24, 24});
+    drawVectorAt(painter, tinted, {24, 24}, 1, ColorFilter::tint(green));
+    drawVectorAt(multiply, multiplied, {24, 24});
+    CHECK(own.image.config() == ImageBitmapConfig::Alpha8 && own.screen.maskColors.size() == 1 && own.screen.maskColors[0] == blue);
+    CHECK(painter.screen.maskColors.size() == 1 && painter.screen.maskColors[0] == green);
+    CHECK(multiply.image.config() == ImageBitmapConfig::Argb8888 && multiply.screen.imageFilters.size() == 1 &&
+          multiply.screen.imageFilters[0] == std::vector<ColorFilter>{ColorFilter::tint(blue, BlendMode::Modulate)});
+    // Mirrored right to left: about its middle.
+    auto mirrored = [&] {
         testing::RecordingCanvas c;
         rule.host().draw(c);
         Rect ok = rule.onNodeWithTag("ok").bounds();
-        for (size_t i = 0; i < c.paths.size(); ++i)
-            if (inside(c.paths[i], ok)) return c.paths[i].x - ok.x;
-        return -1.f;
+        for (const Matrix& m : c.transforms)
+            if (near(m.values[Matrix::ScaleX], -1, 0.001f) && near(m.map(Offset{ok.x, ok.y}).x, ok.right(), 0.01f)) return true;
+        return false;
     };
-    CHECK(near(squareX(), 0));
+    CHECK(!mirrored());
     rtl.set(true);
     rule.waitForIdle();
-    CHECK(near(squareX(), 12));
+    CHECK(mirrored());
 }
 
 TEST(clip_scrollable_container_clips_along_its_axis) {
@@ -24095,14 +24275,17 @@ TEST(bitmaps_are_composes) {
     CHECK(f.size() == 4 && near(f[0], 1025 / 2048.f, 1e-7f) && near(f[1], 2, 1e-6f) && near(f[3], 0.5f, 1e-7f) && argbAt(fine, 0, 0) == 0x8080FF00u);
     // Drawn into: kept while there is no renderer, drawn by one as it comes; by one there, as the canvas goes.
     struct Fake final : detail::BitmapRenderer {
-        std::vector<size_t> drawn;  // each draw's commands
+        const ImageBitmap* watched = nullptr;
+        std::vector<size_t> drawn;  // each draw's commands (into the watched one: others drawn before are waiting too)
         void draw(const ImageBitmap& b, const DisplayList& draws) override {
+            if (!(b == *watched)) return;
             drawn.push_back(draws.size());
             detail::bitmaps::store(b, std::vector<uint8_t>(size_t(b.width()) * size_t(b.height()) * 4, 255), true);
         }
         void readBack(const ImageBitmap&) override {}
     } fake;
     ImageBitmap target(3, 3);
+    fake.watched = &target;
     { graphics::Canvas c(target); c.drawRect({0, 0, 1, 1}, Paint{}); c.drawCircle({1, 1}, 1, Paint{}); }
     { graphics::Canvas c(target); }  // (drew nothing: nothing to do)
     CHECK(target.version() == 1 && argbAt(target, 0, 0) == 0);
@@ -24117,7 +24300,8 @@ TEST(bitmaps_are_composes) {
     }
     CHECK(fake.drawn.size() == 3);
     detail::setBitmapRenderer(nullptr);
-    // An Alpha8 bitmap drawn as a mask: in black from a DrawScope (as Compose's), in a canvas's paint.
+    // An Alpha8 bitmap drawn as a mask (drawImageMask): in black from a DrawScope (as Compose's),
+    // in a canvas's paint.
     ImageBitmap mask(4, 4, ImageBitmapConfig::Alpha8);
     testing::RecordingCanvas r;
     {
@@ -24127,13 +24311,20 @@ TEST(bitmaps_are_composes) {
         c.drawImage(mask, {0, 0}, Paint{.color = Color{0, 0, 1, 0.75f}});
         c.drawImage(clear, {0, 0}, Paint{});  // (an Argb8888 one as it is)
     }
-    CHECK(r.stack == "LBblLBbl" && r.images.size() == 3 && r.rects.size() == 2);
-    CHECK(r.blendStack.empty());
-    if (r.rects.size() == 2 && r.layerAlphas.size() == 2) {
-        CHECK(r.rectColors[0] == colors::Black && r.rectBlends[0] == BlendMode::SrcOver && sameRect(r.rects[0], {12, 12, 4, 4}) && near(r.layerAlphas[0], 0.5f));
-        CHECK(r.order.substr(0, 1) == "r" && r.imageBlends[0] == BlendMode::DstIn && r.imageBlends[2] == BlendMode::SrcOver);  // (the brush first; the mask over it by DstIn)
-        CHECK(r.rectColors[1] == (Color{0, 0, 1, 1}) && near(r.layerAlphas[1], 0.75f) && near(r.imageAlphas[1], 1));
-        CHECK(near(r.imageAlphas[2], 1));
+    CHECK(r.images.size() == 3 && r.maskColors.size() == 2 && r.rects.empty() && r.stack.empty());
+    if (r.maskColors.size() == 2 && r.images.size() == 3) {
+        CHECK(r.maskColors[0] == colors::Black && near(r.maskAlphas[0], 0.5f) && sameRect(r.imageDestinations[0], {12, 12, 4, 4}));
+        CHECK(r.maskColors[1] == (Color{0, 0, 1, 1}) && near(r.maskAlphas[1], 0.75f) && near(r.imageAlphas[2], 1));
+    }
+    // A backend without one of its own draws it as the default does: the brush in a layer, the
+    // mask over it by DstIn.
+    testing::RecordingCanvas byDefault;
+    byDefault.GraphicsContext::drawImageMask(mask, {0, 0, 4, 4}, {12, 12, 4, 4}, Brush::solid(Color{0, 0, 1, 1}), {12, 12, 4, 4}, 0.75f,
+                                             FilterQuality::Low);
+    CHECK(byDefault.stack == "LBbl" && byDefault.rects.size() == 1 && byDefault.images.size() == 1 && byDefault.blendStack.empty());
+    if (byDefault.rects.size() == 1 && byDefault.images.size() == 1 && byDefault.layerAlphas.size() == 1) {
+        CHECK(byDefault.rectColors[0] == (Color{0, 0, 1, 1}) && sameRect(byDefault.rects[0], {12, 12, 4, 4}) && near(byDefault.layerAlphas[0], 0.75f));
+        CHECK(byDefault.order == "r" && byDefault.imageBlends[0] == BlendMode::DstIn && near(byDefault.imageAlphas[0], 1));  // (the brush first)
     }
     // A bitmap drawn into since: a change where it is drawn, as an image and in a shader.
     testing::FakeTextMeasurer measurer;
@@ -25151,7 +25342,6 @@ TEST(shadow_default_draws_fading_rings_and_display_list_damage_reaches_the_blur)
         void strokeRoundRect(const Rect&, const CornerRadii&, float, Color) override {}
         void drawLine(Offset, Offset, float, Color) override {}
         void drawText(std::string_view, Offset, const Font&, Color, bool) override {}
-        void drawVector(const ImageVector&, const Rect&, Color) override {}
         void drawArc(const Rect&, float, float, float, Color, bool) override {}
         void drawImage(const ImageBitmap&, const Rect&, const Rect&, float, FilterQuality) override {}
         void pushLayer(const Rect&, const CornerRadii&, float, const LayerTransform&) override {}

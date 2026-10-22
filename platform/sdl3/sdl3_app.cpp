@@ -260,13 +260,6 @@ public:
         }
     }
 
-    void drawVector(const ImageVector& vector, const Rect& b, Color color) override {
-        color = filtered(color);
-        if (color.a <= 0 || b.width <= 0 || b.height <= 0) return;
-        glyphs_.resize(1);
-        if (fonts_.vectorQuad(vector, b.x * scale - ox_, b.y * scale - oy_, b.width * scale, b.height * scale, glyphs_[0])) drawGlyphs(toF(color));
-    }
-
     void pushClip(const Rect& r) override {
         // Edges go to the nearest pixel: rounding outwards let a clipped list show a pixel row of
         // what scrolled past its edge (at fractional densities).
@@ -635,13 +628,30 @@ public:
         SDL_RenderTexture(renderer_, texture, &s, &d);
     }
 
-    // A mask (an Alpha8 bitmap): its alpha sampled into each pixel of the rect (nearest with
-    // FilterQuality::None, else bilinearly), the brush's colors through it into a texture: no
-    // blend mode needed (the software renderer has none to keep a layer's pixels by).
+    // A mask (an Alpha8 bitmap). In a color: its alpha as a texture (white, kept while the bitmap
+    // stays as it is) drawn in that color, as a path's coverage is (nearest with
+    // FilterQuality::None, else bilinearly). In a gradient: its alpha sampled into each pixel of
+    // the rect the same way, the brush's colors through it into a texture: no blend mode needed
+    // (the software renderer has none to keep a layer's pixels by).
     void drawImageMask(const ImageBitmap& image, const Rect& src, const Rect& dst, const Brush& unfiltered, const Rect& area, float alpha,
                        FilterQuality quality) override {
         if (image.empty() || alpha <= 0 || dst.width <= 0 || dst.height <= 0) return;
         float dx = dst.x * scale - ox_, dy = dst.y * scale - oy_, dw = dst.width * scale, dh = dst.height * scale;
+        if (unfiltered.isSolid()) {
+            SDL_Texture* t = maskTexture(image);
+            if (!t) return;
+            Color c = filtered(unfiltered.stops().empty() ? colors::Transparent : unfiltered.stops().front().color);
+            SDL_FColor f = toF(c.copy(c.a * std::min(alpha, 1.f)));
+            float iw = float(image.width()), ih = float(image.height());
+            float u0 = src.x / iw, v0 = src.y / ih, u1 = src.right() / iw, v1 = src.bottom() / ih;
+            begin();
+            vertices_ = {{{dx, dy}, f, {u0, v0}}, {{dx + dw, dy}, f, {u1, v0}}, {{dx + dw, dy + dh}, f, {u1, v1}}, {{dx, dy + dh}, f, {u0, v1}}};
+            indices_ = {0, 1, 2, 0, 2, 3};
+            SDL_SetTextureScaleMode(t, quality == FilterQuality::None ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
+            SDL_SetTextureBlendMode(t, blend_);  // (its alpha is the coverage)
+            SDL_RenderGeometry(renderer_, t, vertices_.data(), int(vertices_.size()), indices_.data(), int(indices_.size()));
+            return;
+        }
         float X0 = std::floor(dx), Y0 = std::floor(dy);
         int W = int(std::ceil(dx + dw) - X0), H = int(std::ceil(dy + dh) - Y0);
         if (W <= 0 || H <= 0 || W > 4096 || H > 4096) return;
@@ -667,17 +677,7 @@ public:
             }
         if (alpha < 1)
             for (uint8_t& c : coverage) c = uint8_t(std::lround(c * std::clamp(alpha, 0.f, 1.f)));
-        SDL_Texture* t = nullptr;
-        if (!unfiltered.isSolid()) {  // (a gradient's colors too: through its shader)
-            t = shaderTexture(unfiltered, area, X0, Y0, W, H, coverage.data());
-        } else {
-            Color c = filtered(unfiltered.stops().empty() ? colors::Transparent : unfiltered.stops().front().color);
-            std::vector<uint8_t> rgba(size_t(W) * size_t(H) * 4);
-            auto byte = [](float v) { return uint8_t(std::lround(std::clamp(v, 0.f, 1.f) * 255)); };
-            for (size_t k = 0; k < coverage.size(); ++k)
-                rgba[k * 4] = byte(c.r), rgba[k * 4 + 1] = byte(c.g), rgba[k * 4 + 2] = byte(c.b), rgba[k * 4 + 3] = byte(c.a * coverage[k] / 255.f);
-            t = rgbaTexture(std::move(rgba), W, H);
-        }
+        SDL_Texture* t = shaderTexture(unfiltered, area, X0, Y0, W, H, coverage.data());  // (a gradient's colors too: through its shader)
         if (!t) return;
         SDL_FRect d{X0, Y0, float(W), float(H)};
         SDL_RenderTexture(renderer_, t, nullptr, &d);
@@ -1426,14 +1426,15 @@ public:
 
     // After each frame: free textures of images that are gone and layer targets not used.
     void endFrame() {
-        for (auto it = images_.begin(); it != images_.end();) {
-            if (it->second.token.expired()) {
-                SDL_DestroyTexture(it->second.texture);
-                it = images_.erase(it);
-            } else {
-                ++it;
+        for (auto* cache : {&images_, &masks_})
+            for (auto it = cache->begin(); it != cache->end();) {
+                if (it->second.token.expired()) {
+                    SDL_DestroyTexture(it->second.texture);
+                    it = cache->erase(it);
+                } else {
+                    ++it;
+                }
             }
-        }
         for (auto it = pathMasks_.begin(); it != pathMasks_.end();) {  // paths not drawn for a second
             it->second.idleFrames = it->second.used ? 0 : it->second.idleFrames + 1;
             it->second.used = false;
@@ -1487,8 +1488,10 @@ public:
     void reset() {
         for (SDL_Texture*& t : pages_)
             if (t) SDL_DestroyTexture(std::exchange(t, nullptr));
-        for (auto& [id, image] : images_) SDL_DestroyTexture(image.texture);
-        images_.clear();
+        for (auto* cache : {&images_, &masks_}) {
+            for (auto& [id, image] : *cache) SDL_DestroyTexture(image.texture);
+            cache->clear();
+        }
         for (auto& p : pool_) SDL_DestroyTexture(p.texture);
         pool_.clear();
         for (auto& [key, mask] : pathMasks_)
@@ -1720,6 +1723,26 @@ private:
         SDL_SetTextureScaleMode(t, SDL_SCALEMODE_LINEAR);
         images_.emplace(image.id(), ImageTexture{t, image.token(), version});
         return t;
+    }
+
+    // An Alpha8 bitmap's alpha as a texture: white, as opaque as it is (kept by its id, its alpha
+    // again when it is drawn into).
+    SDL_Texture* maskTexture(const ImageBitmap& image) {
+        uint64_t version = image.version();
+        auto it = masks_.find(image.id());
+        if (it != masks_.end() && it->second.version == version) return it->second.texture;
+        int w = image.width(), h = image.height();
+        const uint8_t* px = image.pixels();
+        std::vector<uint8_t> rgba(size_t(w) * size_t(h) * 4, 255);
+        for (size_t i = 3; i < rgba.size(); i += 4) rgba[i] = px[i];
+        if (it == masks_.end()) {
+            SDL_Texture* t = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, w, h);
+            if (!t) return nullptr;
+            it = masks_.emplace(image.id(), ImageTexture{t, image.token(), version}).first;
+        }
+        SDL_UpdateTexture(it->second.texture, nullptr, rgba.data(), w * 4);
+        it->second.version = version;
+        return it->second.texture;
     }
 
     // A render target at least w x h. Layers that move by fractions of a pixel vary by one in
@@ -2112,6 +2135,7 @@ private:
     std::vector<ColorFilter> filters_;  // pushColorFilter's, innermost last
     SDL_BlendMode blend_ = SDL_BLENDMODE_BLEND;
     std::unordered_map<uint64_t, ImageTexture> images_;
+    std::unordered_map<uint64_t, ImageTexture> masks_;  // Alpha8 bitmaps' alpha (maskTexture)
     std::vector<PooledTexture> pool_;
     struct GradientMesh {
         Brush brush;

@@ -906,9 +906,6 @@ Size DrawScope::measureText(std::string_view text, Font font) const {
     return {measurer_->measureWidth(text, font), measurer_->metrics(font).lineHeight};
 }
 
-void DrawScope::drawVector(const ImageVector& vector, Color color, Offset topLeft, std::optional<Size> size) {
-    detail::drawImageVector(*context_, vector, local(topLeft, size), color);
-}
 
 void DrawScope::translate(float left, float top, const std::function<void(DrawScope&)>& block) {
     context_->pushTranslation({left, top});  // the content too (drawContent() inside it)
@@ -1038,7 +1035,6 @@ public:
     void strokeRoundRect(const Rect&, const CornerRadii&, float, Color) override {}
     void drawLine(Offset, Offset, float, Color) override {}
     void drawText(std::string_view, Offset, const Font&, Color, bool) override {}
-    void drawVector(const ImageVector&, const Rect&, Color) override {}
     void drawArc(const Rect&, float, float, float, Color, bool) override {}
     void drawImage(const ImageBitmap&, const Rect&, const Rect&, float, FilterQuality) override {}
     void drawImageMask(const ImageBitmap&, const Rect&, const Rect&, const Brush&, const Rect&, float, FilterQuality) override {}
@@ -1310,20 +1306,23 @@ void Painter::draw(GraphicsContext& canvas, const Rect& b, float alpha, const st
     if (!data_ || alpha <= 0 || b.width <= 0 || b.height <= 0) return;
     const Data& d = *data_;
     using Kind = Data::Kind;
+    LayoutDirection direction = rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr;
+    if (d.kind == Kind::Vector) {  // (the filter its own way: before its tint)
+        DrawScope scope(canvas, b, nullptr, density, direction);
+        return detail::drawVector(scope, d.vector, alpha, colorFilter);
+    }
     detail::Filtering filtering(canvas, colorFilter);  // what it draws, through the filter
     switch (d.kind) {
     case Kind::Bitmap:
         if (!d.bitmap.empty()) canvas.drawImage(d.bitmap, {0, 0, float(d.bitmap.width()), float(d.bitmap.height())}, b, alpha);
         break;
-    case Kind::Vector:  // in its own paints (a one-color one black, as Compose's icons are)
-        if (!d.vector.empty()) detail::drawImageVector(canvas, d.vector.autoMirror() && rtl ? d.vector.mirrored() : d.vector, b, std::nullopt, alpha);
-        break;
+    case Kind::Vector: break;
     case Kind::Fill: canvas.fillRoundRect(b, CornerRadii(), d.color.copy(d.color.a * alpha)); break;
     case Kind::Gradient:
     case Kind::Custom: {
         bool layer = alpha < 1;
         if (layer) canvas.pushLayer(b, CornerRadii(), alpha);
-        DrawScope scope(canvas, b, nullptr, density, rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr);
+        DrawScope scope(canvas, b, nullptr, density, direction);
         if (d.kind == Kind::Gradient) scope.drawRect(*d.brush);
         else if (d.onDraw) d.onDraw(scope);
         if (layer) canvas.popLayer();

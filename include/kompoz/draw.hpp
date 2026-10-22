@@ -297,8 +297,6 @@ public:
     // One line in one font at topLeft (its top), and how big it is (Kompoz's own: quick labels).
     void drawText(std::string_view text, Offset topLeft, Font font = {}, Color color = colors::Black);
     Size measureText(std::string_view text, Font font = {}) const;
-    // A vector filled in `color` (one in paints of its own in them), in a rect.
-    void drawVector(const ImageVector& vector, Color color, Offset topLeft = {}, std::optional<Size> size = {});
     // Records `block` into `layer` instead of drawing it here (Compose's GraphicsLayer.record):
     // what it draws — a ContentDrawScope's drawContent() too — from this scope's top left, in a
     // size of its own or this scope's. drawLayer() draws the recording, as often as wanted.

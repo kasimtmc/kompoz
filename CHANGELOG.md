@@ -119,6 +119,16 @@
 - **`Paint.isAntiAlias = false`**: drawing not anti-aliased, as Skia decides each pixel (its middle inside the shape;
   a hairline a pixel each step), on the GPU renderer exactly and on SDL_Renderer by its own rasterizers. **Fixed**: a
   `DrawScope` line with butt ends (the default) was drawn half its width longer at each end, as square ones are.
+- **Vectors as Compose's**: `ImageVector` is Compose's model, a tree of `VectorGroup`s and `VectorPath`s with names,
+  `tintColor`/`tintBlendMode`, equal by value; path data as `PathNode`s (`addPathNodes`, `PathParser`, `PathBuilder`,
+  `PathData`, `toPath`), read and drawn as Compose's parser does (arcs in eighths of a turn). A painter draws a vector
+  into a bitmap its size in pixels and that 1:1, as Compose's `VectorPainter`: an Alpha8 mask for one in one color,
+  through its filter, else its tint, else that color; `Icon(imageVector)` is `Icon(rememberVectorPainter(…))` (its
+  default size), Material icons are named and the auto-mirrored ones vectors of their own. The GPU renderer draws a mask
+  without a layer and keeps Alpha8 bitmaps as textures. Changed as Compose has them: a path's trim measures its first
+  contour, a vector drawable's `strokeWidth` is 1 unset, its `tint`/`tintMode` are read, gradients are in their path's
+  units. Removed (Compose has none): `DrawScope::drawVector`, `GraphicsContext::drawVector`, `ImageVector::mirrored`/
+  `autoMirrored`/`paths`/`commands`, `VectorPath::parse`, `Brush::scaled`.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

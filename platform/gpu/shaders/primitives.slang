@@ -13,7 +13,7 @@ static const int STROKE = 1;       // its outline inside it, params.x wide
 static const int LINE = 2;         // from shape.xy to shape.zw, params.x wide, square caps
 static const int ARC = 3;          // center shape.xy, radius shape.z, params.x wide; from params.y, params.z radians; params.w: round caps
 static const int SHADOW = 4;       // a rounded rect's blurred shadow: params.x sigma; params.y: inner (bounds: the rect it is in, uv its radii)
-static const int GLYPH = 5;        // the atlas's texels at uv; params.x: a color glyph (drawn as it is, at the color's alpha)
+static const int GLYPH = 5;        // the atlas's (or a mask's) texels at uv; params.x: a color glyph (drawn as it is, at the color's alpha); params.y: cubic
 static const int IMAGE = 6;        // an image's texels at uv, at alpha params.x
                                    // (both: uv spans `shape`; with flags & 2 the quad reaches past it, its edges
                                    // anti-aliased, the texels sampled no further than params.zw inside uv's)
@@ -606,7 +606,8 @@ float4 fs(Varyings v) : SV_Target {
         // Inner: inside the rect (bounds, its radii in uv), where the blurred hole isn't.
         cover = v.params.y > 0.5 ? (1 - blurred) * roundRectCoverage(v.local, v.bounds, v.uv, dx, dy) : blurred;
     } else if (kind == GLYPH) {
-        float4 texel = texture0.Sample(texcoord);
+        // (A mask's texels: a cubic of the sixteen nearest, each at its center, as an image's.)
+        float4 texel = v.params.y > 0.5 ? cubicSample(texcoord, 0.5 / v.params.zw) : texture0.Sample(texcoord);
         bool colored = v.params.x > 0.5;  // an emoji: as it is, at the color's alpha
         src = colored ? float4(texel.rgb * texel.a, texel.a) * v.color.a : paint;
         cover = (colored ? 1 : texel.a) * edge;

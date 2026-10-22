@@ -2,7 +2,7 @@
 
 // Kompoz's GPU renderer: GraphicsContext drawn with the hardware layer (device.hpp) on any of its
 // backends. Every primitive is a quad whose pixels the fragment shader covers exactly from the
-// shape's distance (shaders/primitives.slang); text and ImageVectors come from the glyph atlas.
+// shape's distance (shaders/primitives.slang); text comes from the glyph atlas.
 //
 // Drawing is recorded, then submitted by flush(): each target (the kept frame, the swapchain
 // image, a layer's texture) gets a pass of batched quads, and a layer's pass runs before the one
@@ -67,9 +67,10 @@ public:
     void drawTextBrush(std::string_view utf8, Offset baseline, const Font& font, const Brush& brush, const Rect& brushArea,
                        bool rtl) override;
     void drawTextShadow(std::string_view utf8, Offset baseline, const Font& font, Color color, float blurRadius, bool rtl) override;
-    void drawVector(const ImageVector& vector, const Rect& bounds, Color color) override;
     void drawArc(const Rect& oval, float startDegrees, float sweepDegrees, float strokeWidth, Color color, bool roundCap) override;
     void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha, FilterQuality quality = DefaultFilterQuality) override;
+    void drawImageMask(const ImageBitmap& image, const Rect& src, const Rect& dst, const Brush& brush, const Rect& brushArea, float alpha,
+                       FilterQuality quality) override;
     void pushLayer(const Rect& bounds, const CornerRadii& radii, float alpha, const LayerTransform& transform = {}) override;
     void popLayer() override;
     void pushClip(const Rect& rect) override;

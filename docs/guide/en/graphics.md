@@ -30,7 +30,7 @@ The draw lambda runs while drawing, not while composing. Read the colors you nee
 | `drawPath(path, color, alpha, style)` | Any path. |
 | `drawText(layout, color, topLeft)`, `drawText(measurer, text, topLeft, style)` | Text (see [Text](text.md#measuring-text)). |
 | `drawImage(image, topLeft)`, `drawImage(image, srcOffset, srcSize, dstOffset, dstSize, …, filterQuality)` | A bitmap, or part of it into a rect, sampled as `FilterQuality` says. |
-| `drawVector(vector, color, topLeft, size)` | An `ImageVector`, tinted. |
+| `painter.draw(d, size, alpha, colorFilter)` | A `Painter` (an `ImageVector`'s: `VectorPainter(vector)`), as Compose's `with(painter) { draw(…) }`. |
 
 They take Compose's parameters, in Compose's order: a color or a brush, then `alpha`, `style`, `colorFilter` and `blendMode` (`d.drawRect(color, {}, size, 0.5f, Stroke(2))`). `DrawStyle` is `Fill` (the default) or `Stroke(width, miter, cap, join, pathEffect)`; a width of 0 is a hairline, one pixel wide whatever the transform. Coordinates are in dp from the canvas's top-left corner; `d.size()` and `d.center()` give its size and center, `d.density()` the pixels in a dp.
 
@@ -272,13 +272,27 @@ const ImageVector& sparkle() {
     return v;
 }
 
+// Paths in paints of their own, in groups, as Compose's ImageVector.Builder makes them.
+const ImageVector& badge() {
+    static const ImageVector v =
+        ImageVector::Builder("Badge", 24, 24, 24, 24)
+            .addPath({.pathData = addPathNodes("M12,2a10,10 0 1,0 0.01,0z"), .fill = Brush::solid(Color::hex(0x1E88E5))})
+            .group({.rotation = -10, .pivotX = 12, .pivotY = 12}, [](ImageVector::Builder& b) {
+                b.path({.stroke = Brush::solid(colors::White), .strokeLineWidth = 2, .strokeLineCap = StrokeCap::Round},
+                       [](PathBuilder& p) { p.moveTo(7, 12).lineTo(10.5f, 15.5f).lineTo(17, 9); });
+            })
+            .build();
+    return v;
+}
+
 void Sparkle() {
     Icon(sparkle(), "");
+    Image(rememberVectorPainter(badge()), "Badge");
     Image(rememberVectorPainter(vectorResource("vectors/logo.xml")), "Logo", Modifier().size(48));
 }
 ```
 
-`vectorResource` reads groups, paths, gradients and clip paths from an Android `<vector>` file, in its own colors when drawn with `Image`, or tinted with `Icon`.
+`vectorResource` reads groups, paths, gradients and clip paths from an Android `<vector>` file. A vector is drawn as Compose draws it: into a bitmap of its size in pixels, kept, and that drawn; in its own colors with `Image`, tinted with `Icon` (one all in one color as an Alpha8 mask).
 
 ## See also
 

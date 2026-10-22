@@ -696,7 +696,8 @@ void Renderer::drawIntoBitmap(const ImageBitmap& bitmap, const DisplayList& draw
     if (bitmap.empty()) return;
     int w = bitmap.width(), h = bitmap.height();
     bool f16 = bitmap.config() == ImageBitmapConfig::F16;
-    bool kept = bitmap.hasAlpha() && (bitmap.config() == ImageBitmapConfig::Argb8888 || bitmap.config() == ImageBitmapConfig::Gpu || f16);
+    bool alpha8 = bitmap.config() == ImageBitmapConfig::Alpha8;
+    bool kept = bitmap.hasAlpha() && (bitmap.config() == ImageBitmapConfig::Argb8888 || bitmap.config() == ImageBitmapConfig::Gpu || f16 || alpha8);
     Texture* before = imageTexture(bitmap);
     auto fresh = device_.createTexture(w, h, f16 ? Format::RGBA16F : Format::RGBA8, uint8_t(TextureUsage::Sampled | TextureUsage::RenderTarget));
     if (!before || !fresh) return;
@@ -705,6 +706,11 @@ void Renderer::drawIntoBitmap(const ImageBitmap& bitmap, const DisplayList& draw
     beginTarget(*fresh, ClearColor{});
     blit(*before);
     draws.replay(*this);
+    if (alpha8) {  // its alpha alone (black, as an Alpha8 one reads back and is sampled)
+        pushBlendMode(BlendMode::SrcIn);
+        fillRoundRect({0, 0, float(w), float(h)}, CornerRadii(), colors::Black);
+        popBlendMode();
+    }
     endTarget();
     scale = s0;
     if (kept) {
@@ -1097,13 +1103,6 @@ void Renderer::drawTextShadow(std::string_view text, Offset baseline, const Font
     glyphs(painted(Brush::solid(color), {}), k);
 }
 
-void Renderer::drawVector(const ImageVector& vector, const Rect& b, Color color) {
-    if (color.a <= 0 || b.width <= 0 || b.height <= 0) return;
-    float x = b.x * scale - ox_, y = b.y * scale - oy_, k = rasterScale(x + b.width * scale / 2, y + b.height * scale / 2);
-    glyphs_.resize(1);
-    if (text_.vectorQuad(vector, x * k, y * k, b.width * scale * k, b.height * scale * k, glyphs_[0])) glyphs(painted(Brush::solid(color), {}), k);
-}
-
 void Renderer::drawArc(const Rect& oval, float start, float sweep, float width, Color color, bool roundCap) {
     if (color.a <= 0 || width <= 0 || sweep == 0) return;
     float cx = (oval.x + oval.width / 2) * scale - ox_, cy = (oval.y + oval.height / 2) * scale - oy_;
@@ -1134,6 +1133,26 @@ void Renderer::drawImage(const ImageBitmap& image, const Rect& src, const Rect& 
     Sampler sampler{quality == FilterQuality::None || cubic ? Filter::Nearest : Filter::Linear};
     sampler.mipmaps = quality == FilterQuality::Medium;
     add(IMAGE, p, t, false, Mask::None, nullptr, false, sampler);
+}
+
+// An Alpha8 bitmap as a mask (as Android draws one): the brush, covering each pixel as much as
+// the bitmap's alpha there says, sampled as drawImage samples (a glyph's quad, its texture the
+// bitmap's).
+void Renderer::drawImageMask(const ImageBitmap& image, const Rect& src, const Rect& dst, const Brush& brush, const Rect& brushArea, float alpha,
+                             FilterQuality quality) {
+    Texture* t = imageTexture(image, quality == FilterQuality::Medium);
+    if (!t || alpha <= 0) return;
+    float x = dst.x * scale - ox_, y = dst.y * scale - oy_;
+    Prim p = painted(brush, brushArea, alpha);
+    set(p.bounds, x, y, x + dst.width * scale, y + dst.height * scale);
+    std::copy(std::begin(p.bounds), std::end(p.bounds), p.shape);
+    float iw = float(image.width()), ih = float(image.height());
+    set(p.uv, src.x / iw, src.y / ih, src.right() / iw, src.bottom() / ih);
+    bool cubic = quality == FilterQuality::High;
+    set(p.params, 0, cubic ? 1.f : 0.f, 0.5f / iw, 0.5f / ih);
+    Sampler sampler{quality == FilterQuality::None || cubic ? Filter::Nearest : Filter::Linear};
+    sampler.mipmaps = quality == FilterQuality::Medium;
+    add(GLYPH, p, t, false, Mask::None, nullptr, false, sampler);
 }
 
 void Renderer::drawShadow(const Rect& rect, const CornerRadii& radii, const Shadow& shadow, bool inner) {

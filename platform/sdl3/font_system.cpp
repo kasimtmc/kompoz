@@ -244,19 +244,6 @@ struct FontSystem::Impl {
         }
     }
 
-    // `v` filled into the px rect (x, y, w, h): the path is rasterized once per size by
-    // FreeType's anti-aliasing outline rasterizer and cached in the glyph atlas.
-    bool vectorQuad(const ImageVector& v, float x, float y, float w, float h, gpu::GlyphQuad& out) {
-        int wpx = std::clamp(int(std::lround(w)), 1, 1024), hpx = std::clamp(int(std::lround(h)), 1, 1024);
-        uint64_t key = (v.id() << 24) | (uint64_t(wpx) << 12) | uint64_t(hpx);
-        Glyph g = vectorGlyph(v, wpx, hpx, key);
-        if (g.width <= 0) return false;
-        float x0 = std::round(x), y0 = std::round(y);
-        atlas.use(g.page);
-        out = {x0, y0, x0 + float(g.width), y0 + float(g.height), g.page, g.x, g.y, g.width, g.height, false};
-        return true;
-    }
-
     struct SdlFree {
         void operator()(unsigned char* p) const { SDL_free(p); }
     };
@@ -900,32 +887,6 @@ struct FontSystem::Impl {
         return out;
     }
 
-    Glyph vectorGlyph(const ImageVector& v, int w, int h, uint64_t key) {
-        if (auto it = vectors_.find(key); it != vectors_.end() && fresh(it->second)) return it->second;
-        using Tag = std::remove_pointer_t<decltype(FT_Outline::tags)>;
-        using ContourEnd = std::remove_pointer_t<decltype(FT_Outline::contours)>;
-        float sx = float(w) / v.viewportWidth(), sy = float(h) / v.viewportHeight(), vh = v.viewportHeight();
-        auto pt = [&](float px, float py) {  // FreeType: 26.6 fixed point, y up
-            return FT_Vector{FT_Pos(std::lround(px * sx * 64)), FT_Pos(std::lround((vh - py) * sy * 64))};
-        };
-        std::vector<FT_Vector> points;
-        std::vector<Tag> tags;
-        std::vector<ContourEnd> contours;
-        FT_Outline outline{};
-        Glyph g;
-        if (fillOutline(v.commands(), false, pt, points, tags, contours, outline)) {
-            std::vector<unsigned char> gray;
-            FT_Bitmap bitmap = grayCanvas(gray, w, h);
-            if (FT_Outline_Get_Bitmap(library_, &outline, &bitmap) == 0) {
-                g.width = w;
-                g.height = h;
-                upload(bitmap, g);
-            }
-        }
-        vectors_.insert_or_assign(key, g);
-        return g;
-    }
-
     void upload(const FT_Bitmap& bitmap, Glyph& g) {
         std::vector<uint8_t> rgba(size_t(g.width) * size_t(g.height) * 4);
         for (int row = 0; row < g.height; ++row) {
@@ -966,7 +927,6 @@ struct FontSystem::Impl {
     std::unordered_map<Face*, hb_font_t*> hbFonts_;
     hb_buffer_t* buffer_ = nullptr;
 #endif
-    std::unordered_map<uint64_t, Glyph> vectors_;  // rasterized ImageVectors by id and size
     std::unordered_map<uint64_t, FontMetrics> metrics_;
 };
 
@@ -983,9 +943,6 @@ float FontSystem::fontScale() const { return impl_->fontScale(); }
 void FontSystem::layout(std::string_view text, float xPx, float baselinePx, const Font& font, bool rtl, std::vector<gpu::GlyphQuad>& out,
                         bool shadow, int blurPx, float scale) {
     impl_->layout(text, xPx, baselinePx, font, rtl, out, shadow, blurPx, scale);
-}
-bool FontSystem::vectorQuad(const ImageVector& vector, float x, float y, float w, float h, gpu::GlyphQuad& out) {
-    return impl_->vectorQuad(vector, x, y, w, h, out);
 }
 gpu::GlyphAtlas& FontSystem::atlas() { return impl_->atlas; }
 void FontSystem::endFrame() { impl_->atlas.endFrame(); }

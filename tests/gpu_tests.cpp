@@ -2406,29 +2406,33 @@ void meshesDrawAsSkiaDoes(Gpu& g) {
     }
 }
 
+// What draws into bitmaps here (as the app's AppBitmaps does): the renderer, in a frame of its
+// own unless one is going on (`inFrame`).
+struct BitmapHook final : detail::BitmapRenderer {
+    Gpu& g;
+    bool inFrame = false;
+    explicit BitmapHook(Gpu& gpu) : g(gpu) {}
+    void draw(const ImageBitmap& b, const DisplayList& draws) override {
+        if (!inFrame) g.device->beginFrame();
+        g.renderer->drawIntoBitmap(b, draws);
+        if (!inFrame) g.renderer->flush(), g.device->endFrame(false);
+    }
+    void readBack(const ImageBitmap& b) override {
+        if (!inFrame) g.device->beginFrame();
+        g.renderer->readBackBitmap(b);
+        if (!inFrame) g.device->endFrame(false);
+    }
+    TextMeasurer* measurer() override { return g.fonts.get(); }
+};
+
 // Bitmaps drawn into (Canvas(ImageBitmap)) by the renderer, as Android draws into them: what is
 // read back is what the same drawing makes on a target of its own; an Argb8888 one kept as the
 // renderer's texture (read back when asked for), drawn into again over what it holds, drawn on
 // the screen before and after in one frame (each time as it was); F16 finer than 8 bits; Alpha8
-// its alpha alone, and drawn in a paint's color; Rgb565 and one without alpha over black,
-// opaque, Rgb565 in 5, 6 and 5 bits.
+// its alpha alone (kept as a texture too), and drawn in a paint's color; Rgb565 and one without
+// alpha over black, opaque, Rgb565 in 5, 6 and 5 bits.
 void bitmapsAreDrawnIntoAsAndroidDoes(Gpu& g) {
-    struct Hook final : detail::BitmapRenderer {
-        Gpu& g;
-        bool inFrame = false;
-        explicit Hook(Gpu& gpu) : g(gpu) {}
-        void draw(const ImageBitmap& b, const DisplayList& draws) override {
-            if (!inFrame) g.device->beginFrame();
-            g.renderer->drawIntoBitmap(b, draws);
-            if (!inFrame) g.renderer->flush(), g.device->endFrame(false);
-        }
-        void readBack(const ImageBitmap& b) override {
-            if (!inFrame) g.device->beginFrame();
-            g.renderer->readBackBitmap(b);
-            if (!inFrame) g.device->endFrame(false);
-        }
-        TextMeasurer* measurer() override { return g.fonts.get(); }
-    } hook(g);
+    BitmapHook hook(g);
     detail::setBitmapRenderer(&hook);
     const int n = 48;
     g.fonts->setScale(1);
@@ -2489,8 +2493,21 @@ void bitmapsAreDrawnIntoAsAndroidDoes(Gpu& g) {
     // Alpha8: its alpha alone; drawn in a paint's color.
     ImageBitmap mask(n, n, ImageBitmapConfig::Alpha8);
     { graphics::Canvas c(mask); scene(c); }
-    CHECK(detail::bitmaps::pixelsCurrent(mask));
+    CHECK(!detail::bitmaps::pixelsCurrent(mask));  // (kept as the renderer's texture too, black)
     compare("drawn into an Alpha8 bitmap", mask, [&](int x, int y) { return std::array<int, 4>{0, 0, 0, straight(x, y)[3]}; }, 1);
+    {  // its texture black too (what is sampled of it as an image), drawn into again
+        ImageBitmap again(n, n, ImageBitmapConfig::Alpha8);
+        { graphics::Canvas c(again); scene(c); }
+        Pixels raw = g.render(n, n, 1, [&](GraphicsContext& ctx) { ctx.drawImage(again, {0, 0, float(n), float(n)}, {0, 0, float(n), float(n)}, 1); });
+        int worst = worstAgainst(raw, [&](int x, int y) {
+            static uint8_t want[4];
+            uint8_t v = uint8_t(std::lround((1 - float(straight(x, y)[3]) / 255) * 255));  // black, as opaque as it is, over white
+            want[0] = want[1] = want[2] = v, want[3] = 255;
+            return want;
+        });
+        CHECK(worst <= 2);
+        if (worst > 2) std::printf("  an Alpha8 bitmap's texture: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+    }
     Pixels masked = g.render(n, n, 1, [&](GraphicsContext& ctx) { graphics::Canvas c(ctx); c.drawImage(mask, {0, 0}, Paint{.color = Color{0.1f, 0.5f, 0.2f, 1}}); });
     {
         int worst = worstAgainst(masked, [&](int x, int y) {
@@ -2532,6 +2549,89 @@ void bitmapsAreDrawnIntoAsAndroidDoes(Gpu& g) {
     ImageBitmap opaque(n, n, ImageBitmapConfig::Argb8888, false);
     { graphics::Canvas c(opaque); scene(c); }
     compare("drawn into an opaque Argb8888 bitmap", opaque, [&](int x, int y) { return overBlack(x, y, 0); }, 1);
+    detail::setBitmapRenderer(nullptr);
+    g.device->beginFrame();
+    g.renderer->endFrame();
+    g.device->endFrame(false);
+}
+
+// Vectors as Compose's VectorPainter draws them: into a bitmap their size in pixels (kept), drawn
+// 1:1. One in one color as an Alpha8 mask, in a translucent tint: each pixel as the paths drawn
+// straight in the tint make it (as opaque as the tint and the coverage, not the tint twice); one
+// in its own colors at 2 px a dp, its gradient, its turned group and its clip where they go;
+// mirrored right to left. A mask drawn sampled as an image is (nearest, bilinearly, a cubic).
+void vectorsDrawAsCompose(Gpu& g) {
+    BitmapHook hook(g);
+    detail::setBitmapRenderer(&hook);
+    const float density = 2;
+    const int n = 48;  // 24 dp
+    // Rendered with what is drawn into bitmaps meanwhile in its frame (as the app's frame draws a vector).
+    auto render = [&](const std::function<void(GraphicsContext&)>& draw) {
+        return g.render(n, n, density, [&](GraphicsContext& c) {
+            hook.inFrame = true;
+            draw(c);
+            hook.inFrame = false;
+        });
+    };
+    // One color (an even-odd ring, a square at half its alpha), tinted.
+    std::vector<PathNode> ringData = addPathNodes("M12,2a10,10 0 1,0 0.001,0zM12,6a6,6 0 1,0 0.001,0z"), dotData = addPathNodes("M10,10h4v4h-4z");
+    ImageVector ring = ImageVector::Builder(24, 24, 24, 24)
+                           .addPath({.pathData = ringData, .pathFillType = Path::FillType::EvenOdd, .fill = Brush::solid(colors::Black)})
+                           .addPath({.pathData = dotData, .fill = Brush::solid(colors::Black), .fillAlpha = 0.5f})
+                           .build();
+    const Color tint{0.1f, 0.4f, 0.9f, 0.5f};
+    Pixels viaVector = render([&](GraphicsContext& c) { VectorPainter(ring).draw(c, {0, 0, 24, 24}, 1, ColorFilter::tint(tint), false, {density}); });
+    Pixels direct = render([&](GraphicsContext& c) {
+        DrawScope s(c, {0, 0, 24, 24}, nullptr, {density});
+        Path ringPath = toPath(ringData);
+        ringPath.fillType = Path::FillType::EvenOdd;
+        s.drawPath(ringPath, tint);
+        s.drawPath(toPath(dotData), tint, 0.5f);
+    });
+    {
+        int worst = worstAgainst(viaVector, [&](int x, int y) { return direct.at(x, y); });
+        CHECK(worst <= 2 && near(viaVector.at(24, 24), int(std::lround((0.1f * 0.25f + 0.75f) * 255)), int(std::lround((0.4f * 0.25f + 0.75f) * 255)),
+                                 int(std::lround((0.9f * 0.25f + 0.75f) * 255))));
+        if (worst > 2) std::printf("  a one-color vector tinted: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+    }
+    // Its own colors at 2 px a dp: a gradient across its top half; a bar turned a quarter about
+    // the middle (from across its lower half to down its left), clipped to its lower half.
+    const Color red{0.9f, 0.1f, 0.1f, 1}, blue{0.1f, 0.2f, 0.9f, 1}, green{0.1f, 0.7f, 0.2f, 1};
+    ImageVector scene = ImageVector::Builder(24, 24, 24, 24)
+                            .addPath({.pathData = addPathNodes("M0,0h24v12h-24z"), .fill = Brush::horizontalGradient({red, blue}, 0, 24)})
+                            .group({.rotation = 90, .pivotX = 12, .pivotY = 12, .clipPathData = addPathNodes("M12,0h12v24h-12z")},
+                                   [&](ImageVector::Builder& b) { b.addPath({.pathData = addPathNodes("M2,16h20v4h-20z"), .fill = Brush::solid(green)}); })
+                            .build();
+    Pixels drawn = render([&](GraphicsContext& c) { VectorPainter(scene).draw(c, {0, 0, 24, 24}, 1, std::nullopt, false, {density}); });
+    auto byte = [](float v) { return int(std::lround(v * 255)); };
+    Color across = lerp(red, blue, 6.25f / 24);  // (at the pixel's middle, 6.25 dp in)
+    CHECK(near(drawn.at(12, 12), byte(across.r), byte(across.g), byte(across.b)));     // the gradient (the bar clipped away above the middle)
+    CHECK(near(drawn.at(12, 36), byte(green.r), byte(green.g), byte(green.b)));         // the bar, down the left of the lower half
+    CHECK(near(drawn.at(12, 46), 255, 255, 255) && near(drawn.at(32, 36), 255, 255, 255));  // (it ends 2 dp up; nothing right of it)
+    // Mirrored right to left: a band at its left drawn at the right.
+    ImageVector band = ImageVector::Builder(24, 24, 24, 24, std::nullopt, BlendMode::SrcIn, true)
+                           .addPath({.pathData = addPathNodes("M0,0h8v24h-8z"), .fill = Brush::solid(colors::Black)})
+                           .build();
+    Pixels ltr = render([&](GraphicsContext& c) { VectorPainter(band).draw(c, {0, 0, 24, 24}, 1, std::nullopt, false, {density}); });
+    Pixels rtl = render([&](GraphicsContext& c) { VectorPainter(band).draw(c, {0, 0, 24, 24}, 1, std::nullopt, true, {density}); });
+    CHECK(near(ltr.at(4, 24), 0, 0, 0) && near(ltr.at(44, 24), 255, 255, 255) && near(rtl.at(4, 24), 255, 255, 255) && near(rtl.at(44, 24), 0, 0, 0));
+    // A mask sampled as an image of its alpha is, each way.
+    const int m = 4;
+    ImageBitmap alpha8(m, m, ImageBitmapConfig::Alpha8), argb(m, m);
+    for (ImageBitmap* b : {&alpha8, &argb}) {
+        graphics::Canvas c(*b);
+        for (int y = 0; y < m; ++y)
+            for (int x = 0; x < m; ++x)
+                c.drawRect({float(x), float(y), float(x + 1), float(y + 1)}, Paint{.color = colors::Black.copy(float((x * 5 + y * 3) % 8) / 7)});
+    }
+    for (FilterQuality q : {FilterQuality::None, FilterQuality::Low, FilterQuality::High}) {
+        Rect src{0, 0, float(m), float(m)}, dst{0, 0, 24, 24};
+        Pixels masked = render([&](GraphicsContext& c) { c.drawImageMask(alpha8, src, dst, Brush::solid(colors::Black), dst, 0.6f, q); });
+        Pixels image = render([&](GraphicsContext& c) { c.drawImage(argb, src, dst, 0.6f, q); });  // (faded alike)
+        int worst = worstAgainst(masked, [&](int x, int y) { return image.at(x, y); });
+        CHECK(worst <= 1);
+        if (worst > 1) std::printf("  a mask sampled with quality %d: off by %d at (%g, %g)\n", int(q), worst, worstAt.x, worstAt.y);
+    }
     detail::setBitmapRenderer(nullptr);
     g.device->beginFrame();
     g.renderer->endFrame();
@@ -3051,6 +3151,7 @@ int main() {
             shadersPaintAsTheyAre(g);
             meshesDrawAsSkiaDoes(g);
             bitmapsAreDrawnIntoAsAndroidDoes(g);
+            vectorsDrawAsCompose(g);
             aliasedDrawingIsSkias(g);
             elevationShadowsAreAndroids(g);
             scenesMatchTheirPictures(g);

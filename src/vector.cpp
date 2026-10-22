@@ -1,4 +1,6 @@
 #include <kompoz/animation.hpp>
+#include <kompoz/display_list.hpp>
+#include <kompoz/draw.hpp>
 #include <kompoz/graphics.hpp>
 
 #include <algorithm>
@@ -11,250 +13,324 @@
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <numbers>
 #include <string>
+#include <unordered_map>
 
 namespace kompoz {
 
-struct ImageVector::Data {
-    std::vector<PathCommand> commands;  // a Builder's: its filled paths' together (drawn tinted)
-    std::vector<VectorPath> paths;      // a Builder's
-    float viewportWidth = 24, viewportHeight = 24, defaultWidth = 24, defaultHeight = 24;
-    uint64_t id = 0;
-    bool autoMirror = false;
-    std::shared_ptr<const Data> base;  // an autoMirrored() one: the vector it was made from (its mirror is shared)
-    mutable std::once_flag mirrorOnce;
-    mutable std::shared_ptr<const Data> mirror;  // mirrored(), made the first time it is asked for
-};
+// --- Path data ---------------------------------------------------------------------------------
 
-namespace {
-std::atomic<uint64_t> gNextVectorId{1};
+bool PathNode::isCurve() const {
+    return kind == Kind::RelativeCurveTo || kind == Kind::CurveTo || kind == Kind::RelativeReflectiveCurveTo || kind == Kind::ReflectiveCurveTo;
+}
+bool PathNode::isQuad() const {
+    return kind == Kind::RelativeQuadTo || kind == Kind::QuadTo || kind == Kind::RelativeReflectiveQuadTo || kind == Kind::ReflectiveQuadTo;
 }
 
 namespace {
 
-// Splits SVG path data into command letters and numbers ("1.41-1.41" is two numbers,
-// so is "0.5.5").
-class PathTokenizer {
-public:
-    explicit PathTokenizer(std::string_view s) : s_(s) {}
+bool digit(char c) { return c >= '0' && c <= '9'; }
 
-    void skipSeparators() {
-        while (i_ < s_.size() && (std::isspace(static_cast<unsigned char>(s_[i_])) || s_[i_] == ',')) ++i_;
+// The number at `start` (Compose's nextFloat: an optional sign, digits with a point among or
+// before them, an exponent) and where it stops; NaN, and where it gave up, if there is none.
+std::pair<size_t, float> nextFloat(std::string_view s, size_t start, size_t end) {
+    size_t i = start;
+    if (i != end && (s[i] == '-' || s[i] == '+')) ++i;
+    int digits = 0;
+    while (i != end && digit(s[i])) ++i, ++digits;
+    if (i != end && s[i] == '.') {
+        ++i;
+        while (i != end && digit(s[i])) ++i, ++digits;
     }
-    bool atEnd() {
-        skipSeparators();
-        return i_ >= s_.size();
+    if (digits == 0) return {i, std::numeric_limits<float>::quiet_NaN()};
+    if (i != end && (s[i] | 0x20) == 'e') {
+        size_t e = i + 1;
+        if (e != end && (s[e] == '-' || s[e] == '+')) ++e;
+        if (e != end && digit(s[e])) {
+            while (e != end && digit(s[e])) ++e;
+            i = e;
+        }
     }
-    bool atCommand() {
-        skipSeparators();
-        return i_ < s_.size() && std::isalpha(static_cast<unsigned char>(s_[i_])) && s_[i_] != 'e' && s_[i_] != 'E';
-    }
-    char command() { return s_[i_++]; }
-    // An arc's flag: a single 0 or 1 (flags may run together, "a1 1 0 01.5.5").
-    bool flag(bool& out) {
-        skipSeparators();
-        if (i_ >= s_.size() || (s_[i_] != '0' && s_[i_] != '1')) return false;
-        out = s_[i_++] == '1';
-        return true;
-    }
+    return {i, std::strtof(std::string(s.substr(start, i - start)).c_str(), nullptr)};
+}
 
-    bool number(float& out) {
-        skipSeparators();
-        size_t start = i_;
-        if (i_ < s_.size() && (s_[i_] == '-' || s_[i_] == '+')) ++i_;
-        bool digits = false, dot = false;
-        while (i_ < s_.size()) {
-            char c = s_[i_];
-            if (std::isdigit(static_cast<unsigned char>(c))) {
-                digits = true;
-            } else if (c == '.' && !dot) {
-                dot = true;
-            } else if ((c == 'e' || c == 'E') && digits) {
-                ++i_;
-                if (i_ < s_.size() && (s_[i_] == '-' || s_[i_] == '+')) ++i_;
-                continue;
-            } else {
+// The nodes of one command letter and the numbers after it (Compose's Char.addPathNodes): as
+// many as there are whole sets of numbers for (a move's after the first are lines).
+bool addNodes(char command, const std::vector<float>& a, std::vector<PathNode>& nodes) {
+    using K = PathNode::Kind;
+    auto sets = [&](size_t n, auto make) {
+        for (size_t i = 0; i + n <= a.size(); i += n) nodes.push_back(make(&a[i]));
+    };
+    switch (command) {
+    case 'z':
+    case 'Z': nodes.push_back(PathNode::Close()); break;
+    case 'm':
+    case 'M':
+        if (a.size() >= 2) {
+            bool relative = command == 'm';
+            nodes.push_back(relative ? PathNode::RelativeMoveTo(a[0], a[1]) : PathNode::MoveTo(a[0], a[1]));
+            for (size_t i = 2; i + 2 <= a.size(); i += 2) nodes.push_back(relative ? PathNode::RelativeLineTo(a[i], a[i + 1]) : PathNode::LineTo(a[i], a[i + 1]));
+        }
+        break;
+    case 'l': sets(2, [](const float* v) { return PathNode::RelativeLineTo(v[0], v[1]); }); break;
+    case 'L': sets(2, [](const float* v) { return PathNode::LineTo(v[0], v[1]); }); break;
+    case 'h': sets(1, [](const float* v) { return PathNode::RelativeHorizontalTo(v[0]); }); break;
+    case 'H': sets(1, [](const float* v) { return PathNode::HorizontalTo(v[0]); }); break;
+    case 'v': sets(1, [](const float* v) { return PathNode::RelativeVerticalTo(v[0]); }); break;
+    case 'V': sets(1, [](const float* v) { return PathNode::VerticalTo(v[0]); }); break;
+    case 'c': sets(6, [](const float* v) { return PathNode::RelativeCurveTo(v[0], v[1], v[2], v[3], v[4], v[5]); }); break;
+    case 'C': sets(6, [](const float* v) { return PathNode::CurveTo(v[0], v[1], v[2], v[3], v[4], v[5]); }); break;
+    case 's': sets(4, [](const float* v) { return PathNode::RelativeReflectiveCurveTo(v[0], v[1], v[2], v[3]); }); break;
+    case 'S': sets(4, [](const float* v) { return PathNode::ReflectiveCurveTo(v[0], v[1], v[2], v[3]); }); break;
+    case 'q': sets(4, [](const float* v) { return PathNode::RelativeQuadTo(v[0], v[1], v[2], v[3]); }); break;
+    case 'Q': sets(4, [](const float* v) { return PathNode::QuadTo(v[0], v[1], v[2], v[3]); }); break;
+    case 't': sets(2, [](const float* v) { return PathNode::RelativeReflectiveQuadTo(v[0], v[1]); }); break;
+    case 'T': sets(2, [](const float* v) { return PathNode::ReflectiveQuadTo(v[0], v[1]); }); break;
+    case 'a':
+    case 'A':
+        sets(7, [&](const float* v) {
+            return PathNode{command == 'a' ? K::RelativeArcTo : K::ArcTo, {v[0], v[1], v[2], v[5], v[6]}, v[3] != 0, v[4] != 0};
+        });
+        break;
+    default: return false;
+    }
+    return true;
+}
+
+} // namespace
+
+std::vector<PathNode>& PathParser::pathStringToNodes(std::string_view s, std::vector<PathNode>& nodes) {
+    auto blank = [](char c) { return static_cast<unsigned char>(c) <= ' '; };
+    size_t start = 0, end = s.size();
+    while (start < end && blank(s[start])) ++start;
+    while (end > start && blank(s[end - 1])) --end;
+    std::vector<float> args;
+    size_t i = start;
+    while (i < end) {
+        char command = 0;
+        do {  // the next command letter ('e' is an exponent's)
+            char c = s[i++];
+            int lower = static_cast<unsigned char>(c) | 0x20;
+            if (lower >= 'a' && lower <= 'z' && lower != 'e') {
+                command = c;
                 break;
             }
-            ++i_;
+        } while (i < end);
+        if (!command) break;
+        args.clear();
+        if ((command | 0x20) != 'z') {
+            while (i < end && blank(s[i])) ++i;
+            bool arc = (command | 0x20) == 'a';
+            float value = 0;
+            do {
+                size_t k = args.size() % 7;  // an arc's flags: one character each ("a1 1 0 01.5.5")
+                auto [next, v] = nextFloat(s, i, arc && (k == 3 || k == 4) ? std::min(i + 1, end) : end);
+                i = next;
+                value = v;
+                if (!std::isnan(v)) args.push_back(v);
+                while (i < end && (blank(s[i]) || s[i] == ',')) ++i;
+            } while (i < end && !std::isnan(value));
         }
-        if (!digits) {
-            i_ = start;
-            return false;
+        if (!addNodes(command, args, nodes)) {
+            std::fprintf(stderr, "kompoz: unsupported path command '%c'\n", command);
+            break;
         }
-        out = std::strtof(std::string(s_.substr(start, i_ - start)).c_str(), nullptr);
-        return true;
     }
+    return nodes;
+}
 
-private:
-    std::string_view s_;
-    size_t i_ = 0;
-};
+PathParser& PathParser::parsePathString(std::string_view pathData) {
+    nodes_.clear();
+    pathStringToNodes(pathData, nodes_);
+    return *this;
+}
+PathParser& PathParser::addPathNodes(const std::vector<PathNode>& nodes) {
+    nodes_.insert(nodes_.end(), nodes.begin(), nodes.end());
+    return *this;
+}
+Path PathParser::toPath() const { return kompoz::toPath(nodes_); }
 
-} // namespace
+std::vector<PathNode> addPathNodes(std::string_view pathData) {
+    std::vector<PathNode> nodes;
+    PathParser().pathStringToNodes(pathData, nodes);
+    return nodes;
+}
 
 namespace {
-// An SVG elliptical arc from (x0, y0) to (x, y) as cubics of at most a quarter turn each (the
-// spec's endpoint to center conversion, then 4/3 tan(delta/4) handles).
-void arcToCubics(std::vector<PathCommand>& out, float x0, float y0, float rx, float ry, float degrees, bool largeArc, bool sweep, float x,
-                 float y) {
-    if (x0 == x && y0 == y) return;
-    if (rx == 0 || ry == 0) {  // no radius: a line
-        out.push_back({PathCommand::Verb::Line, 0, 0, 0, 0, x, y});
+
+// Compose's arcToBezier: the ellipse's arc from angle `start` through `sweep` (radians, about
+// its center, the ellipse turned by `theta`) as cubics of at most an eighth of a turn.
+void arcToBezier(Path& p, double cx, double cy, double a, double b, double e1x, double e1y, double theta, double start, double sweep) {
+    int segments = int(std::ceil(std::abs(sweep * 4 / std::numbers::pi)));
+    double eta1 = start, cosTheta = std::cos(theta), sinTheta = std::sin(theta), cosEta1 = std::cos(eta1), sinEta1 = std::sin(eta1);
+    double ep1x = (-a * cosTheta * sinEta1) - (b * sinTheta * cosEta1), ep1y = (-a * sinTheta * sinEta1) + (b * cosTheta * cosEta1);
+    double perSegment = sweep / segments;
+    for (int i = 0; i < segments; ++i) {
+        double eta2 = eta1 + perSegment, sinEta2 = std::sin(eta2), cosEta2 = std::cos(eta2);
+        double e2x = cx + (a * cosTheta * cosEta2) - (b * sinTheta * sinEta2), e2y = cy + (a * sinTheta * cosEta2) + (b * cosTheta * sinEta2);
+        double ep2x = (-a * cosTheta * sinEta2) - (b * sinTheta * cosEta2), ep2y = (-a * sinTheta * sinEta2) + (b * cosTheta * cosEta2);
+        double tanDiff2 = std::tan((eta2 - eta1) / 2);
+        double alpha = std::sin(eta2 - eta1) * (std::sqrt(4 + 3.0 * tanDiff2 * tanDiff2) - 1) / 3;
+        p.cubicTo(float(e1x + alpha * ep1x), float(e1y + alpha * ep1y), float(e2x - alpha * ep2x), float(e2y - alpha * ep2y), float(e2x), float(e2y));
+        eta1 = eta2, e1x = e2x, e1y = e2y, ep1x = ep2x, ep1y = ep2y;
+    }
+}
+
+// Compose's drawArc: the SVG arc from (x0, y0) to (x1, y1), its radii a and b, turned by
+// `theta` degrees, by its center worked out in the unit circle's space.
+void drawArc(Path& p, double x0, double y0, double x1, double y1, double a, double b, double theta, bool moreThanHalf, bool positiveArc) {
+    if (a == 0 || b == 0) {  // (SVG: a line; Compose's arithmetic would make the path not finite)
+        if (x0 != x1 || y0 != y1) p.lineTo(float(x1), float(y1));
         return;
     }
-    constexpr double kPi = 3.14159265358979323846;
-    double prx = std::abs(rx), pry = std::abs(ry);
-    double phi = degrees * kPi / 180, c = std::cos(phi), s = std::sin(phi);
-    double dx = (x0 - x) / 2.0, dy = (y0 - y) / 2.0;
-    double x1 = c * dx + s * dy, y1 = -s * dx + c * dy;
-    double lambda = x1 * x1 / (prx * prx) + y1 * y1 / (pry * pry);
-    if (lambda > 1) prx *= std::sqrt(lambda), pry *= std::sqrt(lambda);  // too small to reach: as small as reaches
-    double num = prx * prx * pry * pry - prx * prx * y1 * y1 - pry * pry * x1 * x1, den = prx * prx * y1 * y1 + pry * pry * x1 * x1;
-    double k = (den > 0 ? std::sqrt(std::max(0.0, num / den)) : 0) * (largeArc == sweep ? -1 : 1);
-    double cxp = k * prx * y1 / pry, cyp = -k * pry * x1 / prx;
-    double cx = c * cxp - s * cyp + (x0 + x) / 2.0, cy = s * cxp + c * cyp + (y0 + y) / 2.0;
-    auto angle = [](double ux, double uy, double vx, double vy) { return std::atan2(ux * vy - uy * vx, ux * vx + uy * vy); };
-    double ux = (x1 - cxp) / prx, uy = (y1 - cyp) / pry, vx = (-x1 - cxp) / prx, vy = (-y1 - cyp) / pry;
-    double theta = angle(1, 0, ux, uy), delta = angle(ux, uy, vx, vy);
-    if (!sweep && delta > 0) delta -= 2 * kPi;
-    if (sweep && delta < 0) delta += 2 * kPi;
-    int segments = std::max(1, int(std::ceil(std::abs(delta) / (kPi / 2) - 1e-9)));
-    double step = delta / segments, t = 4.0 / 3.0 * std::tan(step / 4);
-    auto point = [&](double a) { return std::pair{cx + prx * std::cos(a) * c - pry * std::sin(a) * s, cy + prx * std::cos(a) * s + pry * std::sin(a) * c}; };
-    auto tangent = [&](double a) { return std::pair{-prx * std::sin(a) * c - pry * std::cos(a) * s, -prx * std::sin(a) * s + pry * std::cos(a) * c}; };
-    for (int i = 0; i < segments; ++i) {
-        double a1 = theta + i * step, a2 = a1 + step;
-        auto [p1x, p1y] = point(a1);
-        auto [p2x, p2y] = i == segments - 1 ? std::pair<double, double>{x, y} : point(a2);  // ends exactly where asked
-        auto [d1x, d1y] = tangent(a1);
-        auto [d2x, d2y] = tangent(a2);
-        out.push_back({PathCommand::Verb::Cubic, float(p1x + t * d1x), float(p1y + t * d1y), float(p2x - t * d2x), float(p2y - t * d2y), float(p2x),
-                       float(p2y)});
+    double thetaD = theta / 180 * std::numbers::pi, cosTheta = std::cos(thetaD), sinTheta = std::sin(thetaD);
+    double x0p = (x0 * cosTheta + y0 * sinTheta) / a, y0p = (-x0 * sinTheta + y0 * cosTheta) / b;
+    double x1p = (x1 * cosTheta + y1 * sinTheta) / a, y1p = (-x1 * sinTheta + y1 * cosTheta) / b;
+    double dx = x0p - x1p, dy = y0p - y1p, xm = (x0p + x1p) / 2, ym = (y0p + y1p) / 2;
+    double dsq = dx * dx + dy * dy;
+    if (dsq == 0.0) return;  // the same point
+    double disc = 1.0 / dsq - 1.0 / 4.0;
+    if (disc < 0.0) {  // too far apart for these radii: as small as reaches
+        double adjust = float(std::sqrt(dsq) / 1.99999);
+        return drawArc(p, x0, y0, x1, y1, a * adjust, b * adjust, theta, moreThanHalf, positiveArc);
     }
+    double s = std::sqrt(disc), sdx = s * dx, sdy = s * dy;
+    double cx = moreThanHalf == positiveArc ? xm - sdy : xm + sdy, cy = moreThanHalf == positiveArc ? ym + sdx : ym - sdx;
+    double eta0 = std::atan2(y0p - cy, x0p - cx), eta1 = std::atan2(y1p - cy, x1p - cx), sweep = eta1 - eta0;
+    if (positiveArc != (sweep >= 0)) sweep += sweep > 0 ? -2 * std::numbers::pi : 2 * std::numbers::pi;
+    cx *= a;
+    cy *= b;
+    double tcx = cx;
+    cx = cx * cosTheta - cy * sinTheta;
+    cy = tcx * sinTheta + cy * cosTheta;
+    arcToBezier(p, cx, cy, a, b, x0, y0, thetaD, eta0, sweep);
 }
+
 } // namespace
 
-std::vector<PathCommand> VectorPath::parse(std::string_view pathData) {
-    std::vector<PathCommand> out;
-
-    PathTokenizer t(pathData);
-    float cx = 0, cy = 0, sx = 0, sy = 0;  // current point, subpath start
-    float lcx = 0, lcy = 0;                // last control point, for S and T
-    char last = 0, cmd = 0;
-    bool needMove = false;  // drawing right after Z starts a new subpath at the old start
-    while (!t.atEnd()) {
-        if (t.atCommand()) cmd = t.command();
-        else if (!cmd) break;
-        bool rel = std::islower(static_cast<unsigned char>(cmd));
-        float ox = rel ? cx : 0, oy = rel ? cy : 0;
-        float v[6];
-        auto read = [&](int n) {
-            for (int k = 0; k < n; ++k)
-                if (!t.number(v[k])) return false;
-            return true;
-        };
-        char upper = char(std::toupper(static_cast<unsigned char>(cmd)));
-        if (needMove && upper != 'M' && upper != 'Z') out.push_back({PathCommand::Verb::Move, 0, 0, 0, 0, sx, sy});
-        needMove = false;
-        switch (upper) {
-        case 'M':
-            if (!read(2)) goto done;
-            cx = sx = ox + v[0];
-            cy = sy = oy + v[1];
-            out.push_back({PathCommand::Verb::Move, 0, 0, 0, 0, cx, cy});
-            cmd = rel ? 'l' : 'L';  // further pairs are line-tos
+void toPath(const std::vector<PathNode>& nodes, Path& target) {
+    using K = PathNode::Kind;
+    Path::FillType fillType = target.fillType;
+    target.rewind();
+    target.fillType = fillType;
+    float currentX = 0, currentY = 0, ctrlX = 0, ctrlY = 0, segmentX = 0, segmentY = 0;
+    PathNode previous = nodes.empty() ? PathNode::Close() : nodes[0];
+    for (const PathNode& n : nodes) {
+        const auto& v = n.values;
+        switch (n.kind) {
+        case K::Close:
+            currentX = ctrlX = segmentX;
+            currentY = ctrlY = segmentY;
+            target.close();
             break;
-        case 'L':
-            if (!read(2)) goto done;
-            cx = ox + v[0];
-            cy = oy + v[1];
-            out.push_back({PathCommand::Verb::Line, 0, 0, 0, 0, cx, cy});
+        case K::RelativeMoveTo:
+            currentX += v[0], currentY += v[1];
+            target.relativeMoveTo(v[0], v[1]);
+            segmentX = currentX, segmentY = currentY;
             break;
-        case 'H':
-            if (!read(1)) goto done;
-            cx = ox + v[0];
-            out.push_back({PathCommand::Verb::Line, 0, 0, 0, 0, cx, cy});
+        case K::MoveTo:
+            currentX = v[0], currentY = v[1];
+            target.moveTo(v[0], v[1]);
+            segmentX = currentX, segmentY = currentY;
             break;
-        case 'V':
-            if (!read(1)) goto done;
-            cy = oy + v[0];
-            out.push_back({PathCommand::Verb::Line, 0, 0, 0, 0, cx, cy});
+        case K::RelativeLineTo:
+            target.relativeLineTo(v[0], v[1]);
+            currentX += v[0], currentY += v[1];
             break;
-        case 'C':
-            if (!read(6)) goto done;
-            out.push_back({PathCommand::Verb::Cubic, ox + v[0], oy + v[1], ox + v[2], oy + v[3], ox + v[4], oy + v[5]});
-            lcx = ox + v[2];
-            lcy = oy + v[3];
-            cx = ox + v[4];
-            cy = oy + v[5];
+        case K::LineTo:
+            target.lineTo(v[0], v[1]);
+            currentX = v[0], currentY = v[1];
             break;
-        case 'S': {
-            if (!read(4)) goto done;
-            bool smooth = last == 'C' || last == 'S';
-            float x1 = smooth ? 2 * cx - lcx : cx, y1 = smooth ? 2 * cy - lcy : cy;
-            out.push_back({PathCommand::Verb::Cubic, x1, y1, ox + v[0], oy + v[1], ox + v[2], oy + v[3]});
-            lcx = ox + v[0];
-            lcy = oy + v[1];
-            cx = ox + v[2];
-            cy = oy + v[3];
+        case K::RelativeHorizontalTo:
+            target.relativeLineTo(v[0], 0);
+            currentX += v[0];
             break;
-        }
-        case 'Q':
-            if (!read(4)) goto done;
-            out.push_back({PathCommand::Verb::Quad, ox + v[0], oy + v[1], 0, 0, ox + v[2], oy + v[3]});
-            lcx = ox + v[0];
-            lcy = oy + v[1];
-            cx = ox + v[2];
-            cy = oy + v[3];
+        case K::HorizontalTo:
+            target.lineTo(v[0], currentY);
+            currentX = v[0];
             break;
-        case 'T': {
-            if (!read(2)) goto done;
-            bool smooth = last == 'Q' || last == 'T';
-            float x1 = smooth ? 2 * cx - lcx : cx, y1 = smooth ? 2 * cy - lcy : cy;
-            out.push_back({PathCommand::Verb::Quad, x1, y1, 0, 0, ox + v[0], oy + v[1]});
-            lcx = x1;
-            lcy = y1;
-            cx = ox + v[0];
-            cy = oy + v[1];
+        case K::RelativeVerticalTo:
+            target.relativeLineTo(0, v[0]);
+            currentY += v[0];
+            break;
+        case K::VerticalTo:
+            target.lineTo(currentX, v[0]);
+            currentY = v[0];
+            break;
+        case K::RelativeCurveTo:
+            target.relativeCubicTo(v[0], v[1], v[2], v[3], v[4], v[5]);
+            ctrlX = currentX + v[2], ctrlY = currentY + v[3];
+            currentX += v[4], currentY += v[5];
+            break;
+        case K::CurveTo:
+            target.cubicTo(v[0], v[1], v[2], v[3], v[4], v[5]);
+            ctrlX = v[2], ctrlY = v[3];
+            currentX = v[4], currentY = v[5];
+            break;
+        case K::RelativeReflectiveCurveTo: {
+            bool after = previous.isCurve();
+            float rx = after ? currentX - ctrlX : 0, ry = after ? currentY - ctrlY : 0;
+            target.relativeCubicTo(rx, ry, v[0], v[1], v[2], v[3]);
+            ctrlX = currentX + v[0], ctrlY = currentY + v[1];
+            currentX += v[2], currentY += v[3];
             break;
         }
-        case 'Z':
-            out.push_back({PathCommand::Verb::Close});
-            cx = sx;
-            cy = sy;
-            needMove = true;
-            cmd = 0;
-            break;
-        case 'A': {
-            bool largeArc = false, sweep = false;
-            if (!read(3) || !t.flag(largeArc) || !t.flag(sweep) || !t.number(v[3]) || !t.number(v[4])) goto done;
-            float x = ox + v[3], y = oy + v[4];
-            arcToCubics(out, cx, cy, v[0], v[1], v[2], largeArc, sweep, x, y);
-            cx = x;
-            cy = y;
+        case K::ReflectiveCurveTo: {
+            bool after = previous.isCurve();
+            float rx = after ? 2 * currentX - ctrlX : currentX, ry = after ? 2 * currentY - ctrlY : currentY;
+            target.cubicTo(rx, ry, v[0], v[1], v[2], v[3]);
+            ctrlX = v[0], ctrlY = v[1];
+            currentX = v[2], currentY = v[3];
             break;
         }
-        default:
-            std::fprintf(stderr, "kompoz: unsupported path command '%c'\n", cmd);
-            goto done;
+        case K::RelativeQuadTo:
+            target.relativeQuadraticTo(v[0], v[1], v[2], v[3]);
+            ctrlX = currentX + v[0], ctrlY = currentY + v[1];
+            currentX += v[2], currentY += v[3];
+            break;
+        case K::QuadTo:
+            target.quadraticTo(v[0], v[1], v[2], v[3]);
+            ctrlX = v[0], ctrlY = v[1];
+            currentX = v[2], currentY = v[3];
+            break;
+        case K::RelativeReflectiveQuadTo: {
+            bool after = previous.isQuad();
+            float rx = after ? currentX - ctrlX : 0, ry = after ? currentY - ctrlY : 0;
+            target.relativeQuadraticTo(rx, ry, v[0], v[1]);
+            ctrlX = currentX + rx, ctrlY = currentY + ry;
+            currentX += v[0], currentY += v[1];
+            break;
         }
-        last = upper;
+        case K::ReflectiveQuadTo: {
+            bool after = previous.isQuad();
+            float rx = after ? 2 * currentX - ctrlX : currentX, ry = after ? 2 * currentY - ctrlY : currentY;
+            target.quadraticTo(rx, ry, v[0], v[1]);
+            ctrlX = rx, ctrlY = ry;
+            currentX = v[0], currentY = v[1];
+            break;
+        }
+        case K::RelativeArcTo:
+        case K::ArcTo: {
+            bool relative = n.kind == K::RelativeArcTo;
+            float endX = relative ? v[3] + currentX : v[3], endY = relative ? v[4] + currentY : v[4];
+            drawArc(target, currentX, currentY, endX, endY, v[0], v[1], v[2], n.isMoreThanHalf, n.isPositiveArc);
+            currentX = ctrlX = endX;
+            currentY = ctrlY = endY;
+            break;
+        }
+        }
+        previous = n;
     }
-done:
-    return out;
 }
 
-ImageVector ImageVector::fromSvgPath(std::string_view pathData, float viewportWidth, float viewportHeight) {
-    auto data = std::make_shared<Data>();
-    data->viewportWidth = data->defaultWidth = viewportWidth;
-    data->viewportHeight = data->defaultHeight = viewportHeight;
-    data->id = gNextVectorId++;
-    data->commands = VectorPath::parse(pathData);
-    ImageVector vector;
-    vector.data_ = std::move(data);
-    return vector;
+Path toPath(const std::vector<PathNode>& nodes) {
+    Path path;
+    toPath(nodes, path);
+    return path;
 }
+
+// --- Android vector drawables ----------------------------------------------------------------
 
 namespace {
 // Just enough XML for vector drawables: elements, their attributes (a prefix like "android:"
@@ -360,29 +436,6 @@ std::optional<Color> xmlColor(const std::string& v) {
     return Color::hex(argb & 0xFFFFFF, float((argb >> 24) & 0xFF) / 255.f);
 }
 
-// A group's transform, as Android applies it: scaled and turned about its pivot, then moved.
-struct Affine {
-    float a = 1, b = 0, c = 0, d = 1, e = 0, f = 0;  // x' = a x + c y + e, y' = b x + d y + f
-    Affine then(const Affine& inner) const {  // this after inner: what inner's points become here
-        return {a * inner.a + c * inner.b, b * inner.a + d * inner.b, a * inner.c + c * inner.d, b * inner.c + d * inner.d,
-                a * inner.e + c * inner.f + e, b * inner.e + d * inner.f + f};
-    }
-    void apply(float& x, float& y) const {
-        float nx = a * x + c * y + e, ny = b * x + d * y + f;
-        x = nx, y = ny;
-    }
-};
-Affine groupTransform(const VectorGroup& g) {
-    float rad = g.rotate * 3.14159265f / 180, cs = std::cos(rad), sn = std::sin(rad);
-    Affine toPivot{1, 0, 0, 1, -g.pivotX, -g.pivotY}, scale{g.scaleX, 0, 0, g.scaleY, 0, 0}, turn{cs, sn, -sn, cs, 0, 0};
-    Affine back{1, 0, 0, 1, g.pivotX + g.translationX, g.pivotY + g.translationY};
-    return back.then(turn.then(scale.then(toPivot)));
-}
-Affine affineOf(const std::array<float, 6>& m) { return {m[0], m[1], m[2], m[3], m[4], m[5]}; }
-void transformCommands(std::vector<PathCommand>& commands, const Affine& m) {
-    for (PathCommand& c : commands)
-        for (auto [x, y] : {std::pair{&c.x1, &c.y1}, std::pair{&c.x2, &c.y2}, std::pair{&c.x, &c.y}}) m.apply(*x, *y);
-}
 
 std::optional<Color> xmlColorOf(const std::map<std::string, std::string>& a, const char* key) {
     auto it = a.find(key);
@@ -411,63 +464,6 @@ std::optional<Brush> gradientBrush(const std::map<std::string, std::string>& at,
     return Brush::linearGradient(std::move(stops), point("startX", "startY"), point("endX", "endY"), mode);
 }
 } // namespace
-
-namespace {
-// The piece of `path` from `start` to `end` (fractions of its length, every contour's together),
-// both moved on by `offset`, wrapping round its end (Android's trimPathStart/End/Offset).
-Path trimmedPath(const Path& path, float start, float end, float offset) {
-    std::vector<float> lengths;
-    float total = 0;
-    PathMeasure measure(path);
-    do {
-        lengths.push_back(measure.length());
-        total += lengths.back();
-    } while (measure.nextContour());
-    Path out;
-    out.fillType = path.fillType;
-    if (total <= 0) return out;
-    auto piece = [&](float from, float to) {  // distances along the whole of it
-        PathMeasure m(path);
-        float base = 0;
-        size_t i = 0;
-        do {
-            float length = lengths[i++], a = std::max(from, base), b = std::min(to, base + length);
-            if (b > a) m.getSegment(a - base, b - base, out);
-            base += length;
-        } while (m.nextContour() && i < lengths.size());
-    };
-    float s = start + offset, e = end + offset;
-    s -= std::floor(s), e -= std::floor(e);  // an end of 1 comes round to 0: the piece wraps
-    if (s <= e) {
-        piece(s * total, e * total);
-    } else {
-        piece(s * total, total);
-        piece(0, e * total);
-    }
-    return out;
-}
-} // namespace
-
-Brush ImageVector::mapBrush(const Brush& brush, const std::array<float, 6>& m, Size viewport) {
-    if (brush.isSolid()) return brush;
-    Affine t = affineOf(m);
-    auto map = [&](float x, float y) {
-        t.apply(x, y);
-        return Offset{x, y};
-    };
-    auto resolve = [](float v, float size) { return std::isinf(v) ? size : v; };
-    Brush b = brush;
-    if (b.kind_ == Brush::Kind::Linear) {
-        b.start_ = map(resolve(brush.start_.x, viewport.width), resolve(brush.start_.y, viewport.height));
-        b.end_ = map(resolve(brush.end_.x, viewport.width), resolve(brush.end_.y, viewport.height));
-        return b;
-    }
-    b.start_ = brush.hasCenter_ ? map(brush.start_.x, brush.start_.y) : map(viewport.width / 2, viewport.height / 2);
-    b.hasCenter_ = true;
-    if (b.kind_ == Brush::Kind::Radial)
-        b.radius_ = (std::isinf(brush.radius_) ? std::min(viewport.width, viewport.height) / 2 : brush.radius_) * std::sqrt(std::abs(t.a * t.d - t.b * t.c));
-    return b;
-}
 
 namespace {
 // An XML element with its attributes and children (a vector drawable, an animated one).
@@ -512,15 +508,17 @@ std::optional<XmlNode> readXmlTree(std::string_view xml) {
     return std::nullopt;
 }
 
+
 // Animated values of a vector drawable's named elements (by name and attribute), over theirs.
 struct VectorValues {
     std::map<std::pair<std::string, std::string>, float> numbers;
     std::map<std::pair<std::string, std::string>, Color> colors;
-    std::map<std::string, std::vector<PathCommand>> paths;  // pathData
+    std::map<std::string, std::vector<PathNode>> paths;  // pathData
 };
 
-// A <vector> element as an ImageVector: its groups and clip-paths through the Builder, its paths
-// in their paints (gradients from their aapt:attr children), `values` over named elements'.
+// A <vector> element as an ImageVector, read as Compose's XmlVectorParser reads it (and its
+// alpha): its groups and clip-paths through the Builder, its paths in their paints (gradients
+// from their aapt:attr children), `values` over named elements'.
 ImageVector vectorOf(const XmlNode& vector, const VectorValues& values) {
     auto number = [&](const XmlNode& n, const char* key, float fallback) {
         if (std::string name = n.attribute("name"); !name.empty())
@@ -533,13 +531,17 @@ ImageVector vectorOf(const XmlNode& vector, const VectorValues& values) {
         return xmlColorOf(n.attributes, key);
     };
     float vw = number(vector, "viewportWidth", 24), vh = number(vector, "viewportHeight", 24);
-    ImageVector::Builder builder(number(vector, "width", vw), number(vector, "height", vh), vw, vh);
+    std::string mode = vector.attribute("tintMode");
+    BlendMode tintMode = mode == "src_over" ? BlendMode::SrcOver : mode == "src_atop" ? BlendMode::SrcAtop : mode == "multiply" ? BlendMode::Modulate
+                       : mode == "screen" ? BlendMode::Screen : mode == "add" ? BlendMode::Plus : BlendMode::SrcIn;
+    ImageVector::Builder builder(number(vector, "width", vw), number(vector, "height", vh), vw, vh, xmlColorOf(vector.attributes, "tint"), tintMode,
+                                 vector.attribute("autoMirrored") == "true");
     float alpha = number(vector, "alpha", 1);
     auto pathOf = [&](const XmlNode& n) {
         VectorPath p;
-        auto animated = values.paths.find(n.attribute("name"));
-        p.commands = animated != values.paths.end() && !n.attribute("name").empty() ? animated->second : VectorPath::parse(n.attribute("pathData"));
-        p.fill.reset();
+        p.name = n.attribute("name");
+        auto animated = p.name.empty() ? values.paths.end() : values.paths.find(p.name);
+        p.pathData = animated != values.paths.end() ? animated->second : addPathNodes(n.attribute("pathData"));
         if (auto c = color(n, "fillColor")) p.fill = Brush::solid(*c);
         if (auto c = color(n, "strokeColor")) p.stroke = Brush::solid(*c);
         for (const XmlNode& attr : n.children) {  // <aapt:attr name="android:fillColor"><gradient>…
@@ -553,7 +555,7 @@ ImageVector vectorOf(const XmlNode& vector, const VectorValues& values) {
         }
         p.fillAlpha = number(n, "fillAlpha", 1) * alpha;
         p.strokeAlpha = number(n, "strokeAlpha", 1) * alpha;
-        p.strokeLineWidth = number(n, "strokeWidth", 0);
+        p.strokeLineWidth = number(n, "strokeWidth", 1);
         p.strokeLineMiter = number(n, "strokeMiterLimit", 4);
         p.trimPathStart = number(n, "trimPathStart", 0);
         p.trimPathEnd = number(n, "trimPathEnd", 1);
@@ -568,22 +570,23 @@ ImageVector vectorOf(const XmlNode& vector, const VectorValues& values) {
         int clips = 0;  // its <clip-path>s: groups of their own, clipping what comes after them, closed with it
         for (const XmlNode& n : parent.children) {
             if (n.name == "group") {
-                builder.addGroup({.rotate = number(n, "rotation", 0), .pivotX = number(n, "pivotX", 0), .pivotY = number(n, "pivotY", 0),
-                                  .scaleX = number(n, "scaleX", 1), .scaleY = number(n, "scaleY", 1),
+                builder.addGroup({.name = n.attribute("name"), .rotation = number(n, "rotation", 0), .pivotX = number(n, "pivotX", 0),
+                                  .pivotY = number(n, "pivotY", 0), .scaleX = number(n, "scaleX", 1), .scaleY = number(n, "scaleY", 1),
                                   .translationX = number(n, "translateX", 0), .translationY = number(n, "translateY", 0)});
                 contents(n);
                 builder.clearGroup();
             } else if (n.name == "clip-path") {
-                builder.addGroup({.clipPathData = n.attribute("pathData")});
+                std::string name = n.attribute("name");
+                auto animated = name.empty() ? values.paths.end() : values.paths.find(name);
+                builder.addGroup({.name = name, .clipPathData = animated != values.paths.end() ? animated->second : addPathNodes(n.attribute("pathData"))});
                 ++clips;
             } else if (n.name == "path") {
-                builder.path(pathOf(n));
+                builder.addPath(pathOf(n));
             }
         }
         for (; clips > 0; --clips) builder.clearGroup();
     };
     contents(vector);
-    builder.autoMirror(vector.attribute("autoMirrored") == "true");
     return builder.build();
 }
 } // namespace
@@ -602,7 +605,7 @@ struct Animator {
     enum class Kind { Number, Color, Path } kind = Kind::Number;
     float from = 0, to = 0;
     Color fromColor, toColor;
-    std::vector<PathCommand> fromPath, toPath;
+    std::vector<PathNode> fromNodes, toNodes;
     float start = 0, duration = 300;
     Easing easing{0.37f, 0, 0.63f, 1};  // accelerate_decelerate (Android's default), near enough
     int repeats = 0;                    // after the first time
@@ -678,8 +681,8 @@ float readAnimators(const XmlNode& n, const std::string& target, float start, co
         if (to.empty()) return;
         if (type == "pathType" || a.property == "pathData") {
             a.kind = Animator::Kind::Path;
-            a.fromPath = VectorPath::parse(from);
-            a.toPath = VectorPath::parse(to);
+            a.fromNodes = addPathNodes(from);
+            a.toNodes = addPathNodes(to);
         } else if (type == "colorType" || (!to.empty() && to[0] == '#')) {
             a.kind = Animator::Kind::Color;
             a.fromColor = xmlColor(from).value_or(colors::Transparent);
@@ -738,17 +741,21 @@ ImageVector AnimatedImageVector::vectorAt(float millis) const {
         case Animator::Kind::Number: values.numbers[key] = a.from + (a.to - a.from) * *f; break;
         case Animator::Kind::Color: values.colors[key] = lerp(a.fromColor, a.toColor, *f); break;
         case Animator::Kind::Path: {
-            bool morphs = a.fromPath.size() == a.toPath.size() &&
-                          std::equal(a.fromPath.begin(), a.fromPath.end(), a.toPath.begin(), [](const PathCommand& x, const PathCommand& y) { return x.verb == y.verb; });
+            bool morphs = a.fromNodes.size() == a.toNodes.size() &&
+                          std::equal(a.fromNodes.begin(), a.fromNodes.end(), a.toNodes.begin(), [](const PathNode& x, const PathNode& y) { return x.kind == y.kind; });
             if (!morphs) {
-                values.paths[a.target] = *f < 0.5f ? a.fromPath : a.toPath;
+                values.paths[a.target] = *f < 0.5f ? a.fromNodes : a.toNodes;
                 break;
             }
-            std::vector<PathCommand> between = a.fromPath;
+            // Each number in between; an arc's flag set while it is anywhere but 0 (as Android
+            // interpolates its flags as numbers and draws them as set unless 0).
+            std::vector<PathNode> between = a.fromNodes;
             for (size_t i = 0; i < between.size(); ++i) {
-                const PathCommand &x = a.fromPath[i], &y = a.toPath[i];
+                const PathNode &x = a.fromNodes[i], &y = a.toNodes[i];
                 auto mix = [&](float p, float q) { return p + (q - p) * *f; };
-                between[i] = {x.verb, mix(x.x1, y.x1), mix(x.y1, y.y1), mix(x.x2, y.x2), mix(x.y2, y.y2), mix(x.x, y.x), mix(x.y, y.y)};
+                for (size_t k = 0; k < x.values.size(); ++k) between[i].values[k] = mix(x.values[k], y.values[k]);
+                between[i].isMoreThanHalf = mix(x.isMoreThanHalf, y.isMoreThanHalf) != 0;
+                between[i].isPositiveArc = mix(x.isPositiveArc, y.isPositiveArc) != 0;
             }
             values.paths[a.target] = std::move(between);
             break;
@@ -758,195 +765,272 @@ ImageVector AnimatedImageVector::vectorAt(float millis) const {
     return vectorOf(data_->vector, values);
 }
 
-ImageVector::Builder::Builder(float defaultWidth, float defaultHeight, float viewportWidth, float viewportHeight)
-    : defaultWidth_(defaultWidth), defaultHeight_(defaultHeight), viewportWidth_(viewportWidth), viewportHeight_(viewportHeight) {}
-ImageVector::Builder& ImageVector::Builder::path(VectorPath path) {
-    if (!groups_.empty()) {  // in its groups: moved, scaled, turned (its gradients, its stroke too), clipped
-        const Group& g = groups_.back();
-        Affine m = affineOf(g.transform);
-        transformCommands(path.commands, m);
-        for (std::vector<PathCommand>& clip : path.clipPaths) transformCommands(clip, m);
-        path.clipPaths.insert(path.clipPaths.begin(), g.clips.begin(), g.clips.end());
-        Size viewport{viewportWidth_, viewportHeight_};
-        if (path.fill) path.fill = mapBrush(*path.fill, g.transform, viewport);
-        if (path.stroke) path.stroke = mapBrush(*path.stroke, g.transform, viewport);
-        path.strokeLineWidth *= std::sqrt(std::abs(m.a * m.d - m.b * m.c));
-    }
-    paths_.push_back(std::move(path));
-    return *this;
+// --- ImageVector ------------------------------------------------------------------------------
+
+bool operator==(const VectorGroup& a, const VectorGroup& b) {
+    return a.name == b.name && a.rotation == b.rotation && a.pivotX == b.pivotX && a.pivotY == b.pivotY && a.scaleX == b.scaleX &&
+           a.scaleY == b.scaleY && a.translationX == b.translationX && a.translationY == b.translationY && a.clipPathData == b.clipPathData &&
+           a.children == b.children;
 }
-ImageVector::Builder& ImageVector::Builder::addGroup(const VectorGroup& group) {
-    Group g = groups_.empty() ? Group{} : groups_.back();
-    Affine m = affineOf(g.transform).then(groupTransform(group));
-    g.transform = {m.a, m.b, m.c, m.d, m.e, m.f};
-    if (!group.clipPathData.empty()) {
-        std::vector<PathCommand> clip = VectorPath::parse(group.clipPathData);
-        transformCommands(clip, m);
-        g.clips.push_back(std::move(clip));
+
+namespace {
+std::atomic<uint64_t> gNextVectorId{1};
+
+// Which bitmaps vectors were drawn into (detail::vectorDrawnInto), by the bitmap's id.
+struct DrawnInto {
+    std::mutex mutex;
+    std::unordered_map<uint64_t, uint64_t> vectors;
+};
+DrawnInto& drawnInto() {
+    static DrawnInto* d = new DrawnInto;  // (never destroyed: vectors that outlive main's statics take theirs out)
+    return *d;
+}
+} // namespace
+
+struct ImageVector::Data {
+    std::string name;
+    float defaultWidth = 0, defaultHeight = 0, viewportWidth = 0, viewportHeight = 0;
+    VectorGroup root;
+    std::optional<Color> tintColor;
+    BlendMode tintBlendMode = BlendMode::SrcIn;
+    bool autoMirror = false;
+    uint64_t id = 0;
+    // Compose's GroupComponent.isTintable and tintColor of its root: every color it paints with
+    // a color of one rgb (that color), no gradients.
+    bool tintable = true;
+    std::optional<Color> oneColor;
+    // The bitmaps it was drawn into, for the size they were drawn at (px) and their config; the
+    // last drawn last.
+    struct Drawn {
+        float width, height;
+        ImageBitmapConfig config;
+        ImageBitmap bitmap;
+    };
+    mutable std::mutex mutex;
+    mutable std::vector<Drawn> drawn;
+    ~Data() {
+        std::lock_guard lock(drawnInto().mutex);
+        for (const Drawn& d : drawn) drawnInto().vectors.erase(d.bitmap.id());
     }
-    groups_.push_back(std::move(g));
+};
+
+namespace {
+// Compose's GroupComponent.markTintFor…: what `group`'s paths and groups paint with, one rgb or not.
+void markTint(const VectorGroup& group, bool& tintable, std::optional<Color>& color) {
+    auto markColor = [&](Color c) {
+        if (!tintable) return;
+        if (!color) color = c;
+        else if (color->r != c.r || color->g != c.g || color->b != c.b) tintable = false, color.reset();
+    };
+    auto markBrush = [&](const std::optional<Brush>& brush) {
+        if (!tintable || !brush) return;
+        if (brush->kind() == Brush::Kind::Solid && !brush->stops().empty()) markColor(brush->stops().front().color);
+        else tintable = false, color.reset();
+    };
+    for (const VectorNode& node : group) {
+        if (const VectorPath* p = node.path()) {
+            markBrush(p->fill);
+            markBrush(p->stroke);
+        } else {
+            bool childTintable = true;
+            std::optional<Color> childColor;
+            markTint(*node.group(), childTintable, childColor);
+            if (childTintable && tintable) {
+                if (childColor) markColor(*childColor);
+            } else {
+                tintable = false, color.reset();
+            }
+        }
+    }
+}
+} // namespace
+
+ImageVector::Builder::Builder(std::string name, float defaultWidth, float defaultHeight, float viewportWidth, float viewportHeight,
+                              std::optional<Color> tintColor, BlendMode tintBlendMode, bool autoMirror)
+    : name_(std::move(name)), defaultWidth_(defaultWidth), defaultHeight_(defaultHeight), viewportWidth_(viewportWidth),
+      viewportHeight_(viewportHeight), tintColor_(tintColor), tintBlendMode_(tintBlendMode), autoMirror_(autoMirror) {}
+
+ImageVector::Builder& ImageVector::Builder::addGroup(VectorGroup group) {
+    groups_.push_back(std::move(group));
     return *this;
 }
 ImageVector::Builder& ImageVector::Builder::clearGroup() {
-    if (!groups_.empty()) groups_.pop_back();
+    if (groups_.size() > 1) {  // (the root stays)
+        VectorGroup closed = std::move(groups_.back());
+        groups_.pop_back();
+        groups_.back().children.emplace_back(std::move(closed));
+    }
     return *this;
 }
-ImageVector::Builder& ImageVector::Builder::path(std::string_view pathData, std::optional<Brush> fill, std::optional<Brush> stroke,
-                                                 float strokeLineWidth) {
-    VectorPath p;
-    p.commands = VectorPath::parse(pathData);
-    p.fill = std::move(fill);
-    p.stroke = std::move(stroke);
-    p.strokeLineWidth = strokeLineWidth;
-    return path(std::move(p));
-}
-ImageVector::Builder& ImageVector::Builder::autoMirror(bool on) {
-    autoMirror_ = on;
+ImageVector::Builder& ImageVector::Builder::addPath(VectorPath path) {
+    groups_.back().children.emplace_back(std::move(path));
     return *this;
 }
-ImageVector ImageVector::Builder::build() const {
+ImageVector ImageVector::Builder::build() {
+    while (groups_.size() > 1) clearGroup();
     auto data = std::make_shared<Data>();
-    data->viewportWidth = viewportWidth_;
-    data->viewportHeight = viewportHeight_;
-    data->defaultWidth = defaultWidth_;
-    data->defaultHeight = defaultHeight_;
+    data->name = name_;
+    data->defaultWidth = defaultWidth_, data->defaultHeight = defaultHeight_;
+    data->viewportWidth = viewportWidth_, data->viewportHeight = viewportHeight_;
+    data->root = groups_.front();
+    data->tintColor = tintColor_;
+    data->tintBlendMode = tintBlendMode_;
+    data->autoMirror = autoMirror_;
     data->id = gNextVectorId++;
-    data->paths = paths_;
-    for (const VectorPath& p : paths_)
-        if (p.fill) data->commands.insert(data->commands.end(), p.commands.begin(), p.commands.end());
+    markTint(data->root, data->tintable, data->oneColor);
     ImageVector vector;
     vector.data_ = std::move(data);
-    return autoMirror_ ? vector.autoMirrored() : vector;
+    return vector;
 }
 
-const std::vector<VectorPath>& ImageVector::paths() const {
-    static const std::vector<VectorPath> none;
-    return data_ ? data_->paths : none;
+ImageVector ImageVector::fromSvgPath(std::string_view pathData, float viewportWidth, float viewportHeight) {
+    return Builder(viewportWidth, viewportHeight, viewportWidth, viewportHeight)
+        .addPath({.pathData = addPathNodes(pathData), .fill = Brush::solid(colors::Black)})
+        .build();
+}
+
+const std::string& ImageVector::name() const {
+    static const std::string none;
+    return data_ ? data_->name : none;
 }
 float ImageVector::defaultWidth() const { return data_ ? data_->defaultWidth : 0; }
 float ImageVector::defaultHeight() const { return data_ ? data_->defaultHeight : 0; }
-
-void detail::drawImageVector(GraphicsContext& canvas, const ImageVector& vector, const Rect& b, std::optional<Color> tint, float alpha) {
-    if (vector.empty() || b.width <= 0 || b.height <= 0 || alpha <= 0) return;
-    const auto& paths = vector.paths();
-    bool strokes = std::any_of(paths.begin(), paths.end(), [](const VectorPath& p) { return p.stroke && p.strokeLineWidth > 0; });
-    bool clipped = std::any_of(paths.begin(), paths.end(), [](const VectorPath& p) { return !p.clipPaths.empty(); });
-    if (paths.empty() || (tint && !strokes && !clipped)) {  // one color: the backend's cached raster
-        Color c = tint.value_or(colors::Black);
-        canvas.drawVector(vector, b, c.copy(c.a * alpha));
-        return;
-    }
-    float sx = b.width / std::max(1e-3f, vector.viewportWidth()), sy = b.height / std::max(1e-3f, vector.viewportHeight());
-    auto scaledPath = [&](const std::vector<PathCommand>& commands) {
-        Path path;
-        for (const PathCommand& c : commands) {
-            switch (c.verb) {
-            case PathCommand::Verb::Move: path.moveTo(c.x * sx, c.y * sy); break;
-            case PathCommand::Verb::Line: path.lineTo(c.x * sx, c.y * sy); break;
-            case PathCommand::Verb::Quad: path.quadraticTo(c.x1 * sx, c.y1 * sy, c.x * sx, c.y * sy); break;
-            case PathCommand::Verb::Conic: path.conicTo(c.x1 * sx, c.y1 * sy, c.x * sx, c.y * sy, c.w); break;
-            case PathCommand::Verb::Cubic: path.cubicTo(c.x1 * sx, c.y1 * sy, c.x2 * sx, c.y2 * sy, c.x * sx, c.y * sy); break;
-            case PathCommand::Verb::Close: path.close(); break;
-            }
-        }
-        return path;
-    };
-    for (const VectorPath& p : paths) {
-        // Inside its groups' clip paths: a layer clipped to each, over the clip's bounds.
-        size_t layers = 0;
-        for (const std::vector<PathCommand>& clip : p.clipPaths) {
-            Path outline = scaledPath(clip);
-            Rect r = outline.bounds();
-            if (r.width <= 0 || r.height <= 0) break;
-            outline.translate({-r.x, -r.y});
-            canvas.pushOutlineLayer({b.x + r.x, b.y + r.y, r.width, r.height}, outline, 1);
-            ++layers;
-        }
-        if (layers < p.clipPaths.size()) {  // clipped to nothing
-            for (; layers > 0; --layers) canvas.popLayer();
-            continue;
-        }
-        Path path = scaledPath(p.commands);
-        path.fillType = p.pathFillType;
-        if (p.trimPathStart != 0 || p.trimPathEnd != 1) path = trimmedPath(path, p.trimPathStart, p.trimPathEnd, p.trimPathOffset);
-        auto paint = [&](const Brush& brush, float a, const PathStroke& stroke) {
-            float total = a * alpha;
-            if (total <= 0 || path.isEmpty()) return;  // (trimmed to nothing)
-            if (tint || brush.kind() == Brush::Kind::Solid) {  // a color: its alpha
-                Color c = tint.value_or(brush.colorAt(b.center(), b));
-                canvas.drawPath(path, {b.x, b.y}, Brush::solid(c.copy(c.a * total)), b, stroke);
-            } else if (total < 1) {  // a gradient (in viewport units, as its path): through a layer
-                canvas.pushLayer(b, 0, total, {});
-                canvas.drawPath(path, {b.x, b.y}, brush.scaled(sx, sy), b, stroke);
-                canvas.popLayer();
-            } else {
-                canvas.drawPath(path, {b.x, b.y}, brush.scaled(sx, sy), b, stroke);
-            }
-        };
-        if (p.fill) paint(*p.fill, p.fillAlpha, {});
-        if (p.stroke && p.strokeLineWidth > 0)
-            paint(*p.stroke, p.strokeAlpha, {p.strokeLineWidth * std::min(sx, sy), p.strokeLineCap, p.strokeLineJoin, p.strokeLineMiter});
-        for (; layers > 0; --layers) canvas.popLayer();
-    }
-}
-
-const std::vector<PathCommand>& ImageVector::commands() const {
-    static const std::vector<PathCommand> none;
-    return data_ ? data_->commands : none;
-}
 float ImageVector::viewportWidth() const { return data_ ? data_->viewportWidth : 0; }
 float ImageVector::viewportHeight() const { return data_ ? data_->viewportHeight : 0; }
+const VectorGroup& ImageVector::root() const {
+    static const VectorGroup none;
+    return data_ ? data_->root : none;
+}
+std::optional<Color> ImageVector::tintColor() const { return data_ ? data_->tintColor : std::nullopt; }
+BlendMode ImageVector::tintBlendMode() const { return data_ ? data_->tintBlendMode : BlendMode::SrcIn; }
+bool ImageVector::autoMirror() const { return data_ && data_->autoMirror; }
 uint64_t ImageVector::id() const { return data_ ? data_->id : 0; }
 
-ImageVector ImageVector::mirrored() const {
-    if (!data_) return {};
-    const Data* source = data_->base ? data_->base.get() : data_.get();  // one mirror per drawing
-    std::call_once(source->mirrorOnce, [d = source] {
-        auto m = std::make_shared<Data>();
-        m->viewportWidth = d->viewportWidth;
-        m->viewportHeight = d->viewportHeight;
-        m->id = gNextVectorId++;
-        m->defaultWidth = d->defaultWidth;
-        m->defaultHeight = d->defaultHeight;
-        m->commands = d->commands;
-        m->paths = d->paths;
-        auto mirror = [&](std::vector<PathCommand>& commands) {
-            for (PathCommand& c : commands)
-                for (float* x : {&c.x1, &c.x2, &c.x}) *x = d->viewportWidth - *x;
-        };
-        mirror(m->commands);
-        std::array<float, 6> flip{-1, 0, 0, 1, d->viewportWidth, 0};
-        for (VectorPath& p : m->paths) {
-            mirror(p.commands);
-            for (std::vector<PathCommand>& clip : p.clipPaths) mirror(clip);
-            if (p.fill) p.fill = mapBrush(*p.fill, flip, {d->viewportWidth, d->viewportHeight});
-            if (p.stroke) p.stroke = mapBrush(*p.stroke, flip, {d->viewportWidth, d->viewportHeight});
+bool operator==(const ImageVector& a, const ImageVector& b) {
+    if (a.data_ == b.data_) return true;
+    if (!a.data_ || !b.data_) return false;
+    const ImageVector::Data &x = *a.data_, &y = *b.data_;
+    return x.name == y.name && x.defaultWidth == y.defaultWidth && x.defaultHeight == y.defaultHeight && x.viewportWidth == y.viewportWidth &&
+           x.viewportHeight == y.viewportHeight && x.root == y.root && x.tintColor == y.tintColor && x.tintBlendMode == y.tintBlendMode &&
+           x.autoMirror == y.autoMirror;
+}
+
+// --- Drawing (Compose's VectorComponent, GroupComponent, PathComponent, DrawCache) ------------
+
+namespace {
+
+// A tint the Alpha8 bitmap of a one-color vector can be drawn through (Compose's
+// tintableWithAlphaMask): none, or a tint by SrcIn or SrcOver.
+bool maskable(const std::optional<ColorFilter>& filter) {
+    return !filter || (filter->kind() == ColorFilter::Kind::Tint && (filter->blendMode() == BlendMode::SrcIn || filter->blendMode() == BlendMode::SrcOver));
+}
+
+void drawPathNode(DrawScope& s, const VectorPath& p) {
+    Path path = toPath(p.pathData);
+    path.fillType = p.pathFillType;
+    if (p.trimPathStart != 0 || p.trimPathEnd != 1) {  // the piece of its first contour, as Android's PathMeasure measures it
+        PathMeasure measure(path, false);
+        float length = measure.length();
+        float start = std::fmod(p.trimPathStart + p.trimPathOffset, 1.f) * length, end = std::fmod(p.trimPathEnd + p.trimPathOffset, 1.f) * length;
+        Path trimmed;  // (filled non-zero, as Compose's render path is)
+        if (start > end) {
+            Path piece;
+            measure.getSegment(start, length, piece, true);
+            trimmed.addPath(piece);
+            piece.reset();
+            measure.getSegment(0, end, piece, true);
+            trimmed.addPath(piece);
+        } else {
+            measure.getSegment(start, end, trimmed, true);
         }
-        d->mirror = std::move(m);
-    });
-    ImageVector v;
-    v.data_ = source->mirror;
-    return v;
+        path = std::move(trimmed);
+    }
+    if (p.fill) s.drawPath(path, *p.fill, p.fillAlpha);
+    if (p.stroke) s.drawPath(path, *p.stroke, p.strokeAlpha, Stroke(p.strokeLineWidth, p.strokeLineMiter, p.strokeLineCap, p.strokeLineJoin));
 }
 
-ImageVector ImageVector::autoMirrored() const {
-    if (!data_) return {};
-    auto d = std::make_shared<Data>();
-    d->commands = data_->commands;
-    d->paths = data_->paths;
-    d->viewportWidth = data_->viewportWidth;
-    d->viewportHeight = data_->viewportHeight;
-    d->defaultWidth = data_->defaultWidth;
-    d->defaultHeight = data_->defaultHeight;
-    d->id = data_->id;  // drawn the same, left to right
-    d->autoMirror = true;
-    d->base = data_->base ? data_->base : data_;
-    ImageVector v;
-    v.data_ = std::move(d);
-    return v;
+void drawGroupNode(DrawScope& s, const VectorGroup& g) {
+    auto children = [&g](DrawScope& in) {
+        for (const VectorNode& node : g) {
+            if (const VectorPath* p = node.path()) drawPathNode(in, *p);
+            else drawGroupNode(in, *node.group());
+        }
+    };
+    Matrix m;
+    m.translate(g.translationX + g.pivotX, g.translationY + g.pivotY);
+    m.rotateZ(g.rotation);
+    m.scale(g.scaleX, g.scaleY, 1);
+    m.translate(-g.pivotX, -g.pivotY);
+    if (m.isIdentity() && g.clipPathData.empty()) return children(s);  // (nothing to transform or clip by)
+    s.withTransform(
+        [&](DrawTransform& t) {
+            if (!m.isIdentity()) t.transform(m);
+            if (!g.clipPathData.empty()) t.clipPath(toPath(g.clipPathData));
+        },
+        children);
 }
 
-bool ImageVector::autoMirror() const { return data_ && data_->autoMirror; }
+constexpr size_t kDrawnKept = 8;  // bitmaps a vector keeps (for as many sizes and configs)
+
+} // namespace
+
+void detail::drawVector(DrawScope& scope, const ImageVector& vector, float alpha, const std::optional<ColorFilter>& colorFilter) {
+    if (vector.empty() || alpha <= 0) return;
+    const ImageVector::Data& d = *vector.data_;
+    float density = scope.density().density;
+    Size size = scope.size();
+    float width = size.width * density, height = size.height * density;  // px
+    if (!(width > 0 && height > 0) || d.viewportWidth <= 0 || d.viewportHeight <= 0) return;
+    std::optional<ColorFilter> intrinsic;
+    if (d.tintColor) intrinsic = ColorFilter::tint(*d.tintColor, d.tintBlendMode);
+    bool oneColor = d.tintable && d.oneColor;
+    ImageBitmapConfig config = oneColor && maskable(intrinsic) && maskable(colorFilter) ? ImageBitmapConfig::Alpha8 : ImageBitmapConfig::Argb8888;
+    // Its bitmap: whole pixels around it (just its size when that is within a hundredth of whole
+    // pixels), the vector scaled to fill the size.
+    auto pixels = [](float v) { return std::abs(v - std::round(v)) < 0.01f && std::round(v) >= 1 ? int(std::round(v)) : int(std::ceil(v)); };
+    int w = pixels(width), h = pixels(height);
+    if (w > maxImageDimension || h > maxImageDimension) return;
+    ImageBitmap bitmap;
+    {
+        std::lock_guard lock(d.mutex);
+        for (auto it = d.drawn.begin(); it != d.drawn.end(); ++it)
+            if (it->width == width && it->height == height && it->config == config) {
+                std::rotate(it, it + 1, d.drawn.end());  // (the last drawn last)
+                bitmap = d.drawn.back().bitmap;
+                break;
+            }
+    }
+    if (bitmap.empty()) {
+        bitmap = ImageBitmap(w, h, config);
+        {
+            graphics::Canvas canvas(bitmap);
+            DrawScope cache(canvas, {float(w), float(h)}, nullptr, scope.density(), LayoutDirection::Ltr);
+            cache.scale(width / d.viewportWidth, height / d.viewportHeight, [&](DrawScope& s) { drawGroupNode(s, d.root); }, Offset{0, 0});
+        }
+        std::lock_guard lock(d.mutex);
+        d.drawn.push_back({width, height, config, bitmap});
+        std::lock_guard registry(drawnInto().mutex);
+        drawnInto().vectors[bitmap.id()] = d.id;
+        if (d.drawn.size() > kDrawnKept) {
+            drawnInto().vectors.erase(d.drawn.front().bitmap.id());
+            d.drawn.erase(d.drawn.begin());
+        }
+    }
+    // Through the painter's filter, else the vector's tint, else (one color, as a mask) its color.
+    std::optional<ColorFilter> filter = colorFilter ? colorFilter : intrinsic;
+    if (!filter && config == ImageBitmapConfig::Alpha8) filter = ColorFilter::tint(d.oneColor->copy(1));
+    auto draw = [&](DrawScope& s) {
+        s.drawImage(bitmap, IntOffset{0, 0}, IntSize{w, h}, Offset{0, 0}, Size{float(w) / density, float(h) / density}, alpha, Fill, filter);
+    };
+    if (d.autoMirror && scope.layoutDirection() == LayoutDirection::Rtl) scope.scale(-1, 1, draw);
+    else draw(scope);
+}
+
+uint64_t detail::vectorDrawnInto(const ImageBitmap& bitmap) {
+    std::lock_guard lock(drawnInto().mutex);
+    auto it = drawnInto().vectors.find(bitmap.id());
+    return it == drawnInto().vectors.end() ? 0 : it->second;
+}
 
 } // namespace kompoz
 

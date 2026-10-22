@@ -851,41 +851,32 @@ void BlurSection(CallSite site) {
 void ColorVectorSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
-        static const ImageVector badge = [] {
-            VectorPath check;
-            check.commands = VectorPath::parse("M7,12.5L10.5,16L17,9");
-            check.fill.reset();
-            check.stroke = Brush::solid(colors::White);
-            check.strokeLineWidth = 2.2f;
-            check.strokeLineCap = StrokeCap::Round;
-            check.strokeLineJoin = StrokeJoin::Round;
-            return ImageVector::Builder(48, 48, 24, 24)
-                .path("M2,12a10,10 0 1,0 20,0a10,10 0 1,0 -20,0z", Brush::solid(Color::hex(0x1E88E5)))  // a circle from two arcs
-                .path(check)
+        static const ImageVector badge = ImageVector::Builder(48, 48, 24, 24)
+                                             .addPath({.pathData = addPathNodes("M2,12a10,10 0 1,0 20,0a10,10 0 1,0 -20,0z"),  // a circle from two arcs
+                                                       .fill = Brush::solid(Color::hex(0x1E88E5))})
+                                             .path({.stroke = Brush::solid(colors::White), .strokeLineWidth = 2.2f, .strokeLineCap = StrokeCap::Round,
+                                                    .strokeLineJoin = StrokeJoin::Round},
+                                                   [](PathBuilder& p) { p.moveTo(7, 12.5f).lineTo(10.5f, 16).lineTo(17, 9); })
+                                             .build();
+        static const ImageVector sun =
+            ImageVector::Builder(48, 48, 24, 24)
+                .addPath({.pathData = addPathNodes("M12,7C14.76,7 17,9.24 17,12C17,14.76 14.76,17 12,17C9.24,17 7,14.76 7,12C7,9.24 9.24,7 12,7Z"),
+                          .fill = Brush::solid(Color::hex(0xFFCA28))})
+                .addPath({.pathData = addPathNodes("M12,1v3M12,20v3M1,12h3M20,12h3M4.2,4.2l2.1,2.1M17.7,17.7l2.1,2.1M4.2,19.8l2.1,-2.1M17.7,6.3l2.1,-2.1"),
+                          .stroke = Brush::solid(Color::hex(0xF57C00)), .strokeLineWidth = 2, .strokeLineCap = StrokeCap::Round})
                 .build();
-        }();
-        static const ImageVector sun = [] {
-            VectorPath rays;
-            rays.commands = VectorPath::parse("M12,1v3M12,20v3M1,12h3M20,12h3M4.2,4.2l2.1,2.1M17.7,17.7l2.1,2.1M4.2,19.8l2.1,-2.1M17.7,6.3l2.1,-2.1");
-            rays.fill.reset();
-            rays.stroke = Brush::solid(Color::hex(0xF57C00));
-            rays.strokeLineWidth = 2;
-            rays.strokeLineCap = StrokeCap::Round;
-            return ImageVector::Builder(48, 48, 24, 24)
-                .path("M12,7C14.76,7 17,9.24 17,12C17,14.76 14.76,17 12,17C9.24,17 7,14.76 7,12C7,9.24 9.24,7 12,7Z", Brush::solid(Color::hex(0xFFCA28)))
-                .path(rays)
+        static const ImageVector tile =
+            ImageVector::Builder(48, 48, 24, 24)
+                .addPath({.pathData = addPathNodes("M3,3h18v18h-18z"), .fill = Brush::horizontalGradient({Color::hex(0x7E57C2), Color::hex(0xEC407A)})})
                 .build();
-        }();
-        static const ImageVector tile = ImageVector::Builder(48, 48, 24, 24)
-                                            .path("M3,3h18v18h-18z", Brush::horizontalGradient({Color::hex(0x7E57C2), Color::hex(0xEC407A)}))
-                                            .build();
         // A group turned about the middle and clipped to the circle: diagonal stripes on a ball.
         static const ImageVector ball = [] {
-            const char* circle = "M2,12a10,10 0 1,0 20,0a10,10 0 1,0 -20,0z";
+            std::vector<PathNode> circle = addPathNodes("M2,12a10,10 0 1,0 20,0a10,10 0 1,0 -20,0z");
             ImageVector::Builder b(48, 48, 24, 24);
-            b.path(circle, Brush::solid(Color::hex(0x26A69A)));
-            b.group({.rotate = -35, .pivotX = 12, .pivotY = 12, .clipPathData = circle}, [](ImageVector::Builder& g) {
-                for (int i = 0; i < 4; ++i) g.path(std::format("M-4,{}h32v2.5h-32z", 3 + i * 5.5), Brush::solid(colors::White.copy(0.85f)));
+            b.addPath({.pathData = circle, .fill = Brush::solid(Color::hex(0x26A69A))});
+            b.group({.rotation = -35, .pivotX = 12, .pivotY = 12, .clipPathData = circle}, [](ImageVector::Builder& g) {
+                for (int i = 0; i < 4; ++i)
+                    g.addPath({.pathData = addPathNodes(std::format("M-4,{}h32v2.5h-32z", 3 + i * 5.5)), .fill = Brush::solid(colors::White.copy(0.85f))});
             });
             return b.build();
         }();
@@ -911,10 +902,10 @@ void ColorVectorSection(CallSite site) {
             float ring = animateFloatAsState(done.get() ? 1.f : 0.f, tween(500));
             float tick = animateFloatAsState(done.get() ? 1.f : 0.f, tween(350, done.get() ? 350 : 0));
             Painter check = rememberVectorPainter(48, 48, 24, 24, [&](ImageVector::Builder& v) {
-                v.path(VectorPath{.commands = VectorPath::parse("M12,2a10,10 0 1,1 0,20a10,10 0 1,1 0,-20z"), .fill = std::nullopt,
-                                  .stroke = Brush::solid(cs.primary), .strokeLineWidth = 2, .strokeLineCap = StrokeCap::Round, .trimPathEnd = ring});
-                v.path(VectorPath{.commands = VectorPath::parse("M7,12.5l3.5,3.5l6.5,-7"), .fill = std::nullopt, .stroke = Brush::solid(cs.primary),
-                                  .strokeLineWidth = 2.4f, .strokeLineCap = StrokeCap::Round, .strokeLineJoin = StrokeJoin::Round, .trimPathEnd = tick});
+                v.addPath({.pathData = addPathNodes("M12,2a10,10 0 1,1 0,20a10,10 0 1,1 0,-20z"), .stroke = Brush::solid(cs.primary),
+                           .strokeLineWidth = 2, .strokeLineCap = StrokeCap::Round, .trimPathEnd = ring});
+                v.addPath({.pathData = addPathNodes("M7,12.5l3.5,3.5l6.5,-7"), .stroke = Brush::solid(cs.primary), .strokeLineWidth = 2.4f,
+                           .strokeLineCap = StrokeCap::Round, .strokeLineJoin = StrokeJoin::Round, .trimPathEnd = tick});
             });
             // An animated vector drawable from the assets: play turning into pause, and back.
             AnimatedImageVector playPause = animatedVectorResource("vectors/play_pause.xml");

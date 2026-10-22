@@ -128,14 +128,6 @@ Brush Brush::sweepGradient(std::vector<ColorStop> stops, std::optional<Offset> c
     return b;
 }
 
-Brush Brush::scaled(float sx, float sy) const {
-    Brush b = *this;  // an infinite end (the far edge) stays infinite
-    b.start_ = {start_.x * sx, start_.y * sy};
-    b.end_ = {end_.x * sx, end_.y * sy};
-    b.radius_ = radius_ * std::sqrt(sx * sy);
-    return b;
-}
-
 Brush Brush::faded(float alpha) const {
     Brush b = *this;
     if (alpha < 1)
@@ -934,6 +926,7 @@ Color ColorFilter::apply(Color d) const {
     if (kind_ == Kind::Lighting)
         return {std::clamp(d.r * color_.r + add_.r, 0.f, 1.f), std::clamp(d.g * color_.g + add_.g, 0.f, 1.f),
                 std::clamp(d.b * color_.b + add_.b, 0.f, 1.f), d.a};
+    if (mode_ == BlendMode::SrcIn && color_.a * d.a > 0) return color_.copy(color_.a * d.a);  // (exactly: the tint, as opaque as both)
     return blend(color_, d, mode_);  // the tint (the source) onto the pixel
 }
 

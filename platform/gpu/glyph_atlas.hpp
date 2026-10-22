@@ -1,8 +1,8 @@
 #pragma once
 
-// The glyph atlas: rasterized glyphs (and ImageVectors) packed into pages of RGBA pixels kept on
-// the CPU, which a renderer uploads to its own textures as they change. White with coverage in
-// alpha for glyphs that take the text's color, straight-alpha colors for emoji.
+// The glyph atlas: rasterized glyphs packed into pages of RGBA pixels kept on the CPU, which a
+// renderer uploads to its own textures as they change. White with coverage in alpha for glyphs
+// that take the text's color, straight-alpha colors for emoji.
 //
 // A page that fills up leaves room to the next one; pages not drawn from for a while are cleared
 // for reuse between frames, never during one (a frame's glyphs stay where they were put until it
@@ -139,7 +139,7 @@ private:
 };
 
 // Where a renderer's text comes from: the platform's font system lays text out as glyphs on the
-// atlas, and rasterizes ImageVectors there.
+// atlas.
 class TextSource {
 public:
     virtual ~TextSource() = default;
@@ -148,8 +148,6 @@ public:
     // not the font system's (text under a transform that enlarges it, laid out that much bigger).
     virtual void layout(std::string_view text, float xPx, float baselinePx, const Font& font, bool rtl, std::vector<GlyphQuad>& out,
                         bool shadow = false, int blurPx = 0, float scale = 0) = 0;
-    // `vector` filled into the px rect (x, y, w, h); false if there is nothing to draw.
-    virtual bool vectorQuad(const ImageVector& vector, float x, float y, float w, float h, GlyphQuad& out) = 0;
     virtual GlyphAtlas& atlas() = 0;
 };
 

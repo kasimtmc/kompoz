@@ -88,7 +88,7 @@ Rect DisplayList::Projective::map(const Rect& r) const {
 bool DisplayList::Command::same(const Command& o) const {
     return kind == o.kind && kompoz::same(bounds, o.bounds) && m == o.m && kompoz::same(rect, o.rect) &&
            kompoz::same(rect2, o.rect2) && radii == o.radii && f1 == o.f1 && f2 == o.f2 && f3 == o.f3 && color == o.color &&
-           kompoz::same(p1, o.p1) && kompoz::same(p2, o.p2) && flag == o.flag && font == o.font && vector == o.vector &&
+           kompoz::same(p1, o.p1) && kompoz::same(p2, o.p2) && flag == o.flag && font == o.font &&
            image == o.image && imageVersion == o.imageVersion && kompoz::same(stroke, o.stroke) && kompoz::same(transform, o.transform) && text == o.text &&
            brush == o.brush && vertices == o.vertices && filter == o.filter && effect == o.effect && elevated == o.elevated && shaped == o.shaped && path == o.path &&
            matrix == o.matrix;
@@ -183,11 +183,6 @@ void DisplayList::drawTextBrush(std::string_view utf8, Offset baseline, const Fo
 void DisplayList::drawTextShadow(std::string_view utf8, Offset baseline, const Font& font, Color color, float blurRadius, bool rtl) {
     if (utf8.empty() || color.a == 0) return;
     if (Command* c = text(Kind::TextShadow, utf8, baseline, font, rtl, std::max(0.f, blurRadius))) c->color = color, c->f1 = blurRadius;
-}
-
-void DisplayList::drawVector(const ImageVector& vector, const Rect& bounds, Color color) {
-    if (vector.empty() || color.a == 0) return;
-    if (Command* c = draw(Kind::Vector, bounds, 0)) c->vector = vector, c->rect = bounds, c->color = color;
 }
 
 void DisplayList::drawArc(const Rect& oval, float startDegrees, float sweepDegrees, float strokeWidth, Color color, bool roundCap) {
@@ -626,7 +621,6 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
             case Kind::Backdrop: canvas.drawBackdrop(c.rect, *c.effect, c.f2); break;
             case Kind::ElevationShadow: canvas.drawElevationShadow(c.elevated->first, c.p1, c.elevated->second); break;
             case Kind::ShapeShadow: canvas.drawShapeShadow(c.rect, c.shaped->first, c.flag, c.shaped->second, c.f1 != 0); break;
-            case Kind::Vector: canvas.drawVector(c.vector, c.rect, c.color); break;
             case Kind::Arc: canvas.drawArc(c.rect, c.f1, c.f2, c.f3, c.color, c.flag); break;
             case Kind::Image: canvas.drawImage(c.image, c.rect2, c.rect, c.f1, FilterQuality(int(c.f2))); break;
             case Kind::Gradient: canvas.fillGradient(c.rect, c.radii, *c.brush, c.rect2); break;

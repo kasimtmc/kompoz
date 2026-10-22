@@ -30,7 +30,7 @@ void Target() {
 | `drawPath(path, color, alpha, style)` | Herhangi bir path. |
 | `drawText(layout, color, topLeft)`, `drawText(measurer, text, topLeft, style)` | Metin (bkz. [Metin](text.md#metni-ölçmek)). |
 | `drawImage(image, topLeft)`, `drawImage(image, srcOffset, srcSize, dstOffset, dstSize, …, filterQuality)` | Bir bitmap ya da bir parçası bir dikdörtgene, `FilterQuality`'nin dediği gibi örneklenerek. |
-| `drawVector(vector, color, topLeft, size)` | Renklendirilmiş bir `ImageVector`. |
+| `painter.draw(d, size, alpha, colorFilter)` | Bir `Painter` (bir `ImageVector`'ünkü: `VectorPainter(vector)`), Compose'un `with(painter) { draw(…) }`'u gibi. |
 
 Compose'un parametrelerini Compose'un sırasıyla alırlar: bir renk ya da fırça, sonra `alpha`, `style`, `colorFilter` ve `blendMode` (`d.drawRect(color, {}, size, 0.5f, Stroke(2))`). `DrawStyle`, `Fill` (varsayılan) ya da `Stroke(width, miter, cap, join, pathEffect)`'tir; 0 genişlik kıl kalınlığındadır, dönüşüm ne olursa olsun bir piksel. Koordinatlar canvas'ın sol üst köşesinden dp cinsindendir; `d.size()` ve `d.center()` boyutunu ve merkezini, `d.density()` bir dp'deki pikselleri verir.
 
@@ -272,13 +272,27 @@ const ImageVector& sparkle() {
     return v;
 }
 
+// Kendi boyalarıyla yollar, gruplar içinde, Compose'un ImageVector.Builder'ının yaptığı gibi.
+const ImageVector& badge() {
+    static const ImageVector v =
+        ImageVector::Builder("Rozet", 24, 24, 24, 24)
+            .addPath({.pathData = addPathNodes("M12,2a10,10 0 1,0 0.01,0z"), .fill = Brush::solid(Color::hex(0x1E88E5))})
+            .group({.rotation = -10, .pivotX = 12, .pivotY = 12}, [](ImageVector::Builder& b) {
+                b.path({.stroke = Brush::solid(colors::White), .strokeLineWidth = 2, .strokeLineCap = StrokeCap::Round},
+                       [](PathBuilder& p) { p.moveTo(7, 12).lineTo(10.5f, 15.5f).lineTo(17, 9); });
+            })
+            .build();
+    return v;
+}
+
 void Sparkle() {
     Icon(sparkle(), "");
+    Image(rememberVectorPainter(badge()), "Rozet");
     Image(rememberVectorPainter(vectorResource("vectors/logo.xml")), "Logo", Modifier().size(48));
 }
 ```
 
-`vectorResource`, bir Android `<vector>` dosyasından grupları, path'leri, gradyanları ve kırpma path'lerini okur; `Image` ile çizildiğinde kendi renkleriyle, `Icon` ile renklendirilmiş olarak.
+`vectorResource`, bir Android `<vector>` dosyasından grupları, path'leri, gradyanları ve kırpma path'lerini okur. Bir vektör Compose'un çizdiği gibi çizilir: piksellerdeki boyutu kadar bir bitmap'e çizilip saklanır ve o çizilir; `Image` ile kendi renkleriyle, `Icon` ile renklendirilmiş olarak (hepsi tek renkse Alpha8 maske olarak).
 
 ## Ayrıca bakın
 
