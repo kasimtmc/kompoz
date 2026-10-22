@@ -16,9 +16,8 @@ Size PointerInputScope::extendedTouchPadding() const {
     Size min = viewConfiguration().minimumTouchTargetSize, own = size();
     return {std::max(0.f, (min.width - own.width) / 2), std::max(0.f, (min.height - own.height) / 2)};
 }
-const ViewConfiguration& PointerInputScope::viewConfiguration() const {
-    static const ViewConfiguration defaults;
-    return state_->element ? state_->element->viewConfiguration : defaults;
+ViewConfiguration PointerInputScope::viewConfiguration() const {
+    return state_->element ? state_->element->viewConfiguration : ViewConfiguration{};
 }
 
 void PointerInputScope::EventAwaiter::suspend(std::coroutine_handle<> h, detail::JobState* job) {
@@ -645,7 +644,7 @@ Task detectTapGestures(PointerInputScope& scope, TapGestureHandlers h) {
 
         // A second press within the double-tap timeout makes it a double tap; one sooner than
         // its minimum time after the first is no second tap.
-        const ViewConfiguration& config = scope.viewConfiguration();
+        ViewConfiguration config = scope.viewConfiguration();  // (its own: the element can be replaced while it waits)
         int64_t up = scope.nowNanos(), deadline = up + nanoseconds(config.doubleTapTimeout).count();
         std::optional<PointerEvent> second;
         while (!second) {

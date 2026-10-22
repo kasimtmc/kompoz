@@ -6229,6 +6229,28 @@ TEST(tap_gestures_tap_double_tap_and_long_press) {
     rule.waitForIdle();
     CHECK((*log == std::vector<std::string>{"double"}));
 
+    // Its composable running again between the taps, its element replaced while the block waits
+    // for the second: the block goes on, and the second tap still doubles it.
+    auto shift = mutableStateOf(0);
+    int composed = 0;
+    ComposeTestRule again([log, shift, &composed] {
+        ++composed;
+        Box(Modifier().size(100).padding(float(shift.get())).pointerInput(0, [log](PointerInputScope& scope) -> Task {
+            co_await detectTapGestures(scope, {
+                .onTap = [log](Offset) { log->push_back("tap"); },
+                .onDoubleTap = [log](Offset) { log->push_back("double"); },
+            });
+        }));
+    });
+    log->clear();
+    tap(again, {30, 30});
+    shift.set(1);
+    again.advanceTimeBy(48);
+    CHECK(composed == 2);  // composed again since the first tap
+    tap(again, {32, 30});
+    again.waitForIdle();
+    CHECK((*log == std::vector<std::string>{"double"}));
+
     log->clear();  // a second tap sooner than the double-tap minimum (40 ms) is none
     tap(rule, {30, 30});
     tap(rule, {32, 30});

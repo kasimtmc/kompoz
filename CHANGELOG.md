@@ -135,6 +135,8 @@
   of each name (`VectorProperty`). The `ImageVector::Builder&` content it took before is gone.
 - **Fixed** (SDL_Renderer): what a transform enlarges is drawn at its size, not enlarged as pixels (a vector's root
   scale made its icons blurred), and text is laid out at the size it is drawn at (in a scaled layer, in a bitmap).
+- **Fixed**: a double tap crashed when its composable ran again between the taps (the tap detector held on to the
+  settings of an element that had been replaced).
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

@@ -89,8 +89,10 @@ public:
 
     Size size() const;  // of the element, in dp
     int64_t nowNanos() const;  // the frame clock
-    // LocalViewConfiguration where the pointerInput was composed (Compose's viewConfiguration).
-    const ViewConfiguration& viewConfiguration() const;
+    // LocalViewConfiguration where the pointerInput was composed (Compose's viewConfiguration):
+    // a copy, good across a suspension (the element it comes from is replaced as its composable
+    // runs again while the block goes on).
+    ViewConfiguration viewConfiguration() const;
     // How far a finger's touch reaches past each side of an element smaller than the minimum
     // touch target (Compose's extendedTouchPadding): half of what it lacks.
     Size extendedTouchPadding() const;
