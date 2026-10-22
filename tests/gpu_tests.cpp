@@ -859,12 +859,12 @@ void gradientsMatchColorAt(Gpu& g) {
                 // the pixel's middle, either side's color is right.
                 float t = k.brush.parameterAt(at, area);
                 Color before = k.brush.colorAtParameter(t - 1e-4f), after = k.brush.colorAtParameter(t + 1e-4f);
-                if (std::max({std::abs(before.r - after.r), std::abs(before.g - after.g), std::abs(before.b - after.b),
-                              std::abs(before.a - after.a)}) > 0.02f)
+                if (std::max({std::abs(before.red() - after.red()), std::abs(before.green() - after.green()), std::abs(before.blue() - after.blue()),
+                              std::abs(before.alpha() - after.alpha())}) > 0.02f)
                     continue;
                 Color want = k.brush.colorAt(at, area);
-                auto over = [&](float v) { return int(std::lround((v * want.a + (1 - want.a)) * 255)); };
-                const uint8_t expect[4] = {uint8_t(over(want.r)), uint8_t(over(want.g)), uint8_t(over(want.b)), 255};
+                auto over = [&](float v) { return int(std::lround((v * want.alpha() + (1 - want.alpha())) * 255)); };
+                const uint8_t expect[4] = {uint8_t(over(want.red())), uint8_t(over(want.green())), uint8_t(over(want.blue())), 255};
                 int d = maxDifference(p.at(x, y), expect);
                 if (d > worst) worst = d, wx = x, wy = y;
             }
@@ -876,7 +876,7 @@ void gradientsMatchColorAt(Gpu& g) {
 // A straight color premultiplied, as 8-bit channels.
 std::array<uint8_t, 4> premultiplied8(Color c) {
     auto b = [](float v) { return uint8_t(std::lround(std::clamp(v, 0.f, 1.f) * 255)); };
-    return {b(c.r * c.a), b(c.g * c.a), b(c.b * c.a), b(c.a)};
+    return {b(c.red() * c.alpha()), b(c.green() * c.alpha()), b(c.blue() * c.alpha()), b(c.alpha())};
 }
 
 // Every blend mode draws what blend() works out, onto a see-through target too, and an edge half
@@ -912,7 +912,7 @@ void blendModesMatchBlend(Gpu& g) {
             }
             int inside = maxDifference(p.at(16, 8), want.data()), edge = maxDifference(p.at(8, 8), half.data());
             CHECK(inside <= 2 && edge <= 3);
-            if (inside > 2 || edge > 3) std::printf("  blend mode %d (alpha %.1f): off by %d inside, %d at the edge\n", m, pair.src.a, inside, edge);
+            if (inside > 2 || edge > 3) std::printf("  blend mode %d (alpha %.1f): off by %d inside, %d at the edge\n", m, pair.src.alpha(), inside, edge);
         }
     }
 }
@@ -933,7 +933,7 @@ void targetCopiesFitEveryTarget(Gpu& g) {
     for (int size : {200, 16, 120}) {  // big first: the copy stays that big
         Pixels p = multiplied(size);
         for (Offset at : {Offset{1, 1}, Offset{float(size) / 2, float(size) / 2}, Offset{float(size) - 2, float(size) - 2}})
-            CHECK(near(p.at(int(at.x), int(at.y)), int(std::lround(want.r * 255)), int(std::lround(want.g * 255)), int(std::lround(want.b * 255))));
+            CHECK(near(p.at(int(at.x), int(at.y)), int(std::lround(want.red() * 255)), int(std::lround(want.green() * 255)), int(std::lround(want.blue() * 255))));
     }
 }
 
@@ -1422,7 +1422,7 @@ void graphicsLayersCompositeAsCompose(Gpu& g) {
         detail::drawThroughLayer(c, l, [&] { c.fillRoundRect({0, 0, 16, 16}, 0, over); });
     });
     Color want = blend(over, under, BlendMode::Multiply);
-    CHECK(near(multiplied.at(8, 8), int(std::lround(want.r * 255)), int(std::lround(want.g * 255)), int(std::lround(want.b * 255))));
+    CHECK(near(multiplied.at(8, 8), int(std::lround(want.red() * 255)), int(std::lround(want.green() * 255)), int(std::lround(want.blue() * 255))));
     ColorMatrix gray;
     gray.setToSaturation(0);
     Pixels grayed = g.render(16, 16, 1, [&](GraphicsContext& c) {
@@ -1432,7 +1432,7 @@ void graphicsLayersCompositeAsCompose(Gpu& g) {
         detail::drawThroughLayer(c, l, [&] { c.fillRoundRect({0, 0, 16, 16}, 0, over); });
     });
     Color g2 = ColorFilter::colorMatrix(gray).apply(over);
-    CHECK(near(grayed.at(8, 8), int(std::lround(g2.r * 255)), int(std::lround(g2.g * 255)), int(std::lround(g2.b * 255))));
+    CHECK(near(grayed.at(8, 8), int(std::lround(g2.red() * 255)), int(std::lround(g2.green() * 255)), int(std::lround(g2.blue() * 255))));
 }
 
 // What Skia makes of a layer's pixels blurred (premultiplied, w x h): the pixels past `valid` as
@@ -1449,7 +1449,7 @@ Image painted(int w, int h, const std::vector<std::pair<gpu::IRect, Color>>& fil
         for (int y = std::max(0, r.y); y < std::min(h, r.y + r.height); ++y)
             for (int x = std::max(0, r.x); x < std::min(w, r.x + r.width); ++x) {
                 float* q = out.at(x, y);
-                q[0] = c.r, q[1] = c.g, q[2] = c.b, q[3] = 1;
+                q[0] = c.red(), q[1] = c.green(), q[2] = c.blue(), q[3] = 1;
             }
     return out;
 }
@@ -1912,7 +1912,7 @@ void blursAreGaussian(Gpu& g) {
         for (int y = r.y; y < r.y + r.height; ++y)
             for (int x = r.x; x < r.x + r.width; ++x) {
                 float* q = i.at(x, y);
-                q[0] = col.r, q[1] = col.g, q[2] = col.b, q[3] = 1;
+                q[0] = col.red(), q[1] = col.green(), q[2] = col.blue(), q[3] = 1;
             }
         return i;
     }();
@@ -1947,8 +1947,8 @@ void pathShadowsAreComposes(Gpu& g) {
     auto painted = [&](const std::vector<float>& alpha) {  // the color at that coverage, over white
         Image out{n, n, std::vector<float>(size_t(n) * n * 4, 0.f)};
         for (size_t i = 0; i < alpha.size(); ++i) {
-            float a = alpha[i] * color.a;
-            out.rgba[i * 4] = color.r * a, out.rgba[i * 4 + 1] = color.g * a, out.rgba[i * 4 + 2] = color.b * a, out.rgba[i * 4 + 3] = a;
+            float a = alpha[i] * color.alpha();
+            out.rgba[i * 4] = color.red() * a, out.rgba[i * 4 + 1] = color.green() * a, out.rgba[i * 4 + 2] = color.blue() * a, out.rgba[i * 4 + 3] = a;
         }
         return overWhite(out);
     };
@@ -2002,7 +2002,7 @@ void pathShadowsAreComposes(Gpu& g) {
             Color c = brush.colorAt({x + 0.5f, y + 0.5f}, area);
             float a = white.at(x, y)[3] * 0.8f;
             float* q = wantBrush.at(x, y);
-            q[0] = c.r * a, q[1] = c.g * a, q[2] = c.b * a, q[3] = a;
+            q[0] = c.red() * a, q[1] = c.green() * a, q[2] = c.blue() * a, q[3] = a;
         }
     Pixels wantB = overWhite(wantBrush);
     int brushWorst = worstAgainst(gotBrush, [&](int x, int y) { return wantB.at(x, y); });
@@ -2190,7 +2190,7 @@ void shadersPaintAsTheyAre(Gpu& g) {
                 if (inside && !inside(p)) continue;
                 Color c = at(p);
                 float* q = out.at(x, y);
-                q[0] = c.r * c.a, q[1] = c.g * c.a, q[2] = c.b * c.a, q[3] = c.a;
+                q[0] = c.red() * c.alpha(), q[1] = c.green() * c.alpha(), q[2] = c.blue() * c.alpha(), q[3] = c.alpha();
             }
         return overWhite(out);
     };
@@ -2343,14 +2343,14 @@ void meshesDrawAsSkiaDoes(Gpu& g) {
                         double p4[4] = {};
                         for (int k = 0; k < 3; ++k) {
                             Color ck = v.colors()[size_t(tri[size_t(k)])];
-                            p4[0] += w[k] * ck.r * ck.a, p4[1] += w[k] * ck.g * ck.a, p4[2] += w[k] * ck.b * ck.a, p4[3] += w[k] * ck.a;
+                            p4[0] += w[k] * ck.red() * ck.alpha(), p4[1] += w[k] * ck.green() * ck.alpha(), p4[2] += w[k] * ck.blue() * ck.alpha(), p4[3] += w[k] * ck.alpha();
                         }
                         Color dst = p4[3] > 0 ? Color{float(p4[0] / p4[3]), float(p4[1] / p4[3]), float(p4[2] / p4[3]), float(p4[3])} : colors::Transparent;
                         col = blend(src, dst, c.mode);
                     }
-                    float alpha = col.a * c.paint.alpha();
+                    float alpha = col.alpha() * c.paint.alpha();
                     float* o = out.at(x, y);
-                    o[0] = col.r * alpha + o[0] * (1 - alpha), o[1] = col.g * alpha + o[1] * (1 - alpha), o[2] = col.b * alpha + o[2] * (1 - alpha);
+                    o[0] = col.red() * alpha + o[0] * (1 - alpha), o[1] = col.green() * alpha + o[1] * (1 - alpha), o[2] = col.blue() * alpha + o[2] * (1 - alpha);
                     o[3] = alpha + o[3] * (1 - alpha);
                 }
             }
@@ -2483,13 +2483,18 @@ void bitmapsAreDrawnIntoAsAndroidDoes(Gpu& g) {
         ctx.drawImage(shown, {0, 0, float(n), float(n)}, {float(n), 0, float(n), float(n)}, 1);
     });
     CHECK(near(both.at(10, 10), 51, 102, 204) && near(both.at(n + 10, 10), 230, 26, 26) && near(both.at(n + 10, 40), 51, 102, 204));
-    // F16: finer than 8 bits.
+    // F16: finer than 8 bits (a color finer than them: one in extended sRGB, its components half floats).
     ImageBitmap fine(n, n, ImageBitmapConfig::F16);
-    { graphics::Canvas c(fine); c.drawRect({0, 0, float(n), float(n)}, Paint{.color = Color{0.5004f, 0.2f, 0.9f, 1}}); }
+    { graphics::Canvas c(fine); c.drawRect({0, 0, float(n), float(n)}, Paint{.color = Color(0.5004f, 0.2f, 0.9f, 1, ColorSpaces::ExtendedSrgb)}); }
     compare("drawn into an F16 bitmap (8 bits of it)", fine, [](int, int) { return std::array<int, 4>{128, 51, 230, 255}; }, 1);
     const std::vector<float>& f = detail::bitmaps::floats(fine);
     // (within a half float's step there, 2^-11: Vulkan may round toward zero as it writes one)
     CHECK(f.size() == size_t(n) * n * 4 && std::abs(f[0] - 0.5004f) < 0.000489f && std::abs(f[0] - 128 / 255.f) > 0.001f);
+    // A color of another space is drawn in sRGB (Display P3's turned into it), not its numbers taken as sRGB's.
+    Color p3(0.5f, 0.2f, 0.8f, 1, ColorSpaces::DisplayP3), inSrgb = p3.convert(ColorSpaces::Srgb);
+    Pixels wide = g.render(8, 8, 1, [&](GraphicsContext& ctx) { ctx.fillRoundRect({0, 0, 8, 8}, CornerRadii(), p3); });
+    auto byte = [](float v) { return int(std::lround(v * 255)); };
+    CHECK(near(wide.at(4, 4), byte(inSrgb.red()), byte(inSrgb.green()), byte(inSrgb.blue()), 1) && !near(wide.at(4, 4), byte(0.5f), byte(0.2f), byte(0.8f), 4));
     // Alpha8: its alpha alone; drawn in a paint's color.
     ImageBitmap mask(n, n, ImageBitmapConfig::Alpha8);
     { graphics::Canvas c(mask); scene(c); }
@@ -2604,9 +2609,10 @@ void vectorsDrawAsCompose(Gpu& g) {
                             .build();
     Pixels drawn = render([&](GraphicsContext& c) { VectorPainter(scene).draw(c, {0, 0, 24, 24}, 1, std::nullopt, false, {density}); });
     auto byte = [](float v) { return int(std::lround(v * 255)); };
-    Color across = lerp(red, blue, 6.25f / 24);  // (at the pixel's middle, 6.25 dp in)
-    CHECK(near(drawn.at(12, 12), byte(across.r), byte(across.g), byte(across.b)));     // the gradient (the bar clipped away above the middle)
-    CHECK(near(drawn.at(12, 36), byte(green.r), byte(green.g), byte(green.b)));         // the bar, down the left of the lower half
+    float u = 6.25f / 24;  // (at the pixel's middle, 6.25 dp in; each component along, as Skia's gradients)
+    Color across{lerp(red.red(), blue.red(), u), lerp(red.green(), blue.green(), u), lerp(red.blue(), blue.blue(), u), 1};
+    CHECK(near(drawn.at(12, 12), byte(across.red()), byte(across.green()), byte(across.blue())));     // the gradient (the bar clipped away above the middle)
+    CHECK(near(drawn.at(12, 36), byte(green.red()), byte(green.green()), byte(green.blue())));         // the bar, down the left of the lower half
     CHECK(near(drawn.at(12, 46), 255, 255, 255) && near(drawn.at(32, 36), 255, 255, 255));  // (it ends 2 dp up; nothing right of it)
     // Mirrored right to left: a band at its left drawn at the right.
     ImageVector band = ImageVector::Builder(24, 24, 24, 24, std::nullopt, BlendMode::SrcIn, true)
@@ -2842,10 +2848,10 @@ void elevationShadowsAreAndroids(Gpu& g) {
                 double dS = inRoundRect(sx, sy, ccx - hw - blurS, ccy - hh - blurS, ccx + hw + blurS, ccy + hh + blurS, crad + blurS);
                 double fs = falloff(dS, 2 * blurS, opaque ? insetS : -1);
                 float* q = out.at(x, y);
-                double aa = c.ambient.a * light.ambientAlpha * alpha * fa, sa = c.spot.a * light.spotAlpha * alpha * fs;
+                double aa = c.ambient.alpha() * light.ambientAlpha * alpha * fa, sa = c.spot.alpha() * light.spotAlpha * alpha * fs;
                 // The two over each other (premultiplied).
-                double ra = c.ambient.r * aa, ga = c.ambient.g * aa, ba = c.ambient.b * aa;
-                double rs = c.spot.r * sa, gs = c.spot.g * sa, bs = c.spot.b * sa;
+                double ra = c.ambient.red() * aa, ga = c.ambient.green() * aa, ba = c.ambient.blue() * aa;
+                double rs = c.spot.red() * sa, gs = c.spot.green() * sa, bs = c.spot.blue() * sa;
                 q[0] = float(rs + ra * (1 - sa)), q[1] = float(gs + ga * (1 - sa)), q[2] = float(bs + ba * (1 - sa)), q[3] = float(sa + aa * (1 - sa));
             }
         return overWhite(out);

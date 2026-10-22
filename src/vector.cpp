@@ -739,7 +739,7 @@ ImageVector AnimatedImageVector::vectorAt(float millis) const {
         std::pair<std::string, std::string> key{a.target, a.property};
         switch (a.kind) {
         case Animator::Kind::Number: values.numbers[key] = a.from + (a.to - a.from) * *f; break;
-        case Animator::Kind::Color: values.colors[key] = lerp(a.fromColor, a.toColor, *f); break;
+        case Animator::Kind::Color: values.colors[key] = detail::animatedColor(a.fromColor, a.toColor, *f); break;  // (Compose animates it: animateColor)
         case Animator::Kind::Path: {
             bool morphs = a.fromNodes.size() == a.toNodes.size() &&
                           std::equal(a.fromNodes.begin(), a.fromNodes.end(), a.toNodes.begin(), [](const PathNode& x, const PathNode& y) { return x.kind == y.kind; });
@@ -820,7 +820,7 @@ void markTint(const VectorGroup& group, bool& tintable, std::optional<Color>& co
     auto markColor = [&](Color c) {
         if (!tintable) return;
         if (!color) color = c;
-        else if (color->r != c.r || color->g != c.g || color->b != c.b) tintable = false, color.reset();
+        else if (color->red() != c.red() || color->green() != c.green() || color->blue() != c.blue()) tintable = false, color.reset();
     };
     auto markBrush = [&](const std::optional<Brush>& brush) {
         if (!tintable || !brush) return;

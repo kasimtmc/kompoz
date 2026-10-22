@@ -673,7 +673,7 @@ void drawStyledText(GraphicsContext& canvas, const StyledTextLayout& layout, con
             float x = x0 + p.x;
             float baseline = lineBaseline - p.rise;
             if (run.background) canvas.fillRoundRect({x, b.y + line.top, p.width, line.height}, 0, *run.background);
-            if (run.shadow && run.shadow->color.a > 0)
+            if (run.shadow && run.shadow->color.alpha() > 0)
                 canvas.drawTextShadow(p.text, {x + run.shadow->offset.x, baseline + run.shadow->offset.y}, run.font, run.shadow->color,
                                       run.shadow->blurRadius, p.rtl);
             if (run.brush) canvas.drawTextBrush(p.text, {x, baseline}, run.font, *run.brush, b, p.rtl);  // spread over the text

@@ -1857,10 +1857,10 @@ void iconButtonImpl(IconButtonKind kind, std::function<void()> onClick, const Mo
                                                      : kind == IconButtonKind::Tonal ? cs.onSecondaryContainer
                                                                                      : around);
     std::optional<Color> border;
-    if (kind == IconButtonKind::Outlined) border = style.enabled ? around : around.copy(around.a * 0.38f);
+    if (kind == IconButtonKind::Outlined) border = style.enabled ? around : around.copy(around.alpha() * 0.38f);
     if (!style.enabled) {
         if (kind == IconButtonKind::Filled || kind == IconButtonKind::Tonal) container = cs.onSurface.copy(0.1f);
-        contentColor = plain ? contentColor.copy(contentColor.a * 0.38f) : cs.onSurface.copy(0.38f);
+        contentColor = plain ? contentColor.copy(contentColor.alpha() * 0.38f) : cs.onSurface.copy(0.38f);
     }
     iconButtonBox(modifier, container, contentColor, border, [&](const Modifier& m) {
         return m.clickable(std::move(onClick), {.enabled = style.enabled, .interactionSource = style.interactionSource});
@@ -1895,11 +1895,11 @@ void iconToggleButtonImpl(IconButtonKind kind, bool checked, std::function<void(
     Color c = checked ? style.checkedContainerColor.value_or(checkedContainer) : style.containerColor.value_or(container);
     Color fg = checked ? style.checkedContentColor.value_or(checkedContent) : style.contentColor.value_or(contentColor);
     std::optional<Color> border;
-    if (kind == IconButtonKind::Outlined && !checked) border = style.enabled ? around : around.copy(around.a * 0.38f);
+    if (kind == IconButtonKind::Outlined && !checked) border = style.enabled ? around : around.copy(around.alpha() * 0.38f);
     if (!style.enabled) {
         bool filled = kind == IconButtonKind::Filled || kind == IconButtonKind::Tonal;
         c = filled ? cs.onSurface.copy(0.1f) : colors::Transparent;
-        fg = filled ? cs.onSurface.copy(0.38f) : around.copy(around.a * 0.38f);
+        fg = filled ? cs.onSurface.copy(0.38f) : around.copy(around.alpha() * 0.38f);
     }
     iconButtonBox(modifier, c, fg, border, [&](const Modifier& m) {
         return m.toggleable(checked, std::move(onCheckedChange), SemanticsRole::Checkbox,
@@ -2232,7 +2232,7 @@ void Switch(bool checked, std::function<void(bool)> onCheckedChange, const Modif
     const ColorScheme& cs = colorScheme();
     bool enabled = options.enabled;
     // Compose 1.4's colors (SwitchDefaults.colors): disabled ones faded over the surface.
-    auto faded = [&](Color c, float a) { return Color{lerp(cs.surface.r, c.r, a), lerp(cs.surface.g, c.g, a), lerp(cs.surface.b, c.b, a), 1}; };
+    auto faded = [&](Color c, float a) { return c.copy(a).compositeOver(cs.surface); };
     Color track = enabled ? (checked ? cs.primary : cs.surfaceContainerHighest) : checked ? faded(cs.onSurface, 0.12f) : faded(cs.surfaceContainerHighest, 0.12f);
     Color outline = enabled ? (checked ? cs.primary : cs.outline) : checked ? track : faded(cs.onSurface, 0.12f);
     Color thumb = enabled ? (checked ? cs.onPrimary : cs.outline) : checked ? cs.surface : faded(cs.onSurface, 0.38f);
@@ -2765,9 +2765,9 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     auto drawAffixes = [=, prefix = o.prefix, suffix = o.suffix](GraphicsContext& canvas, const Rect& b, float baseline) {
         if (affixAlpha < 0.01f) return;
         if (!prefix.empty())
-            canvas.drawText(prefix, {b.x + padStart - prefixWidth, baseline}, font, prefixColor.copy(prefixColor.a * affixAlpha));
+            canvas.drawText(prefix, {b.x + padStart - prefixWidth, baseline}, font, prefixColor.copy(prefixColor.alpha() * affixAlpha));
         if (!suffix.empty())
-            canvas.drawText(suffix, {b.right() - padEnd + kAffixGap, baseline}, font, suffixColor.copy(suffixColor.a * affixAlpha));
+            canvas.drawText(suffix, {b.right() - padEnd + kAffixGap, baseline}, font, suffixColor.copy(suffixColor.alpha() * affixAlpha));
     };
     // Multi-line: lines from the top, the caret's line kept in view.
     auto drawLines = [=, placeholder = o.placeholder](GraphicsContext& canvas, const Rect& b, const LayoutNode& node) {
@@ -3148,7 +3148,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
             Row((plain ? Modifier()
                         : Modifier()
                               .heightIn(56)
-                              .then(containerColor.a > 0 ? Modifier().background(containerColor, shape) : Modifier())
+                              .then(containerColor.alpha() > 0 ? Modifier().background(containerColor, shape) : Modifier())
                               .drawWithContent(decoration)).then(std::make_shared<TextFieldDecorationElement>()),
                 {.verticalAlignment = Alignment::CenterVertically},
                 [&] {

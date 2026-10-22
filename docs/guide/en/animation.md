@@ -35,6 +35,8 @@ Only the scope that reads the value recomposes on each frame of the animation, n
 
 The second argument is an animation spec, or a duration in milliseconds for a tween.
 
+A color animates as Compose's does (`Color.VectorConverter`): in Oklab, its lightness and hue along, so black to white is a mid gray to the eye halfway (`0x636363`), and a spring that overshoots goes past its target there.
+
 ## Animation specs
 
 | Spec | Behavior |

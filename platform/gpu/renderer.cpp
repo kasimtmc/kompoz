@@ -41,7 +41,10 @@ constexpr int kMaskSize = 2048;  // a generation's mask is at least this big eac
 void set(float (&out)[4], float a, float b, float c, float d) {
     out[0] = a, out[1] = b, out[2] = c, out[3] = d;
 }
-void premultiplied(float (&out)[4], Color c) { set(out, c.r * c.a, c.g * c.a, c.b * c.a, c.a); }
+void premultiplied(float (&out)[4], Color color) {
+    auto [r, g, b, a] = detail::srgbComponents(color);
+    set(out, r * a, g * a, b * a, a);
+}
 
 IRect intersect(const IRect& a, const IRect& b) {
     int x0 = std::max(a.x, b.x), y0 = std::max(a.y, b.y);
@@ -303,9 +306,8 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Ma
                         t[20 + r] = m[size_t(r * 5 + 4)];
                     }
                 } else {
-                    Color c = f.color(), add = f.add();
-                    t[4] = c.r, t[5] = c.g, t[6] = c.b, t[7] = c.a;
-                    t[8] = add.r, t[9] = add.g, t[10] = add.b, t[11] = add.a;
+                    auto c = detail::srgbComponents(f.color()), add = detail::srgbComponents(f.add());
+                    std::copy(c.begin(), c.end(), t + 4), std::copy(add.begin(), add.end(), t + 8);
                 }
             }
             filterChains_.push_back(chain);
@@ -349,7 +351,8 @@ void Renderer::fillOpaque(const IRect& rect, Color color) {
     Prim p;
     set(p.bounds, float(rect.x), float(rect.y), float(rect.x + rect.width), float(rect.y + rect.height));
     std::copy(std::begin(p.bounds), std::end(p.bounds), p.shape);
-    set(p.color, color.r, color.g, color.b, color.a);  // as it is
+    auto [r, g, b, a] = detail::srgbComponents(color);
+    set(p.color, r, g, b, a);  // as it is
     add(FILL, p, nullptr, true);
 }
 
@@ -762,7 +765,7 @@ void Renderer::readBackBitmap(const ImageBitmap& bitmap) {
 // --- GraphicsContext -----------------------------------------------------------------------------
 
 void Renderer::fillRoundRect(const Rect& rect, const CornerRadii& radii, Color color) {
-    if (color.a <= 0 || rect.width <= 0 || rect.height <= 0) return;
+    if (color.alpha() <= 0 || rect.width <= 0 || rect.height <= 0) return;
     float x = rect.x * scale - ox_, y = rect.y * scale - oy_, w = rect.width * scale, h = rect.height * scale;
     float half = std::min(w, h) / 2;
     auto px = [&](float r) { return std::clamp(r * scale, 0.f, half); };
@@ -775,7 +778,7 @@ void Renderer::fillRoundRect(const Rect& rect, const CornerRadii& radii, Color c
 }
 
 void Renderer::strokeRoundRect(const Rect& rect, const CornerRadii& radii, float width, Color color) {
-    if (color.a <= 0 || width <= 0 || rect.width <= 0 || rect.height <= 0) return;
+    if (color.alpha() <= 0 || width <= 0 || rect.width <= 0 || rect.height <= 0) return;
     float x = rect.x * scale - ox_, y = rect.y * scale - oy_, w = rect.width * scale, h = rect.height * scale;
     float half = std::min(w, h) / 2;
     auto px = [&](float r) { return std::clamp(r * scale, 0.f, half); };
@@ -790,7 +793,7 @@ void Renderer::strokeRoundRect(const Rect& rect, const CornerRadii& radii, float
 
 void Renderer::drawLine(Offset from, Offset to, float width, Color color) {
     float x0 = from.x * scale - ox_, y0 = from.y * scale - oy_, x1 = to.x * scale - ox_, y1 = to.y * scale - oy_;
-    if (std::hypot(x1 - x0, y1 - y0) < 1e-3f || color.a <= 0) return;
+    if (std::hypot(x1 - x0, y1 - y0) < 1e-3f || color.alpha() <= 0) return;
     float h = width * scale / 2, pad = h + 1;
     Prim p;
     set(p.bounds, std::min(x0, x1) - pad, std::min(y0, y1) - pad, std::max(x0, x1) + pad, std::max(y0, y1) + pad);
@@ -810,7 +813,8 @@ int Renderer::shaderRow(const std::vector<ColorStop>* stops, const Projective& m
         for (size_t i = 0; i < stops->size() && i < kStopsWidth / 2 - 2; ++i) {
             const ColorStop& stop = (*stops)[i];
             float* texel = &stops_[at + i * 8];
-            texel[0] = stop.color.r, texel[1] = stop.color.g, texel[2] = stop.color.b, texel[3] = stop.color.a;
+            auto c = detail::srgbComponents(stop.color);
+            std::copy(c.begin(), c.end(), texel);
             texel[4] = stop.offset;
         }
     for (int r = 0; r < 3; ++r) {
@@ -883,7 +887,7 @@ Renderer::Prim Renderer::paintedShader(const Shader& shader, const Rect& area, f
         const auto& stops = shader.stops();
         if (stops.size() < 2) {  // one color (or none)
             Color c = stops.empty() ? colors::Transparent : stops.front().color;
-            premultiplied(p.color, c.copy(c.a * alpha));
+            premultiplied(p.color, c.copy(c.alpha() * alpha));
             return p;
         }
         set(p.paint, float(kind), float(int(shader.tileMode()) | 8), float(std::min<size_t>(stops.size(), kStopsWidth / 2 - 2)), float(shaderRow(&stops, map)));
@@ -1027,7 +1031,7 @@ Renderer::Prim Renderer::painted(const Brush& brush, const Rect& area, float alp
     Prim p;
     if (brush.isSolid() || brush.stops().size() < 2) {
         Color c = brush.stops().empty() ? colors::Transparent : brush.stops().front().color;
-        premultiplied(p.color, c.copy(c.a * alpha));
+        premultiplied(p.color, c.copy(c.alpha() * alpha));
         return p;
     }
     // Its stops in this frame's table (once for equal brushes), its geometry in the target's pixels.
@@ -1044,7 +1048,8 @@ Renderer::Prim Renderer::painted(const Brush& brush, const Rect& area, float alp
         for (size_t i = 0; i < stops.size() && i < kStopsWidth / 2; ++i) {
             const ColorStop& stop = stops[i];
             float* texel = &stops_[at + i * 8];
-            texel[0] = stop.color.r, texel[1] = stop.color.g, texel[2] = stop.color.b, texel[3] = stop.color.a;
+            auto c = detail::srgbComponents(stop.color);
+            std::copy(c.begin(), c.end(), texel);
             texel[4] = stop.offset;
         }
     }
@@ -1081,7 +1086,7 @@ float textScale(float enlarged, const Font& font, float scale) {
 } // namespace
 
 void Renderer::drawText(std::string_view text, Offset baseline, const Font& font, Color color, bool rtl) {
-    if (color.a <= 0) return;
+    if (color.alpha() <= 0) return;
     float x = baseline.x * scale - ox_, y = baseline.y * scale - oy_, k = textScale(rasterScale(x, y), font, scale);
     glyphs_.clear();
     text_.layout(text, x * k, y * k, font, rtl, glyphs_, false, 0, scale * k);
@@ -1096,7 +1101,7 @@ void Renderer::drawTextBrush(std::string_view text, Offset baseline, const Font&
 }
 
 void Renderer::drawTextShadow(std::string_view text, Offset baseline, const Font& font, Color color, float blurRadius, bool rtl) {
-    if (color.a <= 0) return;
+    if (color.alpha() <= 0) return;
     float x = baseline.x * scale - ox_, y = baseline.y * scale - oy_, k = textScale(rasterScale(x, y), font, scale);
     glyphs_.clear();
     text_.layout(text, x * k, y * k, font, rtl, glyphs_, true, std::max(0, int(std::lround(blurRadius * scale * k))), scale * k);
@@ -1104,7 +1109,7 @@ void Renderer::drawTextShadow(std::string_view text, Offset baseline, const Font
 }
 
 void Renderer::drawArc(const Rect& oval, float start, float sweep, float width, Color color, bool roundCap) {
-    if (color.a <= 0 || width <= 0 || sweep == 0) return;
+    if (color.alpha() <= 0 || width <= 0 || sweep == 0) return;
     float cx = (oval.x + oval.width / 2) * scale - ox_, cy = (oval.y + oval.height / 2) * scale - oy_;
     float r = std::min(oval.width, oval.height) / 2 * scale, h = width * scale / 2, pad = r + h + 1;
     constexpr float kRadians = std::numbers::pi_v<float> / 180;
@@ -1156,7 +1161,7 @@ void Renderer::drawImageMask(const ImageBitmap& image, const Rect& src, const Re
 }
 
 void Renderer::drawShadow(const Rect& rect, const CornerRadii& radii, const Shadow& shadow, bool inner) {
-    if (shadow.color.a <= 0 || rect.width <= 0 || rect.height <= 0) return;
+    if (shadow.color.alpha() <= 0 || rect.width <= 0 || rect.height <= 0) return;
     float blur = std::max(0.f, shadow.blurRadius) * scale;
     float sigma = blur > 0 ? 0.57735f * blur + 0.5f : 0;  // Skia's for the radius
     float grow = (inner ? -shadow.spread : shadow.spread) * scale;
@@ -1649,9 +1654,9 @@ Matrix matrixOf(const Projective& p) {
 // when it can do nothing better (see GraphicsContext::drawElevationShadow), in the target's px.
 void Renderer::drawElevationShadow(const Outline& outline, Offset origin, const ElevationShadow& shadow) {
     float alpha = std::clamp(shadow.alpha, 0.f, 1.f);
-    Color ambient = shadow.ambientColor.copy(shadow.ambientColor.a * light.ambientAlpha * alpha);
-    Color spot = shadow.spotColor.copy(shadow.spotColor.a * light.spotAlpha * alpha);
-    if (targets_.empty() || (ambient.a <= 0 && spot.a <= 0)) return;
+    Color ambient = shadow.ambientColor.copy(shadow.ambientColor.alpha() * light.ambientAlpha * alpha);
+    Color spot = shadow.spotColor.copy(shadow.spotColor.alpha() * light.spotAlpha * alpha);
+    if (targets_.empty() || (ambient.alpha() <= 0 && spot.alpha() <= 0)) return;
     bool transparent = alpha < 1;
     float k = light.density, u = scale / k;  // the window's px a dp; this target's px an Android px
     float w = 0;
@@ -1686,12 +1691,12 @@ void Renderer::drawElevationShadow(const Outline& outline, Offset origin, const 
             add(ELEVATION, p);
         };
         float zA = shadow.plane[2] * k;  // Android's px
-        if (ambient.a > 0 && zA > 0) {
+        if (ambient.alpha() > 0 && zA > 0) {
             float inset = std::min(zA / 2, 150.f) * u, blur = inset * (1 + zA / 128);
             float out = inset * toLocal;
             draw({r.x - out, r.y - out, r.width + 2 * out, r.height + 2 * out}, rr + out, blur * toLocal, transparent ? -1 : out, ambient);
         }
-        if (spot.a > 0 && zA > 0) {
+        if (spot.alpha() > 0 && zA > 0) {
             SpotParams sp = spotParams(zA * u, lightPx.x, lightPx.y, lz, lr);
             Offset off{sp.offset.x + sp.scale * t.m[2], sp.offset.y + sp.scale * t.m[5]};
             Offset local = t.inverse().apply(off.x, off.y);  // (an affine map's inverse, as a point)
@@ -1730,17 +1735,17 @@ void Renderer::drawElevationShadow(const Outline& outline, Offset origin, const 
         flatOutline.close();
     }
     float zA = (shadow.plane[0] * origin.x + shadow.plane[1] * origin.y + shadow.plane[2]) * k;  // (at the outline's origin, as Skia's)
-    if (ambient.a > 0 && zA > 0 && l <= rgt) {
+    if (ambient.alpha() > 0 && zA > 0 && l <= rgt) {
         float outset = std::min(zA / 2, 150.f) * u, oneOverA = 1 + zA / 128, blur = 0.5f * outset * oneOverA;
         float stroke = 0.5f * (outset - blur);
         float grow = std::max(0.f, stroke) * 2;  // (mitered: a little more)
         Rect at{l - grow, top - grow, rgt - l + 2 * grow, bot - top + 2 * grow};
-        pushEffectLayer(at, BlurEffect(blur, blur, TileMode::Decal), ambient.a);
+        pushEffectLayer(at, BlurEffect(blur, blur, TileMode::Decal), ambient.alpha());
         drawPath(flatOutline, {0, 0}, Brush::solid(ambient.copy(1)), at, {});
         if (stroke > 0) drawPath(flatOutline, {0, 0}, Brush::solid(ambient.copy(1)), at, PathStroke{stroke});
         popLayer();
     }
-    if (spot.a > 0) {
+    if (spot.alpha() > 0) {
         std::array<float, 3> plane{shadow.plane[0] * k * u, shadow.plane[1] * k * u, shadow.plane[2] * k * u};  // (z in the target's px)
         Rect pb = path.bounds();
         pb.x += origin.x, pb.y += origin.y;
@@ -1756,7 +1761,7 @@ void Renderer::drawElevationShadow(const Outline& outline, Offset origin, const 
             }
             if (seen) {
                 Rect at{cl - 1, ct - 1, cr - cl + 2, cb - ct + 2};
-                pushEffectLayer(at, BlurEffect(cast->second, cast->second, TileMode::Decal), spot.a);
+                pushEffectLayer(at, BlurEffect(cast->second, cast->second, TileMode::Decal), spot.alpha());
                 pushTransform(matrixOf(m));
                 drawPath(path, origin, Brush::solid(spot.copy(1)), pb, {});
                 popTransform();

@@ -189,7 +189,7 @@ void ModalWideNavigationRail(const Modifier& modifier, const Content& content, c
     Popup({.fullScreen = true, .onDismissRequest = [state] { state.collapse(); }, .dismissOnOutsideClick = false}, [&] {
         Box(Modifier()
                 .fillMaxSize()
-                .background(colorScheme().scrim.copy(colorScheme().scrim.a * 0.32f * std::clamp(p, 0.f, 1.f)))
+                .background(colorScheme().scrim.copy(colorScheme().scrim.alpha() * 0.32f * std::clamp(p, 0.f, 1.f)))
                 .pointerInput(0, [state](PointerInputScope& s) -> Task {
                     co_await detectTapGestures(s, {.onTap = [state](Offset) { state.collapse(); }});
                 }),

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <initializer_list>
 #include <cstdint>
@@ -18,32 +19,148 @@
 #include <variant>
 #include <vector>
 
+#include <kompoz/colorspace.hpp>
+
 namespace kompoz {
 
 inline constexpr float kInfinity = std::numeric_limits<float>::infinity();
 
-struct Color {
-    float r = 0, g = 0, b = 0, a = 1;
-
-    static constexpr Color hex(uint32_t rgb, float alpha = 1.f) {
-        return {((rgb >> 16) & 0xFF) / 255.f, ((rgb >> 8) & 0xFF) / 255.f, (rgb & 0xFF) / 255.f, alpha};
+namespace detail {
+// Compose's floatToHalf and halfToFloat (its Float16's), bit for bit.
+constexpr uint16_t floatToHalf(float f) {
+    uint32_t bits = std::bit_cast<uint32_t>(f), s = bits >> 31;
+    int e = int(bits >> 23 & 0xff);
+    uint32_t m = bits & 0x7fffff, outE = 0, outM = 0;
+    if (e == 0xff) {  // infinite or NaN
+        outE = 0x1f;
+        outM = m != 0 ? 0x200 : 0;
+    } else {
+        e = e - 127 + 15;
+        if (e >= 0x1f) {  // overflow (as Compose writes it)
+            outE = 0x31;
+        } else if (e <= 0) {  // underflow
+            if (e >= -10) {  // a normal float under a half's smallest normal: a subnormal half
+                m = (m | 0x800000) >> (1 - e);
+                if (m & 0x1000) m += 0x2000;
+                outM = m >> 13;
+            }
+        } else {
+            outE = uint32_t(e);
+            outM = m >> 13;
+            if (m & 0x1000) return uint16_t(((outE << 10 | outM) + 1) | s << 15);  // (a half up)
+        }
     }
-    // Same as Compose's color.copy(alpha = ...)
-    constexpr Color copy(float alpha) const { return {r, g, b, alpha}; }
+    return uint16_t(s << 15 | outE << 10 | outM);
+}
+constexpr float halfToFloat(uint16_t h) {
+    uint32_t bits = h, s = bits & 0x8000, e = bits >> 10 & 0x1f, m = bits & 0x3ff, outE = 0, outM = 0;
+    if (e == 0) {  // subnormal or 0
+        if (m != 0) {
+            float o = std::bit_cast<float>(uint32_t(126 << 23) + m) - std::bit_cast<float>(uint32_t(126 << 23));
+            return s == 0 ? o : -o;
+        }
+    } else {
+        outM = m << 13;
+        if (e == 0x1f) {  // infinite or NaN
+            outE = 0xff;
+            if (outM != 0) outM |= 0x400000;
+        } else {
+            outE = e - 15 + 127;
+        }
+    }
+    return std::bit_cast<float>(s << 16 | outE << 23 | outM);
+}
+// A channel 0..1 in 8 bits, as Compose packs an sRGB color's (NaN as 0).
+constexpr uint64_t byteOf(float v) { return v != v ? 0 : uint64_t(int(std::clamp(v, 0.f, 1.f) * 255.f + 0.5f)); }
+} // namespace detail
+
+// A color (Compose's Color): 64 bits, packed as Compose packs them. One in sRGB keeps 8 bits a
+// channel, 0..1 (its ARGB in the upper 32 bits); one in another color space keeps its
+// components as half floats (each within the space's range), its alpha in 10 bits and the
+// space's id (ColorSpaces). red(), green(), blue() are the components in its color space (an
+// Lab or Oklab one's L, a, b), alpha() its alpha.
+class Color {
+public:
+    constexpr Color() = default;  // opaque black (Kompoz's: Compose's Color has none)
+    explicit constexpr Color(uint64_t value) : value_(value) {}  // Compose's Color(value)
+    // In sRGB (Compose's Color(red, green, blue, alpha)).
+    constexpr Color(float red, float green, float blue, float alpha = 1)
+        : value_((detail::byteOf(alpha) << 24 | detail::byteOf(red) << 16 | detail::byteOf(green) << 8 | detail::byteOf(blue)) << 32) {}
+    // In `colorSpace`, each component kept within its range (one of three components, of ColorSpaces).
+    Color(float red, float green, float blue, float alpha, const ColorSpace& colorSpace);
+    static constexpr Color hex(uint32_t rgb, float alpha = 1) {  // 0xRRGGBB, in sRGB
+        return Color((detail::byteOf(alpha) << 24 | (rgb & 0xFFFFFFu)) << 32);
+    }
+    static constexpr Color argb(uint32_t argb) { return Color(uint64_t(argb) << 32); }  // 0xAARRGGBB (Compose's Color(color: Int))
+    // From hue (0..360), saturation and value or lightness (0..1), in an RGB color space (Compose's
+    // Color.hsv, Color.hsl).
+    static Color hsv(float hue, float saturation, float value, float alpha = 1);
+    static Color hsv(float hue, float saturation, float value, float alpha, const Rgb& colorSpace);
+    static Color hsl(float hue, float saturation, float lightness, float alpha = 1);
+    static Color hsl(float hue, float saturation, float lightness, float alpha, const Rgb& colorSpace);
+
+    constexpr uint64_t value() const { return value_; }
+    constexpr bool isSrgb() const { return (value_ & 0x3f) == 0; }  // (sRGB's id: 0)
+    constexpr float red() const { return isSrgb() ? float(value_ >> 48 & 0xff) / 255.f : detail::halfToFloat(uint16_t(value_ >> 48)); }
+    constexpr float green() const { return isSrgb() ? float(value_ >> 40 & 0xff) / 255.f : detail::halfToFloat(uint16_t(value_ >> 32)); }
+    constexpr float blue() const { return isSrgb() ? float(value_ >> 32 & 0xff) / 255.f : detail::halfToFloat(uint16_t(value_ >> 16)); }
+    constexpr float alpha() const { return isSrgb() ? float(value_ >> 56 & 0xff) / 255.f : float(value_ >> 6 & 0x3ff) / 1023.f; }
+    const ColorSpace& colorSpace() const;
+    // The same color in `colorSpace` (Compose's convert: through the spaces' connector,
+    // perceptually).
+    Color convert(const ColorSpace& colorSpace) const;
+    // With another alpha, its components as they are (Compose's copy(alpha = …)).
+    constexpr Color copy(float alpha) const {
+        if (isSrgb()) return Color((value_ & ~(uint64_t(0xff) << 56)) | detail::byteOf(alpha) << 56);
+        uint64_t a = alpha != alpha ? 0 : uint64_t(int(std::clamp(alpha, 0.f, 1.f) * 1023.f + 0.5f));
+        return Color((value_ & ~(uint64_t(0x3ff) << 6)) | a << 6);
+    }
+    Color copy(float alpha, float red, float green, float blue) const;  // in its color space
+    // This over `background`, in the background's color space (Compose's compositeOver).
+    Color compositeOver(Color background) const;
+    // Its relative luminance, 0..1 (Compose's luminance: an RGB color space's).
+    float luminance() const;
+    uint32_t toArgb() const;  // in sRGB, 0xAARRGGBB (Compose's toArgb)
+    constexpr bool isSpecified() const { return value_ != 0x10; }  // (Compose's: not Unspecified)
+    constexpr bool isUnspecified() const { return value_ == 0x10; }
 
     friend constexpr bool operator==(const Color&, const Color&) = default;
+
+private:
+    uint64_t value_ = uint64_t(0xFF000000u) << 32;
 };
 
+// Compose's Color.Black, … (Unspecified: no color, in ColorSpaces::Unspecified).
 namespace colors {
-inline constexpr Color Transparent{0, 0, 0, 0};
-inline constexpr Color Black{0, 0, 0, 1};
-inline constexpr Color White{1, 1, 1, 1};
+inline constexpr Color Transparent = Color::argb(0x00000000);
+inline constexpr Color Black = Color::argb(0xFF000000);
+inline constexpr Color DarkGray = Color::argb(0xFF444444);
+inline constexpr Color Gray = Color::argb(0xFF888888);
+inline constexpr Color LightGray = Color::argb(0xFFCCCCCC);
+inline constexpr Color White = Color::argb(0xFFFFFFFF);
+inline constexpr Color Red = Color::argb(0xFFFF0000);
+inline constexpr Color Green = Color::argb(0xFF00FF00);
+inline constexpr Color Blue = Color::argb(0xFF0000FF);
+inline constexpr Color Yellow = Color::argb(0xFFFFFF00);
+inline constexpr Color Cyan = Color::argb(0xFF00FFFF);
+inline constexpr Color Magenta = Color::argb(0xFFFF00FF);
+inline constexpr Color Unspecified = Color(uint64_t(0x10));
 } // namespace colors
 
 constexpr float lerp(float a, float b, float t) { return a + (b - a) * t; }
-constexpr Color lerp(const Color& a, const Color& b, float t) {
-    return {lerp(a.r, b.r, t), lerp(a.g, b.g, t), lerp(a.b, b.b, t), lerp(a.a, b.a, t)};
-}
+// Between two colors, in Oklab, in `stop`'s color space (Compose's lerp: `t` within 0..1).
+Color lerp(const Color& start, const Color& stop, float t);
+namespace detail {
+// `fraction` of the way from `from` to `to` as Compose animates a color (its ColorVectorConverter):
+// in Oklab, each component as far along (past 0..1 too, as a spring overshoots it), kept within
+// Oklab's range and alpha within 0..1, in `to`'s color space.
+Color animatedColor(Color from, Color to, float fraction);
+// The color in sRGB, as it is drawn (to an sRGB surface, as Compose's to Android's), 8 bits a
+// channel; and its components so, red, green, blue and alpha, not rounded to 8 bits (as Skia
+// draws a paint's color): another space's in extended sRGB (past 0..1 where it is past sRGB).
+inline Color inSrgb(Color c) { return c.isSrgb() ? c : c.convert(ColorSpaces::Srgb); }
+std::array<float, 4> srgbComponents(Color c);
+} // namespace detail
 
 struct Offset {
     float x = 0, y = 0;
@@ -278,8 +395,11 @@ class ImageBitmap {
 public:
     ImageBitmap() = default;
     // Its pixels clear (black and opaque where it has no alpha: Rgb565, or hasAlpha false, as
-    // Android clears an opaque bitmap), `config` as it keeps them.
-    ImageBitmap(int width, int height, ImageBitmapConfig config = ImageBitmapConfig::Argb8888, bool hasAlpha = true);
+    // Android clears an opaque bitmap), `config` as it keeps them. Its color space is the one it
+    // says it is in (Compose's colorSpace; another than a built-in one must outlive it); its
+    // pixels are kept in sRGB, as they are shown, while what is drawn is drawn in sRGB.
+    ImageBitmap(int width, int height, ImageBitmapConfig config = ImageBitmapConfig::Argb8888, bool hasAlpha = true,
+                const ColorSpace& colorSpace = ColorSpaces::Srgb);
     static ImageBitmap fromPixels(int width, int height, std::vector<uint8_t> rgba);  // straight RGBA, Argb8888
 
     bool empty() const { return !data_; }
@@ -287,6 +407,7 @@ public:
     int height() const;
     ImageBitmapConfig config() const;
     bool hasAlpha() const;  // (Alpha8: yes; Rgb565: no)
+    const ColorSpace& colorSpace() const;  // (sRGB unless made in another)
     // Its pixels as straight RGBA, 8 bits a channel (Alpha8's black; F16's kept to 0..1): what it
     // holds now (read back from the renderer where only it has them).
     const uint8_t* pixels() const;
@@ -1652,11 +1773,11 @@ public:
     // color where a hole of the rect shrunk by spread and moved isn't, blurred, inside the rect).
     // The default draws a drop shadow as rings fading out, and no inner shadow.
     virtual void drawShadow(const Rect& rect, const CornerRadii& radii, const Shadow& shadow, bool inner) {
-        if (inner || shadow.color.a <= 0) return;
+        if (inner || shadow.color.alpha() <= 0) return;
         for (int i = 6; i >= 1; --i) {
             float t = float(i) / 6, grow = shadow.spread + shadow.blurRadius * t;
             Rect r{rect.x - grow + shadow.offset.x, rect.y - grow + shadow.offset.y, rect.width + 2 * grow, rect.height + 2 * grow};
-            if (r.width > 0 && r.height > 0) fillRoundRect(r, radii.grown(grow), shadow.color.copy(shadow.color.a * (1.f - t + 1.f / 6) / 3.5f));
+            if (r.width > 0 && r.height > 0) fillRoundRect(r, radii.grown(grow), shadow.color.copy(shadow.color.alpha() * (1.f - t + 1.f / 6) / 3.5f));
         }
     }
     // The same for a shape of any outline (`outline` from `origin`), as Compose draws one: under it,

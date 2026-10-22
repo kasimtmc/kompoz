@@ -125,7 +125,7 @@ Zincir `Modifier()`'dan başlar. Sıra Compose'daki gibi önemlidir. [Modifier'l
 
 ## Birimler
 
-Kotlin'deki `16.dp` yalnızca `16`'dır: her uzunluk dp cinsinden bir `float`'tur. Yazı boyutları `TextUnit`'tir; bir sp sayısından dönüşür (`.fontSize = 24`) ya da `TextUnit::sp(24)` ve `TextUnit::em(1.5f)` olarak yazılır. Süreler `std::chrono` kullanır: `delay(300ms)`, `debounce(300ms)`. Bir `Color` 0 ile 1 arasında float'lar tutar (`Color{1, 0, 0, 1}`) ya da onaltılık bir değerden gelir (`Color::hex(0xE53935)`, `Color::hex(0x000000, 0.5f)`); `colors::Black`, `White` ve `Transparent` isimlidir, `color.copy(0.38f)` de Compose'un `copy(alpha = …)`'su gibi alfayı değiştirir.
+Kotlin'deki `16.dp` yalnızca `16`'dır: her uzunluk dp cinsinden bir `float`'tur. Yazı boyutları `TextUnit`'tir; bir sp sayısından dönüşür (`.fontSize = 24`) ya da `TextUnit::sp(24)` ve `TextUnit::em(1.5f)` olarak yazılır. Süreler `std::chrono` kullanır: `delay(300ms)`, `debounce(300ms)`. Bir `Color` Compose'un 64 bitidir: sRGB'de 0 ile 1 arasındaki bileşenlerden (`Color{1, 0, 0, 1}`), onaltılık bir değerden (`Color::hex(0xE53935)`, `Color::hex(0x000000, 0.5f)`), bir ARGB değerinden (`Color::argb(0xFFE53935)`, Compose'un `Color(0xFFE53935)`'i) ya da başka bir renk uzayında (`Color(0.2f, 0.6f, 0.9f, 1, ColorSpaces::DisplayP3)`) yapılır, `red()`, `green()`, `blue()` ve `alpha()` ile okunur; `colors::Black`, `White` ve `Transparent` isimlidir, `color.copy(0.38f)` de Compose'un `copy(alpha = …)`'su gibi alfayı değiştirir.
 
 ## Coroutine'ler
 

@@ -157,7 +157,7 @@ void ArrowIndicator(float progress, Color color, CallSite site = CallSite::curre
         float turn = (-0.25f + 0.4f * adjusted + tension) * 0.5f;  // of a full turn
         float start = turn * 360, end = (turn + adjusted * 0.8f) * 360, scale = std::min(1.f, adjusted);
         if (scale <= 0) return;
-        Color c = color.copy(color.a * alpha);
+        Color c = color.copy(color.alpha() * alpha);
         float r = kArcRadius + kStrokeWidth / 2;
         Offset o = s.center();
         s.drawArc(c, start, end - start, false, {o.x - r, o.y - r}, Size{2 * r, 2 * r}, 1, Stroke(kStrokeWidth));

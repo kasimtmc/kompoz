@@ -124,6 +124,14 @@ Task animateScroll(std::function<float(float)> scrollBy, std::function<bool()> i
 } // namespace detail
 
 namespace detail {
+// `fraction` of the way between two values as an animation goes: a color as Compose animates one
+// (detail::animatedColor), anything else by its lerp.
+template <class T>
+T animationLerp(const T& from, const T& to, float fraction) {
+    if constexpr (std::is_same_v<T, Color>) return animatedColor(from, to, fraction);
+    else return lerp(from, to, fraction);
+}
+
 // animateValueAsState starting out from `initial` (at once on its way to `target` if they differ).
 template <class T>
 T animateValueFrom(const T& initial, const T& target, const AnimationSpec& spec, CallSite site) {
@@ -147,7 +155,7 @@ T animateValueFrom(const T& initial, const T& target, const AnimationSpec& spec,
         a.value = spec.valueAt(float(now - a.start) / 1e6f, a.from, a.to, finished);
     } else {
         float p = spec.progress(float(now - a.start) / 1e6f, finished);
-        a.value = finished && p == 1.f ? a.to : lerp(a.from, a.to, p);
+        a.value = finished && p == 1.f ? a.to : animationLerp(a.from, a.to, p);
     }
     a.running = !finished;
     if (a.running) c.requestFrame();
@@ -384,7 +392,7 @@ float infiniteProgress(const std::shared_ptr<int64_t>& start, const AnimationSpe
 template <class T>
 class InfiniteState {
 public:
-    T get() const { return lerp(from_, to_, detail::infiniteProgress(start_, spec_, host_)); }
+    T get() const { return detail::animationLerp(from_, to_, detail::infiniteProgress(start_, spec_, host_)); }
     T value() const { return get(); }
 
 private:

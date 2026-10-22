@@ -78,7 +78,7 @@ void Dialog(std::function<void()> onDismissRequest, const Content& content, Dial
     Popup(std::move(spec), [&] {
         // The fade-in is read while drawing: no recomposition per frame.
         Box(onTap(Modifier().fillMaxSize().drawBehind([appear, scrim = colorScheme().scrim](DrawScope& d) {
-                      d.drawRect(scrim.copy(scrim.a * kScrimAlpha * appear.value()));
+                      d.drawRect(scrim.copy(scrim.alpha() * kScrimAlpha * appear.value()));
                   }),
                   outside)
                 .safeDrawingPadding()
@@ -492,7 +492,7 @@ void ModalBottomSheet(std::function<void()> onDismissRequest, const ModalBottomS
             .enabled = anchored.targetValue() != SheetValue::Hidden,
         });
         // Stays clear of the status bar: a tall sheet leaves some scrim to tap.
-        Box(onTap(Modifier().fillMaxSize().background(cs.scrim.copy(cs.scrim.a * scrim)), close).padding(0, insets.top + 48, 0, 0)
+        Box(onTap(Modifier().fillMaxSize().background(cs.scrim.copy(cs.scrim.alpha() * scrim)), close).padding(0, insets.top + 48, 0, 0)
                 .onSizeChanged([d](Size s) {
                     d->room = s.height;
                     d->updateAnchors();

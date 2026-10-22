@@ -48,6 +48,12 @@ struct Register {
 
 bool near(float a, float b) { return std::abs(a - b) < 0.5f; }
 bool near(float a, float b, float tolerance) { return std::abs(a - b) < tolerance; }
+// The same in 8 bits: as an sRGB color keeps a channel (its alpha, a component), a half up.
+bool near8(float a, float b) { return std::lround(a * 255) == std::lround(b * 255); }
+// A gradient's color between two of its colors: each sRGB component along (Skia's).
+Color alongGradient(Color a, Color b, float t) {
+    return {lerp(a.red(), b.red(), t), lerp(a.green(), b.green(), t), lerp(a.blue(), b.blue(), t), lerp(a.alpha(), b.alpha(), t)};
+}
 
 // What a recorded transform (pushTransform's matrix, a graphicsLayer's) does: its scale across and
 // down, its turn (degrees, clockwise), how far it moves the origin, and the point it scales and
@@ -2099,7 +2105,7 @@ TEST(outlined_icon_button_has_an_outline_and_ripples_in_its_circle) {
     CHECK(pressed.rectColors.size() == 4);
     if (pressed.rectColors.size() == 4) {
         Color ripple = pressed.rectColors[3];
-        CHECK(ripple.r == cs.onPrimary.r && ripple.g == cs.onPrimary.g && ripple.b == cs.onPrimary.b && ripple.a > 0);
+        CHECK(ripple.red() == cs.onPrimary.red() && ripple.green() == cs.onPrimary.green() && ripple.blue() == cs.onPrimary.blue() && ripple.alpha() > 0);
     }
     rule.host().pointerUp(mid);
     rule.waitForIdle();
@@ -6952,17 +6958,17 @@ TEST(graphics_layer_goes_offscreen_only_where_it_must) {
     auto turned = layerLook([&] { Box(Modifier().size(40).graphicsLayer({.rotationY = 30, .clip = true}).background(red)); });
     CHECK(turned->layers == 0 && turned->transforms.size() == 1 && turned->clips.size() == 1);
     auto faded = layerLook([&] { Box(Modifier().size(40).graphicsLayer({.alpha = 0.5f}).background(red)); });
-    CHECK(faded->layers == 1 && near(faded->layerAlphas[0], 0.5f) && faded->rectColors.size() == 1 && faded->rectColors[0].a == 1);
+    CHECK(faded->layers == 1 && near(faded->layerAlphas[0], 0.5f) && faded->rectColors.size() == 1 && faded->rectColors[0].alpha() == 1);
     auto modulated = layerLook([&] {
         Box(Modifier().size(40).graphicsLayer({.alpha = 0.5f, .compositingStrategy = CompositingStrategy::ModulateAlpha}).background(red));
     });
-    CHECK(modulated->layers == 0 && modulated->rectColors.size() == 1 && near(modulated->rectColors[0].a, 0.5f));  // the draw faded
+    CHECK(modulated->layers == 0 && modulated->rectColors.size() == 1 && near(modulated->rectColors[0].alpha(), 0.5f));  // the draw faded
     auto blended = layerLook([&] { Box(Modifier().size(40).graphicsLayer({.blendMode = BlendMode::Multiply}).background(red)); });
     CHECK(blended->layers == 1 && blended->rectBlends.size() == 1 && blended->rectBlends[0] == BlendMode::Multiply);
     ColorMatrix gray;
     gray.setToSaturation(0);
     auto filtered = layerLook([&] { Box(Modifier().size(40).graphicsLayer({.colorFilter = ColorFilter::colorMatrix(gray)}).background(red)); });
-    CHECK(filtered->layers == 1 && filtered->rectColors.size() == 1 && filtered->rectColors[0].r < 1 && filtered->rectColors[0].g > 0);
+    CHECK(filtered->layers == 1 && filtered->rectColors.size() == 1 && filtered->rectColors[0].red() < 1 && filtered->rectColors[0].green() > 0);
     auto forced = layerLook([&] { Box(Modifier().size(40).graphicsLayer({.compositingStrategy = CompositingStrategy::Offscreen}).background(red)); });
     CHECK(forced->layers == 1);
     // Faded and clipped to a rounded shape: the layer's own corners; with outsets: bigger, cut to the shape.
@@ -7020,11 +7026,11 @@ TEST(brush_gradients_interpolate_in_the_painted_area) {
     Color red = Color::hex(0xFF0000), blue = Color::hex(0x0000FF), green = Color::hex(0x00FF00);
     Rect area{100, 50, 200, 100};
     auto same = [](Color a, Color b) {
-        return std::abs(a.r - b.r) < 0.01f && std::abs(a.g - b.g) < 0.01f && std::abs(a.b - b.b) < 0.01f;
+        return std::abs(a.red() - b.red()) < 0.01f && std::abs(a.green() - b.green()) < 0.01f && std::abs(a.blue() - b.blue()) < 0.01f;
     };
     Brush h = Brush::horizontalGradient({red, blue});
     CHECK(same(h.colorAt({100, 60}, area), red));
-    CHECK(same(h.colorAt({200, 60}, area), lerp(red, blue, 0.5f)));
+    CHECK(same(h.colorAt({200, 60}, area), alongGradient(red, blue, 0.5f)));
     CHECK(same(h.colorAt({500, 60}, area), blue));  // clamped past the end
     Brush v = Brush::verticalGradient({red, green, blue}, 0, 100);
     CHECK(same(v.colorAt({0, 100}, area), green));
@@ -7032,13 +7038,13 @@ TEST(brush_gradients_interpolate_in_the_painted_area) {
     CHECK(same(d.colorAt({300, 150}, area), blue));
     Brush radial = Brush::radialGradient({red, blue});  // centered, radius 50 (half the height)
     CHECK(same(radial.colorAt({200, 100}, area), red));
-    CHECK(same(radial.colorAt({200, 125}, area), lerp(red, blue, 0.5f)));
+    CHECK(same(radial.colorAt({200, 125}, area), alongGradient(red, blue, 0.5f)));
     Brush sweep = Brush::sweepGradient({red, blue});
     CHECK(same(sweep.colorAt({250, 100.01f}, area), red));     // 3 o'clock
-    CHECK(same(sweep.colorAt({100, 100.01f}, area), lerp(red, blue, 0.5f)));  // 9 o'clock: halfway
+    CHECK(same(sweep.colorAt({100, 100.01f}, area), alongGradient(red, blue, 0.5f)));  // 9 o'clock: halfway
     Brush stops = Brush::linearGradient(std::vector<ColorStop>{{0, red}, {0.2f, green}, {1, blue}}, {0, 0}, {100, 0});
-    CHECK(same(stops.colorAt({110, 0}, area), lerp(red, green, 0.5f)));
-    CHECK(same(stops.colorAt({160, 0}, area), lerp(green, blue, 0.5f)));
+    CHECK(same(stops.colorAt({110, 0}, area), alongGradient(red, green, 0.5f)));
+    CHECK(same(stops.colorAt({160, 0}, area), alongGradient(green, blue, 0.5f)));
     CHECK(Brush::solid(red).isSolid() && Brush::solid(red) == Brush::solid(red) && !(h == v));
 }
 
@@ -7065,9 +7071,10 @@ TEST(brush_geometry_resolves_on_the_area) {
 // blend(): Compose's 29 blend modes, against values worked out by hand from W3C's compositing spec.
 TEST(blend_modes_follow_the_compositing_spec) {
     auto gray = [](float v, float a = 1) { return Color{v, v, v, a}; };
-    auto near = [](Color c, Color want) {
-        return std::abs(c.r - want.r) < 1e-3f && std::abs(c.g - want.g) < 1e-3f && std::abs(c.b - want.b) < 1e-3f &&
-               std::abs(c.a - want.a) < 1e-3f;
+    auto near = [](Color c, Color want) {  // (within two of 8 bits: the colors in and out are of 8 bits a channel)
+        const float e = 2.f / 255;
+        return std::abs(c.red() - want.red()) < e && std::abs(c.green() - want.green()) < e && std::abs(c.blue() - want.blue()) < e &&
+               std::abs(c.alpha() - want.alpha()) < e;
     };
     CHECK(near(blend(gray(0.5f), gray(0.4f), BlendMode::Multiply), gray(0.2f)));
     CHECK(near(blend(gray(0.5f), gray(0.4f), BlendMode::Screen), gray(0.7f)));
@@ -7091,7 +7098,7 @@ TEST(blend_modes_follow_the_compositing_spec) {
     CHECK(near(blend(Color{1, 0, 0, 0.5f}, Color{0, 0, 1, 1}, BlendMode::SrcOver), Color{0.5f, 0, 0.5f, 1}));
     CHECK(near(blend(Color{1, 0, 0, 0.5f}, Color{0, 0, 1, 1}, BlendMode::Multiply), Color{0, 0, 0.5f, 1}));  // red x blue: black, over half
     CHECK(near(blend(Color{1, 0, 0, 0.5f}, Color{0, 0, 1, 0.5f}, BlendMode::Xor), Color{0.5f, 0, 0.5f, 0.5f}));
-    CHECK(blend(red, gray(0.5f), BlendMode::Clear).a == 0);
+    CHECK(blend(red, gray(0.5f), BlendMode::Clear).alpha() == 0);
     CHECK(near(blend(red, gray(0.5f), BlendMode::Dst), gray(0.5f)));
     CHECK(near(blend(Color{1, 0, 0, 0.25f}, gray(0.5f, 0.5f), BlendMode::Plus), Color{(0.25f + 0.25f) / 0.75f, 0.25f / 0.75f, 0.25f / 0.75f, 0.75f}));
 }
@@ -7603,7 +7610,7 @@ TEST(tabs_as_compose_1_4) {
     bool primaryRipple = false;
     for (size_t i = 0; i < pressed.rects.size(); ++i) {
         Color c = pressed.rectColors[i];
-        primaryRipple |= near(pressed.rects[i].width, pressed.rects[i].height, 0.01f) && c.a < 0.2f && c.r == cs.tertiary.r && c.g == cs.tertiary.g && c.b == cs.tertiary.b;
+        primaryRipple |= near(pressed.rects[i].width, pressed.rects[i].height, 0.01f) && c.alpha() < 0.2f && c.red() == cs.tertiary.red() && c.green() == cs.tertiary.green() && c.blue() == cs.tertiary.blue();
     }
     CHECK(primaryRipple);
     rule.host().pointerUp(second.center());
@@ -9293,7 +9300,7 @@ TEST(text_field_labels_go_above_or_stay_up) {
     // The filled one's text sits in the middle of its 56 dp, not 8 dp lower under a label.
     CHECK(near(drawn["veli"].at.y - (end.y + 20), 28 + (16 * 0.8f - 16 * 0.2f) / 2, 1));
     // Always up: the label small at the top, the placeholder and the prefix shown while empty.
-    CHECK(near(drawn["Tutar"].size, 12) && drawn.count("yaz") && drawn.count("₺") && drawn["₺"].color.a > 0.99f);
+    CHECK(near(drawn["Tutar"].size, 12) && drawn.count("yaz") && drawn.count("₺") && drawn["₺"].color.alpha() > 0.99f);
     CHECK(!drawn.count("boş") && near(drawn["Not"].size, 16));  // the usual one: label down, placeholder hidden
     CHECK(near(rule.onNodeWithTag("parola").bounds().height, 20 + 56) && near(drawn["Parola"].size, 12));  // a password field's too
 }
@@ -9671,7 +9678,7 @@ TEST(update_transition_runs_values_together) {
         auto t = updateTransition(on.get());
         float size = t.animateFloat([](const bool& s) { return s ? 100.f : 50.f; }, tween(100, 0, LinearEasing));
         Color color = t.animateColor([](const bool& s) { return s ? colors::White : colors::Black; }, tween(200, 0, LinearEasing));
-        states->push_back(std::format("{} {} {:.0f} {:.1f}", t.currentState(), t.isRunning(), size, color.r));
+        states->push_back(std::format("{} {} {:.0f} {:.1f}", t.currentState(), t.isRunning(), size, color.red()));
     });
     CHECK(states->back() == "false false 50 0.0");
     on.set(true);
@@ -10654,7 +10661,7 @@ TEST(shadows_take_colors_and_clip_and_borders_take_brushes) {
         CHECK(near(e[0].elevation(), 8, 1e-4f) && e[0].shadow.ambientColor == colors::Black && e[0].shadow.spotColor == colors::Black);
         CHECK(e[0].outline.kind == Outline::Kind::Rounded && near(e[0].outline.roundRect.topLeft.x, 16) && sameRect(e[0].bounds, {0, 0, 100, 100}));
         CHECK(e[1].shadow.ambientColor == red && e[1].shadow.spotColor == red && sameRect(e[1].bounds, {0, 100, 100, 100}));
-        CHECK(near(e[2].shadow.ambientColor.a, 0.5f, 1e-4f) && e[2].outline.kind == Outline::Kind::Rectangle);
+        CHECK(near8(e[2].shadow.ambientColor.alpha(), 0.5f) && e[2].outline.kind == Outline::Kind::Rectangle);
     }
     CHECK(canvas.clipShapes.size() == 1 && sameRect(canvas.clipShapes[0].bounds, {0, 0, 100, 100}) && near(canvas.clipShapes[0].radii.topLeft, 16));
     CHECK(canvas.clips.size() == 1 && sameRect(canvas.clips[0], {0, 200, 100, 100}));
@@ -12379,11 +12386,11 @@ TEST(dynamic_color_schemes_map_the_system_tones) {
     CHECK(light.error == lightColorScheme().error && dark.onError == darkColorScheme().onError);  // not from the palette
     // Tones the system doesn't give are made at that lightness: surface 98 between 100 and 95,
     // the dark surface (6) between 10 and 0, still gray.
-    auto between = [](Color c, Color lighter, Color darker) { return c.r < lighter.r && c.r > darker.r; };
-    CHECK(between(light.surface, p.neutral1[0], p.neutral1[2]) && near(light.surface.r * 255, grayTone(98).r * 255));
-    CHECK(between(dark.surface, p.neutral1[11], p.neutral1[12]) && near(dark.surface.g * 255, dark.surface.b * 255));
+    auto between = [](Color c, Color lighter, Color darker) { return c.red() < lighter.red() && c.red() > darker.red(); };
+    CHECK(between(light.surface, p.neutral1[0], p.neutral1[2]) && near(light.surface.red() * 255, grayTone(98).red() * 255));
+    CHECK(between(dark.surface, p.neutral1[11], p.neutral1[12]) && near(dark.surface.green() * 255, dark.surface.blue() * 255));
     CHECK(between(light.surfaceContainer, p.neutral1[2], p.neutral1[3]));  // 94
-    CHECK(near(paletteTone(p.neutral1, 87).r * 255, grayTone(87).r * 255));
+    CHECK(near(paletteTone(p.neutral1, 87).red() * 255, grayTone(87).red() * 255));
 }
 
 TEST(color_schemes_have_compose_1_4s_colors_and_content_colors) {
@@ -12429,7 +12436,7 @@ TEST(scrims_take_the_schemes_scrim_color) {
     bool red = false;
     for (size_t i = 0; i < canvas.rects.size(); ++i) {
         Color c = canvas.rectColors[i];
-        red |= near(canvas.rects[i].width, 400) && c.r == 1 && c.g == 0 && c.b == 0 && near(c.a, 0.32f, 0.01f);
+        red |= near(canvas.rects[i].width, 400) && c.red() == 1 && c.green() == 0 && c.blue() == 0 && near(c.alpha(), 0.32f, 0.01f);
     }
     CHECK(red);
 }
@@ -12899,7 +12906,7 @@ TEST(infinite_transition_states_are_read_where_they_are_needed) {
         ++composed;
         auto t = rememberInfiniteTransition();
         auto angle = t.animateFloatState(0, 100000, tween(100000, 0, LinearEasing));  // a unit a millisecond, for long
-        auto tint = t.animateColorState(colors::Black, colors::White, tween(100000, 0, LinearEasing));
+        auto tint = t.animateColorState(colors::Black, colors::White, infiniteRepeatable(tween(1000, 0, LinearEasing)));  // (a quarter on: another)
         Column([&] {
             Box(Modifier().size(40).graphicsLayer([angle, &drawn](GraphicsLayerScope& l) { drawn.push_back(l.rotationZ = angle.get()); }));
             Box(Modifier().size(40).drawBehind([tint, &tints](DrawScope&) { tints.push_back(tint.get()); }));
@@ -12923,7 +12930,7 @@ TEST(infinite_transition_states_are_read_where_they_are_needed) {
     CHECK(composed == composedBefore);  // the section never composed again...
     CHECK(labels > labelsBefore && rule.onNodeWithText("0").exists() == false);  // ...but the text reading it did
     CHECK(drawn.size() >= 2 && drawn.back() > drawn.front() + 200);
-    CHECK(tints.size() >= 2 && tints.back().r > tints.front().r);
+    CHECK(tints.size() >= 2 && tints.back() != tints.front());
     CHECK(rule.onNodeWithTag("kayan").node()->contentBounds().x > x0 + 1);  // laid out again where it is now
     // Read only while drawing: idle until drawn, then the next frame is asked for.
     ComposeTestRule drawnOnly([&] {
@@ -13087,7 +13094,7 @@ TEST(checkbox_draws_as_compose_1_4) {
         cs = colorScheme();
         TriStateCheckbox(state.get(), [] {}, Modifier().testTag("kutu"), enabled.get());
     });
-    auto sameColor = [](Color a, Color b) { return near(a.r, b.r, 0.01f) && near(a.g, b.g, 0.01f) && near(a.b, b.b, 0.01f) && near(a.a, b.a, 0.01f); };
+    auto sameColor = [](Color a, Color b) { return near(a.red(), b.red(), 0.01f) && near(a.green(), b.green(), 0.01f) && near(a.blue(), b.blue(), 0.01f) && near(a.alpha(), b.alpha(), 0.01f); };
     struct Drawn {
         testing::RecordingCanvas canvas;
         Rect box;
@@ -13134,8 +13141,8 @@ TEST(checkbox_draws_as_compose_1_4) {
     rule.advanceFrame();
     rule.advanceFrame();
     auto faded = drawn();
-    CHECK(faded->canvas.paths.size() == 1 && near(faded->canvas.paths[0].height, 0, 0.05f) && faded->canvas.rectColors[0].a < 0.3f);
-    CHECK(fading->canvas.paths.size() == 1 && near(fading->canvas.paths[0].width, 12) && fading->canvas.pathColors[0].a < 0.99f);
+    CHECK(faded->canvas.paths.size() == 1 && near(faded->canvas.paths[0].height, 0, 0.05f) && faded->canvas.rectColors[0].alpha() < 0.3f);
+    CHECK(fading->canvas.paths.size() == 1 && near(fading->canvas.paths[0].width, 12) && fading->canvas.pathColors[0].alpha() < 0.99f);
     rule.advanceTimeBy(1000);
     CHECK(drawn()->canvas.paths.empty());
     // Indeterminate from off: a dash from the start, drawn along.
@@ -13157,7 +13164,7 @@ TEST(checkbox_draws_as_compose_1_4) {
     rule.advanceTimeBy(1000);
     auto disabledOff = drawn();
     CHECK(disabledOff->canvas.strokes.size() == 1 && sameColor(disabledOff->canvas.strokeColors[0], cs.onSurface.copy(0.38f)));
-    CHECK(disabledOff->canvas.rects.size() == 1 && disabledOff->canvas.rectColors[0].a == 0 && sameRect(disabledOff->canvas.rects[0], {disabledOff->box.x + 2, disabledOff->box.y + 2, 16, 16}));
+    CHECK(disabledOff->canvas.rects.size() == 1 && disabledOff->canvas.rectColors[0].alpha() == 0 && sameRect(disabledOff->canvas.rects[0], {disabledOff->box.x + 2, disabledOff->box.y + 2, 16, 16}));
 }
 
 TEST(radio_button_draws_as_compose_1_4) {
@@ -13168,7 +13175,7 @@ TEST(radio_button_draws_as_compose_1_4) {
         cs = colorScheme();
         RadioButton(selected.get(), [] {}, Modifier().testTag("radyo"), enabled.get());
     });
-    auto sameColor = [](Color a, Color b) { return near(a.r, b.r, 0.01f) && near(a.g, b.g, 0.01f) && near(a.b, b.b, 0.01f) && near(a.a, b.a, 0.01f); };
+    auto sameColor = [](Color a, Color b) { return near(a.red(), b.red(), 0.01f) && near(a.green(), b.green(), 0.01f) && near(a.blue(), b.blue(), 0.01f) && near(a.alpha(), b.alpha(), 0.01f); };
     auto drawn = [&] {
         auto canvas = std::make_shared<testing::RecordingCanvas>();
         rule.host().draw(*canvas);
@@ -13285,7 +13292,7 @@ TEST(buttons_as_compose_1_4) {
     auto container = [&](const char* tag) -> Rect {
         Rect b = rule.onNodeWithTag(tag).bounds();
         for (size_t i = 0; i < canvas->rects.size(); ++i)
-            if (canvas->rectColors[i].a > 0.5f && near(canvas->rects[i].center().y, b.center().y, 0.1f) && near(canvas->rects[i].center().x, b.center().x, 0.1f))
+            if (canvas->rectColors[i].alpha() > 0.5f && near(canvas->rects[i].center().y, b.center().y, 0.1f) && near(canvas->rects[i].center().x, b.center().x, 0.1f))
                 return canvas->rects[i];
         for (Rect r : canvas->strokes)
             if (near(r.center().y, b.center().y, 0.1f) && near(r.center().x, b.center().x, 0.1f)) return r;
@@ -13484,7 +13491,7 @@ TEST(navigation_bar_items_as_compose_1_4) {
         rule.host().draw(*canvas);
         return canvas;
     };
-    auto sameColor3 = [](Color a, Color b) { return near(a.r, b.r, 0.01f) && near(a.g, b.g, 0.01f) && near(a.b, b.b, 0.01f); };
+    auto sameColor3 = [](Color a, Color b) { return near(a.red(), b.red(), 0.01f) && near(a.green(), b.green(), 0.01f) && near(a.blue(), b.blue(), 0.01f); };
     auto indicatorUnder = [&](const testing::RecordingCanvas& canvas, Rect label) -> std::optional<std::pair<Rect, Color>> {
         for (size_t i = 0; i < canvas.rects.size(); ++i)
             if (near(canvas.rects[i].center().x, label.center().x, 1) && sameColor3(canvas.rectColors[i], cs.secondaryContainer))  // (each at whole px)
@@ -13526,7 +13533,7 @@ TEST(navigation_bar_items_as_compose_1_4) {
     bool fromFinger = false;
     for (size_t i = 0; i < canvas->rects.size(); ++i) {
         Rect r = canvas->rects[i];
-        fromFinger |= near(r.width, r.height, 0.01f) && canvas->rectColors[i].a < 0.2f && near(r.center().x, at.x, 3) && near(r.center().y, at.y, 3);
+        fromFinger |= near(r.width, r.height, 0.01f) && canvas->rectColors[i].alpha() < 0.2f && near(r.center().x, at.x, 3) && near(r.center().y, at.y, 3);
     }
     CHECK(fromFinger);
     rule.host().pointerUp(at);
@@ -13588,7 +13595,7 @@ TEST(navigation_rail_as_compose_1_4) {
     bool fromFinger = false;
     for (size_t i = 0; i < pressed.rects.size(); ++i) {
         Rect r = pressed.rects[i];
-        fromFinger |= near(r.width, r.height, 0.01f) && pressed.rectColors[i].a < 0.2f && near(r.center().x, at.x, 3) && near(r.center().y, at.y, 3);
+        fromFinger |= near(r.width, r.height, 0.01f) && pressed.rectColors[i].alpha() < 0.2f && near(r.center().x, at.x, 3) && near(r.center().y, at.y, 3);
     }
     CHECK(fromFinger);
     rule.host().pointerUp(at);
@@ -13799,7 +13806,7 @@ TEST(a_brush_painter_takes_its_color_filter) {
     CHECK(tinted.colorAtParameter(0) == ColorFilter::tint(Color::hex(0xFF0000)).apply(colors::Black) &&
           tinted.colorAtParameter(1) == ColorFilter::tint(Color::hex(0xFF0000)).apply(colors::White));
     Brush lit = ColorFilter::lighting(Color{0.5f, 0.5f, 0.5f, 1}, Color{0.1f, 0, 0, 0}).apply(gradient);
-    CHECK(near(lit.colorAtParameter(1).r, 0.6f, 0.01f) && near(lit.colorAtParameter(1).g, 0.5f, 0.01f) && near(lit.colorAtParameter(0).r, 0.1f, 0.01f));
+    CHECK(near(lit.colorAtParameter(1).red(), 0.6f, 0.01f) && near(lit.colorAtParameter(1).green(), 0.5f, 0.01f) && near(lit.colorAtParameter(0).red(), 0.1f, 0.01f));
     // Painted: the filtered brush (the middle of the box, the middle of the filtered gradient).
     ComposeTestRule rule([&] {
         Image(BrushPainter(gradient), "degrade", Modifier().size(100).testTag("boya"), Alignment::Center, ContentScale::Fit, 1,
@@ -13808,7 +13815,7 @@ TEST(a_brush_painter_takes_its_color_filter) {
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
     bool green = false;
-    for (Color c : canvas.rectColors) green = green || (near(c.g, 0.5f, 0.02f) && near(c.r, 0, 0.02f) && near(c.b, 0, 0.02f));
+    for (Color c : canvas.rectColors) green = green || (near(c.green(), 0.5f, 0.02f) && near(c.red(), 0, 0.02f) && near(c.blue(), 0, 0.02f));
     CHECK(green);
 }
 
@@ -14633,7 +14640,7 @@ TEST(switch_colors_and_press_as_compose_1_4) {
         for (size_t i = 0; i < canvas.rects.size(); ++i) out.push_back({canvas.rects[i], canvas.rectColors[i]});
         return out;
     };
-    auto faded = [&](Color c, float a) { return Color{lerp(cs.surface.r, c.r, a), lerp(cs.surface.g, c.g, a), lerp(cs.surface.b, c.b, a), 1}; };
+    auto faded = [&](Color c, float a) { return c.copy(a).compositeOver(cs.surface); };  // (SwitchDefaults': over the surface)
     auto has = [](const std::vector<std::pair<Rect, Color>>& all, float w, Color c) {
         return std::any_of(all.begin(), all.end(), [&](const auto& p) { return near(p.first.width, w) && p.second == c; });
     };
@@ -15633,7 +15640,7 @@ TEST(fab_menu_opens_from_the_bottom_and_its_button_turns_round) {
         return std::pair{-1.f, Color{}};
     };
     auto button = [&] { return fill(rule.onNodeWithTag("fab").node()->children[0]->bounds()); };  // inside its container
-    auto sameColor = [](Color a, Color b) { return near(a.r, b.r, 0.01f) && near(a.g, b.g, 0.01f) && near(a.b, b.b, 0.01f) && near(a.a, b.a, 0.01f); };
+    auto sameColor = [](Color a, Color b) { return near(a.red(), b.red(), 0.01f) && near(a.green(), b.green(), 0.01f) && near(a.blue(), b.blue(), 0.01f) && near(a.alpha(), b.alpha(), 0.01f); };
     Rect fab = rule.onNodeWithTag("fab").bounds();
     CHECK(near(fab.right(), 400) && near(fab.bottom(), 600) && near(fab.width, 56));
     CHECK(near(button().first, 16) && sameColor(button().second, cs.primaryContainer) && *progress == 0);
@@ -15851,7 +15858,7 @@ TEST(short_navigation_bar_ripples_start_under_the_finger) {
         bool found = false;
         for (size_t i = 0; i < canvas.rects.size(); ++i) {
             Rect r = canvas.rects[i];
-            found |= near(r.width, r.height, 0.01f) && canvas.rectColors[i].a < 0.2f && near(r.center().x, at.x, 3) && near(r.center().y, at.y, 3);
+            found |= near(r.width, r.height, 0.01f) && canvas.rectColors[i].alpha() < 0.2f && near(r.center().x, at.x, 3) && near(r.center().y, at.y, 3);
         }
         rule.host().pointerUp(at);
         rule.waitForIdle();
@@ -16097,7 +16104,7 @@ TEST(modal_wide_navigation_rail_opens_over_the_content_with_a_scrim) {
     rule.host().draw(c);
     bool scrim = false, sheet = false;
     for (size_t i = 0; i < c.rects.size(); ++i) {
-        scrim |= sameRect(c.rects[i], {0, 0, 400, 600}) && near(c.rectColors[i].a, 0.32f, 0.01f);
+        scrim |= sameRect(c.rects[i], {0, 0, 400, 600}) && near(c.rectColors[i].alpha(), 0.32f, 0.01f);
         sheet |= sameRect(c.rects[i], {0, 0, 220, 600}) && c.rectColors[i] == cs.surfaceContainer && near(c.rectCorners[i].topRight, 16) &&
                  near(c.rectCorners[i].topLeft, 0);
     }
@@ -16748,7 +16755,7 @@ TEST(elevated_chips_cast_a_shadow_and_leading_icon_tabs_sit_side_by_side) {
                 l.container = c;
         }
         for (size_t i = 0; i < canvas.strokes.size(); ++i)
-            if (b.contains(canvas.strokes[i].center()) && canvas.strokeColors[i].a > 0) ++l.borders;
+            if (b.contains(canvas.strokes[i].center()) && canvas.strokeColors[i].alpha() > 0) ++l.borders;
         return l;
     };
     // On surfaceContainerLow, a shadow and no border; the plain chip keeps its border.
@@ -17503,7 +17510,7 @@ TEST(scrollbars_show_where_the_content_is_and_move_it) {
         rule.host().draw(canvas);
         Rect bar = rule.onNodeWithTag(tag).bounds();
         for (size_t i = 0; i < canvas.rects.size(); ++i)
-            if (bar.contains(canvas.rects[i].center()) && canvas.rectColors[i].a > 0 && canvas.rectColors[i].r == 0) return std::pair{canvas.rects[i], canvas.rectColors[i]};
+            if (bar.contains(canvas.rects[i].center()) && canvas.rectColors[i].alpha() > 0 && canvas.rectColors[i].red() == 0) return std::pair{canvas.rects[i], canvas.rectColors[i]};
         return std::nullopt;
     };
     auto anyThumb = [&](const char* tag) {  // anything drawn across the bar, wherever along it
@@ -18727,7 +18734,7 @@ TEST(pull_to_refresh_indicator_comes_out_from_under_the_top_edge) {
         return canvas;
     };
     const ColorScheme& cs = colorScheme();
-    auto sameColor = [](Color a, Color b) { return near(a.r, b.r, 0.003f) && near(a.g, b.g, 0.003f) && near(a.b, b.b, 0.003f) && near(a.a, b.a, 0.003f); };
+    auto sameColor = [](Color a, Color b) { return near(a.red(), b.red(), 0.003f) && near(a.green(), b.green(), 0.003f) && near(a.blue(), b.blue(), 0.003f) && near(a.alpha(), b.alpha(), 0.003f); };
     // Hidden: no shadow (only the circle's own color), no arc.
     auto hidden = draw();
     CHECK(hidden->arcs.empty() && hidden->paths.empty() && !hidden->rectColors.empty());
@@ -20303,7 +20310,7 @@ TEST(navigation_rail_items_take_their_options) {
     Color label{};
     for (size_t i = 0; i < canvas.texts.size(); ++i)
         if (canvas.texts[i] == "Kapalı") label = canvas.colors[i];
-    CHECK(near(label.a, cs.onSurface.a * 0.38f, 0.01f));
+    CHECK(near(label.alpha(), cs.onSurface.alpha() * 0.38f, 0.01f));
     tap(rule, off.center());
     rule.waitForIdle();
     CHECK(clicks == 0);
@@ -20521,7 +20528,7 @@ TEST(ripple_spreads_from_the_press_and_fades_once_let_go) {
         for (size_t i = 0; i < canvas.rects.size(); ++i)
             if (const Rect& r = canvas.rects[i]; near(r.width, r.height, 0.01f) && r.width > 0) {
                 out.push_back(r);
-                alpha = canvas.rectColors[i].a;
+                alpha = canvas.rectColors[i].alpha();
             }
         return std::pair(out, canvas);
     };
@@ -21314,12 +21321,12 @@ TEST(gradient_tile_modes_go_on_past_the_ends) {
     auto at = [&](TileMode mode, float x) {  // 0..10 dp from red to blue, painting 0..100
         return Brush::horizontalGradient({a, b}, 0, 10, mode).colorAt({x, 5}, {0, 0, 100, 10});
     };
-    auto same = [](Color p, Color q) { return near(p.r, q.r, 0.01f) && near(p.b, q.b, 0.01f) && near(p.a, q.a, 0.01f); };
-    Color quarter = lerp(a, b, 0.25f);
+    auto same = [](Color p, Color q) { return near(p.red(), q.red(), 0.01f) && near(p.blue(), q.blue(), 0.01f) && near(p.alpha(), q.alpha(), 0.01f); };
+    Color quarter = alongGradient(a, b, 0.25f);
     CHECK(same(at(TileMode::Clamp, 2.5f), quarter) && same(at(TileMode::Clamp, 32.5f), b) && same(at(TileMode::Clamp, -5), a));
     CHECK(same(at(TileMode::Repeated, 12.5f), quarter) && same(at(TileMode::Repeated, 32.5f), quarter) && same(at(TileMode::Repeated, -7.5f), quarter));
-    CHECK(same(at(TileMode::Mirror, 12.5f), lerp(a, b, 0.75f)) && same(at(TileMode::Mirror, 22.5f), quarter) && same(at(TileMode::Mirror, -2.5f), quarter));
-    CHECK(same(at(TileMode::Decal, 2.5f), quarter) && at(TileMode::Decal, 12.5f).a == 0 && at(TileMode::Decal, -1).a == 0);
+    CHECK(same(at(TileMode::Mirror, 12.5f), alongGradient(a, b, 0.75f)) && same(at(TileMode::Mirror, 22.5f), quarter) && same(at(TileMode::Mirror, -2.5f), quarter));
+    CHECK(same(at(TileMode::Decal, 2.5f), quarter) && at(TileMode::Decal, 12.5f).alpha() == 0 && at(TileMode::Decal, -1).alpha() == 0);
     // A radial one too; and the mode makes brushes differ.
     Brush rings = Brush::radialGradient({a, b}, Offset{50, 50}, 10, TileMode::Repeated);
     CHECK(same(rings.colorAt({50 + 12.5f, 50}, {0, 0, 100, 100}), quarter));
@@ -21331,27 +21338,27 @@ TEST(gradient_tile_modes_go_on_past_the_ends) {
 // its own first; equal by what they are.
 TEST(shaders_are_composes) {
     Color red{1, 0, 0, 1}, blue{0, 0, 1, 1}, green{0, 1, 0, 1};
-    auto same = [](Color p, Color q) { return near(p.r, q.r, 0.01f) && near(p.g, q.g, 0.01f) && near(p.b, q.b, 0.01f) && near(p.a, q.a, 0.01f); };
+    auto same = [](Color p, Color q) { return near(p.red(), q.red(), 0.01f) && near(p.green(), q.green(), 0.01f) && near(p.blue(), q.blue(), 0.01f) && near(p.alpha(), q.alpha(), 0.01f); };
     Shader even = LinearGradientShader({10, 0}, {30, 0}, {red, green, blue});
     CHECK(even.kind() == Shader::Kind::Linear && even.stops().size() == 3 && near(even.stops()[1].offset, 0.5f, 1e-6f));
-    CHECK(same(even.colorAt({15, 7}), lerp(red, green, 0.5f)) && same(even.colorAt({0, 0}), red) && same(even.colorAt({40, 0}), blue));
+    CHECK(same(even.colorAt({15, 7}), alongGradient(red, green, 0.5f)) && same(even.colorAt({0, 0}), red) && same(even.colorAt({40, 0}), blue));
     Shader placed = LinearGradientShader({0, 0}, {0, 100}, {red, blue}, {0.2f, 0.4f}, TileMode::Mirror);
-    CHECK(same(placed.colorAt({0, 30}), lerp(red, blue, 0.5f)) && same(placed.colorAt({0, 170}), lerp(red, blue, 0.5f)));
-    CHECK(same(LinearGradientShader({0, 0}, {10, 0}, {red, blue}, {}, TileMode::Repeated).colorAt({12.5f, 0}), lerp(red, blue, 0.25f)));
-    CHECK(LinearGradientShader({0, 0}, {10, 0}, {red, blue}, {}, TileMode::Decal).colorAt({12, 0}).a == 0);
+    CHECK(same(placed.colorAt({0, 30}), alongGradient(red, blue, 0.5f)) && same(placed.colorAt({0, 170}), alongGradient(red, blue, 0.5f)));
+    CHECK(same(LinearGradientShader({0, 0}, {10, 0}, {red, blue}, {}, TileMode::Repeated).colorAt({12.5f, 0}), alongGradient(red, blue, 0.25f)));
+    CHECK(LinearGradientShader({0, 0}, {10, 0}, {red, blue}, {}, TileMode::Decal).colorAt({12, 0}).alpha() == 0);
     Shader radial = RadialGradientShader({50, 50}, 20, {red, blue});
-    CHECK(radial.kind() == Shader::Kind::Radial && same(radial.colorAt({50, 60}), lerp(red, blue, 0.5f)) && near(radial.radius(), 20, 1e-6f));
+    CHECK(radial.kind() == Shader::Kind::Radial && same(radial.colorAt({50, 60}), alongGradient(red, blue, 0.5f)) && near(radial.radius(), 20, 1e-6f));
     Shader sweep = SweepGradientShader({0, 0}, {red, blue});
-    CHECK(same(sweep.colorAt({0, 10}), lerp(red, blue, 0.25f)));  // clockwise from 3 o'clock: 6 o'clock a quarter round
+    CHECK(same(sweep.colorAt({0, 10}), alongGradient(red, blue, 0.25f)));  // clockwise from 3 o'clock: 6 o'clock a quarter round
     // An image: a pixel a dp, bilinearly between pixel centers (premultiplied: a clear pixel adds no color).
     ImageBitmap img = ImageBitmap::fromPixels(2, 1, {255, 0, 0, 255, 0, 0, 255, 0});
     Shader clamp = ImageShader(img);
     CHECK(same(clamp.colorAt({0.5f, 0.5f}), red) && same(clamp.colorAt({1, 0.5f}), red.copy(0.5f)) && same(clamp.colorAt({-3, 0.5f}), red));
-    CHECK(clamp.colorAt({5, 0.5f}).a == 0);
-    CHECK(same(ImageShader(img, TileMode::Repeated).colorAt({2.5f, 0.5f}), red) && ImageShader(img, TileMode::Repeated).colorAt({3.5f, 0.5f}).a == 0);
-    CHECK(ImageShader(img, TileMode::Mirror).colorAt({2.5f, 0.5f}).a == 0);
+    CHECK(clamp.colorAt({5, 0.5f}).alpha() == 0);
+    CHECK(same(ImageShader(img, TileMode::Repeated).colorAt({2.5f, 0.5f}), red) && ImageShader(img, TileMode::Repeated).colorAt({3.5f, 0.5f}).alpha() == 0);
+    CHECK(ImageShader(img, TileMode::Mirror).colorAt({2.5f, 0.5f}).alpha() == 0);
     CHECK(same(ImageShader(img, TileMode::Mirror).colorAt({3.5f, 0.5f}), red));
-    CHECK(ImageShader(img, TileMode::Decal).colorAt({-0.5f, 0.5f}).a == 0 && same(ImageShader(img, TileMode::Clamp, TileMode::Decal).colorAt({0.5f, 0.75f}), red.copy(0.75f)));
+    CHECK(ImageShader(img, TileMode::Decal).colorAt({-0.5f, 0.5f}).alpha() == 0 && same(ImageShader(img, TileMode::Clamp, TileMode::Decal).colorAt({0.5f, 0.75f}), red.copy(0.75f)));
     // A composite: src onto dst.
     Shader both = CompositeShader(LinearGradientShader({0, 0}, {10, 0}, {red, red}), LinearGradientShader({0, 0}, {10, 0}, {blue.copy(0), blue}), BlendMode::SrcOver);
     CHECK(both.kind() == Shader::Kind::Composite && both.blendMode() == BlendMode::SrcOver && both.dst().stops().front().color == red);
@@ -21362,21 +21369,21 @@ TEST(shaders_are_composes) {
     right.translate(10, 0);
     twice.scale(2, 2);
     Shader moved = even.transformed(right);
-    CHECK(moved.transform() && same(moved.colorAt({25, 0}), lerp(red, green, 0.5f)) && !even.transform());
-    CHECK(same(moved.transformed(twice).colorAt({50, 0}), lerp(red, green, 0.5f)));  // (15 + 10) * 2
-    CHECK(same(even.transformed(twice).transformed(right).colorAt({40, 0}), lerp(red, green, 0.5f)));  // 15 * 2 + 10
+    CHECK(moved.transform() && same(moved.colorAt({25, 0}), alongGradient(red, green, 0.5f)) && !even.transform());
+    CHECK(same(moved.transformed(twice).colorAt({50, 0}), alongGradient(red, green, 0.5f)));  // (15 + 10) * 2
+    CHECK(same(even.transformed(twice).transformed(right).colorAt({40, 0}), alongGradient(red, green, 0.5f)));  // 15 * 2 + 10
     CHECK(even.transformed(Matrix()) == even && !even.transformed(Matrix()).transform());
     // Equal by what they are.
     CHECK(LinearGradientShader({10, 0}, {30, 0}, {red, green, blue}) == even && !(even == moved) && !(radial == RadialGradientShader({50, 50}, 21, {red, blue})));
     CHECK(ImageShader(img) == clamp && !(ImageShader(img, TileMode::Repeated) == clamp) && !(both == CompositeShader(both.dst(), both.src(), BlendMode::DstIn)));
-    CHECK(Shader().colorAt({0, 0}).a == 0 && !(Shader() == even));
+    CHECK(Shader().colorAt({0, 0}).alpha() == 0 && !(Shader() == even));
 }
 
 // Brushes as Compose's ShaderBrush: a shader made for the size it paints (made again only for
 // another), faded by a paint's alpha, through a transform; composites; intrinsic sizes; lerp.
 TEST(shader_brushes_are_composes) {
     Color red{1, 0, 0, 1}, blue{0, 0, 1, 1}, green{0, 1, 0, 1};
-    auto same = [](Color p, Color q) { return near(p.r, q.r, 0.01f) && near(p.g, q.g, 0.01f) && near(p.b, q.b, 0.01f) && near(p.a, q.a, 0.01f); };
+    auto same = [](Color p, Color q) { return near(p.red(), q.red(), 0.01f) && near(p.green(), q.green(), 0.01f) && near(p.blue(), q.blue(), 0.01f) && near(p.alpha(), q.alpha(), 0.01f); };
     int made = 0;
     Size madeFor;
     Brush own = Brush::shader([&](Size size) {
@@ -21384,20 +21391,20 @@ TEST(shader_brushes_are_composes) {
         return LinearGradientShader({0, 0}, {size.width, 0}, {red, blue});
     }, Size{40, 20});
     CHECK(own.kind() == Brush::Kind::Shader && !own.isSolid());
-    CHECK(same(own.colorAt({150, 60}, {100, 50, 100, 20}), lerp(red, blue, 0.5f)) && made == 1 && near(madeFor.width, 100, 1e-6f));
-    CHECK(same(own.colorAt({125, 60}, {100, 50, 100, 20}), lerp(red, blue, 0.25f)) && made == 1);  // the same size: not made again
-    CHECK(same(own.colorAt({110, 60}, {100, 50, 20, 20}), lerp(red, blue, 0.5f)) && made == 2);
+    CHECK(same(own.colorAt({150, 60}, {100, 50, 100, 20}), alongGradient(red, blue, 0.5f)) && made == 1 && near(madeFor.width, 100, 1e-6f));
+    CHECK(same(own.colorAt({125, 60}, {100, 50, 100, 20}), alongGradient(red, blue, 0.25f)) && made == 1);  // the same size: not made again
+    CHECK(same(own.colorAt({110, 60}, {100, 50, 20, 20}), alongGradient(red, blue, 0.5f)) && made == 2);
     Brush copy = own;
     CHECK(copy == own && !(own == Brush::shader([](Size) { return Shader(); })));
     CHECK(near(own.intrinsicSize().width, 40, 1e-6f) && near(own.intrinsicSize().height, 20, 1e-6f));
     // Faded: what it paints as opaque as the paint's alpha says.
     Brush half = own.faded(0.5f);
-    CHECK(near(half.shaderAlpha(), 0.5f, 1e-6f) && same(half.colorAt({150, 60}, {100, 50, 100, 20}), lerp(red, blue, 0.5f).copy(0.5f)) && !(half == own));
+    CHECK(near(half.shaderAlpha(), 0.5f, 1e-6f) && same(half.colorAt({150, 60}, {100, 50, 100, 20}), alongGradient(red, blue, 0.5f).copy(0.5f)) && !(half == own));
     CHECK(near(Brush::horizontalGradient({red, blue}).faded(0.5f).shaderAlpha(), 1, 1e-6f));  // (a gradient's alpha is in its stops)
     // One shader whatever the size.
     Shader rings = RadialGradientShader({5, 5}, 5, {red, blue}, {}, TileMode::Repeated);
     Brush fixed = Brush::shader(rings);
-    CHECK(fixed.createShader({300, 300}) == rings && same(fixed.colorAt({17.5f, 5}, {0, 0, 300, 300}), lerp(red, blue, 0.5f)));
+    CHECK(fixed.createShader({300, 300}) == rings && same(fixed.colorAt({17.5f, 5}, {0, 0, 300, 300}), alongGradient(red, blue, 0.5f)));
     CHECK(fixed == Brush::shader(RadialGradientShader({5, 5}, 5, {red, blue}, {}, TileMode::Repeated)) &&
           !(fixed == Brush::shader(RadialGradientShader({5, 5}, 6, {red, blue}, {}, TileMode::Repeated))) &&
           !(fixed == Brush::shader([rings](Size) { return rings; })));  // equal by its shader
@@ -21410,11 +21417,11 @@ TEST(shader_brushes_are_composes) {
         m.rotateZ(90);
         return m;
     }());
-    CHECK(turned.transform() && same(turned.colorAt({100, 55}, {100, 50, 20, 20}), lerp(red, blue, 0.25f)));
+    CHECK(turned.transform() && same(turned.colorAt({100, 55}, {100, 50, 20, 20}), alongGradient(red, blue, 0.25f)));
     CHECK(near(turned.parameterAt({100, 55}, {100, 50, 20, 20}), 0.25f, 1e-4f));
     CHECK(!Brush::solid(red).withTransform(down).transform() && !h.withTransform(Matrix()).transform() && !h.withTransform(std::nullopt).transform());
     CHECK(h.withTransform(down).createShader({20, 20}) == h.createShader({20, 20}).transformed(down));
-    CHECK(same(fixed.withTransform(down).colorAt({17.5f, 15}, {0, 0, 300, 300}), lerp(red, blue, 0.5f)));
+    CHECK(same(fixed.withTransform(down).colorAt({17.5f, 15}, {0, 0, 300, 300}), alongGradient(red, blue, 0.5f)));
     CHECK(!(h.withTransform(down) == h) && h.withTransform(down) == h.withTransform(down));
     // A brush's shader: a gradient's where it lies on that size; a color's a gradient of it.
     Shader hs = h.createShader({50, 30});
@@ -21448,7 +21455,7 @@ TEST(shader_brushes_are_composes) {
 // geometry; a color with a gradient as that gradient in the color; anything else switches halfway.
 TEST(brushes_lerp_as_composes) {
     Color red{1, 0, 0, 1}, blue{0, 0, 1, 1}, green{0, 1, 0, 1};
-    auto same = [](Color p, Color q) { return near(p.r, q.r, 0.01f) && near(p.g, q.g, 0.01f) && near(p.b, q.b, 0.01f) && near(p.a, q.a, 0.01f); };
+    auto same = [](Color p, Color q) { return near(p.red(), q.red(), 0.01f) && near(p.green(), q.green(), 0.01f) && near(p.blue(), q.blue(), 0.01f) && near(p.alpha(), q.alpha(), 0.01f); };
     Brush mixed = lerp(Brush::solid(red), Brush::solid(blue), 0.25f);
     CHECK(mixed.isSolid() && same(mixed.stops().front().color, lerp(red, blue, 0.25f)));
     // Two linear gradients: colors index by index, the shorter's last again; ends mixed.
@@ -22074,7 +22081,7 @@ TEST(vector_drawable_xml_becomes_an_image_vector) {
               near(square.strokeLineWidth, 1));  // (a stroke's width 1 where it isn't given, as Compose reads it)
         // In its group; its stroke's color half transparent, then half again.
         const VectorPath& line = *paths[1].path;
-        CHECK(!line.fill && line.stroke && near(line.stroke->colorAt({}, {}).a, 128 / 255.f, 0.01f) && near(line.strokeAlpha, 0.5f) &&
+        CHECK(!line.fill && line.stroke && near(line.stroke->colorAt({}, {}).alpha(), 128 / 255.f, 0.01f) && near(line.strokeAlpha, 0.5f) &&
               near(line.strokeLineWidth, 2) && line.strokeLineCap == StrokeCap::Round && line.strokeLineJoin == StrokeJoin::Bevel);
         std::vector<Offset> at = paths[1].points();
         CHECK(near(at[0].x, 12) && near(at[0].y, 12) && near(at[1].x, 18) && near(at[1].y, 12));
@@ -22164,7 +22171,7 @@ TEST(vector_drawable_gradients_become_brushes) {
     std::vector<PlacedPath> paths = placedPaths(v);
     CHECK(paths.size() == 5);
     if (paths.size() != 5) return;
-    auto same = [](Color a, Color b) { return near(a.r, b.r, 0.01f) && near(a.g, b.g, 0.01f) && near(a.b, b.b, 0.01f) && near(a.a, b.a, 0.01f); };
+    auto same = [](Color a, Color b) { return near(a.red(), b.red(), 0.01f) && near(a.green(), b.green(), 0.01f) && near(a.blue(), b.blue(), 0.01f) && near(a.alpha(), b.alpha(), 0.01f); };
     const Rect viewport{0, 0, 24, 24};
     // Linear: start, center and end colors from its start point to its end.
     const Brush& linear = *paths[0].path->fill;
@@ -22206,7 +22213,7 @@ TEST(vector_drawable_gradients_become_brushes) {
 
 TEST(image_vector_groups_move_and_clip_their_paths) {
     const Color red = Color::hex(0xC03030), blue = Color::hex(0x3050C0);
-    auto same = [](Color a, Color b) { return near(a.r, b.r, 0.01f) && near(a.g, b.g, 0.01f) && near(a.b, b.b, 0.01f); };
+    auto same = [](Color a, Color b) { return near(a.red(), b.red(), 0.01f) && near(a.green(), b.green(), 0.01f) && near(a.blue(), b.blue(), 0.01f); };
     ImageVector v = ImageVector::Builder(48, 48, 24, 24)
                         .group({.name = "dönen", .rotation = 90, .pivotX = 12, .pivotY = 12, .clipPathData = addPathNodes("M0,0h12v24h-12z")},
                                [&](ImageVector::Builder& b) {
@@ -22512,7 +22519,7 @@ TEST(animated_vectors_play_their_animations) {
 </animated-vector>)";
     AnimatedImageVector avd = AnimatedImageVector::fromAnimatedVectorXml(xml);
     CHECK(!avd.empty() && avd.totalDurationMillis() == 300);  // the group's: its longer animator (together), 100 in and 200 long
-    auto same = [](Color a, Color b) { return near(a.r, b.r, 0.01f) && near(a.g, b.g, 0.01f) && near(a.b, b.b, 0.01f); };
+    auto same = [](Color a, Color b) { return near(a.red(), b.red(), 0.01f) && near(a.green(), b.green(), 0.01f) && near(a.blue(), b.blue(), 0.01f); };
     std::map<float, ImageVector> kept;  // (what the placed paths point into)
     auto at = [&](float t) { return placedPaths(kept[t] = avd.vectorAt(t)); };
     // As it starts: the drawable as it is.
@@ -22523,8 +22530,9 @@ TEST(animated_vectors_play_their_animations) {
     // first): 112.5° at 150.
     const Offset dot = at(50)[0].points()[0], later = at(150)[0].points()[0];
     CHECK(near(dot.x, 19.07f, 0.05f) && near(dot.y, 4.93f, 0.05f) && near(later.x, 21.24f, 0.05f) && near(later.y, 15.83f, 0.05f));
-    // One after the other: the color first (halfway at 50, done at 100), then the shape (halfway at 150).
-    CHECK(same(at(50)[1].path->fill->colorAt({}, {}), Color{0.5f, 0, 0.5f, 1}) && same(at(100)[1].path->fill->colorAt({}, {}), Color::hex(0x0000FF)));
+    // One after the other: the color first (halfway at 50, in Oklab as Compose animates it: ColorTest's
+    // red to blue at 0.5; done at 100), then the shape (halfway at 150).
+    CHECK(same(at(50)[1].path->fill->colorAt({}, {}), Color::hex(0x8C53A2)) && same(at(100)[1].path->fill->colorAt({}, {}), Color::hex(0x0000FF)));
     CHECK(near(at(100)[1].box().width, 4, 0.01f) && near(at(150)[1].box().width, 6, 0.01f) && near(at(220)[1].box().width, 8, 0.01f));
     // From 100, there and back (repeatMode reverse), holding where it ends; before it starts, its
     // own value. A property without valueFrom starts at its own value.
@@ -22558,7 +22566,7 @@ TEST(animated_vectors_play_their_animations) {
     };
     auto shows = [&](Color c) {
         std::vector<Color> drawn = colors();
-        return std::any_of(drawn.begin(), drawn.end(), [&](Color d) { return same(d, c) && near(d.a, c.a, 0.02f); });
+        return std::any_of(drawn.begin(), drawn.end(), [&](Color d) { return same(d, c) && near(d.alpha(), c.alpha(), 0.02f); });
     };
     CHECK(shows(Color::hex(0xFF0000)));
     atEnd.set(true);
@@ -22717,7 +22725,7 @@ TEST(image_vector_builder_draws_paths_in_their_own_paints) {
     VectorDrawing f;
     drawVectorAt(f, fills, {24, 24});
     CHECK(f.image.config() == ImageBitmapConfig::Alpha8 && f.bitmap.paths.size() == 2 && f.bitmap.pathColors.size() == 2 &&
-          near(f.bitmap.pathColors[1].a, 0.5f, 0.01f));
+          near(f.bitmap.pathColors[1].alpha(), 0.5f, 0.01f));
     // Its bitmap whole pixels around its size, just its size within a hundredth of a pixel of it;
     // kept for each size and config (the same one again where they are the same).
     VectorDrawing near48, past48, again48, modulated;
@@ -23608,7 +23616,7 @@ TEST(indication_shows_a_sources_ripple_on_another_node) {
             testing::RecordingCanvas canvas;
             rule.host().draw(canvas);
             last.clear();
-            for (size_t i = 0; i < canvas.rects.size(); ++i) last.push_back({canvas.rects[i], canvas.rectColors[i].a}), lastColor = canvas.rectColors[i];
+            for (size_t i = 0; i < canvas.rects.size(); ++i) last.push_back({canvas.rects[i], canvas.rectColors[i].alpha()}), lastColor = canvas.rectColors[i];
         }
     };
     rule.host().pointerDown({area.x + 10, area.y + 10});  // pressed on the area, away from the icon
@@ -23630,8 +23638,8 @@ TEST(indication_shows_a_sources_ripple_on_another_node) {
     CHECK(last.empty() && !rule.host().hasPendingWork());
     rule.host().pointerMove(centerOf(area));  // the mouse over the area: the icon shows the hover layer
     frames(2);
-    CHECK(last.size() == 1 && near(last[0].second, 0.08f, 0.001f) && near(last[0].first.width, icon.width));
-    CHECK(near(lastColor.r, 1) && near(lastColor.g, 0) && near(lastColor.b, 0));  // in the indication's own color
+    CHECK(last.size() == 1 && near8(last[0].second, 0.08f) && near(last[0].first.width, icon.width));
+    CHECK(near(lastColor.red(), 1) && near(lastColor.green(), 0) && near(lastColor.blue(), 0));  // in the indication's own color
 }
 
 // The red rects drawn now (where they land on the screen), left to right.
@@ -24096,7 +24104,7 @@ TEST(text_shadows_go_under_and_brushes_spread_over_the_text) {
         return Color{};
     };
     Color mid = colorOf("degrade");
-    CHECK(near(mid.r, 0.5f, 0.01f) && near(mid.b, 0.5f, 0.01f));
+    CHECK(near(mid.red(), 0.5f, 0.01f) && near(mid.blue(), 0.5f, 0.01f));
     // Spans: a shadow of their own; a color or brush of their own goes over the text's brush,
     // which spreads over the whole text for each of its pieces.
     CHECK(canvas.shadowTexts.size() == 2 && canvas.shadowTexts[1] == "kırmızı" && canvas.shadowColors[1] == (Color{1, 0, 0, 1}));
@@ -24104,7 +24112,7 @@ TEST(text_shadows_go_under_and_brushes_spread_over_the_text) {
     if (canvas.brushAreas.size() == 4) CHECK(canvas.brushAreas[1].x == canvas.brushAreas[2].x && canvas.brushAreas[1].width == canvas.brushAreas[2].width);
     CHECK(colorOf("boya") == (Color{0, 1, 0, 1}));
     Color own = colorOf(" fırça");
-    CHECK(near(own.g, 0.5f, 0.01f) && own.r == 0 && own.b == 0);
+    CHECK(near(own.green(), 0.5f, 0.01f) && own.red() == 0 && own.blue() == 0);
     // Recorded and replayed as they were.
     DisplayList list(rule.host().textMeasurer());
     list.begin({400, 800}, 0.5f);
@@ -24181,8 +24189,8 @@ TEST(canvases_draw_as_composes) {
     CHECK(r.rects.size() == 4 && r.paths.size() == 8 && r.lines.size() == 1 && r.images.size() == 3 && r.arcs.size() == 1);
     if (r.rects.size() != 4 || r.paths.size() != 8 || r.images.size() != 3 || r.arcs.size() != 1) return;
     CHECK(sameRect(r.rects[0], {21, 12, 10, 10}) && r.rectColors[0] == red);
-    CHECK(sameRect(r.rects[1], {30, 30, 20, 10}) && near(r.rectColors[1].a, 0.5f));
-    CHECK(r.gradients == 1 && near(r.rectColors[2].r, 0.5f, 0.02f) && near(r.rectColors[2].b, 0.5f, 0.02f));  // at canvas x 50: halfway
+    CHECK(sameRect(r.rects[1], {30, 30, 20, 10}) && near(r.rectColors[1].alpha(), 0.5f));
+    CHECK(r.gradients == 1 && near(r.rectColors[2].red(), 0.5f, 0.02f) && near(r.rectColors[2].blue(), 0.5f, 0.02f));  // at canvas x 50: halfway
     CHECK(r.pathStrokes[0] == 3 && r.pathStrokeStyles[0].join == StrokeJoin::Bevel && r.pathStrokeStyles[0].miter == 7);
     CHECK(r.pathStrokeStyles[1].cap == StrokeCap::Round && r.pathStrokes[1] == 3);
     CHECK(near(r.lines[0].first.y, 80) && near(r.lines[0].first.x, 20));
@@ -24424,7 +24432,7 @@ TEST(vertices_are_composes) {
     CHECK(raw.positions().size() == 3 && raw.positions()[2] == (Offset{0, 10}) && raw.indices() == (std::vector<int>{2, 1, 0}));
     CHECK(raw.textureCoordinates().size() == 3 && raw.textureCoordinates()[1] == (Offset{1, 0}));  // (an odd float left out of each)
     CHECK(Vertices(VertexMode::Triangles, std::vector<float>{0, 0, 10, 0, 0, 10}, std::vector<float>{0, 0}, std::vector<uint32_t>{}).textureCoordinates().empty());
-    CHECK(raw.colors().size() == 3 && near(raw.colors()[0].a, 128 / 255.f, 1e-6f) && raw.colors()[0].r == 1 && raw.colors()[1] == blue);
+    CHECK(raw.colors().size() == 3 && near(raw.colors()[0].alpha(), 128 / 255.f, 1e-6f) && raw.colors()[0].red() == 1 && raw.colors()[1] == blue);
     CHECK(raw.triangles() == (T{{2, 1, 0}}));
     CHECK(Vertices(VertexMode::Triangles, five, {}, {}) == Vertices(VertexMode::Triangles, five, {}, {}) &&
           !(Vertices(VertexMode::Triangles, five, {}, {}) == Vertices(VertexMode::TriangleFan, five, {}, {})));
@@ -24655,16 +24663,16 @@ TEST(draw_scopes_take_composes_parameters) {
     CHECK(canvas.rects.size() == 4 && canvas.paths.size() == 8);
     if (canvas.rects.size() != 4 || canvas.paths.size() != 8) return;
     CHECK(pathText(canvas.pathShapes[7]) == "M0,60 L40,60" && canvas.pathStrokeStyles[7].cap == StrokeCap::Butt && canvas.pathStrokes[7] == 2);
-    CHECK(near(canvas.rectColors[0].a, 0.5f) && canvas.rectBlends[1] == BlendMode::Multiply && canvas.gradients == 1);
+    CHECK(near(canvas.rectColors[0].alpha(), 0.5f) && canvas.rectBlends[1] == BlendMode::Multiply && canvas.gradients == 1);
     CHECK(canvas.rectColors[2] == blue && near(canvas.rectRadii[3], 3));  // tinted; a circle's corners
-    CHECK(near(canvas.pathColors[0].a, 0.25f) && pathText(canvas.pathShapes[0]).find('K') != std::string::npos);
+    CHECK(near(canvas.pathColors[0].alpha(), 0.25f) && pathText(canvas.pathShapes[0]).find('K') != std::string::npos);
     CHECK(canvas.pathStrokeStyles[1].hairline && canvas.pathStrokes[1] == 0);
     const PathStroke& bevel = canvas.pathStrokeStyles[2];
     CHECK(bevel.width == 2 && bevel.miter == 10 && bevel.cap == StrokeCap::Square && bevel.join == StrokeJoin::Bevel && !bevel.hairline);
-    CHECK(canvas.pathStrokes[3] == 3 && near(canvas.pathColors[3].a, 0.5f));  // the brush's colors faded
+    CHECK(canvas.pathStrokes[3] == 3 && near(canvas.pathColors[3].alpha(), 0.5f));  // the brush's colors faded
     CHECK(canvas.pathStrokeStyles[4].hairline);
-    CHECK(canvas.lines.size() == 1 && near(canvas.lineColors[0].a, 0.5f));
-    CHECK(near(canvas.pathColors[5].a, 0.5f) && canvas.pathStrokes[5] == 1);
+    CHECK(canvas.lines.size() == 1 && near(canvas.lineColors[0].alpha(), 0.5f));
+    CHECK(near(canvas.pathColors[5].alpha(), 0.5f) && canvas.pathStrokes[5] == 1);
     CHECK(near(canvas.paths[6].width, 11, 1e-4f) && canvas.pathStrokes[6] == 0);  // two 1 dp dots, 10 apart
     // Arcs: a pie slice, filled across its ends, its outline through the center, an arc; a turn
     // and more: a whole oval filled, outlined round and on.
@@ -25430,8 +25438,593 @@ TEST(tooltip_area_shows_by_the_mouse_after_a_moment) {
     if (below.exists()) CHECK(below.bounds().x == 200 + 40 - 15 && below.bounds().y == 440);
 }
 
-bool nearColor(Color a, Color b, float tolerance = 0.003f) {
-    return near(a.r, b.r, tolerance) && near(a.g, b.g, tolerance) && near(a.b, b.b, tolerance) && near(a.a, b.a, tolerance);
+// Color spaces (colorspace.hpp): Compose's ColorSpaceTest's numbers, and more.
+
+namespace {
+// Compose's assertArrayEquals: each within `eps` (or the same float).
+template <size_t N>
+bool nearAll(const std::array<float, N>& a, const std::array<float, N>& b, float eps) {
+    for (size_t i = 0; i < N; ++i)
+        if (!kompoz::detail::sameFloat(a[i], b[i]) && std::abs(a[i] - b[i]) > eps) return false;
+    return true;
+}
+template <typename F>
+bool throwsInvalidArgument(F f) {
+    try {
+        f();
+    } catch (const std::invalid_argument&) {
+        return true;
+    }
+    return false;
+}
+// Compose's ColorSpaceTest's: sRGB's matrices (column-major), primaries and white point.
+constexpr std::array<float, 9> kSrgbToXyz{0.412391f, 0.212639f, 0.019331f, 0.357584f, 0.715169f, 0.119195f, 0.180481f, 0.072192f, 0.950532f};
+constexpr std::array<float, 9> kXyzToSrgb{3.240970f, -0.969244f, 0.055630f, -1.537383f, 1.875968f, -0.203977f, -0.498611f, 0.041555f, 1.056971f};
+constexpr std::array<float, 9> kSrgbToXyzD50{0.4360747f, 0.2225045f, 0.0139322f, 0.3850649f, 0.7168786f,
+                                             0.0971045f, 0.1430804f, 0.0606169f, 0.7141733f};
+constexpr std::array<float, 6> kSrgbPrimariesxyY{0.640f, 0.330f, 0.300f, 0.600f, 0.150f, 0.060f};
+constexpr std::array<float, 9> kSrgbPrimariesXyz{1.939394f, 1.000000f, 0.090909f, 0.500000f, 1.000000f,
+                                                 0.166667f, 2.500000f, 1.000000f, 13.166667f};
+constexpr WhitePoint kSrgbWhitePointxyY{0.3127f, 0.3290f};
+constexpr WhitePoint kSrgbWhitePointXyz{0.950456f, 1.000f, 1.089058f};
+const Rgb::DoubleFunction kIdentity = [](double x) { return x; };
+} // namespace
+
+TEST(color_spaces_have_composes_ids_names_and_models) {
+    const ColorSpace* named[] = {&ColorSpaces::Srgb,     &ColorSpaces::LinearSrgb, &ColorSpaces::ExtendedSrgb, &ColorSpaces::LinearExtendedSrgb,
+                                 &ColorSpaces::Bt709,    &ColorSpaces::Bt2020,     &ColorSpaces::DciP3,        &ColorSpaces::DisplayP3,
+                                 &ColorSpaces::Ntsc1953, &ColorSpaces::SmpteC,     &ColorSpaces::AdobeRgb,     &ColorSpaces::ProPhotoRgb,
+                                 &ColorSpaces::Aces,     &ColorSpaces::Acescg,     &ColorSpaces::CieXyz,       &ColorSpaces::CieLab,
+                                 &ColorSpaces::Unspecified, &ColorSpaces::Bt2020Hlg, &ColorSpaces::Bt2020Pq, &ColorSpaces::Oklab};
+    for (int id = 0; id < 20; ++id) {
+        CHECK(&ColorSpaces::getColorSpace(id) == named[id] && named[id]->id() == id);  // the ids colors keep: these cannot change
+        CHECK(named[id]->componentCount() == 3 && !named[id]->name().empty());
+        CHECK(named[id]->model() == (id == 14 ? ColorModel::Xyz : id == 15 || id == 19 ? ColorModel::Lab : ColorModel::Rgb));
+    }
+    CHECK(ColorSpace::MinId == -1 && ColorSpace::MaxId == 63);
+    CHECK(ColorSpaces::Srgb.name() == "sRGB IEC61966-2.1" && ColorSpaces::Unspecified.name() == "None");
+    CHECK(ColorSpaces::CieLab.name() == "Generic L*a*b*");
+    CHECK(ColorSpaces::Srgb.toString() == "sRGB IEC61966-2.1 (id=0, model=Rgb)" && ColorSpaces::Oklab.toString() == "Oklab (id=19, model=Lab)");
+    bool outOfRange = false;
+    try {
+        ColorSpaces::getColorSpace(20);
+    } catch (const std::out_of_range&) {
+        outOfRange = true;
+    }
+    CHECK(outOfRange);
+    CHECK(componentCount(ColorModel::Cmyk) == 4 && componentCount(ColorModel::Lab) == 3);
+    CHECK(toString(ColorModel::Xyz) == "Xyz" && toString(RenderIntent::Absolute) == "Absolute" && Adaptation::Ciecat02.toString() == "Ciecat02");
+}
+
+TEST(color_spaces_ranges_wide_gamuts_and_srgb_as_composes) {
+    CHECK(ColorSpaces::Srgb.getMinValue(0) == 0 && ColorSpaces::Srgb.getMaxValue(2) == 1);
+    CHECK(ColorSpaces::CieLab.getMinValue(0) == 0 && ColorSpaces::CieLab.getMinValue(1) == -128 && ColorSpaces::CieLab.getMaxValue(0) == 100 &&
+          ColorSpaces::CieLab.getMaxValue(2) == 128);
+    CHECK(ColorSpaces::CieXyz.getMinValue(1) == -2 && ColorSpaces::CieXyz.getMaxValue(1) == 2);
+    CHECK(ColorSpaces::Oklab.getMinValue(0) == 0 && ColorSpaces::Oklab.getMinValue(1) == -0.5f && ColorSpaces::Oklab.getMaxValue(0) == 1 &&
+          ColorSpaces::Oklab.getMaxValue(2) == 0.5f);
+    CHECK(ColorSpaces::ExtendedSrgb.getMinValue(0) == -0.799f && ColorSpaces::ExtendedSrgb.getMaxValue(0) == 2.399f);
+    CHECK(ColorSpaces::LinearExtendedSrgb.getMinValue(0) == -0.5f && ColorSpaces::Aces.getMaxValue(0) == 65504.0f);
+    // Wide: over 90% of NTSC 1953's area holding sRGB's, or a range past 0..1 both ways (Lab, XYZ, Oklab: always). As Compose
+    // tells holding, NTSC 1953 and ProPhoto RGB do not (sRGB's blue past their blue's corner): not wide.
+    bool wide[] = {false, false, true,  true,  false, true, true, true,  false, false,
+                   true,  false, true,  true,  true,  true, false, true, true,  true};
+    for (int id = 0; id < 20; ++id) CHECK(ColorSpaces::getColorSpace(id).isWideGamut() == wide[id]);
+    for (int id = 0; id < 20; ++id) CHECK(ColorSpaces::getColorSpace(id).isSrgb() == (id == 0));
+    // Compose decides by the primaries, white point, range and transfer functions, not the id.
+    Rgb almost("Almost sRGB", kSrgbToXyz, [](double x) { return std::pow(x, 1.0 / 2.2); }, [](double x) { return std::pow(x, 2.2); });
+    CHECK(!almost.isSrgb());
+    Rgb same("Mine", kSrgbPrimariesxyY, Illuminant::D65, TransferParameters(2.4, 1 / 1.055, 0.055 / 1.055, 1 / 12.92, 0.04045));
+    CHECK(same.isSrgb() && same.id() == ColorSpace::MinId && !same.isWideGamut());
+    Rgb wider("Wider", kSrgbPrimariesxyY, Illuminant::D65, kIdentity, kIdentity, -1.0f, 2.0f);
+    CHECK(wider.isWideGamut() && !wider.isSrgb());
+}
+
+TEST(rgb_color_spaces_make_composes_matrices_primaries_and_white_points) {
+    Rgb fromMatrix("Test", kSrgbToXyz, kIdentity, kIdentity);
+    CHECK(nearAll(fromMatrix.getTransform(), kSrgbToXyz, 1e-5f) && nearAll(fromMatrix.getInverseTransform(), kXyzToSrgb, 1e-5f));
+    CHECK(nearAll(fromMatrix.getPrimaries(), kSrgbPrimariesxyY, 1e-5f));
+    CHECK(near(fromMatrix.whitePoint().x, kSrgbWhitePointxyY.x, 1e-5f) && near(fromMatrix.whitePoint().y, kSrgbWhitePointxyY.y, 1e-5f));
+    Rgb fromxyY("Test", kSrgbPrimariesxyY, kSrgbWhitePointxyY, kIdentity, kIdentity, 0.0f, 1.0f);
+    CHECK(nearAll(fromxyY.getTransform(), kSrgbToXyz, 1e-5f) && nearAll(fromxyY.getInverseTransform(), kXyzToSrgb, 1e-5f));
+    Rgb fromXyz("Test", kSrgbPrimariesXyz, kSrgbWhitePointXyz, kIdentity, kIdentity, 0.0f, 1.0f);
+    CHECK(nearAll(fromXyz.getPrimaries(), kSrgbPrimariesxyY, 1e-3f) && near(fromXyz.whitePoint().x, 0.3127f, 1e-3f) &&
+          near(fromXyz.whitePoint().y, 0.3290f, 1e-3f));
+    CHECK(nearAll(fromXyz.getTransform(), kSrgbToXyz, 1e-5f) && nearAll(fromXyz.getInverseTransform(), kXyzToSrgb, 1e-5f));
+    CHECK(ColorSpaces::Srgb.whitePoint() == Illuminant::D65 && nearAll(ColorSpaces::Srgb.primaries(), kSrgbPrimariesxyY, 1e-9f));
+    CHECK(ColorSpaces::DciP3.whitePoint() == WhitePoint(0.314f, 0.351f) && ColorSpaces::ProPhotoRgb.whitePoint() == Illuminant::D50);
+    // What Compose rejects.
+    std::array<float, 6> zeros{};
+    std::array<float, 7> seven{};
+    CHECK(throwsInvalidArgument([&] { Rgb("", zeros, WhitePoint(0, 0), kIdentity, kIdentity, 0.0f, 1.0f); }));
+    CHECK(throwsInvalidArgument([&] { Rgb("Test", seven, WhitePoint(0, 0), kIdentity, kIdentity, 0.0f, 1.0f); }));
+    CHECK(throwsInvalidArgument([&] { Rgb("Test", zeros, WhitePoint(0, 0), kIdentity, kIdentity, 2.0f, 1.0f); }));
+    CHECK(throwsInvalidArgument([&] { Rgb("Test", zeros, WhitePoint(0, 0), 0.0); }));  // a gamma of 0: a constant curve
+    CHECK(throwsInvalidArgument([] { TransferParameters(2.4, 1, 0, 1, 1.5); }));         // d past 1
+    CHECK(throwsInvalidArgument([] { TransferParameters(2.4, 1, 0, -1, 0.5); }));        // decreasing
+    CHECK(throwsInvalidArgument([] { TransferParameters(std::nan(""), 1, 0, 1, 0.5); }));
+    CHECK(!throwsInvalidArgument([] { TransferParameters(detail::TypePQish, -1.5, 1.8, 0.01, 18.8, -18.7, 6.2); }));  // PQ: d past 1 is fine
+    // Degenerate primaries and white point are no error (the matrices are NaN).
+    Rgb test("Test", zeros, WhitePoint(0, 0), kIdentity, kIdentity, 0.0f, 1.0f);
+    CHECK(test.name() == "Test" && !test.isSrgb() && !test.isWideGamut());
+    // The OETF and EOTF kept within the range.
+    Rgb sqrtOetf("Test", zeros, WhitePoint(0, 0), [](double x) { return std::sqrt(x); }, kIdentity, 0.0f, 1.0f);
+    Rgb squareEotf("Test", zeros, WhitePoint(0, 0), kIdentity, [](double x) { return x * x; }, 0.0f, 1.0f);
+    CHECK(near(float(sqrtOetf.oetf()(0.25)), 0.5f, 1e-5f) && sqrtOetf.oetf()(4.0) == 1.0);
+    CHECK(near(float(squareEotf.eotf()(0.25)), 0.0625f, 1e-5f));
+    CHECK(squareEotf.eotf()(3.0) == 1.0 && squareEotf.eotf()(-1.0) == 0.0);
+}
+
+TEST(rgb_color_spaces_turn_colors_into_xyz_and_linear_as_composes) {
+    const Rgb& srgb = ColorSpaces::Srgb;
+    std::array<float, 3> xyz = srgb.toXyz(0.75f, 0.5f, 0.25f);
+    CHECK(nearAll(xyz, {0.3012f, 0.2679f, 0.0840f}, 1e-3f));
+    std::array<float, 3> v{0.75f, 0.5f, 0.25f};
+    CHECK(&srgb.toXyz(v) == &v && nearAll(v, xyz, 1e-5f));  // in place
+    CHECK(nearAll(srgb.fromXyz(0.3012f, 0.2679f, 0.0840f), {0.75f, 0.5f, 0.25f}, 1e-3f));
+    CHECK(nearAll(srgb.fromLinear(0.0f, 0.5f, 1.0f), {0.0f, 0.7354f, 1.0f}, 1e-3f));
+    CHECK(nearAll(srgb.toLinear(0.0f, 0.5f, 1.0f), {0.0f, 0.2140f, 1.0f}, 1e-3f));
+    CHECK(nearAll(srgb.connect(ColorSpaces::LinearSrgb).transform(0.5f, 0.5f, 0.5f), {0.2140f, 0.2140f, 0.2140f}, 1e-4f));
+    CHECK(nearAll(ColorSpaces::LinearSrgb.connect().transform(0.2140f, 0.5f, 1.0f), {0.5f, 0.7354f, 1.0f}, 1e-3f));
+    // CIE XYZ as it is, within -2..2.
+    CHECK(nearAll(ColorSpaces::CieXyz.toXyz(0.32f, 0.43f, 0.54f), {0.32f, 0.43f, 0.54f}, 1e-7f) &&
+          nearAll(ColorSpaces::CieXyz.fromXyz(3.0f, -0.5f, -3.0f), {2.0f, -0.5f, -2.0f}, 1e-7f));
+    for (int id = 0; id < 20; ++id) {
+        const ColorSpace& space = ColorSpaces::getColorSpace(id);
+        if (space.model() != ColorModel::Rgb) continue;
+        const auto& rgb = static_cast<const Rgb&>(space);
+        std::array<float, 3> l = rgb.toLinear(0.0f, 0.5f, 1.0f), c{0.25f, 0.5f, 0.75f};
+        CHECK(nearAll(rgb.fromLinear(l), {0.0f, 0.5f, 1.0f}, 1e-3f));  // (Compose's idempotent transfer functions)
+        CHECK(nearAll(rgb.fromXyz(rgb.toXyz(c)), {0.25f, 0.5f, 0.75f}, 1e-4f));
+    }
+    CHECK(ColorSpaces::Srgb.transferParameters() == TransferParameters(2.4, 1 / 1.055, 0.055 / 1.055, 1 / 12.92, 0.04045));
+    CHECK(ColorSpaces::ExtendedSrgb.transferParameters() == ColorSpaces::Srgb.transferParameters());
+    CHECK(ColorSpaces::AdobeRgb.transferParameters() == TransferParameters(2.2, 1.0, 0.0, 0.0, 0.0));  // a gamma's
+    CHECK(ColorSpaces::Bt2020Pq.transferParameters()->gamma == detail::TypePQish);
+    CHECK(ColorSpaces::Bt2020Hlg.transferParameters()->gamma == detail::TypeHLGish);
+    // ExtendedSrgb keeps a negative value's sign through its transfer functions.
+    CHECK(nearAll(ColorSpaces::ExtendedSrgb.toLinear(-0.5f, 0.5f, 2.0f), {-0.2140f, 0.2140f, 4.9538f}, 1e-3f));
+}
+
+TEST(connectors_turn_colors_between_spaces_as_composes) {
+    Connector connector = ColorSpaces::Srgb.connect(ColorSpaces::DciP3);
+    CHECK(&connector.source() == &ColorSpaces::Srgb && &connector.destination() == &ColorSpaces::DciP3 &&
+          connector.renderIntent() == RenderIntent::Perceptual);
+    connector = ColorSpaces::Srgb.connect(ColorSpaces::Srgb);
+    CHECK(&connector.source() == &connector.destination() && connector.renderIntent() == RenderIntent::Relative);
+    CHECK(&ColorSpaces::DciP3.connect().destination() == &ColorSpaces::Srgb);
+    // The same white point: one matrix.
+    CHECK(nearAll(ColorSpaces::Srgb.connect(ColorSpaces::AdobeRgb).transform(1.0f, 0.5f, 0.0f), {0.8912f, 0.4962f, 0.1164f}, 1e-3f));
+    CHECK(nearAll(ColorSpaces::AdobeRgb.connect(ColorSpaces::Srgb).transform(0.8912f, 0.4962f, 0.1164f), {1.0f, 0.5f, 0.0f}, 1e-3f));
+    std::array<float, 3> v{1.0f, 0.5f, 0.0f};
+    CHECK(&ColorSpaces::Srgb.connect(ColorSpaces::AdobeRgb).transform(v) == &v && nearAll(v, {0.8912f, 0.4962f, 0.1164f}, 1e-3f));
+    CHECK(nearAll(ColorSpaces::Srgb.connect(ColorSpaces::DisplayP3).transform(1.0f, 0.0f, 0.0f), {0.9175f, 0.2003f, 0.1386f}, 1e-3f));
+    // Other white points: through D50 (Bradford), the absolute intent keeping the white point's color.
+    CHECK(nearAll(ColorSpaces::Srgb.connect(ColorSpaces::ProPhotoRgb).transform(1.0f, 0.0f, 0.0f), {0.70226f, 0.2757f, 0.1036f}, 1e-4f));
+    std::array<float, 3> relative = ColorSpaces::DciP3.connect(ColorSpaces::Srgb, RenderIntent::Relative).transform(0.9f, 0.9f, 0.9f);
+    std::array<float, 3> absolute = ColorSpaces::DciP3.connect(ColorSpaces::Srgb, RenderIntent::Absolute).transform(0.9f, 0.9f, 0.9f);
+    CHECK(nearAll(relative, {0.8862f, 0.8862f, 0.8862f}, 1e-4f) && nearAll(absolute, {0.8475f, 0.9217f, 0.8203f}, 1e-4f));
+    CHECK(nearAll(ColorSpaces::Srgb.connect().transform(0.11112f, 0.22227f, 0.444448f), {0.11112f, 0.22227f, 0.444448f}, 1e-5f));
+    CHECK(nearAll(ColorSpaces::DciP3.connect(ColorSpaces::DciP3).transform(1.0f, 0.0f, 0.0f), {1.0f, 0.0f, 0.0f}, 1e-3f));
+    CHECK(nearAll(ColorSpaces::DciP3.connect().transform(0.6f, 0.9f, 0.7f),
+                  ColorSpaces::DciP3.connect(ColorSpaces::Srgb).transform(0.6f, 0.9f, 0.7f), 1e-7f));
+    // CIE L*a*b*, CIE XYZ and Oklab.
+    Connector lab = ColorSpaces::CieLab.connect();
+    CHECK(nearAll(lab.transform(100.0f, 0.0f, 0.0f), {1.0f, 1.0f, 1.0f}, 1e-3f));
+    CHECK(nearAll(lab.transform(100.0f, 0.0f, 54.0f), {1.0f, 0.9925f, 0.5762f}, 1e-3f));
+    lab = ColorSpaces::CieLab.connect(ColorSpaces::Srgb, RenderIntent::Absolute);
+    CHECK(nearAll(lab.transform(100.0f, 0.0f, 0.0f), {1.0f, 0.9910f, 0.8651f}, 1e-3f));
+    CHECK(nearAll(lab.transform(100.0f, 0.0f, 54.0f), {1.0f, 0.9853f, 0.4652f}, 1e-3f));
+    CHECK(nearAll(ColorSpaces::Srgb.connect(ColorSpaces::CieLab).transform(1.0f, 1.0f, 1.0f), {100.0f, 0.0f, 0.0f}, 1e-2f));
+    CHECK(nearAll(ColorSpaces::CieXyz.connect().transform(0.32f, 0.43f, 0.54f), {0.2280f, 0.7541f, 0.8453f}, 1e-3f));
+    Connector oklab = ColorSpaces::Oklab.connect();
+    CHECK(nearAll(oklab.transform(1.000f, -0.065f, 0.241f), {1.0f, 1.0f, 0.0f}, 1e-3f));
+    CHECK(nearAll(oklab.transform(1.000f, -0.125f, -0.217f), {0.0f, 1.0f, 1.0f}, 1e-3f));
+    CHECK(nearAll(oklab.transform(0.500f, 0.250f, 0.000f), {0.768f, 0.0f, 0.366f}, 1e-3f));
+    CHECK(nearAll(oklab.transform(1.0f, 0.0f, 0.0f), {1.0f, 1.0f, 1.0f}, 1e-3f));
+    CHECK(nearAll(oklab.transform(0.0f, 0.0f, 0.0f), {0.0f, 0.0f, 0.0f}, 1e-3f));
+    CHECK(nearAll(ColorSpaces::Srgb.connect(ColorSpaces::Oklab).transform(1.0f, 0.0f, 0.0f), {0.6280f, 0.2249f, 0.1258f}, 1e-3f));
+    std::array<float, 3> back = ColorSpaces::Srgb.connect(ColorSpaces::Oklab).transform(0.2f, 0.4f, 0.6f);
+    CHECK(nearAll(oklab.transform(back), {0.2f, 0.4f, 0.6f}, 1e-4f));
+}
+
+TEST(connectors_of_built_in_spaces_are_kept_as_composes) {
+    CHECK(ColorSpaces::Srgb.connect() == ColorSpaces::Srgb.connect() && &ColorSpaces::Srgb.connect().source() == &ColorSpaces::Srgb);
+    Connector toOklab = ColorSpaces::Srgb.connect(ColorSpaces::Oklab);
+    CHECK(toOklab == ColorSpaces::Srgb.connect(ColorSpaces::Oklab) && &toOklab.destination() == &ColorSpaces::Oklab &&
+          toOklab.renderIntent() == RenderIntent::Perceptual);
+    CHECK(ColorSpaces::Oklab.connect() == ColorSpaces::Oklab.connect() && &ColorSpaces::Oklab.connect().destination() == &ColorSpaces::Srgb);
+    // By the two ids and the intent.
+    Connector p3 = ColorSpaces::DisplayP3.connect(ColorSpaces::Srgb, RenderIntent::Absolute);
+    CHECK(p3 == ColorSpaces::DisplayP3.connect(ColorSpaces::Srgb, RenderIntent::Absolute) && !(p3 == ColorSpaces::DisplayP3.connect()));
+    // A user's space's: made anew each time, the same colors.
+    Rgb mine("Mine", kSrgbPrimariesxyY, Illuminant::D50, 2.2);
+    Connector a = mine.connect(), b = mine.connect();
+    CHECK(!(a == b) && &a.source() == &mine && a.transform(0.3f, 0.6f, 0.9f) == b.transform(0.3f, 0.6f, 0.9f));
+    std::array<float, 3> inMine = a.transform(0.3f, 0.6f, 0.9f);
+    CHECK(nearAll(ColorSpaces::Srgb.connect(mine).transform(inMine), {0.3f, 0.6f, 0.9f}, 1e-4f));
+}
+
+TEST(color_spaces_adapt_to_white_points_as_composes) {
+    std::shared_ptr<const ColorSpace> adapted = ColorSpaces::Srgb.adapt(Illuminant::D50);
+    const auto& d50 = dynamic_cast<const Rgb&>(*adapted);
+    std::array<float, 9> srgbD50{0.43602175f, 0.22247513f, 0.01392813f, 0.38510883f, 0.71690667f,
+                                 0.09710153f, 0.14308129f, 0.06061824f, 0.71415880f};
+    CHECK(nearAll(d50.getTransform(), srgbD50, 1e-7f));
+    CHECK(nearAll(dynamic_cast<const Rgb&>(*ColorSpaces::Srgb.adapt(Illuminant::D50, Adaptation::Bradford)).getTransform(), srgbD50, 1e-7f));
+    CHECK(d50.id() == ColorSpace::MinId && d50.name() == ColorSpaces::Srgb.name() && d50.whitePoint() == Illuminant::D50 && !d50.isSrgb());
+    CHECK(d50.primaries() == ColorSpaces::Srgb.primaries() && d50.transferParameters() == ColorSpaces::Srgb.transferParameters());
+    // Bradford's D65 to D50: the adapted matrix over sRGB's.
+    std::array<float, 9> bradford{1.0478112f, 0.0295424f, -0.0092345f, 0.0228866f, 0.9904844f, 0.0150436f, -0.0501270f, -0.0170491f, 0.7521316f};
+    std::array<float, 9> m{};
+    const std::array<float, 9>&t = d50.transform(), &inv = ColorSpaces::Srgb.inverseTransform();
+    for (int c = 0; c < 3; ++c)
+        for (int r = 0; r < 3; ++r) m[c * 3 + r] = t[r] * inv[c * 3] + t[3 + r] * inv[c * 3 + 1] + t[6 + r] * inv[c * 3 + 2];
+    CHECK(nearAll(m, bradford, 1e-4f));
+    // The same white point, or not RGB: the space itself.
+    CHECK(ColorSpaces::Srgb.adapt(Illuminant::D65).get() == &ColorSpaces::Srgb);
+    CHECK(ColorSpaces::CieLab.adapt(Illuminant::D65).get() == &ColorSpaces::CieLab);
+    // Von Kries and CIECAT02 adapt otherwise.
+    std::shared_ptr<const ColorSpace> vonKriesD50 = ColorSpaces::Srgb.adapt(Illuminant::D50, Adaptation::VonKries);
+    std::shared_ptr<const ColorSpace> ciecat02D50 = ColorSpaces::Srgb.adapt(Illuminant::D50, Adaptation::Ciecat02);
+    const auto &vonKries = dynamic_cast<const Rgb&>(*vonKriesD50), &ciecat02 = dynamic_cast<const Rgb&>(*ciecat02D50);
+    CHECK(!nearAll(vonKries.getTransform(), srgbD50, 1e-4f) && !nearAll(ciecat02.getTransform(), srgbD50, 1e-4f));
+    CHECK(near(vonKries.transform()[1] + vonKries.transform()[4] + vonKries.transform()[7], 1.0f, 1e-5f));  // white's Y still 1
+}
+
+TEST(color_spaces_match_and_equal_as_composes) {
+    for (int id = 0; id < 20; ++id) {
+        const ColorSpace& space = ColorSpaces::getColorSpace(id);
+        if (space.model() != ColorModel::Rgb || id == 2 || id == 3) continue;  // match() cannot tell the extended sRGBs
+        std::shared_ptr<const ColorSpace> d50 = space.adapt(Illuminant::D50);
+        const auto& rgb = dynamic_cast<const Rgb&>(*d50);
+        CHECK(ColorSpaces::match(rgb.getTransform(), *rgb.transferParameters()) == &space);
+    }
+    CHECK(ColorSpaces::match(kSrgbToXyzD50, TransferParameters(2.4, 1 / 1.055, 0.055 / 1.055, 1 / 12.92, 0.04045)) == &ColorSpaces::Srgb);
+    CHECK(ColorSpaces::match(kSrgbToXyzD50, TransferParameters(3.0, 1.0, 0.0, 0.0, 0.0)) == nullptr);
+    // Equal: the same class, id, name and model, and an Rgb's white point, primaries, range and transfer parameters.
+    CHECK(ColorSpaces::Srgb == ColorSpaces::Srgb && !(ColorSpaces::Srgb == ColorSpaces::LinearSrgb));
+    CHECK(!(ColorSpaces::Srgb == ColorSpaces::CieLab));
+    TransferParameters gamma22(2.2, 1.0, 0.0, 0.0, 0.0);
+    Rgb a("A", kSrgbPrimariesxyY, Illuminant::D65, gamma22), b("A", kSrgbPrimariesxyY, Illuminant::D65, gamma22);
+    Rgb c("C", kSrgbPrimariesxyY, Illuminant::D65, gamma22), d("A", kSrgbPrimariesxyY, Illuminant::D50, gamma22);
+    CHECK(a == b && !(a == c) && !(a == d) && a == Rgb("A", kSrgbPrimariesxyY, Illuminant::D65, 2.2));
+    // Without transfer parameters on either side, equal whatever the functions; on one side only, by the functions (Compose's).
+    Rgb f("F", kSrgbPrimariesxyY, Illuminant::D65, kIdentity, kIdentity, 0.0f, 1.0f);
+    Rgb g("F", kSrgbPrimariesxyY, Illuminant::D65, [](double x) { return x * x; }, kIdentity, 0.0f, 1.0f);
+    Rgb withParameters("F", kSrgbPrimariesxyY, Illuminant::D65, 1.0);
+    CHECK(f == g && !(f == withParameters) && !(withParameters == f));
+    CHECK(near(kSrgbWhitePointXyz.x, 0.3127f, 1e-4f) && near(kSrgbWhitePointXyz.y, 0.3290f, 1e-4f));
+    CHECK(WhitePoint(0.3f, 0.3f) == WhitePoint(0.3f, 0.3f) && !(WhitePoint(0.0f, 0.3f) == WhitePoint(-0.0f, 0.3f)));
+}
+
+// Color: Compose's 64 bits (ColorTest's numbers), its functions, and how it animates.
+TEST(colors_pack_as_composes_64_bits) {
+    // sRGB: 8 bits a channel in the upper 32, a half up; its components kept within 0..1.
+    CHECK(Color(1, 0.5f, 0, 1).value() == uint64_t(0xFFFF8000u) << 32 && Color::argb(0xFFFF8000) == Color(1, 0.5f, 0, 1));
+    CHECK(Color::hex(0xFF8000, 0.5f).value() == uint64_t(0x80FF8000u) << 32 && Color(0, 0, 0, 0.5f) == Color::argb(0x80000000));
+    CHECK(Color(0, 0.5019608f, 0).green() == 0.5019608f && Color().value() == uint64_t(0xFF000000u) << 32);
+    CHECK(Color(2, 0, 0).red() == 1 && Color(-1, 0, 0).red() == 0 && Color(0, 2, 0).green() == 1 && Color(0, -1, 0).green() == 0);
+    CHECK(Color(0, 0, 2).blue() == 1 && Color(0, 0, -1).blue() == 0 && Color(0, 0, 0, 2).alpha() == 1 && Color(0, 0, 0, -1).alpha() == 0);
+    CHECK(Color(NAN, 0, 0).red() == 0 && Color(1, 0, 0).isSrgb() && &Color(1, 0, 0).colorSpace() == &ColorSpaces::Srgb);
+    // Another space: half floats at 48, 32 and 16, a 10-bit alpha at 6, the space's id.
+    Color p3(0.15f, 0.2f, 0.3f, 0.5f, ColorSpaces::DisplayP3);
+    CHECK(p3.value() == (uint64_t(detail::floatToHalf(0.15f)) << 48 | uint64_t(detail::floatToHalf(0.2f)) << 32 |
+                         uint64_t(detail::floatToHalf(0.3f)) << 16 | uint64_t(512) << 6 | 7));
+    CHECK(near(p3.red(), 0.15f, 0.0005f) && near(p3.green(), 0.2f, 0.0005f) && near(p3.blue(), 0.3f, 0.0005f) && p3.alpha() == 512.f / 1023);
+    CHECK(!p3.isSrgb() && p3.colorSpace() == ColorSpaces::DisplayP3 && &p3.colorSpace() == &ColorSpaces::DisplayP3);
+    Color aces(0.2f, 0.3f, 0.4f, 0.6f, ColorSpaces::Aces);
+    CHECK(near(aces.red(), 0.2f, 0.0005f) && near(aces.green(), 0.3f, 0.0005f) && near(aces.blue(), 0.4f, 0.0005f));
+    // Kept within the space's range: Display P3's 0..1, CIE Lab's L 0..100 and a, b -128..128.
+    Color out(2, -1, 0.5f, 3, ColorSpaces::DisplayP3), lab(150, -200, 64, 1, ColorSpaces::CieLab);
+    CHECK(out.red() == 1 && out.green() == 0 && out.blue() == 0.5f && out.alpha() == 1);
+    CHECK(lab.red() == 100 && lab.green() == -128 && lab.blue() == 64 && lab.colorSpace() == ColorSpaces::CieLab);
+    // A space of a built-in's numbers is sRGB if it is sRGB; another needs an id.
+    Rgb mine("Mine", std::array<float, 6>{0.640f, 0.330f, 0.300f, 0.600f, 0.150f, 0.060f}, Illuminant::D65,
+             TransferParameters(2.4, 1 / 1.055, 0.055 / 1.055, 1 / 12.92, 0.04045));
+    CHECK(Color(1, 0.5f, 0, 1, mine) == Color(1, 0.5f, 0, 1));
+    Rgb unknown("Unknown", std::array<float, 6>{0.680f, 0.320f, 0.265f, 0.690f, 0.150f, 0.060f}, Illuminant::D65, 2.2);
+    bool threw = false;
+    try {
+        Color(1, 0, 0, 1, unknown);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    CHECK(threw);
+    // copy: another alpha, the components as they are; or other components, in its space.
+    CHECK(p3.copy(1).red() == p3.red() && p3.copy(1).alpha() == 1 && p3.copy(1).colorSpace() == ColorSpaces::DisplayP3);
+    CHECK(Color(1, 0.5f, 0, 1).copy(0.5f) == Color::argb(0x80FF8000) && Color(1, 0.5f, 0, 1).copy(NAN).alpha() == 0);
+    Color other = p3.copy(0.25f, 0.5f, 0.75f, 1);
+    CHECK(other.colorSpace() == ColorSpaces::DisplayP3 && other.red() == 0.5f && other.green() == 0.75f && other.blue() == 1 &&
+          other.alpha() == 256.f / 1023);
+    // Unspecified: 0x10, no color in ColorSpaces::Unspecified, none of Transparent's.
+    CHECK(colors::Unspecified.value() == 0x10 && colors::Unspecified.isUnspecified() && !colors::Unspecified.isSpecified());
+    CHECK(colors::Red.isSpecified() && !colors::Red.isUnspecified() && colors::Unspecified != colors::Transparent);
+    CHECK(Color(0, 0, 0, 0, ColorSpaces::Unspecified) == colors::Unspecified && colors::Transparent.toArgb() == colors::Unspecified.toArgb());
+}
+
+// What takes a color as sRGB takes another space's in sRGB: blending, color filters, HCT; and a
+// bitmap says the space it was made in.
+TEST(colors_of_other_spaces_are_taken_in_srgb) {
+    Color p3(0.5f, 0.2f, 0.8f, 1, ColorSpaces::DisplayP3), srgb = p3.convert(ColorSpaces::Srgb), gray = Color::argb(0xFF808080);
+    Color raw{p3.red(), p3.green(), p3.blue(), 1};  // (its numbers taken as sRGB's: another color)
+    CHECK(srgb != raw);
+    CHECK(blend(p3, gray, BlendMode::Multiply) == blend(srgb, gray, BlendMode::Multiply) &&
+          blend(p3, gray, BlendMode::Multiply) != blend(raw, gray, BlendMode::Multiply));
+    CHECK(blend(gray, p3, BlendMode::Screen) == blend(gray, srgb, BlendMode::Screen));
+    CHECK(ColorMatrix().apply(p3) == srgb && ColorFilter::colorMatrix(ColorMatrix()).apply(p3) == srgb);
+    CHECK(ColorFilter::lighting(p3, colors::Transparent).apply(colors::White) == ColorFilter::lighting(srgb, colors::Transparent).apply(colors::White));
+    CHECK(ColorFilter::tint(p3, BlendMode::SrcIn).apply(colors::White) == srgb);
+    CHECK(Hct::fromColor(p3) == Hct::fromColor(srgb) && !(Hct::fromColor(p3) == Hct::fromColor(raw)));
+    CHECK(TonalPalette::fromSeed(p3) == TonalPalette::fromSeed(srgb));
+    // ImageBitmap: the space it was made in (sRGB unless given).
+    CHECK(ImageBitmap(4, 4, ImageBitmapConfig::Argb8888, true, ColorSpaces::DisplayP3).colorSpace() == ColorSpaces::DisplayP3);
+    CHECK(&ImageBitmap(4, 4, ImageBitmapConfig::F16, true, ColorSpaces::LinearExtendedSrgb).colorSpace() == &ColorSpaces::LinearExtendedSrgb);
+    CHECK(&ImageBitmap(4, 4).colorSpace() == &ColorSpaces::Srgb && &ImageBitmap().colorSpace() == &ColorSpaces::Srgb);
+}
+
+TEST(colors_keep_their_components_as_composes_half_floats) {
+    CHECK(detail::floatToHalf(1) == 0x3c00 && detail::floatToHalf(0.5f) == 0x3800 && detail::floatToHalf(-2) == 0xc000);
+    CHECK(detail::floatToHalf(0.1f) == 0x2e66 && detail::floatToHalf(1.f / 3) == 0x3555 && detail::floatToHalf(65504) == 0x7bff);
+    CHECK(detail::floatToHalf(0) == 0 && detail::floatToHalf(-0.f) == 0x8000 && detail::floatToHalf(INFINITY) == 0x7c00 &&
+          detail::floatToHalf(NAN) == 0x7e00);
+    CHECK(detail::floatToHalf(1e-7f) == 0x0002 && detail::floatToHalf(1e-9f) == 0);  // subnormal; under the smallest
+    CHECK(detail::floatToHalf(1e6f) == 0xc400);  // (Compose's overflow, bit for bit: an exponent of 0x31)
+    CHECK(detail::halfToFloat(0x3c00) == 1 && detail::halfToFloat(0x3555) == 0.333251953125f && detail::halfToFloat(0xc000) == -2);
+    CHECK(detail::halfToFloat(0x0001) == 5.9604645e-8f && detail::halfToFloat(0x8001) == -5.9604645e-8f && detail::halfToFloat(0x7bff) == 65504);
+    CHECK(detail::halfToFloat(0x7c00) == INFINITY && std::isnan(detail::halfToFloat(0x7e00)) && std::signbit(detail::halfToFloat(0x8000)));
+    for (uint32_t h = 0; h < 0x10000; ++h)  // every finite half back to itself
+        if ((h & 0x7c00) != 0x7c00 && detail::floatToHalf(detail::halfToFloat(uint16_t(h))) != h) {
+            CHECK(false);
+            break;
+        }
+}
+
+TEST(colors_convert_composite_and_measure_as_composes) {
+    Color srgb = Color::argb(0xFFFF8000), adobe(0.8916f, 0.4980f, 0.1168f, 1, ColorSpaces::AdobeRgb);
+    Color converted = srgb.convert(ColorSpaces::AdobeRgb);
+    CHECK(converted.colorSpace() == ColorSpaces::AdobeRgb && near(converted.red(), adobe.red(), 0.0005f) &&
+          near(converted.green(), adobe.green(), 0.0005f) && near(converted.blue(), adobe.blue(), 0.0005f) && converted.alpha() == 1);
+    CHECK(srgb.toArgb() == 0xFFFF8000 && adobe.toArgb() == 0xFFFF8000 && srgb.convert(ColorSpaces::Srgb) == srgb);
+    Color green = Color::argb(0xFF64B432), back = green.convert(ColorSpaces::CieLab).convert(ColorSpaces::Srgb);
+    CHECK(near(back.red(), 100.f / 255, 0.01f) && near(back.green(), 180.f / 255, 0.01f) && near(back.blue(), 50.f / 255, 0.01f));
+    CHECK(Color::argb(0x1F2B3D4E).convert(ColorSpaces::Oklab).convert(ColorSpaces::Srgb).toArgb() == 0x1F2B3D4E);
+    // compositeOver: in the background's space.
+    Color same = Color::argb(0x7f007f00).compositeOver(Color::argb(0x7f7f0000));
+    CHECK(near(same.red(), 0.16f, 0.01f) && near(same.green(), 0.33f, 0.01f) && near(same.blue(), 0, 0.01f) && near(same.alpha(), 0.75f, 0.01f));
+    Color p3 = Color::argb(0x7f007f00).compositeOver(Color(0.5f, 0, 0, 0.5f, ColorSpaces::DisplayP3));
+    CHECK(p3.colorSpace() == ColorSpaces::DisplayP3 && near(p3.red(), 0.31f, 0.01f) && near(p3.green(), 0.33f, 0.01f) &&
+          near(p3.blue(), 0.09f, 0.01f) && near(p3.alpha(), 0.75f, 0.01f));
+    Color low = Color(0, 1, 0, 0.01f).compositeOver(Color(1, 0, 0, 0.01f));
+    CHECK(near(low.red(), 0.5f, 0.01f) && near(low.green(), 0.5f, 0.01f) && near(low.blue(), 0, 0.01f) && near(low.alpha(), 0.01f, 0.02f));
+    CHECK(Color::argb(0x00007f00).compositeOver(Color::argb(0x007f0000)) == Color(0, 0, 0, 0));
+    // Of other alphas, each a half up in 8 bits: a quarter green over red; a half over a quarter.
+    CHECK(Color(0, 1, 0, 0.25f).compositeOver(colors::Red) == Color::argb(0xFFBF4000));
+    CHECK(Color(0, 1, 0, 0.5f).compositeOver(Color(1, 0, 0, 0.25f)) == Color::argb(0xA033CC00));
+    // luminance: an RGB space's, its EOTF's.
+    CHECK(colors::Black.luminance() == 0 && near(colors::Blue.luminance(), 0.0722f, 0.0005f) && near(colors::Red.luminance(), 0.2126f, 0.0005f));
+    CHECK(near(colors::Green.luminance(), 0.7152f, 0.0005f) && colors::White.luminance() == 1);
+    CHECK(near(Color::argb(0xFF808080).luminance(), 0.2159f, 0.0005f));  // (through sRGB's EOTF: 0x80 is a fifth of the light)
+    CHECK(near(Color(1, 1, 1, 1, ColorSpaces::LinearSrgb).luminance(), 1, 1e-3f) && near(Color(0.5f, 0.5f, 0.5f, 1, ColorSpaces::LinearSrgb).luminance(), 0.5f, 1e-3f));
+    bool threw = false;
+    try {
+        Color(50, 0, 0, 1, ColorSpaces::CieLab).luminance();
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    CHECK(threw);
+}
+
+TEST(colors_from_hsv_and_hsl_as_composes) {
+    CHECK(Color::hsv(0, 0, 0, 0) == colors::Transparent && Color::hsv(0, 0, 0) == colors::Black && Color::hsv(120, 1, 0) == colors::Black);
+    CHECK(Color::hsv(0, 0, 1) == colors::White && Color::hsv(240, 0, 1) == colors::White && Color::hsv(120, 0, 0.5f) == Color::argb(0xFF808080));
+    CHECK(Color::hsv(0, 1, 1) == colors::Red && Color::hsv(60, 1, 1) == colors::Yellow && Color::hsv(120, 1, 1) == colors::Green);
+    CHECK(Color::hsv(180, 1, 1) == colors::Cyan && Color::hsv(240, 1, 1) == colors::Blue && Color::hsv(300, 1, 1) == colors::Magenta &&
+          Color::hsv(360, 1, 1) == colors::Red);
+    CHECK(Color::hsl(0, 0, 0, 0) == colors::Transparent && Color::hsl(120, 1, 0) == colors::Black && Color::hsl(120, 1, 1) == colors::White);
+    CHECK(Color::hsl(240, 0.5f, 1) == colors::White && Color::hsl(240, 0, 0.5f) == Color::argb(0xFF808080));
+    CHECK(Color::hsl(0, 1, 0.5f) == colors::Red && Color::hsl(60, 1, 0.5f) == colors::Yellow && Color::hsl(120, 1, 0.5f) == colors::Green);
+    CHECK(Color::hsl(180, 1, 0.5f) == colors::Cyan && Color::hsl(240, 1, 0.5f) == colors::Blue && Color::hsl(300, 1, 0.5f) == colors::Magenta &&
+          Color::hsl(360, 1, 0.5f) == colors::Red);
+    const Rgb& linear = ColorSpaces::LinearSrgb;
+    CHECK(Color::hsv(120, 0, 1, 1, linear).convert(ColorSpaces::Srgb) == colors::White && Color::hsv(240, 0, 0.5f, 1, linear) == Color(0.5f, 0.5f, 0.5f, 1, linear));
+    CHECK(Color::hsv(60, 1, 1, 1, linear) == Color(1, 1, 0, 1, linear) && Color::hsv(300, 1, 1, 1, linear) == Color(1, 0, 1, 1, linear));
+    CHECK(Color::hsl(180, 1, 0.5f, 1, linear) == Color(0, 1, 1, 1, linear) && Color::hsl(0, 0, 0.5f, 1, linear) == Color(0.5f, 0.5f, 0.5f, 1, linear));
+    int threw = 0;
+    for (auto f : {+[] { Color::hsv(361, 0, 0); }, +[] { Color::hsv(0, 1.5f, 0); }, +[] { Color::hsv(0, 0, -1); }, +[] { Color::hsl(-1, 0, 0); },
+                   +[] { Color::hsl(0, 0, 2); }, +[] { Color::hsv(NAN, 0, 0); }}) {
+        try {
+            f();
+        } catch (const std::invalid_argument&) {
+            ++threw;
+        }
+    }
+    CHECK(threw == 6);
+}
+
+TEST(colors_lerp_in_oklab_as_composes) {
+    // ColorTest's: red to blue at a thousandth at a time, as Compose makes them.
+    static constexpr uint32_t expected[1001] = {
+    0xff0000, 0xff0102, 0xfe0203, 0xfe0305, 0xfe0507, 0xfe0609, 0xfe070a, 0xfd080c, 0xfd090d, 0xfd0b0f, 0xfd0b10,
+    0xfc0d11, 0xfc0e13, 0xfc0e13, 0xfc1015, 0xfc1116, 0xfb1117, 0xfb1218, 0xfb1319, 0xfb1319, 0xfa141a, 0xfa151b,
+    0xfa151c, 0xfa161d, 0xf9171d, 0xf9181e, 0xf9181f, 0xf91920, 0xf91920, 0xf81a21, 0xf81a22, 0xf81b22, 0xf81b23,
+    0xf71c24, 0xf71d24, 0xf71d25, 0xf71d26, 0xf71e26, 0xf61e27, 0xf61f27, 0xf61f28, 0xf62028, 0xf52029, 0xf5212a,
+    0xf5212a, 0xf5222b, 0xf4222b, 0xf4222c, 0xf4232c, 0xf4232d, 0xf4232d, 0xf3242e, 0xf3242e, 0xf3252f, 0xf3252f,
+    0xf22530, 0xf22630, 0xf22631, 0xf22631, 0xf22732, 0xf12732, 0xf12833, 0xf12833, 0xf12833, 0xf02934, 0xf02935,
+    0xf02935, 0xf02935, 0xef2a36, 0xef2a36, 0xef2b37, 0xef2b37, 0xef2b37, 0xee2b38, 0xee2c38, 0xee2c39, 0xee2c39,
+    0xed2c3a, 0xed2d3a, 0xed2d3a, 0xed2d3b, 0xed2e3b, 0xec2e3b, 0xec2e3c, 0xec2f3c, 0xec2f3d, 0xeb2f3d, 0xeb2f3e,
+    0xeb2f3e, 0xeb303e, 0xea303f, 0xea303f, 0xea313f, 0xea3140, 0xea3140, 0xe93141, 0xe93141, 0xe93241, 0xe93242,
+    0xe83242, 0xe83342, 0xe83343, 0xe83343, 0xe73343, 0xe73344, 0xe73444, 0xe73444, 0xe63445, 0xe63445, 0xe63546,
+    0xe63546, 0xe63546, 0xe53547, 0xe53547, 0xe53647, 0xe53648, 0xe43648, 0xe43648, 0xe43648, 0xe43749, 0xe43749,
+    0xe33749, 0xe3374a, 0xe3384a, 0xe3384a, 0xe2384b, 0xe2384b, 0xe2384b, 0xe2384c, 0xe1394c, 0xe1394c, 0xe1394d,
+    0xe1394d, 0xe1394d, 0xe03a4e, 0xe03a4e, 0xe03a4e, 0xe03a4f, 0xdf3a4f, 0xdf3b4f, 0xdf3b50, 0xdf3b50, 0xdf3b50,
+    0xde3b50, 0xde3b51, 0xde3c51, 0xde3c51, 0xdd3c52, 0xdd3c52, 0xdd3c52, 0xdd3c53, 0xdd3d53, 0xdc3d53, 0xdc3d53,
+    0xdc3d54, 0xdc3d54, 0xdb3d54, 0xdb3d55, 0xdb3e55, 0xdb3e55, 0xda3e55, 0xda3e56, 0xda3e56, 0xda3e56, 0xda3f57,
+    0xd93f57, 0xd93f57, 0xd93f57, 0xd93f58, 0xd83f58, 0xd84058, 0xd84059, 0xd84059, 0xd84059, 0xd74059, 0xd7405a,
+    0xd7405a, 0xd7415a, 0xd6415b, 0xd6415b, 0xd6415b, 0xd6415b, 0xd5415c, 0xd5415c, 0xd5425c, 0xd5425c, 0xd5425d,
+    0xd4425d, 0xd4425d, 0xd4425e, 0xd4425e, 0xd3425e, 0xd3435e, 0xd3435f, 0xd3435f, 0xd2435f, 0xd2435f, 0xd24360,
+    0xd24360, 0xd24360, 0xd14460, 0xd14461, 0xd14461, 0xd14461, 0xd04461, 0xd04462, 0xd04462, 0xd04462, 0xcf4562,
+    0xcf4563, 0xcf4563, 0xcf4563, 0xcf4564, 0xce4564, 0xce4564, 0xce4564, 0xce4565, 0xcd4665, 0xcd4665, 0xcd4665,
+    0xcd4666, 0xcc4666, 0xcc4666, 0xcc4666, 0xcc4667, 0xcc4767, 0xcb4767, 0xcb4767, 0xcb4768, 0xcb4768, 0xca4768,
+    0xca4768, 0xca4769, 0xca4769, 0xca4769, 0xc94769, 0xc9486a, 0xc9486a, 0xc9486a, 0xc8486a, 0xc8486a, 0xc8486b,
+    0xc8486b, 0xc7486b, 0xc7486c, 0xc7496c, 0xc7496c, 0xc7496c, 0xc6496d, 0xc6496d, 0xc6496d, 0xc6496d, 0xc5496d,
+    0xc5496e, 0xc5496e, 0xc5496e, 0xc54a6e, 0xc44a6f, 0xc44a6f, 0xc44a6f, 0xc44a6f, 0xc34a70, 0xc34a70, 0xc34a70,
+    0xc34a70, 0xc24a70, 0xc24a71, 0xc24b71, 0xc24b71, 0xc24b71, 0xc14b72, 0xc14b72, 0xc14b72, 0xc14b72, 0xc04b73,
+    0xc04b73, 0xc04b73, 0xc04b73, 0xc04b74, 0xbf4b74, 0xbf4c74, 0xbf4c74, 0xbf4c74, 0xbe4c75, 0xbe4c75, 0xbe4c75,
+    0xbe4c75, 0xbd4c76, 0xbd4c76, 0xbd4c76, 0xbd4c76, 0xbc4c77, 0xbc4c77, 0xbc4c77, 0xbc4d77, 0xbc4d78, 0xbb4d78,
+    0xbb4d78, 0xbb4d78, 0xbb4d78, 0xba4d79, 0xba4d79, 0xba4d79, 0xba4d79, 0xb94d79, 0xb94d7a, 0xb94d7a, 0xb94d7a,
+    0xb94e7a, 0xb84e7b, 0xb84e7b, 0xb84e7b, 0xb84e7b, 0xb74e7b, 0xb74e7c, 0xb74e7c, 0xb74e7c, 0xb74e7c, 0xb64e7d,
+    0xb64e7d, 0xb64e7d, 0xb64e7d, 0xb54e7e, 0xb54f7e, 0xb54e7e, 0xb54f7e, 0xb44f7e, 0xb44f7f, 0xb44f7f, 0xb44f7f,
+    0xb44f7f, 0xb34f80, 0xb34f80, 0xb34f80, 0xb34f80, 0xb24f80, 0xb24f81, 0xb24f81, 0xb24f81, 0xb24f81, 0xb14f81,
+    0xb14f82, 0xb15082, 0xb15082, 0xb05082, 0xb05083, 0xb05083, 0xb05083, 0xb05083, 0xaf5083, 0xaf5084, 0xaf5084,
+    0xae5084, 0xae5084, 0xae5084, 0xae5085, 0xae5085, 0xad5085, 0xad5085, 0xad5086, 0xad5086, 0xac5086, 0xac5086,
+    0xac5086, 0xac5187, 0xab5087, 0xab5187, 0xab5187, 0xab5187, 0xab5188, 0xaa5188, 0xaa5188, 0xaa5188, 0xaa5189,
+    0xa95189, 0xa95189, 0xa95189, 0xa95189, 0xa9518a, 0xa8518a, 0xa8518a, 0xa8518a, 0xa8518a, 0xa7518b, 0xa7518b,
+    0xa7518b, 0xa7518b, 0xa6518b, 0xa6518c, 0xa6518c, 0xa6518c, 0xa6528c, 0xa5528d, 0xa5528d, 0xa5528d, 0xa5528d,
+    0xa4528d, 0xa4528e, 0xa4528e, 0xa4528e, 0xa4528e, 0xa3528e, 0xa3528f, 0xa3528f, 0xa2528f, 0xa2528f, 0xa2528f,
+    0xa25290, 0xa25290, 0xa15290, 0xa15290, 0xa15290, 0xa15291, 0xa05291, 0xa05291, 0xa05291, 0xa05291, 0xa05292,
+    0x9f5292, 0x9f5292, 0x9f5292, 0x9f5292, 0x9e5293, 0x9e5293, 0x9e5293, 0x9e5293, 0x9d5293, 0x9d5294, 0x9d5394,
+    0x9d5294, 0x9d5394, 0x9c5395, 0x9c5395, 0x9c5395, 0x9c5395, 0x9b5395, 0x9b5396, 0x9b5396, 0x9b5396, 0x9b5396,
+    0x9a5396, 0x9a5397, 0x9a5397, 0x9a5397, 0x995397, 0x995397, 0x995398, 0x995398, 0x985398, 0x985398, 0x985398,
+    0x985398, 0x975399, 0x975399, 0x975399, 0x975399, 0x97539a, 0x96539a, 0x96539a, 0x96539a, 0x96539a, 0x95539b,
+    0x95539b, 0x95539b, 0x95539b, 0x94539b, 0x94539c, 0x94539c, 0x94539c, 0x94539c, 0x93539c, 0x93539d, 0x93539d,
+    0x93539d, 0x92539d, 0x92539d, 0x92539d, 0x92539e, 0x92539e, 0x91539e, 0x91539e, 0x91539f, 0x90539f, 0x90539f,
+    0x90539f, 0x90539f, 0x9053a0, 0x8f53a0, 0x8f53a0, 0x8f53a0, 0x8f53a0, 0x8e53a1, 0x8e53a1, 0x8e53a1, 0x8e53a1,
+    0x8e53a1, 0x8d53a1, 0x8d53a2, 0x8d53a2, 0x8d53a2, 0x8c53a2, 0x8c53a2, 0x8c53a3, 0x8c53a3, 0x8b53a3, 0x8b53a3,
+    0x8b53a4, 0x8b53a4, 0x8b53a4, 0x8a53a4, 0x8a53a4, 0x8a53a4, 0x8a53a5, 0x8953a5, 0x8953a5, 0x8953a5, 0x8953a5,
+    0x8853a6, 0x8853a6, 0x8853a6, 0x8853a6, 0x8753a6, 0x8753a7, 0x8753a7, 0x8753a7, 0x8753a7, 0x8653a7, 0x8653a8,
+    0x8653a8, 0x8653a8, 0x8553a8, 0x8553a8, 0x8553a8, 0x8553a9, 0x8453a9, 0x8453a9, 0x8453a9, 0x8453a9, 0x8353aa,
+    0x8353aa, 0x8353aa, 0x8353aa, 0x8353ab, 0x8252ab, 0x8253ab, 0x8253ab, 0x8252ab, 0x8152ab, 0x8152ac, 0x8152ac,
+    0x8152ac, 0x8052ac, 0x8052ac, 0x8052ad, 0x8052ad, 0x8052ad, 0x7f52ad, 0x7f52ad, 0x7f52ae, 0x7f52ae, 0x7e52ae,
+    0x7e52ae, 0x7e52ae, 0x7e52ae, 0x7d52af, 0x7d52af, 0x7d52af, 0x7d52af, 0x7c52af, 0x7c52b0, 0x7c52b0, 0x7c52b0,
+    0x7c52b0, 0x7b52b0, 0x7b52b1, 0x7b52b1, 0x7b52b1, 0x7a52b1, 0x7a52b1, 0x7a52b2, 0x7a52b2, 0x7952b2, 0x7952b2,
+    0x7952b2, 0x7951b2, 0x7851b3, 0x7851b3, 0x7851b3, 0x7851b3, 0x7851b4, 0x7751b4, 0x7751b4, 0x7751b4, 0x7751b4,
+    0x7651b4, 0x7651b5, 0x7651b5, 0x7651b5, 0x7551b5, 0x7551b5, 0x7551b6, 0x7551b6, 0x7451b6, 0x7451b6, 0x7451b6,
+    0x7451b7, 0x7451b7, 0x7351b7, 0x7351b7, 0x7351b7, 0x7351b7, 0x7251b8, 0x7250b8, 0x7250b8, 0x7250b8, 0x7150b8,
+    0x7150b9, 0x7150b9, 0x7150b9, 0x7050b9, 0x7050b9, 0x7050b9, 0x7050ba, 0x6f50ba, 0x6f50ba, 0x6f50ba, 0x6f50ba,
+    0x6f50bb, 0x6e50bb, 0x6e50bb, 0x6e50bb, 0x6e50bb, 0x6d50bc, 0x6d50bc, 0x6d4fbc, 0x6d4fbc, 0x6c4fbc, 0x6c4fbc,
+    0x6c4fbd, 0x6c4fbd, 0x6b4fbd, 0x6b4fbd, 0x6b4fbe, 0x6b4fbe, 0x6a4fbe, 0x6a4fbe, 0x6a4fbe, 0x6a4fbe, 0x694fbf,
+    0x694fbf, 0x694fbf, 0x694fbf, 0x694fbf, 0x684fc0, 0x684ec0, 0x684ec0, 0x684ec0, 0x674ec0, 0x674ec1, 0x674ec1,
+    0x674ec1, 0x664ec1, 0x664ec1, 0x664ec1, 0x664ec2, 0x654ec2, 0x654ec2, 0x654ec2, 0x654ec2, 0x654ec3, 0x644dc3,
+    0x644dc3, 0x644dc3, 0x634dc3, 0x634dc3, 0x634dc4, 0x634dc4, 0x634dc4, 0x624dc4, 0x624dc4, 0x624dc5, 0x624dc5,
+    0x614dc5, 0x614dc5, 0x614cc5, 0x614cc6, 0x604cc6, 0x604cc6, 0x604cc6, 0x604cc6, 0x5f4cc6, 0x5f4cc7, 0x5f4cc7,
+    0x5f4cc7, 0x5e4cc7, 0x5e4cc7, 0x5e4cc8, 0x5e4cc8, 0x5d4cc8, 0x5d4bc8, 0x5d4bc8, 0x5d4bc8, 0x5c4bc9, 0x5c4bc9,
+    0x5c4bc9, 0x5c4bc9, 0x5b4bc9, 0x5b4bca, 0x5b4bca, 0x5b4bca, 0x5b4bca, 0x5a4bca, 0x5a4aca, 0x5a4acb, 0x5a4acb,
+    0x594acb, 0x594acb, 0x594acb, 0x594acc, 0x584acc, 0x584acc, 0x584acc, 0x584acc, 0x574acc, 0x5749cd, 0x5749cd,
+    0x5749cd, 0x5649cd, 0x5649cd, 0x5649ce, 0x5649ce, 0x5549ce, 0x5549ce, 0x5549ce, 0x5549cf, 0x5449cf, 0x5448cf,
+    0x5448cf, 0x5448cf, 0x5348cf, 0x5348d0, 0x5348d0, 0x5348d0, 0x5248d0, 0x5248d0, 0x5248d1, 0x5247d1, 0x5147d1,
+    0x5147d1, 0x5147d1, 0x5147d1, 0x5047d2, 0x5047d2, 0x5047d2, 0x5047d2, 0x4f47d2, 0x4f46d3, 0x4f46d3, 0x4f46d3,
+    0x4e46d3, 0x4e46d3, 0x4e46d4, 0x4e46d4, 0x4d46d4, 0x4d46d4, 0x4d46d4, 0x4d45d4, 0x4c45d5, 0x4c45d5, 0x4c45d5,
+    0x4c45d5, 0x4b45d5, 0x4b45d5, 0x4b45d6, 0x4b45d6, 0x4a44d6, 0x4a44d6, 0x4a44d6, 0x4a44d7, 0x4944d7, 0x4944d7,
+    0x4944d7, 0x4944d7, 0x4843d8, 0x4843d8, 0x4843d8, 0x4843d8, 0x4743d8, 0x4743d9, 0x4743d9, 0x4743d9, 0x4643d9,
+    0x4642d9, 0x4642d9, 0x4642da, 0x4542da, 0x4542da, 0x4542da, 0x4542da, 0x4442da, 0x4441db, 0x4441db, 0x4341db,
+    0x4341db, 0x4341db, 0x4341dc, 0x4241dc, 0x4241dc, 0x4240dc, 0x4240dc, 0x4140dc, 0x4140dd, 0x4140dd, 0x4140dd,
+    0x4040dd, 0x403fdd, 0x403fde, 0x403fde, 0x3f3fde, 0x3f3fde, 0x3f3fde, 0x3f3fdf, 0x3e3edf, 0x3e3edf, 0x3e3edf,
+    0x3d3edf, 0x3d3edf, 0x3d3ee0, 0x3d3ee0, 0x3c3de0, 0x3c3de0, 0x3c3de0, 0x3c3de0, 0x3b3de1, 0x3b3de1, 0x3b3de1,
+    0x3b3ce1, 0x3a3ce1, 0x3a3ce2, 0x3a3ce2, 0x393ce2, 0x393ce2, 0x393be2, 0x393be3, 0x383be3, 0x383be3, 0x383be3,
+    0x383be3, 0x373ae3, 0x373ae4, 0x373ae4, 0x363ae4, 0x363ae4, 0x363ae4, 0x3639e4, 0x3539e5, 0x3539e5, 0x3539e5,
+    0x3539e5, 0x3439e5, 0x3438e6, 0x3438e6, 0x3338e6, 0x3338e6, 0x3338e6, 0x3337e6, 0x3237e7, 0x3237e7, 0x3237e7,
+    0x3137e7, 0x3137e7, 0x3136e8, 0x3136e8, 0x3036e8, 0x3036e8, 0x3036e8, 0x3035e8, 0x2f35e9, 0x2f35e9, 0x2f35e9,
+    0x2e35e9, 0x2e34e9, 0x2e34ea, 0x2e34ea, 0x2d34ea, 0x2d34ea, 0x2d33ea, 0x2c33eb, 0x2c33eb, 0x2c33eb, 0x2b32eb,
+    0x2b32eb, 0x2b32eb, 0x2b32ec, 0x2a32ec, 0x2a31ec, 0x2a31ec, 0x2931ec, 0x2931ec, 0x2931ed, 0x2930ed, 0x2830ed,
+    0x2830ed, 0x2830ed, 0x272fee, 0x272fee, 0x272fee, 0x262fee, 0x262eee, 0x262eef, 0x252eef, 0x252def, 0x252def,
+    0x252def, 0x242def, 0x242cf0, 0x242cf0, 0x232cf0, 0x232cf0, 0x232bf0, 0x222bf1, 0x222bf1, 0x222bf1, 0x212af1,
+    0x212af1, 0x212af1, 0x202af1, 0x2029f2, 0x2029f2, 0x1f29f2, 0x1f28f2, 0x1f28f2, 0x1e28f3, 0x1e27f3, 0x1e27f3,
+    0x1d27f3, 0x1d27f3, 0x1d26f3, 0x1c26f4, 0x1c25f4, 0x1c25f4, 0x1b25f4, 0x1b25f4, 0x1b24f5, 0x1a24f5, 0x1a24f5,
+    0x1923f5, 0x1923f5, 0x1922f6, 0x1822f6, 0x1822f6, 0x1821f6, 0x1721f6, 0x1720f6, 0x1620f7, 0x1620f7, 0x161ff7,
+    0x151ff7, 0x151ef7, 0x141ef8, 0x141ef8, 0x141df8, 0x131df8, 0x131cf8, 0x121cf8, 0x121bf9, 0x111bf9, 0x111af9,
+    0x111af9, 0x1019f9, 0x1019fa, 0x0f18fa, 0x0f18fa, 0x0e17fa, 0x0e17fa, 0x0d16fa, 0x0d15fb, 0x0c15fb, 0x0c14fb,
+    0x0b14fb, 0x0b13fb, 0x0a12fc, 0x0a11fc, 0x0911fc, 0x0810fc, 0x080ffc, 0x070efc, 0x070dfd, 0x060dfd, 0x060cfd,
+    0x050bfd, 0x0509fd, 0x0409fe, 0x0308fe, 0x0307fe, 0x0206fe, 0x0204fe, 0x0103fe, 0x0102fe, 0x0001ff, 0x0000ff
+    };
+    int off = 0, worst = 0;
+    for (int i = 0; i <= 1000; ++i) {
+        uint32_t got = lerp(colors::Red, colors::Blue, float(i) / 1000).toArgb();
+        int d = 0;
+        for (int shift : {0, 8, 16}) d = std::max(d, std::abs(int(got >> shift & 0xff) - int(expected[i] >> shift & 0xff)));
+        off += d != 0, worst = std::max(worst, d);
+        CHECK(got >> 24 == 0xff);
+    }
+    CHECK(worst < 2 && off <= 1);  // (as ColorTest allows, within a unit; here one of them is)
+    // As ColorTest works it out: each Oklab component along, back in sRGB; alpha along too.
+    Color redOklab = colors::Red.convert(ColorSpaces::Oklab), greenOklab = colors::Green.convert(ColorSpaces::Oklab);
+    bool same = true;
+    for (int i = 0; i <= 255; ++i) {
+        float t = float(i) / 255;
+        Color want = Color(lerp(redOklab.red(), greenOklab.red(), t), lerp(redOklab.green(), greenOklab.green(), t),
+                           lerp(redOklab.blue(), greenOklab.blue(), t), 1, ColorSpaces::Oklab)
+                         .convert(ColorSpaces::Srgb);
+        same = same && lerp(colors::Red, colors::Green, t).toArgb() == want.toArgb() &&
+               lerp(colors::Red, colors::Red.copy(0), t).toArgb() == colors::Red.copy(lerp(1.f, 0.f, t)).toArgb();
+    }
+    CHECK(same);
+    // Within 0..1 (an easing's overshoot), in the stop's space.
+    CHECK(lerp(colors::Red, colors::Blue, 1.5f) == lerp(colors::Red, colors::Blue, 1) && lerp(colors::Red, colors::Blue, -1) == lerp(colors::Red, colors::Blue, 0));
+    Color p3 = lerp(colors::Red, Color(0, 0, 1, 1, ColorSpaces::DisplayP3), 0.5f);
+    CHECK(p3.colorSpace() == ColorSpaces::DisplayP3 && lerp(colors::Black, colors::White, 0.5f).toArgb() == 0xFF636363);
+}
+
+TEST(colors_animate_in_oklab_as_composes_vector_converter) {
+    // Black to white: Oklab's L along (0.5: a linear 0.125, 0x63 in sRGB), not sRGB's numbers (0x80).
+    CHECK(detail::animatedColor(colors::Black, colors::White, 0.5f).toArgb() == 0xFF636363);
+    // Past the target, as a spring overshoots: L kept within 0..1, a and b within -0.5..0.5, alpha within 0..1.
+    Color over = detail::animatedColor(colors::Black, colors::White, 1.5f), under = detail::animatedColor(colors::White, colors::Black, 1.5f);
+    CHECK(over.toArgb() == 0xFFFFFFFF && under.toArgb() == 0xFF000000);
+    Color redOklab = colors::Red.convert(ColorSpaces::Oklab), blueOklab = colors::Blue.convert(ColorSpaces::Oklab);
+    Color past(lerp(blueOklab.red(), redOklab.red(), 3.f), 0.5f, 0.5f, 1, ColorSpaces::Oklab);  // (a and b past 0.5 three times as far)
+    CHECK(lerp(blueOklab.green(), redOklab.green(), 3.f) > 0.5f && lerp(blueOklab.blue(), redOklab.blue(), 3.f) > 0.5f);
+    CHECK(detail::animatedColor(colors::Blue, colors::Red, 3) == past.convert(ColorSpaces::Srgb));
+    CHECK(detail::animatedColor(colors::Red.copy(0), colors::Red, 2).alpha() == 1 && detail::animatedColor(colors::Red, colors::Red.copy(0), 2).alpha() == 0);
+    CHECK(detail::animatedColor(colors::Red, Color(0, 0, 1, 1, ColorSpaces::DisplayP3), 0.25f).colorSpace() == ColorSpaces::DisplayP3);
+    // animateColorAsState goes so: halfway along a linear tween, L halfway.
+    auto target = std::make_shared<MutableState<Color>>(mutableStateOf(colors::Black));
+    auto seen = std::make_shared<Color>();
+    ComposeTestRule rule([target, seen] { *seen = animateColorAsState(target->get(), tween(32, 0, LinearEasing)); });
+    target->set(colors::White);
+    rule.advanceFrame();  // the frame that sees the new target
+    rule.advanceFrame();  // 16 of 32 ms
+    CHECK(seen->toArgb() == 0xFF636363);
+    rule.waitForIdle();
+    CHECK(*seen == colors::White);
+    // A spring past its target, each frame as its progress has it (not held at the target, as a
+    // lerp's fraction is): white to gray goes darker than gray as it bounces.
+    AnimationSpec bouncy = spring(Spring::DampingRatioHighBouncy, Spring::StiffnessMedium);
+    const Color gray = Color::argb(0xFF808080);
+    auto to = std::make_shared<MutableState<Color>>(mutableStateOf(colors::White));
+    auto got = std::make_shared<Color>();
+    ComposeTestRule springy([to, got, bouncy] { *got = animateColorAsState(to->get(), bouncy); });
+    to->set(gray);
+    springy.advanceFrame();  // the frame that sees the new target
+    bool asProgress = true, darker = false;
+    for (int frame = 1; frame < 60; ++frame) {
+        springy.advanceFrame();
+        bool finished = false;
+        float p = bouncy.progress(16.f * float(frame), finished);
+        if (finished) break;
+        asProgress = asProgress && *got == detail::animatedColor(colors::White, gray, p);
+        darker = darker || got->red() < gray.red();
+    }
+    CHECK(asProgress && darker);
+    // An infinite transition's too, along an easing past its end: a state read and a value.
+    Easing beyond{0.3f, 0.f, 0.4f, 1.8f};
+    auto stateDarker = std::make_shared<bool>(false), valueDarker = std::make_shared<bool>(false);
+    ComposeTestRule endless([&, stateDarker, valueDarker] {
+        auto t = rememberInfiniteTransition();
+        auto shade = t.animateColorState(colors::White, gray, infiniteRepeatable(tween(400, 0, beyond)));
+        Color value = t.animateColor(colors::White, gray, infiniteRepeatable(tween(400, 0, beyond)));
+        *valueDarker = *valueDarker || value.red() < gray.red();
+        Box(Modifier().size(10).drawBehind([shade, stateDarker, gray](DrawScope&) { *stateDarker = *stateDarker || shade.get().red() < gray.red(); }));
+    });
+    for (int frame = 0; frame < 30; ++frame) {
+        endless.advanceFrame();
+        testing::RecordingCanvas canvas;
+        endless.host().draw(canvas);
+    }
+    CHECK(*stateDarker && *valueDarker);
+}
+
+bool nearColor(Color a, Color b, float tolerance = 2.f / 255) {  // (within two of 8 bits: in and out of 8 bits a channel)
+    return near(a.red(), b.red(), tolerance) && near(a.green(), b.green(), tolerance) && near(a.blue(), b.blue(), tolerance) && near(a.alpha(), b.alpha(), tolerance);
 }
 
 TEST(color_filters_tint_matrices_and_lighting) {
@@ -25598,7 +26191,7 @@ TEST(shadow_default_draws_fading_rings_and_display_list_damage_reaches_the_blur)
     CHECK(rings.rects.size() == 6);
     if (rings.rects.size() == 6) {
         CHECK(near(rings.rects[0].x, 10 - 7, 0.01f) && near(rings.rects[0].y, 10 - 7 + 3, 0.01f));  // the widest: spread and blur out
-        CHECK(near(rings.rects[5].x, 10 - 2, 0.01f) && rings.colors[5].a > rings.colors[0].a);    // the innermost, darkest
+        CHECK(near(rings.rects[5].x, 10 - 2, 0.01f) && rings.colors[5].alpha() > rings.colors[0].alpha());    // the innermost, darkest
     }
     rings.drawShadow({10, 10, 20, 20}, 4, Shadow{Color{0, 0, 0, 1}, {}, 6, 0}, true);
     CHECK(rings.rects.size() == 6);  // no inner shadow by default
@@ -26561,7 +27154,7 @@ TEST(blend_modes_fade_an_offscreen_layer) {
     // The Porter-Duff modes added for images' tints too: half red over half white.
     Color red{1, 0, 0, 0.5f}, white{1, 1, 1, 0.5f};
     auto tint = [&](BlendMode m) { return ColorFilter::tint(red, m).apply(white); };
-    auto close = [](Color a, Color b) { return near(a.r, b.r, 0.01f) && near(a.g, b.g, 0.01f) && near(a.b, b.b, 0.01f) && near(a.a, b.a, 0.01f); };
+    auto close = [](Color a, Color b) { return near(a.red(), b.red(), 0.01f) && near(a.green(), b.green(), 0.01f) && near(a.blue(), b.blue(), 0.01f) && near(a.alpha(), b.alpha(), 0.01f); };
     CHECK(close(tint(BlendMode::Clear), {0, 0, 0, 0}) && close(tint(BlendMode::Dst), white));
     CHECK(close(tint(BlendMode::DstOut), {1, 1, 1, 0.25f}) && close(tint(BlendMode::SrcOut), {1, 0, 0, 0.25f}));
     CHECK(close(tint(BlendMode::Xor), {1, 0.5f, 0.5f, 0.5f}) && close(tint(BlendMode::DstAtop), {1, 0.5f, 0.5f, 0.5f}));
@@ -26776,7 +27369,7 @@ TEST(blur_types_blur_the_node_what_it_draws_or_what_is_behind) {
     // layer; its child after it, out of it, sharp, but in the clip and faded as the elements in
     // between have it.
     testing::RecordingCanvas c = draw();
-    CHECK(c.rects.size() == 3 && c.rectColors[1].r == 1 && c.rectColors[2].b == 1);
+    CHECK(c.rects.size() == 3 && c.rectColors[1].red() == 1 && c.rectColors[2].blue() == 1);
     CHECK(c.layerEffects.size() == 3 && c.layerEffects[0] == BlurEffect(6, 6, TileMode::Clamp) && !c.layerEffects[1] && !c.layerEffects[2]);
     CHECK(c.rectDepths.size() == 3 && c.rectDepths[0] == 0 && c.rectDepths[1] == 2 && c.rectDepths[2] == 1);  // the child in the faded layer alone
     CHECK(near(c.layerAlphas[1], 0.5f) && near(c.layerAlphas[2], 0.5f));
@@ -26929,13 +27522,13 @@ TEST(elevation_shadows_blur_as_skia_where_nothing_does_better) {
         float z = 20, r = z / 2, b = 0.5f * r * (1 + z / 128), stroke = 0.5f * (r - b);
         const auto& a = c.shadows[0];
         CHECK(sameRect(a.rect, {30, 50, 40, 20}) && near(a.shadow.blurRadius, b / 2, 1e-4f) && near(a.shadow.spread, stroke / 2 / 2, 1e-4f));
-        CHECK(a.shadow.color.r == 1 && near(a.shadow.color.a, 0.039f, 1e-6f));
+        CHECK(a.shadow.color.red() == 1 && near8(a.shadow.color.alpha(), 0.039f));
         // Spot: cast from the light (scaled by Lz / (Lz - z) about its foot), blurred by its radius times z / (Lz - z).
         float lz = 1000, ratio = z / (lz - z), scale = lz / (lz - z);
         const auto& s = c.shadows[1];
         CHECK(near(s.rect.x, 30 * scale - ratio * 100, 1e-3f) && near(s.rect.y, 50 * scale, 1e-3f) && near(s.rect.width, 40 * scale, 1e-3f));
-        CHECK(near(s.radii.topLeft, 4 * scale, 1e-4f) && near(s.shadow.blurRadius, 800 * ratio, 1e-3f) && s.shadow.color.b == 1 &&
-              near(s.shadow.color.a, 0.19f, 1e-6f));
+        CHECK(near(s.radii.topLeft, 4 * scale, 1e-4f) && near(s.shadow.blurRadius, 800 * ratio, 1e-3f) && s.shadow.color.blue() == 1 &&
+              near8(s.shadow.color.alpha(), 0.19f));
     }
     // A display list: the light's center where its transform takes it; the shadow's reach its area.
     auto up = mutableStateOf(8.f);
@@ -26979,7 +27572,7 @@ TEST(drop_shadows_take_brushes_alphas_and_blend_modes) {
         Box(Modifier().offset(20, 20).size(40).dropShadow(RectangleShape, Shadow{.color = red, .offset = {3, 4}, .blurRadius = 6, .spread = 2,
                                                                                   .alpha = 0.5f, .blendMode = BlendMode::Multiply}));
     });
-    CHECK(plain->shadows.size() == 1 && near(plain->shadows[0].shadow.color.a, 0.5f, 1e-6f) && plain->layers == 0 &&
+    CHECK(plain->shadows.size() == 1 && near8(plain->shadows[0].shadow.color.alpha(), 0.5f) && plain->layers == 0 &&
           plain->shadows[0].blend == BlendMode::Multiply);
     CHECK(plain->clips.size() == 1 && sameRect(plain->clips[0], {20 - 8 + 3, 20 - 8 + 4, 56, 56}));
     // A brush: in a layer at its alpha, the shadow (white), then the brush SrcIn over it, over what it covers.
@@ -27172,7 +27765,7 @@ TEST(checkboxes_and_radio_buttons_ripple_and_hover_in_a_40_dp_circle) {
     rule.host().draw(focused);
     bool layer = false, ring = false;  // (besides the box's own outline)
     for (size_t i = 0; i < focused.rects.size(); ++i)
-        layer |= near(focused.rects[i].width, 40) && near(focused.rectRadii[i], 20) && near(focused.rectColors[i].a, 0.1f, 0.01f) &&
+        layer |= near(focused.rects[i].width, 40) && near(focused.rectRadii[i], 20) && near(focused.rectColors[i].alpha(), 0.1f, 0.01f) &&
                  near(focused.rects[i].center().x, b.center().x);
     for (size_t i = 0; i < focused.strokes.size(); ++i) ring |= near(focused.strokes[i].width, 40);
     CHECK(layer && !ring);
@@ -27193,7 +27786,7 @@ TEST(unbounded_indications_hover_in_a_circle_of_their_radius) {
         rule.host().draw(c);
         std::vector<std::pair<Rect, float>> out;
         for (size_t i = 0; i < c.rects.size(); ++i)
-            if (near(c.rectColors[i].a, 0.08f, 0.001f)) out.push_back({c.rects[i], c.rectRadii[i]});
+            if (near8(c.rectColors[i].alpha(), 0.08f)) out.push_back({c.rects[i], c.rectRadii[i]});
         return out;
     };
     Rect icon = rule.onNodeWithTag("simge").bounds(), wide = rule.onNodeWithTag("geniş").bounds();
@@ -27254,7 +27847,7 @@ TEST(hct_matches_material_color_utilities) {
         Hct h = Hct::fromColor(Color::hex(k.rgb));
         CHECK(near(h.hue, k.hue, 0.01f) && near(h.chroma, k.chroma, 0.01f) && near(h.tone, k.tone, 0.01f));
         Color back = h.toColor(), was = Color::hex(k.rgb);  // back to itself
-        CHECK(near(back.r, was.r, 1.5f / 255) && near(back.g, was.g, 1.5f / 255) && near(back.b, was.b, 1.5f / 255));
+        CHECK(near(back.red(), was.red(), 1.5f / 255) && near(back.green(), was.green(), 1.5f / 255) && near(back.blue(), was.blue(), 1.5f / 255));
     }
     CHECK(near(Hct::fromColor(Color::hex(0x000000)).tone, 0) && near(Hct::fromColor(Color::hex(0xFFFFFF)).tone, 100, 0.01f));
     // Asked for more chroma than sRGB has at a tone: that hue and tone, as much chroma as there is.
@@ -27268,7 +27861,7 @@ TEST(hct_matches_material_color_utilities) {
     // Under 1 of chroma: grey of that tone.
     for (float chroma : {0.f, 0.9f}) {
         Color grey = Hct{0, chroma, 50}.toColor();
-        CHECK(grey.r == grey.g && grey.g == grey.b && near(Hct::fromColor(grey).tone, 50, 0.5f));
+        CHECK(grey.red() == grey.green() && grey.green() == grey.blue() && near(Hct::fromColor(grey).tone, 50, 0.5f));
     }
 }
 
@@ -27312,7 +27905,7 @@ ImageBitmap pixelsOf(std::initializer_list<std::pair<uint32_t, int>> colors, boo
 }
 uint32_t hexOf(Color c) {
     auto ch = [](float v) { return uint32_t(std::lround(v * 255)); };
-    return ch(c.r) << 16 | ch(c.g) << 8 | ch(c.b);
+    return ch(c.red()) << 16 | ch(c.green()) << 8 | ch(c.blue());
 }
 }  // namespace
 

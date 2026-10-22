@@ -125,7 +125,7 @@ A chain starts from `Modifier()`. Order matters as in Compose. See [Modifiers](m
 
 ## Units
 
-Kotlin's `16.dp` is just `16`: every length is a `float` in dp. Font sizes are `TextUnit`, which converts from a number of sp (`.fontSize = 24`) or is written as `TextUnit::sp(24)` and `TextUnit::em(1.5f)`. Durations use `std::chrono`: `delay(300ms)`, `debounce(300ms)`. A `Color` holds floats from 0 to 1 (`Color{1, 0, 0, 1}`) or comes from a hex value (`Color::hex(0xE53935)`, `Color::hex(0x000000, 0.5f)`); `colors::Black`, `White` and `Transparent` are named, and `color.copy(0.38f)` changes the alpha like Compose's `copy(alpha = …)`.
+Kotlin's `16.dp` is just `16`: every length is a `float` in dp. Font sizes are `TextUnit`, which converts from a number of sp (`.fontSize = 24`) or is written as `TextUnit::sp(24)` and `TextUnit::em(1.5f)`. Durations use `std::chrono`: `delay(300ms)`, `debounce(300ms)`. A `Color` is Compose's 64 bits: made from components from 0 to 1 in sRGB (`Color{1, 0, 0, 1}`), a hex value (`Color::hex(0xE53935)`, `Color::hex(0x000000, 0.5f)`), an ARGB one (`Color::argb(0xFFE53935)`, Compose's `Color(0xFFE53935)`) or in another color space (`Color(0.2f, 0.6f, 0.9f, 1, ColorSpaces::DisplayP3)`), read with `red()`, `green()`, `blue()` and `alpha()`; `colors::Black`, `White` and `Transparent` are named, and `color.copy(0.38f)` changes the alpha like Compose's `copy(alpha = …)`.
 
 ## Coroutines
 

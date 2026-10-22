@@ -584,7 +584,7 @@ void graphics::Canvas::drawRawPoints(PointMode pointMode, const std::vector<floa
 namespace {
 
 // A color faded by a paint's alpha.
-Color faded(Color c, float alpha) { return alpha < 1 ? c.copy(c.a * std::max(alpha, 0.f)) : c; }
+Color faded(Color c, float alpha) { return alpha < 1 ? c.copy(c.alpha() * std::max(alpha, 0.f)) : c; }
 
 // The path Skia draws for an arc (SkPathPriv::CreateDrawArcPath): a whole oval for a filled
 // sweep of a turn or more; else through the center first if useCenter (and back to it), the
@@ -1317,7 +1317,7 @@ void Painter::draw(GraphicsContext& canvas, const Rect& b, float alpha, const st
         if (!d.bitmap.empty()) canvas.drawImage(d.bitmap, {0, 0, float(d.bitmap.width()), float(d.bitmap.height())}, b, alpha);
         break;
     case Kind::Vector: break;
-    case Kind::Fill: canvas.fillRoundRect(b, CornerRadii(), d.color.copy(d.color.a * alpha)); break;
+    case Kind::Fill: canvas.fillRoundRect(b, CornerRadii(), d.color.copy(d.color.alpha() * alpha)); break;
     case Kind::Gradient:
     case Kind::Custom: {
         bool layer = alpha < 1;

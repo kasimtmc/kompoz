@@ -222,7 +222,7 @@ void ModalNavigationDrawer(const Content& drawerContent, DrawerState state, cons
         if (!visible) return;  // closed: nothing above the content
         Box(Modifier()
                 .fillMaxSize()
-                .drawBehind([d, scrim = colorScheme().scrim](DrawScope& draw) { draw.drawRect(scrim.copy(scrim.a * 0.32f * d->fraction.value())); })
+                .drawBehind([d, scrim = colorScheme().scrim](DrawScope& draw) { draw.drawRect(scrim.copy(scrim.alpha() * 0.32f * d->fraction.value())); })
                 .pointerInput(0, [state, coroutines](PointerInputScope& s) -> Task {
                     co_await detectTapGestures(s, {.onTap = [state, coroutines](Offset) {
                                                    coroutines.launch([state]() -> Task { co_await state.close(); });

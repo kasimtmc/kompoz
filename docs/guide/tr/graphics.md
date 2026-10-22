@@ -74,6 +74,21 @@ void Faded(const Content& content) {
 }
 ```
 
+## Renkler ve renk uzayları
+
+Bir `Color` Compose'unkidir: 64 bit; sRGB'de kanal başına 8 bit, Compose'un başka bir renk uzayında (`ColorSpaces`: Display P3, BT.2020, Adobe RGB, CIE L\*a\*b\*, Oklab ve daha fazlası) bileşenleri yarım float'lar. `convert` birini başka bir uzaya çevirir, `toArgb()` sRGB'sini `0xAARRGGBB` olarak verir; bir renk hangi uzayda olursa olsun sRGB'de çizilir.
+
+```cpp body
+Color p3(0.1f, 0.75f, 0.45f, 1, ColorSpaces::DisplayP3);  // Display P3'te
+Color lab(55, 60, -40, 1, ColorSpaces::CieLab);           // L*, a*, b*
+Color between = lerp(colors::Red, colors::Blue, 0.5f);    // Oklab'da karıştırılır
+Row(Modifier().height(40), {}, [&] {
+    for (Color c : {p3, lab, between}) Box(Modifier().size(40).background(c));
+});
+```
+
+`lerp`, Compose'unki gibi iki rengi Oklab'da karıştırır: kırmızıdan maviye yarı yol, sRGB sayılarının verdiği koyu mor değil, ikisi kadar açık bir menekşedir. Canlandırılan bir renk de böyle gider (`animateColorAsState`). Bir gradyan renklerini Skia'nınki gibi sRGB'de karıştırır.
+
 ## Fırçalar
 
 Bir `Brush`, bir rengin gidebileceği her yerde düz bir renkle ya da bir gradyanla boyar: çizim çağrıları, `background`, metin.

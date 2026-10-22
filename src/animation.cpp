@@ -299,7 +299,7 @@ float InfiniteTransition::animateFloat(float from, float to, const AnimationSpec
 }
 
 Color InfiniteTransition::animateColor(Color from, Color to, const AnimationSpec& spec) const {
-    return lerp(from, to, progress(spec));
+    return detail::animatedColor(from, to, progress(spec));
 }
 
 } // namespace kompoz

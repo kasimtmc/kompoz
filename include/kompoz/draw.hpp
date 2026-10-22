@@ -53,7 +53,7 @@ struct Paint {
     std::optional<ColorFilter> colorFilter;
     std::optional<PathEffect> pathEffect;
 
-    float alpha() const { return color.a; }
+    float alpha() const { return color.alpha(); }
     void setAlpha(float alpha) { color = color.copy(std::clamp(alpha, 0.f, 1.f)); }
     friend bool operator==(const Paint&, const Paint&) = default;
 };

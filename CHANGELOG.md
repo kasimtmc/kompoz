@@ -143,6 +143,13 @@
   settings of an element that had been replaced).
 - **Fixed**: a `rememberSaveable` under a `SaveableStateHolder` kept its value when its composable left while its
   provider stayed, and brought it back; it goes now, as in Compose (the showcase's time picker came back in 24 hours).
+- **Colors and color spaces as Compose's**: a `Color` is Compose's 64 bits (sRGB 8 bits a channel; another space's
+  components half floats, with the space's id), with `convert`, `compositeOver`, `luminance`, `toArgb`, `hsv`/`hsl`
+  and `isSpecified`, and the `colorspace` package (`ColorSpace`, the 20 `ColorSpaces`, `Rgb` with transfer functions
+  and ICC curves, connectors, adaptation). `lerp(Color)` mixes in Oklab and animated colors go as Compose's
+  `Color.VectorConverter`; gradients mix in sRGB, as Skia's; a color of another space is drawn in sRGB, not rounded to
+  8 bits on the way. `ImageBitmap` takes a color space. **Changed**: `Color`'s `r`, `g`, `b`, `a` fields are its
+  `red()`, `green()`, `blue()`, `alpha()`, and its components are kept as Compose keeps them (8 bits in sRGB).
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

@@ -13,6 +13,7 @@ struct ImageBitmap::Data {
     int width = 0, height = 0;
     ImageBitmapConfig config = ImageBitmapConfig::Argb8888;
     bool hasAlpha = true;
+    const ColorSpace* colorSpace = &ColorSpaces::Srgb;
     uint64_t id = 0;
     std::mutex mutex;
     uint64_t version = 1;     // what it holds now
@@ -87,9 +88,10 @@ public:
 
 } // namespace
 
-ImageBitmap::ImageBitmap(int width, int height, ImageBitmapConfig config, bool hasAlpha) {
+ImageBitmap::ImageBitmap(int width, int height, ImageBitmapConfig config, bool hasAlpha, const ColorSpace& colorSpace) {
     if (width <= 0 || height <= 0 || width > maxImageDimension || height > maxImageDimension) return;
     auto d = make(width, height, config, hasAlpha);
+    d->colorSpace = &colorSpace;
     d->rgba.assign(size_t(width) * size_t(height) * 4, 0);
     if (!d->hasAlpha)  // black and opaque
         for (size_t i = 3; i < d->rgba.size(); i += 4) d->rgba[i] = 255;
@@ -114,6 +116,7 @@ int ImageBitmap::width() const { return data_ ? data_->width : 0; }
 int ImageBitmap::height() const { return data_ ? data_->height : 0; }
 ImageBitmapConfig ImageBitmap::config() const { return data_ ? data_->config : ImageBitmapConfig::Argb8888; }
 bool ImageBitmap::hasAlpha() const { return !data_ || data_->hasAlpha; }
+const ColorSpace& ImageBitmap::colorSpace() const { return data_ ? *data_->colorSpace : ColorSpaces::Srgb; }
 uint64_t ImageBitmap::id() const { return data_ ? data_->id : 0; }
 
 uint64_t ImageBitmap::version() const {
@@ -157,7 +160,7 @@ PixelMap ImageBitmap::toPixelMap(int startX, int startY, std::optional<int> widt
 
 Color PixelMap::operator()(int x, int y) const {
     uint32_t c = buffer[size_t(bufferOffset) + size_t(y) * size_t(stride) + size_t(x)];
-    return Color::hex(c & 0xFFFFFF, float(c >> 24) / 255.f);
+    return Color::argb(c);
 }
 
 namespace detail {

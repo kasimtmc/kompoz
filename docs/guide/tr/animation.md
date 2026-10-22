@@ -35,6 +35,8 @@ Animasyonun her karesinde yalnızca değeri okuyan scope yeniden kompoze edilir,
 
 İkinci argüman bir animasyon tanımıdır ya da bir tween için milisaniye cinsinden bir süre.
 
+Bir renk Compose'unki gibi canlanır (`Color.VectorConverter`): Oklab'da, açıklığı ve tonu boyunca; böylece siyahtan beyaza yarı yolda göze orta bir gridir (`0x636363`) ve aşan bir yay orada hedefinin ötesine geçer.
+
 ## Animasyon tanımları
 
 | Tanım | Davranış |

@@ -143,17 +143,17 @@ DisplayList::Command* DisplayList::draw(Kind kind, const Rect& local, float pad)
 }
 
 void DisplayList::fillRoundRect(const Rect& rect, const CornerRadii& radii, Color color) {
-    if (color.a == 0) return;
+    if (color.alpha() == 0) return;
     if (Command* c = draw(Kind::FillRoundRect, rect, 0)) c->rect = rect, c->radii = radii, c->color = color;
 }
 
 void DisplayList::strokeRoundRect(const Rect& rect, const CornerRadii& radii, float width, Color color) {
-    if (color.a == 0) return;
+    if (color.alpha() == 0) return;
     if (Command* c = draw(Kind::StrokeRoundRect, rect, width / 2)) c->rect = rect, c->radii = radii, c->f2 = width, c->color = color;
 }
 
 void DisplayList::drawLine(Offset from, Offset to, float width, Color color) {
-    if (color.a == 0) return;
+    if (color.alpha() == 0) return;
     Rect r{std::min(from.x, to.x), std::min(from.y, to.y), std::abs(to.x - from.x), std::abs(to.y - from.y)};
     if (Command* c = draw(Kind::Line, r, width)) c->p1 = from, c->p2 = to, c->f2 = width, c->color = color;
 }
@@ -170,7 +170,7 @@ DisplayList::Command* DisplayList::text(Kind kind, std::string_view utf8, Offset
 }
 
 void DisplayList::drawText(std::string_view utf8, Offset baseline, const Font& font, Color color, bool rtl) {
-    if (utf8.empty() || color.a == 0) return;
+    if (utf8.empty() || color.alpha() == 0) return;
     if (Command* c = text(Kind::Text, utf8, baseline, font, rtl)) c->color = color;
 }
 
@@ -181,18 +181,18 @@ void DisplayList::drawTextBrush(std::string_view utf8, Offset baseline, const Fo
 }
 
 void DisplayList::drawTextShadow(std::string_view utf8, Offset baseline, const Font& font, Color color, float blurRadius, bool rtl) {
-    if (utf8.empty() || color.a == 0) return;
+    if (utf8.empty() || color.alpha() == 0) return;
     if (Command* c = text(Kind::TextShadow, utf8, baseline, font, rtl, std::max(0.f, blurRadius))) c->color = color, c->f1 = blurRadius;
 }
 
 void DisplayList::drawArc(const Rect& oval, float startDegrees, float sweepDegrees, float strokeWidth, Color color, bool roundCap) {
-    if (color.a == 0) return;
+    if (color.alpha() == 0) return;
     if (Command* c = draw(Kind::Arc, oval, strokeWidth / 2))
         c->rect = oval, c->f1 = startDegrees, c->f2 = sweepDegrees, c->f3 = strokeWidth, c->color = color, c->flag = roundCap;
 }
 
 void DisplayList::drawShadow(const Rect& rect, const CornerRadii& radii, const Shadow& shadow, bool inner) {
-    if (shadow.color.a <= 0 || rect.width <= 0 || rect.height <= 0) return;
+    if (shadow.color.alpha() <= 0 || rect.width <= 0 || rect.height <= 0) return;
     // A drop shadow reaches its spread, offset and three blur radii out; an inner one stays inside.
     Rect area = rect;
     float pad = 0;
@@ -214,7 +214,7 @@ void DisplayList::drawShadow(const Rect& rect, const CornerRadii& radii, const S
 }
 
 void DisplayList::drawShadowPath(const Path& outline, Offset origin, const Shadow& shadow, bool inner) {
-    if (shadow.color.a <= 0 || outline.isEmpty()) return;
+    if (shadow.color.alpha() <= 0 || outline.isEmpty()) return;
     Rect rect = outline.bounds();
     rect.x += origin.x;
     rect.y += origin.y;

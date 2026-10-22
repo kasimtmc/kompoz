@@ -187,7 +187,7 @@ public:
     void vectorDrawn(const ImageBitmap& image, Color c, float alpha, const Rect& dst) {
         if (uint64_t v = detail::vectorDrawnInto(image)) {
             vectors.push_back(v);
-            vectorColors.push_back(c.copy(c.a * alpha));
+            vectorColors.push_back(c.copy(c.alpha() * alpha));
             vectorBounds.push_back(moved(dst));
         }
     }

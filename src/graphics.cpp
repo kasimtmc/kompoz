@@ -131,7 +131,7 @@ Brush Brush::sweepGradient(std::vector<ColorStop> stops, std::optional<Offset> c
 Brush Brush::faded(float alpha) const {
     Brush b = *this;
     if (alpha < 1)
-        for (ColorStop& s : b.stops_) s.color = s.color.copy(s.color.a * std::max(alpha, 0.f));
+        for (ColorStop& s : b.stops_) s.color = s.color.copy(s.color.alpha() * std::max(alpha, 0.f));
     if (alpha < 1 && kind_ == Kind::Shader) b.shaderAlpha_ *= std::max(alpha, 0.f);
     return b;
 }
@@ -222,7 +222,7 @@ Shader Brush::createShader(Size size) const {
 Color Brush::colorAt(Offset p, const Rect& area) const {
     if (kind_ == Kind::Shader || (transform_ && kind_ != Kind::Solid)) {
         Color c = createShader({area.width, area.height}).colorAt({p.x - area.x, p.y - area.y});
-        return c.copy(c.a * shaderAlpha_);
+        return c.copy(c.alpha() * shaderAlpha_);
     }
     return colorAtParameter(parameterAt(p, area));
 }
@@ -411,7 +411,10 @@ Color colorAlong(const std::vector<ColorStop>& stops, TileMode tile, float t) {
         const ColorStop &a = stops[i - 1], &b = stops[i];
         if (t <= b.offset) {
             float span = b.offset - a.offset;
-            return lerp(a.color, b.color, span > 0 ? (t - a.offset) / span : 1.f);
+            // (Skia's: each component along, in sRGB, not premultiplied)
+            Color x = detail::inSrgb(a.color), y = detail::inSrgb(b.color);
+            float u = span > 0 ? (t - a.offset) / span : 1.f;
+            return {lerp(x.red(), y.red(), u), lerp(x.green(), y.green(), u), lerp(x.blue(), y.blue(), u), lerp(x.alpha(), y.alpha(), u)};
         }
     }
     return stops.back().color;
@@ -652,7 +655,8 @@ ColorMatrix& ColorMatrix::timesAssign(const ColorMatrix& o) {
 }
 
 Color ColorMatrix::apply(Color c) const {
-    const float in[4] = {c.r, c.g, c.b, c.a};
+    c = detail::inSrgb(c);
+    const float in[4] = {c.red(), c.green(), c.blue(), c.alpha()};
     float out[4];
     for (int row = 0; row < 4; ++row) {
         float v = values[size_t(row * 5 + 4)];
@@ -812,11 +816,11 @@ Brush ColorFilter::apply(const Brush& brush) const {
 namespace {
 
 // W3C's compositing spec's helpers for the non-separable modes, on straight colors.
-struct Rgb {
+struct RgbValue {
     float r, g, b;
 };
-float lum(Rgb c) { return 0.3f * c.r + 0.59f * c.g + 0.11f * c.b; }
-Rgb clipColor(Rgb c) {
+float lum(RgbValue c) { return 0.3f * c.r + 0.59f * c.g + 0.11f * c.b; }
+RgbValue clipColor(RgbValue c) {
     float l = lum(c), n = std::min({c.r, c.g, c.b}), x = std::max({c.r, c.g, c.b});
     auto low = [&](float v) { return l + (v - l) * l / (l - n); };
     auto high = [&](float v) { return l + (v - l) * (1 - l) / (x - l); };
@@ -824,12 +828,12 @@ Rgb clipColor(Rgb c) {
     if (x > 1 && x - l > 0) c = {high(c.r), high(c.g), high(c.b)};
     return c;
 }
-Rgb setLum(Rgb c, float l) {
+RgbValue setLum(RgbValue c, float l) {
     float d = l - lum(c);
     return clipColor({c.r + d, c.g + d, c.b + d});
 }
-float sat(Rgb c) { return std::max({c.r, c.g, c.b}) - std::min({c.r, c.g, c.b}); }
-Rgb setSat(Rgb c, float s) {
+float sat(RgbValue c) { return std::max({c.r, c.g, c.b}) - std::min({c.r, c.g, c.b}); }
+RgbValue setSat(RgbValue c, float s) {
     float* v[3] = {&c.r, &c.g, &c.b};
     std::sort(std::begin(v), std::end(v), [](float* x, float* y) { return *x < *y; });  // min, mid, max
     if (*v[2] > *v[0]) {
@@ -868,8 +872,9 @@ float separable(BlendMode mode, float cs, float cb) {
 } // namespace
 
 Color blend(Color source, Color destination, BlendMode mode) {
-    float sa = source.a, da = destination.a;
-    float s[3] = {source.r * sa, source.g * sa, source.b * sa}, d[3] = {destination.r * da, destination.g * da, destination.b * da};
+    source = detail::inSrgb(source), destination = detail::inSrgb(destination);
+    float sa = source.alpha(), da = destination.alpha();
+    float s[3] = {source.red() * sa, source.green() * sa, source.blue() * sa}, d[3] = {destination.red() * da, destination.green() * da, destination.blue() * da};
     float out[3], a = sa + da - sa * da;  // (the separable and non-separable modes' alpha)
     auto porterDuff = [&](float fs, float fd) {  // s fs + d fd
         for (int i = 0; i < 3; ++i) out[i] = s[i] * fs + d[i] * fd;
@@ -900,7 +905,7 @@ Color blend(Color source, Color destination, BlendMode mode) {
     case BlendMode::Saturation:
     case BlendMode::Color:
     case BlendMode::Luminosity: {
-        Rgb cs{source.r, source.g, source.b}, cb{destination.r, destination.g, destination.b}, b{};
+        RgbValue cs{source.red(), source.green(), source.blue()}, cb{destination.red(), destination.green(), destination.blue()}, b{};
         switch (mode) {
         case BlendMode::Hue: b = setLum(setSat(cs, sat(cb)), lum(cb)); break;
         case BlendMode::Saturation: b = setLum(setSat(cb, sat(cs)), lum(cb)); break;
@@ -912,7 +917,7 @@ Color blend(Color source, Color destination, BlendMode mode) {
         break;
     }
     default: {  // separable: s (1 - da) + d (1 - sa) + sa da B(cs, cb)
-        const float cs[3] = {source.r, source.g, source.b}, cb[3] = {destination.r, destination.g, destination.b};
+        const float cs[3] = {source.red(), source.green(), source.blue()}, cb[3] = {destination.red(), destination.green(), destination.blue()};
         for (int i = 0; i < 3; ++i) out[i] = s[i] * (1 - da) + d[i] * (1 - sa) + sa * da * separable(mode, cs[i], cb[i]);
         break;
     }
@@ -923,10 +928,13 @@ Color blend(Color source, Color destination, BlendMode mode) {
 
 Color ColorFilter::apply(Color d) const {
     if (kind_ == Kind::Matrix) return matrix_.apply(d);
-    if (kind_ == Kind::Lighting)
-        return {std::clamp(d.r * color_.r + add_.r, 0.f, 1.f), std::clamp(d.g * color_.g + add_.g, 0.f, 1.f),
-                std::clamp(d.b * color_.b + add_.b, 0.f, 1.f), d.a};
-    if (mode_ == BlendMode::SrcIn && color_.a * d.a > 0) return color_.copy(color_.a * d.a);  // (exactly: the tint, as opaque as both)
+    d = detail::inSrgb(d);
+    if (kind_ == Kind::Lighting) {
+        Color color = detail::inSrgb(color_), add = detail::inSrgb(add_);
+        return {std::clamp(d.red() * color.red() + add.red(), 0.f, 1.f), std::clamp(d.green() * color.green() + add.green(), 0.f, 1.f),
+                std::clamp(d.blue() * color.blue() + add.blue(), 0.f, 1.f), d.alpha()};
+    }
+    if (mode_ == BlendMode::SrcIn && color_.alpha() * d.alpha() > 0) return detail::inSrgb(color_).copy(color_.alpha() * d.alpha());  // (exactly: the tint, as opaque as both)
     return blend(color_, d, mode_);  // the tint (the source) onto the pixel
 }
 
@@ -951,8 +959,8 @@ ImageBitmap ColorFilter::apply(const ImageBitmap& image) const {
     std::vector<uint8_t> out(size_t(image.width()) * size_t(image.height()) * 4);
     for (size_t i = 0; i < out.size(); i += 4) {
         Color c = apply(Color{in[i] / 255.f, in[i + 1] / 255.f, in[i + 2] / 255.f, in[i + 3] / 255.f});
-        out[i] = uint8_t(std::lround(c.r * 255)), out[i + 1] = uint8_t(std::lround(c.g * 255));
-        out[i + 2] = uint8_t(std::lround(c.b * 255)), out[i + 3] = uint8_t(std::lround(c.a * 255));
+        out[i] = uint8_t(std::lround(c.red() * 255)), out[i + 1] = uint8_t(std::lround(c.green() * 255));
+        out[i + 2] = uint8_t(std::lround(c.blue() * 255)), out[i + 3] = uint8_t(std::lround(c.alpha() * 255));
     }
     ImageBitmap filtered = ImageBitmap::fromPixels(image.width(), image.height(), std::move(out));
     cache.push_back({image.token(), image.id(), image.version(), *this, filtered});
@@ -2307,7 +2315,7 @@ Path strokedPath(const Rect& rect, const Shape& shape, bool rtl, float width) {
 // Android's BlurMaskFilter, Android's sigma for the radius): the masks drawn opaque in layers that
 // blur them (Decal), in one faded by the color's alpha.
 void GraphicsContext::drawShadowPath(const Path& outline, Offset origin, const Shadow& shadow, bool inner) {
-    if (shadow.color.a <= 0 || outline.isEmpty()) return;
+    if (shadow.color.alpha() <= 0 || outline.isEmpty()) return;
     Rect b = outline.bounds();
     b.x += origin.x, b.y += origin.y;
     Color opaque = shadow.color.copy(1);
@@ -2320,7 +2328,7 @@ void GraphicsContext::drawShadowPath(const Path& outline, Offset origin, const S
         Rect at{b.x + shadow.offset.x - grow, b.y + shadow.offset.y - grow, b.width + 2 * grow, b.height + 2 * grow};
         Rect reach = blur.outputBounds(at);
         if (quickReject(reach)) return;
-        pushLayer(reach, CornerRadii(), shadow.color.a);
+        pushLayer(reach, CornerRadii(), shadow.color.alpha());
         pushEffectLayer(at, blur, 1);
         drawPath(outline, moved, Brush::solid(opaque), at, {});
         popLayer();
@@ -2337,7 +2345,7 @@ void GraphicsContext::drawShadowPath(const Path& outline, Offset origin, const S
     // is the outline (the clip), not the fill's own edge.
     Rect at{b.x - 2, b.y - 2, b.width + 4, b.height + 4};
     pushClipPath(outline, origin);
-    pushLayer(at, CornerRadii(), shadow.color.a);
+    pushLayer(at, CornerRadii(), shadow.color.alpha());
     fillRoundRect(at, CornerRadii(), opaque);
     // Less the hole blurred.
     Rect hole{at.x + shadow.offset.x, at.y + shadow.offset.y, at.width, at.height};
@@ -2418,7 +2426,7 @@ void GraphicsContext::drawShapeShadow(const Rect& rect, const Shape& shape, bool
         popBlendMode();
         popLayer();
     } else {
-        s.color = s.color.copy(s.color.a * alpha);
+        s.color = s.color.copy(s.color.alpha() * alpha);
         draw();
     }
     if (shadow.blendMode != BlendMode::SrcOver) popBlendMode();
@@ -2485,17 +2493,17 @@ void GraphicsContext::drawElevationShadow(const Outline& outline, Offset origin,
         }
     };
     float flat = shadow.plane[0] * origin.x + shadow.plane[1] * origin.y + shadow.plane[2];  // (at the outline's origin, as Skia's)
-    if (Color c = shadow.ambientColor; c.a * light.ambientAlpha * alpha > 0 && flat > 0) {
+    if (Color c = shadow.ambientColor; c.alpha() * light.ambientAlpha * alpha > 0 && flat > 0) {
         float z = flat * k, r = std::min(z / 2, 150.f), oneOverA = 1 + z / 128, blur = 0.5f * r * oneOverA;
         float stroke = std::max(0.f, 0.5f * (r - blur));  // (a negative width strokes nothing)
-        cast(b, radii, Shadow{c.copy(c.a * light.ambientAlpha * alpha), {}, blur / k, stroke / 2 / k}, 1, {});
+        cast(b, radii, Shadow{c.copy(c.alpha() * light.ambientAlpha * alpha), {}, blur / k, stroke / 2 / k}, 1, {});
     }
     Offset center = b.center();
     float z = (shadow.plane[0] * center.x + shadow.plane[1] * center.y + shadow.plane[2]) * k, lz = light.z * k;
-    if (Color c = shadow.spotColor; c.a * light.spotAlpha * alpha > 0 && z > 0 && lz > z) {
+    if (Color c = shadow.spotColor; c.alpha() * light.spotAlpha * alpha > 0 && z > 0 && lz > z) {
         float ratio = std::clamp(z / (lz - z), 0.f, 0.95f), scale = std::clamp(lz / (lz - z), 1.f, 1.95f);
         Offset l = lightCenter();
-        cast(b, radii, Shadow{c.copy(c.a * light.spotAlpha * alpha), {}, light.radius * k * ratio / k, 0}, scale, {-ratio * l.x, -ratio * l.y});
+        cast(b, radii, Shadow{c.copy(c.alpha() * light.spotAlpha * alpha), {}, light.radius * k * ratio / k, 0}, scale, {-ratio * l.x, -ratio * l.y});
     }
 }
 

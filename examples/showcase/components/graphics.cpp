@@ -642,6 +642,47 @@ void TileModeSection(CallSite site) {
     });
 }
 
+// Colors as Compose's: red to blue mixed by lerp (in Oklab, lightness and hue along) and, beside
+// it, by their sRGB numbers as a gradient mixes them; colors made in other color spaces (Display
+// P3, CIE L*a*b*, Oklab) shown in sRGB, their sRGB said; a color animated (animateColorAsState,
+// in Oklab as Compose's Color.VectorConverter).
+void ColorSpaceSection(CallSite site) {
+    composable(site, [=] {
+        const ColorScheme& cs = colorScheme();
+        auto warm = remember([] { return mutableStateOf(false); });
+        Color animated = animateColorAsState(warm.get() ? Color::hex(0xFF6D00) : Color::hex(0x2962FF), tween(1200));
+        Section("Color · ColorSpace · Oklab", [&] {
+            auto strip = [&](const char* name, const std::function<Color(float)>& at) {
+                Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically}, [&] {
+                    Text(name, Modifier().width(104), {.font = typography().labelLarge});
+                    Row(Modifier().weight(1).height(32).clip(RoundedCornerShape(8)), {}, [&] {
+                        for (int i = 0; i <= 8; ++i) Box(Modifier().weight(1).fillMaxHeight().background(at(float(i) / 8)));
+                    });
+                });
+            };
+            strip("lerp (Oklab)", [](float t) { return lerp(colors::Red, colors::Blue, t); });
+            strip("sRGB sayıları", [](float t) { return Color{1 - t, 0, t, 1}; });
+            const std::pair<Color, const char*> made[] = {
+                {Color(0.1f, 0.75f, 0.45f, 1, ColorSpaces::DisplayP3), "Display P3"},
+                {Color(55, 60, -40, 1, ColorSpaces::CieLab), "CIE L*a*b*"},
+                {Color(0.7f, -0.1f, 0.15f, 1, ColorSpaces::Oklab), "Oklab"},
+            };
+            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
+                for (const auto& [color, name] : made)
+                    Column(Modifier().weight(1), {.verticalArrangement = Arrangement::spacedBy(4)}, [&] {
+                        Box(Modifier().fillMaxWidth().height(40).background(color, RoundedCornerShape(8)));
+                        Text(name, {.font = typography().labelLarge});
+                        Text(std::format("sRGB #{:06X}", color.toArgb() & 0xFFFFFF), {.font = typography().bodySmall, .color = cs.onSurfaceVariant});
+                    });
+            });
+            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically}, [&] {
+                Box(Modifier().size(40).background(animated, CircleShape));
+                Button([warm] { warm.set(!warm.get()); }, [] { Text("Rengi canlandır (Oklab'da)"); });
+            });
+        });
+    });
+}
+
 // graphics::Canvas through drawIntoCanvas: twelve spokes each drawn after save, rotate (about the
 // middle) and restore; a grid skewed; two circles faded together in a layer (saveLayer: where they
 // overlap only the one on top shows); a dashed stroke and a corner-rounded fill in Paints. Meshes

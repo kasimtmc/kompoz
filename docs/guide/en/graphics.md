@@ -74,6 +74,21 @@ void Faded(const Content& content) {
 }
 ```
 
+## Colors and color spaces
+
+A `Color` is Compose's: 64 bits, in sRGB 8 bits a channel, or in another of Compose's color spaces (`ColorSpaces`: Display P3, BT.2020, Adobe RGB, CIE L\*a\*b\*, Oklab and more) its components as half floats. `convert` turns one into another space and `toArgb()` gives its sRGB as `0xAARRGGBB`; whatever space a color is in, it is drawn in sRGB.
+
+```cpp body
+Color p3(0.1f, 0.75f, 0.45f, 1, ColorSpaces::DisplayP3);  // in Display P3
+Color lab(55, 60, -40, 1, ColorSpaces::CieLab);           // L*, a*, b*
+Color between = lerp(colors::Red, colors::Blue, 0.5f);    // mixed in Oklab
+Row(Modifier().height(40), {}, [&] {
+    for (Color c : {p3, lab, between}) Box(Modifier().size(40).background(c));
+});
+```
+
+`lerp` mixes two colors in Oklab, as Compose's does: halfway from red to blue is a violet as light as both, not the dark purple their sRGB numbers make. An animated color goes the same way (`animateColorAsState`). A gradient mixes its colors in sRGB, as Skia's.
+
 ## Brushes
 
 A `Brush` paints with a solid color or a gradient, wherever a color would go: drawing calls, `background`, text.

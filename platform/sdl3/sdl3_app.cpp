@@ -98,7 +98,10 @@ EM_JS(void, kompoz_web_vibrate, (int millis), {
 namespace kompoz::sdl {
 namespace {
 
-SDL_FColor toF(Color c) { return {c.r, c.g, c.b, c.a}; }
+SDL_FColor toF(Color c) {
+    auto [r, g, b, a] = detail::srgbComponents(c);
+    return {r, g, b, a};
+}
 
 
 
@@ -123,7 +126,7 @@ public:
 
     void fillRoundRect(const Rect& rect, const CornerRadii& radii, Color color) override {
         color = filtered(color);
-        if (color.a <= 0 || rect.width <= 0 || rect.height <= 0) return;
+        if (color.alpha() <= 0 || rect.width <= 0 || rect.height <= 0) return;
         float x = rect.x * scale - ox_, y = rect.y * scale - oy_, w = rect.width * scale, h = rect.height * scale;
         CornerRadii r = pixelRadii(radii, w, h);
         if (r.max() < 0.5f) {
@@ -143,7 +146,7 @@ public:
 
     void strokeRoundRect(const Rect& rect, const CornerRadii& radii, float width, Color color) override {
         color = filtered(color);
-        if (color.a <= 0 || width <= 0 || rect.width <= 0 || rect.height <= 0) return;
+        if (color.alpha() <= 0 || width <= 0 || rect.width <= 0 || rect.height <= 0) return;
         float x = rect.x * scale - ox_, y = rect.y * scale - oy_, w = rect.width * scale, h = rect.height * scale;
         float sw = std::min(width * scale, std::min(w, h) / 2);
         CornerRadii r = pixelRadii(radii, w, h);
@@ -176,7 +179,7 @@ public:
         color = filtered(color);
         float x0 = from.x * scale - ox_, y0 = from.y * scale - oy_, x1 = to.x * scale - ox_, y1 = to.y * scale - oy_;
         float dx = x1 - x0, dy = y1 - y0, length = std::hypot(dx, dy);
-        if (length < 1e-3f || color.a <= 0) return;
+        if (length < 1e-3f || color.alpha() <= 0) return;
         dx /= length;
         dy /= length;
         float hw = width * scale / 2;
@@ -201,7 +204,7 @@ public:
 
     void drawText(std::string_view text, Offset baseline, const Font& font, Color color, bool rtl) override {
         color = filtered(color);
-        if (color.a <= 0) return;
+        if (color.alpha() <= 0) return;
         glyphs_.clear();
         fonts_.layout(text, baseline.x * scale - ox_, baseline.y * scale - oy_, font, rtl, glyphs_, false, 0, scale);
         drawGlyphs(toF(color));
@@ -220,7 +223,7 @@ public:
 
     void drawTextShadow(std::string_view text, Offset baseline, const Font& font, Color color, float blurRadius, bool rtl) override {
         color = filtered(color);
-        if (color.a <= 0) return;
+        if (color.alpha() <= 0) return;
         int blur = std::max(0, int(std::lround(blurRadius * scale)));
         glyphs_.clear();
         fonts_.layout(text, baseline.x * scale - ox_, baseline.y * scale - oy_, font, rtl, glyphs_, true, blur, scale);
@@ -230,7 +233,7 @@ public:
     void drawArc(const Rect& oval, float start, float sweep, float width, Color color, bool roundCap) override {
         Color unfiltered = color;  // (the caps are filled by fillRoundRect, which filters)
         color = filtered(color);
-        if (color.a <= 0 || width <= 0 || sweep == 0) return;
+        if (color.alpha() <= 0 || width <= 0 || sweep == 0) return;
         float cx = (oval.x + oval.width / 2) * scale - ox_, cy = (oval.y + oval.height / 2) * scale - oy_;
         float r = std::min(oval.width, oval.height) / 2 * scale, hw = width * scale / 2;
         int segments = std::clamp(int(std::abs(sweep) / 360.f * r), 6, 256);
@@ -418,7 +421,7 @@ public:
     void drawFilteredShadow(const Rect& rect, const CornerRadii& radii, const Shadow& original, bool inner) {
         Shadow shadow = original;
         shadow.color = filtered(shadow.color);
-        if (shadow.color.a <= 0 || rect.width <= 0 || rect.height <= 0) return;
+        if (shadow.color.alpha() <= 0 || rect.width <= 0 || rect.height <= 0) return;
         float blur = std::max(0.f, shadow.blurRadius) * scale;
         float sigma = 0.57735f * blur + 0.5f;
         int pad = blur > 0 ? int(std::ceil(sigma * 3)) : 1;
@@ -447,8 +450,9 @@ public:
                                   std::round(hh));
         });
         if (!t) return;
-        SDL_SetTextureColorModFloat(t, shadow.color.r, shadow.color.g, shadow.color.b);
-        SDL_SetTextureAlphaModFloat(t, shadow.color.a);
+        SDL_FColor color = toF(shadow.color);
+        SDL_SetTextureColorModFloat(t, color.r, color.g, color.b);
+        SDL_SetTextureAlphaModFloat(t, color.a);
         SDL_SetTextureBlendMode(t, blend_);  // (the blend mode drawn with)
         SDL_RenderTexture(renderer_, t, nullptr, &d);
     }
@@ -483,7 +487,7 @@ public:
             for (int y = 0; y < H; ++y)
                 for (int x = 0; x < W; ++x) {
                     size_t i = size_t(y) * size_t(W) + size_t(x);
-                    Color c = brush.colorAt({(float(x) + 0.5f) / scale, (float(y) + 0.5f) / scale}, rel);
+                    SDL_FColor c = toF(brush.colorAt({(float(x) + 0.5f) / scale, (float(y) + 0.5f) / scale}, rel));
                     rgba[i * 4] = byte(c.r), rgba[i * 4 + 1] = byte(c.g), rgba[i * 4 + 2] = byte(c.b), rgba[i * 4 + 3] = byte(c.a * a[i]);
                 }
             SDL_UpdateTexture(tex, nullptr, rgba.data(), W * 4);
@@ -601,7 +605,7 @@ public:
     void drawFilteredShadowPath(const Path& outline, Offset origin, const Shadow& original, bool inner) {
         Shadow shadow = original;
         shadow.color = filtered(shadow.color);
-        if (shadow.color.a <= 0 || outline.isEmpty()) return;
+        if (shadow.color.alpha() <= 0 || outline.isEmpty()) return;
         Rect b = outline.bounds();
         float blur = std::max(0.f, shadow.blurRadius) * scale, sigma = 0.57735f * blur + 0.5f;
         int pad = blur > 0 ? int(std::ceil(sigma * 3)) : 1, spread = int(std::lround(std::abs(shadow.spread) * scale));
@@ -638,8 +642,9 @@ public:
             return a;
         });
         if (!t) return;
-        SDL_SetTextureColorModFloat(t, shadow.color.r, shadow.color.g, shadow.color.b);
-        SDL_SetTextureAlphaModFloat(t, shadow.color.a);
+        SDL_FColor color = toF(shadow.color);
+        SDL_SetTextureColorModFloat(t, color.r, color.g, color.b);
+        SDL_SetTextureAlphaModFloat(t, color.a);
         SDL_SetTextureBlendMode(t, blend_);  // (the blend mode drawn with)
         SDL_RenderTexture(renderer_, t, nullptr, &d);
     }
@@ -671,7 +676,7 @@ public:
             SDL_Texture* t = maskTexture(image);
             if (!t) return;
             Color c = filtered(unfiltered.stops().empty() ? colors::Transparent : unfiltered.stops().front().color);
-            SDL_FColor f = toF(c.copy(c.a * std::min(alpha, 1.f)));
+            SDL_FColor f = toF(c.copy(c.alpha() * std::min(alpha, 1.f)));
             float iw = float(image.width()), ih = float(image.height());
             float u0 = src.x / iw, v0 = src.y / ih, u1 = src.right() / iw, v1 = src.bottom() / ih;
             begin();
@@ -1286,8 +1291,8 @@ public:
             case TileMode::Clamp: c = brush.colorAtParameter((float(i) + 0.5f) / kTexels); break;
             }
             auto byte = [](float v) { return uint8_t(std::lround(std::clamp(v, 0.f, 1.f) * 255)); };
-            pixels[size_t(i) * 4] = byte(c.r), pixels[size_t(i) * 4 + 1] = byte(c.g), pixels[size_t(i) * 4 + 2] = byte(c.b),
-                               pixels[size_t(i) * 4 + 3] = byte(c.a);
+            SDL_FColor f = toF(c);
+            pixels[size_t(i) * 4] = byte(f.r), pixels[size_t(i) * 4 + 1] = byte(f.g), pixels[size_t(i) * 4 + 2] = byte(f.b), pixels[size_t(i) * 4 + 3] = byte(f.a);
         }
         SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, kTexels, 1);
         if (!texture) return nullptr;
@@ -1371,17 +1376,17 @@ public:
                     if (!colors.empty()) {  // the colors between the vertices, premultiplied
                         float d[4] = {};
                         for (int k = 0; k < 3; ++k) {
-                            Color ck = colors[size_t(tri[size_t(k)])];
+                            SDL_FColor ck = toF(colors[size_t(tri[size_t(k)])]);
                             d[0] += w[k] * ck.r * ck.a, d[1] += w[k] * ck.g * ck.a, d[2] += w[k] * ck.b * ck.a, d[3] += w[k] * ck.a;
                         }
                         Color dst = d[3] > 0 ? Color{d[0] / d[3], d[1] / d[3], d[2] / d[3], d[3]} : colors::Transparent;
                         c = blend(src, dst, blendMode);
                     }
-                    c = filtered(c);
-                    float ca = std::clamp(c.a * alpha, 0.f, 1.f);
+                    SDL_FColor f = toF(filtered(c));
+                    float ca = std::clamp(f.a * alpha, 0.f, 1.f);
                     float* out = &premul[(size_t(y - Y0) * size_t(W) + size_t(x - X0)) * 4];
                     float keep = 1 - ca;
-                    out[0] = c.r * ca + out[0] * keep, out[1] = c.g * ca + out[1] * keep, out[2] = c.b * ca + out[2] * keep;
+                    out[0] = f.r * ca + out[0] * keep, out[1] = f.g * ca + out[1] * keep, out[2] = f.b * ca + out[2] * keep;
                     out[3] = ca + out[3] * keep;
                 }
         }
@@ -1808,7 +1813,8 @@ private:
 
     void fillPixelRect(float x, float y, float w, float h, Color color) {
         if (w <= 0 || h <= 0) return;
-        SDL_SetRenderDrawColorFloat(renderer_, color.r, color.g, color.b, color.a);
+        SDL_FColor f = toF(color);
+        SDL_SetRenderDrawColorFloat(renderer_, f.r, f.g, f.b, f.a);
         SDL_FRect rect{x, y, w, h};
         if (aliased()) {  // the pixels whose middles it holds (its left and top edges out, right and bottom in)
             float l = std::floor(x + 0.5f), t = std::floor(y + 0.5f), r = std::floor(x + w + 0.5f), b = std::floor(y + h + 0.5f);
@@ -2055,7 +2061,7 @@ private:
             for (int i = 0; i < W; ++i) {
                 size_t k = size_t(j) * size_t(W) + size_t(i);
                 Offset dp{(x0 + float(i) + 0.5f + ox_) / scale - area.x, (y0 + float(j) + 0.5f + oy_) / scale - area.y};
-                Color c = filtered(shader.colorAt(dp));
+                SDL_FColor c = toF(filtered(shader.colorAt(dp)));
                 float a = c.a * brush.shaderAlpha() * (coverage ? coverage[k] / 255.f : 1.f);
                 rgba[k * 4] = byte(c.r), rgba[k * 4 + 1] = byte(c.g), rgba[k * 4 + 2] = byte(c.b), rgba[k * 4 + 3] = byte(a);
             }

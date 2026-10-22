@@ -24,7 +24,8 @@ float labF(float t) { return t > kDelta * kDelta * kDelta ? std::cbrt(t) : t / (
 float labFInverse(float t) { return t > kDelta ? t * t * t : 3 * kDelta * kDelta * (t - 4.f / 29); }
 
 Lab toLab(Color c) {
-    float r = toLinear(c.r), g = toLinear(c.g), b = toLinear(c.b);
+    c = detail::inSrgb(c);
+    float r = toLinear(c.red()), g = toLinear(c.green()), b = toLinear(c.blue());
     float x = 0.4124564f * r + 0.3575761f * g + 0.1804375f * b;
     float y = 0.2126729f * r + 0.7151522f * g + 0.0721750f * b;
     float z = 0.0193339f * r + 0.1191920f * g + 0.9503041f * b;
@@ -54,7 +55,7 @@ Color paletteTone(const std::array<Color, 13>& keyColor, float tone) {
     if (float(TonalPalette::kTones[nearest]) == tone) return c;
     Lab lab = toLab(c);
     lab.l = tone;
-    return fromLab(lab, c.a);
+    return fromLab(lab, c.alpha());
 }
 
 // The fixed colors, the same light or dark (Compose's): 90 and 80, on them 10 and 30.

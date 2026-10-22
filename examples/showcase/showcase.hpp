@@ -128,6 +128,7 @@ void ShapesSection(CallSite site = CallSite::current());
 void SharedElementSection(CallSite site = CallSite::current());
 void BlendModeSection(CallSite site = CallSite::current());
 void TileModeSection(CallSite site = CallSite::current());
+void ColorSpaceSection(CallSite site = CallSite::current());
 void CanvasSection(CallSite site = CallSite::current());
 void BlurSection(CallSite site = CallSite::current());
 void ColorVectorSection(CallSite site = CallSite::current());

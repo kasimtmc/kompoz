@@ -40,7 +40,8 @@ struct Xyz {
     double x, y, z;
 };
 Xyz xyzFromColor(Color c) {
-    double r = linearized(c.r), g = linearized(c.g), b = linearized(c.b);
+    c = detail::inSrgb(c);  // (an ARGB's, as the utilities take one)
+    double r = linearized(c.red()), g = linearized(c.green()), b = linearized(c.blue());
     return {0.41233895 * r + 0.35762064 * g + 0.18051042 * b, 0.2126 * r + 0.7152 * g + 0.0722 * b,
             0.01932141 * r + 0.11916382 * g + 0.95034478 * b};
 }
@@ -228,14 +229,15 @@ TonalPalette TonalPalette::fromSeed(Color seed) {
 
 namespace {
 
-using Rgb = uint32_t;  // 0xRRGGBB
-int red(Rgb c) { return int(c >> 16) & 0xFF; }
-int green(Rgb c) { return int(c >> 8) & 0xFF; }
-int blue(Rgb c) { return int(c) & 0xFF; }
-Color colorOf(Rgb c) { return {red(c) / 255.f, green(c) / 255.f, blue(c) / 255.f, 1}; }
-Rgb rgbOf(Color c) {
-    auto channel = [](float v) { return Rgb(std::lround(std::clamp(v, 0.f, 1.f) * 255.f)); };
-    return channel(c.r) << 16 | channel(c.g) << 8 | channel(c.b);
+using Rgb24 = uint32_t;  // 0xRRGGBB
+int red(Rgb24 c) { return int(c >> 16) & 0xFF; }
+int green(Rgb24 c) { return int(c >> 8) & 0xFF; }
+int blue(Rgb24 c) { return int(c) & 0xFF; }
+Color colorOf(Rgb24 c) { return {red(c) / 255.f, green(c) / 255.f, blue(c) / 255.f, 1}; }
+Rgb24 rgbOf(Color c) {
+    auto channel = [](float v) { return Rgb24(std::lround(std::clamp(v, 0.f, 1.f) * 255.f)); };
+    c = detail::inSrgb(c);
+    return channel(c.red()) << 16 | channel(c.green()) << 8 | channel(c.blue());
 }
 
 // L*a*b* (D65), as the k-means measures colors.
@@ -244,12 +246,12 @@ struct Lab {
     double distance(const Lab& o) const { return (l - o.l) * (l - o.l) + (a - o.a) * (a - o.a) + (b - o.b) * (b - o.b); }  // squared
 };
 constexpr double kWhite[3] = {95.047, 100.0, 108.883};
-Lab labOf(Rgb c) {
+Lab labOf(Rgb24 c) {
     Xyz v = xyzFromColor(colorOf(c));
     double fx = labF(v.x / kWhite[0]), fy = labF(v.y / kWhite[1]), fz = labF(v.z / kWhite[2]);
     return {116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)};
 }
-Rgb rgbOf(const Lab& lab) {
+Rgb24 rgbOf(const Lab& lab) {
     double fy = (lab.l + 16.0) / 116.0, fx = lab.a / 500.0 + fy, fz = fy - lab.b / 200.0;
     return rgbOf(colorFromXyz({labInvF(fx) * kWhite[0], labInvF(fy) * kWhite[1], labInvF(fz) * kWhite[2]}));
 }
@@ -257,7 +259,7 @@ Rgb rgbOf(const Lab& lab) {
 // Wu's quantizer: boxes of a 32-level RGB cube cut where the variance falls most, up to maxColors.
 class QuantizerWu {
 public:
-    std::vector<Rgb> quantize(const std::unordered_map<Rgb, uint32_t>& counts, int maxColors) {
+    std::vector<Rgb24> quantize(const std::unordered_map<Rgb24, uint32_t>& counts, int maxColors) {
         for (const auto& [c, n] : counts) {
             int i = index((red(c) >> 3) + 1, (green(c) >> 3) + 1, (blue(c) >> 3) + 1);
             weights_[i] += n;
@@ -268,11 +270,11 @@ public:
         }
         computeMoments();
         std::vector<Box> boxes = createBoxes(maxColors);
-        std::vector<Rgb> colors;
+        std::vector<Rgb24> colors;
         for (const Box& box : boxes) {
             int64_t w = volume(box, weights_);
             if (w <= 0) continue;
-            auto mean = [&](const std::vector<int64_t>& m) { return Rgb(std::clamp<int64_t>(volume(box, m) / w, 0, 255)); };
+            auto mean = [&](const std::vector<int64_t>& m) { return Rgb24(std::clamp<int64_t>(volume(box, m) / w, 0, 255)); };
             colors.push_back(mean(mr_) << 16 | mean(mg_) << 8 | mean(mb_));
         }
         return colors;
@@ -420,13 +422,13 @@ private:
 };
 
 // Weighted k-means in L*a*b*, starting from `start` (Wu's colors): the clusters and their pixels.
-std::map<Rgb, uint32_t> quantizeWsmeans(const std::unordered_map<Rgb, uint32_t>& counts, const std::vector<Rgb>& start, int maxColors) {
-    std::vector<Rgb> pixels;
+std::map<Rgb24, uint32_t> quantizeWsmeans(const std::unordered_map<Rgb24, uint32_t>& counts, const std::vector<Rgb24>& start, int maxColors) {
+    std::vector<Rgb24> pixels;
     std::vector<Lab> points;
     std::vector<uint32_t> weights;
     for (const auto& [c, n] : counts) pixels.push_back(c);
     std::ranges::sort(pixels);  // a fixed order, whatever the hash map's
-    for (Rgb c : pixels) points.push_back(labOf(c)), weights.push_back(counts.at(c));
+    for (Rgb24 c : pixels) points.push_back(labOf(c)), weights.push_back(counts.at(c));
     int clusterCount = std::min({maxColors, int(points.size()), int(start.size())});
     if (clusterCount == 0) return {};
     std::vector<Lab> clusters;
@@ -484,7 +486,7 @@ std::map<Rgb, uint32_t> quantizeWsmeans(const std::unordered_map<Rgb, uint32_t>&
         for (size_t c = 0; c < size_t(clusterCount); ++c)
             clusters[c] = population[c] ? Lab{sums[c].l / population[c], sums[c].a / population[c], sums[c].b / population[c]} : Lab{};
     }
-    std::map<Rgb, uint32_t> result;
+    std::map<Rgb24, uint32_t> result;
     for (size_t c = 0; c < size_t(clusterCount); ++c)
         if (population[c]) result[rgbOf(clusters[c])] += population[c];
     return result;
@@ -495,12 +497,12 @@ std::map<Rgb, uint32_t> quantizeWsmeans(const std::unordered_map<Rgb, uint32_t>&
 std::vector<std::pair<Color, uint32_t>> quantizeColors(const ImageBitmap& image, int maxColors) {
     maxColors = std::min(maxColors, 256);
     if (image.empty() || maxColors <= 0) return {};
-    std::unordered_map<Rgb, uint32_t> counts;
+    std::unordered_map<Rgb24, uint32_t> counts;
     const uint8_t* p = image.pixels();
     for (size_t i = 0, n = size_t(image.width()) * size_t(image.height()); i < n; ++i, p += 4)
-        if (p[3] == 255) ++counts[Rgb(p[0]) << 16 | Rgb(p[1]) << 8 | p[2]];
+        if (p[3] == 255) ++counts[Rgb24(p[0]) << 16 | Rgb24(p[1]) << 8 | p[2]];
     if (counts.empty()) return {};
-    std::vector<Rgb> wu = QuantizerWu().quantize(counts, maxColors);
+    std::vector<Rgb24> wu = QuantizerWu().quantize(counts, maxColors);
     std::vector<std::pair<Color, uint32_t>> out;
     for (const auto& [c, n] : quantizeWsmeans(counts, wu, maxColors)) out.push_back({colorOf(c), n});
     std::ranges::stable_sort(out, std::greater{}, &std::pair<Color, uint32_t>::second);
