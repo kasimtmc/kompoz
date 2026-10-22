@@ -874,7 +874,7 @@ void ColorVectorSection(CallSite site) {
             std::vector<PathNode> circle = addPathNodes("M2,12a10,10 0 1,0 20,0a10,10 0 1,0 -20,0z");
             ImageVector::Builder b(48, 48, 24, 24);
             b.addPath({.pathData = circle, .fill = Brush::solid(Color::hex(0x26A69A))});
-            b.group({.rotation = -35, .pivotX = 12, .pivotY = 12, .clipPathData = circle}, [](ImageVector::Builder& g) {
+            b.group({.name = "çizgiler", .rotation = -35, .pivotX = 12, .pivotY = 12, .clipPathData = circle}, [](ImageVector::Builder& g) {
                 for (int i = 0; i < 4; ++i)
                     g.addPath({.pathData = addPathNodes(std::format("M-4,{}h32v2.5h-32z", 3 + i * 5.5)), .fill = Brush::solid(colors::White.copy(0.85f))});
             });
@@ -896,16 +896,28 @@ void ColorVectorSection(CallSite site) {
                 Text("vectorResource: Android'in vector drawable XML'i (yaylar, döndürülmüş grup, çizgiler, degradeler)", Modifier().weight(1),
                      {.font = typography().bodyMedium});
             });
-            // Composable vector content (rememberVectorPainter { … }): a ring, then a tick, drawn in
-            // (trimPathEnd) as it is switched on.
+            // Composable vector content (rememberVectorPainter { Path() }): a ring, then a tick, drawn
+            // in (trimPathEnd) as it is switched on; the ball's stripes turned with it (its group
+            // drawn by RenderVectorGroup with a config of its own).
             auto done = remember([] { return mutableStateOf(false); });
             float ring = animateFloatAsState(done.get() ? 1.f : 0.f, tween(500));
             float tick = animateFloatAsState(done.get() ? 1.f : 0.f, tween(350, done.get() ? 350 : 0));
-            Painter check = rememberVectorPainter(48, 48, 24, 24, [&](ImageVector::Builder& v) {
-                v.addPath({.pathData = addPathNodes("M12,2a10,10 0 1,1 0,20a10,10 0 1,1 0,-20z"), .stroke = Brush::solid(cs.primary),
-                           .strokeLineWidth = 2, .strokeLineCap = StrokeCap::Round, .trimPathEnd = ring});
-                v.addPath({.pathData = addPathNodes("M7,12.5l3.5,3.5l6.5,-7"), .stroke = Brush::solid(cs.primary), .strokeLineWidth = 2.4f,
-                           .strokeLineCap = StrokeCap::Round, .strokeLineJoin = StrokeJoin::Round, .trimPathEnd = tick});
+            Painter check = rememberVectorPainter(48, 48, 24, 24, [&](float, float) {
+                vector::Path({.pathData = addPathNodes("M12,2a10,10 0 1,1 0,20a10,10 0 1,1 0,-20z"), .stroke = Brush::solid(cs.primary),
+                              .strokeLineWidth = 2, .strokeLineCap = StrokeCap::Round, .trimPathEnd = ring});
+                vector::Path({.pathData = addPathNodes("M7,12.5l3.5,3.5l6.5,-7"), .stroke = Brush::solid(cs.primary), .strokeLineWidth = 2.4f,
+                              .strokeLineCap = StrokeCap::Round, .strokeLineJoin = StrokeJoin::Round, .trimPathEnd = tick});
+            });
+            struct Turn final : vector::VectorConfig {
+                float degrees;
+                explicit Turn(float d) : degrees(d) {}
+                using VectorConfig::getOrDefault;
+                float getOrDefault(vector::VectorPropertyOf<float> property, float defaultValue) const override {
+                    return property == vector::VectorProperty::Rotation ? degrees : defaultValue;
+                }
+            };
+            Painter turning = rememberVectorPainter(48, 48, 24, 24, [&](float, float) {
+                vector::RenderVectorGroup(ball.root(), {{"çizgiler", std::make_shared<Turn>(-35 + 90 * ring)}});
             });
             // An animated vector drawable from the assets: play turning into pause, and back.
             AnimatedImageVector playPause = animatedVectorResource("vectors/play_pause.xml");
@@ -918,8 +930,10 @@ void ColorVectorSection(CallSite site) {
             });
             Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(16), .verticalAlignment = Alignment::CenterVertically}, [&] {
                 Image(check, "Onay");
+                Image(turning, "Dönen çizgiler");
                 Switch(done.get(), [done](bool on) { done.set(on); });
-                Text("rememberVectorPainter { … }: trimPathEnd ile kendini çizen onay", Modifier().weight(1), {.font = typography().bodyMedium});
+                Text("rememberVectorPainter { Path() }: trimPathEnd ile kendini çizen onay; RenderVectorGroup: grubu döndüren VectorConfig",
+                     Modifier().weight(1), {.font = typography().bodyMedium});
             });
             Text("Image kendi renkleriyle çizer (dolgu, çizgi, degrade, döndürülüp daireye kırpılmış grup); Icon tek tonla boyar.",
                  {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});

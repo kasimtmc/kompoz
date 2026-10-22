@@ -294,6 +294,20 @@ void Sparkle() {
 
 `vectorResource` reads groups, paths, gradients and clip paths from an Android `<vector>` file. A vector is drawn as Compose draws it: into a bitmap of its size in pixels, kept, and that drawn; in its own colors with `Image`, tinted with `Icon` (one all in one color as an Alpha8 mask).
 
+A vector's content can be composable too, as Compose's `rememberVectorPainter { Group { Path() } }`: what it reads makes it again, here a tick drawn in as it is switched on.
+
+```cpp body
+#! auto done = mutableStateOf(false);
+float drawn = animateFloatAsState(done.get() ? 1.f : 0.f, tween(400));
+Painter tick = rememberVectorPainter(24, 24, 24, 24, [&](float, float) {
+    vector::Path({.pathData = addPathNodes("M5,12l5,5l9,-10"), .stroke = Brush::solid(colors::Black), .strokeLineWidth = 2,
+                  .trimPathEnd = drawn});
+});
+Image(tick, "Done");
+```
+
+`vector::RenderVectorGroup(icon.root(), configs)` draws an existing vector's tree that way, a `VectorConfig` of a group's or path's name giving the values it is drawn with (a turn, a color, a trim).
+
 ## See also
 
 - [Phases](phases.md): drawing without recomposing.

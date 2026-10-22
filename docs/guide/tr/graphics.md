@@ -294,6 +294,20 @@ void Sparkle() {
 
 `vectorResource`, bir Android `<vector>` dosyasından grupları, path'leri, gradyanları ve kırpma path'lerini okur. Bir vektör Compose'un çizdiği gibi çizilir: piksellerdeki boyutu kadar bir bitmap'e çizilip saklanır ve o çizilir; `Image` ile kendi renkleriyle, `Icon` ile renklendirilmiş olarak (hepsi tek renkse Alpha8 maske olarak).
 
+Bir vektörün içeriği Compose'un `rememberVectorPainter { Group { Path() } }`'u gibi composable da olabilir: okuduğu şey onu yeniden yapar; burada açıldıkça kendini çizen bir onay işareti.
+
+```cpp body
+#! auto done = mutableStateOf(false);
+float drawn = animateFloatAsState(done.get() ? 1.f : 0.f, tween(400));
+Painter tick = rememberVectorPainter(24, 24, 24, 24, [&](float, float) {
+    vector::Path({.pathData = addPathNodes("M5,12l5,5l9,-10"), .stroke = Brush::solid(colors::Black), .strokeLineWidth = 2,
+                  .trimPathEnd = drawn});
+});
+Image(tick, "Tamam");
+```
+
+`vector::RenderVectorGroup(icon.root(), configs)` var olan bir vektörün ağacını böyle çizer; bir grubun ya da yolun adına verilen `VectorConfig` onun çizileceği değerleri verir (dönüş, renk, kırpma).
+
 ## Ayrıca bakın
 
 - [Aşamalar](phases.md): yeniden kompoze etmeden çizmek.

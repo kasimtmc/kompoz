@@ -22186,7 +22186,8 @@ TEST(vector_paths_trim_and_vectors_come_from_composable_content) {
     std::vector<PlacedPath> xp = placedPaths(xml);
     CHECK(xp.size() == 1 && xp[0].path->name == "kısa" && near(xp[0].path->trimPathStart, 0.1f, 0.01f) && near(xp[0].path->trimPathEnd, 0.6f, 0.01f) &&
           near(xp[0].path->trimPathOffset, 0.2f, 0.01f));
-    // Composable content: what it reads makes it again; made the same, the same vector.
+    // Composable content (vector::Group, vector::Path): what it reads makes it again; made the
+    // same, the same vector.
     auto turn = mutableStateOf(0.f);
     auto other = mutableStateOf(0);
     Painter seen, red, blue;
@@ -22194,16 +22195,17 @@ TEST(vector_paths_trim_and_vectors_come_from_composable_content) {
     ComposeTestRule rule([&] {
         other.get();
         // Two in one composable: each its own.
-        red = rememberVectorPainter(24, 24, 24, 24, [](ImageVector::Builder& v) {
-            v.addPath({.pathData = addPathNodes("M0,0h4v4h-4z"), .fill = Brush::solid(Color::hex(0xFF0000))});
+        red = rememberVectorPainter(24, 24, 24, 24, [](float, float) {
+            vector::Path({.pathData = addPathNodes("M0,0h4v4h-4z"), .fill = Brush::solid(Color::hex(0xFF0000))});
         });
-        blue = rememberVectorPainter(24, 24, 24, 24, [](ImageVector::Builder& v) {
-            v.addPath({.pathData = addPathNodes("M0,0h4v4h-4z"), .fill = Brush::solid(Color::hex(0x0000FF))});
+        blue = rememberVectorPainter(24, 24, 24, 24, [](float, float) {
+            vector::Path({.pathData = addPathNodes("M0,0h4v4h-4z"), .fill = Brush::solid(Color::hex(0x0000FF))});
         });
-        seen = rememberVectorPainter(48, 48, 24, 24, [&](ImageVector::Builder& v) {
-            remembered = remember([] { static int made = 0; return ++made; });  // kept inside it
-            v.group({.rotation = turn.get(), .pivotX = 12, .pivotY = 12},
-                    [&](ImageVector::Builder& g) { g.addPath({.pathData = addPathNodes("M12,2L12,6"), .stroke = Brush::solid(ink), .strokeLineWidth = 2}); });
+        seen = rememberVectorPainter(48, 48, 24, 24, [&](float, float) {
+            vector::Group({.rotation = turn.get(), .pivotX = 12, .pivotY = 12}, [&] {
+                remembered = remember([] { static int made = 0; return ++made; });  // kept inside it
+                vector::Path({.pathData = addPathNodes("M12,2L12,6"), .stroke = Brush::solid(ink), .strokeLineWidth = 2});
+            });
         });
         Image(seen, "dönen", Modifier().testTag("dönen"));
     }, {100, 100});
@@ -22216,6 +22218,15 @@ TEST(vector_paths_trim_and_vectors_come_from_composable_content) {
     turn.set(90);
     rule.waitForIdle();
     CHECK(!(seen == first) && remembered == firstRemembered);
+    auto turnedLine = [&](float degrees) {  // what it makes, as a vector built so
+        return VectorPainter(ImageVector::Builder("VectorRootGroup", 48, 48, 24, 24)
+                                 .group({.rotation = degrees, .pivotX = 12, .pivotY = 12},
+                                        [&](ImageVector::Builder& b) {
+                                            b.addPath({.pathData = addPathNodes("M12,2L12,6"), .stroke = Brush::solid(ink), .strokeLineWidth = 2});
+                                        })
+                                 .build());
+    };
+    CHECK(seen == turnedLine(90) && !(seen == turnedLine(0)));
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
     bool turned = false;  // its group's matrix now a quarter turn: its line from the right edge in
@@ -22225,6 +22236,97 @@ TEST(vector_paths_trim_and_vectors_come_from_composable_content) {
         for (const Matrix& m : drawn.transforms) turned = turned || (near(m.map(Offset{12, 2}).x, 22, 0.001f) && near(m.map(Offset{12, 2}).y, 12, 0.001f));
     }
     CHECK(turned);
+    // Its name, tint and mirroring as given; without a viewport, its default size in pixels;
+    // what is given to the content the viewport's size. A group's own children aren't added; a
+    // group or path outside a vector's content adds nothing.
+    Painter named, unsized;
+    Size given;
+    ComposeTestRule more([&] {
+        vector::Path({.pathData = addPathNodes("M0,0h1v1z")});
+        vector::Group({}, [] {});
+        named = rememberVectorPainter(24, 24, 12, 12, "rozet", colors::Black, BlendMode::SrcOver, true, [](float, float) {
+            vector::Group({.name = "g", .children = {VectorPath{.pathData = addPathNodes("M9,9h1v1z")}}},
+                          [] { vector::Path({.pathData = addPathNodes("M0,0h4v4z"), .fill = Brush::solid(colors::White)}); });
+        });
+        CompositionLocalProvider({LocalDensity.provides(Density{2})}, [&] {
+            unsized = rememberVectorPainter(24, 16, [&](float width, float height) { given = {width, height}; });
+        });
+    }, {100, 100});
+    ImageVector expected = ImageVector::Builder("rozet", 24, 24, 12, 12, colors::Black, BlendMode::SrcOver, true)
+                               .group({.name = "g"}, [](ImageVector::Builder& b) {
+                                   b.addPath({.pathData = addPathNodes("M0,0h4v4z"), .fill = Brush::solid(colors::White)});
+                               })
+                               .build();
+    CHECK(named == VectorPainter(expected) && unsized == VectorPainter(ImageVector::Builder("VectorRootGroup", 24, 16, 48, 32).build()) &&
+          near(given.width, 48, 0.001f) && near(given.height, 32, 0.001f));
+}
+
+// RenderVectorGroup: a vector's tree as vector::Group and vector::Path, each with the config of
+// its name in place of its own values where it gives them (Compose's VectorConfig), its cap,
+// join, miter, fill type and a group's name its own.
+TEST(render_vector_group_draws_a_tree_through_configs) {
+    const Color red = Color::hex(0xC03030), blue = Color::hex(0x3050C0);
+    ImageVector icon = ImageVector::Builder(24, 24, 24, 24)
+                           .group({.name = "dönen", .rotation = 10, .pivotX = 12, .pivotY = 12, .clipPathData = addPathNodes("M0,0h24v24z")},
+                                  [&](ImageVector::Builder& b) {
+                                      b.addPath({.name = "çizgi", .pathData = addPathNodes("M2,2h20"), .pathFillType = Path::FillType::EvenOdd,
+                                                 .stroke = Brush::solid(red), .strokeLineWidth = 2, .strokeLineCap = StrokeCap::Round,
+                                                 .strokeLineJoin = StrokeJoin::Bevel, .strokeLineMiter = 2});
+                                  })
+                           .addPath({.name = "kare", .pathData = addPathNodes("M0,0h4v4z"), .fill = Brush::solid(red)})
+                           .build();
+    struct Everything final : vector::VectorConfig {
+        float getOrDefault(vector::VectorPropertyOf<float> p, float d) const override {
+            using P = vector::VectorProperty;
+            for (auto [property, value] : {std::pair{P::Rotation, 30.f}, {P::PivotX, 1.f}, {P::PivotY, 2.f}, {P::ScaleX, 3.f}, {P::ScaleY, 4.f},
+                                           {P::TranslateX, 5.f}, {P::TranslateY, 6.f}, {P::FillAlpha, 0.5f}, {P::StrokeLineWidth, 7.f},
+                                           {P::StrokeAlpha, 0.25f}, {P::TrimPathStart, 0.1f}, {P::TrimPathEnd, 0.9f}, {P::TrimPathOffset, 0.2f}})
+                if (p == property) return value;
+            return d;
+        }
+        std::vector<PathNode> getOrDefault(vector::VectorPropertyOf<std::vector<PathNode>>, std::vector<PathNode>) const override {
+            return addPathNodes("M1,1h2");
+        }
+        std::optional<Brush> getOrDefault(vector::VectorPropertyOf<std::optional<Brush>> p, std::optional<Brush> d) const override {
+            return p == vector::VectorProperty::Stroke ? std::optional<Brush>(Brush::solid(Color::hex(0x3050C0))) : d;
+        }
+    };
+    struct FillOnly final : vector::VectorConfig {
+        using VectorConfig::getOrDefault;
+        std::optional<Brush> getOrDefault(vector::VectorPropertyOf<std::optional<Brush>> p, std::optional<Brush> d) const override {
+            return p == vector::VectorProperty::Fill ? std::nullopt : d;
+        }
+    };
+    auto all = std::make_shared<Everything>();
+    Painter plain, configured;
+    ComposeTestRule rule([&] {
+        plain = rememberVectorPainter(24, 24, 24, 24, [&](float, float) { vector::RenderVectorGroup(icon.root()); });
+        configured = rememberVectorPainter(24, 24, 24, 24, [&](float, float) {
+            vector::RenderVectorGroup(icon.root(), {{"dönen", all}, {"çizgi", all}, {"kare", std::make_shared<FillOnly>()}});
+        });
+    }, {100, 100});
+    ImageVector asIs = ImageVector::Builder("VectorRootGroup", 24, 24, 24, 24)
+                           .group({.name = "dönen", .rotation = 10, .pivotX = 12, .pivotY = 12, .clipPathData = addPathNodes("M0,0h24v24z")},
+                                  [&](ImageVector::Builder& b) {
+                                      b.addPath({.name = "çizgi", .pathData = addPathNodes("M2,2h20"), .pathFillType = Path::FillType::EvenOdd,
+                                                 .stroke = Brush::solid(red), .strokeLineWidth = 2, .strokeLineCap = StrokeCap::Round,
+                                                 .strokeLineJoin = StrokeJoin::Bevel, .strokeLineMiter = 2});
+                                  })
+                           .addPath({.name = "kare", .pathData = addPathNodes("M0,0h4v4z"), .fill = Brush::solid(red)})
+                           .build();
+    CHECK(plain == VectorPainter(asIs));
+    ImageVector through = ImageVector::Builder("VectorRootGroup", 24, 24, 24, 24)
+                              .group({.name = "dönen", .rotation = 30, .pivotX = 1, .pivotY = 2, .scaleX = 3, .scaleY = 4, .translationX = 5,
+                                      .translationY = 6, .clipPathData = addPathNodes("M1,1h2")},
+                                     [&](ImageVector::Builder& b) {
+                                         b.addPath({.name = "çizgi", .pathData = addPathNodes("M1,1h2"), .pathFillType = Path::FillType::EvenOdd,
+                                                    .fillAlpha = 0.5f, .stroke = Brush::solid(blue), .strokeAlpha = 0.25f, .strokeLineWidth = 7,
+                                                    .strokeLineCap = StrokeCap::Round, .strokeLineJoin = StrokeJoin::Bevel, .strokeLineMiter = 2,
+                                                    .trimPathStart = 0.1f, .trimPathEnd = 0.9f, .trimPathOffset = 0.2f});
+                                     })
+                              .addPath({.name = "kare", .pathData = addPathNodes("M0,0h4v4z")})
+                              .build();
+    CHECK(configured == VectorPainter(through));
 }
 
 TEST(animated_vectors_play_their_animations) {

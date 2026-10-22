@@ -1635,15 +1635,104 @@ Painter rememberAnimatedVectorPainter(const AnimatedImageVector& vector, bool at
     return VectorPainter(last);
 }
 
-Painter rememberVectorPainter(float defaultWidth, float defaultHeight, float viewportWidth, float viewportHeight,
-                              const std::function<void(ImageVector::Builder&)>& content, bool autoMirror, CallSite site) {
+namespace {
+thread_local ImageVector::Builder* gVectorContent = nullptr;  // what vector::Group and vector::Path add to now
+} // namespace
+
+Painter rememberVectorPainter(float defaultWidth, float defaultHeight, float viewportWidth, float viewportHeight, std::string name,
+                              std::optional<Color> tintColor, BlendMode tintBlendMode, bool autoMirror,
+                              const std::function<void(float, float)>& content, CallSite site) {
     ComposableScope scope(site);  // what the content remembers stays in here
-    ImageVector::Builder builder(defaultWidth, defaultHeight, viewportWidth, viewportHeight, std::nullopt, BlendMode::SrcIn, autoMirror);
-    content(builder);
+    float density = LocalDensity.current().density;
+    if (std::isnan(viewportWidth)) viewportWidth = defaultWidth * density;  // (Compose's: its default size in px)
+    if (std::isnan(viewportHeight)) viewportHeight = defaultHeight * density;
+    ImageVector::Builder builder(std::move(name), defaultWidth, defaultHeight, viewportWidth, viewportHeight, tintColor, tintBlendMode, autoMirror);
+    struct Content {
+        ImageVector::Builder* outer;
+        explicit Content(ImageVector::Builder* b) : outer(std::exchange(gVectorContent, b)) {}
+        ~Content() { gVectorContent = outer; }
+    };
+    {
+        Content in(&builder);
+        if (content) content(viewportWidth, viewportHeight);
+    }
     ImageVector made = builder.build();
     ImageVector& last = remember([] { return ImageVector(); });
     if (last.empty() || !(last == made)) last = made;
     return VectorPainter(last);
+}
+
+Painter rememberVectorPainter(float defaultWidth, float defaultHeight, float viewportWidth, float viewportHeight,
+                              const std::function<void(float, float)>& content, CallSite site) {
+    return rememberVectorPainter(defaultWidth, defaultHeight, viewportWidth, viewportHeight, "VectorRootGroup", std::nullopt, BlendMode::SrcIn, false,
+                                 content, site);
+}
+
+Painter rememberVectorPainter(float defaultWidth, float defaultHeight, const std::function<void(float, float)>& content, CallSite site) {
+    constexpr float unset = std::numeric_limits<float>::quiet_NaN();
+    return rememberVectorPainter(defaultWidth, defaultHeight, unset, unset, content, site);
+}
+
+void vector::Group(const VectorGroup& group, const std::function<void()>& content, CallSite site) {
+    ComposableScope scope(site);  // (a group of its own for what its content remembers; what it reads recomposes the painter's composable)
+    ImageVector::Builder* builder = gVectorContent;
+    if (!builder) return;  // (outside a vector's content)
+    VectorGroup own = group;
+    own.children.clear();
+    builder->addGroup(std::move(own));
+    if (content) content();
+    builder->clearGroup();
+}
+
+void vector::Path(const VectorPath& path) {
+    if (gVectorContent) gVectorContent->addPath(path);
+}
+
+float vector::VectorConfig::getOrDefault(VectorPropertyOf<float>, float defaultValue) const { return defaultValue; }
+std::vector<PathNode> vector::VectorConfig::getOrDefault(VectorPropertyOf<std::vector<PathNode>>, std::vector<PathNode> defaultValue) const {
+    return defaultValue;
+}
+std::optional<Brush> vector::VectorConfig::getOrDefault(VectorPropertyOf<std::optional<Brush>>, std::optional<Brush> defaultValue) const {
+    return defaultValue;
+}
+
+void vector::RenderVectorGroup(const VectorGroup& group, const std::map<std::string, std::shared_ptr<const VectorConfig>>& configs, CallSite site) {
+    ComposableScope scope(site);
+    static const VectorConfig none;
+    for (const VectorNode& node : group) {
+        const std::string& name = node.path() ? node.path()->name : node.group()->name;
+        auto found = configs.find(name);
+        const VectorConfig& c = found != configs.end() && found->second ? *found->second : none;
+        using P = VectorProperty;
+        if (const VectorPath* p = node.path()) {
+            vector::Path({.name = p->name,
+                          .pathData = c.getOrDefault(P::PathData, p->pathData),
+                          .pathFillType = p->pathFillType,
+                          .fill = c.getOrDefault(P::Fill, p->fill),
+                          .fillAlpha = c.getOrDefault(P::FillAlpha, p->fillAlpha),
+                          .stroke = c.getOrDefault(P::Stroke, p->stroke),
+                          .strokeAlpha = c.getOrDefault(P::StrokeAlpha, p->strokeAlpha),
+                          .strokeLineWidth = c.getOrDefault(P::StrokeLineWidth, p->strokeLineWidth),
+                          .strokeLineCap = p->strokeLineCap,
+                          .strokeLineJoin = p->strokeLineJoin,
+                          .strokeLineMiter = p->strokeLineMiter,
+                          .trimPathStart = c.getOrDefault(P::TrimPathStart, p->trimPathStart),
+                          .trimPathEnd = c.getOrDefault(P::TrimPathEnd, p->trimPathEnd),
+                          .trimPathOffset = c.getOrDefault(P::TrimPathOffset, p->trimPathOffset)});
+        } else {
+            const VectorGroup& g = *node.group();
+            vector::Group({.name = g.name,
+                           .rotation = c.getOrDefault(P::Rotation, g.rotation),
+                           .pivotX = c.getOrDefault(P::PivotX, g.pivotX),
+                           .pivotY = c.getOrDefault(P::PivotY, g.pivotY),
+                           .scaleX = c.getOrDefault(P::ScaleX, g.scaleX),
+                           .scaleY = c.getOrDefault(P::ScaleY, g.scaleY),
+                           .translationX = c.getOrDefault(P::TranslateX, g.translationX),
+                           .translationY = c.getOrDefault(P::TranslateY, g.translationY),
+                           .clipPathData = c.getOrDefault(P::PathData, g.clipPathData)},
+                          [&] { RenderVectorGroup(g, configs); });
+        }
+    }
 }
 
 void Image(const Painter& painter, std::string contentDescription, const Modifier& modifier, Alignment alignment,

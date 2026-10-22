@@ -702,17 +702,63 @@ ImageVector vectorResource(const std::string& path, CallSite site = CallSite::cu
 // A vector as a Painter, made once (Compose's rememberVectorPainter).
 Painter rememberVectorPainter(const ImageVector& image, CallSite site = CallSite::current());
 // A vector made by composable content (Compose's rememberVectorPainter { Group { Path() } }):
-// what the content reads (state, animations) makes it again when it changes; made the same, it
-// stays the same vector (equal painters, a backend's raster kept).
+// vector::Group and vector::Path in `content` (given the viewport's size) make its tree; what it
+// reads (state, animations) makes it again when it changes (the composable that remembers it
+// recomposes); made the same, it stays the same vector (an equal painter, its bitmaps kept).
+// Without a viewport, its default size in pixels (LocalDensity), as Compose's; its name
+// "VectorRootGroup" unless given.
 //   float drawn = animateFloatAsState(done.get() ? 1.f : 0.f, tween(600));
-//   Painter check = rememberVectorPainter(48, 48, 24, 24, [&](ImageVector::Builder& v) {
-//       VectorPath tick{.commands = VectorPath::parse("M5,12l5,5l9,-10"), .fill = std::nullopt,
-//                       .stroke = Brush::solid(color), .strokeLineWidth = 2.5f, .trimPathEnd = drawn};
-//       v.path(tick);
+//   Painter check = rememberVectorPainter(48, 48, 24, 24, [&](float, float) {
+//       vector::Path({.pathData = addPathNodes("M5,12l5,5l9,-10"), .stroke = Brush::solid(color), .strokeLineWidth = 2.5f,
+//                     .trimPathEnd = drawn});
 //   });
-Painter rememberVectorPainter(float defaultWidth, float defaultHeight, float viewportWidth, float viewportHeight,
-                              const std::function<void(ImageVector::Builder&)>& content, bool autoMirror = false,
+Painter rememberVectorPainter(float defaultWidth, float defaultHeight, const std::function<void(float viewportWidth, float viewportHeight)>& content,
                               CallSite site = CallSite::current());
+Painter rememberVectorPainter(float defaultWidth, float defaultHeight, float viewportWidth, float viewportHeight,
+                              const std::function<void(float viewportWidth, float viewportHeight)>& content, CallSite site = CallSite::current());
+Painter rememberVectorPainter(float defaultWidth, float defaultHeight, float viewportWidth, float viewportHeight, std::string name,
+                              std::optional<Color> tintColor, BlendMode tintBlendMode, bool autoMirror,
+                              const std::function<void(float viewportWidth, float viewportHeight)>& content, CallSite site = CallSite::current());
+
+// A vector's content, as Compose's androidx.compose.ui.graphics.vector composables make it.
+namespace vector {
+// A group in it (Compose's Group): `group`'s name, transform and clip (not its children), what
+// `content` makes inside it.
+void Group(const VectorGroup& group, const std::function<void()>& content, CallSite site = CallSite::current());
+// A path in it (Compose's Path).
+void Path(const VectorPath& path);
+
+// What a VectorConfig can draw a group or a path with in place of its own value (Compose's
+// VectorProperty): each of its own type.
+template <class T>
+struct VectorPropertyOf {
+    int index;
+    friend constexpr bool operator==(VectorPropertyOf, VectorPropertyOf) = default;
+};
+struct VectorProperty {
+    static constexpr VectorPropertyOf<float> Rotation{0}, PivotX{1}, PivotY{2}, ScaleX{3}, ScaleY{4}, TranslateX{5}, TranslateY{6};
+    static constexpr VectorPropertyOf<std::vector<PathNode>> PathData{7};  // a path's, or a group's clip path
+    static constexpr VectorPropertyOf<std::optional<Brush>> Fill{8}, Stroke{10};
+    static constexpr VectorPropertyOf<float> FillAlpha{9}, StrokeLineWidth{11}, StrokeAlpha{12}, TrimPathStart{13}, TrimPathEnd{14},
+        TrimPathOffset{15};
+};
+// The values a group or a path is drawn with (Compose's VectorConfig): its own, but for those a
+// config of your own gives (override getOrDefault; `using VectorConfig::getOrDefault;` keeps the others).
+class VectorConfig {
+public:
+    virtual ~VectorConfig() = default;
+    virtual float getOrDefault(VectorPropertyOf<float> property, float defaultValue) const;
+    virtual std::vector<PathNode> getOrDefault(VectorPropertyOf<std::vector<PathNode>> property, std::vector<PathNode> defaultValue) const;
+    virtual std::optional<Brush> getOrDefault(VectorPropertyOf<std::optional<Brush>> property, std::optional<Brush> defaultValue) const;
+};
+// `group`'s paths and groups as vector::Path and vector::Group (Compose's RenderVectorGroup),
+// each drawn with the config of its name in `configs` (a path's cap, join, miter and fill type,
+// a group's name, its own):
+//   Image(rememberVectorPainter(24, 24, 24, 24, [&](float, float) { vector::RenderVectorGroup(icon.root(), {{"spin", spinning}}); }), "");
+void RenderVectorGroup(const VectorGroup& group, const std::map<std::string, std::shared_ptr<const VectorConfig>>& configs = {},
+                       CallSite site = CallSite::current());
+} // namespace vector
+
 // An animated vector drawable asset ("vectors/play_pause.xml"), read once (Compose's
 // AnimatedImageVector.animatedVectorResource; see AnimatedImageVector::fromAnimatedVectorXml).
 AnimatedImageVector animatedVectorResource(const std::string& path, CallSite site = CallSite::current());
