@@ -703,18 +703,27 @@ void CanvasSection(CallSite site) {
             });
             Row(Modifier().fillMaxWidth().height(96), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
                 Canvas(Modifier().size(96), [primary = cs.primary, tertiary = cs.tertiary](DrawScope& d) {
+                    // A fan of 72 triangles, a little bigger than the circle it is cut to: a mesh isn't
+                    // anti-aliased (as Skia's), a clip is.
                     std::vector<Offset> at{{48, 48}};
                     std::vector<Color> colors{colors::White};
                     const Color ring[] = {primary, Color::hex(0xFFB300), tertiary, Color::hex(0x26A69A), primary};
-                    for (int i = 0; i <= 24; ++i) {
-                        float a = float(i) / 24 * 2 * std::numbers::pi_v<float>;
-                        at.push_back({48 + 44 * std::cos(a), 48 + 44 * std::sin(a)});
-                        float t = float(i) / 24 * 4;
+                    for (int i = 0; i <= 72; ++i) {
+                        float a = float(i) / 72 * 2 * std::numbers::pi_v<float>;
+                        at.push_back({48 + 46 * std::cos(a), 48 + 46 * std::sin(a)});
+                        float t = float(i) / 72 * 4;
                         int k = std::min(3, int(t));
                         colors.push_back(lerp(ring[k], ring[k + 1], t - float(k)));
                     }
                     Vertices fan(VertexMode::TriangleFan, at, {}, colors);
-                    d.drawIntoCanvas([&](graphics::Canvas& c) { c.drawVertices(fan, BlendMode::Modulate, Paint{.color = colors::White}); });
+                    Path round;
+                    round.addOval({4, 4, 88, 88});
+                    d.drawIntoCanvas([&](graphics::Canvas& c) {
+                        c.save();
+                        c.clipPath(round);
+                        c.drawVertices(fan, BlendMode::Modulate, Paint{.color = colors::White});
+                        c.restore();
+                    });
                 });
                 Canvas(Modifier().weight(1).fillMaxHeight(), [photo, primary = cs.primary](DrawScope& d) {
                     if (photo.empty()) return;
@@ -739,9 +748,8 @@ void CanvasSection(CallSite site) {
             ImageBitmap pattern = remember([primary = cs.primary, tertiary = cs.tertiary] {
                 ImageBitmap b(96, 96);
                 graphics::Canvas c(b);
-                for (int i = 0; i < 6; ++i)
-                    c.drawCircle({48, 48}, float(48 - i * 8), Paint{.color = i % 2 ? tertiary : primary});
-                c.drawRect({0, 44, 96, 8}, Paint{.color = colors::White.copy(0.8f)});
+                for (int i = 0; i < 6; ++i)  // (inside the bitmap: an edge at its own edge would be cut flat there)
+                    c.drawCircle({48, 48}, float(46 - i * 8), Paint{.color = i % 2 ? tertiary : primary});
                 return b;
             });
             ImageBitmap stencil = remember([] {
@@ -777,6 +785,10 @@ void CanvasSection(CallSite site) {
                     });
                 });
             });
+            Text("Renk yelpazesi: köşe renkli drawVertices (Skia gibi örgü yumuşatılmaz; daireye kırpıldı) · fotoğraf: doku "
+                 "koordinatlı şerit · halkalar: bitmap'e çizildi · daire ve çizgi: üstte yumuşatmalı, altta isAntiAlias = false "
+                 "(her piksel ya tam ya hiç, Skia gibi) · yıldızlar: Alpha8 maske, boyanın renginde",
+                 {.font = typography().bodySmall, .color = cs.onSurfaceVariant});
         });
     });
 }
