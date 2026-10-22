@@ -41,7 +41,7 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 | API | Durum |
 |---|---|
 | `padding` (120), `fillMaxSize`/`Width`/`Height` (117/67/6), `size` (51), `width`/`height` (18/39) | ✅ |
-| `Column` (108), `Box` (92), `Row` (50), `Arrangement` (66), `Spacer` (36) | ✅ |
+| `Column` (108), `Box` (92), `Row` (50), `Arrangement` (66), `Spacer` (36) | ✅ Compose'daki gibi tam piksellerde yerleşir (`roundToPx` boyutlar, padding kenarları ve aralık; hizalama yarım yukarı; ağırlıkların artan pikselleri ilklere) |
 | `PaddingValues` (16), `offset` (16), `heightIn`/`widthIn` (4/3), `safeDrawingPadding` (3) | ✅ |
 | `aspectRatio` (14), `wrapContentSize`/`Width`/`Height` (13), `requiredSize`/`Width`/`Height` (5), `requiredSizeIn`/`WidthIn`/`HeightIn` | ✅ `required*In` gelen kısıtları yok sayan aralıklar: verilmeyen (en büyüğü `kInfinity`) gelenini, verilenin izin verdiği kadar korur; gelen kısıtların dışına taşan ortalanır |
 | `sizeIn`, `defaultMinSize`, `offset { }` | ✅ `offset { }` lambda ile (layout'ta okunur); `defaultMinSize` sadece gelen en küçük 0 iken uygulanır |

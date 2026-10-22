@@ -96,6 +96,7 @@ struct TextLayoutResult::Data {
     TextOverflow overflow = TextOverflow::Clip;
     float width = 0;  // what the lines are aligned in
     float maxWidth = kInfinity, maxHeight = kInfinity;
+    float density = 1;  // px a dp where it was laid out (its size whole px there)
 };
 } // namespace kompoz
 
@@ -147,7 +148,7 @@ void drawStyledText(GraphicsContext& canvas, const StyledTextLayout& layout, con
 // A public TextLayoutResult for a layout: its lines aligned in `width`, laid out for at most
 // maxWidth x maxHeight.
 TextLayoutResult makeTextLayoutResult(StyledTextLayout layout, std::string text, TextMeasurer& measurer, TextAlign align,
-                                      TextOverflow overflow, float width, float maxWidth, float maxHeight);
+                                      TextOverflow overflow, float width, float maxWidth, float maxHeight, float density = 0);
 
 // The run under a point (local to the text), or -1.
 int runAt(const StyledTextLayout& layout, Offset p, float boundsWidth, TextAlign align);

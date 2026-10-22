@@ -614,7 +614,7 @@ TEST(long_press_selects_a_word_with_handles_and_a_toolbar) {
     host.draw(canvas);
     bool handleMoved = false;  // the end handle now hangs under the end of "güzel"
     for (const Rect& r : canvas.rects)
-        handleMoved = handleMoved || (near(r.width, 22) && near(r.x, field.x + 16 + 8.5f * 13) && near(r.y, field.y + 36));
+        handleMoved = handleMoved || (near(r.width, 22) && near(r.x, std::floor(field.x + 16 + 8.5f * 13 + 0.5f)) && near(r.y, field.y + 36));  // (placed at whole px)
     CHECK(handleMoved);
     rule.onNodeWithText("Select all").performClick();
     CHECK(ime.selectionStart == 0 && ime.selectionEnd == int(value.peek().size()) && ticks() == 6);  // no handle moved
@@ -1860,6 +1860,92 @@ TEST(path_data_is_read_as_composes_path_parser_reads_it) {
           PathNode::RelativeReflectiveQuadTo(0, 0).isQuad() && !PathNode::CurveTo(0, 0, 0, 0, 0, 0).isQuad() && !PathNode::Close().isQuad());
 }
 
+// Layout in whole pixels, as Compose's (its sizes, constraints and places Int px), here at 2.625
+// px a dp: sizes and offsets each rounded (a half up), a padding's sides and a spacing rounded
+// before they add up, a centered child where half the room left rounds to, weights shared as
+// Compose shares them (each share rounded, the px over taken from the first), a text's size the
+// whole px above it, its baselines rounded.
+TEST(layout_is_in_whole_pixels_as_composes) {
+    const float d = 2.625f;
+    ComposeTestRule rule([] {
+        Column([] {
+            Box(Modifier().size(31, 20).testTag("dış"), Alignment::Center, [] { Box(Modifier().size(10, 9).testTag("iç")); });
+            Box(Modifier().width(40).padding(1.3f, 0, 1.3f, 0).testTag("dolgulu"), [] { Box(Modifier().fillMaxWidth().height(4).testTag("dolgu içi")); });
+            Row(Modifier().testTag("aralıklı"), {.horizontalArrangement = Arrangement::spacedBy(1.3f)}, [] {
+                for (int i = 0; i < 3; ++i) Box(Modifier().size(10).testTag(std::format("a{}", i)));
+            });
+            Row(Modifier().width(100), [] {
+                for (int i = 0; i < 3; ++i) Box(Modifier().weight(1).height(4).testTag(std::format("w{}", i)));
+            });
+            Box(Modifier().offset(0.7f, 0.2f).size(5).testTag("kaymış"));
+            Text("abc", Modifier().testTag("yazı"), {.fontSize = 15});
+        });
+    }, {400, 800});
+    rule.host().setDensity({d, 1});
+    rule.waitForIdle();
+    auto px = [&](const char* tag) {  // its bounds in px
+        Rect b = rule.onNodeWithTag(tag).bounds();
+        return Rect{b.x * d, b.y * d, b.width * d, b.height * d};
+    };
+    auto whole = [](Rect r) {
+        auto w = [](float v) { return std::abs(v - std::round(v)) < 1e-3f; };
+        return w(r.x) && w(r.y) && w(r.width) && w(r.height);
+    };
+    for (const char* tag : {"dış", "iç", "dolgulu", "dolgu içi", "aralıklı", "a0", "a1", "a2", "w0", "w1", "w2", "kaymış", "yazı"}) {
+        CHECK(whole(px(tag)));
+        if (!whole(px(tag))) std::printf("  %s not on whole px\n", tag);
+    }
+    // 31 x 20 dp: 81 x 53 px (81.375, 52.5 a half up); 10 x 9: 26 x 24; centered at 27.5 and 14.5 px: 28, 15.
+    CHECK(near(px("dış").width, 81, 1e-3f) && near(px("dış").height, 53, 1e-3f) && near(px("iç").width, 26, 1e-3f) && near(px("iç").height, 24, 1e-3f));
+    CHECK(near(px("iç").x - px("dış").x, 28, 1e-3f) && near(px("iç").y - px("dış").y, 15, 1e-3f));
+    // 40 dp less 1.3 dp a side: 105 px less 3 a side (3.41 each, rounded before they add up).
+    CHECK(near(px("dolgulu").width, 105, 1e-3f) && near(px("dolgu içi").width, 99, 1e-3f) && near(px("dolgu içi").x - px("dolgulu").x, 3, 1e-3f));
+    // 1.3 dp apart: 3 px, each time.
+    CHECK(near(px("a1").x - px("a0").x, 29, 1e-3f) && near(px("a2").x - px("a0").x, 58, 1e-3f) && near(px("aralıklı").width, 84, 1e-3f));
+    // 263 px (262.5) in three: 87.67 rounded to 88 each, one over: the first gives it up.
+    CHECK(near(px("w0").width, 87, 1e-3f) && near(px("w1").width, 88, 1e-3f) && near(px("w2").width, 88, 1e-3f) &&
+          near(px("w2").x + px("w2").width - px("w0").x, 263, 1e-3f));
+    // Moved by 1.84 and 0.53 px: 2 and 1.
+    Rect moved = rule.onNodeWithTag("kaymış").node()->contentBounds();  // (its content moved, not its place)
+    CHECK(near(moved.x * d - px("kaymış").x, 2, 1e-3f) && near(moved.y * d - px("kaymış").y, 1, 1e-3f));
+    // "abc" at 15 sp: 22.5 x 18.75 dp (the test's measurer), 59.06 x 49.22 px: 60 x 50.
+    CHECK(near(px("yazı").width, 60, 1e-3f) && near(px("yazı").height, 50, 1e-3f));
+    float baseline = rule.onNodeWithTag("yazı").node()->alignmentLine(FirstBaseline) * d;  // 12 dp: 31.5 px, 32
+    CHECK(near(baseline, 32, 1e-3f));
+    // A tab row's tabs share its whole px out as Compose's (each the row's divided, the rest left
+    // over); a held button in a group grows by whole px, its neighbours give up whole px.
+    MutableInteractionSource held;
+    ComposeTestRule rows([&held] {
+        Column([&held] {
+            PrimaryTabRow(0, Modifier().width(100), [] {
+                for (int i = 0; i < 3; ++i) Tab(i == 0, [] {}, [i] { Text(std::format("S{}", i)); }, {}, Modifier().testTag(std::format("s{}", i)));
+            });
+            ButtonGroup([&held](const ButtonGroupScope& group) {
+                Button([] {}, group.animateWidth(MutableInteractionSource()).testTag("g0"), [] { Text("Önceki"); });
+                Button([] {}, group.animateWidth(held).testTag("g1"), {.interactionSource = held}, [] { Text("Oynat"); });
+                Button([] {}, group.animateWidth(MutableInteractionSource()).testTag("g2"), [] { Text("Sonraki"); });
+            });
+        });
+    }, {400, 800});
+    rows.host().setDensity({d, 1});
+    rows.waitForIdle();
+    auto rowPx = [&](const char* tag) {
+        Rect b = rows.onNodeWithTag(tag).bounds();
+        return Rect{b.x * d, b.y * d, b.width * d, b.height * d};
+    };
+    CHECK(near(rowPx("s0").width, 87, 1e-3f) && near(rowPx("s1").x, 87, 1e-3f) && near(rowPx("s2").x, 174, 1e-3f));  // 263 / 3
+    float g0 = rowPx("g0").width, g1 = rowPx("g1").width, g2 = rowPx("g2").width;
+    rows.host().pointerDown(rows.onNodeWithTag("g1").bounds().center());
+    rows.advanceTimeBy(500);
+    float growth = g1 * 0.15f;  // (its natural width a whole px: what it grows by rounded, half of it from each neighbour)
+    CHECK(near(rowPx("g1").width, g1 + std::floor(growth + 0.5f), 1e-3f) && near(rowPx("g0").width, g0 - std::floor(growth / 2 + 0.5f), 1e-3f) &&
+          near(rowPx("g2").width, g2 - std::floor(growth / 2 + 0.5f), 1e-3f));
+    rows.host().pointerUp(rows.onNodeWithTag("g1").bounds().center());
+    TextLayoutMeasurer measurer(rule.host().textMeasurer(), Font{15}, colors::Black, colors::Black, false, d);
+    Size measured = measurer.measure("abc").size();
+    CHECK(near(measured.width * d, 60, 1e-3f) && near(measured.height * d, 50, 1e-3f));
+}
+
 TEST(icon_sizes_tints_and_draws) {
     ComposeTestRule rule([] {
         CompositionLocalProvider({LocalContentColor.provides(Color::hex(0x123456))}, [] {
@@ -2922,7 +3008,7 @@ TEST(shared_element_moves_from_its_match_and_hides_it) {
     if (mid.size() == 1) {
         float size = mid[0].bounds.width, x = 100 + mid[0].transform.translationX;
         CHECK(size > 60 && size < 190 && x > 5 && x < 95 && !has(*middle, {0, 0, 40, 40}));
-        CHECK(has(*middle, {100, 300, size, size}));  // its content is laid out at the in-between size
+        CHECK(has(*middle, {100, 300, std::floor(size + 0.5f), std::floor(size + 0.5f)}));  // its content is laid out at the in-between size (whole px)
     }
     for (int i = 0; i < 80; ++i) frame();
     auto settled = frame();
@@ -10654,7 +10740,7 @@ TEST(bottom_sheet_scaffold_peeks_expands_and_follows_drags) {
         rule.advanceFrame();
         rule.host().pointerMove({200, 720 - 100.f * float(i) / 60});
     }
-    CHECK(top() > 599 && top() < 600 + ViewConfiguration{}.touchSlop + 2);  // it followed the finger
+    CHECK(top() > 599 && top() <= 600 + ViewConfiguration{}.touchSlop + 2);  // it followed the finger (placed at whole px)
     rule.advanceFrame();
     rule.host().pointerUp({200, 620});
     rule.waitForIdle();
@@ -11115,7 +11201,7 @@ TEST(multi_browse_carousel_grows_and_shrinks_its_items_as_they_move) {
     }
     rule.advanceFrame();
     auto mid = masks();
-    CHECK(mid.size() == 4 && near(mid[1].first, 97, 3) && near(mid[1].second, 164, 3));  // (less the first step, to the slop)
+    CHECK(mid.size() == 4 && near(mid[1].first, 97, 3.5f) && near(mid[1].second, 164, 3.5f));  // (less the first step, to the slop; whole px)
     CHECK(mid[0].first < 0 && mid[0].second < 186 && near(mid[0].first + mid[0].second + 8, mid[1].first));  // side by side
     rule.host().pointerUp({300 - 97 - ViewConfiguration{}.touchSlop, 100});
     rule.waitForIdle();  // let go: it settles on an item
@@ -12577,7 +12663,7 @@ TEST(flex_box_grows_shrinks_and_wraps_as_css) {
     CHECK(near(at("c").y, 5) && near(at("a").y, 10) && near(at("b").y, 0));
     config.set({.justifyContent = FlexJustifyContent::SpaceEvenly});
     rule.waitForIdle();
-    CHECK(near(at("c").x, 37.5f) && near(at("a").x, 125) && near(at("b").x, 212.5f));
+    CHECK(near(at("c").x, 38) && near(at("a").x, 125) && near(at("b").x, 213));  // (37.5 and 212.5 at whole px)
     // RowReverse: from the end.
     config.set({.direction = FlexDirection::RowReverse});
     rule.waitForIdle();
@@ -12838,7 +12924,7 @@ TEST(infinite_transition_states_are_read_where_they_are_needed) {
     CHECK(labels > labelsBefore && rule.onNodeWithText("0").exists() == false);  // ...but the text reading it did
     CHECK(drawn.size() >= 2 && drawn.back() > drawn.front() + 200);
     CHECK(tints.size() >= 2 && tints.back().r > tints.front().r);
-    CHECK(rule.onNodeWithTag("kayan").node()->contentBounds().x > x0 + 2);  // laid out again where it is now
+    CHECK(rule.onNodeWithTag("kayan").node()->contentBounds().x > x0 + 1);  // laid out again where it is now
     // Read only while drawing: idle until drawn, then the next frame is asked for.
     ComposeTestRule drawnOnly([&] {
         auto angle = rememberInfiniteTransition().animateFloatState(0, 360, infiniteRepeatable(tween(1000, 0, LinearEasing)));
@@ -13401,7 +13487,7 @@ TEST(navigation_bar_items_as_compose_1_4) {
     auto sameColor3 = [](Color a, Color b) { return near(a.r, b.r, 0.01f) && near(a.g, b.g, 0.01f) && near(a.b, b.b, 0.01f); };
     auto indicatorUnder = [&](const testing::RecordingCanvas& canvas, Rect label) -> std::optional<std::pair<Rect, Color>> {
         for (size_t i = 0; i < canvas.rects.size(); ++i)
-            if (near(canvas.rects[i].center().x, label.center().x, 0.5f) && sameColor3(canvas.rectColors[i], cs.secondaryContainer))
+            if (near(canvas.rects[i].center().x, label.center().x, 1) && sameColor3(canvas.rectColors[i], cs.secondaryContainer))  // (each at whole px)
                 return std::pair{canvas.rects[i], canvas.rectColors[i]};
         return std::nullopt;
     };
@@ -15272,7 +15358,7 @@ TEST(button_group_grows_the_held_button_and_squeezes_its_neighbours) {
     rule.advanceTimeBy(500);
     float extra = b0.width * 0.15f;
     CHECK(near(at("b").width, b0.width + extra) && near(at("a").width, a0.width - extra / 2) && near(at("c").width, c0.width - extra / 2));
-    CHECK(near(at("a").x, 0) && near(at("c").right(), c0.right()));  // the row keeps its width
+    CHECK(near(at("a").x, 0) && near(at("c").right(), c0.right(), 1.01f));  // the row keeps its width (a px either way: each part rounded, as Compose's)
     CHECK(near(at("c").x - at("b").right(), 12));
     rule.host().pointerUp(b0.center());
     rule.advanceTimeBy(500);
@@ -15835,9 +15921,9 @@ TEST(short_navigation_bar_shares_the_width_or_centres_its_items) {
     arrangement.set(ShortNavigationBarArrangement::Centered);
     rule.waitForIdle();
     // As wide as the widest (16 + 24 icon + 4 + "Profil" 39 + 16), together in the middle.
-    CHECK(sameRect(at("Ana"), {31.5f, 0, 99, 64}) && sameRect(at("Ara"), {130.5f, 0, 99, 64}) && sameRect(at("Profil"), {229.5f, 0, 99, 64}));
+    CHECK(sameRect(at("Ana"), {32, 0, 99, 64}) && sameRect(at("Ara"), {131, 0, 99, 64}) && sameRect(at("Profil"), {230, 0, 99, 64}));  // (31.5… at whole px)
     Look centered = look();  // round icon and label ("Ara" 19.5, rounded up)
-    CHECK(centered.pills.size() == 1 && sameRect(centered.pills[0], {140, 12, 80, 40}) && near(centered.radii[0], 20));
+    CHECK(centered.pills.size() == 1 && sameRect(centered.pills[0], {141, 12, 80, 40}) && near(centered.radii[0], 20));
 
     arrangement.set(std::nullopt);  // by the window: compact shares the width
     rule.waitForIdle();
@@ -16690,7 +16776,7 @@ TEST(elevated_chips_cast_a_shadow_and_leading_icon_tabs_sit_side_by_side) {
     Rect t0 = rule.onNodeWithTag("tab0").bounds(), icon = rule.onNodeWithText("uçak").bounds(), text = rule.onNodeWithText("Uçuş").bounds();
     CHECK(near(t0.height, 48) && near(rule.onNodeWithTag("tabs").bounds().height, 48));
     CHECK(near(text.x, icon.right() + 8) && near(icon.center().y, t0.center().y) && near(text.center().y, t0.center().y));
-    CHECK(near(icon.x - t0.x, t0.right() - text.right()));
+    CHECK(icon.x - t0.x == std::floor((t0.width - (text.right() - icon.x)) / 2 + 0.5f));  // centered at whole px (the half px to the right)
     // The selected one in primary (the other as asked), its indicator under both.
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
@@ -20920,8 +21006,9 @@ TEST(animated_content_aligns_its_contents_and_keeps_same_key_content) {
     box = rule.onNodeWithTag("ortalı").bounds();
     Rect small = rule.onNodeWithTag("küçük").bounds(), large = rule.onNodeWithTag("büyük").bounds();
     CHECK(box.width > 110 && box.width < 190);
-    CHECK(near(small.x + 50, box.x + box.width / 2) && near(small.y + 20, box.y + box.height / 2));
-    CHECK(near(large.x + 100, box.x + box.width / 2) && near(large.y + 40, box.y + box.height / 2));
+    auto centered = [](float space, float size) { return std::floor((space - size) / 2 + 0.5f); };  // (whole px, a half up)
+    CHECK(box.width == std::floor(box.width) && small.x - box.x == centered(box.width, 100) && small.y - box.y == centered(box.height, 40));
+    CHECK(large.x - box.x == centered(box.width, 200) && large.y - box.y == centered(box.height, 80));
     rule.waitForIdle();
     box = rule.onNodeWithTag("ortalı").bounds();
     large = rule.onNodeWithTag("büyük").bounds();
@@ -22963,7 +23050,7 @@ TEST(snackbars_lay_out_as_compose_and_host_your_own) {
     CHECK(twoLines && twoLines->alignmentLine(LastBaseline) > twoLines->alignmentLine(FirstBaseline) &&
           near(rule.onNodeWithTag("iki").bounds().height, 68));  // two lines: 68 dp
     CHECK(near(rule.onNodeWithTag("yalnız").bounds().height, 48));
-    CHECK(near(at["Büyük eylemli"].y, at["EYLEM"].y));  // a taller action still on the text's baseline
+    CHECK(near(at["Büyük eylemli"].y, at["EYLEM"].y, 1));  // a taller action still on the text's baseline (each text at whole px)
     // The action on a line of its own, at the end; its own container color.
     Rect action = rule.onNodeWithText("Uzun bir eylem adı").bounds();
     CHECK(action.y > at["Alt satırda eylem"].y && near(action.right() + 12, below.right() - 8) && near(at["Alt satırda eylem"].y, below.y + 30));
@@ -25705,7 +25792,7 @@ TEST(slider_thumbs_and_tracks_are_slots_given_its_state) {
     // The track: as long as the slider less the thumb, from half a thumb in; the thumb's middle at the value along it.
     Rect slider = rule.onNodeWithTag("kaydırıcı").bounds(), thumb = rule.onNodeWithTag("başparmak").bounds(), track = rule.onNodeWithTag("iz").bounds();
     CHECK(slider.height == 48 && track.width == 190 && track.x == slider.x + 5 && near(track.y + 3, slider.y + 24, 0.01f));  // 48 dp to touch
-    CHECK(near(thumb.x - slider.x, 190 * 0.25f, 0.01f) && thumb.width == 10);
+    CHECK(thumb.x - slider.x == std::floor(190 * 0.25f + 0.5f) && thumb.width == 10);  // (at whole px)
     CHECK(seen && seen->value() == 25 && seen->valueFrom() == 0 && seen->valueTo() == 100 && near(seen->valueAsFraction(), 0.25f, 1e-4f));
     CHECK(rule.onNodeWithText("50").exists());  // the value thumb shows it
     rule.host().pointerDown({slider.x + 5 + 190 * 0.75f, slider.y + 22});  // held: the thumb knows it
@@ -25908,6 +25995,14 @@ TEST(animate_bounds_glides_to_a_new_place_and_size) {
     scroll.scrollTo(100);  // the scope scrolls with it: no animation
     frames(2);
     CHECK(red.y == 160 - 100 && !rule.host().hasPendingWork());
+    // At 2.625 px a dp: along the way at whole px, as Compose places it (its offset rounded).
+    const float d = 2.625f;
+    rule.host().setDensity({d, 1});
+    rule.waitForIdle();
+    right.set(false);
+    frames(7);
+    auto whole = [d](float v) { return std::abs(v * d - std::round(v * d)) < 1e-3f; };
+    CHECK(red.x > 1 && red.x < 199 && whole(red.x) && whole(red.y));
 }
 
 TEST(minimum_interactive_component_size_keeps_room_to_touch) {

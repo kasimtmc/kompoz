@@ -1038,16 +1038,19 @@ void ButtonGroup(const Modifier& modifier, const ButtonGroupOptions& options, co
                 height = std::max(height, p.height);
             }
         }
-        // A held button grows; its neighbours give the room up.
+        // A held button grows; its neighbours give the room up: in whole px, each part rounded
+        // as Compose's (the row a px wider or narrower for it, as there).
         std::vector<float> widths = natural;
+        float d = detail::layoutDensity();
+        auto px = [d](float v) { return std::floor(v + 0.5f) / d; };  // (v in px)
         for (size_t i = 0; i < n; ++i) {
             auto* item = children[i].node->modifier.find<ButtonGroupItemElement>();
-            float extra = item ? natural[i] * options.expandedRatio * item->expansion : 0;
+            float growth = item ? natural[i] * d * options.expandedRatio * item->expansion : 0;
             bool before = i > 0, after = i + 1 < n;
-            if (extra == 0 || (!before && !after)) continue;
-            widths[i] += extra;
-            if (before) widths[i - 1] -= after ? extra / 2 : extra;
-            if (after) widths[i + 1] -= before ? extra / 2 : extra;
+            if (growth == 0 || (!before && !after)) continue;
+            widths[i] += px(growth);
+            if (before) widths[i - 1] -= after ? px(growth / 2) : px(growth);
+            if (after) widths[i + 1] -= before ? px(growth / 2) : px(growth);
         }
         // A squeezed one keeps its height, even if its label has to wrap.
         for (size_t i = 0; i < n; ++i) {
@@ -1213,7 +1216,7 @@ void tabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs,
     // The first measured position is taken as is; later ones slide.
     bool first = !*measured;
     AnimationSpec spec = first ? snap() : motionScheme().defaultSpatialSpec;  // Compose 1.4's
-    float x = animateFloatAsState(target.first, spec), width = animateFloatAsState(target.second, spec);
+    float shownX = animateFloatAsState(target.first, spec), shownWidth = animateFloatAsState(target.second, spec);
     if (!s.empty()) *measured = true;
     Color indicator = cs.primary, divider = cs.outlineVariant;
     bool secondary = style.secondary, scrollable = style.scrollable;
@@ -1221,7 +1224,9 @@ void tabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs,
 
     auto policy = [spans, secondary, scrollable, edge](LayoutNode& node, const Constraints& c) {
         size_t n = node.children.size();
-        float w = c.hasBoundedWidth() ? c.maxWidth : 360.f, tabWidth = n ? w / float(n) : w, h = 0, at = scrollable ? edge : 0;
+        float d = detail::layoutDensity();  // (a tab's width whole px, as Compose's: the row's divided, the rest left over)
+        float w = c.hasBoundedWidth() ? c.maxWidth : 360.f, tabWidth = n ? std::floor(w * d / float(n) + 1.f / 1024) / d : w, h = 0,
+              at = scrollable ? edge : 0;
         Spans out;
         for (size_t i = 0; i < n; ++i) {
             LayoutNode* child = node.children[i];
@@ -1248,6 +1253,8 @@ void tabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs,
         d.drawContent();
         float h = d.size().height;
         if (!scrollable) d.drawRect(divider, {0, h - 1}, Size{d.size().width, 1});
+        float px = d.density().density;  // (placed and sized in whole px along the way, as Compose's indicator)
+        float x = std::floor(shownX * px + 0.5f) / px, width = std::floor(shownWidth * px + 0.5f) / px;
         if (width <= 0) return;
         if (secondary)  // Compose 1.4's SecondaryIndicator: 3 dp, the tab's width
             d.drawRect(indicator, {x, h - 3}, Size{width, 3});

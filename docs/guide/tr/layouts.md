@@ -10,7 +10,7 @@ Yerleşim, ağaçta bir kez aşağı inip yukarı çıkan tek bir geçişte olur
 2. Her çocuk, önce kendi çocuklarını ölçerek bu kısıtlar içinde kendini ölçer ve boyutunu bildirir.
 3. Ebeveyn çocuklarını yerleştirir ve kendi boyutunu bildirir.
 
-Her düğüm bir geçişte bir kez ölçülür, bu yüzden ağaç ne kadar derin olursa olsun yerleşim hızlı kalır. Tüm boyutlar dp cinsindendir.
+Her düğüm bir geçişte bir kez ölçülür, bu yüzden ağaç ne kadar derin olursa olsun yerleşim hızlı kalır. Tüm boyutlar dp cinsindendir ve Compose'daki gibi tam piksellere yerleşir: boyutlar, padding, aralıklar ve konumlar Compose'un yuvarladığı yerlerde en yakın piksele (yarım yukarı) yuvarlanır, bir metin de onu çevreleyen tam pikseller kadar büyüktür.
 
 ## Column, Row ve Box
 

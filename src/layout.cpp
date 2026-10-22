@@ -18,9 +18,10 @@ void Arrangement::arrange(float total, const std::vector<float>& sizes, std::vec
     size_t n = sizes.size();
     positions.resize(n);
     if (n == 0) return;
-    float used = std::accumulate(sizes.begin(), sizes.end(), 0.f) + spacing * float(n - 1);
+    float space = detail::toWholePx(spacing);  // (in whole px, as Compose's spacedBy)
+    float used = std::accumulate(sizes.begin(), sizes.end(), 0.f) + space * float(n - 1);
     float free = std::max(0.f, total - used);
-    float start = 0, gap = spacing;
+    float start = 0, gap = space;
     switch (kind) {
     case Kind::Start: break;
     case Kind::End: start = free; break;
@@ -73,9 +74,10 @@ struct PaddingElement final : ModifierElement {
     PaddingValues p;
     bool absolute = false;  // start/end are left/right
     Size measure(const Constraints& c, const MeasureNext& next, Offset& contentOffset) const override {
-        float h = p.start + p.end, v = p.top + p.bottom;
+        using detail::toWholePx;  // each side in whole px, as Compose's
+        float start = toWholePx(p.start), top = toWholePx(p.top), h = start + toWholePx(p.end), v = top + toWholePx(p.bottom);
         Size s = next(c.deflate(h, v));
-        contentOffset = {p.start, p.top};
+        contentOffset = {start, top};
         return c.constrain({s.width + h, s.height + v});
     }
     bool mirrorsInRtl() const override { return !absolute; }
@@ -513,6 +515,7 @@ Modifier Modifier::absolutePadding(float left, float top, float right, float bot
 namespace {
 
 thread_local LayoutNode* gMeasuring = nullptr;  // the node whose modifiers are measuring
+thread_local float gLayoutDensity = 1;           // the px a dp of the host measuring now
 
 // windowInsetsPadding() / consumeWindowInsets(): pads by the insets the enclosing ones haven't
 // consumed yet, and consumes all of `insets` for what is inside.
@@ -1622,7 +1625,13 @@ void stackSlot(const Content& content) {
 
 } // namespace detail
 
-Size LayoutNode::measure(const Constraints& constraints) {
+Size LayoutNode::measure(const Constraints& given) {
+    float outerDensity = std::exchange(gLayoutDensity, host_ ? host_->density().density : gLayoutDensity);
+    struct Restore {
+        float d;
+        ~Restore() { gLayoutDensity = d; }
+    } restore{outerDensity};
+    Constraints constraints = detail::toWholePx(given);  // (whole px, as Compose's)
     bool probe = detail::isProbeMeasure();
     detail::LayoutPass pass = detail::currentLayoutPass();
     if (!needsMeasure_ && !probe && measuredWith_ == constraints && measuredIn_ == pass && !gMeasureEverything) return size_;  // as it was
@@ -1650,6 +1659,35 @@ void LayoutNode::invalidateMeasure() {
 }
 
 LayoutNode* detail::measuringNode() { return gMeasuring; }
+
+float detail::layoutDensity() { return gLayoutDensity; }
+float detail::toWholePx(float dp) {
+    if (!std::isfinite(dp)) return dp;
+    float d = gLayoutDensity;
+    // (a half up, a thousandth of a px early: a length summed from whole px a dp at a fractional
+    // density can come out a hair under its half)
+    return std::floor(dp * d + 0.5f + 1.f / 1024) / d;
+}
+Size detail::toWholePx(Size s) { return {toWholePx(s.width), toWholePx(s.height)}; }
+float detail::wholePxAbove(float dp, float density) {
+    if (!std::isfinite(dp)) return dp;
+    return std::ceil(dp * density - 1.f / 1024) / density;  // (a hair over a whole px, from summing at a fractional density, isn't the next)
+}
+Size detail::wholePxAbove(Size s) { return {wholePxAbove(s.width, gLayoutDensity), wholePxAbove(s.height, gLayoutDensity)}; }
+Constraints detail::toWholePx(const Constraints& c) {
+    return {toWholePx(c.minWidth), toWholePx(c.maxWidth), toWholePx(c.minHeight), toWholePx(c.maxHeight)};
+}
+
+void LayoutNode::place(float x, float y, float zIndex) {
+    float d = host_ ? host_->density().density : gLayoutDensity;
+    float outer = std::exchange(gLayoutDensity, d);
+    x = detail::toWholePx(x), y = detail::toWholePx(y);
+    gLayoutDensity = outer;
+    if (position_.x != x || position_.y != y || placedZIndex_ != zIndex) relaidOut_ = true, ++detail::relaidOutCount();
+    position_ = {x, y};
+    placedZIndex_ = zIndex;
+    placedNow_ = true;
+}
 uint64_t& detail::relaidOutCount() {
     thread_local uint64_t count = 0;
     return count;
@@ -1672,7 +1710,7 @@ Size LayoutNode::measureLayer(size_t index, const Constraints& c) {
                 s = {std::max(s.width, cs.width), std::max(s.height, cs.height)};
             }
         }
-        contentSize_ = c.constrain(s);
+        contentSize_ = c.constrain(detail::toWholePx(s));
         if (rtl)  // right to left: what was placed from the start is placed from the end
             for (auto* child : children)
                 if (child->placedNow_) child->position_.x = contentSize_.width - child->position_.x - child->size_.width;
@@ -1684,8 +1722,8 @@ Size LayoutNode::measureLayer(size_t index, const Constraints& c) {
         Size inner = measureLayer(index + 1, {c.minWidth, c.maxWidth, 0, c.maxHeight});
         float line = alignmentLineInside(index + 1, pad->line);
         if (std::isnan(line)) line = 0;
-        float before = std::isnan(pad->before) ? 0 : std::max(0.f, pad->before - line);
-        float after = std::isnan(pad->after) ? 0 : std::max(0.f, pad->after - (inner.height - line));
+        float before = std::isnan(pad->before) ? 0 : std::max(0.f, detail::toWholePx(pad->before) - line);
+        float after = std::isnan(pad->after) ? 0 : std::max(0.f, detail::toWholePx(pad->after) - (inner.height - line));
         Size s = c.constrain({inner.width, before + inner.height + after});
         float y = std::isnan(pad->before) ? s.height - after - inner.height : before;
         layers_[index] = {s, {0, y}, {}};
@@ -1693,8 +1731,9 @@ Size LayoutNode::measureLayer(size_t index, const Constraints& c) {
     }
     Offset offset;
     Size s = elements[index]->measure(
-        c, [&](const Constraints& inner) { return measureLayer(index + 1, inner); }, offset);
-    s = c.constrain(s);
+        c, [&](const Constraints& inner) { return measureLayer(index + 1, detail::toWholePx(inner)); }, offset);
+    s = c.constrain(detail::toWholePx(s));
+    offset = {detail::toWholePx(offset.x), detail::toWholePx(offset.y)};
     if (rtl && elements[index]->mirrorsInRtl()) {  // the content's offset from the other side
         Size inner = index + 1 == elements.size() ? contentSize_ : layers_[index + 1].size;
         offset.x = s.width - inner.width - offset.x;

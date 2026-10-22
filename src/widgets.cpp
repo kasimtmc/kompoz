@@ -82,7 +82,7 @@ MeasurePolicy linearPolicy(bool horizontal, Arrangement arrangement, float cross
         std::vector<Size> sizes(n);
         std::vector<ParentData> data(n);
         float totalWeight = 0, used = 0, crossSize = 0;
-        float spacing = arrangement.spacing * float(n > 0 ? n - 1 : 0);
+        float spacing = detail::toWholePx(arrangement.spacing) * float(n > 0 ? n - 1 : 0);  // (whole px, as Compose's)
         for (size_t i = 0; i < n; ++i) {
             data[i] = node.children[i]->parentData();
             totalWeight += std::max(0.f, data[i].weight);
@@ -97,10 +97,19 @@ MeasurePolicy linearPolicy(bool horizontal, Arrangement arrangement, float cross
         }
         // ...and weighted children share the rest.
         if (totalWeight > 0) {
+            // In whole px, as Compose shares it: each share rounded, what that leaves over (or
+            // takes too much) a px each to the first weighted children.
+            float density = detail::layoutDensity();
             float remaining = maxMain == kInfinity ? 0 : std::max(0.f, maxMain - used - spacing);
+            float unit = remaining * density / totalWeight;  // (px a weight)
+            int remainder = int(std::lround(remaining * density));
+            for (size_t i = 0; i < n; ++i)
+                if (data[i].weight > 0) remainder -= int(std::floor(unit * data[i].weight + 0.5f));
             for (size_t i = 0; i < n; ++i) {
                 if (data[i].weight <= 0) continue;
-                float share = remaining * data[i].weight / totalWeight;
+                int extra = remainder > 0 ? 1 : remainder < 0 ? -1 : 0;
+                remainder -= extra;
+                float share = std::max(0.f, std::floor(unit * data[i].weight + 0.5f) + float(extra)) / density;
                 // Unbounded (measuring the natural size): a weight has nothing to share out.
                 sizes[i] = maxMain == kInfinity ? node.children[i]->measure(make(0, kInfinity, maxCross))
                                                 : node.children[i]->measure(make(data[i].fill ? share : 0, share, maxCross));
@@ -1024,10 +1033,10 @@ void emitStyledText(const AnnotatedString& text, const Modifier& modifier, const
         // min(maxIntrinsicWidth, maxWidth) — a background or a centered alignment spans the width,
         // not the longest line it came out with. (A line too long unwrapped is cut to it anyway.)
         float width = layout->wrapped && c.hasBoundedWidth() ? c.maxWidth : layout->width;
-        Size size{std::ceil(width), std::ceil(layout->height)};
-        bool lines = !layout->lines.empty();  // its baselines, for alignBy and paddingFromBaseline
-        node.textBaselines[0] = lines ? layout->lines.front().top + layout->lines.front().ascent : std::numeric_limits<float>::quiet_NaN();
-        node.textBaselines[1] = lines ? layout->lines.back().top + layout->lines.back().ascent : std::numeric_limits<float>::quiet_NaN();
+        Size size = detail::wholePxAbove({width, layout->height});  // (whole px up, as Compose's ceil of its paragraph's)
+        bool lines = !layout->lines.empty();  // its baselines, for alignBy and paddingFromBaseline (whole px, as Compose's)
+        node.textBaselines[0] = lines ? detail::toWholePx(layout->lines.front().top + layout->lines.front().ascent) : std::numeric_limits<float>::quiet_NaN();
+        node.textBaselines[1] = lines ? detail::toWholePx(layout->lines.back().top + layout->lines.back().ascent) : std::numeric_limits<float>::quiet_NaN();
         // Each link's node over its first line (one left out of what shows isn't placed).
         if (!node.children.empty()) {
             float width = c.constrain(size).width;

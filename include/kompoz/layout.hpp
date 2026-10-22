@@ -2149,6 +2149,16 @@ struct MinIntrinsicWidth {
 bool isMinIntrinsicWidth();
 // The node being measured, if any: a state read now is read by its layout.
 LayoutNode* measuringNode();
+// Layout is in whole pixels, as Compose's (its sizes, constraints and places are Int px): the
+// px a dp of the host measuring now (1 with none), and a length in dp at the nearest whole px
+// there (a half up, as Kotlin's roundToInt; an infinite one as it is).
+float layoutDensity();
+float toWholePx(float dp);
+Size toWholePx(Size size);
+Constraints toWholePx(const Constraints& constraints);
+// At the whole px at or above it (Compose's ceil of a text's size), at `density` px a dp.
+float wholePxAbove(float dp, float density);
+Size wholePxAbove(Size size);  // (at layoutDensity())
 // How many times a node was measured afresh or moved so far: a layout that leaves it as it was
 // changed nothing.
 uint64_t& relaidOutCount();
@@ -2219,12 +2229,8 @@ public:
     // marks it, and the nodes around it, to be measured again.
     void invalidateMeasure();
     bool needsMeasure() const { return needsMeasure_; }
-    void place(float x, float y, float zIndex = 0) {
-        if (position_.x != x || position_.y != y || placedZIndex_ != zIndex) relaidOut_ = true, ++detail::relaidOutCount();
-        position_ = {x, y};
-        placedZIndex_ = zIndex;
-        placedNow_ = true;
-    }
+    // Where its parent puts it: at the nearest whole pixels (detail::toWholePx).
+    void place(float x, float y, float zIndex = 0);
     Size size() const { return size_; }
     // Placed by its parent's last layout. One only measured (a size probe, a subcomposed slot
     // left out) isn't drawn, hit or told to accessibility services, as in Compose.

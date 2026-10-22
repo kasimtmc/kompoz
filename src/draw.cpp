@@ -835,7 +835,7 @@ void DrawScope::drawText(const TextLayoutMeasurer& measurer, const AnnotatedStri
     TextLayoutResult layout = measurer.measure(text, s, maxWidth, maxHeight);
     if (size && layout.data_) {
         const TextLayoutResult::Data& d = *layout.data_;
-        layout = detail::makeTextLayoutResult(d.layout, d.text, *d.measurer, d.align, d.overflow, size->width, d.maxWidth, d.maxHeight);
+        layout = detail::makeTextLayoutResult(d.layout, d.text, *d.measurer, d.align, d.overflow, size->width, d.maxWidth, d.maxHeight, d.density);
     }
     drawText(layout, std::nullopt, topLeft, std::nullopt, std::nullopt, std::nullopt, std::nullopt, blendMode);
 }

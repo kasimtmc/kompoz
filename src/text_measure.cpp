@@ -17,7 +17,9 @@ const detail::TextLine* lineAt(const TextLayoutResult::Data& d, int line) {
 
 } // namespace
 
-Size TextLayoutResult::size() const { return {std::ceil(data_->width), std::ceil(data_->layout.height)}; }
+Size TextLayoutResult::size() const {
+    return {detail::wholePxAbove(data_->width, data_->density), detail::wholePxAbove(data_->layout.height, data_->density)};
+}
 int TextLayoutResult::lineCount() const { return int(data_->layout.lines.size()); }
 bool TextLayoutResult::didOverflowWidth() const { return data_->layout.tooWide; }
 bool TextLayoutResult::didOverflowHeight() const { return data_->layout.truncated || data_->layout.height > data_->maxHeight + 0.5f; }
@@ -98,7 +100,7 @@ const std::string& TextLayoutResult::text() const { return data_->text; }
 namespace detail {
 
 TextLayoutResult makeTextLayoutResult(StyledTextLayout layout, std::string text, TextMeasurer& measurer, TextAlign align,
-                                      TextOverflow overflow, float width, float maxWidth, float maxHeight) {
+                                      TextOverflow overflow, float width, float maxWidth, float maxHeight, float density) {
     auto d = std::make_shared<TextLayoutResult::Data>();
     d->layout = std::move(layout);
     d->text = std::move(text);
@@ -108,6 +110,7 @@ TextLayoutResult makeTextLayoutResult(StyledTextLayout layout, std::string text,
     d->width = width;
     d->maxWidth = maxWidth;
     d->maxHeight = maxHeight;
+    d->density = density > 0 ? density : detail::layoutDensity();  // (the layout's measuring it, else the measurer's)
     TextLayoutResult r;
     r.data_ = std::move(d);
     return r;
@@ -136,13 +139,15 @@ TextLayoutResult TextLayoutMeasurer::measure(const AnnotatedString& text, const 
                                                 direction, style.textIndent, false, LineBreak::Strategy::Simple, &text.paragraphStyles());
         width = std::max(width, std::min(natural.width, maxWidth));
     }
-    return detail::makeTextLayoutResult(std::move(layout), text.text(), *measurer_, style.textAlign, style.overflow, width, maxWidth, maxHeight);
+    return detail::makeTextLayoutResult(std::move(layout), text.text(), *measurer_, style.textAlign, style.overflow, width, maxWidth, maxHeight,
+                                        density_);
 }
 
 TextLayoutMeasurer rememberTextMeasurer(CallSite site) {
     ComposableScope scope(site);
-    return TextLayoutMeasurer(detail::Composer::require().host().textMeasurer(), LocalTextStyle.current(), LocalContentColor.current(),
-                              colorScheme().primary, LocalLayoutDirection.current() == LayoutDirection::Rtl);
+    ComposeHost& host = detail::Composer::require().host();
+    return TextLayoutMeasurer(host.textMeasurer(), LocalTextStyle.current(), LocalContentColor.current(), colorScheme().primary,
+                              LocalLayoutDirection.current() == LayoutDirection::Rtl, host.density().density);
 }
 
 } // namespace kompoz

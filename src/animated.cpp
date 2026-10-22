@@ -141,7 +141,7 @@ void animatedContentContainer(const Modifier& modifier, const std::shared_ptr<An
                         if (a.start >= 0) n.host()->requestLayoutFrame();
                     }
                 }
-                Size own = c.constrain(shown);
+                Size own = c.constrain(detail::toWholePx(shown));  // (in whole px: Compose animates an IntSize)
                 for (size_t i = 0; i < n.children.size(); ++i) {
                     Offset o = alignment.align(sizes[i], own);
                     n.children[i]->place(o.x, o.y);

@@ -135,6 +135,10 @@
   of each name (`VectorProperty`). The `ImageVector::Builder&` content it took before is gone.
 - **Fixed** (SDL_Renderer): what a transform enlarges is drawn at its size, not enlarged as pixels (a vector's root
   scale made its icons blurred), and text is laid out at the size it is drawn at (in a scaled layer, in a bitmap).
+- **Layout in whole pixels, as Compose's**: sizes, constraints and places are rounded to the nearest pixel (a half up)
+  where Compose rounds them: a padding's sides and a spacing before they add up, weights shared with the pixels left over
+  going to the first, a tab row's tabs the row divided, sizes and places along an animation; a text's size the pixel
+  above it, its baselines rounded (`Density::roundToPx`). Icons and edges no longer fall between pixels.
 - **Fixed**: a double tap crashed when its composable ran again between the taps (the tap detector held on to the
   settings of an element that had been replaced).
 - **Fixed**: a `rememberSaveable` under a `SaveableStateHolder` kept its value when its composable left while its

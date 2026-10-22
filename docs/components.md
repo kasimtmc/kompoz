@@ -41,7 +41,7 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 | API | Status |
 |---|---|
 | `padding` (120), `fillMaxSize`/`Width`/`Height` (117/67/6), `size` (51), `width`/`height` (18/39) | ✅ |
-| `Column` (108), `Box` (92), `Row` (50), `Arrangement` (66), `Spacer` (36) | ✅ |
+| `Column` (108), `Box` (92), `Row` (50), `Arrangement` (66), `Spacer` (36) | ✅ laid out in whole pixels as Compose's (`roundToPx` sizes, padding sides and spacing; alignment a half up; weights' leftover pixels to the first) |
 | `PaddingValues` (16), `offset` (16), `heightIn`/`widthIn` (4/3), `safeDrawingPadding` (3) | ✅ |
 | `aspectRatio` (14), `wrapContentSize`/`Width`/`Height` (13), `requiredSize`/`Width`/`Height` (5), `requiredSizeIn`/`WidthIn`/`HeightIn` | ✅ `required*In` are ranges that ignore the incoming constraints: an unset bound (max `kInfinity`) keeps the incoming one as far as the set bound allows; content that overflows the incoming constraints is centered |
 | `sizeIn`, `defaultMinSize`, `offset { }` | ✅ `offset { }` with a lambda (read during layout); `defaultMinSize` applies only when the incoming minimum is 0 |

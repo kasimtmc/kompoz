@@ -420,7 +420,9 @@ struct AnimateBoundsElement final : ModifierElement {
             if (finished) a.moving = false, a.shown = a.target;
             else host->requestRedraw();  // drawn moved along: nothing to lay out
         }
-        Offset by{a.shown.x - at.x, a.shown.y - at.y};
+        // Moved by whole px, as Compose places it along the way (its offset rounded).
+        float d = host->density().density;
+        Offset by{std::floor((a.shown.x - at.x) * d + 0.5f) / d, std::floor((a.shown.y - at.y) * d + 0.5f) / d};
         if (by.x == 0 && by.y == 0) return drawContent();
         g.pushTranslation(by);
         drawContent();

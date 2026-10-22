@@ -61,8 +61,9 @@ public:
 // TextMeasurer); keep it, measure while drawing.
 class TextLayoutMeasurer {
 public:
-    TextLayoutMeasurer(TextMeasurer& measurer, Font font, Color color, Color linkColor, bool rtl = false)
-        : measurer_(&measurer), font_(font), color_(color), linkColor_(linkColor), rtl_(rtl) {}
+    // `density`: the px a dp where it measures (its results' sizes whole px there).
+    TextLayoutMeasurer(TextMeasurer& measurer, Font font, Color color, Color linkColor, bool rtl = false, float density = 1)
+        : measurer_(&measurer), font_(font), color_(color), linkColor_(linkColor), rtl_(rtl), density_(density) {}
     // maxLines, overflow, softWrap, alignment and direction come from the style (autoSize doesn't).
     TextLayoutResult measure(const std::string& text, const TextStyle& style = {}, float maxWidth = kInfinity,
                              float maxHeight = kInfinity) const;
@@ -75,6 +76,7 @@ private:
     Font font_;
     Color color_, linkColor_;
     bool rtl_ = false;  // laid out right to left where it was remembered: text with no direction of its own goes so
+    float density_ = 1;
 };
 
 TextLayoutMeasurer rememberTextMeasurer(CallSite site = CallSite::current());

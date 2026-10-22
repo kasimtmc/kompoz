@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <initializer_list>
 #include <cstdint>
 #include <functional>
@@ -76,6 +77,11 @@ struct Density {
     float density = 1, fontScale = 1;
     constexpr float toPx(float dp) const { return dp * density; }
     constexpr float toDp(float px) const { return px / density; }
+    // Compose's Dp.roundToPx: the nearest whole px (a half up); an infinite one as it is.
+    float roundToPx(float dp) const {
+        float px = dp * density;
+        return std::isinf(px) ? px : std::floor(px + 0.5f);
+    }
     constexpr float spToDp(float sp) const { return sp * fontScale; }
     friend constexpr bool operator==(const Density&, const Density&) = default;
 };

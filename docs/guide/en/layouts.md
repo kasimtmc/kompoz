@@ -10,7 +10,7 @@ Layout happens in one pass down and up the tree:
 2. Each child measures itself within them, measuring its own children first, and reports its size.
 3. The parent places its children and reports its own size.
 
-Each node is measured once per pass, so layout stays fast however deep the tree is. All sizes are in dp.
+Each node is measured once per pass, so layout stays fast however deep the tree is. All sizes are in dp, laid out on whole pixels as Compose's: sizes, padding, spacing and places are rounded to the nearest pixel (a half up) where Compose rounds them, and a text is as big as the whole pixels around it.
 
 ## Column, Row and Box
 
