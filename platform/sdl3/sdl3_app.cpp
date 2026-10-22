@@ -203,7 +203,7 @@ public:
         color = filtered(color);
         if (color.a <= 0) return;
         glyphs_.clear();
-        fonts_.layout(text, baseline.x * scale - ox_, baseline.y * scale - oy_, font, rtl, glyphs_);
+        fonts_.layout(text, baseline.x * scale - ox_, baseline.y * scale - oy_, font, rtl, glyphs_, false, 0, scale);
         drawGlyphs(toF(color));
     }
 
@@ -214,7 +214,7 @@ public:
         float ox = ox_, oy = oy_, s = scale;
         std::function<SDL_FColor(float, float)> shade = [&](float x, float y) { return toF(brush.colorAt({(x + ox) / s, (y + oy) / s}, area)); };
         glyphs_.clear();
-        fonts_.layout(text, baseline.x * scale - ox_, baseline.y * scale - oy_, font, rtl, glyphs_);
+        fonts_.layout(text, baseline.x * scale - ox_, baseline.y * scale - oy_, font, rtl, glyphs_, false, 0, scale);
         drawGlyphs(SDL_FColor{1, 1, 1, 1}, &shade);
     }
 
@@ -223,7 +223,7 @@ public:
         if (color.a <= 0) return;
         int blur = std::max(0, int(std::lround(blurRadius * scale)));
         glyphs_.clear();
-        fonts_.layout(text, baseline.x * scale - ox_, baseline.y * scale - oy_, font, rtl, glyphs_, true, blur);
+        fonts_.layout(text, baseline.x * scale - ox_, baseline.y * scale - oy_, font, rtl, glyphs_, true, blur, scale);
         drawGlyphs(toF(color));
     }
 
@@ -331,11 +331,33 @@ public:
         float most = 4000 / scale;
         Offset middle = bounds.center();
         bounds = bounds.intersect({middle.x - most / 2, middle.y - most / 2, most, most});
-        float pox = ox_, poy = oy_;
+        // Drawn into the layer as many times finer as the matrix enlarges what is drawn in every
+        // direction (its smaller singular value; as it is through a perspective), as far as a
+        // layer can be: what it enlarges stays as sharp as if it were drawn at that size, and the
+        // layer is never sampled smaller than it is drawn (which would skip its pixels). One that
+        // only scales (and turns) draws as coarser too where it shrinks: a vector's root scale
+        // has its pixels the screen's one for one, whatever its size.
+        float k = 1;
+        if (v[Matrix::Perspective0] == 0 && v[Matrix::Perspective1] == 0 && v[Matrix::Perspective2] == 1) {
+            float a = v[Matrix::ScaleX], b = v[Matrix::SkewX], d = v[Matrix::SkewY], e = v[Matrix::ScaleY];
+            float sum = a * a + b * b + d * d + e * e, det = a * e - b * d;
+            float spread = std::sqrt(std::max(0.f, sum * sum - 4 * det * det));  // (the singular values' squares differ by this)
+            k = std::sqrt(std::max(0.f, (sum - spread) / 2));
+            bool scalesOnly = spread <= 1e-4f * sum;
+            float widest = std::max(bounds.width, bounds.height) * scale;
+            k = std::clamp(k, scalesOnly ? 0.125f : 1.f, std::max(1.f, std::min(8.f, widest > 0 ? 4000 / widest : 8.f)));
+        }
+        float s0 = scale, pox = ox_, poy = oy_;
+        scale = s0 * k, ox_ = pox * k, oy_ = poy * k;
         pushLayer(bounds, CornerRadii(), 1, {});
+        Layer& layer = layers_.back();
+        layer.ox = pox, layer.oy = poy, layer.scale = s0;
+        layer.shape = SDL_FRect{bounds.x * s0 - pox, bounds.y * s0 - poy, bounds.width * s0, bounds.height * s0};
+        if (layer.texture) layer.supersample = k;
+        else scale = s0, ox_ = pox, oy_ = poy;  // (drawn directly: as it is)
         // The matrix in the parent's pixels: back to dp, through it, to pixels again.
-        auto& m = layers_.back().matrix;
-        float sx = scale, a = v[Matrix::ScaleX], b = v[Matrix::SkewX], c = v[Matrix::TranslateX], d = v[Matrix::SkewY], e = v[Matrix::ScaleY],
+        auto& m = layer.matrix;
+        float sx = s0, a = v[Matrix::ScaleX], b = v[Matrix::SkewX], c = v[Matrix::TranslateX], d = v[Matrix::SkewY], e = v[Matrix::ScaleY],
               f = v[Matrix::TranslateY], g = v[Matrix::Perspective0], h = v[Matrix::Perspective1], i = v[Matrix::Perspective2];
         // [s 0 -o; 0 s -o; 0 0 1] M [1/s 0 o/s; 0 1/s o/s; 0 0 1]
         float px = pox / sx, py = poy / sx;
@@ -345,7 +367,7 @@ public:
             const float* r = k == 0 ? r0 : k == 1 ? r1 : r2;
             m[size_t(k * 3)] = r[0] / sx, m[size_t(k * 3 + 1)] = r[1] / sx, m[size_t(k * 3 + 2)] = r[0] * px + r[1] * py + r[2];
         }
-        layers_.back().matrixSet = true;
+        layer.matrixSet = true;
     }
 
     void popTransform() override {
@@ -354,6 +376,14 @@ public:
         transformLayers_.pop_back();
         if (layer) popLayer();
         else popTranslation();
+    }
+
+    // How many times finer than the screen's pixels the layers in effect are drawn (transforms'
+    // layers drawn finer: see pushTransform).
+    float finer() const {
+        float f = 1;
+        for (const Layer& l : layers_) f *= l.supersample;
+        return f;
     }
 
     // What can show (visibleRect) in dp.
@@ -695,6 +725,7 @@ public:
                     SDL_Rect{x0, y0, std::max(1, x1 - x0), std::max(1, y1 - y0)},
                     SDL_FRect{bounds.x * scale - ox_, bounds.y * scale - oy_, bounds.width * scale, bounds.height * scale},
                     radii.scaled(scale), alpha, transform};
+        layer.scale = scale;
         if (layer.rect.w <= 4096 && layer.rect.h <= 4096) layer.texture = acquire(layer.rect.w, layer.rect.h, &layer.texW, &layer.texH);
         // Too big or no render target support: draw directly (no rounding, alpha or transform),
         // keeping the clips that are in effect.
@@ -1032,6 +1063,7 @@ public:
         SDL_SetRenderTarget(renderer_, layer.previous);
         ox_ = layer.ox;
         oy_ = layer.oy;
+        scale = layer.scale;
         clips_ = std::move(layer.clips);
         SDL_SetRenderClipRect(renderer_, clips_.empty() ? nullptr : &clips_.back());
 
@@ -1056,7 +1088,7 @@ public:
             int cells = std::clamp(int(std::ceil(std::max(b.w, b.h) / 128)), 1, 64);
             if (software_) SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
             begin();
-            float tw = float(layer.texW), th = float(layer.texH);
+            float tw = float(layer.texW), th = float(layer.texH), fine = layer.supersample;  // (its texture's px: the parent's times fine)
             SDL_FColor c{a, a, a, a};
             for (int j = 0; j <= cells; ++j)
                 for (int i = 0; i <= cells; ++i) {
@@ -1064,7 +1096,7 @@ public:
                     float depth = mx[6] * px + mx[7] * py + mx[8];
                     float k = depth > 1e-4f ? 1 / depth : 1e4f;
                     vertices_.push_back({{(mx[0] * px + mx[1] * py + mx[2]) * k, (mx[3] * px + mx[4] * py + mx[5]) * k}, c,
-                                         {std::clamp((px - x) / tw, 0.f, w / tw), std::clamp((py - y) / th, 0.f, h / th)}});
+                                         {std::clamp((px * fine - x) / tw, 0.f, w / tw), std::clamp((py * fine - y) / th, 0.f, h / th)}});
                 }
             for (int j = 0; j < cells; ++j)
                 for (int i = 0; i < cells; ++i) {
@@ -1370,7 +1402,7 @@ public:
     void drawPath(const Path& path, Offset origin, const Brush& unfiltered, const Rect& area, const PathStroke& given) override {
         if (path.isEmpty()) return;
         PathStroke stroke = given;
-        if (stroke.hairline) stroke.width = 1 / scale, stroke.join = StrokeJoin::Round;  // a pixel wide, its corners unfolded
+        if (stroke.hairline) stroke.width = finer() / scale, stroke.join = StrokeJoin::Round;  // a pixel wide, its corners unfolded
         Brush brush = filtered(unfiltered);
         // Rasterized relative to a whole pixel, with the fraction (in quarter pixels) part of the
         // cache key: moving a path by whole pixels doesn't rasterize it again. One that moves by
@@ -1524,6 +1556,8 @@ private:
         Rect bounds;                      // and those bounds (dp)
         std::array<float, 9> matrix{};    // pushTransform's, in the parent's pixels (row by row), if matrixSet
         bool matrixSet = false;
+        float scale = 0;        // the parent's px a dp (scale while it is drawn into: that times supersample)
+        float supersample = 1;  // its texture's px a parent's px (a transform's layer, drawn finer)
         std::optional<ClipMask> clip;     // a clip's layer: kept only inside (or outside) this
     };
 
