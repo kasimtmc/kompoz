@@ -795,7 +795,8 @@ void Renderer::strokeRoundRect(const Rect& rect, const CornerRadii& radii, float
 void Renderer::drawLine(Offset from, Offset to, float width, Color color) {
     float x0 = from.x * scale - ox_, y0 = from.y * scale - oy_, x1 = to.x * scale - ox_, y1 = to.y * scale - oy_;
     if (std::hypot(x1 - x0, y1 - y0) < 1e-3f || color.alpha() <= 0) return;
-    float h = width * scale / 2, pad = h + 1;
+    // Out to its square caps' corners (h past each end and to each side, turned with it), and a pixel.
+    float h = width * scale / 2, pad = (std::abs(x1 - x0) + std::abs(y1 - y0)) / std::hypot(x1 - x0, y1 - y0) * h + 1;
     Prim p;
     set(p.bounds, std::min(x0, x1) - pad, std::min(y0, y1) - pad, std::max(x0, x1) + pad, std::max(y0, y1) + pad);
     set(p.shape, x0, y0, x1, y1);

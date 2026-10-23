@@ -165,6 +165,8 @@
 - **The GPU renderer on the web**, on WebGL 2 (`showcase.html?KOMPOZ_GPU=gles`: a web page's query is now its app's
   environment, through `platform/web/shell.html`); `kompoz_gpu_tests` builds as a page that emrun opens and reports
   on, the same pictures in a browser (in CI on Chrome's SwiftShader).
+- **Fixed**: on the GPU renderer a turned line's square caps lost their corners' faintest pixels: its quad didn't reach
+  them.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.
