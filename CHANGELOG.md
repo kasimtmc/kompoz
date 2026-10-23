@@ -18,7 +18,7 @@
 - **CI** on every platform: the tests, the platform tests, and an app built against each way of installing Kompoz,
   run and clicked (in a real window on Windows and macOS, where Kompoz now runs, and offscreen on macOS too). `CONTRIBUTING.md`, issue forms and
   `scripts/release.sh` for publishing a release's packages.
-- **Kompoz's own GPU renderer**, being built (`KOMPOZ_GPU=vulkan`): one core over a thin layer per native graphics
+- **Kompoz's own GPU renderer**, being built (`KOMPOZ_GPU=vulkan` or `gles`): one core over a thin layer per native graphics
   API: Vulkan on Linux, Windows and Android first, then Metal on Apple's systems, WebGPU on the web, and OpenGL ES 3 where there is none of those (old GPUs, WebGL 2, ANGLE on Windows). Rounded rects, borders, lines, arcs,
   shadows, text, images, clips and layers are drawn on the GPU with exact anti-aliasing (a straight edge at any angle
   cuts each pixel as exactly as a path's polygon does, a square corner as its two edges, a ring or a line thinner than a
@@ -155,6 +155,10 @@
   is drawn, at the pixels it is drawn at; `PathMeasure` measures and cuts curves as `SkContourMeasure` does (pieces of
   curves as curves, `isClosed`, `resScale`). **Changed**: `PathEffect` is a value made by its functions (`isNone`,
   `filterPath`); its fields and `apply` are gone, and a path's effect travels with its stroke (`PathStroke::pathEffect`).
+- **The GPU renderer on OpenGL ES 3** (`KOMPOZ_GPU=gles`): the same core and shaders over OpenGL ES 3.0 (needing
+  float targets: ES 3.2, or EXT_color_buffer_float or _half_float), drawing what Vulkan draws pixel for pixel (the
+  tests' pictures alike on Mesa, NVIDIA and two phones' Adrenos); on Android chosen by a `kompoz-gpu` file;
+  `kompoz_gpu_tests` runs on it, in CI too, and on a phone from adb shell.
 - **Fixed**: the GPU renderer showed the window as one color where its GPU doesn't happen to sample a picture at an
   undefined place as wanted (a phone's Adreno, on Vulkan as on OpenGL ES): the kept frame was copied to the window
   without the shape its texels go across, and filtered, a pixel off on some GPUs (it is copied texel for pixel now).

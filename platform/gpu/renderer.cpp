@@ -875,12 +875,11 @@ Renderer::Prim Renderer::paintedShader(const Shader& shader, const Rect& area, f
     case Shader::Kind::Image: {
         Texture* t = imageTexture(shader.image());
         if (!t) return Prim{};
-        auto wrap = [](TileMode m) {
-            return m == TileMode::Repeated ? Wrap::Repeat : m == TileMode::Mirror ? Wrap::Mirror : m == TileMode::Decal ? Wrap::Transparent : Wrap::Clamp;
-        };
+        auto wrap = [](TileMode m) { return m == TileMode::Repeated ? Wrap::Repeat : m == TileMode::Mirror ? Wrap::Mirror : Wrap::Clamp; };
         map = Projective::scaling(1 / float(shader.image().width()), 1 / float(shader.image().height())) * map;  // to its uv
         paintTextures_.push_back({t, Sampler{Filter::Linear, wrap(shader.tileMode()), wrap(shader.tileModeY())}});
-        set(p.paint, 4, 8, float(paintTextures_.size() - 1), float(shaderRow(nullptr, map)));
+        int decal = (shader.tileMode() == TileMode::Decal ? 16 : 0) | (shader.tileModeY() == TileMode::Decal ? 32 : 0);
+        set(p.paint, 4, float(8 | decal), float(paintTextures_.size() - 1), float(shaderRow(nullptr, map)));
         return p;
     }
     default: {

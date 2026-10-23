@@ -16,6 +16,7 @@ is used as it comes.
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -113,9 +114,27 @@ def compile_shader(source, stage, entry, tools, work):
            "msl": slang("metal", "metal"),
            "wgsl": slang("wgsl", "wgsl")}
     if stage != "compute":  # OpenGL ES 3.0 and WebGL 2 have no compute shaders
-        # (What SPIR-V doesn't mark relaxed comes out highp.)
-        out["glsl"] = run([str(cross), "--es", "--version", "300", f"{base}.spv"])
+        out["glsl"] = glsl(run, cross, f"{base}.spv", stage)
     return out
+
+
+def glsl(run, cross, spv, stage):
+    """GLSL ES 3.00 from the SPIR-V, bound as the OpenGL ES backend binds it: the uniforms (Vulkan's
+    push constants) a std140 uniform block (the same layout: they are all vec4s), the stages'
+    varyings named by their location (GLSL ES 3.00 matches them by name, not location), each
+    sampler named by the texture unit it reads (its binding less one: kompozTexture0, 1, ...).
+    What SPIR-V doesn't mark relaxed comes out highp."""
+    reflection = json.loads(run([str(cross), spv, "--reflect"]))
+    command = [str(cross), "--es", "--version", "300", "--glsl-emit-push-constant-as-ubo"]
+    varyings = reflection.get("outputs" if stage == "vertex" else "inputs", [])
+    for v in varyings:
+        command += ["--rename-interface-variable", "out" if stage == "vertex" else "in", str(v["location"]), f"kompozVarying{v['location']}"]
+    text = run(command + [spv]).decode()
+    for sampler in reflection.get("textures", []):
+        text, n = re.subn(rf"\b{re.escape(sampler['name'])}\b", f"kompozTexture{sampler['binding'] - 1}", text)
+        if n == 0:
+            sys.exit(f"{spv}: sampler {sampler['name']} not found in its GLSL")
+    return text.encode()
 
 
 def embed(name, data, text):

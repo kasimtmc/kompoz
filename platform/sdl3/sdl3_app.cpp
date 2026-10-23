@@ -2252,9 +2252,10 @@ struct App {
     SDL_Renderer* renderer = nullptr;
     std::unique_ptr<FontSystem> fonts;
     std::unique_ptr<SdlCanvas> canvas;
-    // KOMPOZ_GPU=vulkan: Kompoz's GPU renderer instead of SDL_Renderer (gpu/renderer.hpp), with
+    // KOMPOZ_GPU=vulkan or gles: Kompoz's GPU renderer instead of SDL_Renderer (gpu/renderer.hpp), with
     // the kept frame in a texture of its own.
     std::unique_ptr<gpu::Device> gpu;
+    SDL_GLContext glContext = nullptr;  // KOMPOZ_GPU=gles: the OpenGL ES context it draws with
     std::unique_ptr<gpu::Renderer> gpuCanvas;
     std::unique_ptr<gpu::Texture> gpuFrame;
     bool gpuInFrame = false;
@@ -2332,6 +2333,7 @@ struct App {
         gpuFrame.reset();
         gpuCanvas.reset();
         gpu.reset();
+        if (glContext) SDL_GL_DestroyContext(glContext);
         fonts.reset();
         for (auto* cursor : cursors)
             if (cursor) SDL_DestroyCursor(cursor);
@@ -3372,16 +3374,40 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
         if (dir) app->profile = app->profile || SDL_GetPathInfo((std::string(dir) + "/kompoz-profile").c_str(), nullptr);
 #endif
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
-    const char* gpuChoice = SDL_getenv("KOMPOZ_GPU");  // vulkan: Kompoz's GPU renderer
-    bool useGpu = gpuChoice && std::string_view(gpuChoice) == "vulkan";
-#ifdef KOMPOZ_GPU_VULKAN
-    if (useGpu) flags |= SDL_WINDOW_VULKAN;
-#else
-    if (useGpu) {
-        SDL_Log("kompoz: KOMPOZ_GPU=%s: this build has no Vulkan backend", gpuChoice);
-        useGpu = false;
+    // KOMPOZ_GPU=vulkan or gles: Kompoz's GPU renderer on Vulkan or OpenGL ES 3. On Android, where
+    // an app has no environment, the first word of a file named kompoz-gpu in its files (as for
+    // kompoz-profile above):
+    //   adb shell run-as <package> sh -c 'echo gles > files/kompoz-gpu'
+    std::string gpuChoice = SDL_getenv("KOMPOZ_GPU") ? SDL_getenv("KOMPOZ_GPU") : "";
+#ifdef SDL_PLATFORM_ANDROID
+    for (const char* dir : {SDL_GetAndroidInternalStoragePath(), SDL_GetAndroidExternalStoragePath()}) {
+        if (!dir || !gpuChoice.empty()) continue;
+        if (void* data = SDL_LoadFile((std::string(dir) + "/kompoz-gpu").c_str(), nullptr)) {
+            std::string text = static_cast<const char*>(data);
+            SDL_free(data);
+            gpuChoice = text.substr(0, text.find_first_of(" \t\r\n"));
+        }
     }
 #endif
+    bool useVulkan = gpuChoice == "vulkan", useGles = gpuChoice == "gles", useGpu = useVulkan || useGles;
+#ifdef KOMPOZ_GPU_VULKAN
+    if (useVulkan) flags |= SDL_WINDOW_VULKAN;
+#else
+    if (useVulkan) {
+        SDL_Log("kompoz: KOMPOZ_GPU=vulkan: this build has no Vulkan backend");
+        useVulkan = useGpu = false;
+    }
+#endif
+    if (useGles) {  // an OpenGL ES 3.0 context (a debug one with KOMPOZ_GPU_VALIDATION=1)
+        flags |= SDL_WINDOW_OPENGL;
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
+        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 0);
+        if (const char* v = SDL_getenv("KOMPOZ_GPU_VALIDATION"); v && std::string_view(v) == "1")
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
+    }
 #ifdef SDL_PLATFORM_EMSCRIPTEN
     flags |= SDL_WINDOW_FILL_DOCUMENT;  // the whole page, resized with the browser window
     kompoz_web_watch_wheel();
@@ -3409,7 +3435,27 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
                           int(std::lround(app->config.height * pointsPerDp)));
 
     if (const char* driver = SDL_GetCurrentVideoDriver()) app->pinchSinceStart = std::string_view(driver) == "wayland";
-    if (useGpu) {
+    if (useGles) {
+        kompoz::gpu::setLogger([](const char* message) { SDL_Log("%s", message); });
+        app->glContext = SDL_GL_CreateContext(app->window);
+        if (!app->glContext) {
+            SDL_Log("kompoz: no OpenGL ES 3 context: %s", SDL_GetError());
+            return SDL_APP_FAILURE;
+        }
+        SDL_GL_SetSwapInterval(1);
+        kompoz::gpu::Surface surface;
+        surface.glGetProcAddress = [](const char* name) { return reinterpret_cast<void*>(SDL_GL_GetProcAddress(name)); };
+        SDL_Window* window = app->window;
+        surface.glSwap = [window] { SDL_GL_SwapWindow(window); };
+        surface.drawableSize = [window](int* w, int* h) { SDL_GetWindowSizeInPixels(window, w, h); };
+        std::string error;
+        app->gpu = kompoz::gpu::Device::create(kompoz::gpu::Backend::GLES, surface, &error);
+        if (!app->gpu) {
+            SDL_Log("kompoz: no OpenGL ES device: %s", error.c_str());
+            return SDL_APP_FAILURE;
+        }
+        SDL_Log("kompoz: renderer: Kompoz on %s (%s)", kompoz::gpu::backendName(app->gpu->backend()), app->gpu->deviceName().c_str());
+    } else if (useVulkan) {
 #ifdef KOMPOZ_GPU_VULKAN
         kompoz::gpu::setLogger([](const char* message) { SDL_Log("%s", message); });
         kompoz::gpu::Surface surface;

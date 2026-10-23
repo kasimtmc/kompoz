@@ -119,7 +119,6 @@ VkSamplerAddressMode vkWrap(Wrap w) {
     case Wrap::Clamp: return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     case Wrap::Repeat: return VK_SAMPLER_ADDRESS_MODE_REPEAT;
     case Wrap::Mirror: return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-    case Wrap::Transparent: return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
     }
     return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 }
@@ -574,7 +573,6 @@ public:
         sci.addressModeU = vkWrap(s.wrapU);
         sci.addressModeV = vkWrap(s.wrapV);
         sci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        sci.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
         sci.maxLod = s.mipmaps ? VK_LOD_CLAMP_NONE : 0;
         VkSampler vs = VK_NULL_HANDLE;
         vk.vkCreateSampler(device, &sci, nullptr, &vs);

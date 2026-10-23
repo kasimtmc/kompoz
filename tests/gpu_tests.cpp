@@ -7,8 +7,15 @@
 //   KOMPOZ_GOLDEN_UPDATE=1   writes the pictures anew (look at them before committing them)
 //   KOMPOZ_GPU_REQUIRED=1    no device is a failure (CI), not a skip
 //   KOMPOZ_GPU_VALIDATION=1  the API's validation on: any error it reports is a failure
+//   KOMPOZ_GPU=gles          OpenGL ES 3's backend instead of Vulkan's (the same pictures)
+//   KOMPOZ_GOLDEN_DIR=<dir>  the pictures from there (a phone's copy)
 //
-// The device is Vulkan's, on SDL's offscreen video driver (a headless surface): lavapipe in CI.
+// On Android it is a program run from adb shell, on OpenGL ES 3 through EGL (no SDL video there):
+//   adb push kompoz_gpu_tests libSDL3.so assets/fonts tests/golden /data/local/tmp/kgt/
+//   adb shell 'cd /data/local/tmp/kgt && LD_LIBRARY_PATH=. KOMPOZ_GOLDEN_DIR=golden ./kompoz_gpu_tests'
+//
+// The device is Vulkan's (or OpenGL ES's), on SDL's offscreen video driver (a headless surface):
+// lavapipe (llvmpipe) in CI.
 
 #include "../platform/gpu/device.hpp"
 #include "../platform/gpu/path_geometry.hpp"
@@ -19,7 +26,13 @@
 #include <kompoz/draw.hpp>
 
 #include <SDL3/SDL.h>
+#define SDL_MAIN_HANDLED  // (its own main, which says SDL may start: SDL_SetMainReady)
+#include <SDL3/SDL_main.h>
 #include <SDL3/SDL_vulkan.h>
+#ifdef __ANDROID__
+#include <dlfcn.h>
+#include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -57,11 +70,79 @@ struct Pixels {
 // A device, fonts and a renderer for the tests.
 struct Gpu {
     SDL_Window* window = nullptr;
+    SDL_GLContext context = nullptr;
     std::unique_ptr<gpu::Device> device;
     std::unique_ptr<sdl::FontSystem> fonts;
     std::unique_ptr<gpu::Renderer> renderer;
 
+#ifdef __ANDROID__
+    // On Android, a program run from adb shell has no SDL (it needs an app's Java side): an OpenGL
+    // ES 3 context of its own, through EGL, current on a pbuffer.
+    void* egl = nullptr;
+    void* glesLibrary = nullptr;
     bool start(std::string* why) {
+        using Fn = void* (*)(...);
+        egl = dlopen("libEGL.so", RTLD_NOW);
+        glesLibrary = dlopen("libGLESv3.so", RTLD_NOW);
+        if (!egl || !glesLibrary) {
+            *why = "no libEGL.so or libGLESv3.so";
+            return false;
+        }
+        auto fn = [&](const char* name) { return reinterpret_cast<Fn>(dlsym(egl, name)); };
+        void* display = fn("eglGetDisplay")(nullptr);
+        int major = 0, minor = 0;
+        if (!display || !fn("eglInitialize")(display, &major, &minor)) {
+            *why = "no EGL display";
+            return false;
+        }
+        const int attributes[] = {0x3040 /*EGL_RENDERABLE_TYPE*/, 0x40 /*EGL_OPENGL_ES3_BIT*/, 0x3033 /*EGL_SURFACE_TYPE*/, 0x1 /*EGL_PBUFFER_BIT*/,
+                                  0x3024, 8, 0x3023, 8, 0x3022, 8, 0x3021, 8, 0x3038 /*EGL_NONE*/};
+        void* config = nullptr;
+        int count = 0;
+        fn("eglChooseConfig")(display, attributes, &config, 1, &count);
+        const int contextAttributes[] = {0x3098 /*EGL_CONTEXT_MAJOR_VERSION*/, 3, 0x3038};
+        void* context = count > 0 ? reinterpret_cast<void*>(fn("eglCreateContext")(display, config, nullptr, contextAttributes)) : nullptr;
+        const int surfaceAttributes[] = {0x3057 /*EGL_WIDTH*/, 64, 0x3056 /*EGL_HEIGHT*/, 64, 0x3038};
+        void* surface = context ? reinterpret_cast<void*>(fn("eglCreatePbufferSurface")(display, config, surfaceAttributes)) : nullptr;
+        if (!surface || !fn("eglMakeCurrent")(display, surface, surface, context)) {
+            *why = "no OpenGL ES 3 context through EGL";
+            return false;
+        }
+        static void* gles = glesLibrary;
+        static Fn getProcAddress = fn("eglGetProcAddress");
+        gpu::Surface s;
+        s.glGetProcAddress = [](const char* name) -> void* {
+            if (void* f = dlsym(gles, name)) return f;
+            return reinterpret_cast<void*>(getProcAddress(name));
+        };
+        s.drawableSize = [](int* w, int* h) { *w = 64, *h = 64; };
+        device = gpu::Device::create(gpu::Backend::GLES, s, why);
+        return device && startRenderer(why);
+    }
+#else
+    bool start(std::string* why) {
+        const char* choice = std::getenv("KOMPOZ_GPU");
+        bool gles = choice && std::string(choice) == "gles";
+        if (gles) {
+            // An OpenGL ES 3.0 context (a debug one for validation), current on this thread.
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+            const char* validation = std::getenv("KOMPOZ_GPU_VALIDATION");
+            if (validation && std::string(validation) == "1") SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
+            window = SDL_CreateWindow("kompoz_gpu_tests", 64, 64, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+            if (!window || !(context = SDL_GL_CreateContext(window))) {
+                *why = std::string("no OpenGL ES 3 context: ") + SDL_GetError();
+                return false;
+            }
+            gpu::Surface surface;
+            surface.glGetProcAddress = [](const char* name) { return reinterpret_cast<void*>(SDL_GL_GetProcAddress(name)); };
+            SDL_Window* w = window;
+            surface.glSwap = [w] { SDL_GL_SwapWindow(w); };
+            surface.drawableSize = [w](int* width, int* height) { SDL_GetWindowSizeInPixels(w, width, height); };
+            device = gpu::Device::create(gpu::Backend::GLES, surface, why);
+            return device && startRenderer(why);
+        }
         window = SDL_CreateWindow("kompoz_gpu_tests", 64, 64, SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN);
         if (!window) {
             *why = std::string("no Vulkan window: ") + SDL_GetError();
@@ -80,14 +161,23 @@ struct Gpu {
         };
         surface.drawableSize = [w](int* width, int* height) { SDL_GetWindowSizeInPixels(w, width, height); };
         device = gpu::Device::create(gpu::Backend::Vulkan, surface, why);
-        if (!device) return false;
+        return device && startRenderer(why);
+    }
+#endif
+
+    bool startRenderer(std::string* why) {
         fonts = std::make_unique<sdl::FontSystem>();
-        if (!fonts->load(FontWeight::Normal, "fonts/Regular.ttf")) {
+        std::string dir = "fonts/";
+#ifdef __ANDROID__  // (a relative path is an app's asset there: the program's own directory's, absolute)
+        char cwd[4096];
+        if (getcwd(cwd, sizeof cwd)) dir = std::string(cwd) + "/fonts/";
+#endif
+        if (!fonts->load(FontWeight::Normal, dir + "Regular.ttf")) {
             *why = "no fonts/Regular.ttf beside the test";
             return false;
         }
-        fonts->load(FontWeight::Bold, "fonts/Bold.ttf");
-        fonts->load(FontWeight::Medium, "fonts/Medium.ttf");
+        fonts->load(FontWeight::Bold, dir + "Bold.ttf");
+        fonts->load(FontWeight::Medium, dir + "Medium.ttf");
         renderer = std::make_unique<gpu::Renderer>(*device, *fonts);
         return true;
     }
@@ -95,6 +185,7 @@ struct Gpu {
     ~Gpu() {
         renderer.reset();
         device.reset();
+        if (context) SDL_GL_DestroyContext(context);
         if (window) SDL_DestroyWindow(window);
     }
 
@@ -128,7 +219,16 @@ bool near(const uint8_t* p, int r, int g, int b, int tolerance = 2) {
     return maxDifference(p, want) <= tolerance;
 }
 
-std::string goldenPath(const std::string& name) { return std::string(KOMPOZ_GOLDEN_DIR) + "/" + name + ".png"; }
+// (KOMPOZ_GOLDEN_DIR=<dir> where they are elsewhere: on a phone, pushed beside the program.)
+std::string goldenPath(const std::string& name) {
+    const char* dir = std::getenv("KOMPOZ_GOLDEN_DIR");
+    std::string path = std::string(dir ? dir : KOMPOZ_GOLDEN_DIR) + "/" + name + ".png";
+#ifdef __ANDROID__  // (a relative path is an app's asset there: from the program's own directory, absolute)
+    char cwd[4096];
+    if (path[0] != '/' && getcwd(cwd, sizeof cwd)) path = std::string(cwd) + "/" + path;
+#endif
+    return path;
+}
 
 bool savePng(const std::string& path, Pixels& p) {
     SDL_Surface* s = SDL_CreateSurfaceFrom(p.width, p.height, SDL_PIXELFORMAT_RGBA32, p.rgba.data(), p.width * 4);
@@ -2021,7 +2121,8 @@ void pathShadowsAreComposes(Gpu& g) {
 
 // Images are sampled as their FilterQuality says, their texels premultiplied (a transparent
 // texel's color doesn't bleed), against models on the CPU: the nearest texel; bilinear; from the
-// mipmap level the size takes (a 16 x 16 drawn 4 x 4: each pixel its 4 x 4 block's mean);
+// mipmap level the size takes (a 16 x 16 drawn 4 x 4: each pixel its 4 x 4 block's mean; between
+// two, the nearer);
 // Mitchell's cubic of the sixteen nearest. Hairlines are a pixel wide through any scale.
 void imagesAreSampledAsAsked(Gpu& g) {
     const int iw = 4, ih = 4, n = 32;
@@ -2115,6 +2216,36 @@ void imagesAreSampledAsAsked(Gpu& g) {
     CHECK(worst <= 3);
     if (worst > 3) std::printf("  a mipmapped image: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
     CHECK(worstAgainst(small(FilterQuality::Low), [&](int x, int y) { return wantMeans.at(x, y); }) > 20);
+    // Between two levels, the nearer one's alone (not the two blended): a checker of 2 x 2 blocks
+    // (its first smaller level a checker of texels, the next one color) drawn 6 x 6, bilinearly
+    // from that first level.
+    const uint8_t checker[2][3] = {{26, 64, 217}, {230, 38, 26}};
+    std::vector<uint8_t> blocks(size_t(big) * big * 4);
+    for (int y = 0; y < big; ++y)
+        for (int x = 0; x < big; ++x) {
+            uint8_t* q = &blocks[(size_t(y) * big + size_t(x)) * 4];
+            std::copy_n(checker[(x / 2 + y / 2) % 2], 3, q);
+            q[3] = 255;
+        }
+    ImageBitmap blocky = ImageBitmap::fromPixels(big, big, blocks);
+    Image nearer{6, 6, std::vector<float>(36 * 4, 0.f)};
+    for (int y = 0; y < 6; ++y)
+        for (int x = 0; x < 6; ++x) {
+            float u = (x + 0.5f) * 8 / 6 - 0.5f, v = (y + 0.5f) * 8 / 6 - 0.5f;
+            int i0 = int(std::floor(u)), j0 = int(std::floor(v));
+            for (int dj = 0; dj < 2; ++dj)
+                for (int di = 0; di < 2; ++di) {
+                    int i = std::clamp(i0 + di, 0, 7), j = std::clamp(j0 + dj, 0, 7);
+                    float weight = (di ? u - float(i0) : 1 - (u - float(i0))) * (dj ? v - float(j0) : 1 - (v - float(j0)));
+                    for (int c = 0; c < 3; ++c) nearer.at(x, y)[c] += weight * float(checker[(i + j) % 2][c]) / 255;
+                }
+            nearer.at(x, y)[3] = 1;
+        }
+    Pixels wantNearer = overWhite(nearer);
+    worst = worstAgainst(g.render(6, 6, 1, [&](GraphicsContext& c) { c.drawImage(blocky, {0, 0, float(big), float(big)}, {0, 0, 6, 6}, 1, FilterQuality::Medium); }),
+                         [&](int x, int y) { return wantNearer.at(x, y); });
+    CHECK(worst <= 3);
+    if (worst > 3) std::printf("  a mipmapped image between levels: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
     // Hairlines: a pixel wide, enlarged three times (by a transform), turned or not; a 1 dp stroke three.
     for (float turn : {0.f, 30.f}) {
         for (bool hairline : {true, false}) {
@@ -2172,8 +2303,8 @@ void conicsAreExact(Gpu& g) {
 
 // Shaders paint as they say, against Shader::colorAt on the CPU at each pixel's middle: an image
 // tiled (repeated across, mirrored down) and its decal edge; a gradient through a turned,
-// stretched transform; two composited (multiplied: baked, then painted); an image shader on a path
-// drawn turned.
+// stretched transform; two composited (multiplied: baked, then painted; two images); an image
+// shader on a path drawn turned.
 void shadersPaintAsTheyAre(Gpu& g) {
     const int n = 64;
     std::vector<uint8_t> px(4 * 3 * 4);
@@ -2212,6 +2343,16 @@ void shadersPaintAsTheyAre(Gpu& g) {
     }());
     check("a decal image shader", g.render(n, n, 1, [&](GraphicsContext& c) { c.fillGradient(area, 0, Brush::shader(decal), area); }),
           model([&](Offset p) { return decal.colorAt(p); }), 2);
+    for (auto [across, down] : {std::pair{TileMode::Decal, TileMode::Repeated}, std::pair{TileMode::Mirror, TileMode::Decal}}) {
+        Shader half = ImageShader(tile, across, down).transformed([] {
+            Matrix m;
+            m.translate(20, 14);
+            m.scale(3, 4);
+            return m;
+        }());
+        check("an image shader decal one way", g.render(n, n, 1, [&](GraphicsContext& c) { c.fillGradient(area, 0, Brush::shader(half), area); }),
+              model([&](Offset p) { return half.colorAt(p); }), 2);
+    }
     // A gradient through a turned, stretched transform (the brush's).
     Matrix turned;
     turned.translate(32, 32);
@@ -2244,6 +2385,21 @@ void shadersPaintAsTheyAre(Gpu& g) {
                                                    BlendMode::Overlay));
     check("a composite of one color and an image", g.render(n, n, 1, [&](GraphicsContext& c) { c.fillGradient(area, 0, oneColor, area); }),
           model([&](Offset p) { return oneColor.colorAt(p, area); }), 3);
+    // Two images of their own sizes, the source's decal edge faded over its own texels.
+    std::vector<uint8_t> widePx(4 * 6 * 5);
+    for (int i = 0; i < 30; ++i) {
+        uint8_t* q = &widePx[size_t(i) * 4];
+        q[0] = uint8_t(200 - i * 6), q[1] = uint8_t(i * 8), q[2] = uint8_t(90 + i % 5 * 30), q[3] = uint8_t(i % 3 == 0 ? 160 : 255);
+    }
+    Shader wide = ImageShader(ImageBitmap::fromPixels(6, 5, widePx), TileMode::Decal, TileMode::Decal).transformed([] {
+        Matrix m;
+        m.translate(14, 10);
+        m.scale(6, 7);
+        return m;
+    }());
+    Brush twoImages = Brush::shader(CompositeShader(ImageShader(tile, TileMode::Repeated, TileMode::Repeated), wide, BlendMode::SrcOver));
+    check("a composite of two images, one decal", g.render(n, n, 1, [&](GraphicsContext& c) { c.fillGradient(area, 0, twoImages, area); }),
+          model([&](Offset p) { return twoImages.colorAt(p, area); }), 3);
     // A composite of composites (baked, then painted from its texture): the image multiplied, then screened by a gradient.
     Brush nested = Brush::composite(multiplied, Brush::linearGradient({Color{0.2f, 0.1f, 0.6f, 0.8f}, Color{0.9f, 0.9f, 0.2f, 0.4f}}, {0, 0}, {64, 64}),
                                     BlendMode::Screen);
@@ -3147,6 +3303,7 @@ void pathEffectsApplyWhereDrawn(Gpu& g) {
     CHECK(pixelAt(inFine)[0] < 100 && pixelAt(inCoarse)[0] > 200);
 }
 
+// Renderer::blit: a texture (the app's kept frame) onto the target pixel for pixel, as it is.
 // The kept frame copied to the window (Renderer::blit): each pixel as the texture has it.
 void blitCopiesTexturesAsTheyAre(Gpu& g) {
     const int w = 40, h = 30;
@@ -3167,6 +3324,41 @@ void blitCopiesTexturesAsTheyAre(Gpu& g) {
     int worst = worstAgainst(shown, [&](int x, int y) { return kept.at(x, y); });
     CHECK(worst == 0 && near(shown.at(8, 7), 255, 0, 0) && near(shown.at(26, 18), 0, 0, 255) && near(shown.at(1, 28), 0, 255, 0));
     if (worst != 0) std::printf("  blit: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+}
+
+// Texels uploaded read back as they were, in every format: a part uploaded from a wider picture
+// (its rows apart as that picture's), a part read back from where it is, BGRA in its order, half
+// floats exactly (subnormals and the sign of zero too).
+void texturesReadBackAsUploaded(Gpu& g) {
+    const int w = 4, h = 3;
+    const uint16_t halves[] = {0x3c00, 0xc000, 0x0400, 0x7bff, 0x0001, 0x03ff, 0x3555, 0x8000, 0x2e66, 0xfbff, 0x0000};
+    const float floats[] = {1, -2.5f, 1e-30f, 3.4e38f, 0.1f, -0.f, 65504, 1e-7f, -1e20f, 0.333f, 7};
+    for (gpu::Format format : {gpu::Format::RGBA8, gpu::Format::BGRA8, gpu::Format::R16F, gpu::Format::RGBA16F, gpu::Format::RGBA32F}) {
+        size_t texel = gpu::bytesPerTexel(format), row = texel * w;
+        // Two pictures of w x h texels: the texture's, and the one a part of is put over it.
+        auto picture = [&](int seed) {
+            std::vector<uint8_t> bytes(row * h);
+            for (size_t i = 0; uint8_t& b : bytes) b = uint8_t(i++ * 37 + size_t(seed));
+            if (format == gpu::Format::R16F || format == gpu::Format::RGBA16F)
+                for (size_t i = 0; i < bytes.size() / 2; ++i) std::memcpy(&bytes[i * 2], &halves[(i * 3 + size_t(seed)) % std::size(halves)], 2);
+            if (format == gpu::Format::RGBA32F)
+                for (size_t i = 0; i < bytes.size() / 4; ++i) std::memcpy(&bytes[i * 4], &floats[(i * 3 + size_t(seed)) % std::size(floats)], 4);
+            return bytes;
+        };
+        std::vector<uint8_t> first = picture(0), second = picture(5), want = first;
+        const gpu::IRect part{1, 1, 2, 2};
+        for (int y = part.y; y < part.y + part.height; ++y)
+            std::memcpy(&want[size_t(y) * row + size_t(part.x) * texel], &second[size_t(y - part.y) * row], size_t(part.width) * texel);
+        auto t = g.device->createTexture(w, h, format, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+        g.device->beginFrame();
+        g.device->upload(*t, {0, 0, w, h}, first.data(), row);
+        g.device->upload(*t, part, second.data(), row);
+        std::vector<uint8_t> all = g.device->readPixels(*t, {0, 0, w, h}), some = g.device->readPixels(*t, {1, 2, 3, 1});
+        g.device->endFrame(false);
+        bool whole = all == want, piece = some == std::vector<uint8_t>(want.begin() + std::ptrdiff_t(2 * row + texel), want.end());
+        CHECK(whole && piece);
+        if (!whole || !piece) std::printf("  format %d: read back %s\n", int(format), whole ? "a part wrong" : "wrong");
+    }
 }
 
 void scenesMatchTheirPictures(Gpu& g) {
@@ -3193,12 +3385,15 @@ void scenesMatchTheirPictures(Gpu& g) {
 
 int main() {
     setvbuf(stdout, nullptr, _IOLBF, 0);
+    SDL_SetMainReady();  // (its own main)
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");
     bool required = std::getenv("KOMPOZ_GPU_REQUIRED") && std::string(std::getenv("KOMPOZ_GPU_REQUIRED")) == "1";
+#ifndef __ANDROID__  // (there, no SDL video: see Gpu::start)
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         std::printf("no SDL video: %s\n", SDL_GetError());
         return required ? 1 : 0;
     }
+#endif
     int result = 0;
     {
         Gpu g;
@@ -3236,6 +3431,7 @@ int main() {
             elevationShadowsAreAndroids(g);
             pathEffectsApplyWhereDrawn(g);
             blitCopiesTexturesAsTheyAre(g);
+            texturesReadBackAsUploaded(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
             std::printf("%d checks, %d failed\n", checks, failures);

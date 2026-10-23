@@ -136,8 +136,8 @@ Kompoz her kareyi önce kaydeder ve yalnızca bir önceki kareden beri değişen
 | `KOMPOZ_ATSPI=1` | Masaüstünün erişilebilirliği kapalıyken de semantik ağacı AT-SPI üzerinden ekran okuyuculara sunar (Linux); `0` hiç sunmaz. |
 | `KOMPOZ_TRACE=1` | Her recomposition'da kaç scope'un çalışıp atlandığını günlüğe yazar. |
 | `KOMPOZ_PROFILE=1` | Kare sürelerini günlüğe yazar. |
-| `KOMPOZ_GPU=vulkan` | SDL_Renderer yerine Kompoz'un kendi GPU renderer'ıyla Vulkan üzerinde çizer (Linux, Windows, Android). Yapım aşamasında. |
-| `KOMPOZ_GPU_DEVICE=name`, `KOMPOZ_GPU_VALIDATION=1` | Onunla birlikte: adında `name` geçen GPU; kuruluysa Vulkan'ın validation katmanları. |
+| `KOMPOZ_GPU=vulkan`, `KOMPOZ_GPU=gles` | SDL_Renderer yerine Kompoz'un kendi GPU renderer'ıyla çizer: Vulkan (Linux, Windows, Android) ya da OpenGL ES 3 üzerinde (sistemde olduğu yerde: Linux, Android). Yapım aşamasında. Bir uygulamanın ortam değişkeni olmayan Android'de, uygulamanın dosyalarındaki `kompoz-gpu` adlı dosyanın ilk sözcüğü: `adb shell run-as <paket> sh -c 'echo gles > files/kompoz-gpu'`. |
+| `KOMPOZ_GPU_DEVICE=name`, `KOMPOZ_GPU_VALIDATION=1` | Onunla birlikte: adında `name` geçen GPU (Vulkan); kuruluysa Vulkan'ın validation katmanları, OpenGL ES'in hata ayıklama çıktısı (debug context): ikisinin bildirdiği her hata sayılır (`kompoz_gpu_tests` birinde başarısız olur). |
 | `KOMPOZ_DAMAGE_SHOW=1`, `KOMPOZ_DAMAGE_CHECK=1`, `KOMPOZ_FULL_REDRAW=1` | Yalnızca değişeni yeniden çizmeyi gösterir, kontrol eder ya da kapatır. |
 | `KOMPOZ_LAYOUT_CHECK=1` | Her artımlı yerleşimi tam bir yerleşimle karşılaştırır (testler bunu hep yapar). |
 | `KOMPOZ_IMAGE_CACHE=dir` | `AsyncImage`'ın indirdiği resimleri tuttuğu yer. |

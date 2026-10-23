@@ -63,8 +63,9 @@ private:
 };
 
 enum class Filter : uint8_t { Nearest, Linear };
-// Beyond the edges: the edge texel, the texture again, mirrored, or transparent.
-enum class Wrap : uint8_t { Clamp, Repeat, Mirror, Transparent };
+// Beyond the edges: the edge texel, the texture again, or mirrored. (Transparent past them, which not
+// every API's samplers can do, is the shaders'.)
+enum class Wrap : uint8_t { Clamp, Repeat, Mirror };
 // `mipmaps`: from a mipmapped texture's copy nearest the size it is drawn at (else its full size).
 struct Sampler {
     Filter filter = Filter::Linear;
@@ -142,6 +143,10 @@ struct Surface {
     std::vector<const char*> vulkanInstanceExtensions;
     void* (*vulkanGetInstanceProcAddr)(void* instance, const char* name) = nullptr;
     std::function<bool(void* instance, uint64_t* surface)> createVulkanSurface;
+    // OpenGL ES: a function of the context (made current on this thread) by name, and showing
+    // what was drawn into the default framebuffer.
+    void* (*glGetProcAddress)(const char* name) = nullptr;
+    std::function<void()> glSwap;
     // The drawable's size in pixels.
     std::function<void(int* width, int* height)> drawableSize;
 };

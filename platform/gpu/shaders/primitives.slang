@@ -39,7 +39,8 @@ static const int MESH = 10;        // a triangle of a mesh (Canvas.drawVertices)
 static const int LINEAR = 1;  // paint.x: the kind; from gradient.xy to gradient.zw
 static const int RADIAL = 2;  // round gradient.xy out to gradient.z
 static const int SWEEP = 3;   // round gradient.xy, clockwise from 3 o'clock
-static const int IMAGE_PAINT = 4;  // texture1 (premultiplied) where the map puts the pixel (its uv); paint.z: which (CPU side)
+static const int IMAGE_PAINT = 4;  // texture1 (premultiplied) where the map puts the pixel (its uv); paint.z: which (CPU side);
+                                   // paint.y plus 16, 32: transparent past its left and right, top and bottom (decal)
 static const int COMPOSITE_PAINT = 5;  // two paints (each of the kinds above) composited where the pixel is: their paint and
                                        // geometry in texels 0 to 3 of row paint.w (the destination's, then the source's),
                                        // the blend mode in texel 4; an image destination in texture1, an image source in
@@ -250,7 +251,18 @@ float4 paintOne(float2 p, float4 color, float4 paint, float4 g, bool second) {
         float3 q = float3(dot(r0, h), dot(r1, h), dot(r2, h));
         p = q.xy / q.z;
     }
-    if (kind == IMAGE_PAINT) return (second ? texture5.Sample(p) : texture1.Sample(p)) * color.a;
+    if (kind == IMAGE_PAINT) {
+        float4 texel = second ? texture5.Sample(p) : texture1.Sample(p);
+        if ((bits & 48) != 0) {  // decal: as a transparent border filtered in (its edge texels fading out over a texel)
+            float2 size;
+            if (second) texture5.GetDimensions(size.x, size.y);
+            else texture1.GetDimensions(size.x, size.y);
+            float2 at = p * size;
+            float2 fade = saturate(1 - abs(at - clamp(at, 0.5, size - 0.5)));
+            texel *= ((bits & 16) != 0 ? fade.x : 1) * ((bits & 32) != 0 ? fade.y : 1);
+        }
+        return texel * color.a;
+    }
     const float pi = 3.141592653589793;
     float t = 0;
     if (kind == LINEAR) {
@@ -627,7 +639,9 @@ float4 fs(Varyings v) : SV_Target {
     } else if (kind == ELEVATION) {
         float d = -roundRectDistance(v.local, v.shape, v.radii);  // in from its edge
         float t = saturate(d / v.params.x);
-        cover = d > 0 && (v.params.y <= 0 || d < v.params.y) ? max(exp(-4 * (1 - t) * (1 - t)) - 0.018, 0) : 0;
+        // (Its hole's edge a 1024th of a pixel in: a pixel's middle on the edge itself, as integer
+        // geometry puts it, falls in the hole whatever a GPU rounds d to.)
+        cover = d > 0 && (v.params.y <= 0 || d < v.params.y - 1.0 / 1024) ? max(exp(-4 * (1 - t) * (1 - t)) - 0.018, 0) : 0;
     } else if (kind == PATH) {
         cover = pathCoverage(texture0.SampleLevel(maskTexcoord(v.local - v.params.xy), 0).r, v.params.z > 0.5);
     } else if (kind == MESH) {

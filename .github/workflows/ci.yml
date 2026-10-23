@@ -81,6 +81,16 @@ jobs:
         run: |
           export VK_DRIVER_FILES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"
           ./kompoz_gpu_tests
+      # The same on OpenGL ES 3 (llvmpipe, through EGL), its debug output's errors failures.
+      - name: GPU renderer tests (OpenGL ES 3 on llvmpipe, validated, against tests/golden)
+        working-directory: build
+        env:
+          KOMPOZ_GPU: gles
+          KOMPOZ_GPU_REQUIRED: "1"
+          KOMPOZ_GPU_VALIDATION: "1"
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          ASAN_OPTIONS: detect_leaks=0
+        run: ./kompoz_gpu_tests
       - name: Install (with the SDL3, FreeType and HarfBuzz built here), and build an app against it
         run: |
           cmake --install build --prefix "$PWD/install"

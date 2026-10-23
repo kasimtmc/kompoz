@@ -225,7 +225,11 @@ if(KOMPOZ_BUILD_SDL3)
     # is a GPU API (Linux, Android, Windows). Vulkan's headers come from the system or the package
     # manager, else from third_party/ (scripts/fetch-deps.sh); the Vulkan Memory Allocator is in
     # platform/gpu/external/. Neither is needed by apps: Vulkan itself is loaded at run time.
-    target_sources(kompoz_sdl3 PRIVATE platform/gpu/device.cpp platform/gpu/path_geometry.cpp platform/gpu/renderer.cpp)
+    # The OpenGL ES 3 backend needs nothing to build: the context is the platform's, its functions
+    # looked up at run time.
+    target_sources(kompoz_sdl3 PRIVATE platform/gpu/device.cpp platform/gpu/path_geometry.cpp platform/gpu/renderer.cpp
+                   platform/gpu/gles_device.cpp)
+    target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_GPU_GLES=1)
     if(NOT APPLE AND NOT EMSCRIPTEN)
         find_package(VulkanHeaders CONFIG QUIET)
         # (find_path searches where the toolchain's headers are: the NDK's sysroot, MinGW's, the
@@ -301,11 +305,16 @@ if(KOMPOZ_BUILD_SDL3)
                            COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/assets $<TARGET_FILE_DIR:${target}>)
     endfunction()
 
-    # The GPU renderer drawn on a real device (Vulkan), against pictures in tests/golden/.
-    if(KOMPOZ_BUILD_TESTS AND kompoz_gpu_vulkan AND NOT ANDROID)
+    # The GPU renderer drawn on a real device (Vulkan, or OpenGL ES with KOMPOZ_GPU=gles), against
+    # pictures in tests/golden/. On Android (KOMPOZ_BUILD_TESTS=ON with the NDK's toolchain) a
+    # program run from adb shell, on a phone's own GPU.
+    if(KOMPOZ_BUILD_TESTS AND kompoz_gpu_vulkan)
         add_executable(kompoz_gpu_tests tests/gpu_tests.cpp platform/gpu/device.cpp platform/gpu/path_geometry.cpp platform/gpu/renderer.cpp
-                       platform/gpu/vulkan_device.cpp platform/gpu/vma.cpp platform/sdl3/font_system.cpp)
+                       platform/gpu/vulkan_device.cpp platform/gpu/vma.cpp platform/gpu/gles_device.cpp platform/sdl3/font_system.cpp)
         target_include_directories(kompoz_gpu_tests PRIVATE ${kompoz_vulkan_include} platform/gpu/external)
+        if(ANDROID)
+            target_sources(kompoz_gpu_tests PRIVATE platform/sdl3/android_ime.cpp)  # (the font system's glyphs Android draws)
+        endif()
         target_link_libraries(kompoz_gpu_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,INTERFACE_LINK_LIBRARIES>)
         target_compile_definitions(kompoz_gpu_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,COMPILE_DEFINITIONS>
                                    KOMPOZ_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden")

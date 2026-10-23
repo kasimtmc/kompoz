@@ -90,12 +90,20 @@ float intensity(float fraction) {
     float row = (uniforms.mask.y + 0.5) * uniforms.origin.w;
     float2 a = table.SampleLevel(float2(0.5 * uniforms.origin.z, row), 0).xy;
     if (fraction <= a.x) return a.y;
+    // (A result of its own, not a return from the loop: that leaves an undefined value in what
+    // SPIR-V becomes, which OpenGL ES compilers warn of.)
+    float result = 0;
+    bool between = false;
     for (int i = 1; i < n; ++i) {
         float2 b = table.SampleLevel(float2((i + 0.5) * uniforms.origin.z, row), 0).xy;
-        if (fraction >= a.x && fraction <= b.x) return lerp(a.y, b.y, saturate((fraction - a.x) / max(b.x - a.x, 0.0001)));
+        if (fraction >= a.x && fraction <= b.x) {
+            result = lerp(a.y, b.y, saturate((fraction - a.x) / max(b.x - a.x, 0.0001)));
+            between = true;
+            break;
+        }
         a = b;
     }
-    return a.y;
+    return between ? result : a.y;
 }
 
 // Where the pixel `c` lies along the blur (0..1): left and above the layer as at its edge.

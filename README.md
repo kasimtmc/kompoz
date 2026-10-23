@@ -245,7 +245,9 @@ changed while it was measured, is measured again.
  │ sdl3      window, input, IME/soft keyboard, anti-aliased drawing with SDL_Renderer, HarfBuzz + FreeType
  │           glyph atlas, images, the desktop's accent color (Linux)
  │ android   the Java side: keyboard (InputConnection), accessibility, insets, dynamic color, back gesture
- └────────────────────────────────────── (a Skia, Metal or Vulkan backend would go here)
+ │ gpu       Kompoz's own GPU renderer (KOMPOZ_GPU=vulkan or gles, being built): one core over thin
+ │           layers for Vulkan and OpenGL ES 3 (Metal and WebGPU to come)
+ └──────────────────────────────────────
 ```
 
 A new platform backend implements `GraphicsContext` and `TextMeasurer` (two functions, plus two optional calls for
