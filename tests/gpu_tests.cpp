@@ -3147,6 +3147,28 @@ void pathEffectsApplyWhereDrawn(Gpu& g) {
     CHECK(pixelAt(inFine)[0] < 100 && pixelAt(inCoarse)[0] > 200);
 }
 
+// The kept frame copied to the window (Renderer::blit): each pixel as the texture has it.
+void blitCopiesTexturesAsTheyAre(Gpu& g) {
+    const int w = 40, h = 30;
+    auto frame = g.device->createTexture(w, h, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+    Color red{1, 0, 0, 1}, blue{0, 0, 1, 1};
+    Pixels kept, shown;
+    shown = g.render(w, h, 1, [&](GraphicsContext&) {
+        gpu::Renderer& r = *g.renderer;
+        r.beginTarget(*frame, gpu::ClearColor{0, 1, 0, 1});
+        r.fillRoundRect({4, 4, 10, 8}, CornerRadii(), red);
+        r.fillRoundRect({20, 12, 14, 12}, CornerRadii(3), blue);
+        r.endTarget();
+        r.blit(*frame);
+    });
+    g.device->beginFrame();
+    kept = {w, h, g.device->readPixels(*frame, {0, 0, w, h})};
+    g.device->endFrame(false);
+    int worst = worstAgainst(shown, [&](int x, int y) { return kept.at(x, y); });
+    CHECK(worst == 0 && near(shown.at(8, 7), 255, 0, 0) && near(shown.at(26, 18), 0, 0, 255) && near(shown.at(1, 28), 0, 255, 0));
+    if (worst != 0) std::printf("  blit: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+}
+
 void scenesMatchTheirPictures(Gpu& g) {
     struct Scene {
         const char* name;
@@ -3213,6 +3235,7 @@ int main() {
             aliasedDrawingIsSkias(g);
             elevationShadowsAreAndroids(g);
             pathEffectsApplyWhereDrawn(g);
+            blitCopiesTexturesAsTheyAre(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
             std::printf("%d checks, %d failed\n", checks, failures);

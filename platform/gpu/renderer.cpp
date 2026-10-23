@@ -360,9 +360,10 @@ void Renderer::blit(Texture& texture) {
     const Texture& t = *passes_[targets_.back().pass].target;
     Prim p;
     set(p.bounds, 0, 0, float(t.width()), float(t.height()));
+    std::copy(std::begin(p.bounds), std::end(p.bounds), p.shape);  // (an image's texels go across its shape)
     set(p.uv, 0, 0, 1, 1);
     p.params[0] = 1;
-    add(IMAGE, p, &texture, true);
+    add(IMAGE, p, &texture, true, Mask::None, nullptr, false, Sampler{Filter::Nearest});  // (texel for pixel, on any GPU)
 }
 
 // --- Submitting ----------------------------------------------------------------------------------

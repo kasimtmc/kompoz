@@ -155,6 +155,9 @@
   is drawn, at the pixels it is drawn at; `PathMeasure` measures and cuts curves as `SkContourMeasure` does (pieces of
   curves as curves, `isClosed`, `resScale`). **Changed**: `PathEffect` is a value made by its functions (`isNone`,
   `filterPath`); its fields and `apply` are gone, and a path's effect travels with its stroke (`PathStroke::pathEffect`).
+- **Fixed**: the GPU renderer showed the window as one color where its GPU doesn't happen to sample a picture at an
+  undefined place as wanted (a phone's Adreno, on Vulkan as on OpenGL ES): the kept frame was copied to the window
+  without the shape its texels go across, and filtered, a pixel off on some GPUs (it is copied texel for pixel now).
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.
