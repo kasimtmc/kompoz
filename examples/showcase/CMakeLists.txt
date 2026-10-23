@@ -19,9 +19,10 @@ else()
     file(GLOB_RECURSE showcase_assets CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/assets/* ${CMAKE_CURRENT_SOURCE_DIR}/assets/*)
     if(EMSCRIPTEN)
         # showcase.html (+ .js, .wasm, .data): the fonts and images go in its virtual file system;
-        # the page (platform/web/shell.html) is just the canvas.
+        # the page (platform/web/shell.html) is just the canvas, its query the app's environment
+        # (showcase.html?KOMPOZ_GPU=gles), which it sets through ENV.
         set_target_properties(showcase PROPERTIES SUFFIX ".html")
-        target_link_options(showcase PRIVATE -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB
+        target_link_options(showcase PRIVATE -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sEXPORTED_RUNTIME_METHODS=ENV
                             "--shell-file=${PROJECT_SOURCE_DIR}/platform/web/shell.html"
                             "--preload-file=${PROJECT_SOURCE_DIR}/assets@/"
                             "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/assets@/")

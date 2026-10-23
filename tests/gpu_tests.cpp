@@ -7,12 +7,15 @@
 //   KOMPOZ_GOLDEN_UPDATE=1   writes the pictures anew (look at them before committing them)
 //   KOMPOZ_GPU_REQUIRED=1    no device is a failure (CI), not a skip
 //   KOMPOZ_GPU_VALIDATION=1  the API's validation on: any error it reports is a failure
-//   KOMPOZ_GPU=gles          OpenGL ES 3's backend instead of Vulkan's (the same pictures)
+//   KOMPOZ_GPU=gles          OpenGL ES 3's backend instead of Vulkan's (the same pictures; the web's only one)
 //   KOMPOZ_GOLDEN_DIR=<dir>  the pictures from there (a phone's copy)
 //
 // On Android it is a program run from adb shell, on OpenGL ES 3 through EGL (no SDL video there):
 //   adb push kompoz_gpu_tests libSDL3.so assets/fonts tests/golden /data/local/tmp/kgt/
 //   adb shell 'cd /data/local/tmp/kgt && LD_LIBRARY_PATH=. KOMPOZ_GOLDEN_DIR=golden ./kompoz_gpu_tests'
+// On the web it is a page on the browser's WebGL 2, the variables its query, which emrun opens and
+// reports on (in CI on Chrome's SwiftShader):
+//   emrun --browser chrome build-web/kompoz_gpu_tests.html KOMPOZ_GPU_REQUIRED=1
 //
 // The device is Vulkan's (or OpenGL ES's), on SDL's offscreen video driver (a headless surface):
 // lavapipe (llvmpipe) in CI.
@@ -121,8 +124,12 @@ struct Gpu {
     }
 #else
     bool start(std::string* why) {
+#ifdef __EMSCRIPTEN__
+        bool gles = true;  // (WebGL 2)
+#else
         const char* choice = std::getenv("KOMPOZ_GPU");
         bool gles = choice && std::string(choice) == "gles";
+#endif
         if (gles) {
             // An OpenGL ES 3.0 context (a debug one for validation), current on this thread.
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
@@ -3386,7 +3393,9 @@ void scenesMatchTheirPictures(Gpu& g) {
 int main() {
     setvbuf(stdout, nullptr, _IOLBF, 0);
     SDL_SetMainReady();  // (its own main)
+#ifndef __EMSCRIPTEN__  // (there, the page's canvas)
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");
+#endif
     bool required = std::getenv("KOMPOZ_GPU_REQUIRED") && std::string(std::getenv("KOMPOZ_GPU_REQUIRED")) == "1";
 #ifndef __ANDROID__  // (there, no SDL video: see Gpu::start)
     if (!SDL_Init(SDL_INIT_VIDEO)) {

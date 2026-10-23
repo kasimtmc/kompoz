@@ -162,6 +162,9 @@
 - **Fixed**: the GPU renderer showed the window as one color where its GPU doesn't happen to sample a picture at an
   undefined place as wanted (a phone's Adreno, on Vulkan as on OpenGL ES): the kept frame was copied to the window
   without the shape its texels go across, and filtered, a pixel off on some GPUs (it is copied texel for pixel now).
+- **The GPU renderer on the web**, on WebGL 2 (`showcase.html?KOMPOZ_GPU=gles`: a web page's query is now its app's
+  environment, through `platform/web/shell.html`); `kompoz_gpu_tests` builds as a page that emrun opens and reports
+  on, the same pictures in a browser (in CI on Chrome's SwiftShader).
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

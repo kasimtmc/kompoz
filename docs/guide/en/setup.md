@@ -158,7 +158,7 @@ cmake --build build-web -j
 python3 -m http.server 8765 --directory build-web
 ```
 
-Then open `http://localhost:8765/showcase.html`. There are no threads on the web, so work you would put on a thread runs in a coroutine instead. Characters the bundled font lacks (emoji, CJK, Arabic) are drawn with the browser's own fonts.
+Then open `http://localhost:8765/showcase.html`. There are no threads on the web, so work you would put on a thread runs in a coroutine instead. Characters the bundled font lacks (emoji, CJK, Arabic) are drawn with the browser's own fonts. The page's query is the app's environment (`showcase.html?KOMPOZ_GPU=gles`, see [Tools](tools.md#environment-variables)).
 
 For the web build of your own app, copy the Emscripten options from `examples/showcase/CMakeLists.txt`.
 

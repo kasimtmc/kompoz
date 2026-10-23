@@ -321,9 +321,14 @@ jobs:
       - name: Dependencies
         run: scripts/fetch-deps.sh
       - name: Configure
-        run: emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_BUILD_TESTS=OFF
+        run: emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_BUILD_TESTS=ON
       - name: Build
-        run: cmake --build build-web --target showcase -j4
+        run: cmake --build build-web --target showcase kompoz_gpu_tests -j4
+      - name: GPU renderer tests (WebGL 2 on Chrome's SwiftShader, against tests/golden)
+        run: >
+          emrun --browser chrome --kill_exit --timeout 1800
+          --browser_args="--headless=new --no-sandbox --use-angle=swiftshader --enable-unsafe-swiftshader"
+          build-web/kompoz_gpu_tests.html KOMPOZ_GPU_REQUIRED=1
 
   shaders:
     name: Shaders (the committed headers are what their sources compile to)

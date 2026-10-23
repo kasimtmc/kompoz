@@ -22,6 +22,8 @@
       canvas: document.getElementById('canvas'),
       setStatus: function (text) { loading.textContent = text; loading.style.display = text ? 'grid' : 'none'; },
       onRuntimeInitialized: function () { Module.setStatus(''); },
+      // The page's query is the app's environment, as a desktop's variables are: ?KOMPOZ_GPU=gles
+      preRun: [function () { new URLSearchParams(location.search).forEach(function (value, name) { Module.ENV[name] = value; }); }],
     };
   </script>
   {{{ SCRIPT }}}

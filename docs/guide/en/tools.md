@@ -122,6 +122,8 @@ Kompoz records each frame first and draws again only what changed since the fram
 
 ## Environment variables
 
+On the web, the page's query sets them: `showcase.html?KOMPOZ_GPU=gles&KOMPOZ_PROFILE=1`.
+
 | Variable | What it does |
 |---|---|
 | `KOMPOZ_PREVIEW=name` | Shows one preview, or all of them with `*`. |
@@ -136,7 +138,7 @@ Kompoz records each frame first and draws again only what changed since the fram
 | `KOMPOZ_ATSPI=1` | Serves the semantics tree to screen readers over AT-SPI even when the desktop's accessibility is off (Linux); `0` never. |
 | `KOMPOZ_TRACE=1` | Logs how many scopes ran and were skipped in each recomposition. |
 | `KOMPOZ_PROFILE=1` | Logs frame times. |
-| `KOMPOZ_GPU=vulkan`, `KOMPOZ_GPU=gles` | Draws with Kompoz's own GPU renderer instead of SDL_Renderer, on Vulkan (Linux, Windows, Android) or OpenGL ES 3 (where the system has it: Linux, Android). It is being built. On Android, where an app has no environment, the first word of a file named `kompoz-gpu` in the app's files: `adb shell run-as <package> sh -c 'echo gles > files/kompoz-gpu'`. |
+| `KOMPOZ_GPU=vulkan`, `KOMPOZ_GPU=gles` | Draws with Kompoz's own GPU renderer instead of SDL_Renderer, on Vulkan (Linux, Windows, Android) or OpenGL ES 3 (where the system has it: Linux, Android; WebGL 2 on the web). It is being built. On Android, where an app has no environment, the first word of a file named `kompoz-gpu` in the app's files: `adb shell run-as <package> sh -c 'echo gles > files/kompoz-gpu'`. |
 | `KOMPOZ_GPU_DEVICE=name`, `KOMPOZ_GPU_VALIDATION=1` | With it: the GPU whose name contains `name` (Vulkan); Vulkan's validation layers where they are installed, OpenGL ES's debug output (a debug context): an error either reports is counted (`kompoz_gpu_tests` fails on one). |
 | `KOMPOZ_DAMAGE_SHOW=1`, `KOMPOZ_DAMAGE_CHECK=1`, `KOMPOZ_FULL_REDRAW=1` | Show, check or turn off redrawing only what changed. |
 | `KOMPOZ_LAYOUT_CHECK=1` | Checks every incremental layout against a full one (the tests always do). |

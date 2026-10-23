@@ -246,7 +246,7 @@ changed while it was measured, is measured again.
  │           glyph atlas, images, the desktop's accent color (Linux)
  │ android   the Java side: keyboard (InputConnection), accessibility, insets, dynamic color, back gesture
  │ gpu       Kompoz's own GPU renderer (KOMPOZ_GPU=vulkan or gles, being built): one core over thin
- │           layers for Vulkan and OpenGL ES 3 (Metal and WebGPU to come)
+ │           layers for Vulkan and OpenGL ES 3, WebGL 2 on the web (Metal and WebGPU to come)
  └──────────────────────────────────────
 ```
 

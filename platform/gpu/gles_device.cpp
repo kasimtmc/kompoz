@@ -18,6 +18,15 @@
 #include <string>
 #include <vector>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+// The GPU's name where the browser tells it (WebGL's own RENDERER is a placeholder), into `out`.
+EM_JS(void, kompoz_webgl_renderer, (char* out, int size), {
+    var info = GLctx.getExtension("WEBGL_debug_renderer_info");
+    stringToUTF8(info ? String(GLctx.getParameter(info.UNMASKED_RENDERER_WEBGL)) : "", out, size);
+});
+#endif
+
 namespace kompoz::gpu {
 
 namespace {
@@ -155,6 +164,11 @@ public:
         int major = std::atoi(std::strstr(version, "OpenGL ES") + 10), minor = 0;
         if (const char* dot = std::strchr(std::strstr(version, "OpenGL ES") + 10, '.')) minor = std::atoi(dot + 1);
         renderer = reinterpret_cast<const char*>(gl.GetString(GL_RENDERER));
+#ifdef __EMSCRIPTEN__
+        char name[256];
+        kompoz_webgl_renderer(name, sizeof name);
+        if (name[0]) renderer = name;
+#endif
         GLint count = 0;
         gl.GetIntegerv(GL_NUM_EXTENSIONS, &count);
         auto has = [&](const char* name) {
