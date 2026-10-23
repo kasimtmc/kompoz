@@ -102,8 +102,7 @@ inline constexpr GLenum GL_VERSION = 0x1F02;
 inline constexpr GLenum GL_VERTEX_SHADER = 0x8B31;
 inline constexpr GLenum GL_ZERO = 0;
 
-// The functions: each X(return type, name without its gl, parameters). DebugMessageCallback is
-// KHR_debug's (core in OpenGL ES 3.2), looked up but not required.
+// The functions: each X(return type, name without its gl, parameters).
 #define KOMPOZ_GL_FUNCTIONS(X) \
     X(void, ActiveTexture, (GLenum texture)) \
     X(void, AttachShader, (GLuint program, GLuint shader)) \
@@ -124,7 +123,6 @@ inline constexpr GLenum GL_ZERO = 0;
     X(void, CompileShader, (GLuint shader)) \
     X(GLuint, CreateProgram, (void)) \
     X(GLuint, CreateShader, (GLenum type)) \
-    X(void, DebugMessageCallback, (GLDEBUGPROC callback, const void *userParam)) \
     X(void, DeleteBuffers, (GLsizei n, const GLuint *buffers)) \
     X(void, DeleteFramebuffers, (GLsizei n, const GLuint *framebuffers)) \
     X(void, DeleteProgram, (GLuint program)) \
@@ -176,19 +174,25 @@ struct Gl {
     KOMPOZ_GL_FUNCTIONS(KOMPOZ_GL_MEMBER)
 #undef KOMPOZ_GL_MEMBER
 
-    // Every function from `lookup` (glName); false (and *missing the first one's name) if one but
-    // DebugMessageCallback isn't there.
+    // The debug output's callback, not required: KHR_debug's and OpenGL ES 3.2's (the same function
+    // under two names, each to call only where it is the context's: the core one is an error on an
+    // older context).
+    void(KOMPOZ_GL_API* DebugMessageCallbackKHR)(GLDEBUGPROC callback, const void* userParam) = nullptr;
+    void(KOMPOZ_GL_API* DebugMessageCallback)(GLDEBUGPROC callback, const void* userParam) = nullptr;
+
+    // Every function from `lookup` (glName); false (and *missing the first one's name) if one isn't
+    // there.
     bool load(void* (*lookup)(const char* name), std::string* missing) {
-#define KOMPOZ_GL_LOAD(ret, name, args)                                                  \
-    name = reinterpret_cast<decltype(name)>(lookup("gl" #name));                         \
-    if (!name && std::string(#name) == "DebugMessageCallback")                           \
-        name = reinterpret_cast<decltype(name)>(lookup("glDebugMessageCallbackKHR"));    \
-    if (!name && std::string(#name) != "DebugMessageCallback") {                         \
-        if (missing) *missing = "gl" #name;                                              \
-        return false;                                                                    \
+#define KOMPOZ_GL_LOAD(ret, name, args)                          \
+    name = reinterpret_cast<decltype(name)>(lookup("gl" #name)); \
+    if (!name) {                                                 \
+        if (missing) *missing = "gl" #name;                      \
+        return false;                                            \
     }
         KOMPOZ_GL_FUNCTIONS(KOMPOZ_GL_LOAD)
 #undef KOMPOZ_GL_LOAD
+        DebugMessageCallbackKHR = reinterpret_cast<decltype(DebugMessageCallbackKHR)>(lookup("glDebugMessageCallbackKHR"));
+        DebugMessageCallback = reinterpret_cast<decltype(DebugMessageCallback)>(lookup("glDebugMessageCallback"));
         return true;
     }
 };

@@ -183,10 +183,11 @@ public:
             return false;
         }
         const char* validation = std::getenv("KOMPOZ_GPU_VALIDATION");
-        if (validation && std::string(validation) == "1" && gl.DebugMessageCallback) {
+        auto debugCallback = has("GL_KHR_debug") && gl.DebugMessageCallbackKHR ? gl.DebugMessageCallbackKHR : es32 ? gl.DebugMessageCallback : nullptr;
+        if (validation && std::string(validation) == "1" && debugCallback) {
             gl.Enable(GL_DEBUG_OUTPUT);
             gl.Enable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-            gl.DebugMessageCallback(debugMessage, this);
+            debugCallback(debugMessage, this);
         }
         swap = s.glSwap;
         drawableSize = s.drawableSize;
@@ -229,6 +230,7 @@ public:
         GlFormat f = glFormat(format);
         int levels = usage & TextureUsage::Mipmapped ? int(std::floor(std::log2(std::max(width, height)))) + 1 : 1;
         GLuint name = 0;
+        while (gl.GetError() != GL_NO_ERROR) {}  // (an earlier call's error, which isn't this texture's)
         gl.GenTextures(1, &name);
         gl.BindTexture(GL_TEXTURE_2D, name);
         gl.TexStorage2D(GL_TEXTURE_2D, levels, f.internal, width, height);
