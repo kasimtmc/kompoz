@@ -1584,7 +1584,7 @@ struct DrawStyle {
     }
     friend bool operator==(const DrawStyle&, const DrawStyle&) = default;
 };
-inline constexpr DrawStyle Fill{};
+inline const DrawStyle Fill{};  // (not constexpr: a path effect holds a shared pointer)
 constexpr DrawStyle Stroke(float width = 0, float miter = 4, StrokeCap cap = StrokeCap::Butt, StrokeJoin join = StrokeJoin::Miter,
                            std::optional<PathEffect> pathEffect = {}) {
     return {true, width, miter, cap, join, pathEffect};
