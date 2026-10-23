@@ -165,6 +165,9 @@
 - **The GPU renderer on the web**, on WebGL 2 (`showcase.html?KOMPOZ_GPU=gles`: a web page's query is now its app's
   environment, through `platform/web/shell.html`); `kompoz_gpu_tests` builds as a page that emrun opens and reports
   on, the same pictures in a browser (in CI on Chrome's SwiftShader).
+- **Fixed**: the GPU renderer's turned, stretched and leaning edges were up to 10/255 off on GPUs that snap vertices
+  coarsely (4 subpixel bits, as SwiftShader does: Chrome's WebGL where it doesn't use the GPU): a quad's corners are
+  put where such a GPU would put them, and its pixels shaded from there.
 - **Fixed**: on the GPU renderer a turned line's square caps lost their corners' faintest pixels: its quad didn't reach
   them.
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the

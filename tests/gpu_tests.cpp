@@ -2490,7 +2490,8 @@ void meshesDrawAsSkiaDoes(Gpu& g) {
                         double len = std::hypot(s1.x - s0.x, s1.y - s0.y);
                         margin = std::min(margin, std::abs(w[k] * twice / std::max(len, 1e-9)));
                     }
-                    if (margin * c.scale < 0.01 * (c.transform ? 0.5 : 1)) edgy[size_t(y) * n + size_t(x)] = true;
+                    // (within a sixteenth of a pixel: a GPU may snap a vertex that far, at 4 subpixel bits, the least Vulkan and OpenGL ES allow)
+                    if (margin * c.scale < 1 / 16.0) edgy[size_t(y) * n + size_t(x)] = true;
                     if (!in) continue;
                     Color src = solid ? c.paint.color.copy(1) : Color{};
                     if (!solid) {

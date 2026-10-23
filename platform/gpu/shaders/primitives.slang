@@ -119,9 +119,22 @@ Varyings vs(Instance instance, uint vertex : VERTEX_ID) {
     static const float2 corners[6] = { float2(0, 0), float2(1, 0), float2(1, 1), float2(0, 0), float2(1, 1), float2(0, 1) };
     float2 corner = corners[vertex % 6];
     float2 local = lerp(instance.bounds.xy, instance.bounds.zw, corner);
-    float3 placed = float3(instance.xform.x * local.x + instance.xform.z * local.y + instance.extra.x,
-                           instance.xform.y * local.x + instance.xform.w * local.y + instance.extra.y,
-                           instance.projection.x * local.x + instance.projection.y * local.y + instance.projection.z);
+    float3x3 m = float3x3(instance.xform.x, instance.xform.z, instance.extra.x,
+                          instance.xform.y, instance.xform.w, instance.extra.y,
+                          instance.projection.x, instance.projection.y, instance.projection.z);
+    float3 placed = mul(m, float3(local, 1));
+    // The corner where the coarsest grid a GPU may snap it to puts it (a sixteenth of a pixel: 4
+    // subpixel bits, the least Vulkan and OpenGL ES allow), so that every GPU shades the pixels
+    // where they are: its local position from there, back through the placement (its adjugate:
+    // homogeneous).
+    if (placed.z > 0) {
+        float2 snapped = round(placed.xy / placed.z * 16) / 16;
+        float3 back = cross(m[1], m[2]) * snapped.x + cross(m[2], m[0]) * snapped.y + cross(m[0], m[1]);
+        if (abs(back.z) > 1e-20) {
+            local = back.xy / back.z;
+            placed = mul(m, float3(local, 1));
+        }
+    }
     Varyings out;
     out.position = float4(placed.xy * uniforms.toClip.xy + placed.z * uniforms.toClip.zw, 0, placed.z);
     out.local = local;
