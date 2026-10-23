@@ -191,7 +191,8 @@ public:
     // Texels (in the texture's format, `rowBytes` apart) into part of a texture; outside passes.
     virtual void upload(Texture& texture, const IRect& region, const void* pixels, size_t rowBytes) = 0;
     // Draws into `target` (cleared first if `clear`), sampling `reads` (each read before by
-    // what was drawn into it).
+    // what was drawn into it). A pass starts with nothing bound: its pipeline, uniforms and
+    // textures are set in it (as Metal's and WebGPU's encoders have them).
     virtual void beginPass(Texture& target, const std::optional<ClearColor>& clear, std::span<Texture* const> reads) = 0;
     virtual void setPipeline(Pipeline& pipeline) = 0;
     virtual void setScissor(const IRect& rect) = 0;

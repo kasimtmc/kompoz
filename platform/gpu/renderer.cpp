@@ -528,21 +528,25 @@ void Renderer::execute(Pass& pass) {
             BlendPlan plan = planFor(b.blend, b.opaque);
             uniforms[8] = float(int(b.blend));
             uniforms[9] = float(plan.how);
-            device_.setPipeline(pipeline(pass.target->format(), plan.state, b.mesh));
-            device_.setUniforms(uniforms, sizeof uniforms);
+            // (Again in each pass the batch is drawn in: a pass starts with nothing bound.)
+            auto bind = [&] {
+                device_.setPipeline(pipeline(pass.target->format(), plan.state, b.mesh));
+                device_.setUniforms(uniforms, sizeof uniforms);
+                if (b.mask == Mask::Texture0)
+                    device_.setTexture(0, *mask_, nearest);
+                else
+                    device_.setTexture(0, *b.texture, b.sampler);
+                if (b.mask == Mask::Texture1)  // (a layer's cut, which may be turned: filtered)
+                    device_.setTexture(1, *mask_, Sampler{});
+                else
+                    device_.setTexture(1, *b.texture1, b.sampler1);
+                device_.setTexture(2, stopsTexture_ ? *stopsTexture_ : *white_, nearest);
+                device_.setTexture(3, readsTarget ? *dstCopy_ : *white_, nearest);
+                device_.setTexture(4, masked ? *mask_ : *white_, nearest);
+                device_.setTexture(5, *b.texture5, b.sampler5);
+            };
+            bind();
             uint32_t corners = b.mesh ? 3 : 6;
-            if (b.mask == Mask::Texture0)
-                device_.setTexture(0, *mask_, nearest);
-            else
-                device_.setTexture(0, *b.texture, b.sampler);
-            if (b.mask == Mask::Texture1)  // (a layer's cut, which may be turned: filtered)
-                device_.setTexture(1, *mask_, Sampler{});
-            else
-                device_.setTexture(1, *b.texture1, b.sampler1);
-            device_.setTexture(2, stopsTexture_ ? *stopsTexture_ : *white_, nearest);
-            device_.setTexture(3, readsTarget ? *dstCopy_ : *white_, nearest);
-            device_.setTexture(4, masked ? *mask_ : *white_, nearest);
-            device_.setTexture(5, *b.texture5, b.sampler5);
             if (!plan.readsTarget) {
                 device_.setScissor(b.scissor);
                 device_.draw({prims.buffer, prims.offset + uint64_t(b.first) * sizeof(Prim)}, corners, b.count);
@@ -578,7 +582,7 @@ void Renderer::execute(Pass& pass) {
                 device_.endPass();
                 device_.copyTexture(*pass.target, under, *dstCopy_, under.x, under.y);
                 device_.beginPass(*pass.target, std::nullopt, reads);
-                device_.setUniforms(uniforms, sizeof uniforms);
+                bind();
                 device_.setScissor(under);
                 device_.draw({prims.buffer, prims.offset + uint64_t(k) * sizeof(Prim)}, corners, 1);
             }
