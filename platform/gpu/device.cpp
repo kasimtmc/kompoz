@@ -8,6 +8,7 @@ namespace kompoz::gpu {
 
 std::unique_ptr<Device> createVulkanDevice(const Surface& surface, std::string* error);
 std::unique_ptr<Device> createGlesDevice(const Surface& surface, std::string* error);
+std::unique_ptr<Device> createMetalDevice(const Surface& surface, std::string* error);
 
 namespace {
 void (*gLogger)(const char*) = nullptr;
@@ -39,6 +40,9 @@ std::unique_ptr<Device> Device::create(Backend backend, const Surface& surface, 
 #endif
 #if KOMPOZ_GPU_GLES
     case Backend::GLES: return createGlesDevice(surface, error);
+#endif
+#if KOMPOZ_GPU_METAL
+    case Backend::Metal: return createMetalDevice(surface, error);
 #endif
     default:
         if (error) *error = std::string("Kompoz was built without its ") + backendName(backend) + " backend";

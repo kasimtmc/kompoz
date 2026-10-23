@@ -147,6 +147,8 @@ struct Surface {
     // what was drawn into the default framebuffer.
     void* (*glGetProcAddress)(const char* name) = nullptr;
     std::function<void()> glSwap;
+    // Metal: the layer the window shows (a CAMetalLayer); none to draw only into textures.
+    void* metalLayer = nullptr;
     // The drawable's size in pixels.
     std::function<void(int* width, int* height)> drawableSize;
 };

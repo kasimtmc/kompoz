@@ -18,7 +18,7 @@
 - **CI** on every platform: the tests, the platform tests, and an app built against each way of installing Kompoz,
   run and clicked (in a real window on Windows and macOS, where Kompoz now runs, and offscreen on macOS too). `CONTRIBUTING.md`, issue forms and
   `scripts/release.sh` for publishing a release's packages.
-- **Kompoz's own GPU renderer**, being built (`KOMPOZ_GPU=vulkan` or `gles`): one core over a thin layer per native graphics
+- **Kompoz's own GPU renderer**, being built (`KOMPOZ_GPU=vulkan`, `metal` or `gles`): one core over a thin layer per native graphics
   API: Vulkan on Linux, Windows and Android first, then Metal on Apple's systems, WebGPU on the web, and OpenGL ES 3 where there is none of those (old GPUs, WebGL 2, ANGLE on Windows). Rounded rects, borders, lines, arcs,
   shadows, text, images, clips and layers are drawn on the GPU with exact anti-aliasing (a straight edge at any angle
   cuts each pixel as exactly as a path's polygon does, a square corner as its two edges, a ring or a line thinner than a
@@ -167,6 +167,9 @@
   on, the same pictures in a browser (in CI on Chrome's SwiftShader).
 - **The GPU renderer on Windows through ANGLE** (`KOMPOZ_GPU=gles` with ANGLE's `libEGL.dll` and `libGLESv2.dll` beside
   the app, which vcpkg builds): OpenGL ES over Direct3D 11; `kompoz_gpu_tests` runs on it in CI, on WARP.
+- **The GPU renderer on Metal** (`KOMPOZ_GPU=metal`, macOS and iOS): the same pictures as on Vulkan and OpenGL ES, with
+  Metal's API validation on in CI; an app draws into its window's layer, `kompoz_gpu_tests` (Metal by default on
+  Apple's systems) into textures alone.
 - **Fixed**: the GPU renderer's turned, stretched and leaning edges were up to 10/255 off on GPUs that snap vertices
   coarsely (4 subpixel bits, as SwiftShader does: Chrome's WebGL where it doesn't use the GPU): a quad's corners are
   put where such a GPU would put them, and its pixels shaded from there.

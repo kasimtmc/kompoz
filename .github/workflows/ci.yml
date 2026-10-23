@@ -189,6 +189,12 @@ jobs:
         run: cmake --build build
       - name: Tests
         run: build/kompoz_tests
+      - name: GPU renderer tests (Metal, validated, against tests/golden)
+        working-directory: build
+        env:
+          KOMPOZ_GPU_REQUIRED: 1
+          KOMPOZ_GPU_VALIDATION: 1
+        run: ./kompoz_gpu_tests
       - name: Install, and build an app against it
         run: |
           cmake --install build --prefix "$PWD/install"
@@ -197,6 +203,12 @@ jobs:
       - name: Run it in a window (Cocoa, Metal), click its button, take a screenshot
         working-directory: build-package
         run: KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo && test -s shot.png
+      - name: The same on Kompoz's GPU renderer (Metal, presenting to the window's layer)
+        working-directory: build-package
+        env:
+          KOMPOZ_GPU: metal
+          KOMPOZ_GPU_VALIDATION: 1
+        run: KOMPOZ_SCRIPT="${KOMPOZ_SCRIPT_RUN/shot.png/shot-metal.png}" ./demo && test -s shot-metal.png
       # Offscreen, with no renderer chosen: SDL's OpenGL there wants EGL, which macOS hasn't, so it
       # draws with the software renderer.
       - name: Run it offscreen, click its button, take a screenshot

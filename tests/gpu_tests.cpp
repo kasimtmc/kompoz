@@ -9,6 +9,7 @@
 //   KOMPOZ_GPU_VALIDATION=1  the API's validation on: any error it reports is a failure
 //   KOMPOZ_GPU=gles          OpenGL ES 3's backend instead of Vulkan's (the same pictures; the web's only one;
 //                            on Windows ANGLE's, with its DLLs beside the test: vcpkg's bin/)
+//   KOMPOZ_GPU=metal         Metal's (on Apple's systems, where it is the default)
 //   KOMPOZ_GOLDEN_DIR=<dir>  the pictures from there (a phone's copy)
 //
 // On Android it is a program run from adb shell, on OpenGL ES 3 through EGL (no SDL video there):
@@ -130,6 +131,12 @@ struct Gpu {
 #else
         const char* choice = std::getenv("KOMPOZ_GPU");
         bool gles = choice && std::string(choice) == "gles";
+#endif
+#ifdef __APPLE__
+        if (!choice || std::string(choice) == "metal") {  // (no window: it draws only into textures)
+            device = gpu::Device::create(gpu::Backend::Metal, gpu::Surface{}, why);
+            return device && startRenderer(why);
+        }
 #endif
         if (gles) {
             // An OpenGL ES 3.0 context (a debug one for validation), current on this thread.
