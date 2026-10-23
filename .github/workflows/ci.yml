@@ -136,6 +136,37 @@ jobs:
         run: build/kompoz_tests.exe
       - name: Platform tests (UI Automation)
         run: build/kompoz_platform_tests.exe
+      - name: ANGLE's port, as this runner's vcpkg has it
+        id: angle-port
+        shell: pwsh
+        run: |
+          $port = "$env:VCPKG_INSTALLATION_ROOT\ports\angle"
+          "hash=" + (Get-FileHash "$port\vcpkg.json").Hash.Substring(0, 16) + (Get-FileHash "$port\portfile.cmake").Hash.Substring(0, 16) >> $env:GITHUB_OUTPUT
+      - uses: actions/cache/restore@v4
+        id: angle-cache
+        with:
+          path: vcpkg-cache
+          key: angle-x64-windows-release-${{ steps.angle-port.outputs.hash }}
+      - name: ANGLE (vcpkg's, from Google's source), beside the GPU tests
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force vcpkg-cache | Out-Null
+          $env:VCPKG_DEFAULT_BINARY_CACHE = "$PWD\vcpkg-cache"
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install angle:x64-windows-release --x-install-root="$PWD\angle"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Copy-Item angle\x64-windows-release\bin\libEGL.dll, angle\x64-windows-release\bin\libGLESv2.dll build\
+      - uses: actions/cache/save@v4  # (built once per port version: kept even when a later step fails)
+        if: steps.angle-cache.outputs.cache-hit != 'true'
+        with:
+          path: vcpkg-cache
+          key: angle-x64-windows-release-${{ steps.angle-port.outputs.hash }}
+      - name: GPU renderer tests (OpenGL ES 3 through ANGLE on Direct3D 11's WARP, validated, against tests/golden)
+        working-directory: build
+        env:
+          KOMPOZ_GPU: gles
+          KOMPOZ_GPU_REQUIRED: 1
+          KOMPOZ_GPU_VALIDATION: 1
+        run: ./kompoz_gpu_tests.exe
       - name: Install (with the SDL3, FreeType and HarfBuzz built here), and build an app against it
         run: |
           cmake --install build --prefix "$PWD/install"

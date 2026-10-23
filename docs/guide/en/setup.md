@@ -134,6 +134,8 @@ cmake --build build-windows -j
 
 Ship the executable with the `fonts/` and `licenses/` folders next to it. The tests also run under Wine: `WINEPATH=/usr/x86_64-w64-mingw32/bin wine build-windows/kompoz_tests.exe`.
 
+Kompoz's GPU renderer on OpenGL ES (`KOMPOZ_GPU=gles`) uses ANGLE where the app has ANGLE's `libEGL.dll` and `libGLESv2.dll` next to it: OpenGL ES over Direct3D 11, the same on every Windows GPU. vcpkg builds them from Google's source (`vcpkg install angle:x64-windows-release`); without them, the GPU driver's own OpenGL ES is used.
+
 ### Android
 
 You need the Android SDK, NDK 29.0.14206865, the SDK's CMake 4.1.2 (from Android Studio's SDK Manager, or `sdkmanager "ndk;29.0.14206865" "cmake;4.1.2"`) and JDK 17 or newer (Android Studio's bundled JBR will do).

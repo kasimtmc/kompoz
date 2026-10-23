@@ -134,6 +134,8 @@ cmake --build build-windows -j
 
 Çalıştırılabilir dosyayı yanında `fonts/` ve `licenses/` klasörleriyle dağıtın. Testler Wine altında da çalışır: `WINEPATH=/usr/x86_64-w64-mingw32/bin wine build-windows/kompoz_tests.exe`.
 
+Kompoz'un OpenGL ES üzerindeki GPU renderer'ı (`KOMPOZ_GPU=gles`), uygulamanın yanında ANGLE'ın `libEGL.dll` ve `libGLESv2.dll` dosyaları varsa ANGLE'ı kullanır: Direct3D 11 üzerinde OpenGL ES, her Windows GPU'sunda aynı. vcpkg onları Google'ın kaynağından derler (`vcpkg install angle:x64-windows-release`); onlar yoksa GPU sürücüsünün kendi OpenGL ES'i kullanılır.
+
 ### Android
 
 Android SDK, NDK 29.0.14206865, SDK'nın CMake 4.1.2'si (Android Studio'nun SDK Manager'ından ya da `sdkmanager "ndk;29.0.14206865" "cmake;4.1.2"` ile) ve JDK 17 ya da daha yenisi gerekir (Android Studio'yla gelen JBR iş görür).

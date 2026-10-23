@@ -7,7 +7,8 @@
 //   KOMPOZ_GOLDEN_UPDATE=1   writes the pictures anew (look at them before committing them)
 //   KOMPOZ_GPU_REQUIRED=1    no device is a failure (CI), not a skip
 //   KOMPOZ_GPU_VALIDATION=1  the API's validation on: any error it reports is a failure
-//   KOMPOZ_GPU=gles          OpenGL ES 3's backend instead of Vulkan's (the same pictures; the web's only one)
+//   KOMPOZ_GPU=gles          OpenGL ES 3's backend instead of Vulkan's (the same pictures; the web's only one;
+//                            on Windows ANGLE's, with its libEGL.dll and libGLESv2.dll beside the test)
 //   KOMPOZ_GOLDEN_DIR=<dir>  the pictures from there (a phone's copy)
 //
 // On Android it is a program run from adb shell, on OpenGL ES 3 through EGL (no SDL video there):
@@ -137,6 +138,10 @@ struct Gpu {
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
             const char* validation = std::getenv("KOMPOZ_GPU_VALIDATION");
             if (validation && std::string(validation) == "1") SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
+#ifdef _WIN32  // (ANGLE's where it is beside the test, as an app's: see sdl3_app.cpp)
+            if (const char* base = SDL_GetBasePath(); base && SDL_GetPathInfo((std::string(base) + "libEGL.dll").c_str(), nullptr))
+                SDL_SetHint(SDL_HINT_OPENGL_ES_DRIVER, "1");
+#endif
             window = SDL_CreateWindow("kompoz_gpu_tests", 64, 64, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
             if (!window || !(context = SDL_GL_CreateContext(window))) {
                 *why = std::string("no OpenGL ES 3 context: ") + SDL_GetError();

@@ -3407,6 +3407,12 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
         SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 0);
         if (const char* v = SDL_getenv("KOMPOZ_GPU_VALIDATION"); v && std::string_view(v) == "1")
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
+#ifdef SDL_PLATFORM_WINDOWS
+        // ANGLE's where the app has it beside it (libEGL.dll, libGLESv2.dll): OpenGL ES over
+        // Direct3D 11, the same on every Windows GPU. Else the driver's own OpenGL ES.
+        if (const char* base = SDL_GetBasePath(); base && SDL_GetPathInfo((std::string(base) + "libEGL.dll").c_str(), nullptr))
+            SDL_SetHint(SDL_HINT_OPENGL_ES_DRIVER, "1");
+#endif
     }
 #ifdef SDL_PLATFORM_EMSCRIPTEN
     flags |= SDL_WINDOW_FILL_DOCUMENT;  // the whole page, resized with the browser window
