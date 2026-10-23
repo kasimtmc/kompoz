@@ -8,7 +8,7 @@
 //   KOMPOZ_GPU_REQUIRED=1    no device is a failure (CI), not a skip
 //   KOMPOZ_GPU_VALIDATION=1  the API's validation on: any error it reports is a failure
 //   KOMPOZ_GPU=gles          OpenGL ES 3's backend instead of Vulkan's (the same pictures; the web's only one;
-//                            on Windows ANGLE's, with its libEGL.dll and libGLESv2.dll beside the test)
+//                            on Windows ANGLE's, with its DLLs beside the test: vcpkg's bin/)
 //   KOMPOZ_GOLDEN_DIR=<dir>  the pictures from there (a phone's copy)
 //
 // On Android it is a program run from adb shell, on OpenGL ES 3 through EGL (no SDL video there):
@@ -19,7 +19,7 @@
 //   emrun --browser chrome build-web/kompoz_gpu_tests.html KOMPOZ_GPU_REQUIRED=1
 //
 // The device is Vulkan's (or OpenGL ES's), on SDL's offscreen video driver (a headless surface):
-// lavapipe (llvmpipe) in CI.
+// lavapipe (llvmpipe) in CI. On Windows, a hidden window.
 
 #include "../platform/gpu/device.hpp"
 #include "../platform/gpu/path_geometry.hpp"
@@ -3399,8 +3399,8 @@ void scenesMatchTheirPictures(Gpu& g) {
 int main() {
     setvbuf(stdout, nullptr, _IOLBF, 0);
     SDL_SetMainReady();  // (its own main)
-#ifndef __EMSCRIPTEN__  // (there, the page's canvas)
-    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");
+#if !defined(__EMSCRIPTEN__) && !defined(_WIN32)  // (there, the page's canvas; on Windows a hidden window, as ANGLE's
+    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");    // EGL hasn't the device enumeration the offscreen driver's wants)
 #endif
     bool required = std::getenv("KOMPOZ_GPU_REQUIRED") && std::string(std::getenv("KOMPOZ_GPU_REQUIRED")) == "1";
 #ifndef __ANDROID__  // (there, no SDL video: see Gpu::start)

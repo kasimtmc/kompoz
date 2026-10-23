@@ -154,7 +154,7 @@ jobs:
           $env:VCPKG_DEFAULT_BINARY_CACHE = "$PWD\vcpkg-cache"
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install angle:x64-windows-release --x-install-root="$PWD\angle"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          Copy-Item angle\x64-windows-release\bin\libEGL.dll, angle\x64-windows-release\bin\libGLESv2.dll build\
+          Copy-Item angle\x64-windows-release\bin\*.dll build\  # (libEGL, libGLESv2 and the zlib they use)
       - uses: actions/cache/save@v4  # (built once per port version: kept even when a later step fails)
         if: steps.angle-cache.outputs.cache-hit != 'true'
         with:
