@@ -4740,6 +4740,32 @@ TEST(display_list_lines_frames_up_by_node_and_replays_an_area) {
     CHECK(part.rects.size() == 1 && part.rects[0].width == 100 && part.layers == 0 && part.clips.empty());
 }
 
+std::string pathText(const Path& path);  // (below)
+
+// A path drawn the same but through another path effect has changed: damage where it is.
+TEST(display_list_path_effects_are_part_of_what_is_drawn) {
+    testing::FakeTextMeasurer measurer;
+    DisplayList list(measurer);
+    int node = 0;
+    Path line;
+    line.moveTo(10, 10);
+    line.lineTo(90, 10);
+    auto frame = [&](float phase) {
+        list.begin({200, 200}, 1);
+        list.beginNode(&node);
+        list.drawPath(line, {}, Brush::solid(colors::Black), {}, {.width = 2, .pathEffect = PathEffect::dashPathEffect({10, 10}, phase)});
+        list.endNode();
+        return list.end();
+    };
+    frame(0);
+    CHECK(!frame(0));
+    auto d = frame(5);
+    CHECK(d && d->x <= 10 && d->right() >= 90);
+    testing::RecordingCanvas replayed;
+    list.replay(replayed);
+    CHECK(replayed.pathShapes.size() == 1 && pathText(replayed.pathShapes[0]).starts_with("M10,9 L15,9 L15,11 L10,11 M25,9"));
+}
+
 // What is drawn through a transform touches where the transform takes it; a transform that
 // changes is damage where its drawing was and where it is; replayed, it is pushed again.
 TEST(display_list_follows_transforms) {
@@ -24124,6 +24150,13 @@ TEST(text_shadows_go_under_and_brushes_spread_over_the_text) {
           replayed.textOrder == canvas.textOrder);
 }
 
+// What a path effect makes of a path drawn with `stroke` at a unit a pixel (the path itself if it
+// leaves it as it is).
+Path effected(const PathEffect& effect, const Path& path, PathStroke stroke = {.width = 1}) {
+    Path out;
+    return effect.filterPath(out, path, stroke) ? out : path;
+}
+
 // A path's commands as text: "M0,0 L10,0 Q… C… Z".
 std::string pathText(const Path& path) {
     std::string out;
@@ -24612,21 +24645,27 @@ TEST(path_effects_dash_and_round_strokes) {
     rule.host().draw(canvas);
     CHECK(canvas.pathShapes.size() == 6 && canvas.strokes.size() == 1);
     if (canvas.pathShapes.size() != 6) return;
-    CHECK(pathText(canvas.pathShapes[0]) == "M0,0 L10,0 M15,0 L25,0 M30,0 L40,0" && canvas.pathStrokes[0] == 2);
+    // A line with butt ends: each dash its rectangle, filled (Skia's way with a line).
+    CHECK(pathText(canvas.pathShapes[0]) == "M0,-1 L10,-1 L10,1 L0,1 M15,-1 L25,-1 L25,1 L15,1 M30,-1 L40,-1 L40,1 L30,1" &&
+          canvas.pathStrokes[0] == 0);
     CHECK(pathText(canvas.pathShapes[1]) == "M0,10 L5,10 M10,10 L20,10 M25,10 L35,10");  // 5 into the pattern
-    // Each corner cut back 4 and rounded, from the middle of the first side (counterclockwise, as
-    // Compose's addRect goes: down the left side first).
-    CHECK(pathText(canvas.pathShapes[2]) == "M0,10 L0,16 Q4,20 L16,20 Q20,16 L20,4 Q16,0 L4,0 Q0,4 L0,10 Z");
-    // As Android's canvas makes them, clockwise: the circle from its right (dashed from there,
-    // downwards), the rect from its top left (rounded, then dashed from the middle of its top).
-    CHECK(pathText(canvas.pathShapes[3]).starts_with("M60,50 ") && canvas.pathShapes[3].commands()[1].y > 50);
-    CHECK(pathText(canvas.pathShapes[4]).starts_with("M15,0 L19,0"));
+    // Each corner cut back 4 and rounded through it, from the first side cut back (counterclockwise,
+    // as Compose's addRect goes: down the left side first).
+    CHECK(pathText(canvas.pathShapes[2]) == "M0,4 L0,16 Q4,20 L16,20 Q20,16 L20,4 Q16,0 L4,0 Q0,4 Z");
+    // As Android's canvas makes them, clockwise: the circle from its right, dashed from there
+    // downwards, its first dash left for the end, where the last one goes on into it (a closed
+    // contour's dashes join round its start); the rect from its top left (rounded, then dashed from
+    // its first side cut back: the first dash, 0 to 4, joined to the end too).
+    const auto& dashes = canvas.pathShapes[3].commands();
+    CHECK(dashes.size() > 2 && dashes[0].verb == PathCommand::Verb::Move && near(dashes[0].x, 50.58f, 0.01f) && near(dashes[0].y, 59.98f, 0.01f));
+    CHECK(dashes.size() > 2 && dashes[1].verb == PathCommand::Verb::Conic && near(dashes.back().x, 55.33f, 0.01f) && near(dashes.back().y, 58.46f, 0.01f));
+    CHECK(pathText(canvas.pathShapes[4]).starts_with("M14,0 L18,0") && pathText(canvas.pathShapes[4]).ends_with("M6,0 L10,0"));
     PathMeasure circle(canvas.pathShapes[3]);  // the dashes around the circle: two thirds of it drawn
     float drawn = circle.length();
     while (circle.nextContour()) drawn += circle.length();
     CHECK(near(drawn, 2 * 3.14159f * 10 * 2 / 3, 1.5f));
     std::string chained = pathText(canvas.pathShapes[4]);
-    CHECK(chained.find('Q') == std::string::npos && chained.find('M') != chained.rfind('M'));  // rounded, then dashed (as lines)
+    CHECK(chained.find('Q') != std::string::npos && chained.find('M') != chained.rfind('M'));  // rounded, then dashed: its curves pieces of them
     PathMeasure arc(canvas.pathShapes[5]);
     float arcDrawn = arc.length();
     while (arc.nextContour()) arcDrawn += arc.length();
@@ -24797,24 +24836,26 @@ TEST(stamped_path_effects_lay_a_shape_along_the_path) {
     Path line;
     line.moveTo(0, 0);
     line.lineTo(100, 0);
-    std::vector<Offset> at = starts(PathEffect::stampedPathEffect(box, 20, 0, StampedPathEffectStyle::Translate).apply(line));
+    std::vector<Offset> at = starts(effected(PathEffect::stampedPathEffect(box, 20, 0, StampedPathEffectStyle::Translate), line));
     CHECK(at.size() == 5);
     for (size_t i = 0; i < at.size() && i < 5; ++i) CHECK(near2(at[i], {20.f * float(i), -1}));
     // A phase of 5 puts the first one at 15 (Skia's way).
-    at = starts(PathEffect::stampedPathEffect(box, 20, 5, StampedPathEffectStyle::Translate).apply(line));
+    at = starts(effected(PathEffect::stampedPathEffect(box, 20, 5, StampedPathEffectStyle::Translate), line));
     CHECK(at.size() == 5 && near2(at[0], {15, -1}) && near2(at[4], {95, -1}));
     // Turned with a line going down: the box lies along it.
     Path down;
     down.moveTo(0, 0);
     down.lineTo(0, 100);
-    Rect turned = PathEffect::stampedPathEffect(box, 50, 0, StampedPathEffectStyle::Rotate).apply(down).bounds();
+    Rect turned = effected(PathEffect::stampedPathEffect(box, 50, 0, StampedPathEffectStyle::Rotate), down).bounds();
     CHECK(near(turned.x, -1, 0.01f) && near(turned.width, 2, 0.01f) && near(turned.y, 0, 0.01f) && near(turned.bottom(), 54, 0.01f));
-    // Bent along a circle (radius 50): a 30 dp long box keeps to the circle instead of running off
-    // along its tangent (sqrt(50² + 30²) ≈ 58 at its end).
+    // Bent along a circle (radius 50) as Skia bends it: each side a quadratic through its middle
+    // moved onto the path. A 30 dp long box keeps to the circle instead of running off along its
+    // tangent (sqrt(50² + 30²) ≈ 58 at its end); its inner side, 49 out, dips between its ends to
+    // the quadratic's middle, 49 (1 + cos 0.3) / 2 ≈ 47.9.
     Path circle, longBox;
     circle.addOval({0, 0, 100, 100});
     longBox.addRect({0, -1, 30, 2});
-    Path bent = PathEffect::stampedPathEffect(longBox, 80, 0, StampedPathEffectStyle::Morph).apply(circle);
+    Path bent = effected(PathEffect::stampedPathEffect(longBox, 80, 0, StampedPathEffectStyle::Morph), circle);
     PathMeasure m(bent);
     float farthest = 0, closest = 100, reach = 100;
     do {
@@ -24828,7 +24869,7 @@ TEST(stamped_path_effects_lay_a_shape_along_the_path) {
         }
         reach = std::min(reach, span);
     } while (m.nextContour());
-    CHECK(farthest < 51.5f && closest > 48.5f && reach > 28);
+    CHECK(farthest < 51.01f && closest > 47.8f && closest < 48 && reach > 28);
     // Round a closed contour, its closing side too: 6 stamps on a 160 dp square, every 30 dp.
     Path square;
     square.moveTo(0, 0);
@@ -24836,12 +24877,14 @@ TEST(stamped_path_effects_lay_a_shape_along_the_path) {
     square.lineTo(40, 40);
     square.lineTo(0, 40);
     square.close();
-    at = starts(PathEffect::stampedPathEffect(box, 30, 0, StampedPathEffectStyle::Translate).apply(square));
+    at = starts(effected(PathEffect::stampedPathEffect(box, 30, 0, StampedPathEffectStyle::Translate), square));
     CHECK(at.size() == 6 && at.size() > 5 && near2(at[5], {0, 10 - 1}));
     // Rounded corners first, then stamped; drawn filled, not stroked.
     PathEffect chained = PathEffect::chainPathEffect(PathEffect::stampedPathEffect(box, 20, 0, StampedPathEffectStyle::Translate),
                                                      PathEffect::cornerPathEffect(4));
-    CHECK(chained.fills() && near(chained.cornerRadius, 4));
+    PathStroke stroke{.width = 3};
+    Path made;
+    CHECK(chained.filterPath(made, line, stroke) && !stroke.strokes() && !made.isEmpty());
     ComposeTestRule rule([&] {
         Canvas(Modifier().size(120, 20), [&](DrawScope& d) {
             d.drawPath(line, colors::Black, 1, Stroke(3, 4, StrokeCap::Butt, StrokeJoin::Miter, PathEffect::stampedPathEffect(box, 20, 0, StampedPathEffectStyle::Translate)));
@@ -24917,20 +24960,291 @@ TEST(path_measure_lengths_positions_and_segments) {
     CHECK(p.x == 10 && p.y == 5 && t.x == 0 && t.y == 1);
     Offset end = m.getPosition(100);  // past the end: at the end (back at the start)
     CHECK(end.x == 0 && end.y == 0);
+    Offset before = m.getPosition(-5), beforeTangent = m.getTangent(-5);  // before the start: at the start
+    CHECK(before.x == 0 && before.y == 0 && beforeTangent.x == 1 && beforeTangent.y == 0);
     Path piece;
     CHECK(m.getSegment(5, 25, piece));
     CHECK(pathText(piece) == "M5,0 L10,0 L10,10 L5,10");
-    CHECK(!m.getSegment(20, 20, piece) && m.getSegment(30, 35, piece, false) && pathText(piece).ends_with("L0,10 L0,5"));
+    // Not from a moveTo: going on from where it was, no line to its start (a zero-length one where
+    // it starts on a corner, as Skia's).
+    CHECK(!m.getSegment(20, 20, piece) && m.getSegment(30, 35, piece, false) && pathText(piece).ends_with("L5,10 L5,10 L0,5"));
     CHECK(m.nextContour() && m.length() == 20 && !m.nextContour());
     Path round;
     round.addOval({0, 0, 20, 20});
-    CHECK(near(PathMeasure(round).length(), 2 * 3.14159f * 10, 0.05f));
+    // Its curves cut until each piece is within half a unit of a line: a circle of 10 a little short;
+    // at 4 pixels a unit, within an eighth of one.
+    CHECK(near(PathMeasure(round).length(), 62.427f, 0.001f) && near(PathMeasure(round, false, 4).length(), 62.730f, 0.001f));
     Path corner;
     corner.moveTo(0, 0);
     corner.lineTo(10, 0);
     corner.lineTo(10, 10);
     CHECK(PathMeasure(corner).length() == 20 && near(PathMeasure(corner, true).length(), 20 + 14.142f, 0.01f));
-    CHECK(PathMeasure().length() == 0 && PathMeasure(Path()).getPosition(3).x == 0);
+    CHECK(PathMeasure().length() == 0 && std::isnan(PathMeasure(Path()).getPosition(3).x) && std::isnan(PathMeasure().getTangent(0).y));
+}
+
+// Skia's PathMeasureTest, ported: lengths, positions and tangents, degenerate pieces, contours of
+// no length skipped, a close not followed by a move; and its contour_measure_verbs' distances.
+TEST(path_measure_is_skias) {
+    auto nearly = [](float a, float b, float tolerance = 1.f / 4096) { return std::abs(a - b) <= tolerance; };  // (SkScalarNearlyEqual)
+    Path square;
+    square.moveTo(0, 0);
+    square.lineTo(1, 0);
+    square.lineTo(1, 1);
+    square.lineTo(0, 1);
+    CHECK(PathMeasure(square, true).length() == 4 && PathMeasure(square).length() == 3 && PathMeasure(square, true).isClosed());
+    Path line;
+    line.moveTo(0, 0);
+    line.lineTo(3, 4);
+    CHECK(PathMeasure(line).length() == 5 && !PathMeasure(line).isClosed());
+    // A close not followed by a move: drawing on starts from the contour's start.
+    Path closed;
+    closed.lineTo(1, 0);
+    closed.lineTo(1, 1);
+    closed.lineTo(0, 1);
+    closed.close();
+    closed.lineTo(-1, 0);
+    PathMeasure m(closed);
+    CHECK(m.length() == 4 && m.isClosed() && m.nextContour() && m.length() == 1 && !m.isClosed());
+    Offset p = m.getPosition(0.5f), t = m.getTangent(0.5f);
+    CHECK(nearly(p.x, -0.5f, 0.0001f) && p.y == 0 && t.x == -1 && t.y == 0);
+    // Degenerate pieces (a zero-length line, quadratic and cubic) measure nothing.
+    Path degenerate;
+    degenerate.moveTo(0, 0);
+    degenerate.lineTo(0, 0);
+    degenerate.lineTo(1, 0);
+    degenerate.quadraticTo(1, 0, 1, 0);
+    degenerate.quadraticTo(1, 1, 1, 2);
+    degenerate.cubicTo(1, 2, 1, 2, 1, 2);
+    degenerate.cubicTo(2, 2, 3, 2, 4, 2);
+    m.setPath(degenerate);
+    CHECK(m.length() == 6);
+    p = m.getPosition(0.5f), t = m.getTangent(0.5f);
+    CHECK(nearly(p.x, 0.5f, 0.0001f) && p.y == 0 && t.x == 1 && t.y == 0);
+    p = m.getPosition(2.5f), t = m.getTangent(2.5f);
+    CHECK(nearly(p.x, 1, 0.0001f) && nearly(p.y, 1.5f) && t.x == 0 && t.y == 1);
+    p = m.getPosition(4.5f), t = m.getTangent(4.5f);
+    CHECK(nearly(p.x, 2.5f, 0.0001f) && nearly(p.y, 2, 0.0001f) && t.x == 1 && t.y == 0);
+    // Moves in between: the last one starts the next contour.
+    Path moves;
+    moves.moveTo(0, 0);
+    moves.lineTo(1, 0);
+    moves.moveTo(1, 1);
+    moves.moveTo(2, 2);
+    moves.lineTo(1, 2);
+    m.setPath(moves);
+    p = m.getPosition(0.5f), t = m.getTangent(0.5f);
+    CHECK(m.length() == 1 && nearly(p.x, 0.5f, 0.0001f) && p.y == 0 && t.x == 1 && t.y == 0);
+    CHECK(m.nextContour() && m.length() == 1);
+    p = m.getPosition(0.5f), t = m.getTangent(0.5f);
+    CHECK(nearly(p.x, 1.5f, 0.0001f) && nearly(p.y, 2, 0.0001f) && t.x == -1 && t.y == 0 && !m.nextContour());
+    // Huge and tiny segments neither hang nor go wrong (test_small_segment, 2 and 3).
+    Path small;
+    small.moveTo(100000, 100000);
+    small.lineTo(1.0005f, 0.9999f);
+    small.lineTo(1, 1);
+    Path quads;
+    quads.quadraticTo(100000000000.f, 100000000000.f, 0, 0);
+    quads.quadraticTo(10, 10, 0, 0);
+    Path cubics;
+    cubics.cubicTo(100000000000.f, 100000000000.f, 0, 0, 10, 10);
+    cubics.cubicTo(10, 10, 0, 0, 10, 10);
+    CHECK(PathMeasure(small).length() > 0 && std::isfinite(PathMeasure(quads).length()) && std::isfinite(PathMeasure(cubics, false, 1000).length()));
+    // A conic of weight 1 and of 10 along a line: a point 20 along is at 20.
+    Path conic;
+    conic.conicTo(100, 0, 100, 0, 1);
+    Path heavy;
+    heavy.conicTo(100, 0, 100, 0, 10);
+    CHECK(std::abs(PathMeasure(conic).getPosition(20).x - 20) < 0.5f && std::abs(PathMeasure(heavy).getPosition(20).x - 20) < 0.5f);
+    CHECK(!PathMeasure(line).nextContour());  // (PathMeasure_nextctr)
+    // Two circles, each a closed contour: a quarter round, at the bottom going left.
+    Path circles;
+    circles.addOval({-100, -100, 200, 200}, Path::Direction::Clockwise);
+    circles.addOval({-10, -10, 20, 20}, Path::Direction::Clockwise);
+    m.setPath(circles);
+    for (float r : {100.f, 10.f}) {
+        p = m.getPosition(m.length() / 4), t = m.getTangent(m.length() / 4);
+        CHECK(m.isClosed() && nearly(m.length(), 2 * r * std::numbers::pi_v<float>, r == 100 ? 1.5f : 0.5f) && nearly(p.x, 0) && nearly(p.y, r) &&
+              nearly(t.x, -1) && nearly(t.y, 0));
+        m.nextContour();
+    }
+    CHECK(m.length() == 0);
+    // Contours of no length are skipped (test_empty_contours, test_MLM_contours).
+    Path empty;
+    empty.moveTo(0, 0), empty.lineTo(100, 100), empty.lineTo(200, 100);
+    empty.moveTo(2, 2), empty.moveTo(3, 3);
+    empty.moveTo(4, 4), empty.close(), empty.close(), empty.close();
+    empty.moveTo(5, 5), empty.lineTo(5, 5);
+    empty.moveTo(5, 5), empty.lineTo(5, 5), empty.close();
+    empty.moveTo(5, 5), empty.lineTo(5, 5), empty.close(), empty.close();
+    empty.moveTo(6, 6), empty.lineTo(7, 7);
+    empty.moveTo(10, 10);
+    m.setPath(empty);
+    CHECK(m.length() > 0 && m.nextContour() && nearly(m.length(), std::sqrt(2.f)) && !m.nextContour());
+    Path trailing;
+    trailing.moveTo(10, 10), trailing.lineTo(20, 20), trailing.moveTo(30, 30);
+    for (bool forceClosed : {false, true}) {
+        m.setPath(trailing, forceClosed);
+        CHECK(m.length() > 0 && !m.nextContour());
+    }
+    // contour_measure_verbs: the distance at the end of each piece, as Skia measures it.
+    Path verbs;
+    verbs.moveTo(10, 10);
+    verbs.lineTo(10, 30);
+    verbs.lineTo(30, 30);
+    verbs.quadraticTo(40, 30, 40, 40);
+    CHECK(nearly(PathMeasure(verbs).length(), 56.127525f));
+    verbs.cubicTo(50, 40, 50, 50, 40, 50);
+    CHECK(nearly(PathMeasure(verbs).length(), 76.004692f));
+    verbs.conicTo(50, 50, 50, 60, 1.2f);
+    CHECK(nearly(PathMeasure(verbs).length(), 92.428185f));
+}
+
+// Pieces of curves are the curves cut there (Skia's segTo): a quadratic's piece a quadratic, a
+// cubic's a cubic, a conic's a conic (its weight what that piece needs), their ends where the
+// measure puts those distances.
+TEST(path_measure_segments_cut_curves) {
+    auto close = [](Offset a, Offset b) { return std::abs(a.x - b.x) < 1e-3f && std::abs(a.y - b.y) < 1e-3f; };
+    Path quad;
+    quad.moveTo(0, 0);
+    quad.quadraticTo(50, 100, 100, 0);
+    PathMeasure m(quad);
+    float len = m.length();
+    Path piece;
+    CHECK(m.getSegment(len / 4, len / 2, piece));
+    const auto& q = piece.commands();
+    CHECK(q.size() >= 2 && q[0].verb == PathCommand::Verb::Move && close({q[0].x, q[0].y}, m.getPosition(len / 4)));
+    CHECK(q.size() >= 2 && q.back().verb == PathCommand::Verb::Quad && close({q.back().x, q.back().y}, m.getPosition(len / 2)));
+    // A middle piece of a quadratic: its control point where the curve's tangents at its ends meet.
+    if (q.size() == 2) {
+        Offset a{q[0].x, q[0].y}, c{q[1].x1, q[1].y1}, b{q[1].x, q[1].y}, ta = m.getTangent(len / 4), tb = m.getTangent(len / 2);
+        float cross1 = (c.x - a.x) * ta.y - (c.y - a.y) * ta.x, cross2 = (c.x - b.x) * tb.y - (c.y - b.y) * tb.x;
+        CHECK(std::abs(cross1) < 0.01f && std::abs(cross2) < 0.01f);
+    }
+    Path cubic;
+    cubic.moveTo(0, 0);
+    cubic.cubicTo(0, 100, 100, 100, 100, 0);
+    m.setPath(cubic);
+    len = m.length();
+    piece.reset();
+    CHECK(m.getSegment(0, len / 3, piece) && piece.commands().back().verb == PathCommand::Verb::Cubic &&
+          close({piece.commands().back().x, piece.commands().back().y}, m.getPosition(len / 3)));
+    piece.reset();
+    CHECK(m.getSegment(len / 3, len, piece) && piece.commands().back().verb == PathCommand::Verb::Cubic && piece.commands().back().x == 100 &&
+          piece.commands().back().y == 0);
+    // A cubic's tangent at an end whose control point is on it: towards the next control point
+    // (Skia's), at the other end from the one before; with both on it, end to end.
+    auto tangentAt = [](Offset c1, Offset c2, Offset end, bool atEnd) {
+        Path p;
+        p.moveTo(0, 0);
+        p.cubicTo(c1.x, c1.y, c2.x, c2.y, end.x, end.y);
+        PathMeasure pm(p);
+        return pm.getTangent(atEnd ? pm.length() : 0);
+    };
+    Offset t0 = tangentAt({0, 0}, {100, 100}, {100, 0}, false), t1 = tangentAt({0, 100}, {100, 0}, {100, 0}, true);
+    Offset both = tangentAt({0, 0}, {0, 0}, {0, 100}, false);
+    CHECK(close(t0, {0.70711f, 0.70711f}) && close(t1, {0.70711f, -0.70711f}) && close(both, {0, 1}));
+    // A circle's quarter (a conic of weight cos 45°): its piece from 15° to 75°, a conic of cos 30°.
+    Path round;
+    round.addOval({-10, -10, 20, 20}, Path::Direction::Clockwise);
+    m.setPath(round);
+    len = m.length();
+    piece.reset();
+    CHECK(m.getSegment(len / 24, len * 5 / 24, piece));
+    const auto& k = piece.commands();
+    CHECK(k.size() == 2 && k[1].verb == PathCommand::Verb::Conic && std::abs(k[1].w - std::cos(std::numbers::pi_v<float> / 6)) < 0.01f);
+    // From a quarter's start, and to its end (a conic cut in two): 30° pieces, conics of cos 15°.
+    for (auto [from, to] : {std::pair{0.f, len / 12}, std::pair{len / 6, len / 4}}) {
+        piece.reset();
+        CHECK(m.getSegment(from, to, piece) && piece.commands().size() == 2 && piece.commands()[1].verb == PathCommand::Verb::Conic &&
+              std::abs(piece.commands()[1].w - std::cos(std::numbers::pi_v<float> / 12)) < 0.002f);
+    }
+    // Across pieces: each cut where it starts or stops, the ones between whole.
+    piece.reset();
+    CHECK(m.getSegment(len / 8, len * 7 / 8, piece) && piece.commands().size() == 5 && piece.commands()[2].x == -10 && piece.commands()[2].y == 0);
+}
+
+// Dashes, corners and stamps as Skia makes them; what Skia refuses is no effect; a dash on a curve
+// is measured at the pixels it is drawn at.
+TEST(path_effects_are_skias) {
+    Path line;
+    line.moveTo(0, 0);
+    line.lineTo(40, 0);
+    // A zero-length dash: a zero-length line, for caps to show (round ones: dots).
+    CHECK(pathText(effected(PathEffect::dashPathEffect({0, 10}), line, {.width = 2, .cap = StrokeCap::Round})) ==
+          "M0,0 L0,0 M10,0 L10,0 M20,0 L20,0 M30,0 L30,0");
+    // A negative phase from the pattern's end: -5 of 15 is 10 into it.
+    CHECK(PathEffect::dashPathEffect({10, 5}, -5) == PathEffect::dashPathEffect({10, 5}, 10) &&
+          PathEffect::dashPathEffect({10, 5}, 25) == PathEffect::dashPathEffect({10, 5}, 10));
+    CHECK(!(PathEffect::dashPathEffect({10, 5}, 3) == PathEffect::dashPathEffect({10, 5})) &&
+          !(PathEffect::dashPathEffect({10, 5}) == PathEffect::dashPathEffect({10, 6})) && !(PathEffect::cornerPathEffect(2) == PathEffect::cornerPathEffect(3)));
+    CHECK(pathText(effected(PathEffect::dashPathEffect({10, 5}, -5), line, {.width = 1, .cap = StrokeCap::Round})) ==
+          "M5,0 L15,0 M20,0 L30,0 M35,0 L40,0");
+    // What Skia refuses (crbug.com/348821 among them) is none: the path drawn as it is.
+    for (const PathEffect& none : {PathEffect::dashPathEffect({}), PathEffect::dashPathEffect({1}), PathEffect::dashPathEffect({-1, 2}),
+                                   PathEffect::dashPathEffect({0, 0}), PathEffect::dashPathEffect({1.76934361e+36f, 2.80259693e-45f}, INFINITY),
+                                   PathEffect::cornerPathEffect(0), PathEffect::cornerPathEffect(-1), PathEffect::cornerPathEffect(NAN),
+                                   PathEffect::stampedPathEffect(line, 0, 0, StampedPathEffectStyle::Translate),
+                                   PathEffect::stampedPathEffect(Path(), 10, 0, StampedPathEffectStyle::Rotate)}) {
+        Path out;
+        PathStroke stroke{.width = 1};
+        CHECK(none.isNone() && !none.filterPath(out, line, stroke) && none == PathEffect());
+    }
+    // Chained with none: the other one.
+    PathEffect corner = PathEffect::cornerPathEffect(3);
+    CHECK(PathEffect::chainPathEffect(PathEffect(), corner) == corner && PathEffect::chainPathEffect(corner, PathEffect()) == corner);
+    // A fill isn't dashed; its corners are rounded.
+    Path square;
+    square.addRect({0, 0, 20, 20}, Path::Direction::Clockwise);
+    Path out;
+    PathStroke fill;
+    CHECK(!PathEffect::dashPathEffect({2, 2}).filterPath(out, square, fill) && corner.filterPath(out, square, fill));
+    // Curves go through a corner effect as they are, corners between lines rounded; an open
+    // contour's first line begins with a quadratic at its start, and a curve goes on from where the
+    // line before it stopped (Skia's: "just replicate the curve for now").
+    Path mixed;
+    mixed.moveTo(0, 0);
+    mixed.lineTo(20, 0);
+    mixed.quadraticTo(30, 0, 30, 10);
+    mixed.lineTo(30, 30);
+    mixed.lineTo(0, 30);
+    CHECK(pathText(effected(PathEffect::cornerPathEffect(4), mixed)) == "M0,0 Q4,0 L16,0 Q30,10 Q30,14 L30,26 Q26,30 L4,30 L0,30");
+    // Measured at the pixels: a dashed circle's (radius 50) dash 300 along it starts nearer its
+    // true place (6 radians round) at 3 pixels a unit than at 1.
+    Path circle;
+    circle.addOval({0, 0, 100, 100}, Path::Direction::Clockwise);
+    auto off = [&](float resScale) {
+        Path dashes;
+        PathStroke stroke{.width = 1};
+        PathEffect::dashPathEffect({10, 10}).filterPath(dashes, circle, stroke, resScale);
+        PathMeasure m(dashes);
+        for (int k = 0; k < 14; ++k) m.nextContour();  // (the first dash, 0 to 10, waits for the end)
+        Offset p = m.getPosition(0);
+        float a = std::atan2(p.y - 50, p.x - 50);
+        return std::abs(a + 2 * std::numbers::pi_v<float> - 6);
+    };
+    CHECK(off(3) < off(1) && off(3) < 0.005f && off(1) > 0.005f);
+    // Far too many dashes: Skia gives up (nothing dashed); odd cases neither hang nor fail
+    // (DashPath_bug4871, DashCrazy_crbug_875494).
+    Path longLine;
+    longLine.moveTo(1, 1);
+    longLine.lineTo(1, 5.0e10f);
+    PathStroke wide{.width = 2, .cap = StrokeCap::Round};
+    CHECK(!PathEffect::dashPathEffect({1, 1}).filterPath(out, longLine, wide) && out.isEmpty());
+    Path tiny;
+    tiny.moveTo(30, 24);
+    tiny.cubicTo(30.002f, 24, 30, 24, 30, 24);
+    tiny.close();
+    PathStroke stroke{.width = 1};
+    out.reset();
+    PathEffect::dashPathEffect({1, 1}).filterPath(out, tiny, stroke);
+    Path rect;
+    rect.addRect({43, 236, 57, 149}, Path::Direction::Clockwise);
+    out.reset();
+    CHECK(PathEffect::dashPathEffect({98, 94, 2888458849.f, 227, 0, 197}, 222).filterPath(out, rect, stroke));
+    // The scale strokes and effects are worked out at (Skia's ComputeResScaleForStroking).
+    CHECK(detail::resScaleOf(2, 0, 0, 3) == 3 && detail::resScaleOf(0, 1, -1, 0) == 1 && detail::resScaleOf(0, 0, 0, 0) == 1 &&
+          detail::resScaleOf(INFINITY, 0, 0, 1) == 1 && detail::resScaleOf(1e6f, 0, 0, 1) == 1e5f);
+    CHECK(std::abs(detail::resScaleOf(3, 4, 0, 1) - 5) < 1e-6f);
 }
 
 TEST(paths_are_skias) {
@@ -25229,17 +25543,17 @@ TEST(draw_points_as_dots_lines_or_one_line) {
 TEST(path_effects_edge_cases) {
     Path square;
     square.addRect({0, 0, 20, 20}, Path::Direction::Clockwise);
-    // Dashes come in on/off pairs: an odd last interval is dropped.
+    // Dashes come in on/off pairs: an odd last interval is dropped (as Android drops it).
     PathEffect odd = PathEffect::dashPathEffect({10, 5, 3});
-    CHECK(odd.count == 2);
+    CHECK(odd == PathEffect::dashPathEffect({10, 5}));
     Path line;
     line.moveTo(0, 0);
     line.lineTo(40, 0);
-    CHECK(pathText(odd.apply(line)) == "M0,0 L10,0 M15,0 L25,0 M30,0 L40,0");
+    CHECK(pathText(effected(odd, line, {.width = 1, .cap = StrokeCap::Round})) == "M0,0 L10,0 M15,0 L25,0 M30,0 L40,0");
     // A closed contour's dashes go round its closing side too.
-    CHECK(pathText(PathEffect::dashPathEffect({100, 1}).apply(square)) == "M0,0 L20,0 L20,20 L0,20 L0,0");
+    CHECK(pathText(effected(PathEffect::dashPathEffect({100, 1}), square)) == "M0,0 L20,0 L20,20 L0,20 L0,0");
     // A corner gives at most half of either side to its curve.
-    CHECK(pathText(PathEffect::cornerPathEffect(15).apply(square)) == "M10,0 L10,0 Q20,10 L20,10 Q10,20 L10,20 Q0,10 L0,10 Q10,0 L10,0 Z");
+    CHECK(pathText(effected(PathEffect::cornerPathEffect(15), square)) == "M10,0 Q20,10 Q10,20 Q0,10 Q10,0 Z");
     // Going back to the start before close() is the same square.
     Path back;
     back.moveTo(0, 0);
@@ -25248,11 +25562,12 @@ TEST(path_effects_edge_cases) {
     back.lineTo(0, 20);
     back.lineTo(0, 0);
     back.close();
-    CHECK(pathText(PathEffect::cornerPathEffect(4).apply(back)) == pathText(PathEffect::cornerPathEffect(4).apply(square)));
+    CHECK(pathText(effected(PathEffect::cornerPathEffect(4), back)) == pathText(effected(PathEffect::cornerPathEffect(4), square)));
     // Chained: rounded corners, then dashed (4 on, 4 off): half of the shorter way round.
     PathEffect chain = PathEffect::chainPathEffect(PathEffect::dashPathEffect({4, 4}), PathEffect::cornerPathEffect(6));
-    CHECK(chain.cornerRadius == 6 && chain.count == 2);
-    PathMeasure rounded(PathEffect::cornerPathEffect(6).apply(square)), dashed(chain.apply(square));
+    CHECK(chain == PathEffect::chainPathEffect(PathEffect::dashPathEffect({4, 4}), PathEffect::cornerPathEffect(6)) &&
+          !(chain == PathEffect::chainPathEffect(PathEffect::cornerPathEffect(6), PathEffect::dashPathEffect({4, 4}))));
+    PathMeasure rounded(effected(PathEffect::cornerPathEffect(6), square)), dashed(effected(chain, square));
     float drawn = dashed.length();
     while (dashed.nextContour()) drawn += dashed.length();
     CHECK(rounded.length() < 78 && near(drawn, rounded.length() / 2, 2));

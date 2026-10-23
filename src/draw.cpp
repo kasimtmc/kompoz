@@ -621,15 +621,8 @@ void DrawScope::paint(const Path& path, const Brush& brush, float alpha, const D
     Blending blending(*context_, blendMode);
     detail::Filtering filtering(*context_, colorFilter);
     Brush b = brush.faded(alpha);
-    PathStroke stroke = style.pathStroke();
-    if (style.pathEffect) {  // (a fill's: a Canvas's Paint)
-        Path effected = style.pathEffect->apply(path, !style.isStroke());
-        if (effected.isEmpty()) return;
-        if (style.pathEffect->fills()) stroke = {};  // stamped shapes are filled
-        context_->drawPath(effected, {bounds_.x, bounds_.y}, b, bounds_, stroke);
-        return;
-    }
-    context_->drawPath(path, {bounds_.x, bounds_.y}, b, bounds_, stroke);
+    // (Its path effect goes with it, applied where it is drawn, at the pixels it is drawn at.)
+    context_->drawPath(path, {bounds_.x, bounds_.y}, b, bounds_, style.pathStroke());
 }
 
 // A rounded rect (this scope's; `oval`: a circle), as the backend draws one where it can: filled,

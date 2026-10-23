@@ -13,6 +13,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -1162,13 +1163,98 @@ Shape GenericShape(std::function<void(Path& path, Size size, LayoutDirection lay
 // A shape whose outline is made as `createOutline` says (Compose's Shape implemented).
 Shape OutlineShape(std::function<Outline(Size size, LayoutDirection layoutDirection)> createOutline);
 
+struct PathStroke;
+namespace detail {
+class ContourMeasure;
+}
+
+// How stampedPathEffect lays each copy of its shape on the path (Skia's SkPath1DPathEffect
+// styles): moved there, also turned the way the path goes, or bent along it.
+enum class StampedPathEffectStyle { Translate, Rotate, Morph };
+
+// What a path goes through before it is drawn (Compose's PathEffect, Skia's): dashes, rounded
+// corners, copies of a shape stamped along it, or one effect after another. Applied as the path
+// is drawn, at the pixels it is drawn at (as Skia applies a paint's effect). One made of what
+// Skia refuses (dashes of an odd count or none, a negative interval, nothing on; a corner of no
+// radius; a stamp of no advance or an empty shape) is none, as Skia's: it leaves the path as it is.
+// Equal when made the same way.
+class PathEffect {
+public:
+    PathEffect() = default;  // none
+    // On, off, on… (in pairs, an odd last one left out as Android leaves it; none negative, not all
+    // 0), `phase` into the pattern (its length's remainder; negative: from its end), starting
+    // again on each contour; a closed one joins its last dash to its first. Strokes only: a fill
+    // is drawn as it is.
+    static PathEffect dashPathEffect(std::span<const float> intervals, float phase = 0);
+    static PathEffect dashPathEffect(std::initializer_list<float> intervals, float phase = 0) {
+        return dashPathEffect(std::span<const float>(intervals.begin(), intervals.size()), phase);
+    }
+    // Each corner between two lines cut back by `radius` (half each line at most) and joined by a
+    // quadratic through it; curves as they are.
+    static PathEffect cornerPathEffect(float radius);
+    // `shape` every `advance` along each contour, filled (the stroke becomes a fill); a phase of
+    // p puts the first one at advance - p.
+    static PathEffect stampedPathEffect(const Path& shape, float advance, float phase, StampedPathEffectStyle style);
+    // `inner`'s effect, then `outer`'s on what it made.
+    static PathEffect chainPathEffect(const PathEffect& outer, const PathEffect& inner);
+
+    bool isNone() const { return !node_; }
+    // What the effect makes of `src` drawn with `stroke` at `resScale` pixels a unit (Skia's
+    // filterPath): into `dst`, `stroke` changed if it draws the result otherwise (a stamp's, a
+    // dashed line's, filled); false if it leaves the path as it is.
+    bool filterPath(Path& dst, const Path& src, PathStroke& stroke, float resScale = 1) const;
+
+    friend bool operator==(const PathEffect& a, const PathEffect& b);
+
+    struct Node;
+
+private:
+    std::shared_ptr<const Node> node_;
+};
+
 struct PathStroke {
     float width = 0;  // 0: fill (unless a hairline)
     StrokeCap cap = StrokeCap::Butt;
     StrokeJoin join = StrokeJoin::Miter;
     float miter = 4;
     bool hairline = false;  // stroked one pixel wide, whatever the transform (the width unused)
+    std::optional<PathEffect> pathEffect;  // what the path goes through first, filled or stroked
     bool strokes() const { return hairline || width > 0; }
+};
+
+namespace detail {
+// The scale a matrix draws strokes and path effects at (Skia's ComputeResScaleForStroking): its
+// larger column's length (1 if none).
+float resScaleOf(float scaleX, float skewY, float skewX, float scaleY);
+// `stroke`'s path effect on `path` at `resScale` (as Skia's FillPathWithPaint applies it): the
+// path to draw in `effected` (or `path` itself, returned) and how, its effect gone.
+const Path& pathEffected(const Path& path, PathStroke& stroke, float resScale, Path& effected);
+} // namespace detail
+
+// Lengths along a path (Compose's PathMeasure, Android's: Skia's SkPathMeasure), contour by
+// contour (those of no length skipped), its curves measured as Skia measures them: cut in halves
+// until each piece is within half a unit of a line (half a unit over `resScale`), positions and
+// tangents on the curves themselves, pieces of them as curves.
+class PathMeasure {
+public:
+    PathMeasure() = default;
+    explicit PathMeasure(const Path& path, bool forceClosed = false, float resScale = 1) { setPath(path, forceClosed, resScale); }
+    void setPath(const Path& path, bool forceClosed = false, float resScale = 1);
+    float length() const;  // of the current contour (the first, until nextContour()); 0 if none
+    bool isClosed() const;  // the current contour ends with a close (or forceClosed)
+    // Where `distance` (kept within 0..length) lands, and the unit vector the contour goes there;
+    // NaN, NaN if there is no contour (Compose's Offset.Unspecified).
+    Offset getPosition(float distance) const;
+    Offset getTangent(float distance) const;
+    // Adds the piece from startDistance to stopDistance (kept within 0..length; false unless start
+    // is under stop) to `destination`: its curves cut at those places, beginning with a moveTo
+    // (else going on from where it was).
+    bool getSegment(float startDistance, float stopDistance, Path& destination, bool startWithMoveTo = true) const;
+    bool nextContour();  // moves on to the next contour, if there is one
+
+private:
+    std::vector<std::shared_ptr<const detail::ContourMeasure>> contours_;
+    size_t current_ = 0;
 };
 
 class DrawScope;
@@ -1480,36 +1566,6 @@ private:
 
 class GraphicsContext;
 
-// How stampedPathEffect lays each copy of its shape on the path: moved there, also turned the
-// way the path goes, or bent along it.
-enum class StampedPathEffectStyle { Translate, Rotate, Morph };
-
-// What a stroke does to its path first (Compose's PathEffect): dashes (on, off, on… dp, from
-// `phase` into the pattern, starting again on each contour), rounded corners, copies of a shape
-// stamped along it (filled, instead of the stroke), or rounded corners and then one of the others
-// (chainPathEffect).
-struct PathEffect {
-    std::array<float, 8> intervals{};
-    int count = 0;
-    float phase = 0;
-    float cornerRadius = 0;
-    std::optional<Path> stamp;  // its origin goes on the path
-    float advance = 0;          // dp from one stamp to the next
-    StampedPathEffectStyle stampStyle = StampedPathEffectStyle::Translate;
-
-    static PathEffect dashPathEffect(std::initializer_list<float> intervals, float phase = 0);
-    static PathEffect cornerPathEffect(float radius);
-    // `shape` every `advance` dp along each contour; a phase of p puts the first one at advance - p
-    // (as Skia's).
-    static PathEffect stampedPathEffect(const Path& shape, float advance, float phase, StampedPathEffectStyle style);
-    static PathEffect chainPathEffect(const PathEffect& outer, const PathEffect& inner);
-    // The path the stroke then draws (or fills, stamped); a fill's (`filled`) without the dashes,
-    // as Skia dashes only strokes.
-    Path apply(const Path& path, bool filled = false) const;
-    bool fills() const { return stamp && advance > 0; }  // its path is filled, not stroked
-    friend bool operator==(const PathEffect&, const PathEffect&) = default;
-};
-
 // How a shape is drawn (Compose's DrawStyle): filled (Fill), or outlined (Stroke): `width` dp
 // wide, centered on its outline (0: a hairline, one pixel wide whatever the transform), its
 // corners joined (a miter cut off past `miter` times the width), its ends capped, its path
@@ -1522,8 +1578,10 @@ struct DrawStyle {
     StrokeJoin join = StrokeJoin::Miter;
     std::optional<PathEffect> pathEffect;
     constexpr bool isStroke() const { return stroke; }
-    // As a path's stroke (none for Fill).
-    PathStroke pathStroke() const { return stroke ? PathStroke{width, cap, join, miter, width <= 0} : PathStroke{}; }
+    // As a path's stroke (none for Fill), with its path effect.
+    PathStroke pathStroke() const {
+        return stroke ? PathStroke{width, cap, join, miter, width <= 0, pathEffect} : PathStroke{.pathEffect = pathEffect};
+    }
     friend bool operator==(const DrawStyle&, const DrawStyle&) = default;
 };
 inline constexpr DrawStyle Fill{};
@@ -1531,31 +1589,6 @@ constexpr DrawStyle Stroke(float width = 0, float miter = 4, StrokeCap cap = Str
                            std::optional<PathEffect> pathEffect = {}) {
     return {true, width, miter, cap, join, pathEffect};
 }
-
-// Lengths along a path (Compose's PathMeasure), contour by contour (curves measured as fine
-// polylines): how long the current one is, where a distance along it lands and which way it
-// goes there, and the piece between two distances.
-class PathMeasure {
-public:
-    PathMeasure() = default;
-    explicit PathMeasure(const Path& path, bool forceClosed = false) { setPath(path, forceClosed); }
-    void setPath(const Path& path, bool forceClosed = false);
-    float length() const;  // of the current contour (the first, until nextContour())
-    Offset getPosition(float distance) const;
-    Offset getTangent(float distance) const;  // a unit vector
-    // Adds the piece from startDistance to stopDistance to `destination` (beginning with a
-    // moveTo, or a lineTo from where it was); false if there is none.
-    bool getSegment(float startDistance, float stopDistance, Path& destination, bool startWithMoveTo = true) const;
-    bool nextContour();  // moves on to the next contour, if there is one
-
-private:
-    struct Contour {
-        std::vector<Offset> points;
-        std::vector<float> lengths;  // from the start to each point
-    };
-    std::vector<Contour> contours_;
-    size_t current_ = 0;
-};
 
 // A shadow (Compose's Shadow, for text and, with spread, for dropShadow/innerShadow): its
 // color, how far it is moved and how much it is blurred (dp; Compose's text shadows count

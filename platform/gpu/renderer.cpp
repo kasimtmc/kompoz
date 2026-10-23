@@ -1307,7 +1307,13 @@ std::vector<Contour> Renderer::polygonsOf(const Path& path, Offset origin, const
     return transformed ? project(contours, transform_) : contours;
 }
 
-void Renderer::drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& area, const PathStroke& stroke) {
+void Renderer::drawPath(const Path& source, Offset origin, const Brush& brush, const Rect& area, const PathStroke& given) {
+    if (source.isEmpty()) return;
+    // Its path effect at the pixels it is drawn at (Skia's resScale: the transform's larger scale).
+    PathStroke stroke = given;
+    Path effected;
+    const Path& path = detail::pathEffected(source, stroke, scale * detail::resScaleOf(transform_.m[0], transform_.m[3], transform_.m[1], transform_.m[4]),
+                                            effected);
     if (path.isEmpty()) return;
     std::vector<Contour> contours = polygonsOf(path, origin, stroke);
     bool evenOdd = !stroke.strokes() && path.fillType == Path::FillType::EvenOdd;

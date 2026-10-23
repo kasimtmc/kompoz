@@ -83,6 +83,7 @@ add_library(kompoz_core STATIC
     src/graphics.cpp
     src/color.cpp
     src/colorspace.cpp
+    src/path_effect.cpp
     src/image_bitmap.cpp
     src/text.cpp
     src/html.cpp

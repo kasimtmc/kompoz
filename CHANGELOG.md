@@ -150,6 +150,11 @@
   `Color.VectorConverter`; gradients mix in sRGB, as Skia's; a color of another space is drawn in sRGB, not rounded to
   8 bits on the way. `ImageBitmap` takes a color space. **Changed**: `Color`'s `r`, `g`, `b`, `a` fields are its
   `red()`, `green()`, `blue()`, `alpha()`, and its components are kept as Compose keeps them (8 bits in sRGB).
+- **Path effects and PathMeasure as Skia's**: dashes, corners, stamps and chains as Skia makes them (a closed contour's
+  dashes joined round its start, curves dashed as pieces of themselves, any chain of effects), applied where the path
+  is drawn, at the pixels it is drawn at; `PathMeasure` measures and cuts curves as `SkContourMeasure` does (pieces of
+  curves as curves, `isClosed`, `resScale`). **Changed**: `PathEffect` is a value made by its functions (`isNone`,
+  `filterPath`); its fields and `apply` are gone, and a path's effect travels with its stroke (`PathStroke::pathEffect`).
 - **Fixed**: building with GCC 14 (the text field's caret handle) and with MSVC; the MinGW toolchain file dropped the
   roots it was given; offscreen on macOS the window couldn't be created (SDL made it an OpenGL one, which needs EGL
   there): it now draws with the software renderer.

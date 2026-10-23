@@ -27,7 +27,8 @@ bool same(const LayerTransform& a, const LayerTransform& b) {
            a.translationY == b.translationY && same(a.origin, b.origin);
 }
 bool same(const PathStroke& a, const PathStroke& b) {
-    return a.width == b.width && a.cap == b.cap && a.join == b.join && a.miter == b.miter && a.hairline == b.hairline;
+    return a.width == b.width && a.cap == b.cap && a.join == b.join && a.miter == b.miter && a.hairline == b.hairline &&
+           a.pathEffect == b.pathEffect;
 }
 
 bool empty(const Rect& r) { return r.width <= 0 || r.height <= 0; }

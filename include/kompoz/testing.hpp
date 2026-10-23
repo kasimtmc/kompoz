@@ -357,7 +357,13 @@ public:
         order += 'v';
         meshes.push_back({v, {origin.x + translation.x, origin.y + translation.y}, mode, brush, area, alpha, blend(), filterStack});
     }
-    void drawPath(const Path& path, Offset origin, const Brush& brush, const Rect& area, const PathStroke& stroke) override {
+    // A path effect is applied as a backend applies it (here a unit a pixel): the path and stroke
+    // recorded are what it made.
+    void drawPath(const Path& source, Offset origin, const Brush& brush, const Rect& area, const PathStroke& given) override {
+        PathStroke stroke = given;
+        Path effected;
+        const Path& path = detail::pathEffected(source, stroke, 1, effected);
+        if (&path == &effected && path.isEmpty()) return;  // (nothing left to draw)
         order += 'p';
         pathBlends.push_back(blend());
         pathAntiAliased.push_back(antiAliased());

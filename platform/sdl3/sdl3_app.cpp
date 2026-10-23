@@ -1404,9 +1404,12 @@ public:
         SDL_DestroyTexture(texture);
     }
 
-    void drawPath(const Path& path, Offset origin, const Brush& unfiltered, const Rect& area, const PathStroke& given) override {
-        if (path.isEmpty()) return;
+    void drawPath(const Path& source, Offset origin, const Brush& unfiltered, const Rect& area, const PathStroke& given) override {
+        if (source.isEmpty()) return;
         PathStroke stroke = given;
+        Path effected;
+        const Path& path = detail::pathEffected(source, stroke, scale, effected);  // (its path effect at the pixels it is drawn at)
+        if (path.isEmpty()) return;
         if (stroke.hairline) stroke.width = finer() / scale, stroke.join = StrokeJoin::Round;  // a pixel wide, its corners unfolded
         Brush brush = filtered(unfiltered);
         // Rasterized relative to a whole pixel, with the fraction (in quarter pixels) part of the

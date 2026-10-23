@@ -3095,6 +3095,58 @@ void projectionsAreExact() {
     CHECK(std::any_of(cut[0].points.begin(), cut[0].points.end(), [&](Offset q) { return at(q, 10.f / 3, 10.f / 3); }));
 }
 
+// Path effects are applied by the renderer as it draws a path, at the pixels it draws it at (Skia's
+// resScale): a line's butt dashes as their rectangles; a small circle's dashes measured at 8 px a
+// unit (its curves cut finer), where at 1 they would fall elsewhere.
+void pathEffectsApplyWhereDrawn(Gpu& g) {
+    Path line;
+    line.moveTo(2, 5);
+    line.lineTo(42, 5);
+    Pixels dashed = g.render(100, 20, 2, [&](GraphicsContext& c) {
+        c.drawPath(line, {}, Brush::solid(colors::Black), {}, {.width = 4, .pathEffect = PathEffect::dashPathEffect({10, 10})});
+    });
+    CHECK(near(dashed.at(14, 10), 0, 0, 0) && near(dashed.at(34, 10), 255, 255, 255) && near(dashed.at(54, 10), 0, 0, 0) &&
+          near(dashed.at(74, 10), 255, 255, 255));
+    Path circle;
+    circle.addOval({1, 1, 10, 10}, Path::Direction::Clockwise);
+    PathEffect dash = PathEffect::dashPathEffect({1, 1});
+    // The angles (degrees, 0..360 from the right, clockwise) each dash covers at a scale.
+    auto covered = [&](float resScale) {
+        Path out;
+        PathStroke stroke{.width = 0.5f};
+        dash.filterPath(out, circle, stroke, resScale);
+        std::vector<bool> on(360, false);
+        PathMeasure m(out, false, 64);
+        do {
+            for (float d = 0; d <= m.length(); d += 0.01f) {
+                Offset p = m.getPosition(d);
+                float a = std::atan2(p.y - 6, p.x - 6) * 180 / std::numbers::pi_v<float>;
+                on[size_t(int(std::floor(a < 0 ? a + 360 : a))) % 360] = true;
+            }
+        } while (m.nextContour());
+        return on;
+    };
+    std::vector<bool> fine = covered(8), coarse = covered(1);
+    // A degree well inside one of fine's dashes and coarse's gaps (its neighbours too), and the other way round.
+    int inFine = -1, inCoarse = -1;
+    for (int a = 2; a < 358; ++a) {
+        bool f = fine[size_t(a - 2)] && fine[size_t(a)] && fine[size_t(a + 2)], c = coarse[size_t(a - 2)] || coarse[size_t(a)] || coarse[size_t(a + 2)];
+        bool f2 = fine[size_t(a - 2)] || fine[size_t(a)] || fine[size_t(a + 2)], c2 = coarse[size_t(a - 2)] && coarse[size_t(a)] && coarse[size_t(a + 2)];
+        if (inFine < 0 && f && !c) inFine = a;
+        if (inCoarse < 0 && c2 && !f2) inCoarse = a;
+    }
+    CHECK(inFine >= 0 && inCoarse >= 0);
+    if (inFine < 0 || inCoarse < 0) return;
+    Pixels drawn = g.render(100, 100, 8, [&](GraphicsContext& c) {
+        c.drawPath(circle, {}, Brush::solid(colors::Black), {}, {.width = 0.5f, .pathEffect = dash});
+    });
+    auto pixelAt = [&](int degrees) {
+        float a = float(degrees + 1) * std::numbers::pi_v<float> / 180 - std::numbers::pi_v<float> / 360;  // (the degree's middle)
+        return drawn.at(int((6 + 5 * std::cos(a)) * 8), int((6 + 5 * std::sin(a)) * 8));
+    };
+    CHECK(pixelAt(inFine)[0] < 100 && pixelAt(inCoarse)[0] > 200);
+}
+
 void scenesMatchTheirPictures(Gpu& g) {
     struct Scene {
         const char* name;
@@ -3160,6 +3212,7 @@ int main() {
             vectorsDrawAsCompose(g);
             aliasedDrawingIsSkias(g);
             elevationShadowsAreAndroids(g);
+            pathEffectsApplyWhereDrawn(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
             std::printf("%d checks, %d failed\n", checks, failures);

@@ -157,7 +157,20 @@ void Heart() {
 }
 ```
 
-`moveTo`, `lineTo`, `quadraticTo`, `conicTo`, `cubicTo`, their `relative…` forms, `arcTo`, `addRect`, `addOval`, `addRoundRect` and `close` build it, as Compose's (an Android path) does: shapes added whole go counterclockwise unless you pass `Path::Direction::Clockwise`, and arcs and ovals are conics, exact. `transform(matrix)` moves it, `op` (or `a + b`, `a - b`, `a & b`) combines two, keeping their curves, `iterator()` walks its segments, `PathHitTester` tests points against it again and again. `PathMeasure` measures its length and gives segments of it, for drawing a path progressively.
+`moveTo`, `lineTo`, `quadraticTo`, `conicTo`, `cubicTo`, their `relative…` forms, `arcTo`, `addRect`, `addOval`, `addRoundRect` and `close` build it, as Compose's (an Android path) does: shapes added whole go counterclockwise unless you pass `Path::Direction::Clockwise`, and arcs and ovals are conics, exact. `transform(matrix)` moves it, `op` (or `a + b`, `a - b`, `a & b`) combines two, keeping their curves, `iterator()` walks its segments, `PathHitTester` tests points against it again and again. `PathMeasure` measures its length and gives segments of it (pieces of its curves, as curves), for drawing a path progressively, as Android's does.
+
+A `PathEffect` on a stroke (or a `Paint`) changes the path as it is drawn, as Skia's: dashes, rounded corners, a shape stamped along it, or one after another (`chainPathEffect`).
+
+```cpp body
+Path wave;
+wave.moveTo(0, 20);
+wave.cubicTo(30, -10, 60, 50, 90, 20);
+Canvas(Modifier().size(100, 40), [wave](DrawScope& d) {
+    d.drawPath(wave, colorScheme().primary, 1, Stroke(3, 4, StrokeCap::Round, StrokeJoin::Round, PathEffect::dashPathEffect({8, 6})));
+});
+```
+
+It is applied where the path is drawn, at the pixels it is drawn at, so a dash on a curve lands where Compose's does at any scale.
 
 ## Shapes and clipping
 

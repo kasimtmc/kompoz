@@ -157,7 +157,20 @@ void Heart() {
 }
 ```
 
-`moveTo`, `lineTo`, `quadraticTo`, `conicTo`, `cubicTo`, bunların `relative…` biçimleri, `arcTo`, `addRect`, `addOval`, `addRoundRect` ve `close` path'i Compose'unki (bir Android path'i) gibi kurar: bütün olarak eklenen şekiller `Path::Direction::Clockwise` vermezseniz saat yönünün tersine döner, yaylar ve ovaller birebir conic'lerdir. `transform(matrix)` onu taşır, `op` (ya da `a + b`, `a - b`, `a & b`) iki path'i eğrilerini koruyarak birleştirir, `iterator()` segmentlerini gezer, `PathHitTester` noktaları ona tekrar tekrar sınar. `PathMeasure` uzunluğunu ölçer ve parçalarını verir; bir path'i adım adım çizmek için.
+`moveTo`, `lineTo`, `quadraticTo`, `conicTo`, `cubicTo`, bunların `relative…` biçimleri, `arcTo`, `addRect`, `addOval`, `addRoundRect` ve `close` path'i Compose'unki (bir Android path'i) gibi kurar: bütün olarak eklenen şekiller `Path::Direction::Clockwise` vermezseniz saat yönünün tersine döner, yaylar ve ovaller birebir conic'lerdir. `transform(matrix)` onu taşır, `op` (ya da `a + b`, `a - b`, `a & b`) iki path'i eğrilerini koruyarak birleştirir, `iterator()` segmentlerini gezer, `PathHitTester` noktaları ona tekrar tekrar sınar. `PathMeasure` uzunluğunu ölçer ve parçalarını verir (eğrilerinin parçalarını eğri olarak); Android'inki gibi, bir path'i adım adım çizmek için.
+
+Bir çizgideki (ya da bir `Paint`'teki) `PathEffect` path'i çizilirken değiştirir, Skia'nınki gibi: kesikler, yuvarlak köşeler, boyunca basılan bir şekil ya da biri ardından öteki (`chainPathEffect`).
+
+```cpp body
+Path wave;
+wave.moveTo(0, 20);
+wave.cubicTo(30, -10, 60, 50, 90, 20);
+Canvas(Modifier().size(100, 40), [wave](DrawScope& d) {
+    d.drawPath(wave, colorScheme().primary, 1, Stroke(3, 4, StrokeCap::Round, StrokeJoin::Round, PathEffect::dashPathEffect({8, 6})));
+});
+```
+
+Path'in çizildiği yerde, çizildiği piksellerde uygulanır; böylece bir eğrideki kesik her ölçekte Compose'unkinin düştüğü yere düşer.
 
 ## Şekiller ve kırpma
 
