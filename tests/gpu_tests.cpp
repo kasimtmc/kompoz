@@ -147,8 +147,8 @@ struct Gpu {
         const int contextAttributes[] = {0x3098 /*EGL_CONTEXT_MAJOR_VERSION*/, 3, 0x3038};
         void* context = count > 0 ? reinterpret_cast<void*>(fn("eglCreateContext")(display, config, nullptr, contextAttributes)) : nullptr;
         const int surfaceAttributes[] = {0x3057 /*EGL_WIDTH*/, 64, 0x3056 /*EGL_HEIGHT*/, 64, 0x3038};
-        void* surface = context ? reinterpret_cast<void*>(fn("eglCreatePbufferSurface")(display, config, surfaceAttributes)) : nullptr;
-        if (!surface || !fn("eglMakeCurrent")(display, surface, surface, context)) {
+        void* pbuffer = context ? reinterpret_cast<void*>(fn("eglCreatePbufferSurface")(display, config, surfaceAttributes)) : nullptr;
+        if (!pbuffer || !fn("eglMakeCurrent")(display, pbuffer, pbuffer, context)) {
             *why = "no OpenGL ES 3 context through EGL";
             return false;
         }
