@@ -179,6 +179,11 @@
   names the file), so only an app's first run compiles them: on a phone's Adreno its first frame was drawn in 465 ms on
   Vulkan and 621 ms on OpenGL ES, and is in 21 and 22 ms after that. On OpenGL ES, pipelines that differ only in
   blending share one program, compiled once.
+- **Fixed**: on Android's Vulkan, with the phone turned from its natural way up, the GPU renderer made its swapchain
+  anew every frame (the compositor would have had to turn each image, so every present was "suboptimal"): its images
+  are now the display's way up, and the frame is turned into them as it is copied there (`Device::swapchainTurns`), as
+  Android asks of Vulkan apps. On a phone's Adreno turned sideways, a screen scrolled at 113 frames a second instead of
+  38, with 2.4 ms of work a frame instead of 26.
 - **Fixed**: the GPU renderer's turned, stretched and leaning edges were up to 10/255 off on GPUs that snap vertices
   coarsely (4 subpixel bits, as SwiftShader does: Chrome's WebGL where it doesn't use the GPU): a quad's corners are
   put where such a GPU would put them, and its pixels shaded from there.

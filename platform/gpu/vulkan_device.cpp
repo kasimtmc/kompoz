@@ -173,7 +173,9 @@ public:
     VkSwapchainKHR swapchain = VK_NULL_HANDLE;
     VkFormat swapFormat = VK_FORMAT_B8G8R8A8_UNORM;
     Format swapFormatKompoz = Format::BGRA8;
-    VkExtent2D swapExtent{};
+    VkExtent2D swapExtent{};  // the drawable's size it was made for (its images are turned: turns)
+    VkSurfaceTransformFlagBitsKHR swapTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;  // the display's then
+    int turns = 0;
     std::vector<std::unique_ptr<VulkanTexture>> swapImages;
     std::vector<VkSemaphore> renderFinished;  // per swapchain image
     uint32_t swapIndex = 0;
@@ -441,6 +443,7 @@ public:
     int validationErrors() const override { return errors.load(); }
     bool clipYDown() const override { return true; }
     Format swapchainFormat() const override { return swapFormatKompoz; }
+    int swapchainTurns() const override { return turns; }
 
     // --- Resources ---------------------------------------------------------------------------
 
@@ -668,11 +671,21 @@ public:
         if (caps.maxImageCount) sci.minImageCount = std::min(sci.minImageCount, caps.maxImageCount);
         sci.imageFormat = chosen.format;
         sci.imageColorSpace = chosen.colorSpace;
-        sci.imageExtent = extent;
+        // Turned as the display is, by us: its images the display's way up, the content drawn turned
+        // into them (swapchainTurns), not turned by the compositor every frame (a present it has to
+        // turn is "suboptimal"). A mirrored display is left to it.
+        VkSurfaceTransformFlagBitsKHR transform = caps.currentTransform;
+        turns = transform == VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR    ? 1
+                : transform == VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR ? 2
+                : transform == VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR ? 3
+                                                                       : 0;
+        if (turns == 0 && (caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)) transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+        VkExtent2D imageExtent = turns & 1 ? VkExtent2D{extent.height, extent.width} : extent;
+        sci.imageExtent = imageExtent;
         sci.imageArrayLayers = 1;
         sci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | (caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
         sci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        sci.preTransform = (caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR : caps.currentTransform;
+        sci.preTransform = transform;
         for (VkCompositeAlphaFlagBitsKHR a : {VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
                                               VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR, VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR})
             if (caps.supportedCompositeAlpha & a) {
@@ -692,11 +705,12 @@ public:
         }
         swapchain = made;
         swapExtent = extent;
+        swapTransform = caps.currentTransform;
         vk.vkGetSwapchainImagesKHR(device, swapchain, &count, nullptr);
         std::vector<VkImage> images(count);
         vk.vkGetSwapchainImagesKHR(device, swapchain, &count, images.data());
         for (VkImage image : images) {
-            swapImages.push_back(std::make_unique<VulkanTexture>(*this, int(extent.width), int(extent.height), swapFormatKompoz, image,
+            swapImages.push_back(std::make_unique<VulkanTexture>(*this, int(imageExtent.width), int(imageExtent.height), swapFormatKompoz, image,
                                                                  makeView(image, chosen.format), VK_NULL_HANDLE));
             VkSemaphoreCreateInfo semci{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
             VkSemaphore s = VK_NULL_HANDLE;
@@ -1082,7 +1096,12 @@ public:
             pi.pSwapchains = &swapchain;
             pi.pImageIndices = &swapIndex;
             VkResult r = vk.vkQueuePresentKHR(queue, &pi);
-            if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) swapExtent = {};  // made again next frame
+            if (r == VK_SUBOPTIMAL_KHR) {  // made again if the display turned since (else it is the compositor's to fit)
+                VkSurfaceCapabilitiesKHR caps{};
+                vk.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical, surface, &caps);
+                if (caps.currentTransform != swapTransform) swapExtent = {};
+            }
+            if (r == VK_ERROR_OUT_OF_DATE_KHR) swapExtent = {};  // made again next frame
         }
         inFrame = false;
         acquired = false;

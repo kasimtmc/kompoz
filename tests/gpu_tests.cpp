@@ -3398,6 +3398,17 @@ void blitCopiesTexturesAsTheyAre(Gpu& g) {
     int worst = worstAgainst(shown, [&](int x, int y) { return kept.at(x, y); });
     CHECK(worst == 0 && near(shown.at(8, 7), 255, 0, 0) && near(shown.at(26, 18), 0, 0, 255) && near(shown.at(1, 28), 0, 255, 0));
     if (worst != 0) std::printf("  blit: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
+    // Turned clockwise by quarters, into a target the display's way up (Device::swapchainTurns):
+    // each pixel the texel turned onto it.
+    for (int turns = 1; turns < 4; ++turns) {
+        int tw = turns & 1 ? h : w, th = turns & 1 ? w : h;
+        Pixels turned = g.render(tw, th, 1, [&](GraphicsContext&) { g.renderer->blit(*frame, turns); });
+        worst = worstAgainst(turned, [&](int x, int y) {
+            return turns == 1 ? kept.at(y, h - 1 - x) : turns == 2 ? kept.at(w - 1 - x, h - 1 - y) : kept.at(w - 1 - y, x);
+        });
+        CHECK(worst == 0);
+        if (worst != 0) std::printf("  blit turned %d times: off by %d at (%g, %g)\n", turns, worst, worstAt.x, worstAt.y);
+    }
 }
 
 // Texels uploaded read back as they were, in every format: a part uploaded from a wider picture

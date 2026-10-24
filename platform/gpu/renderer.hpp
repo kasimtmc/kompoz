@@ -43,8 +43,9 @@ public:
     void endTarget();
     // Sets a px rect of the target to `color` as it is (no blending).
     void fillOpaque(const IRect& rect, Color color);
-    // Copies `texture` over the whole target as it is.
-    void blit(Texture& texture);
+    // Copies `texture` into the target as it is, texel for pixel, turned by `quarterTurns`
+    // (clockwise, about the target: Device::swapchainTurns).
+    void blit(Texture& texture, int quarterTurns = 0);
     // Submits what the targets ended so far recorded (glyphs and images uploaded first).
     void flush();
     // After each frame: textures of images that are gone, and layer targets unused for a while, go.

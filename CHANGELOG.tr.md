@@ -188,6 +188,11 @@
   Adreno'sunda ilk kare Vulkan'da 465, OpenGL ES'te 621 ms'de çiziliyordu, sonraki çalışmalarda 21 ve 22 ms'de
   çizilir. OpenGL ES'te yalnızca karışımı (blending) farklı olan pipeline'lar bir kez derlenen tek bir programı
   paylaşır.
+- **Düzeltildi**: Android'in Vulkan'ında, telefon doğal duruşundan döndürülmüşken GPU renderer swapchain'ini her karede
+  yeniden yapıyordu (her görüntüyü bileştiricinin döndürmesi gerekecekti, bu yüzden her present "suboptimal" idi):
+  görüntüleri artık ekranın kendi yönünde ve kare oraya kopyalanırken döndürülüyor (`Device::swapchainTurns`),
+  Android'in Vulkan uygulamalarından istediği gibi. Yana çevrilmiş bir telefonun Adreno'sunda bir ekran saniyede 38
+  yerine 113 kareyle kaydı, karede 26 yerine 2.4 ms işle.
 - **Düzeltildi**: GPU renderer'ın döndürülmüş, gerilmiş ve eğik kenarları, köşe noktalarını kaba bir ızgaraya oturtan
   GPU'larda (4 alt piksel biti, SwiftShader gibi: Chrome'un GPU kullanmadığı yerdeki WebGL'i) 10/255'e kadar
   sapıyordu: bir dörtgenin köşeleri böyle bir GPU'nun koyacağı yere konur, pikselleri oradan boyanır.

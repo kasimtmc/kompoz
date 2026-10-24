@@ -203,9 +203,14 @@ public:
     // Starts a frame (waiting for the GPU to be done with the one before the last). Calls below
     // need a frame begun.
     virtual void beginFrame() = 0;
-    // The image presented at the end of the frame, at the drawable's size; nothing if there is
-    // nothing to present to now (minimized, the surface lost).
+    // The image presented at the end of the frame, at the drawable's size (turned: see
+    // swapchainTurns); nothing if there is nothing to present to now (minimized, the surface lost).
     virtual Texture* swapchainTexture() = 0;
+    // How many quarter turns (clockwise) the window's content is drawn turned by into the
+    // swapchain's images, which are then the display's own way up (as wide as the drawable is high
+    // for an odd number): where the system leaves turning to the app, so that the compositor
+    // doesn't turn every frame (Android's Vulkan, the screen turned from its natural way up).
+    virtual int swapchainTurns() const { return 0; }
     // `size` bytes of this frame's memory (aligned to `alignment`), to write now.
     virtual void* allocate(size_t size, size_t alignment, BufferRef* ref) = 0;
     // Texels (in the texture's format, `rowBytes` apart) into part of a texture; outside passes.

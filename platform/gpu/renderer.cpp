@@ -357,13 +357,19 @@ void Renderer::fillOpaque(const IRect& rect, Color color) {
     add(FILL, p, nullptr, true);
 }
 
-void Renderer::blit(Texture& texture) {
-    const Texture& t = *passes_[targets_.back().pass].target;
+void Renderer::blit(Texture& texture, int quarterTurns) {
+    float w = float(texture.width()), h = float(texture.height());
     Prim p;
-    set(p.bounds, 0, 0, float(t.width()), float(t.height()));
+    set(p.bounds, 0, 0, w, h);
     std::copy(std::begin(p.bounds), std::end(p.bounds), p.shape);  // (an image's texels go across its shape)
     set(p.uv, 0, 0, 1, 1);
     p.params[0] = 1;
+    // Its own transform, turning it into the target (xform's columns, then the move).
+    switch (quarterTurns & 3) {
+    case 1: set(p.xform, 0, 1, -1, 0), p.extra[0] = h; break;
+    case 2: set(p.xform, -1, 0, 0, -1), p.extra[0] = w, p.extra[1] = h; break;
+    case 3: set(p.xform, 0, -1, 1, 0), p.extra[1] = w; break;
+    }
     add(IMAGE, p, &texture, true, Mask::None, nullptr, false, Sampler{Filter::Nearest});  // (texel for pixel, on any GPU)
 }
 

@@ -2788,9 +2788,19 @@ Drawn drawFrameGpu(App& app, const std::string& shot) {
     if (swapchain) {
         app.showFrame = false;
         r.beginTarget(*swapchain);
-        r.blit(*app.gpuFrame);
-        if (damage && app.damageShow)  // what was drawn again, outlined (only in the window, not the kept pixels)
+        int turns = device.swapchainTurns();
+        r.blit(*app.gpuFrame, turns);
+        if (damage && app.damageShow) {  // what was drawn again, outlined (only in the window, not the kept pixels)
+            Matrix turned;  // (as the frame is: a point's x and y from these, then moved)
+            float c[4][2] = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}};  // (cos, sin) of the turns
+            float cs = c[turns & 3][0], sn = c[turns & 3][1];
+            turned(0, 0) = cs, turned(0, 1) = sn, turned(1, 0) = -sn, turned(1, 1) = cs;
+            turned(3, 0) = (turns & 3) == 1 ? screen.height : (turns & 3) == 2 ? screen.width : 0;
+            turned(3, 1) = (turns & 3) == 2 ? screen.height : (turns & 3) == 3 ? screen.width : 0;
+            r.pushTransform(turned);
             r.strokeRoundRect(*damage, CornerRadii(), 3 / scale, Color{1, 0, 80 / 255.f, 1});
+            r.popTransform();
+        }
         r.endTarget();
     }
     r.flush();
