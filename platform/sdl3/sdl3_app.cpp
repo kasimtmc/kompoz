@@ -2252,8 +2252,8 @@ struct App {
     SDL_Renderer* renderer = nullptr;
     std::unique_ptr<FontSystem> fonts;
     std::unique_ptr<SdlCanvas> canvas;
-    // KOMPOZ_GPU=vulkan, gles or metal: Kompoz's GPU renderer instead of SDL_Renderer (gpu/renderer.hpp),
-    // with the kept frame in a texture of its own.
+    // KOMPOZ_GPU=vulkan, gles, metal or webgpu: Kompoz's GPU renderer instead of SDL_Renderer
+    // (gpu/renderer.hpp), with the kept frame in a texture of its own.
     std::unique_ptr<gpu::Device> gpu;
     SDL_GLContext glContext = nullptr;  // KOMPOZ_GPU=gles: the OpenGL ES context it draws with
     SDL_MetalView metalView = nullptr;  // KOMPOZ_GPU=metal: the view whose layer it draws into
@@ -3376,9 +3376,9 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
         if (dir) app->profile = app->profile || SDL_GetPathInfo((std::string(dir) + "/kompoz-profile").c_str(), nullptr);
 #endif
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
-    // KOMPOZ_GPU=vulkan, gles or metal: Kompoz's GPU renderer on Vulkan, OpenGL ES 3 or Metal. On Android, where
-    // an app has no environment, the first word of a file named kompoz-gpu in its files (as for
-    // kompoz-profile above):
+    // KOMPOZ_GPU=vulkan, gles, metal or webgpu: Kompoz's GPU renderer on Vulkan, OpenGL ES 3, Metal or
+    // WebGPU (on the web: the page's canvas). On Android, where an app has no environment, the first
+    // word of a file named kompoz-gpu in its files (as for kompoz-profile above):
     //   adb shell run-as <package> sh -c 'echo gles > files/kompoz-gpu'
     std::string gpuChoice = SDL_getenv("KOMPOZ_GPU") ? SDL_getenv("KOMPOZ_GPU") : "";
 #ifdef SDL_PLATFORM_ANDROID
@@ -3391,7 +3391,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
         }
     }
 #endif
-    bool useVulkan = gpuChoice == "vulkan", useGles = gpuChoice == "gles", useMetal = gpuChoice == "metal";
+    bool useVulkan = gpuChoice == "vulkan", useGles = gpuChoice == "gles", useMetal = gpuChoice == "metal", useWebGPU = gpuChoice == "webgpu";
 #ifdef KOMPOZ_GPU_VULKAN
     if (useVulkan) flags |= SDL_WINDOW_VULKAN;
 #else
@@ -3408,7 +3408,13 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
         useMetal = false;
     }
 #endif
-    bool useGpu = useVulkan || useGles || useMetal;
+#ifndef KOMPOZ_GPU_WEBGPU
+    if (useWebGPU) {
+        SDL_Log("kompoz: KOMPOZ_GPU=webgpu: this build has no WebGPU backend (the web's has)");
+        useWebGPU = false;
+    }
+#endif
+    bool useGpu = useVulkan || useGles || useMetal || useWebGPU;
     if (useGles) {  // an OpenGL ES 3.0 context (a debug one with KOMPOZ_GPU_VALIDATION=1)
         flags |= SDL_WINDOW_OPENGL;
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
@@ -3469,6 +3475,20 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
         app->gpu = kompoz::gpu::Device::create(kompoz::gpu::Backend::GLES, surface, &error);
         if (!app->gpu) {
             SDL_Log("kompoz: no OpenGL ES device: %s", error.c_str());
+            return SDL_APP_FAILURE;
+        }
+        SDL_Log("kompoz: renderer: Kompoz on %s (%s)", kompoz::gpu::backendName(app->gpu->backend()), app->gpu->deviceName().c_str());
+    } else if (useWebGPU) {
+        kompoz::gpu::setLogger([](const char* message) { SDL_Log("%s", message); });
+        kompoz::gpu::Surface surface;
+        const char* canvas = SDL_GetHint(SDL_HINT_EMSCRIPTEN_CANVAS_SELECTOR);
+        surface.webgpuCanvas = canvas ? canvas : "#canvas";
+        SDL_Window* window = app->window;
+        surface.drawableSize = [window](int* w, int* h) { SDL_GetWindowSizeInPixels(window, w, h); };
+        std::string error;
+        app->gpu = kompoz::gpu::Device::create(kompoz::gpu::Backend::WebGPU, surface, &error);
+        if (!app->gpu) {
+            SDL_Log("kompoz: no WebGPU device: %s", error.c_str());
             return SDL_APP_FAILURE;
         }
         SDL_Log("kompoz: renderer: Kompoz on %s (%s)", kompoz::gpu::backendName(app->gpu->backend()), app->gpu->deviceName().c_str());

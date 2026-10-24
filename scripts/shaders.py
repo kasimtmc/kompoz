@@ -112,10 +112,30 @@ def compile_shader(source, stage, entry, tools, work):
     # other targets.
     out = {"spirv": slang("spirv", "spv", "-DKOMPOZ_SPIRV", "-profile", "spirv_1_3", "-fvk-use-entrypoint-name"),
            "msl": slang("metal", "metal"),
-           "wgsl": slang("wgsl", "wgsl")}
+           "wgsl": wgsl(slang("wgsl", "wgsl"))}
     if stage != "compute":  # OpenGL ES 3.0 and WebGL 2 have no compute shaders
         out["glsl"] = glsl(run, cross, f"{base}.spv", stage)
     return out
+
+
+def wgsl(source):
+    """WGSL bound as the WebGPU backend binds it: Slang leaves the uniforms (Vulkan's push constants)
+    without a binding and splits each combined sampler into its texture at the sampler's binding and
+    its sampler at the next, where the next texture is. The uniforms go to binding 0, texture slot i
+    (binding i + 1 in the source) to bindings 2i + 1 (the texture) and 2i + 2 (its sampler). And
+    derivatives are taken in non-uniform control flow, as every other target allows: WGSL's
+    uniformity diagnostic for them is turned off."""
+    text = source.decode()
+    text = re.sub(r"^var<uniform> ", "@binding(0) @group(0) var<uniform> ", text, flags=re.M)
+    slots = {name: int(binding) - 1
+             for binding, name in re.findall(r"@binding\((\d+)\) @group\(0\) var (\w+)_texture_\d+ : texture_2d<f32>;", text)}
+
+    def rebind(match):
+        name, kind = match.group(2), match.group(3)
+        return f"@binding({2 * slots[name] + (1 if kind == 'texture' else 2)}) @group(0) var {name}_{kind}_"
+
+    text = re.sub(r"@binding\((\d+)\) @group\(0\) var (\w+)_(texture|sampler)_", rebind, text)
+    return ("diagnostic(off, derivative_uniformity);\n" + text).encode()
 
 
 def glsl(run, cross, spv, stage):

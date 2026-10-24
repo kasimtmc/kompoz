@@ -244,8 +244,8 @@ yeniden ölçülür.
  │ sdl3      pencere, girdi, IME/yazılım klavyesi, SDL_Renderer ile kenar yumuşatmalı çizim, HarfBuzz + FreeType
  │           glif atlası, resimler, masaüstünün vurgu rengi (Linux)
  │ android   Java tarafı: klavye (InputConnection), erişilebilirlik, kenar boşlukları, dinamik renk, geri hareketi
- │ gpu       Kompoz'un kendi GPU renderer'ı (KOMPOZ_GPU=vulkan, metal ya da gles, yapım aşamasında): Vulkan ve OpenGL
- │           ES 3 (web'de WebGL 2) ve Metal için ince katmanların üstünde tek çekirdek (WebGPU gelecek)
+ │ gpu       Kompoz'un kendi GPU renderer'ı (KOMPOZ_GPU=vulkan, metal, webgpu ya da gles, yapım aşamasında):
+ │           Vulkan, Metal, WebGPU ve OpenGL ES 3 (web'de WebGL 2) için ince katmanların üstünde tek çekirdek
  └──────────────────────────────────────
 ```
 

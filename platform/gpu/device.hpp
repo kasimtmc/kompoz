@@ -111,6 +111,9 @@ struct PipelineDesc {
     std::vector<VertexAttribute> instanceAttributes;
     uint32_t instanceStride = 0;
     int textures = 0;
+    // The slots (bits) whose textures are read texel by texel, with nearest samplers: they may be
+    // RGBA32F, which not every GPU filters (WebGPU binds them so).
+    uint8_t texelTextures = 0;
     BlendState blend;
     Format target = Format::RGBA8;
 };
@@ -149,6 +152,9 @@ struct Surface {
     std::function<void()> glSwap;
     // Metal: the layer the window shows (a CAMetalLayer); none to draw only into textures.
     void* metalLayer = nullptr;
+    // WebGPU on the web: the canvas it draws into (a CSS selector: SDL's "#canvas"); none to draw
+    // only into textures.
+    std::string webgpuCanvas;
     // The drawable's size in pixels.
     std::function<void(int* width, int* height)> drawableSize;
 };

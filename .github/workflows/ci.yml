@@ -372,6 +372,11 @@ jobs:
           emrun --browser chrome --kill_exit --timeout 1800
           --browser_args="--headless=new --no-sandbox --use-angle=swiftshader --enable-unsafe-swiftshader"
           build-web/kompoz_gpu_tests.html KOMPOZ_GPU_REQUIRED=1
+      - name: GPU renderer tests (WebGPU on Chrome's SwiftShader, against tests/golden)
+        run: >
+          emrun --browser chrome --kill_exit --timeout 1800
+          --browser_args="--headless=new --no-sandbox --enable-unsafe-webgpu --use-webgpu-adapter=swiftshader --enable-features=Vulkan"
+          build-web/kompoz_gpu_tests.html KOMPOZ_GPU=webgpu KOMPOZ_GPU_REQUIRED=1
 
   shaders:
     name: Shaders (the committed headers are what their sources compile to)

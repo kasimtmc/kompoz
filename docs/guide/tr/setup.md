@@ -160,7 +160,7 @@ cmake --build build-web -j
 python3 -m http.server 8765 --directory build-web
 ```
 
-Ardından `http://localhost:8765/showcase.html` adresini açın. Web'de thread yoktur; bu yüzden bir thread'e koyacağınız iş onun yerine bir coroutine'de çalışır. Gömülü fontta olmayan karakterler (emoji, CJK, Arapça) tarayıcının kendi fontlarıyla çizilir. Sayfanın sorgusu uygulamanın ortamıdır (`showcase.html?KOMPOZ_GPU=gles`, bkz. [Araçlar](tools.md#ortam-değişkenleri)).
+Ardından `http://localhost:8765/showcase.html` adresini açın. Web'de thread yoktur; bu yüzden bir thread'e koyacağınız iş onun yerine bir coroutine'de çalışır. Gömülü fontta olmayan karakterler (emoji, CJK, Arapça) tarayıcının kendi fontlarıyla çizilir. Sayfanın sorgusu uygulamanın ortamıdır (`showcase.html?KOMPOZ_GPU=gles`, bkz. [Araçlar](tools.md#ortam-değişkenleri)): Kompoz'un GPU renderer'ı orada WebGL 2 (`gles`) ya da WebGPU (`webgpu`) üzerinde çizer. Sayfa ASYNCIFY ile bağlanır; bir okuma (içine çizilen bir bitmap, bir ekran görüntüsü) WebGPU'yu onunla bekler.
 
 Kendi uygulamanızın web derlemesi için Emscripten seçeneklerini `examples/showcase/CMakeLists.txt`'den kopyalayın.
 

@@ -245,8 +245,8 @@ changed while it was measured, is measured again.
  │ sdl3      window, input, IME/soft keyboard, anti-aliased drawing with SDL_Renderer, HarfBuzz + FreeType
  │           glyph atlas, images, the desktop's accent color (Linux)
  │ android   the Java side: keyboard (InputConnection), accessibility, insets, dynamic color, back gesture
- │ gpu       Kompoz's own GPU renderer (KOMPOZ_GPU=vulkan, metal or gles, being built): one core over thin
- │           layers for Vulkan, Metal and OpenGL ES 3, WebGL 2 on the web (WebGPU to come)
+ │ gpu       Kompoz's own GPU renderer (KOMPOZ_GPU=vulkan, metal, webgpu or gles, being built): one core
+ │           over thin layers for Vulkan, Metal, WebGPU and OpenGL ES 3 (WebGL 2 on the web)
  └──────────────────────────────────────
 ```
 

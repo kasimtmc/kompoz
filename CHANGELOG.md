@@ -18,7 +18,7 @@
 - **CI** on every platform: the tests, the platform tests, and an app built against each way of installing Kompoz,
   run and clicked (in a real window on Windows and macOS, where Kompoz now runs, and offscreen on macOS too). `CONTRIBUTING.md`, issue forms and
   `scripts/release.sh` for publishing a release's packages.
-- **Kompoz's own GPU renderer**, being built (`KOMPOZ_GPU=vulkan`, `metal` or `gles`): one core over a thin layer per native graphics
+- **Kompoz's own GPU renderer**, being built (`KOMPOZ_GPU=vulkan`, `metal`, `webgpu` or `gles`): one core over a thin layer per native graphics
   API: Vulkan on Linux, Windows and Android first, then Metal on Apple's systems, WebGPU on the web, and OpenGL ES 3 where there is none of those (old GPUs, WebGL 2, ANGLE on Windows). Rounded rects, borders, lines, arcs,
   shadows, text, images, clips and layers are drawn on the GPU with exact anti-aliasing (a straight edge at any angle
   cuts each pixel as exactly as a path's polygon does, a square corner as its two edges, a ring or a line thinner than a
@@ -170,6 +170,10 @@
 - **The GPU renderer on Metal** (`KOMPOZ_GPU=metal`, macOS and iOS): the same pictures as on Vulkan and OpenGL ES, with
   Metal's API validation on in CI; an app draws into its window's layer, `kompoz_gpu_tests` (Metal by default on
   Apple's systems) into textures alone.
+- **The GPU renderer on WebGPU** (`showcase.html?KOMPOZ_GPU=webgpu`): Dawn's webgpu.h on the web, the same pictures
+  as everywhere (in CI on Chrome's SwiftShader, and on a phone's Chrome: Adreno through Dawn); a web build is linked
+  with ASYNCIFY, through which a readback waits for the GPU. `kompoz_gpu_tests` runs on Android's Vulkan too
+  (`KOMPOZ_GPU=vulkan`, without a window).
 - **Fixed**: the GPU renderer's turned, stretched and leaning edges were up to 10/255 off on GPUs that snap vertices
   coarsely (4 subpixel bits, as SwiftShader does: Chrome's WebGL where it doesn't use the GPU): a quad's corners are
   put where such a GPU would put them, and its pixels shaded from there.

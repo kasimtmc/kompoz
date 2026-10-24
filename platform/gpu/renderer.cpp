@@ -70,6 +70,7 @@ Pipeline& Renderer::pipeline(Format target, const BlendState& blend, bool mesh) 
     for (uint32_t i = 0; i < 12; ++i) desc.instanceAttributes.push_back({i, VertexFormat::Float4, i * 16});
     desc.instanceStride = sizeof(Prim);
     desc.textures = 6;
+    desc.texelTextures = 1 << 2;  // (the stops' table)
     desc.blend = blend;
     desc.target = target;
     pipelines_.emplace_back(key, device_.createPipeline(desc));
@@ -426,6 +427,7 @@ void Renderer::execute(Pass& pass) {
             desc.instanceAttributes = {{0, VertexFormat::Float4, 0}};
             desc.instanceStride = 16;
             desc.textures = 2;
+            desc.texelTextures = 1 << 1;  // (the table: a progressive blur's stops, or its mask)
             desc.blend = {false};
             desc.target = pass.target->format();
             effectPipeline_ = device_.createPipeline(desc);
@@ -1190,6 +1192,7 @@ void Renderer::drawShadow(const Rect& rect, const CornerRadii& radii, const Shad
     premultiplied(p.color, shadow.color);
     if (inner) {
         set(p.bounds, x, y, x + w, y + h);
+        set(p.gradient, x, y, x + w, y + h);  // (the rect the shader cuts it to: see SHADOW in primitives.slang)
         float half = std::min(w, h) / 2;
         set(p.uv, clampTo(r.topLeft, half), clampTo(r.topRight, half), clampTo(r.bottomRight, half), clampTo(r.bottomLeft, half));
     } else {

@@ -7,17 +7,18 @@
 //   KOMPOZ_GOLDEN_UPDATE=1   writes the pictures anew (look at them before committing them)
 //   KOMPOZ_GPU_REQUIRED=1    no device is a failure (CI), not a skip
 //   KOMPOZ_GPU_VALIDATION=1  the API's validation on: any error it reports is a failure
-//   KOMPOZ_GPU=gles          OpenGL ES 3's backend instead of Vulkan's (the same pictures; the web's only one;
+//   KOMPOZ_GPU=gles          OpenGL ES 3's backend instead of Vulkan's (the same pictures; the web's default;
 //                            on Windows ANGLE's, with its DLLs beside the test: vcpkg's bin/)
 //   KOMPOZ_GPU=metal         Metal's (on Apple's systems, where it is the default)
+//   KOMPOZ_GPU=webgpu        WebGPU's (on the web; OpenGL ES's, WebGL 2, is the default there)
 //   KOMPOZ_GOLDEN_DIR=<dir>  the pictures from there (a phone's copy)
 //
 // On Android it is a program run from adb shell, on OpenGL ES 3 through EGL (no SDL video there),
 // or on Vulkan (KOMPOZ_GPU=vulkan) without a window:
 //   adb push kompoz_gpu_tests libSDL3.so assets/fonts tests/golden /data/local/tmp/kgt/
 //   adb shell 'cd /data/local/tmp/kgt && LD_LIBRARY_PATH=. KOMPOZ_GOLDEN_DIR=golden ./kompoz_gpu_tests'
-// On the web it is a page on the browser's WebGL 2, the variables its query, which emrun opens and
-// reports on (in CI on Chrome's SwiftShader):
+// On the web it is a page on the browser's WebGL 2 (or WebGPU), the variables its query, which
+// emrun opens and reports on (in CI on Chrome's SwiftShader):
 //   emrun --browser chrome build-web/kompoz_gpu_tests.html KOMPOZ_GPU_REQUIRED=1
 //
 // The device is Vulkan's (or OpenGL ES's), on SDL's offscreen video driver (a headless surface):
@@ -135,10 +136,14 @@ struct Gpu {
     }
 #else
     bool start(std::string* why) {
-#ifdef __EMSCRIPTEN__
-        bool gles = true;  // (WebGL 2)
-#else
         const char* choice = std::getenv("KOMPOZ_GPU");
+#ifdef __EMSCRIPTEN__
+        if (choice && std::string(choice) == "webgpu") {  // (no canvas: it draws only into textures)
+            device = gpu::Device::create(gpu::Backend::WebGPU, gpu::Surface{}, why);
+            return device && startRenderer(why);
+        }
+        bool gles = true;  // (WebGL 2, the web's other)
+#else
         bool gles = choice && std::string(choice) == "gles";
 #endif
 #ifdef __APPLE__
@@ -2148,10 +2153,10 @@ void pathShadowsAreComposes(Gpu& g) {
 }
 
 // Images are sampled as their FilterQuality says, their texels premultiplied (a transparent
-// texel's color doesn't bleed), against models on the CPU: the nearest texel; bilinear; from the
-// mipmap level the size takes (a 16 x 16 drawn 4 x 4: each pixel its 4 x 4 block's mean; between
-// two, the nearer);
-// Mitchell's cubic of the sixteen nearest. Hairlines are a pixel wide through any scale.
+// texel's color doesn't bleed), against models on the CPU: the nearest texel; bilinear (and both in
+// one target); from the mipmap level the size takes (a 16 x 16 drawn 4 x 4: each pixel its 4 x 4
+// block's mean; between two, the nearer); Mitchell's cubic of the sixteen nearest. Hairlines are a
+// pixel wide through any scale.
 void imagesAreSampledAsAsked(Gpu& g) {
     const int iw = 4, ih = 4, n = 32;
     std::vector<uint8_t> px(size_t(iw) * ih * 4);
@@ -2217,6 +2222,17 @@ void imagesAreSampledAsAsked(Gpu& g) {
         CHECK(worst <= 2);
         if (worst > 2) std::printf("  image sampled at quality %d: off by %d at (%g, %g)\n", int(quality), worst, worstAt.x, worstAt.y);
     }
+    // Twice in one target, nearest then bilinear (the same texture, a sampler each): each as alone.
+    Pixels both = g.render(2 * n, n, 1, [&](GraphicsContext& c) {
+        c.drawImage(image, {0, 0, float(iw), float(ih)}, {0, 0, float(n), float(n)}, 1, FilterQuality::None);
+        c.drawImage(image, {0, 0, float(iw), float(ih)}, {float(n), 0, float(n), float(n)}, 1, FilterQuality::Low);
+    });
+    int worstBoth = 0;
+    for (int y = 0; y < n; ++y)
+        for (int x = 0; x < n; ++x)
+            worstBoth = std::max({worstBoth, maxDifference(both.at(x, y), nearest.at(x, y)), maxDifference(both.at(n + x, y), bilinear.at(x, y))});
+    CHECK(worstBoth <= 2);
+    if (worstBoth > 2) std::printf("  an image nearest and bilinear in one target: off by %d\n", worstBoth);
     // Mipmaps: a 16 x 16 drawn 4 x 4 at Medium, each pixel its block's mean (not at Low: the four texels in its middle).
     const int big = 16;
     std::vector<uint8_t> fine(size_t(big) * big * 4);
@@ -3390,6 +3406,33 @@ void texturesReadBackAsUploaded(Gpu& g) {
     }
 }
 
+// A readback in the middle of a frame (as a bitmap drawn into is read) leaves the frame going: what
+// is drawn after it is drawn, from the frame's memory handed out after it.
+void readbacksLeaveTheFrameGoing(Gpu& g) {
+    const int n = 16;
+    auto first = g.device->createTexture(n, n, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+    auto second = g.device->createTexture(n, n, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+    gpu::Renderer& r = *g.renderer;
+    g.fonts->setScale(1);
+    r.scale = 1;
+    g.device->beginFrame();
+    r.beginTarget(*first, gpu::ClearColor{1, 1, 1, 1});
+    r.fillRoundRect({2, 2, 8, 8}, CornerRadii(), Color{1, 0, 0, 1});
+    r.endTarget();
+    r.flush();
+    Pixels a{n, n, g.device->readPixels(*first, {0, 0, n, n})};
+    r.beginTarget(*second, gpu::ClearColor{1, 1, 1, 1});
+    r.fillRoundRect({6, 6, 8, 8}, CornerRadii(), Color{0, 0, 1, 1});
+    r.endTarget();
+    r.flush();
+    Pixels b{n, n, g.device->readPixels(*second, {0, 0, n, n})};
+    g.device->endFrame(false);
+    r.endFrame();
+    g.fonts->endFrame();
+    CHECK(near(a.at(4, 4), 255, 0, 0) && near(a.at(12, 12), 255, 255, 255));
+    CHECK(near(b.at(10, 10), 0, 0, 255) && near(b.at(3, 3), 255, 255, 255));
+}
+
 void scenesMatchTheirPictures(Gpu& g) {
     struct Scene {
         const char* name;
@@ -3463,6 +3506,7 @@ int main() {
             pathEffectsApplyWhereDrawn(g);
             blitCopiesTexturesAsTheyAre(g);
             texturesReadBackAsUploaded(g);
+            readbacksLeaveTheFrameGoing(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
             std::printf("%d checks, %d failed\n", checks, failures);

@@ -12,7 +12,7 @@ static const int FILL = 0;         // a rounded rect: shape, radii (tl, tr, br, 
 static const int STROKE = 1;       // its outline inside it, params.x wide
 static const int LINE = 2;         // from shape.xy to shape.zw, params.x wide, square caps
 static const int ARC = 3;          // center shape.xy, radius shape.z, params.x wide; from params.y, params.z radians; params.w: round caps
-static const int SHADOW = 4;       // a rounded rect's blurred shadow: params.x sigma; params.y: inner (bounds: the rect it is in, uv its radii)
+static const int SHADOW = 4;       // a rounded rect's blurred shadow: params.x sigma; params.y: inner (gradient: the rect it is in, uv its radii)
 static const int GLYPH = 5;        // the atlas's (or a mask's) texels at uv; params.x: a color glyph (drawn as it is, at the color's alpha); params.y: cubic
 static const int IMAGE = 6;        // an image's texels at uv, at alpha params.x
                                    // (both: uv spans `shape`; with flags & 2 the quad reaches past it, its edges
@@ -100,7 +100,6 @@ struct Varyings {
     float w : DEPTH_W;     // the transform's w there (1 unless in perspective)
     float2 texcoord : TEXCOORD;
     float4 vertexColor : VERTEXCOLOR;  // a mesh's (premultiplied), between its vertices
-    nointerpolation float4 bounds : BOUNDS;
     nointerpolation float4 shape : SHAPE;
     nointerpolation float4 radii : RADII;
     nointerpolation float4 color : COLOR;
@@ -143,7 +142,6 @@ Varyings vs(Instance instance, uint vertex : VERTEX_ID) {
     float2 across = (kind == GLYPH || kind == IMAGE) ? (local - instance.shape.xy) / (instance.shape.zw - instance.shape.xy) : corner;
     out.texcoord = lerp(instance.uv.xy, instance.uv.zw, across);
     out.vertexColor = float4(0, 0, 0, 0);
-    out.bounds = instance.bounds;
     out.shape = instance.shape;
     out.radii = instance.radii;
     out.color = instance.color;
@@ -173,7 +171,6 @@ Varyings vsMesh(Instance instance, uint vertex : VERTEX_ID) {
     out.w = placed.z;
     out.texcoord = texcoord;
     out.vertexColor = i == 0 ? instance.xform : i == 1 ? instance.extra : instance.projection;
-    out.bounds = float4(0, 0, 0, 0);
     out.shape = float4(0, 0, 0, 0);
     out.radii = float4(0, 0, 0, 0);
     out.color = instance.color;
@@ -628,8 +625,10 @@ float4 fs(Varyings v) : SV_Target {
     } else if (kind == SHADOW) {
         float sigma = v.params.x;
         float blurred = sigma > 0.01 ? blurredRoundRect(v.local, v.shape, v.radii, sigma) : roundRectCoverage(v.local, v.shape, v.radii, dx, dy);
-        // Inner: inside the rect (bounds, its radii in uv), where the blurred hole isn't.
-        cover = v.params.y > 0.5 ? (1 - blurred) * roundRectCoverage(v.local, v.bounds, v.uv, dx, dy) : blurred;
+        // Inner: inside the rect (the gradient's field: a shadow's color is solid; its radii in uv),
+        // where the blurred hole isn't. (Not the quad's bounds: the fragment shader reads nothing the
+        // quad is placed by, which on Adreno through Dawn lost the target's tiles only it covered.)
+        cover = v.params.y > 0.5 ? (1 - blurred) * roundRectCoverage(v.local, v.gradient, v.uv, dx, dy) : blurred;
     } else if (kind == GLYPH) {
         // (A mask's texels: a cubic of the sixteen nearest, each at its center, as an image's.)
         float4 texel = v.params.y > 0.5 ? cubicSample(texcoord, 0.5 / v.params.zw) : texture0.Sample(texcoord);
