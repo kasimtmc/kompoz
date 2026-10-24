@@ -3728,10 +3728,19 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     kompoz::android_ime::attach();
 #endif
 
-    if (const char* script = SDL_getenv("KOMPOZ_SCRIPT")) {
-        std::stringstream in(script);
-        for (std::string command; std::getline(in, command, ';');) app->script.commands.push_back(command);
+    std::string script = SDL_getenv("KOMPOZ_SCRIPT") ? SDL_getenv("KOMPOZ_SCRIPT") : "";
+#ifdef SDL_PLATFORM_ANDROID  // (no environment: a file named kompoz-script in the app's files, as kompoz-gpu)
+    for (const char* dir : {SDL_GetAndroidInternalStoragePath(), SDL_GetAndroidExternalStoragePath()}) {
+        if (!dir || !script.empty()) continue;
+        if (void* data = SDL_LoadFile((std::string(dir) + "/kompoz-script").c_str(), nullptr)) {
+            script = static_cast<const char*>(data);
+            SDL_free(data);
+        }
     }
+#endif
+    std::stringstream in(script);
+    for (std::string command; std::getline(in, command, ';');)
+        if (command.find_first_not_of(" \t\r\n") != std::string::npos) app->script.commands.push_back(command);
     kompoz::sdl::updateMetrics(*app);
     *appstate = app.release();
     return SDL_APP_CONTINUE;

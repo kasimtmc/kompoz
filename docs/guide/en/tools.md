@@ -114,6 +114,12 @@ Android has no environment variables, so there the profiler looks for a file in 
 adb shell run-as dev.kompoz.showcase touch files/kompoz-profile
 ```
 
+A script, too, comes from a file there (the same commands; a frame benchmark repeats on every device):
+
+```bash
+adb shell run-as dev.kompoz.showcase sh -c "'echo \"wait 60; swipe 200 600 200 200 12; wait 120\" > files/kompoz-script'"
+```
+
 Kompoz records each frame first and draws again only what changed since the frame before; a frame in which nothing on the screen changes is neither drawn nor presented. To see or check this:
 
 - `KOMPOZ_DAMAGE_SHOW=1` outlines what was drawn again in each frame.

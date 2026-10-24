@@ -114,6 +114,12 @@ Android'de ortam değişkeni yoktur; orada profil aracı uygulamanın depolamas�
 adb shell run-as dev.kompoz.showcase touch files/kompoz-profile
 ```
 
+Bir betik de oradaki bir dosyadan gelir (aynı komutlar; bir kare ölçümü her cihazda aynı tekrarlanır):
+
+```bash
+adb shell run-as dev.kompoz.showcase sh -c "'echo \"wait 60; swipe 200 600 200 200 12; wait 120\" > files/kompoz-script'"
+```
+
 Kompoz her kareyi önce kaydeder ve yalnızca bir önceki kareden beri değişeni yeniden çizer; ekranda hiçbir şeyin değişmediği bir kare ne çizilir ne sunulur. Bunu görmek ya da kontrol etmek için:
 
 - `KOMPOZ_DAMAGE_SHOW=1` her karede yeniden çizilenin çevresini çizer.
