@@ -201,19 +201,9 @@ public:
             if (error) *error = "no WebGPU";
             return false;
         }
-#ifdef __EMSCRIPTEN__
-        if (!s.webgpuCanvas.empty()) {
-            WGPUEmscriptenSurfaceSourceCanvasHTMLSelector canvas = WGPU_EMSCRIPTEN_SURFACE_SOURCE_CANVAS_HTML_SELECTOR_INIT;
-            canvas.selector = view(s.webgpuCanvas);
-            WGPUSurfaceDescriptor sd = WGPU_SURFACE_DESCRIPTOR_INIT;
-            sd.nextInChain = &canvas.chain;
-            surface = wgpuInstanceCreateSurface(instance, &sd);
-        }
-#endif
         drawableSize = s.drawableSize;
 
         WGPURequestAdapterOptions options = WGPU_REQUEST_ADAPTER_OPTIONS_INIT;
-        options.compatibleSurface = surface;
         WGPURequestAdapterCallbackInfo adapterCallback = WGPU_REQUEST_ADAPTER_CALLBACK_INFO_INIT;
         adapterCallback.mode = WGPUCallbackMode_WaitAnyOnly;
         adapterCallback.callback = [](WGPURequestAdapterStatus status, WGPUAdapter a, WGPUStringView message, void* self, void*) {
@@ -257,6 +247,17 @@ public:
             return false;
         }
         queue = wgpuDeviceGetQueue(device);
+        // The canvas's surface only now that there is a device: taken by WebGPU, a canvas can't
+        // be WebGL's any more (where a backend after this one would draw).
+#ifdef __EMSCRIPTEN__
+        if (!s.webgpuCanvas.empty()) {
+            WGPUEmscriptenSurfaceSourceCanvasHTMLSelector canvas = WGPU_EMSCRIPTEN_SURFACE_SOURCE_CANVAS_HTML_SELECTOR_INIT;
+            canvas.selector = view(s.webgpuCanvas);
+            WGPUSurfaceDescriptor sd = WGPU_SURFACE_DESCRIPTOR_INIT;
+            sd.nextInChain = &canvas.chain;
+            surface = wgpuInstanceCreateSurface(instance, &sd);
+        }
+#endif
         if (surface) {
             WGPUSurfaceCapabilities caps = WGPU_SURFACE_CAPABILITIES_INIT;
             if (wgpuSurfaceGetCapabilities(surface, adapter, &caps) == WGPUStatus_Success && caps.formatCount > 0)

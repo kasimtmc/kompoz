@@ -18,7 +18,7 @@
 - **CI** on every platform: the tests, the platform tests, and an app built against each way of installing Kompoz,
   run and clicked (in a real window on Windows and macOS, where Kompoz now runs, and offscreen on macOS too). `CONTRIBUTING.md`, issue forms and
   `scripts/release.sh` for publishing a release's packages.
-- **Kompoz's own GPU renderer**, being built (`KOMPOZ_GPU=vulkan`, `metal`, `webgpu` or `gles`): one core over a thin layer per native graphics
+- **Kompoz's own GPU renderer**, being built (`KOMPOZ_GPU=vulkan`, `metal`, `webgpu`, `gles`, or `auto`: the platform's best, falling back to the next): one core over a thin layer per native graphics
   API: Vulkan on Linux, Windows and Android first, then Metal on Apple's systems, WebGPU on the web, and OpenGL ES 3 where there is none of those (old GPUs, WebGL 2, ANGLE on Windows). Rounded rects, borders, lines, arcs,
   shadows, text, images, clips and layers are drawn on the GPU with exact anti-aliasing (a straight edge at any angle
   cuts each pixel as exactly as a path's polygon does, a square corner as its two edges, a ring or a line thinner than a
