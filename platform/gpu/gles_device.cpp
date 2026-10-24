@@ -15,9 +15,11 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <map>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #ifdef __EMSCRIPTEN__
@@ -167,6 +169,14 @@ public:
     std::map<uint64_t, std::pair<GLenum, std::vector<uint8_t>>> binaries;
     bool binariesMade = false;  // since the file was written (at a frame's end)
     std::vector<uint32_t> enabledAttributes;
+    // Timed (setGpuTiming, where EXT_disjoint_timer_query is): each pass's time in a query of its
+    // own; the frames whose times aren't in yet, oldest first.
+    bool timerQueries = false, timing = false, frameTimed = false, queryOpen = false;
+    using TimedPasses = std::vector<std::pair<std::string, GLuint>>;
+    TimedPasses timedPasses;
+    std::deque<TimedPasses> waitingTimes;
+    std::vector<GLuint> spareQueries;
+    std::vector<GpuFrameTime> timed;
     BlendState blend{};
     bool blendSet = false;
 
@@ -202,6 +212,7 @@ public:
         };
         bool es32 = major > 3 || (major == 3 && minor >= 2);
         floatTargets = es32 || has("GL_EXT_color_buffer_float") || has("GL_EXT_color_buffer_half_float");
+        timerQueries = has("GL_EXT_disjoint_timer_query") || has("GL_EXT_disjoint_timer_query_webgl2");
         if (!floatTargets) {
             if (error) *error = "OpenGL ES can't draw into half-float textures here (no EXT_color_buffer_float or _half_float)";
             return false;
@@ -283,6 +294,9 @@ public:
     }
 
     ~GlesDevice() override {
+        for (auto& frame : waitingTimes)
+            for (auto& [label, query] : frame) spareQueries.push_back(query);
+        if (!spareQueries.empty()) gl.DeleteQueries(GLsizei(spareQueries.size()), spareQueries.data());
         window.reset();
         for (auto& [key, program] : programs) gl.DeleteProgram(program);
         for (auto& [desc, name] : samplers) gl.DeleteSamplers(1, &name);
@@ -453,6 +467,8 @@ public:
     // --- Frames ------------------------------------------------------------------------------
 
     void beginFrame() override {
+        collectTimes();
+        frameTimed = timing;
         inFrame = true;
         haveWindow = false;
         for (size_t& u : used) u = 0;
@@ -514,12 +530,15 @@ public:
     void generateMipmaps(Texture& texture) override {
         auto& t = static_cast<GlesTexture&>(texture);
         if (t.levels <= 1) return;
+        beginTimed("mipmaps " + std::to_string(t.width()) + "x" + std::to_string(t.height()));
         gl.BindTexture(GL_TEXTURE_2D, t.name);
         gl.GenerateMipmap(GL_TEXTURE_2D);
+        endTimed();
     }
 
     void beginPass(Texture& texture, const std::optional<ClearColor>& clear, std::span<Texture* const>) override {
         auto& t = static_cast<GlesTexture&>(texture);
+        beginTimed(passLabel(t.width(), t.height(), t.format(), &t == window.get()));
         gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer(t));
         gl.Viewport(0, 0, t.width(), t.height());
         target = &t;
@@ -590,6 +609,7 @@ public:
         for (const Call& c : calls) make(c);
         calls.clear();
         target = nullptr;
+        endTimed();
     }
 
     void make(const Call& c) {
@@ -655,6 +675,7 @@ public:
     void copyTexture(Texture& source, const IRect& region, Texture& destination, int x, int y) override {
         auto& src = static_cast<GlesTexture&>(source);
         auto& dst = static_cast<GlesTexture&>(destination);
+        beginTimed("copy " + std::to_string(region.width) + "x" + std::to_string(region.height));
         GLuint read = framebuffer(src), draw = framebuffer(dst);
         gl.BindFramebuffer(GL_READ_FRAMEBUFFER, read);
         gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, draw);
@@ -662,6 +683,7 @@ public:
         gl.BlitFramebuffer(region.x, region.y, region.x + region.width, region.y + region.height, x, y, x + region.width, y + region.height,
                            GL_COLOR_BUFFER_BIT, GL_NEAREST);
         gl.BindFramebuffer(GL_FRAMEBUFFER, 0);
+        endTimed();
     }
 
     std::vector<uint8_t> readPixels(Texture& texture, const IRect& region) override {
@@ -697,7 +719,9 @@ public:
             gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
             gl.Disable(GL_SCISSOR_TEST);
             int w = window->width(), h = window->height();
+            beginTimed("copy to screen");
             gl.BlitFramebuffer(0, 0, w, h, 0, h, w, 0, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+            endTimed();
             gl.BindFramebuffer(GL_FRAMEBUFFER, 0);
             if (swap) swap();
         } else {
@@ -705,10 +729,59 @@ public:
         }
         inFrame = false;
         haveWindow = false;
+        if (!timedPasses.empty()) waitingTimes.push_back(std::exchange(timedPasses, {}));
         if (binariesMade) writeBinaries();
     }
 
     void waitIdle() override { gl.Finish(); }
+
+    bool setGpuTiming(bool on) override {
+        if (on && !timerQueries) return false;
+        timing = on;
+        return true;
+    }
+
+    std::vector<GpuFrameTime> takeGpuTimes() override { return std::exchange(timed, {}); }
+
+    // A pass's (or a copy's) time, from here to endTimed, if the frame is timed.
+    void beginTimed(std::string label) {
+        if (!frameTimed) return;
+        GLuint query = 0;
+        if (spareQueries.empty()) gl.GenQueries(1, &query);
+        else query = spareQueries.back(), spareQueries.pop_back();
+        gl.BeginQuery(GL_TIME_ELAPSED_EXT, query);
+        queryOpen = true;
+        timedPasses.emplace_back(std::move(label), query);
+    }
+    void endTimed() {
+        if (!queryOpen) return;
+        gl.EndQuery(GL_TIME_ELAPSED_EXT);
+        queryOpen = false;
+    }
+
+    // The frames whose queries have their times (each frame's last, then all of it): their passes'
+    // times, and the frame's their sum (a query times only what it was around). A disjoint
+    // operation (the GPU's clock changed) leaves the frames then without times.
+    void collectTimes() {
+        while (!waitingTimes.empty()) {
+            TimedPasses& frame = waitingTimes.front();
+            GLuint available = 0;
+            gl.GetQueryObjectuiv(frame.back().second, GL_QUERY_RESULT_AVAILABLE, &available);
+            if (!available) break;
+            GLint disjoint = 0;
+            gl.GetIntegerv(GL_GPU_DISJOINT_EXT, &disjoint);
+            GpuFrameTime time;
+            for (auto& [label, query] : frame) {
+                GLuint ns = 0;
+                gl.GetQueryObjectuiv(query, GL_QUERY_RESULT, &ns);
+                time.passes.push_back({std::move(label), double(ns) / 1e6});
+                time.ms += double(ns) / 1e6;
+                spareQueries.push_back(query);
+            }
+            if (!disjoint) timed.push_back(std::move(time));
+            waitingTimes.pop_front();
+        }
+    }
 };
 
 } // namespace

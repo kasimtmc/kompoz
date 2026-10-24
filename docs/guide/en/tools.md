@@ -59,7 +59,7 @@ KOMPOZ_PREVIEW=CounterCardPreview scripts/dev.sh
 
 ## Scripted runs and screenshots
 
-`KOMPOZ_SCRIPT` drives the app without a user: clicks, typing, swipes and screenshots, with coordinates in dp. While the script runs, time is virtual, so animations are the same on every run; when it ends, real time takes over and you can go on using the app from where it left off.
+`KOMPOZ_SCRIPT` drives the app without a user: clicks, typing, swipes and screenshots, with coordinates in dp. While the script runs, time is virtual, so animations are the same on every run; when it ends, real time takes over and you can go on using the app from where it left off. After `realtime`, the rest of the script runs in real time, its frames paced to the display as a person would see them: for measuring with `KOMPOZ_PROFILE`.
 
 ```bash
 SDL_VIDEODRIVER=offscreen KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
@@ -86,6 +86,7 @@ The commands, separated by `;`:
 | `key name` | `enter`, `backspace`, `escape`, `tab`, `shift+tab`, `space`, `up`, `down`, `left`, `right`. |
 | `resize w h` | Resizes the window. |
 | `wait frames` | Lets frames pass (in virtual time). |
+| `realtime` | The rest in real time, frames paced to the display. |
 | `sleep ms` | Lets real time pass, for work on other threads: an image loading, the wallpaper's colors being read. |
 | `shot file.png` | Saves a screenshot. |
 | `quit` | Ends the app. |
@@ -106,7 +107,13 @@ void Row1(const std::string& title) {
 
 ## Profiling frames
 
-`KOMPOZ_PROFILE=1` logs frame times: for each slow frame, the time spent on input, composition and layout, drawing and presenting, with the offscreen layers it drew and the glyphs it rasterized, and a summary every second.
+`KOMPOZ_PROFILE=1` logs frame times. A frame is slow when its work takes longer than the display's refresh period, or it comes more than two periods after the one before; for each slow frame it logs the time spent on input, composition and layout, waiting for the GPU to be done with an earlier frame (`wait`), drawing and presenting, with the offscreen layers it drew and the glyphs it rasterized. Every second a summary follows: the frames, how many were shown and how many refreshes of the display went by without a frame between two shown back to back, the work's and the wait's averages, and on Kompoz's GPU renderer the GPU's own time for a frame. A frame that took the GPU longer than a refresh period is logged with its costliest passes, each named by what it draws into (`window`, `1080x2400`, `2048x2048 R16F`) or `copy WxH`:
+
+```
+kompoz: GPU frame 12.2 ms: 1080x2400 10.5, window 1.6, 2048x2402 R16F 0.1
+```
+
+The GPU's time is measured with Vulkan's and WebGPU's timestamps (WebGPU where the adapter has `timestamp-query`) and OpenGL ES's timer queries (`EXT_disjoint_timer_query`, on WebGL 2 its `_webgl2` one); Metal's is a frame's alone, from its command buffers. Where none of them is, the profile says so.
 
 Android has no environment variables, so there the profiler looks for a file in the app's storage, and its output goes to `adb logcat -s SDL/APP`:
 
@@ -114,10 +121,12 @@ Android has no environment variables, so there the profiler looks for a file in 
 adb shell run-as dev.kompoz.showcase touch files/kompoz-profile
 ```
 
+Where `run-as` is refused (SELinux: a LineageOS build, for one), these files (`kompoz-profile`, `kompoz-script`, `kompoz-gpu`) can go in the app's external files instead: `adb shell touch /sdcard/Android/data/dev.kompoz.showcase/files/kompoz-profile`.
+
 A script, too, comes from a file there (the same commands; a frame benchmark repeats on every device):
 
 ```bash
-adb shell run-as dev.kompoz.showcase sh -c "'echo \"wait 60; swipe 200 600 200 200 12; wait 120\" > files/kompoz-script'"
+adb shell run-as dev.kompoz.showcase sh -c "'echo \"realtime; wait 60; swipe 200 600 200 200 12; wait 120\" > files/kompoz-script'"
 ```
 
 Kompoz records each frame first and draws again only what changed since the frame before; a frame in which nothing on the screen changes is neither drawn nor presented. To see or check this:

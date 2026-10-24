@@ -144,6 +144,22 @@ public:
     std::function<void(int*, int*)> drawableSize;
     std::string name;
     int errors = 0;
+    // Timed (setGpuTiming, where the adapter has timestamp queries): a frame's passes' starts and
+    // ends written into a query set, resolved into a buffer and read back once done; a few frames'
+    // sets in turn (a frame goes untimed while all are being read). Copies aren't timed: WebGPU
+    // times passes only.
+    struct TimedFrame {
+        WGPUQuerySet queries = nullptr;
+        WGPUBuffer resolved = nullptr, read = nullptr;
+        std::vector<std::string> labels;  // pass i's: queries 2i and 2i + 1
+        enum State { Free, Writing, Mapping, Mapped, Failed } state = Free;
+    };
+    static constexpr uint32_t kTimedPasses = 256;
+    bool timestamps = false, timing = false;
+    std::array<TimedFrame, 4> timedFrames;
+    TimedFrame* timedNow = nullptr;
+    WGPUPassTimestampWrites passTimes = WGPU_PASS_TIMESTAMP_WRITES_INIT;
+    std::vector<GpuFrameTime> timed;
 
     // The frame's memory: CPU pieces, each mirrored by a GPU buffer written up to where it is used
     // (flush) before commands are submitted.
@@ -227,6 +243,12 @@ public:
         }
 
         WGPUDeviceDescriptor dd = WGPU_DEVICE_DESCRIPTOR_INIT;
+        WGPUFeatureName timestampQuery = WGPUFeatureName_TimestampQuery;
+        timestamps = wgpuAdapterHasFeature(adapter, timestampQuery);
+        if (timestamps) {
+            dd.requiredFeatureCount = 1;
+            dd.requiredFeatures = &timestampQuery;
+        }
         dd.uncapturedErrorCallbackInfo.callback = [](WGPUDevice const*, WGPUErrorType, WGPUStringView message, void* self, void*) {
             ++static_cast<WebGPUDevice*>(self)->errors;
             log("WebGPU: " + text(message));
@@ -270,6 +292,12 @@ public:
 
     ~WebGPUDevice() override {
         window.reset();
+        for (TimedFrame& f : timedFrames) {
+            if (f.state == TimedFrame::Mapped) wgpuBufferUnmap(f.read);
+            if (f.queries) wgpuQuerySetRelease(f.queries);
+            if (f.resolved) wgpuBufferRelease(f.resolved);
+            if (f.read) wgpuBufferRelease(f.read);
+        }
         for (Group& g : groups) wgpuBindGroupRelease(g.group);
         for (auto& [code, m] : modules) wgpuShaderModuleRelease(m);
         for (auto& [desc, s] : samplers) wgpuSamplerRelease(s);
@@ -434,6 +462,16 @@ public:
     }
 
     void beginFrame() override {
+        collectTimes();
+        timedNow = nullptr;
+        if (timing)
+            for (TimedFrame& f : timedFrames)
+                if (f.state == TimedFrame::Free) {
+                    f.state = TimedFrame::Writing;
+                    f.labels.clear();
+                    timedNow = &f;
+                    break;
+                }
         for (Chunk& c : chunks) c.used = c.flushed = 0;
         for (Group& g : groups) wgpuBindGroupRelease(g.group);
         groups.clear();
@@ -591,6 +629,7 @@ public:
             WGPURenderPassDescriptor pd = WGPU_RENDER_PASS_DESCRIPTOR_INIT;
             pd.colorAttachmentCount = 1;
             pd.colorAttachments = &attachment;
+            pd.timestampWrites = timePass("mipmaps " + std::to_string(t.width()) + "x" + std::to_string(t.height()));
             WGPURenderPassEncoder p = wgpuCommandEncoderBeginRenderPass(encoder, &pd);
             wgpuRenderPassEncoderSetPipeline(p, drawn);
             wgpuRenderPassEncoderSetBindGroup(p, 0, group, 0, nullptr);
@@ -623,6 +662,7 @@ public:
         WGPURenderPassDescriptor d = WGPU_RENDER_PASS_DESCRIPTOR_INIT;
         d.colorAttachmentCount = 1;
         d.colorAttachments = &attachment;
+        d.timestampWrites = timePass(passLabel(t.width(), t.height(), t.format(), &t == window.get()));
         pass = wgpuCommandEncoderBeginRenderPass(encoder, &d);
         target = &t;
         pipeline = nullptr;
@@ -754,7 +794,25 @@ public:
 
     void endFrame(bool present) override {
         if (!inFrame) return;
+        uint32_t times = timedNow ? uint32_t(timedNow->labels.size()) * 2 : 0;
+        if (times) {
+            wgpuCommandEncoderResolveQuerySet(encoder, timedNow->queries, 0, times, timedNow->resolved, 0);
+            wgpuCommandEncoderCopyBufferToBuffer(encoder, timedNow->resolved, 0, timedNow->read, 0, uint64_t(times) * 8);
+        }
         submit();
+        if (times) {
+            timedNow->state = TimedFrame::Mapping;
+            WGPUBufferMapCallbackInfo callback = WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
+            callback.mode = WGPUCallbackMode_AllowProcessEvents;
+            callback.callback = [](WGPUMapAsyncStatus status, WGPUStringView, void* frame, void*) {
+                static_cast<TimedFrame*>(frame)->state = status == WGPUMapAsyncStatus_Success ? TimedFrame::Mapped : TimedFrame::Failed;
+            };
+            callback.userdata1 = timedNow;
+            wgpuBufferMapAsync(timedNow->read, WGPUMapMode_Read, 0, size_t(times) * 8, callback);
+        } else if (timedNow) {
+            timedNow->state = TimedFrame::Free;
+        }
+        timedNow = nullptr;
 #ifndef __EMSCRIPTEN__  // (on the web the canvas shows what was drawn when the frame's callback returns)
         if (present && window) wgpuSurfacePresent(surface);
 #else
@@ -762,6 +820,64 @@ public:
 #endif
         window.reset();
         inFrame = false;
+    }
+
+    bool setGpuTiming(bool on) override {
+        if (on && !timestamps) return false;
+        timing = on;
+        for (TimedFrame& f : timedFrames)
+            if (on && !f.queries) {
+                WGPUQuerySetDescriptor qd = WGPU_QUERY_SET_DESCRIPTOR_INIT;
+                qd.type = WGPUQueryType_Timestamp;
+                qd.count = kTimedPasses * 2;
+                f.queries = wgpuDeviceCreateQuerySet(device, &qd);
+                WGPUBufferDescriptor bd = WGPU_BUFFER_DESCRIPTOR_INIT;
+                bd.size = uint64_t(kTimedPasses) * 16;
+                bd.usage = WGPUBufferUsage_QueryResolve | WGPUBufferUsage_CopySrc;
+                f.resolved = wgpuDeviceCreateBuffer(device, &bd);
+                bd.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
+                f.read = wgpuDeviceCreateBuffer(device, &bd);
+            }
+        return true;
+    }
+
+    std::vector<GpuFrameTime> takeGpuTimes() override { return std::exchange(timed, {}); }
+
+    // The timestamps for a pass of this frame's, if it is timed (and has room for them).
+    const WGPUPassTimestampWrites* timePass(std::string label) {
+        if (!timedNow || timedNow->labels.size() >= kTimedPasses) return nullptr;
+        passTimes = WGPU_PASS_TIMESTAMP_WRITES_INIT;
+        passTimes.querySet = timedNow->queries;
+        passTimes.beginningOfPassWriteIndex = uint32_t(timedNow->labels.size()) * 2;
+        passTimes.endOfPassWriteIndex = passTimes.beginningOfPassWriteIndex + 1;
+        timedNow->labels.push_back(std::move(label));
+        return &passTimes;
+    }
+
+    // The frames read back since: each pass from its start to its end, the frame from its first
+    // pass's start to its last's end (nanoseconds; a browser may round them).
+    void collectTimes() {
+        if (std::any_of(timedFrames.begin(), timedFrames.end(), [](const TimedFrame& f) { return f.state == TimedFrame::Mapping; }))
+            wgpuInstanceProcessEvents(instance);
+        for (TimedFrame& f : timedFrames) {
+            if (f.state == TimedFrame::Failed) f.state = TimedFrame::Free;
+            if (f.state != TimedFrame::Mapped) continue;
+            size_t n = f.labels.size() * 2;
+            auto* t = static_cast<const uint64_t*>(wgpuBufferGetConstMappedRange(f.read, 0, n * 8));
+            if (t) {
+                GpuFrameTime frame;
+                uint64_t first = UINT64_MAX, last = 0;
+                for (size_t i = 0; i < f.labels.size(); ++i) {
+                    uint64_t a = t[2 * i], b = std::max(t[2 * i + 1], a);
+                    frame.passes.push_back({f.labels[i], double(b - a) / 1e6});
+                    first = std::min(first, a), last = std::max(last, b);
+                }
+                frame.ms = double(last - first) / 1e6;
+                timed.push_back(std::move(frame));
+            }
+            wgpuBufferUnmap(f.read);
+            f.state = TimedFrame::Free;
+        }
     }
 
     void waitIdle() override {

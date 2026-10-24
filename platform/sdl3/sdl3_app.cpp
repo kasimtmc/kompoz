@@ -2222,6 +2222,7 @@ struct Script {
     Offset swipeFrom, swipeTo;
     int swipeFrames = 0, swipeStep = 0;
     std::deque<std::string> dropped;  // what dropfile/droptext pushed to SDL, alive until handled
+    bool realtime = false;  // `realtime`: from there on the clock is real and frames are paced as without a script
 
     bool enabled() const { return !commands.empty(); }
     bool running() const { return next < commands.size() || waitFrames > 0 || sleepUntilNs > 0 || swipeStep < swipeFrames; }
@@ -2281,9 +2282,15 @@ struct App {
     bool pinchSinceStart = false;
     struct Profile {
         uint64_t lastStart = 0, eventsNs = 0, summaryStart = 0;
+        uint64_t lastShown = 0;  // when the last frame shown was handed to the display
+        bool busy = false;       // the last iteration had more to do (frames meant to follow each other)
         int frames = 0, slow = 0, unchanged = 0;  // unchanged: recorded, nothing on the screen differed
-        double workTotal = 0, workMax = 0, intervalMax = 0, drawnArea = 0;  // drawnArea: fractions of the screen, summed
+        int shown = 0, missed = 0;                // missed: display refreshes between frames shown back to back
+        double workTotal = 0, workMax = 0, waitTotal = 0, intervalMax = 0, drawnArea = 0;  // drawnArea: fractions of the screen, summed
+        int gpuFrames = 0;
+        double gpuTotal = 0, gpuMax = 0;
     } prof;
+    bool gpuTimed = false;  // KOMPOZ_PROFILE: the GPU's time measured (Device::setGpuTiming)
     // The frame is recorded, and only what changed on the screen is drawn again, into pixels
     // kept in a texture (`frame`) that is then shown; a frame that changes nothing isn't shown.
     std::unique_ptr<kompoz::DisplayList> display;
@@ -2348,7 +2355,7 @@ struct App {
     Offset toDp(float x, float y) const { return {x * pointToDp, y * pointToDp}; }
     // Frame and input times are on one clock: a script's virtual one while it runs, SDL's after.
     int64_t clock() const { return int64_t(SDL_GetTicksNS()) + clockOffset; }
-    int64_t eventTime(Uint64 timestamp) const { return script.running() ? script.clock : int64_t(timestamp) + clockOffset; }
+    int64_t eventTime(Uint64 timestamp) const { return script.running() && !script.realtime ? script.clock : int64_t(timestamp) + clockOffset; }
 };
 
 // The device for mediaQuery: Android's own account of it; elsewhere a mouse is a fine pointer, a
@@ -2864,11 +2871,14 @@ Drawn drawFrame(App& app, const std::string& shot) {
     return {true, area};
 }
 
-void profileFrame(App& app, uint64_t start, uint64_t composed, uint64_t drawn, uint64_t presented, int glyphs, float area) {
+void profileFrame(App& app, uint64_t start, uint64_t composed, uint64_t waited, uint64_t drawn, uint64_t presented, bool shown, int glyphs,
+                  float area) {
     auto ms = [](uint64_t ns) { return double(ns) / 1e6; };
     App::Profile& p = app.prof;
+    double period = ms(app.framePeriodNs);
     double interval = p.lastStart ? ms(start - p.lastStart) : 0;
-    double events = ms(p.eventsNs), compose = ms(composed - start), draw = ms(drawn - composed), present = ms(presented - drawn);
+    double events = ms(p.eventsNs), compose = ms(composed - start), wait = ms(waited), draw = ms(drawn - composed - waited),
+           present = ms(presented - drawn);
     double work = events + compose + draw;
     p.lastStart = start;
     p.eventsNs = 0;
@@ -2876,23 +2886,56 @@ void profileFrame(App& app, uint64_t start, uint64_t composed, uint64_t drawn, u
     ++p.frames;
     p.workTotal += work;
     p.workMax = std::max(p.workMax, work);
+    p.waitTotal += wait;
     p.intervalMax = std::max(p.intervalMax, interval);
     if (area == 0) ++p.unchanged;
     p.drawnArea += area < 0 ? 1 : area;
-    if (work > 8 || interval > 34) {
+    if (shown) {
+        // Refreshes of the display that went by without a frame, between two shown back to back
+        // (the app busy all along: not those it waited through for an event).
+        if (p.lastShown && p.busy) p.missed += std::max(0, int(std::lround(ms(presented - p.lastShown) / period)) - 1);
+        p.lastShown = presented;
+        ++p.shown;
+    }
+    if (work > period || interval > 2 * period + 1) {
         ++p.slow;
-        SDL_Log("kompoz: frame %.1f ms after the last: input %.1f, compose+layout %.1f, draw %.1f, present %.1f ms; %d layers, %d glyphs, "
-                "%.0f%% drawn again",
-                interval, events, compose, draw, present, app.gpuCanvas ? app.gpuCanvas->layerCount : app.canvas->layerCount, glyphs,
+        SDL_Log("kompoz: frame %.1f ms after the last: input %.1f, compose+layout %.1f, wait %.1f, draw %.1f, present %.1f ms; %d layers, "
+                "%d glyphs, %.0f%% drawn again",
+                interval, events, compose, wait, draw, present, app.gpuCanvas ? app.gpuCanvas->layerCount : app.canvas->layerCount, glyphs,
                 (area < 0 ? 1 : area) * 100);
     }
     if (start - p.summaryStart >= 1'000'000'000) {
-        SDL_Log("kompoz: %d frames in %.0f ms (%d changed nothing on the screen; %.0f%% of it drawn again on average), work avg %.1f "
-                "max %.1f ms, longest gap %.1f ms, %d slow",
-                p.frames, ms(start - p.summaryStart), p.unchanged, p.drawnArea / p.frames * 100, p.workTotal / p.frames, p.workMax,
-                p.intervalMax, p.slow);
+        char gpu[96] = "";
+        if (p.gpuFrames) std::snprintf(gpu, sizeof gpu, ", GPU avg %.1f max %.1f ms", p.gpuTotal / p.gpuFrames, p.gpuMax);
+        SDL_Log("kompoz: %d frames in %.0f ms (%d shown, %d refreshes missed; %d changed nothing on the screen; %.0f%% of it drawn again on "
+                "average), work avg %.1f max %.1f ms, wait avg %.1f ms%s, longest gap %.1f ms, %d slow",
+                p.frames, ms(start - p.summaryStart), p.shown, p.missed, p.unchanged, p.drawnArea / p.frames * 100, p.workTotal / p.frames,
+                p.workMax, p.waitTotal / p.frames, gpu, p.intervalMax, p.slow);
+        uint64_t lastShown = p.lastShown;
+        bool busy = p.busy;
         p = {};
         p.lastStart = p.summaryStart = start;
+        p.lastShown = lastShown, p.busy = busy;
+    }
+}
+
+// KOMPOZ_PROFILE on the GPU renderer: the GPU's time for each frame it has done (Device::
+// setGpuTiming) into the summary, and a frame that took the GPU longer than the display's
+// period logged with its costliest passes.
+void profileGpu(App& app) {
+    App::Profile& p = app.prof;
+    double period = double(app.framePeriodNs) / 1e6;
+    for (gpu::GpuFrameTime& t : app.gpu->takeGpuTimes()) {
+        ++p.gpuFrames;
+        p.gpuTotal += t.ms;
+        p.gpuMax = std::max(p.gpuMax, t.ms);
+        if (t.ms <= period) continue;
+        std::ranges::sort(t.passes, std::greater<>(), &gpu::GpuPassTime::ms);
+        std::string passes;
+        for (size_t i = 0; i < t.passes.size() && i < 6; ++i)
+            passes += std::format("{}{} {:.1f}", i ? ", " : "", t.passes[i].label, t.passes[i].ms);
+        if (t.passes.size() > 6) passes += std::format(" (+{} more)", t.passes.size() - 6);
+        SDL_Log("kompoz: GPU frame %.1f ms%s%s", t.ms, passes.empty() ? "" : ": ", passes.c_str());
     }
 }
 
@@ -2925,6 +2968,9 @@ std::string stepScript(App& app) {
         if (command == "wait") {
             in >> s.waitFrames;
             return {};
+        } else if (command == "realtime") {  // the rest in real time, frames paced to the display: as a person would see it
+            s.realtime = true;
+            app.clockOffset = std::max<int64_t>(0, s.clock - int64_t(SDL_GetTicksNS()));  // (never back)
         } else if (command == "sleep") {  // real milliseconds: what other threads do (an image read, the wallpaper's colors)
             int ms = 0;
             in >> ms;
@@ -3478,6 +3524,10 @@ bool startGpu(App& app, gpu::Backend backend) {
     }
     if (app.gpu) {
         SDL_Log("kompoz: renderer: Kompoz on %s (%s)", gpu::backendName(backend), app.gpu->deviceName().c_str());
+        if (app.profile) {
+            app.gpuTimed = app.gpu->setGpuTiming(true);
+            if (!app.gpuTimed) SDL_Log("kompoz: profile: this GPU's time can't be measured here");
+        }
         return true;
     }
     SDL_Log("kompoz: no %s device: %s", gpu::backendName(backend), error.c_str());
@@ -3782,7 +3832,8 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 #endif
     bool scripted = app.script.running();
     std::string shot = app.script.enabled() ? kompoz::sdl::stepScript(app) : std::string{};
-    int64_t now = scripted ? (app.script.clock += 16'666'667) : app.clock();
+    int64_t now = scripted && !app.script.realtime ? (app.script.clock += 16'666'667) : app.clock();
+    if (scripted) app.script.clock = std::max(app.script.clock, now);
     if (scripted && !app.script.running())  // its last frame: real time from here, never back
         app.clockOffset = std::max<int64_t>(0, now - int64_t(SDL_GetTicksNS()));
 
@@ -3866,9 +3917,12 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
         app.showFrame = true;
     }
     kompoz::sdl::Drawn drawn;
+    uint64_t waited = 0;  // in beginFrame: for the GPU to be done with a frame before
     if (redraw || !shot.empty() || app.showFrame) {
         if (app.gpu) {
+            uint64_t before = app.profile ? SDL_GetTicksNS() : 0;
             app.gpu->beginFrame();
+            if (app.profile) waited = SDL_GetTicksNS() - before;
             app.gpuInFrame = true;
         }
         drawn = kompoz::sdl::drawFrame(app, shot);
@@ -3885,7 +3939,8 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
         app.fonts->endFrame();
         t3 = app.profile ? SDL_GetTicksNS() : 0;
     }
-    if (app.profile && redraw) kompoz::sdl::profileFrame(app, t0, t1, t2, t3, app.fonts->rasterized() - glyphsBefore, drawn.area);
+    if (app.profile && redraw) kompoz::sdl::profileFrame(app, t0, t1, waited, t2, t3, drawn.shown, app.fonts->rasterized() - glyphsBefore, drawn.area);
+    if (app.gpuTimed) kompoz::sdl::profileGpu(app);
     // Sleep until the next event when there is nothing to animate or recompose, or until the
     // next coroutine delay is due.
     bool busy = app.host->hasPendingWork() || app.script.running() || app.resizeFrames > 0;
@@ -3900,9 +3955,10 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 #else
     // A frame not shown didn't wait for the display: an animation that changes nothing on the
     // screen (scrolled out of view) would spin as fast as it can. Paced to the display instead.
-    if (busy && !drawn.shown && !app.script.running())
+    if (busy && !drawn.shown && (!app.script.running() || app.script.realtime))
         if (uint64_t spent = SDL_GetTicksNS() - iterationStart; spent < app.framePeriodNs) SDL_DelayNS(app.framePeriodNs - spent);
 #endif
+    app.prof.busy = busy;
     if (int64_t deadline = app.host->nextTimerDeadline(); !busy && deadline >= 0 && deadline != app.wakeDeadline) {
         if (app.wakeTimer) SDL_RemoveTimer(app.wakeTimer);
         app.wakeDeadline = deadline;

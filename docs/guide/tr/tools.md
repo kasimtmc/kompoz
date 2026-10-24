@@ -59,7 +59,7 @@ KOMPOZ_PREVIEW=CounterCardPreview scripts/dev.sh
 
 ## Betikli çalıştırmalar ve ekran görüntüleri
 
-`KOMPOZ_SCRIPT` uygulamayı bir kullanıcı olmadan sürer: tıklamalar, yazma, kaydırmalar ve ekran görüntüleri, koordinatlar dp cinsinden. Betik çalışırken zaman sanaldır, böylece animasyonlar her çalıştırmada aynıdır; betik bitince gerçek zaman devralır ve uygulamayı kaldığı yerden kullanmaya devam edebilirsiniz.
+`KOMPOZ_SCRIPT` uygulamayı bir kullanıcı olmadan sürer: tıklamalar, yazma, kaydırmalar ve ekran görüntüleri, koordinatlar dp cinsinden. Betik çalışırken zaman sanaldır, böylece animasyonlar her çalıştırmada aynıdır; betik bitince gerçek zaman devralır ve uygulamayı kaldığı yerden kullanmaya devam edebilirsiniz. `realtime`'dan sonra betiğin geri kalanı gerçek zamanda çalışır, kareleri bir insanın göreceği gibi ekranın hızına göre bekletilir: `KOMPOZ_PROFILE` ile ölçmek için.
 
 ```bash
 SDL_VIDEODRIVER=offscreen KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
@@ -86,6 +86,7 @@ SDL_VIDEODRIVER=offscreen KOMPOZ_PREVIEW=CounterCardPreview KOMPOZ_SCRIPT="wait 
 | `key name` | `enter`, `backspace`, `escape`, `tab`, `shift+tab`, `space`, `up`, `down`, `left`, `right`. |
 | `resize w h` | Pencereyi yeniden boyutlandırır. |
 | `wait frames` | Karelerin geçmesine izin verir (sanal zamanda). |
+| `realtime` | Geri kalanı gerçek zamanda, kareler ekranın hızında. |
 | `sleep ms` | Başka thread'lerdeki işler için gerçek zamanın geçmesine izin verir: yüklenen bir resim, okunan duvar kağıdı renkleri. |
 | `shot file.png` | Bir ekran görüntüsü kaydeder. |
 | `quit` | Uygulamayı sonlandırır. |
@@ -106,7 +107,13 @@ void Row1(const std::string& title) {
 
 ## Karelerin profilini çıkarmak
 
-`KOMPOZ_PROFILE=1` kare sürelerini günlüğe yazar: her yavaş kare için girdiye, kompozisyon ve yerleşime, çizime ve sunuma harcanan süreyi, çizdiği ekran dışı katmanlarla rasterleştirdiği glifleri, ayrıca her saniye bir özet.
+`KOMPOZ_PROFILE=1` kare sürelerini günlüğe yazar. İşi ekranın yenileme süresinden uzun süren ya da bir öncekinden iki yenileme süresinden fazla sonra gelen kare yavaştır; her yavaş kare için girdiye, kompozisyon ve yerleşime, GPU'nun daha önceki bir kareyi bitirmesini beklemeye (`wait`), çizime ve sunuma harcanan süreyi, çizdiği ekran dışı katmanlarla rasterleştirdiği glifleri yazar. Her saniye bir özet gelir: kareler, kaçının gösterildiği ve arka arkaya gösterilen iki kare arasında ekranın kaç yenilemesinin karesiz geçtiği, işin ve beklemenin ortalamaları, Kompoz'un GPU renderer'ında da bir karenin GPU'daki kendi süresi. GPU'da bir yenileme süresinden uzun süren kare, en pahalı geçişleriyle yazılır; her biri çizdiği yerle (`window`, `1080x2400`, `2048x2048 R16F`) ya da `copy WxH` olarak adlandırılır:
+
+```
+kompoz: GPU frame 12.2 ms: 1080x2400 10.5, window 1.6, 2048x2402 R16F 0.1
+```
+
+GPU süresi Vulkan'ın ve WebGPU'nun zaman damgalarıyla (WebGPU'da adaptörde `timestamp-query` varsa) ve OpenGL ES'in zamanlayıcı sorgularıyla (`EXT_disjoint_timer_query`, WebGL 2'de `_webgl2` olanı) ölçülür; Metal'de yalnızca karenin tamamınınki, komut tamponlarından. Hiçbirinin olmadığı yerde profil bunu söyler.
 
 Android'de ortam değişkeni yoktur; orada profil aracı uygulamanın depolamasında bir dosya arar ve çıktısı `adb logcat -s SDL/APP`'a gider:
 
@@ -114,10 +121,12 @@ Android'de ortam değişkeni yoktur; orada profil aracı uygulamanın depolamas�
 adb shell run-as dev.kompoz.showcase touch files/kompoz-profile
 ```
 
+`run-as`'in reddedildiği yerde (SELinux: örneğin bir LineageOS derlemesi) bu dosyalar (`kompoz-profile`, `kompoz-script`, `kompoz-gpu`) uygulamanın harici dosyalarına da konabilir: `adb shell touch /sdcard/Android/data/dev.kompoz.showcase/files/kompoz-profile`.
+
 Bir betik de oradaki bir dosyadan gelir (aynı komutlar; bir kare ölçümü her cihazda aynı tekrarlanır):
 
 ```bash
-adb shell run-as dev.kompoz.showcase sh -c "'echo \"wait 60; swipe 200 600 200 200 12; wait 120\" > files/kompoz-script'"
+adb shell run-as dev.kompoz.showcase sh -c "'echo \"realtime; wait 60; swipe 200 600 200 200 12; wait 120\" > files/kompoz-script'"
 ```
 
 Kompoz her kareyi önce kaydeder ve yalnızca bir önceki kareden beri değişeni yeniden çizer; ekranda hiçbir şeyin değişmediği bir kare ne çizilir ne sunulur. Bunu görmek ya da kontrol etmek için:

@@ -175,6 +175,21 @@ void writePipelineCache(const std::string& path, const std::vector<uint8_t>& dat
 // FNV-1a, 64 bits: what the caches check and key what they keep by.
 uint64_t fnv1a(const void* data, size_t size, uint64_t hash = 0xcbf29ce484222325);
 
+// The GPU's time for a frame (Device::setGpuTiming): from its first work to its last, and each
+// pass's, named by what it draws into ("window", "1080x2400", "2048x2048 R16F"), or "copy WxH",
+// "mipmaps WxH" (OpenGL ES's own copy of the window into its framebuffer: "copy to screen"); on
+// Metal the frame alone.
+struct GpuPassTime {
+    std::string label;
+    double ms = 0;
+};
+struct GpuFrameTime {
+    double ms = 0;
+    std::vector<GpuPassTime> passes;
+};
+// A pass's name in a GpuFrameTime.
+std::string passLabel(int width, int height, Format format, bool window);
+
 class Device {
 public:
     virtual ~Device() = default;
@@ -236,6 +251,15 @@ public:
     virtual std::vector<uint8_t> readPixels(Texture& texture, const IRect& region) = 0;
     // Submits the frame, and shows the swapchain image if `present` (and it was asked for).
     virtual void endFrame(bool present) = 0;
+    // Times the GPU's work from the next frame on (or no longer): where the API can (Vulkan's and
+    // WebGPU's timestamps, OpenGL ES's timer queries, Metal's command buffers); false if it can't.
+    virtual bool setGpuTiming(bool on) {
+        (void)on;
+        return false;
+    }
+    // The frames timed (that drew something) whose GPU work is done since the last call, oldest
+    // first: a frame or two after their endFrame.
+    virtual std::vector<GpuFrameTime> takeGpuTimes() { return {}; }
     // Waits for the GPU to finish everything (before resources it uses go).
     virtual void waitIdle() = 0;
 };

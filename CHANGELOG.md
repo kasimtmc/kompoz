@@ -184,6 +184,12 @@
   are now the display's way up, and the frame is turned into them as it is copied there (`Device::swapchainTurns`), as
   Android asks of Vulkan apps. On a phone's Adreno turned sideways, a screen scrolled at 113 frames a second instead of
   38, with 2.4 ms of work a frame instead of 26.
+- **`KOMPOZ_PROFILE` measures the GPU**: on Kompoz's GPU renderer each frame's GPU time and its passes' (Vulkan's and
+  WebGPU's timestamps, OpenGL ES's timer queries; Metal's frame as a whole), a frame over the display's refresh period
+  logged with its costliest passes; the frames shown and the refreshes missed between them; the wait for the GPU apart
+  from drawing. A frame is slow past the display's refresh period (it was past 8 ms). `Device::setGpuTiming` and
+  `takeGpuTimes` give the times. A script's `realtime` runs the rest of it in real time, frames paced to the display, for
+  measuring.
 - **Fixed**: the GPU renderer's turned, stretched and leaning edges were up to 10/255 off on GPUs that snap vertices
   coarsely (4 subpixel bits, as SwiftShader does: Chrome's WebGL where it doesn't use the GPU): a quad's corners are
   put where such a GPU would put them, and its pixels shaded from there.

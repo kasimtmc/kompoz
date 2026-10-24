@@ -113,7 +113,13 @@ public:
     struct Frame {
         id<MTLCommandBuffer> submitted;
         std::vector<Chunk> chunks;
+        std::vector<id<MTLCommandBuffer>> timedBuffers;  // all of the frame's, if it was timed and drew something
     };
+    // Timed (setGpuTiming): the frame's command buffers so far, and whether it drew something;
+    // the frames done since takeGpuTimes. (Its passes aren't timed: Metal's counters would.)
+    bool timing = false, drewSomething = false;
+    std::vector<id<MTLCommandBuffer>> frameBuffers;
+    std::vector<GpuFrameTime> timed;
     Frame frames[kFramesInFlight];
     int frameIndex = 0;
     bool inFrame = false;
@@ -287,6 +293,12 @@ public:
         Frame& f = frames[frameIndex];
         if (f.submitted) [f.submitted waitUntilCompleted];
         f.submitted = nil;
+        if (!f.timedBuffers.empty()) {  // (done in order: the last done, all are)
+            CFTimeInterval start = f.timedBuffers.front().GPUStartTime, end = f.timedBuffers.back().GPUEndTime;
+            if (end > start) timed.push_back({(end - start) * 1000, {}});
+            f.timedBuffers.clear();
+        }
+        drewSomething = false;
         for (Chunk& c : f.chunks) c.used = 0;
         startCommands();
         drawable = nil;
@@ -365,6 +377,7 @@ public:
 
     void beginPass(Texture& texture, const std::optional<ClearColor>& clear, std::span<Texture* const>) override {
         endBlit();
+        drewSomething = true;
         auto& t = static_cast<MetalTexture&>(texture);
         MTLRenderPassDescriptor* d = [MTLRenderPassDescriptor renderPassDescriptor];
         d.colorAttachments[0].texture = t.texture;
@@ -426,6 +439,7 @@ public:
                 destinationBytesPerRow:row
               destinationBytesPerImage:size];
         endBlit();
+        if (timing) frameBuffers.push_back(commands);
         [commands commit];
         [commands waitUntilCompleted];
         std::vector<uint8_t> out(size);
@@ -438,8 +452,11 @@ public:
         if (!inFrame) return;
         endBlit();
         if (present && drawable) [commands presentDrawable:drawable];
+        if (timing) frameBuffers.push_back(commands);
         [commands commit];
         frames[frameIndex].submitted = commands;
+        if (drewSomething) frames[frameIndex].timedBuffers = std::move(frameBuffers);
+        frameBuffers.clear();
         commands = nil;
         drawable = nil;
         window.reset();
@@ -450,6 +467,13 @@ public:
         for (Frame& f : frames)
             if (f.submitted) [f.submitted waitUntilCompleted];
     }
+
+    bool setGpuTiming(bool on) override {
+        timing = on;
+        return true;
+    }
+
+    std::vector<GpuFrameTime> takeGpuTimes() override { return std::exchange(timed, {}); }
 };
 
 } // namespace

@@ -93,6 +93,19 @@ void writePipelineCache(const std::string& path, const std::vector<uint8_t>& dat
     }
 }
 
+std::string passLabel(int width, int height, Format format, bool window) {
+    if (window) return "window";
+    std::string label = std::to_string(width) + "x" + std::to_string(height);
+    switch (format) {
+    case Format::RGBA8: break;
+    case Format::BGRA8: label += " BGRA8"; break;
+    case Format::R16F: label += " R16F"; break;
+    case Format::RGBA32F: label += " RGBA32F"; break;
+    case Format::RGBA16F: label += " RGBA16F"; break;
+    }
+    return label;
+}
+
 const char* backendName(Backend backend) {
     switch (backend) {
     case Backend::Vulkan: return "vulkan";

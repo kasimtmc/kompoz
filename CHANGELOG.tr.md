@@ -193,6 +193,12 @@
   görüntüleri artık ekranın kendi yönünde ve kare oraya kopyalanırken döndürülüyor (`Device::swapchainTurns`),
   Android'in Vulkan uygulamalarından istediği gibi. Yana çevrilmiş bir telefonun Adreno'sunda bir ekran saniyede 38
   yerine 113 kareyle kaydı, karede 26 yerine 2.4 ms işle.
+- **`KOMPOZ_PROFILE` GPU'yu ölçer**: Kompoz'un GPU renderer'ında her karenin GPU süresi ve geçişlerininki (Vulkan'ın ve
+  WebGPU'nun zaman damgaları, OpenGL ES'in zamanlayıcı sorguları; Metal'de karenin tamamı), ekranın yenileme süresini
+  aşan kare en pahalı geçişleriyle yazılır; gösterilen kareler ve aralarında kaçan yenilemeler; GPU'yu bekleme çizimden
+  ayrı. Bir kare ekranın yenileme süresini aşınca yavaştır (8 ms'yi aşınca idi). Süreleri `Device::setGpuTiming` ve
+  `takeGpuTimes` verir. Bir betiğin `realtime` komutu geri kalanını ölçmek için gerçek zamanda, kareleri ekranın hızında
+  çalıştırır.
 - **Düzeltildi**: GPU renderer'ın döndürülmüş, gerilmiş ve eğik kenarları, köşe noktalarını kaba bir ızgaraya oturtan
   GPU'larda (4 alt piksel biti, SwiftShader gibi: Chrome'un GPU kullanmadığı yerdeki WebGL'i) 10/255'e kadar
   sapıyordu: bir dörtgenin köşeleri böyle bir GPU'nun koyacağı yere konur, pikselleri oradan boyanır.

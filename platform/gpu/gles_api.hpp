@@ -54,6 +54,7 @@ inline constexpr GLenum GL_FRAMEBUFFER_COMPLETE = 0x8CD5;
 inline constexpr GLenum GL_FUNC_ADD = 0x8006;
 inline constexpr GLenum GL_FUNC_REVERSE_SUBTRACT = 0x800B;
 inline constexpr GLenum GL_FUNC_SUBTRACT = 0x800A;
+inline constexpr GLenum GL_GPU_DISJOINT_EXT = 0x8FBB;
 inline constexpr GLenum GL_HALF_FLOAT = 0x140B;
 inline constexpr GLenum GL_INFO_LOG_LENGTH = 0x8B84;
 inline constexpr GLenum GL_LINEAR = 0x2601;
@@ -75,6 +76,8 @@ inline constexpr GLenum GL_ONE_MINUS_SRC_COLOR = 0x0301;
 inline constexpr GLenum GL_PACK_ALIGNMENT = 0x0D05;
 inline constexpr GLenum GL_PROGRAM_BINARY_LENGTH = 0x8741;
 inline constexpr GLenum GL_PROGRAM_BINARY_RETRIEVABLE_HINT = 0x8257;
+inline constexpr GLenum GL_QUERY_RESULT = 0x8866;
+inline constexpr GLenum GL_QUERY_RESULT_AVAILABLE = 0x8867;
 inline constexpr GLenum GL_R16F = 0x822D;
 inline constexpr GLenum GL_READ_FRAMEBUFFER = 0x8CA8;
 inline constexpr GLenum GL_RED = 0x1903;
@@ -95,6 +98,7 @@ inline constexpr GLenum GL_TEXTURE_MAX_LEVEL = 0x813D;
 inline constexpr GLenum GL_TEXTURE_MIN_FILTER = 0x2801;
 inline constexpr GLenum GL_TEXTURE_WRAP_S = 0x2802;
 inline constexpr GLenum GL_TEXTURE_WRAP_T = 0x2803;
+inline constexpr GLenum GL_TIME_ELAPSED_EXT = 0x88BF;
 inline constexpr GLenum GL_TRIANGLES = 0x0004;
 inline constexpr GLenum GL_UNIFORM_BUFFER = 0x8A11;
 inline constexpr GLenum GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT = 0x8A34;
@@ -110,6 +114,7 @@ inline constexpr GLenum GL_ZERO = 0;
 #define KOMPOZ_GL_FUNCTIONS(X) \
     X(void, ActiveTexture, (GLenum texture)) \
     X(void, AttachShader, (GLuint program, GLuint shader)) \
+    X(void, BeginQuery, (GLenum target, GLuint id)) \
     X(void, BindBuffer, (GLenum target, GLuint buffer)) \
     X(void, BindBufferBase, (GLenum target, GLuint index, GLuint buffer)) \
     X(void, BindBufferRange, (GLenum target, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size)) \
@@ -131,6 +136,7 @@ inline constexpr GLenum GL_ZERO = 0;
     X(void, DeleteBuffers, (GLsizei n, const GLuint *buffers)) \
     X(void, DeleteFramebuffers, (GLsizei n, const GLuint *framebuffers)) \
     X(void, DeleteProgram, (GLuint program)) \
+    X(void, DeleteQueries, (GLsizei n, const GLuint *ids)) \
     X(void, DeleteSamplers, (GLsizei count, const GLuint *samplers)) \
     X(void, DeleteShader, (GLuint shader)) \
     X(void, DeleteTextures, (GLsizei n, const GLuint *textures)) \
@@ -140,11 +146,13 @@ inline constexpr GLenum GL_ZERO = 0;
     X(void, DrawArraysInstanced, (GLenum mode, GLint first, GLsizei count, GLsizei instancecount)) \
     X(void, Enable, (GLenum cap)) \
     X(void, EnableVertexAttribArray, (GLuint index)) \
+    X(void, EndQuery, (GLenum target)) \
     X(void, Finish, (void)) \
     X(void, Flush, (void)) \
     X(void, FramebufferTexture2D, (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)) \
     X(void, GenBuffers, (GLsizei n, GLuint *buffers)) \
     X(void, GenFramebuffers, (GLsizei n, GLuint *framebuffers)) \
+    X(void, GenQueries, (GLsizei n, GLuint *ids)) \
     X(void, GenSamplers, (GLsizei count, GLuint *samplers)) \
     X(void, GenTextures, (GLsizei n, GLuint *textures)) \
     X(void, GenVertexArrays, (GLsizei n, GLuint *arrays)) \
@@ -153,6 +161,7 @@ inline constexpr GLenum GL_ZERO = 0;
     X(void, GetIntegerv, (GLenum pname, GLint *data)) \
     X(void, GetProgramInfoLog, (GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog)) \
     X(void, GetProgramiv, (GLuint program, GLenum pname, GLint *params)) \
+    X(void, GetQueryObjectuiv, (GLuint id, GLenum pname, GLuint *params)) \
     X(void, GetShaderInfoLog, (GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog)) \
     X(void, GetShaderiv, (GLuint shader, GLenum pname, GLint *params)) \
     X(const GLubyte *, GetString, (GLenum name)) \

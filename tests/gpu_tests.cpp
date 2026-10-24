@@ -36,6 +36,9 @@
 #define SDL_MAIN_HANDLED  // (its own main, which says SDL may start: SDL_SetMainReady)
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_vulkan.h>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 #ifdef __ANDROID__
 #include <dlfcn.h>
 #include <unistd.h>
@@ -3473,6 +3476,41 @@ void readbacksLeaveTheFrameGoing(Gpu& g) {
     CHECK(near(b.at(10, 10), 0, 0, 255) && near(b.at(3, 3), 255, 255, 255));
 }
 
+// The GPU's time for each frame, where the device measures it: frames that drew come back a frame
+// or two later, with their passes named by their targets (on Metal the frame alone), each within
+// the frame's time; none once it is turned off.
+void gpuTimesComeBack(Gpu& g) {
+    if (!g.device->setGpuTiming(true)) {
+        std::printf("  (the GPU's time isn't measured on this device)\n");
+        return;
+    }
+    std::vector<gpu::GpuFrameTime> times;
+    double longest = 0;  // a frame's wall time, drawn and read back: its GPU work's within it
+    for (int i = 0; i < 16 && times.size() < 3; ++i) {
+        uint64_t start = SDL_GetTicksNS();
+        g.render(192, 192, 1, rects);
+        longest = std::max(longest, double(SDL_GetTicksNS() - start) / 1e6);
+#ifdef __EMSCRIPTEN__
+        emscripten_sleep(1);  // (WebGL has a query's result only after the page's task, as an app's frames are)
+#endif
+        for (gpu::GpuFrameTime& t : g.device->takeGpuTimes()) times.push_back(std::move(t));
+    }
+    CHECK(times.size() >= 3);
+    bool passes = g.device->backend() != gpu::Backend::Metal;
+    for (const gpu::GpuFrameTime& t : times) {
+        CHECK(t.ms >= 0 && t.ms <= longest + 0.5);
+        if (passes)
+            CHECK(std::ranges::any_of(t.passes, [&](const gpu::GpuPassTime& p) { return p.label == "192x192" && p.ms >= 0 && p.ms <= t.ms + 1e-3; }));
+    }
+    g.device->setGpuTiming(false);
+    for (int i = 0; i < 4; ++i) {  // (those timed before still coming back)
+        g.render(192, 192, 1, rects);
+        g.device->takeGpuTimes();
+    }
+    for (int i = 0; i < 4; ++i) g.render(192, 192, 1, rects);
+    CHECK(g.device->takeGpuTimes().empty());
+}
+
 void scenesMatchTheirPictures(Gpu& g) {
     struct Scene {
         const char* name;
@@ -3616,6 +3654,7 @@ int main() {
             blitCopiesTexturesAsTheyAre(g);
             texturesReadBackAsUploaded(g);
             readbacksLeaveTheFrameGoing(g);
+            gpuTimesComeBack(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
         }

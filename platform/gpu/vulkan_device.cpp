@@ -49,7 +49,8 @@ namespace {
     X(vkUpdateDescriptorSets) X(vkCreateSampler) X(vkDestroySampler) X(vkCmdBeginRenderPass) X(vkCmdEndRenderPass)                         \
     X(vkCmdBindPipeline) X(vkCmdSetViewport) X(vkCmdSetScissor) X(vkCmdPushConstants) X(vkCmdBindDescriptorSets)                           \
     X(vkCmdBindVertexBuffers) X(vkCmdDraw) X(vkCmdPipelineBarrier) X(vkCmdCopyBufferToImage) X(vkCmdCopyImageToBuffer) X(vkCmdCopyImage)                    \
-    X(vkCmdBlitImage) X(vkCreatePipelineCache) X(vkDestroyPipelineCache) X(vkGetPipelineCacheData)
+    X(vkCmdBlitImage) X(vkCreatePipelineCache) X(vkDestroyPipelineCache) X(vkGetPipelineCacheData) X(vkCreateQueryPool)                    \
+    X(vkDestroyQueryPool) X(vkCmdResetQueryPool) X(vkCmdWriteTimestamp) X(vkGetQueryPoolResults)
 
 struct Api {
     PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
@@ -63,6 +64,7 @@ struct Api {
 };
 
 constexpr int kFramesInFlight = 2;
+constexpr uint32_t kTimestamps = 1024;  // a frame's timestamps at most (setGpuTiming): its passes' beyond go untimed
 constexpr VkDeviceSize kChunkSize = 4 << 20;  // per-frame memory comes in chunks of this (or one as big as asked)
 
 VkFormat vkFormat(Format f) {
@@ -158,6 +160,9 @@ public:
     VkPhysicalDeviceProperties properties{};
     VkDevice device = VK_NULL_HANDLE;
     uint32_t queueFamily = 0;
+    bool timestampsValid = false;  // the queue's (setGpuTiming)
+    bool timing = false;
+    std::vector<GpuFrameTime> timed;
     VkQueue queue = VK_NULL_HANDLE;
     VmaAllocator allocator = VK_NULL_HANDLE;
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
@@ -197,6 +202,11 @@ public:
         VkDescriptorPool descriptors = VK_NULL_HANDLE;
         std::vector<Chunk> chunks;
         std::vector<std::function<void()>> deletions;  // run when the frame's GPU work is done
+        // Timed (setGpuTiming): its timestamps, each a pass's start (its label) or end (empty),
+        // the frame's start and end around them.
+        VkQueryPool timestamps = VK_NULL_HANDLE;
+        bool timed = false;
+        std::vector<std::string> marks;
     };
     std::array<Frame, kFramesInFlight> frames;
     int frameIndex = 0;
@@ -223,6 +233,7 @@ public:
                 vk.vkDestroyCommandPool(device, f.pool, nullptr);
                 vk.vkDestroyFence(device, f.fence, nullptr);
                 vk.vkDestroySemaphore(device, f.imageAvailable, nullptr);
+                if (f.timestamps) vk.vkDestroyQueryPool(device, f.timestamps, nullptr);
             }
             for (auto& [key, pass] : renderPasses) vk.vkDestroyRenderPass(device, pass, nullptr);
             for (auto& [desc, sampler] : samplers) vk.vkDestroySampler(device, sampler, nullptr);
@@ -431,6 +442,7 @@ public:
                     physical = d;
                     properties = p;
                     queueFamily = q;
+                    timestampsValid = families[q].timestampValidBits > 0 && p.limits.timestampPeriod > 0;
                 }
                 break;
             }
@@ -732,6 +744,7 @@ public:
         frameIndex = (frameIndex + 1) % kFramesInFlight;
         Frame& f = frames[size_t(frameIndex)];
         vk.vkWaitForFences(device, 1, &f.fence, VK_TRUE, UINT64_MAX);
+        readTimestamps(f);
         runDeletions(f);
         vk.vkResetCommandPool(device, f.pool, 0);
         f.nextBuffer = 0;
@@ -741,6 +754,54 @@ public:
         acquired = false;
         waitImage = false;
         startCommands();
+        f.timed = timing && f.timestamps;
+        if (f.timed) {
+            vk.vkCmdResetQueryPool(cmd, f.timestamps, 0, kTimestamps);
+            mark(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, "frame");
+        }
+    }
+
+    bool setGpuTiming(bool on) override {
+        if (on && !timestampsValid) return false;
+        timing = on;
+        if (on)
+            for (Frame& f : frames)
+                if (!f.timestamps) {
+                    VkQueryPoolCreateInfo qci{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+                    qci.queryType = VK_QUERY_TYPE_TIMESTAMP;
+                    qci.queryCount = kTimestamps;
+                    if (vk.vkCreateQueryPool(device, &qci, nullptr, &f.timestamps) != VK_SUCCESS) return timing = false;
+                }
+        return true;
+    }
+
+    std::vector<GpuFrameTime> takeGpuTimes() override { return std::exchange(timed, {}); }
+
+    // A timestamp of this frame's, if timed: a pass's start (its label; only with room left for
+    // its end and the frame's), its end (empty), or the frame's end.
+    void mark(VkPipelineStageFlagBits stage, std::string label) {
+        Frame& f = frames[size_t(frameIndex)];
+        size_t room = label == "end of frame" ? 1 : label.empty() ? 2 : 3;
+        if (!f.timed || f.marks.size() + room > kTimestamps) return;
+        vk.vkCmdWriteTimestamp(cmd, stage, f.timestamps, uint32_t(f.marks.size()));
+        f.marks.push_back(std::move(label));
+    }
+
+    // The frame's times, once its GPU work is done: each pass from its start to its end.
+    void readTimestamps(Frame& f) {
+        std::vector<std::string> marks = std::exchange(f.marks, {});
+        if (marks.size() < 2 || marks.back() != "end of frame") return;
+        std::vector<uint64_t> t(marks.size());
+        if (vk.vkGetQueryPoolResults(device, f.timestamps, 0, uint32_t(t.size()), t.size() * 8, t.data(), 8, VK_QUERY_RESULT_64_BIT) != VK_SUCCESS)
+            return;
+        double toMs = double(properties.limits.timestampPeriod) / 1e6;
+        GpuFrameTime frame{double(t.back() - t.front()) * toMs, {}};
+        size_t start = 0;
+        for (size_t i = 1; i + 1 < marks.size(); ++i) {
+            if (!marks[i].empty()) start = i;
+            else if (start) frame.passes.push_back({marks[start], double(t[i] - t[start]) * toMs}), start = 0;
+        }
+        if (!frame.passes.empty()) timed.push_back(std::move(frame));
     }
 
     void startCommands() {
@@ -844,6 +905,7 @@ public:
     void generateMipmaps(Texture& texture) override {
         auto& t = static_cast<VulkanTexture&>(texture);
         if (t.mipLevels <= 1) return;
+        mark(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, "mipmaps " + std::to_string(t.width()) + "x" + std::to_string(t.height()));
         transition(t, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
         // Each level read once written: from TRANSFER_DST to TRANSFER_SRC, then blitted, halved, into the next.
         auto toSource = [&](uint32_t level) {
@@ -872,6 +934,7 @@ public:
         }
         toSource(t.mipLevels - 1);
         t.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        mark(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, {});
     }
 
     void upload(Texture& texture, const IRect& region, const void* pixels, size_t rowBytes) override {
@@ -928,6 +991,7 @@ public:
         rbi.renderArea = {{0, 0}, {uint32_t(t.width()), uint32_t(t.height())}};
         rbi.clearValueCount = clear ? 1 : 0;
         rbi.pClearValues = &cv;
+        mark(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, passLabel(t.width(), t.height(), t.format(), !t.allocation));
         vk.vkCmdBeginRenderPass(cmd, &rbi, VK_SUBPASS_CONTENTS_INLINE);
         VkViewport viewport{0, 0, float(t.width()), float(t.height()), 0, 1};
         vk.vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -1000,6 +1064,7 @@ public:
 
     void endPass() override {
         vk.vkCmdEndRenderPass(cmd);
+        mark(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, {});
         target = nullptr;
     }
 
@@ -1035,7 +1100,9 @@ public:
         copy.srcOffset = {region.x, region.y, 0};
         copy.dstOffset = {x, y, 0};
         copy.extent = {uint32_t(region.width), uint32_t(region.height), 1};
+        mark(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, "copy " + std::to_string(region.width) + "x" + std::to_string(region.height));
         vk.vkCmdCopyImage(cmd, src.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        mark(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, {});
     }
 
     std::vector<uint8_t> readPixels(Texture& texture, const IRect& region) override {
@@ -1080,6 +1147,7 @@ public:
         present = present && acquired;
         if (present) transition(*swapImages[swapIndex], VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
         Frame& f = frames[size_t(frameIndex)];
+        mark(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, "end of frame");
         vk.vkResetFences(device, 1, &f.fence);
         if (acquired && !present) {
             // An image was acquired but isn't shown: it must still be given back, so it is
