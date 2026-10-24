@@ -2,7 +2,11 @@
 
 #include "device.hpp"
 
+#include <chrono>
 #include <cstdio>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
 
 namespace kompoz::gpu {
 
@@ -22,6 +26,71 @@ void log(const std::string& message) {
         gLogger(message.c_str());
     else
         std::fprintf(stderr, "%s\n", message.c_str());
+}
+
+namespace {
+// A cache file: this, the data's size and FNV-1a hash (8 bytes each, little-endian), the data.
+constexpr char kCacheMagic[8] = {'K', 'P', 'Z', 'P', 'I', 'P', 'E', '1'};
+
+void putU64(std::vector<uint8_t>& out, uint64_t value) {
+    for (int i = 0; i < 8; ++i) out.push_back(uint8_t(value >> (8 * i)));
+}
+
+uint64_t getU64(const uint8_t* in) {
+    uint64_t value = 0;
+    for (int i = 0; i < 8; ++i) value |= uint64_t(in[i]) << (8 * i);
+    return value;
+}
+
+std::filesystem::path utf8Path(const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); }
+} // namespace
+
+uint64_t fnv1a(const void* data, size_t size, uint64_t hash) {
+    auto* bytes = static_cast<const uint8_t*>(data);
+    for (size_t i = 0; i < size; ++i) hash = (hash ^ bytes[i]) * 0x100000001b3;
+    return hash;
+}
+
+std::vector<uint8_t> readPipelineCache(const std::string& path) {
+    std::ifstream in(utf8Path(path), std::ios::binary);
+    std::vector<uint8_t> file((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    constexpr size_t header = sizeof kCacheMagic + 16;
+    if (file.size() < header || std::memcmp(file.data(), kCacheMagic, sizeof kCacheMagic) != 0) return {};
+    uint64_t size = getU64(file.data() + sizeof kCacheMagic);
+    if (size != file.size() - header || getU64(file.data() + sizeof kCacheMagic + 8) != fnv1a(file.data() + header, size)) return {};
+    return {file.begin() + header, file.end()};
+}
+
+void writePipelineCache(const std::string& path, const std::vector<uint8_t>& data) {
+    std::vector<uint8_t> file(kCacheMagic, kCacheMagic + sizeof kCacheMagic);
+    putU64(file, data.size());
+    putU64(file, fnv1a(data.data(), data.size()));
+    file.insert(file.end(), data.begin(), data.end());
+    // (Another run of the app writing it too writes a file of its own.)
+    auto stamp = uint64_t(std::chrono::steady_clock::now().time_since_epoch().count());
+    std::filesystem::path target = utf8Path(path), part = utf8Path(path + "." + std::to_string(stamp % 1000000007) + ".tmp");
+    std::error_code ec;
+    if (target.has_parent_path()) std::filesystem::create_directories(target.parent_path(), ec);
+    {
+        std::ofstream out(part, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(file.data()), std::streamsize(file.size()));
+        if (!out.flush()) {
+            out.close();
+            std::filesystem::remove(part, ec);
+            log("the pipeline cache couldn't be written: " + path);
+            return;
+        }
+    }
+    std::filesystem::rename(part, target, ec);
+    if (ec) {  // where renaming doesn't replace
+        std::error_code e;
+        std::filesystem::remove(target, e);
+        std::filesystem::rename(part, target, ec);
+    }
+    if (ec) {
+        std::filesystem::remove(part, ec);
+        log("the pipeline cache couldn't be written: " + path);
+    }
 }
 
 const char* backendName(Backend backend) {

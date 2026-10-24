@@ -182,6 +182,12 @@
   resimlerin aynısı (CI'da Chrome'un SwiftShader'ında ve bir telefonun Chrome'unda: Dawn üzerinden Adreno); bir web
   derlemesi, bir okumanın GPU'yu beklediği ASYNCIFY ile bağlanır. `kompoz_gpu_tests` Android'in Vulkan'ında da
   çalışır (`KOMPOZ_GPU=vulkan`, pencere olmadan).
+- **GPU renderer'ın shader'ları bir kez derlenir**: Vulkan'ın pipeline önbelleği ve OpenGL ES'in program binary'leri
+  uygulamanın önbellek dizininde tutulur (indirilen resimlerin yanında `pipelines-vulkan`, `pipelines-gles`;
+  dosyayı `Surface::pipelineCache` söyler), böylece onları yalnızca uygulamanın ilk çalışması derler: bir telefonun
+  Adreno'sunda ilk kare Vulkan'da 465, OpenGL ES'te 621 ms'de çiziliyordu, sonraki çalışmalarda 21 ve 22 ms'de
+  çizilir. OpenGL ES'te yalnızca karışımı (blending) farklı olan pipeline'lar bir kez derlenen tek bir programı
+  paylaşır.
 - **Düzeltildi**: GPU renderer'ın döndürülmüş, gerilmiş ve eğik kenarları, köşe noktalarını kaba bir ızgaraya oturtan
   GPU'larda (4 alt piksel biti, SwiftShader gibi: Chrome'un GPU kullanmadığı yerdeki WebGL'i) 10/255'e kadar
   sapıyordu: bir dörtgenin köşeleri böyle bir GPU'nun koyacağı yere konur, pikselleri oradan boyanır.

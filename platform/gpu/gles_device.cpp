@@ -15,7 +15,9 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #ifdef __EMSCRIPTEN__
@@ -108,12 +110,8 @@ public:
 
 class GlesPipeline final : public Pipeline {
 public:
-    GlesPipeline(Gl& gl, GLuint program) : gl(gl), program(program) {}
-    ~GlesPipeline() override {
-        if (program) gl.DeleteProgram(program);
-    }
-    Gl& gl;
-    GLuint program = 0;
+    explicit GlesPipeline(GLuint program) : program(program) {}
+    GLuint program = 0;  // (the device's)
     std::vector<VertexAttribute> attributes;
     uint32_t stride = 0;
     BlendState blend;
@@ -159,6 +157,15 @@ public:
     GlesTexture* target = nullptr;
     GlesPipeline* pipeline = nullptr;
     std::vector<std::pair<Sampler, GLuint>> samplers;
+    // A program for each pair of shaders, by their sources' hash: pipelines that differ only in
+    // what OpenGL keeps as state (blending, the target's format) share it.
+    std::map<uint64_t, GLuint> programs;
+    // Programs' binaries kept between runs, where the driver gives them and there is a file: by
+    // the same hash, the binary's format and bytes. The file begins with the driver's renderer
+    // and version; another driver's binaries aren't taken.
+    std::string cacheFile, driver;
+    std::map<uint64_t, std::pair<GLenum, std::vector<uint8_t>>> binaries;
+    bool binariesMade = false;  // since the file was written (at a frame's end)
     std::vector<uint32_t> enabledAttributes;
     BlendState blend{};
     bool blendSet = false;
@@ -218,7 +225,55 @@ public:
         gl.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
         gl.PixelStorei(GL_PACK_ALIGNMENT, 1);
         gl.Disable(GL_DITHER);
+#ifndef __EMSCRIPTEN__  // (WebGL has no programs' binaries)
+        GLint formats = 0;
+        if (gl.GetProgramBinary && gl.ProgramBinary && gl.ProgramParameteri) gl.GetIntegerv(GL_NUM_PROGRAM_BINARY_FORMATS, &formats);
+        if (formats > 0 && !s.pipelineCache.empty()) {
+            cacheFile = s.pipelineCache;
+            driver = renderer + "\n" + version;
+            readBinaries(readPipelineCache(cacheFile));
+        }
+#endif
         return true;
+    }
+
+    // The cache file: the driver's length (4 bytes) and name, then binaries, each its key (8
+    // bytes), format and length (4 each) and bytes. (Read where it was written: in this
+    // machine's byte order.)
+    void readBinaries(const std::vector<uint8_t>& file) {
+        size_t at = 0;
+        auto take = [&](void* out, size_t n) {
+            if (file.size() - at < n) return false;
+            std::memcpy(out, file.data() + at, n);
+            at += n;
+            return true;
+        };
+        uint32_t length = 0;
+        if (!take(&length, 4) || file.size() - at < length || std::string_view(reinterpret_cast<const char*>(file.data() + at), length) != driver) return;
+        at += length;
+        uint64_t key = 0;
+        uint32_t format = 0, size = 0;
+        while (take(&key, 8) && take(&format, 4) && take(&size, 4) && file.size() - at >= size) {
+            binaries[key] = {GLenum(format), std::vector<uint8_t>(file.begin() + std::ptrdiff_t(at), file.begin() + std::ptrdiff_t(at + size))};
+            at += size;
+        }
+    }
+
+    void writeBinaries() {
+        binariesMade = false;
+        std::vector<uint8_t> file;
+        auto put = [&](const void* data, size_t n) { file.insert(file.end(), static_cast<const uint8_t*>(data), static_cast<const uint8_t*>(data) + n); };
+        auto length = uint32_t(driver.size());
+        put(&length, 4);
+        put(driver.data(), driver.size());
+        for (auto& [key, binary] : binaries) {
+            auto format = uint32_t(binary.first), size = uint32_t(binary.second.size());
+            put(&key, 8);
+            put(&format, 4);
+            put(&size, 4);
+            put(binary.second.data(), size);
+        }
+        writePipelineCache(cacheFile, file);
     }
 
     // The API's errors (counted, as Vulkan's validation errors are) and what else is severe.
@@ -229,6 +284,7 @@ public:
 
     ~GlesDevice() override {
         window.reset();
+        for (auto& [key, program] : programs) gl.DeleteProgram(program);
         for (auto& [desc, name] : samplers) gl.DeleteSamplers(1, &name);
         if (stream) gl.DeleteBuffers(1, &stream);
         if (uniformBuffer) gl.DeleteBuffers(1, &uniformBuffer);
@@ -280,13 +336,57 @@ public:
     }
 
     std::unique_ptr<Pipeline> createPipeline(const PipelineDesc& desc) override {
-        GLuint vs = shader(GL_VERTEX_SHADER, *desc.vertex), fs = shader(GL_FRAGMENT_SHADER, *desc.fragment);
+        uint64_t key = fnv1a(desc.fragment->glsl.data(), desc.fragment->glsl.size(), fnv1a(desc.vertex->glsl.data(), desc.vertex->glsl.size()));
+        GLuint program = 0;
+        if (auto it = programs.find(key); it != programs.end()) {
+            program = it->second;
+        } else {
+            program = binaryProgram(key);
+            if (!program) program = linkProgram(*desc.vertex, *desc.fragment, key);
+            if (!program) return nullptr;
+            // Each sampler from the unit it is named after. (Its uniform block is at binding 0, where
+            // linking puts every block.)
+            gl.UseProgram(program);
+            for (int unit = 0; unit < kMaxTextures; ++unit) {
+                std::string name = "kompozTexture" + std::to_string(unit);
+                GLint location = gl.GetUniformLocation(program, name.c_str());
+                if (location >= 0) gl.Uniform1i(location, unit);
+            }
+            gl.UseProgram(pipeline ? pipeline->program : 0);
+            programs[key] = program;
+        }
+        auto p = std::make_unique<GlesPipeline>(program);
+        p->attributes = desc.instanceAttributes;
+        p->stride = desc.instanceStride;
+        p->blend = desc.blend;
+        return p;
+    }
+
+    // The program from its binary kept in an earlier run; none if there is none or the driver
+    // won't take it (then linking keeps another).
+    GLuint binaryProgram(uint64_t key) {
+        auto it = binaries.find(key);
+        if (it == binaries.end()) return 0;
+        GLuint program = gl.CreateProgram();
+        gl.ProgramBinary(program, it->second.first, it->second.second.data(), GLsizei(it->second.second.size()));
+        GLint ok = 0;
+        gl.GetProgramiv(program, GL_LINK_STATUS, &ok);
+        if (ok) return program;
+        gl.DeleteProgram(program);
+        return 0;
+    }
+
+    // The program compiled and linked (and its binary kept, where binaries are); none if it
+    // can't be.
+    GLuint linkProgram(const ShaderCode& vertex, const ShaderCode& fragment, uint64_t key) {
+        GLuint vs = shader(GL_VERTEX_SHADER, vertex), fs = shader(GL_FRAGMENT_SHADER, fragment);
         if (!vs || !fs) {
             if (vs) gl.DeleteShader(vs);
             if (fs) gl.DeleteShader(fs);
-            return nullptr;
+            return 0;
         }
         GLuint program = gl.CreateProgram();
+        if (!cacheFile.empty()) gl.ProgramParameteri(program, GL_PROGRAM_BINARY_RETRIEVABLE_HINT, 1);
         gl.AttachShader(program, vs);
         gl.AttachShader(program, fs);
         gl.LinkProgram(program);
@@ -302,22 +402,22 @@ public:
             log("OpenGL ES: a program didn't link: " + message);
             ++errors;
             gl.DeleteProgram(program);
-            return nullptr;
+            return 0;
         }
-        // Each sampler from the unit it is named after. (Its uniform block is at binding 0, where
-        // linking puts every block.)
-        gl.UseProgram(program);
-        for (int unit = 0; unit < kMaxTextures; ++unit) {
-            std::string name = "kompozTexture" + std::to_string(unit);
-            GLint location = gl.GetUniformLocation(program, name.c_str());
-            if (location >= 0) gl.Uniform1i(location, unit);
+        if (!cacheFile.empty()) {
+            GLint length = 0;
+            gl.GetProgramiv(program, GL_PROGRAM_BINARY_LENGTH, &length);
+            std::vector<uint8_t> binary(size_t(std::max(length, 0)));
+            GLenum format = 0;
+            GLsizei written = 0;
+            if (length > 0) gl.GetProgramBinary(program, length, &written, &format, binary.data());
+            if (written > 0) {
+                binary.resize(size_t(written));
+                binaries[key] = {format, std::move(binary)};
+                binariesMade = true;
+            }
         }
-        gl.UseProgram(pipeline ? pipeline->program : 0);
-        auto p = std::make_unique<GlesPipeline>(gl, program);
-        p->attributes = desc.instanceAttributes;
-        p->stride = desc.instanceStride;
-        p->blend = desc.blend;
-        return p;
+        return program;
     }
 
     GLuint sampler(const Sampler& s) {
@@ -605,6 +705,7 @@ public:
         }
         inFrame = false;
         haveWindow = false;
+        if (binariesMade) writeBinaries();
     }
 
     void waitIdle() override { gl.Finish(); }

@@ -54,6 +54,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <filesystem>
+#include <filesystem>
 #include <format>
 #include <memory>
 #include <numbers>
@@ -3415,6 +3417,11 @@ bool startGpu(App& app, gpu::Backend backend) {
     SDL_Window* window = app.window;
     gpu::Surface surface;
     surface.drawableSize = [window](int* w, int* h) { SDL_GetWindowSizeInPixels(window, w, h); };
+    // The compiled pipelines beside the downloaded images, a file for each backend.
+    if (std::filesystem::path dir = appCacheDirectory(app.config.title); !dir.empty()) {
+        std::u8string file = (dir / (std::string("pipelines-") + gpu::backendName(backend))).u8string();
+        surface.pipelineCache.assign(file.begin(), file.end());
+    }
     std::string error;
     switch (backend) {
     case gpu::Backend::GLES:

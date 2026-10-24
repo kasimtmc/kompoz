@@ -174,6 +174,11 @@
   as everywhere (in CI on Chrome's SwiftShader, and on a phone's Chrome: Adreno through Dawn); a web build is linked
   with ASYNCIFY, through which a readback waits for the GPU. `kompoz_gpu_tests` runs on Android's Vulkan too
   (`KOMPOZ_GPU=vulkan`, without a window).
+- **The GPU renderer's shaders compiled once**: Vulkan's pipeline cache and OpenGL ES's programs' binaries are kept in
+  the app's cache directory (`pipelines-vulkan`, `pipelines-gles`, beside the downloaded images; `Surface::pipelineCache`
+  names the file), so only an app's first run compiles them: on a phone's Adreno its first frame was drawn in 465 ms on
+  Vulkan and 621 ms on OpenGL ES, and is in 21 and 22 ms after that. On OpenGL ES, pipelines that differ only in
+  blending share one program, compiled once.
 - **Fixed**: the GPU renderer's turned, stretched and leaning edges were up to 10/255 off on GPUs that snap vertices
   coarsely (4 subpixel bits, as SwiftShader does: Chrome's WebGL where it doesn't use the GPU): a quad's corners are
   put where such a GPU would put them, and its pixels shaded from there.

@@ -157,11 +157,23 @@ struct Surface {
     std::string webgpuCanvas;
     // The drawable's size in pixels.
     std::function<void(int* width, int* height)> drawableSize;
+    // A file where the pipelines' compiled shaders are kept between runs, read when the device is
+    // made and written when it has made more (Vulkan's pipeline cache, OpenGL ES's program
+    // binaries); none to compile them every run. Metal and the browser keep theirs themselves.
+    std::string pipelineCache;
 };
 
 // Where the hardware layer's messages go (stderr until the platform says).
 void setLogger(void (*logger)(const char* message));
 void log(const std::string& message);
+
+// A pipeline cache's file: what was written into it, nothing if there is none or it isn't whole
+// (a write cut short, another program's file).
+std::vector<uint8_t> readPipelineCache(const std::string& path);
+// Writes it whole or not at all (a file beside it, renamed), making its directory.
+void writePipelineCache(const std::string& path, const std::vector<uint8_t>& data);
+// FNV-1a, 64 bits: what the caches check and key what they keep by.
+uint64_t fnv1a(const void* data, size_t size, uint64_t hash = 0xcbf29ce484222325);
 
 class Device {
 public:

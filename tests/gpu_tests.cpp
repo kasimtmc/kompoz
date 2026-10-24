@@ -47,9 +47,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <memory>
 #include <numbers>
+#include <random>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -81,6 +84,32 @@ struct Gpu {
     std::unique_ptr<gpu::Device> device;
     std::unique_ptr<sdl::FontSystem> fonts;
     std::unique_ptr<gpu::Renderer> renderer;
+    std::string pipelineCache;                    // the device's (none: compiled anew)
+    void* (*glProcAddress)(const char*) = nullptr;  // OpenGL ES's functions, on its backend
+
+    gpu::Surface surface() const {
+        gpu::Surface s;
+        s.pipelineCache = pipelineCache;
+        return s;
+    }
+
+    // Whether the device keeps its pipelines in the file it is given: Vulkan's where the driver's
+    // pipeline cache holds them (lavapipe's and SwiftShader's hold nothing), OpenGL ES's where the
+    // driver gives programs' binaries (not WebGL); Metal and the browser keep their own.
+    bool keepsPipelines() const {
+        if (device->backend() == gpu::Backend::Vulkan) {
+            std::string name = device->deviceName();
+            return name.find("llvmpipe") == std::string::npos && name.find("SwiftShader") == std::string::npos;
+        }
+#ifndef __EMSCRIPTEN__
+        if (device->backend() == gpu::Backend::GLES) {
+            int formats = 0;
+            reinterpret_cast<void (*)(unsigned, int*)>(glProcAddress("glGetIntegerv"))(0x87FE /*GL_NUM_PROGRAM_BINARY_FORMATS*/, &formats);
+            return formats > 0;
+        }
+#endif
+        return false;
+    }
 
 #ifdef __ANDROID__
     // On Android, a program run from adb shell has no SDL (it needs an app's Java side): Vulkan
@@ -92,7 +121,7 @@ struct Gpu {
         using Fn = void* (*)(...);
         if (const char* choice = std::getenv("KOMPOZ_GPU"); choice && std::string(choice) == "vulkan") {
             void* loader = dlopen("libvulkan.so", RTLD_NOW);
-            gpu::Surface s;
+            gpu::Surface s = surface();
             s.vulkanGetInstanceProcAddr = loader ? reinterpret_cast<void* (*)(void*, const char*)>(dlsym(loader, "vkGetInstanceProcAddr")) : nullptr;
             device = gpu::Device::create(gpu::Backend::Vulkan, s, why);
             return device && startRenderer(why);
@@ -125,8 +154,8 @@ struct Gpu {
         }
         static void* gles = glesLibrary;
         static Fn getProcAddress = fn("eglGetProcAddress");
-        gpu::Surface s;
-        s.glGetProcAddress = [](const char* name) -> void* {
+        gpu::Surface s = surface();
+        s.glGetProcAddress = glProcAddress = [](const char* name) -> void* {
             if (void* f = dlsym(gles, name)) return f;
             return reinterpret_cast<void*>(getProcAddress(name));
         };
@@ -139,7 +168,7 @@ struct Gpu {
         const char* choice = std::getenv("KOMPOZ_GPU");
 #ifdef __EMSCRIPTEN__
         if (choice && std::string(choice) == "webgpu") {  // (no canvas: it draws only into textures)
-            device = gpu::Device::create(gpu::Backend::WebGPU, gpu::Surface{}, why);
+            device = gpu::Device::create(gpu::Backend::WebGPU, surface(), why);
             return device && startRenderer(why);
         }
         bool gles = true;  // (WebGL 2, the web's other)
@@ -148,7 +177,7 @@ struct Gpu {
 #endif
 #ifdef __APPLE__
         if (!choice || std::string(choice) == "metal") {  // (no window: it draws only into textures)
-            device = gpu::Device::create(gpu::Backend::Metal, gpu::Surface{}, why);
+            device = gpu::Device::create(gpu::Backend::Metal, surface(), why);
             return device && startRenderer(why);
         }
 #endif
@@ -168,12 +197,12 @@ struct Gpu {
                 *why = std::string("no OpenGL ES 3 context: ") + SDL_GetError();
                 return false;
             }
-            gpu::Surface surface;
-            surface.glGetProcAddress = [](const char* name) { return reinterpret_cast<void*>(SDL_GL_GetProcAddress(name)); };
+            gpu::Surface s = surface();
+            s.glGetProcAddress = glProcAddress = [](const char* name) { return reinterpret_cast<void*>(SDL_GL_GetProcAddress(name)); };
             SDL_Window* w = window;
-            surface.glSwap = [w] { SDL_GL_SwapWindow(w); };
-            surface.drawableSize = [w](int* width, int* height) { SDL_GetWindowSizeInPixels(w, width, height); };
-            device = gpu::Device::create(gpu::Backend::GLES, surface, why);
+            s.glSwap = [w] { SDL_GL_SwapWindow(w); };
+            s.drawableSize = [w](int* width, int* height) { SDL_GetWindowSizeInPixels(w, width, height); };
+            device = gpu::Device::create(gpu::Backend::GLES, s, why);
             return device && startRenderer(why);
         }
         window = SDL_CreateWindow("kompoz_gpu_tests", 64, 64, SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN);
@@ -181,19 +210,19 @@ struct Gpu {
             *why = std::string("no Vulkan window: ") + SDL_GetError();
             return false;
         }
-        gpu::Surface surface;
+        gpu::Surface s = surface();
         Uint32 count = 0;
-        if (const char* const* names = SDL_Vulkan_GetInstanceExtensions(&count)) surface.vulkanInstanceExtensions.assign(names, names + count);
-        surface.vulkanGetInstanceProcAddr = reinterpret_cast<void* (*)(void*, const char*)>(SDL_Vulkan_GetVkGetInstanceProcAddr());
+        if (const char* const* names = SDL_Vulkan_GetInstanceExtensions(&count)) s.vulkanInstanceExtensions.assign(names, names + count);
+        s.vulkanGetInstanceProcAddr = reinterpret_cast<void* (*)(void*, const char*)>(SDL_Vulkan_GetVkGetInstanceProcAddr());
         SDL_Window* w = window;
-        surface.createVulkanSurface = [w](void* instance, uint64_t* out) {
+        s.createVulkanSurface = [w](void* instance, uint64_t* out) {
             VkSurfaceKHR made{};
             if (!SDL_Vulkan_CreateSurface(w, static_cast<VkInstance>(instance), nullptr, &made)) return false;
             std::memcpy(out, &made, sizeof made);
             return true;
         };
-        surface.drawableSize = [w](int* width, int* height) { SDL_GetWindowSizeInPixels(w, width, height); };
-        device = gpu::Device::create(gpu::Backend::Vulkan, surface, why);
+        s.drawableSize = [w](int* width, int* height) { SDL_GetWindowSizeInPixels(w, width, height); };
+        device = gpu::Device::create(gpu::Backend::Vulkan, s, why);
         return device && startRenderer(why);
     }
 #endif
@@ -3453,6 +3482,73 @@ void scenesMatchTheirPictures(Gpu& g) {
     }
 }
 
+// A device keeps the pipelines it made in the file it is given, and one started from that file
+// draws as one that compiled them anew; a file cut short, or another's, is passed over as none
+// (and written anew).
+void pipelinesAreKeptBetweenRuns() {
+    CHECK(gpu::fnv1a("a", 1) == 0xaf63dc4c8601ec8c);  // (FNV-1a's own)
+    std::string file = (std::filesystem::temp_directory_path() / ("kompoz_gpu_tests_pipelines_" + std::to_string(std::random_device{}()))).string();
+    auto pictures = [&](bool* keeps) {
+        Gpu g;
+        g.pipelineCache = file;
+        std::string why;
+        std::vector<Pixels> out;
+        CHECK(g.start(&why));
+        if (!g.device) return out;
+        *keeps = g.keepsPipelines();
+        for (auto draw : {blendModes, effects, paths, text}) out.push_back(g.render(192, 192, 1, draw));
+        CHECK(g.device->validationErrors() == 0);
+        CHECK(gpu::readPipelineCache(file).empty() != *keeps);  // (kept at a frame's end, the app going on)
+        return out;
+    };
+    auto same = [](const std::vector<Pixels>& a, const std::vector<Pixels>& b) {
+        if (a.size() != b.size()) return false;
+        for (size_t i = 0; i < a.size(); ++i)
+            if (a[i].rgba != b[i].rgba) return false;
+        return true;
+    };
+    bool keeps = false;
+    std::vector<Pixels> fresh = pictures(&keeps);
+    std::vector<uint8_t> kept = gpu::readPipelineCache(file);
+    CHECK(kept.empty() != keeps);
+    if (!kept.empty()) {
+        // All of it taken, and nothing compiled: the file isn't written again.
+        auto written = std::filesystem::last_write_time(file);
+        CHECK(same(pictures(&keeps), fresh));
+        CHECK(std::filesystem::last_write_time(file) == written);
+        // Cut short, or a byte changed (the data's last, the file's first): none read; then the
+        // whole file again.
+        std::filesystem::resize_file(file, std::filesystem::file_size(file) / 2);
+        CHECK(gpu::readPipelineCache(file).empty());
+        CHECK(same(pictures(&keeps), fresh));
+        CHECK(gpu::readPipelineCache(file) == kept);
+        for (uintmax_t at : {std::filesystem::file_size(file) - 1, uintmax_t(0)}) {
+            {
+                std::fstream f(file, std::ios::in | std::ios::out | std::ios::binary);
+                f.seekg(std::streamoff(at));
+                char byte = char(f.get());
+                f.seekp(std::streamoff(at));
+                f.put(char(~byte));
+            }
+            CHECK(gpu::readPipelineCache(file).empty());
+            CHECK(same(pictures(&keeps), fresh));
+            CHECK(gpu::readPipelineCache(file) == kept);
+        }
+        // Whole, but another driver's (its name, or its header's version, a byte off) or not one at
+        // all: passed over, and written anew.
+        std::vector<uint8_t> other = kept;
+        other[4] ^= 1;
+        for (const std::vector<uint8_t>& written : {other, std::vector<uint8_t>(kept.size(), 0x5a)}) {
+            gpu::writePipelineCache(file, written);
+            CHECK(gpu::readPipelineCache(file) == written);
+            CHECK(same(pictures(&keeps), fresh));
+            CHECK(gpu::readPipelineCache(file) == kept);
+        }
+    }
+    std::error_code ec;
+    std::filesystem::remove(file, ec);
+}
+
 } // namespace
 
 int main() {
@@ -3469,6 +3565,7 @@ int main() {
     }
 #endif
     int result = 0;
+    bool started = false;
     {
         Gpu g;
         std::string why;
@@ -3476,6 +3573,7 @@ int main() {
             std::printf("skipped: %s\n", why.c_str());
             result = required ? 1 : 0;
         } else {
+            started = true;
             std::printf("device: %s\n", g.device->deviceName().c_str());
             edgesAreCoveredExactly(g);
             edgesCutPixelsExactly(g);
@@ -3509,9 +3607,12 @@ int main() {
             readbacksLeaveTheFrameGoing(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
-            std::printf("%d checks, %d failed\n", checks, failures);
-            result = failures == 0 ? 0 : 1;
         }
+    }
+    if (started) {  // (devices of its own, one after another)
+        pipelinesAreKeptBetweenRuns();
+        std::printf("%d checks, %d failed\n", checks, failures);
+        result = failures == 0 ? 0 : 1;
     }
     SDL_Quit();
     return result;

@@ -66,12 +66,15 @@ inline constexpr GLenum GL_NEAREST = 0x2600;
 inline constexpr GLenum GL_NEAREST_MIPMAP_NEAREST = 0x2700;
 inline constexpr GLenum GL_NO_ERROR = 0;
 inline constexpr GLenum GL_NUM_EXTENSIONS = 0x821D;
+inline constexpr GLenum GL_NUM_PROGRAM_BINARY_FORMATS = 0x87FE;
 inline constexpr GLenum GL_ONE = 1;
 inline constexpr GLenum GL_ONE_MINUS_DST_ALPHA = 0x0305;
 inline constexpr GLenum GL_ONE_MINUS_DST_COLOR = 0x0307;
 inline constexpr GLenum GL_ONE_MINUS_SRC_ALPHA = 0x0303;
 inline constexpr GLenum GL_ONE_MINUS_SRC_COLOR = 0x0301;
 inline constexpr GLenum GL_PACK_ALIGNMENT = 0x0D05;
+inline constexpr GLenum GL_PROGRAM_BINARY_LENGTH = 0x8741;
+inline constexpr GLenum GL_PROGRAM_BINARY_RETRIEVABLE_HINT = 0x8257;
 inline constexpr GLenum GL_R16F = 0x822D;
 inline constexpr GLenum GL_READ_FRAMEBUFFER = 0x8CA8;
 inline constexpr GLenum GL_RED = 0x1903;
@@ -181,6 +184,10 @@ struct Gl {
     // older context).
     void(KOMPOZ_GL_API* DebugMessageCallbackKHR)(GLDEBUGPROC callback, const void* userParam) = nullptr;
     void(KOMPOZ_GL_API* DebugMessageCallback)(GLDEBUGPROC callback, const void* userParam) = nullptr;
+    // Programs' binaries, not required: OpenGL ES 3.0 has them, WebGL hasn't.
+    void(KOMPOZ_GL_API* GetProgramBinary)(GLuint program, GLsizei bufSize, GLsizei* length, GLenum* binaryFormat, void* binary) = nullptr;
+    void(KOMPOZ_GL_API* ProgramBinary)(GLuint program, GLenum binaryFormat, const void* binary, GLsizei length) = nullptr;
+    void(KOMPOZ_GL_API* ProgramParameteri)(GLuint program, GLenum pname, GLint value) = nullptr;
 
     // Every function from `lookup` (glName); false (and *missing the first one's name) if one isn't
     // there.
@@ -195,6 +202,9 @@ struct Gl {
 #undef KOMPOZ_GL_LOAD
         DebugMessageCallbackKHR = reinterpret_cast<decltype(DebugMessageCallbackKHR)>(lookup("glDebugMessageCallbackKHR"));
         DebugMessageCallback = reinterpret_cast<decltype(DebugMessageCallback)>(lookup("glDebugMessageCallback"));
+        GetProgramBinary = reinterpret_cast<decltype(GetProgramBinary)>(lookup("glGetProgramBinary"));
+        ProgramBinary = reinterpret_cast<decltype(ProgramBinary)>(lookup("glProgramBinary"));
+        ProgramParameteri = reinterpret_cast<decltype(ProgramParameteri)>(lookup("glProgramParameteri"));
         return true;
     }
 };

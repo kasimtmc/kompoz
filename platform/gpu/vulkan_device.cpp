@@ -49,7 +49,7 @@ namespace {
     X(vkUpdateDescriptorSets) X(vkCreateSampler) X(vkDestroySampler) X(vkCmdBeginRenderPass) X(vkCmdEndRenderPass)                         \
     X(vkCmdBindPipeline) X(vkCmdSetViewport) X(vkCmdSetScissor) X(vkCmdPushConstants) X(vkCmdBindDescriptorSets)                           \
     X(vkCmdBindVertexBuffers) X(vkCmdDraw) X(vkCmdPipelineBarrier) X(vkCmdCopyBufferToImage) X(vkCmdCopyImageToBuffer) X(vkCmdCopyImage)                    \
-    X(vkCmdBlitImage) X(vkCreatePipelineCache) X(vkDestroyPipelineCache)
+    X(vkCmdBlitImage) X(vkCreatePipelineCache) X(vkDestroyPipelineCache) X(vkGetPipelineCacheData)
 
 struct Api {
     PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
@@ -161,6 +161,9 @@ public:
     VkQueue queue = VK_NULL_HANDLE;
     VmaAllocator allocator = VK_NULL_HANDLE;
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
+    std::string cacheFile;       // where the pipeline cache is kept between runs (none: not kept)
+    size_t cacheSize = 0;        // the cache's data's size when it was made (with the file's) or kept
+    bool pipelinesMade = false;  // since the cache was last kept (at a frame's end)
     VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     std::function<void(int*, int*)> drawableSize;
@@ -327,8 +330,26 @@ public:
         aci.pVulkanFunctions = &functions;
         if (vmaCreateAllocator(&aci, &allocator) != VK_SUCCESS) return fail("vmaCreateAllocator failed");
 
+        // The pipelines compiled in earlier runs, if this GPU and driver made them: the data begins
+        // with its header (its size, version one, the vendor's and device's IDs, the driver's
+        // cache UUID), which drivers check too, though not every one as carefully.
+        cacheFile = s.pipelineCache;
+        std::vector<uint8_t> kept = cacheFile.empty() ? std::vector<uint8_t>() : readPipelineCache(cacheFile);
+        auto u32 = [&](size_t at) {
+            uint32_t v;
+            std::memcpy(&v, kept.data() + at, 4);
+            return v;
+        };
+        bool ours = kept.size() >= 16 + VK_UUID_SIZE && u32(0) >= 16 + VK_UUID_SIZE && u32(4) == VK_PIPELINE_CACHE_HEADER_VERSION_ONE &&
+                    u32(8) == properties.vendorID && u32(12) == properties.deviceID &&
+                    std::memcmp(kept.data() + 16, properties.pipelineCacheUUID, VK_UUID_SIZE) == 0;
+        if (!ours) kept.clear();
         VkPipelineCacheCreateInfo pcci{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+        pcci.initialDataSize = kept.size();
+        pcci.pInitialData = kept.data();
         vk.vkCreatePipelineCache(device, &pcci, nullptr, &pipelineCache);
+        // (What the driver took of the file.)
+        if (pipelineCache) vk.vkGetPipelineCacheData(device, pipelineCache, &cacheSize, nullptr);
 
         // One binding layout for every pipeline: textures at bindings 1..kMaxTextures, uniforms as
         // push constants.
@@ -539,6 +560,7 @@ public:
         vk.vkDestroyShaderModule(device, vs, nullptr);
         vk.vkDestroyShaderModule(device, fs, nullptr);
         if (r != VK_SUCCESS) return nullptr;
+        pipelinesMade = true;
         return std::make_unique<VulkanPipeline>(*this, pipeline);
     }
 
@@ -1064,6 +1086,22 @@ public:
         }
         inFrame = false;
         acquired = false;
+        if (pipelinesMade) keepPipelineCache();
+    }
+
+    // The pipeline cache into its file, if it has more than it had. (Told by its size: what it has
+    // more makes it bigger, while the same cache may be written in another order each time, as
+    // Mesa's driver for Intel writes it.)
+    void keepPipelineCache() {
+        pipelinesMade = false;
+        if (cacheFile.empty() || !pipelineCache) return;
+        size_t size = 0;
+        if (vk.vkGetPipelineCacheData(device, pipelineCache, &size, nullptr) != VK_SUCCESS || size == cacheSize) return;
+        std::vector<uint8_t> data(size);
+        if (vk.vkGetPipelineCacheData(device, pipelineCache, &size, data.data()) != VK_SUCCESS) return;
+        data.resize(size);
+        writePipelineCache(cacheFile, data);
+        cacheSize = size;
     }
 
     void waitIdle() override {

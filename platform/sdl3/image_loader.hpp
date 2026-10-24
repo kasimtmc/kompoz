@@ -7,6 +7,7 @@
 #include <kompoz/graphics.hpp>
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <string>
 #include <vector>
@@ -22,8 +23,11 @@ std::vector<uint8_t> readFile(const std::string& path);
 // Loads `model` (a path or an http(s) URL) for `size` away from the UI thread and calls
 // `done` with it, from any thread; empty if it failed. Downloads are kept in the disk cache.
 void loadImageAsync(const std::string& model, const ImageRequestSize& size, std::function<void(ImageBitmap)> done);
-// Where downloaded images are kept: the app's cache directory (KOMPOZ_IMAGE_CACHE overrides it,
-// empty for none), up to maxBytes (0: none). Before the first load.
+// The app's own cache directory, where the system keeps apps' caches (a directory named after the
+// app); empty where there is none (the web).
+std::filesystem::path appCacheDirectory(const std::string& appName);
+// Where downloaded images are kept: the app's cache directory's images (KOMPOZ_IMAGE_CACHE overrides
+// it, empty for none), up to maxBytes (0: none). Before the first load.
 void startImageDiskCache(const std::string& appName, uint64_t maxBytes);
 // At exit: loads waiting are dropped, the running ones stop soon; the worker threads end.
 void stopImageLoader();

@@ -431,31 +431,42 @@ void loadImageAsync(const std::string& model, const ImageRequestSize& size, std:
 #endif
 }
 
-void startImageDiskCache(const std::string& appName, uint64_t maxBytes) {
+std::filesystem::path appCacheDirectory(const std::string& appName) {
 #ifdef SDL_PLATFORM_EMSCRIPTEN
     (void)appName;
-    (void)maxBytes;
+    return {};
 #else
     auto utf8Path = [](const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); };
     // A name that makes a directory.
     std::string name;
     for (char c : appName) name += (std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_' || c == '.' || uint8_t(c) >= 0x80) ? c : '_';
     if (name.empty() || name[0] == '.') name = "app" + name;
-    std::filesystem::path dir;
-    if (const char* own = SDL_getenv("KOMPOZ_IMAGE_CACHE")) {
-        dir = utf8Path(own);
-    } else {
 #if defined(SDL_PLATFORM_ANDROID)
-        if (const char* cache = SDL_GetAndroidCachePath()) dir = std::filesystem::path(cache) / "images";
+    (void)utf8Path;
+    if (const char* cache = SDL_GetAndroidCachePath()) return std::filesystem::path(cache);
 #elif defined(SDL_PLATFORM_WINDOWS)
-        if (const char* local = SDL_getenv("LOCALAPPDATA")) dir = utf8Path(local) / "Kompoz" / utf8Path(name) / "images";
+    if (const char* local = SDL_getenv("LOCALAPPDATA")) return utf8Path(local) / "Kompoz" / utf8Path(name);
 #elif defined(SDL_PLATFORM_APPLE)
-        if (const char* home = SDL_getenv("HOME")) dir = std::filesystem::path(home) / "Library" / "Caches" / utf8Path(name) / "images";
+    if (const char* home = SDL_getenv("HOME")) return std::filesystem::path(home) / "Library" / "Caches" / utf8Path(name);
 #else
-        if (const char* xdg = SDL_getenv("XDG_CACHE_HOME"); xdg && *xdg) dir = std::filesystem::path(xdg) / "kompoz" / name / "images";
-        else if (const char* home = SDL_getenv("HOME")) dir = std::filesystem::path(home) / ".cache" / "kompoz" / name / "images";
+    (void)utf8Path;
+    if (const char* xdg = SDL_getenv("XDG_CACHE_HOME"); xdg && *xdg) return std::filesystem::path(xdg) / "kompoz" / name;
+    if (const char* home = SDL_getenv("HOME")) return std::filesystem::path(home) / ".cache" / "kompoz" / name;
 #endif
-    }
+    return {};
+#endif
+}
+
+void startImageDiskCache(const std::string& appName, uint64_t maxBytes) {
+#ifdef SDL_PLATFORM_EMSCRIPTEN
+    (void)appName;
+    (void)maxBytes;
+#else
+    std::filesystem::path dir;
+    if (const char* own = SDL_getenv("KOMPOZ_IMAGE_CACHE"))
+        dir = std::filesystem::path(std::u8string(own, own + std::strlen(own)));
+    else if (std::filesystem::path base = appCacheDirectory(appName); !base.empty())
+        dir = base / "images";
     std::lock_guard lock(gDiskMutex);
     gDisk = dir.empty() || maxBytes == 0 ? nullptr : std::make_shared<DiskCache>(dir, maxBytes);
 #endif
