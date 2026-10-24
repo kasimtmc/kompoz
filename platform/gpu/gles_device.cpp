@@ -159,8 +159,8 @@ public:
     GlesTexture* target = nullptr;
     GlesPipeline* pipeline = nullptr;
     std::vector<std::pair<Sampler, GLuint>> samplers;
-    // A program for each pair of shaders, by their sources' hash: pipelines that differ only in
-    // what OpenGL keeps as state (blending, the target's format) share it.
+    // A program for each pair of shaders (and the fragment one's constants), by their hash:
+    // pipelines that differ only in what OpenGL keeps as state (blending, the target's format) share it.
     std::map<uint64_t, GLuint> programs;
     // Programs' binaries kept between runs, where the driver gives them and there is a file: by
     // the same hash, the binary's format and bytes. The file begins with the driver's renderer
@@ -329,9 +329,17 @@ public:
         return std::make_unique<GlesTexture>(gl, width, height, format, name, levels);
     }
 
-    GLuint shader(GLenum stage, const ShaderCode& code) {
+    // A shader compiled, its specialization constants (SPIRV-Cross's macros for them) defined
+    // after its #version.
+    GLuint shader(GLenum stage, const ShaderCode& code, const std::vector<int32_t>& constants = {}) {
         GLuint s = gl.CreateShader(stage);
-        const char* source = reinterpret_cast<const char*>(code.glsl.data());
+        std::string text = reinterpret_cast<const char*>(code.glsl.data());
+        if (!constants.empty()) {
+            std::string defines;
+            for (size_t i = 0; i < constants.size(); ++i) defines += "#define SPIRV_CROSS_CONSTANT_ID_" + std::to_string(i) + " " + std::to_string(constants[i]) + "\n";
+            text.insert(text.find('\n') + 1, defines);
+        }
+        const char* source = text.c_str();
         gl.ShaderSource(s, 1, &source, nullptr);
         gl.CompileShader(s);
         GLint ok = 0;
@@ -350,13 +358,14 @@ public:
     }
 
     std::unique_ptr<Pipeline> createPipeline(const PipelineDesc& desc) override {
-        uint64_t key = fnv1a(desc.fragment->glsl.data(), desc.fragment->glsl.size(), fnv1a(desc.vertex->glsl.data(), desc.vertex->glsl.size()));
+        uint64_t key = fnv1a(desc.constants.data(), desc.constants.size() * 4,
+                             fnv1a(desc.fragment->glsl.data(), desc.fragment->glsl.size(), fnv1a(desc.vertex->glsl.data(), desc.vertex->glsl.size())));
         GLuint program = 0;
         if (auto it = programs.find(key); it != programs.end()) {
             program = it->second;
         } else {
             program = binaryProgram(key);
-            if (!program) program = linkProgram(*desc.vertex, *desc.fragment, key);
+            if (!program) program = linkProgram(*desc.vertex, *desc.fragment, desc.constants, key);
             if (!program) return nullptr;
             // Each sampler from the unit it is named after. (Its uniform block is at binding 0, where
             // linking puts every block.)
@@ -392,8 +401,8 @@ public:
 
     // The program compiled and linked (and its binary kept, where binaries are); none if it
     // can't be.
-    GLuint linkProgram(const ShaderCode& vertex, const ShaderCode& fragment, uint64_t key) {
-        GLuint vs = shader(GL_VERTEX_SHADER, vertex), fs = shader(GL_FRAGMENT_SHADER, fragment);
+    GLuint linkProgram(const ShaderCode& vertex, const ShaderCode& fragment, const std::vector<int32_t>& constants, uint64_t key) {
+        GLuint vs = shader(GL_VERTEX_SHADER, vertex), fs = shader(GL_FRAGMENT_SHADER, fragment, constants);
         if (!vs || !fs) {
             if (vs) gl.DeleteShader(vs);
             if (fs) gl.DeleteShader(fs);

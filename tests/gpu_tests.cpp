@@ -231,20 +231,27 @@ struct Gpu {
 #endif
 
     bool startRenderer(std::string* why) {
-        fonts = std::make_unique<sdl::FontSystem>();
+        fonts = loadFonts();
+        if (!fonts) {
+            *why = "no fonts/Regular.ttf beside the test";
+            return false;
+        }
+        renderer = std::make_unique<gpu::Renderer>(*device, *fonts);
+        return true;
+    }
+
+    // The bundled fonts beside the test; none if they aren't there.
+    static std::unique_ptr<sdl::FontSystem> loadFonts() {
+        auto fonts = std::make_unique<sdl::FontSystem>();
         std::string dir = "fonts/";
 #ifdef __ANDROID__  // (a relative path is an app's asset there: the program's own directory's, absolute)
         char cwd[4096];
         if (getcwd(cwd, sizeof cwd)) dir = std::string(cwd) + "/fonts/";
 #endif
-        if (!fonts->load(FontWeight::Normal, dir + "Regular.ttf")) {
-            *why = "no fonts/Regular.ttf beside the test";
-            return false;
-        }
+        if (!fonts->load(FontWeight::Normal, dir + "Regular.ttf")) return nullptr;
         fonts->load(FontWeight::Bold, dir + "Bold.ttf");
         fonts->load(FontWeight::Medium, dir + "Medium.ttf");
-        renderer = std::make_unique<gpu::Renderer>(*device, *fonts);
-        return true;
+        return fonts;
     }
 
     ~Gpu() {
@@ -3511,6 +3518,77 @@ void gpuTimesComeBack(Gpu& g) {
     CHECK(g.device->takeGpuTimes().empty());
 }
 
+// A device that can't make the shader's variants (as an Adreno 6xx's Vulkan compiler couldn't
+// one): the renderer draws with the whole shader instead, the same pictures.
+class WithoutVariants final : public gpu::Device {
+public:
+    explicit WithoutVariants(gpu::Device& d) : d_(d) {}
+    int refused = 0;
+    gpu::Backend backend() const override { return d_.backend(); }
+    std::string deviceName() const override { return d_.deviceName(); }
+    int validationErrors() const override { return d_.validationErrors(); }
+    bool clipYDown() const override { return d_.clipYDown(); }
+    bool renderTargetsBottomUp() const override { return d_.renderTargetsBottomUp(); }
+    std::unique_ptr<gpu::Texture> createTexture(int width, int height, gpu::Format format, uint8_t usage) override {
+        return d_.createTexture(width, height, format, usage);
+    }
+    std::unique_ptr<gpu::Pipeline> createPipeline(const gpu::PipelineDesc& desc) override {
+        if (!desc.constants.empty()) {
+            ++refused;
+            return nullptr;
+        }
+        return d_.createPipeline(desc);
+    }
+    gpu::Format swapchainFormat() const override { return d_.swapchainFormat(); }
+    void beginFrame() override { d_.beginFrame(); }
+    gpu::Texture* swapchainTexture() override { return d_.swapchainTexture(); }
+    void* allocate(size_t size, size_t alignment, gpu::BufferRef* ref) override { return d_.allocate(size, alignment, ref); }
+    void upload(gpu::Texture& t, const gpu::IRect& region, const void* pixels, size_t rowBytes) override { d_.upload(t, region, pixels, rowBytes); }
+    void beginPass(gpu::Texture& target, const std::optional<gpu::ClearColor>& clear, std::span<gpu::Texture* const> reads) override {
+        d_.beginPass(target, clear, reads);
+    }
+    void setPipeline(gpu::Pipeline& p) override { d_.setPipeline(p); }
+    void setScissor(const gpu::IRect& rect) override { d_.setScissor(rect); }
+    void setUniforms(const void* data, size_t size) override { d_.setUniforms(data, size); }
+    void setTexture(int slot, gpu::Texture& t, const gpu::Sampler& sampler) override { d_.setTexture(slot, t, sampler); }
+    void draw(const gpu::BufferRef& instances, uint32_t vertexCount, uint32_t instanceCount) override { d_.draw(instances, vertexCount, instanceCount); }
+    void endPass() override { d_.endPass(); }
+    void generateMipmaps(gpu::Texture& t) override { d_.generateMipmaps(t); }
+    void copyTexture(gpu::Texture& source, const gpu::IRect& region, gpu::Texture& destination, int x, int y) override {
+        d_.copyTexture(source, region, destination, x, y);
+    }
+    std::vector<uint8_t> readPixels(gpu::Texture& t, const gpu::IRect& region) override { return d_.readPixels(t, region); }
+    void endFrame(bool present) override { d_.endFrame(present); }
+    void waitIdle() override { d_.waitIdle(); }
+
+private:
+    gpu::Device& d_;
+};
+
+void variantsFallBackToTheWholeShader(Gpu& g) {
+    WithoutVariants device(*g.device);
+    std::unique_ptr<sdl::FontSystem> fonts = Gpu::loadFonts();  // (an atlas of its own: a renderer takes what changed on its atlas)
+    auto renderer = std::make_unique<gpu::Renderer>(device, *fonts);
+    for (auto draw : {rects, text, blendModes, effects}) {
+        Pixels expected = g.render(192, 192, 1, draw);
+        fonts->setScale(1);
+        renderer->scale = 1;
+        device.beginFrame();
+        auto target = device.createTexture(192, 192, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+        renderer->beginTarget(*target, gpu::ClearColor{1, 1, 1, 1});
+        draw(*renderer);
+        renderer->endTarget();
+        renderer->flush();
+        Pixels actual{192, 192, device.readPixels(*target, {0, 0, 192, 192})};
+        device.endFrame(false);
+        renderer->endFrame();
+        fonts->endFrame();
+        CHECK(actual.rgba == expected.rgba);
+    }
+    CHECK(device.refused > 0);
+    renderer.reset();
+}
+
 void scenesMatchTheirPictures(Gpu& g) {
     struct Scene {
         const char* name;
@@ -3566,11 +3644,12 @@ void pipelinesAreKeptBetweenRuns() {
         CHECK(same(pictures(&keeps), fresh));
         CHECK(std::filesystem::last_write_time(file) == written);
         // Cut short, or a byte changed (the data's last, the file's first): none read; then the
-        // whole file again.
+        // whole file again. (Not byte for byte the first: a driver's binaries may differ as it
+        // compiled them or took them from a cache of its own, as Mesa's do.)
         std::filesystem::resize_file(file, std::filesystem::file_size(file) / 2);
         CHECK(gpu::readPipelineCache(file).empty());
         CHECK(same(pictures(&keeps), fresh));
-        CHECK(gpu::readPipelineCache(file) == kept);
+        CHECK(!gpu::readPipelineCache(file).empty());
         for (uintmax_t at : {std::filesystem::file_size(file) - 1, uintmax_t(0)}) {
             {
                 std::fstream f(file, std::ios::in | std::ios::out | std::ios::binary);
@@ -3581,7 +3660,7 @@ void pipelinesAreKeptBetweenRuns() {
             }
             CHECK(gpu::readPipelineCache(file).empty());
             CHECK(same(pictures(&keeps), fresh));
-            CHECK(gpu::readPipelineCache(file) == kept);
+            CHECK(!gpu::readPipelineCache(file).empty());
         }
         // Whole, but another driver's (its name, or its header's version, a byte off) or not one at
         // all: passed over, and written anew.
@@ -3591,7 +3670,8 @@ void pipelinesAreKeptBetweenRuns() {
             gpu::writePipelineCache(file, written);
             CHECK(gpu::readPipelineCache(file) == written);
             CHECK(same(pictures(&keeps), fresh));
-            CHECK(gpu::readPipelineCache(file) == kept);
+            std::vector<uint8_t> again = gpu::readPipelineCache(file);
+            CHECK(!again.empty() && again != written);
         }
     }
     std::error_code ec;
@@ -3655,6 +3735,7 @@ int main() {
             texturesReadBackAsUploaded(g);
             readbacksLeaveTheFrameGoing(g);
             gpuTimesComeBack(g);
+            variantsFallBackToTheWholeShader(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
         }

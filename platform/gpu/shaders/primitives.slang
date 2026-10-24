@@ -65,6 +65,20 @@ static const int COMPOSITE_PAINT = 5;  // two paints (each of the kinds above) c
 #define VERTEX_ID SV_VertexID
 #endif
 
+// What a pipeline is made for (the renderer's ShaderVariant): specialization constants that leave
+// out of the fragment shader what its batches never need. Every branch an über-shader keeps costs
+// registers, so time, on every pixel it shades (a plain copy took six times as long with them all on
+// an Adreno 618). Each is a mask or a switch; the defaults take everything.
+[vk::constant_id(0)] const int KINDS = 0x7ff;  // the kinds drawn: bit 1 << kind
+[vk::constant_id(1)] const int PAINTS = 0x3f;  // the paints: bit 1 << paint.x (bit 0: the color alone)
+[vk::constant_id(2)] const int CLIPPED = 1;    // cut by clips (clipCoverage)
+[vk::constant_id(3)] const int FILTERED = 1;   // through color filters (applyFilters)
+[vk::constant_id(4)] const int HOW = -1;       // how the coverage goes in (finish); -1: as uniforms.blend.y says
+[vk::constant_id(5)] const int FLAGS = 0xff;   // the instances' flags that may be set
+
+bool drawn(int kind) { return (KINDS & (1 << kind)) != 0; }
+bool paints(int paint) { return (PAINTS & (1 << paint)) != 0; }
+
 struct Uniforms {
     float4 toClip;   // clip = position * toClip.xy + toClip.zw
     float4 texels;   // a texel's size in the coverage mask (xy) and in the table (zw)
@@ -250,7 +264,7 @@ float2 maskTexcoord(float2 texel) {
 // first: llvmpipe on LLVM 20 crashes compiling the tile modes' branches with one.)
 float4 paintOne(float2 p, float4 color, float4 paint, float4 g, bool second) {
     int kind = int(paint.x + 0.5);
-    if (kind == 0) return color;
+    if (kind == 0 || (PAINTS & ~1) == 0) return color;
     int bits = int(paint.y + 0.5);
     float v = (paint.w + 0.5) * uniforms.texels.w;
     if ((bits & 8) != 0) {
@@ -261,7 +275,7 @@ float4 paintOne(float2 p, float4 color, float4 paint, float4 g, bool second) {
         float3 q = float3(dot(r0, h), dot(r1, h), dot(r2, h));
         p = q.xy / q.z;
     }
-    if (kind == IMAGE_PAINT) {
+    if (paints(IMAGE_PAINT) && kind == IMAGE_PAINT) {
         float4 texel = second ? texture5.Sample(p) : texture1.Sample(p);
         if ((bits & 48) != 0) {  // decal: as a transparent border filtered in (its edge texels fading out over a texel)
             float2 size;
@@ -273,6 +287,7 @@ float4 paintOne(float2 p, float4 color, float4 paint, float4 g, bool second) {
         }
         return texel * color.a;
     }
+    if (!paints(LINEAR) && !paints(RADIAL) && !paints(SWEEP)) return color;
     const float pi = 3.141592653589793;
     float t = 0;
     if (kind == LINEAR) {
@@ -303,8 +318,8 @@ float4 paintOne(float2 p, float4 color, float4 paint, float4 g, bool second) {
     float4 straight = previous;
     bool found = t <= before;
     for (int i = 1; i < count; ++i) {
-        float4 next = texture2.SampleLevel(float2((2 * i + 0.5) * uniforms.texels.z, v), 0);
-        float offset = texture2.SampleLevel(float2((2 * i + 1.5) * uniforms.texels.z, v), 0).x;
+        float4 next = texture2.SampleLevel(float2((float(i) * 2 + 0.5) * uniforms.texels.z, v), 0);
+        float offset = texture2.SampleLevel(float2((float(i) * 2 + 1.5) * uniforms.texels.z, v), 0).x;
         if (!found && t <= offset) {
             float span = offset - before;
             straight = lerp(previous, next, span > 0 ? (t - before) / span : 1);
@@ -400,7 +415,7 @@ float4 applyFilters(float4 color, float4 filter) {
     int count = int(filter.x + 0.5);
     float4 c = color.a > 0 ? float4(color.rgb / color.a, color.a) : float4(0, 0, 0, 0);
     for (int i = 0; i < count; ++i) {
-        float x = float(i * 6);
+        float x = float(i) * 6;  // (in floats: an Adreno 6xx compiler choked on an int multiply here once specialized)
         float4 head = tableTexel(x, filter.y);
         int kind = int(head.x + 0.5);
         float4 a = tableTexel(x + 1, filter.y), b = tableTexel(x + 2, filter.y);
@@ -422,7 +437,7 @@ float4 applyFilters(float4 color, float4 filter) {
 // (DstIn) mixed towards what changes nothing; 3 (Clear) the coverage alone; 4 the mode worked out
 // here against the target's copy and mixed with it.
 float4 finish(float4 src, float cover, float2 pixel) {
-    int how = int(uniforms.blend.y + 0.5);
+    int how = HOW >= 0 ? HOW : int(uniforms.blend.y + 0.5);
     float4 out = src * cover;
     if (how == 1) {
         out = lerp(float4(1, 1, 1, 1), src, cover);
@@ -511,7 +526,7 @@ float4 arcCap(float2 q, float radius, float halfSize, float start, float sweep, 
 float clipCoverage(float2 pixel, int count, float row) {
     float inside = 1;
     for (int i = 0; i < count; ++i) {
-        float x = float(i * 6);
+        float x = float(i) * 6;  // (in floats: see applyFilters)
         float4 head = tableTexel(x, row), a = tableTexel(x + 1, row), b = tableTexel(x + 2, row);
         float c = 0;
         if (head.x > 0.5) {
@@ -554,7 +569,7 @@ float4 cubicSample(float2 uv, float2 size) {
 // The paint at p (see paintOne): a composite's two worked out there and blended, the source onto
 // the destination, as Skia's SkShaders::Blend does, at the color's alpha.
 float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
-    if (int(paint.x + 0.5) != COMPOSITE_PAINT) return paintOne(p, color, paint, g, false);
+    if (!paints(COMPOSITE_PAINT) || int(paint.x + 0.5) != COMPOSITE_PAINT) return paintOne(p, color, paint, g, false);
     float v = (paint.w + 0.5) * uniforms.texels.w;
     float4 texel[5];
     for (int i = 0; i < 5; ++i) texel[i] = texture2.SampleLevel(float2((i + 0.5) * uniforms.texels.z, v), 0);
@@ -566,7 +581,7 @@ float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
 [shader("fragment")]
 float4 fs(Varyings v) : SV_Target {
     int kind = int(v.kind + 0.5);
-    int flags = int(v.flags + 0.5);
+    int flags = int(v.flags + 0.5) & FLAGS;
     // A device pixel's steps in the instance's space, exactly: the local point over w, and 1 over
     // w, go straight across the screen (their differences are exact), the local point doesn't
     // in perspective.
@@ -592,15 +607,15 @@ float4 fs(Varyings v) : SV_Target {
     float2 lowUv = min(v.uv.xy, v.uv.zw) + v.params.zw, highUv = max(v.uv.xy, v.uv.zw) - v.params.zw;
     float2 texcoord = edged ? clamp(v.texcoord, lowUv, highUv) : v.texcoord;
     float edge = edged ? roundRectCoverage(v.local, v.shape, float4(0, 0, 0, 0), dx, dy) : 1;
-    if (kind == FILL) {
+    if (drawn(FILL) && kind == FILL) {
         cover = roundRectCoverage(v.local, v.shape, v.radii, dx, dy);
-    } else if (kind == STROKE) {
+    } else if (drawn(STROKE) && kind == STROKE) {
         float w = v.params.x;
         float4 inner = float4(v.shape.xy + w, v.shape.zw - w);
         float outside = roundRectCoverage(v.local, v.shape, v.radii, dx, dy);
         float inside = roundRectCoverage(v.local, inner, max(v.radii - w, 0), dx, dy);
         cover = saturate(outside - inside);
-    } else if (kind == LINE) {
+    } else if (drawn(LINE) && kind == LINE) {
         float2 a = v.shape.xy, b = v.shape.zw;
         float len = length(b - a);
         float2 dir = len > 0 ? (b - a) / len : float2(1, 0), side = float2(-dir.y, dir.x);
@@ -613,7 +628,7 @@ float4 fs(Varyings v) : SV_Target {
         float acrossIt = edgeCoverage(across - h, gSide) + edgeCoverage(-across - h, -gSide) - 1;
         float alongIt = edgeCoverage(along - reach, gDir) + edgeCoverage(-along - reach, -gDir) - 1;
         cover = saturate(acrossIt) * saturate(alongIt);
-    } else if (kind == ARC) {
+    } else if (drawn(ARC) && kind == ARC) {
         // The ring between its two circles, each edge cutting the pixel's box (a ring thinner than
         // a pixel covers as much as it is wide); past its ends, the caps.
         float2 q = v.local - v.shape.xy;
@@ -622,25 +637,25 @@ float4 fs(Varyings v) : SV_Target {
         float ring = saturate(edgeCoverage(len - radius - h, g) + edgeCoverage(radius - h - len, -g) - 1);
         float4 cap = arcCap(q, radius, h, v.params.y, v.params.z, v.params.w > 0.5);
         cover = cap.w > 0.5 ? edgeCoverage(cap.x, pixelSteps(cap.yz, dx, dy)) : ring;
-    } else if (kind == SHADOW) {
+    } else if (drawn(SHADOW) && kind == SHADOW) {
         float sigma = v.params.x;
         float blurred = sigma > 0.01 ? blurredRoundRect(v.local, v.shape, v.radii, sigma) : roundRectCoverage(v.local, v.shape, v.radii, dx, dy);
         // Inner: inside the rect (the gradient's field: a shadow's color is solid; its radii in uv),
         // where the blurred hole isn't. (Not the quad's bounds: the fragment shader reads nothing the
         // quad is placed by, which on Adreno through Dawn lost the target's tiles only it covered.)
         cover = v.params.y > 0.5 ? (1 - blurred) * roundRectCoverage(v.local, v.gradient, v.uv, dx, dy) : blurred;
-    } else if (kind == GLYPH) {
+    } else if (drawn(GLYPH) && kind == GLYPH) {
         // (A mask's texels: a cubic of the sixteen nearest, each at its center, as an image's.)
         float4 texel = v.params.y > 0.5 ? cubicSample(texcoord, 0.5 / v.params.zw) : texture0.Sample(texcoord);
         bool colored = v.params.x > 0.5;  // an emoji: as it is, at the color's alpha
         src = colored ? float4(texel.rgb * texel.a, texel.a) * v.color.a : paint;
         cover = (colored ? 1 : texel.a) * edge;
-    } else if (kind == IMAGE) {
+    } else if (drawn(IMAGE) && kind == IMAGE) {
         // Premultiplied texels; a cubic of the sixteen nearest, each at its center (params.y).
         float4 texel = v.params.y > 0.5 ? cubicSample(texcoord, 0.5 / v.params.zw) : texture0.Sample(texcoord);
         src = texel * v.params.x;
         cover = edge;
-    } else if (kind == LAYER) {
+    } else if (drawn(LAYER) && kind == LAYER) {
         float2 texel = clamp(v.local, v.params.xy + 0.5, v.params.zw - 0.5);
         bool mixed = (flags & 8) != 0;
         src = texture0.Sample((texel - v.params.xy) * v.uv.zw) * (mixed ? 1 : v.color.a);
@@ -648,19 +663,19 @@ float4 fs(Varyings v) : SV_Target {
         cover = (flags & 1) != 0 ? pathCoverage(texture1.SampleLevel((v.local - v.radii.xy) * uniforms.texels.xy, 0).r, false)
                                  : roundRectCoverage(v.local, v.shape, v.radii, dx, dy);
         if (mixed) cover *= v.color.a;
-    } else if (kind == ELEVATION) {
+    } else if (drawn(ELEVATION) && kind == ELEVATION) {
         float d = -roundRectDistance(v.local, v.shape, v.radii);  // in from its edge
         float t = saturate(d / v.params.x);
         // (Its hole's edge a 1024th of a pixel in: a pixel's middle on the edge itself, as integer
         // geometry puts it, falls in the hole whatever a GPU rounds d to.)
         cover = d > 0 && (v.params.y <= 0 || d < v.params.y - 1.0 / 1024) ? max(exp(-4 * (1 - t) * (1 - t)) - 0.018, 0) : 0;
-    } else if (kind == PATH) {
+    } else if (drawn(PATH) && kind == PATH) {
         cover = pathCoverage(texture0.SampleLevel(maskTexcoord(v.local - v.params.xy), 0).r, v.params.z > 0.5);
-    } else if (kind == MESH) {
+    } else if (drawn(MESH) && kind == MESH) {
         src = (v.params.z > 0.5 ? blendColors(paint, v.vertexColor, int(v.params.x + 0.5)) : paint) * v.params.y;
         cover = 1;
     }
     if (aliased) cover = cover > 0.5 ? 1 : 0;  // (a rect square to the pixels comes with its edges on them: see Renderer::add)
-    cover *= clipCoverage(v.position.xy, int(v.filter.z + 0.5), v.filter.w);
-    return finish(applyFilters(src, v.filter), cover, v.position.xy);
+    if (CLIPPED != 0) cover *= clipCoverage(v.position.xy, int(v.filter.z + 0.5), v.filter.w);
+    return finish(FILTERED != 0 ? applyFilters(src, v.filter) : src, cover, v.position.xy);
 }

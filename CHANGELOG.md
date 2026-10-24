@@ -190,6 +190,12 @@
   from drawing. A frame is slow past the display's refresh period (it was past 8 ms). `Device::setGpuTiming` and
   `takeGpuTimes` give the times. A script's `realtime` runs the rest of it in real time, frames paced to the display, for
   measuring.
+- **The GPU renderer's shader made for what it draws**: its fragment shader is specialized for each batch (Vulkan's
+  specialization constants, Metal's function constants, WebGPU's overrides, OpenGL ES's defines) to the kinds, paints,
+  clips, filters and blend mode it has, so that a pixel no longer pays for every branch of the whole shader. On a
+  Redmi Note 9 Pro's Adreno 618 a frame of the showcase's Components screen took the GPU 30–50 ms instead of 400–460, a
+  plain copy to the window 1.3 ms instead of 34. Where a driver can't make a variant (that Adreno's Vulkan compiler
+  couldn't one), the whole shader draws it; `PipelineDesc::constants` carries them.
 - **Fixed**: the GPU renderer's turned, stretched and leaning edges were up to 10/255 off on GPUs that snap vertices
   coarsely (4 subpixel bits, as SwiftShader does: Chrome's WebGL where it doesn't use the GPU): a quad's corners are
   put where such a GPU would put them, and its pixels shaded from there.

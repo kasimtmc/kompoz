@@ -116,6 +116,9 @@ struct PipelineDesc {
     uint8_t texelTextures = 0;
     BlendState blend;
     Format target = Format::RGBA8;
+    // The fragment shader's specialization constants 0, 1, ... (its [vk::constant_id] ones, all
+    // ints): what this pipeline's shader is made for. Those not given keep their defaults.
+    std::vector<int32_t> constants;
 };
 
 class Pipeline {

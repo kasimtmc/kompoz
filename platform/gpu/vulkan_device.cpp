@@ -522,7 +522,11 @@ public:
         VkShaderModule vs = module(desc.vertex->spirv), fs = module(desc.fragment->spirv);
         std::array<VkPipelineShaderStageCreateInfo, 2> stages{};
         stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vs, desc.vertex->entry, nullptr};
-        stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, fs, desc.fragment->entry, nullptr};
+        std::vector<VkSpecializationMapEntry> entries;
+        for (uint32_t i = 0; i < desc.constants.size(); ++i) entries.push_back({i, i * 4, 4});
+        VkSpecializationInfo specialized{uint32_t(entries.size()), entries.data(), desc.constants.size() * 4, desc.constants.data()};
+        stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, fs, desc.fragment->entry,
+                     desc.constants.empty() ? nullptr : &specialized};
         VkVertexInputBindingDescription binding{0, desc.instanceStride, VK_VERTEX_INPUT_RATE_INSTANCE};
         std::vector<VkVertexInputAttributeDescription> attributes;
         for (const VertexAttribute& a : desc.instanceAttributes) attributes.push_back({a.location, 0, vkVertexFormat(a.format), a.offset});
@@ -574,7 +578,12 @@ public:
         VkResult r = vk.vkCreateGraphicsPipelines(device, pipelineCache, 1, &gpci, nullptr, &pipeline);
         vk.vkDestroyShaderModule(device, vs, nullptr);
         vk.vkDestroyShaderModule(device, fs, nullptr);
-        if (r != VK_SUCCESS) return nullptr;
+        if (r != VK_SUCCESS) {
+            std::string made;
+            for (int32_t c : desc.constants) made += " " + std::to_string(c);
+            log("Vulkan: a pipeline wasn't made (" + std::to_string(int(r)) + ")" + (made.empty() ? "" : ", its constants" + made));
+            return nullptr;
+        }
         pipelinesMade = true;
         return std::make_unique<VulkanPipeline>(*this, pipeline);
     }

@@ -187,7 +187,9 @@ public:
         return std::make_unique<MetalTexture>(width, height, format, t);
     }
 
-    id<MTLFunction> function(const ShaderCode& code) {
+    // The shader's function, from its library (made once), specialized by `constants` (its
+    // function constants 0, 1, ...).
+    id<MTLFunction> function(const ShaderCode& code, const std::vector<int32_t>& constants = {}) {
         id<MTLLibrary> library = nil;
         for (auto& [source, made] : libraries)
             if (source == code.msl.data()) library = made;
@@ -210,11 +212,20 @@ public:
             }
             libraries.emplace_back(code.msl.data(), library);
         }
-        return [library newFunctionWithName:@(code.entry)];
+        if (constants.empty()) return [library newFunctionWithName:@(code.entry)];
+        MTLFunctionConstantValues* values = [MTLFunctionConstantValues new];
+        for (size_t i = 0; i < constants.size(); ++i) [values setConstantValue:&constants[i] type:MTLDataTypeInt atIndex:i];
+        NSError* failure = nil;
+        id<MTLFunction> made = [library newFunctionWithName:@(code.entry) constantValues:values error:&failure];
+        if (!made) {
+            log(std::string("Metal: a shader wasn't specialized: ") + (failure ? failure.localizedDescription.UTF8String : "?"));
+            ++errors;
+        }
+        return made;
     }
 
     std::unique_ptr<Pipeline> createPipeline(const PipelineDesc& desc) override {
-        id<MTLFunction> vertex = function(*desc.vertex), fragment = function(*desc.fragment);
+        id<MTLFunction> vertex = function(*desc.vertex), fragment = function(*desc.fragment, desc.constants);
         if (!vertex || !fragment) return nullptr;
         MTLRenderPipelineDescriptor* d = [MTLRenderPipelineDescriptor new];
         d.vertexFunction = vertex;

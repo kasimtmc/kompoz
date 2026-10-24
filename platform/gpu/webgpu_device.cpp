@@ -411,6 +411,13 @@ public:
         fragment.entryPoint = view(desc.fragment->entry);
         fragment.targetCount = 1;
         fragment.targets = &color;
+        // (WGSL's overrides, named by their @id.)
+        std::vector<std::string> keys;
+        for (size_t i = 0; i < desc.constants.size(); ++i) keys.push_back(std::to_string(i));
+        std::vector<WGPUConstantEntry> constants(desc.constants.size(), WGPU_CONSTANT_ENTRY_INIT);
+        for (size_t i = 0; i < constants.size(); ++i) constants[i].key = view(keys[i].c_str()), constants[i].value = desc.constants[i];
+        fragment.constantCount = constants.size();
+        fragment.constants = constants.data();
 
         WGPURenderPipelineDescriptor d = WGPU_RENDER_PIPELINE_DESCRIPTOR_INIT;
         d.layout = layout;

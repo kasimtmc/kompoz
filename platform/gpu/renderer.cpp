@@ -60,10 +60,10 @@ Renderer::Renderer(Device& device, TextSource& text) : device_(device), text_(te
 
 Renderer::~Renderer() { device_.waitIdle(); }
 
-Pipeline& Renderer::pipeline(Format target, const BlendState& blend, bool mesh) {
-    PipelineKey key{target, blend, mesh};
+Pipeline* Renderer::pipeline(Format target, const BlendState& blend, bool mesh, const ShaderVariant& variant, int how) {
+    PipelineKey key{target, blend, mesh, variant, how};
     for (auto& [k, p] : pipelines_)
-        if (k == key) return *p;
+        if (k == key) return p.get();
     PipelineDesc desc;
     desc.vertex = mesh ? &kMeshVertex : &kVertex;
     desc.fragment = &kFragment;
@@ -73,8 +73,14 @@ Pipeline& Renderer::pipeline(Format target, const BlendState& blend, bool mesh) 
     desc.texelTextures = 1 << 2;  // (the stops' table)
     desc.blend = blend;
     desc.target = target;
-    pipelines_.emplace_back(key, device_.createPipeline(desc));
-    return *pipelines_.back().second;
+    desc.constants = {variant.kinds, variant.paints, variant.clipped, variant.filtered, how, variant.flags};  // (primitives.slang's order)
+    std::unique_ptr<Pipeline> made = device_.createPipeline(desc);
+    if (!made) {  // (a driver that can't make this variant, as an Adreno 6xx's compiler couldn't one: the whole shader)
+        desc.constants.clear();
+        made = device_.createPipeline(desc);
+    }
+    pipelines_.emplace_back(key, std::move(made));
+    return pipelines_.back().second.get();
 }
 
 namespace {
@@ -333,6 +339,10 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Ma
     if (!texture) texture = white_.get();
     if (!texture1) texture1 = white_.get();
     uint32_t generation = pass.shelf.generation;
+    // What it needs of the fragment shader (a composite paint: its two paints may be any). (A
+    // mesh's extra is its vertex's color: its flags may be any.)
+    ShaderVariant variant{uint16_t(1 << kind), uint8_t(paintKind == 5 ? 0x3f : 1 << paintKind), uint8_t(kind == MESH ? 0xff : int(p.extra[3])),
+                          p.filter[2] > 0, p.filter[0] > 0};
     if (!pass.batches.empty()) {
         Batch& last = pass.batches.back();
         if (last.texture == texture && last.texture1 == texture1 && last.mask == mask && last.opaque == opaque && last.blend == blend &&
@@ -340,11 +350,12 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Ma
             last.mesh == (kind == MESH) && last.texture5 == texture5 && last.sampler5 == sampler5) {
             pass.prims.push_back(p);
             ++last.count;
+            last.variant |= variant;
             return;
         }
     }
     pass.batches.push_back({texture, texture1, mask, opaque, blend, clip, generation, uint32_t(pass.prims.size()), 1, sampler, sampler1,
-                            kind == MESH, texture5, sampler5});
+                            kind == MESH, texture5, sampler5, variant});
     pass.prims.push_back(p);
 }
 
@@ -536,9 +547,11 @@ void Renderer::execute(Pass& pass) {
             BlendPlan plan = planFor(b.blend, b.opaque);
             uniforms[8] = float(int(b.blend));
             uniforms[9] = float(plan.how);
+            Pipeline* drawing = pipeline(pass.target->format(), plan.state, b.mesh, b.variant, int(plan.how));
+            if (!drawing) continue;  // (no pipeline for it on this device: logged when it failed)
             // (Again in each pass the batch is drawn in: a pass starts with nothing bound.)
             auto bind = [&] {
-                device_.setPipeline(pipeline(pass.target->format(), plan.state, b.mesh));
+                device_.setPipeline(*drawing);
                 device_.setUniforms(uniforms, sizeof uniforms);
                 if (b.mask == Mask::Texture0)
                     device_.setTexture(0, *mask_, nearest);

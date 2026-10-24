@@ -199,6 +199,13 @@
   ayrı. Bir kare ekranın yenileme süresini aşınca yavaştır (8 ms'yi aşınca idi). Süreleri `Device::setGpuTiming` ve
   `takeGpuTimes` verir. Bir betiğin `realtime` komutu geri kalanını ölçmek için gerçek zamanda, kareleri ekranın hızında
   çalıştırır.
+- **GPU renderer'ın shader'ı çizdiğine göre yapılır**: fragment shader'ı her batch için (Vulkan'ın specialization
+  constant'ları, Metal'in function constant'ları, WebGPU'nun override'ları, OpenGL ES'in define'larıyla) onun türlerine,
+  boyalarına, kırpmalarına, filtrelerine ve karışım biçimine göre özelleştirilir; böylece bir piksel artık bütün
+  shader'ın her dalının bedelini ödemez. Bir Redmi Note 9 Pro'nun Adreno 618'inde vitrinin Bileşenler ekranının bir
+  karesi GPU'da 400–460 yerine 30–50 ms, pencereye düz bir kopya 34 yerine 1.3 ms sürdü. Bir sürücünün bir varyantı
+  yapamadığı yerde (o Adreno'nun Vulkan derleyicisi birini yapamadı) onu bütün shader çizer; sabitleri
+  `PipelineDesc::constants` taşır.
 - **Düzeltildi**: GPU renderer'ın döndürülmüş, gerilmiş ve eğik kenarları, köşe noktalarını kaba bir ızgaraya oturtan
   GPU'larda (4 alt piksel biti, SwiftShader gibi: Chrome'un GPU kullanmadığı yerdeki WebGL'i) 10/255'e kadar
   sapıyordu: bir dörtgenin köşeleri böyle bir GPU'nun koyacağı yere konur, pikselleri oradan boyanır.

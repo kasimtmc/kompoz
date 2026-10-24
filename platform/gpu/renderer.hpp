@@ -110,6 +110,20 @@ private:
     };
     // Where a batch's textures come from: its own, or the coverage mask (made when the pass runs).
     enum class Mask : uint8_t { None, Texture0, Texture1 };
+    // What a batch's primitives need of the fragment shader (its specialization constants: see
+    // shaders/primitives.slang): their kinds and paints (bits), whether they are clipped or
+    // filtered, the flags they set. A pipeline is made for each one met (and blend mode).
+    struct ShaderVariant {
+        uint16_t kinds = 0;
+        uint8_t paints = 0, flags = 0;
+        bool clipped = false, filtered = false;
+        ShaderVariant& operator|=(const ShaderVariant& o) {
+            kinds |= o.kinds, paints |= o.paints, flags |= o.flags;
+            clipped = clipped || o.clipped, filtered = filtered || o.filtered;
+            return *this;
+        }
+        bool operator==(const ShaderVariant&) const = default;
+    };
     struct Batch {
         Texture* texture;
         Texture* texture1;
@@ -124,6 +138,7 @@ private:
         bool mesh = false;  // (see below)
         Texture* texture5 = nullptr;  // a composite paint's source image (white if none)
         Sampler sampler5;  // its primitives a mesh's triangles (three vertices each, by vsMesh)
+        ShaderVariant variant;  // its primitives' together
     };
     // One edge of a path in the coverage mask, and the path's part of the mask (shaders/path.slang).
     struct EdgeInstance {
@@ -288,7 +303,8 @@ private:
     Texture* imageTexture(const ImageBitmap& image, bool mipmapped = false);  // its pixels premultiplied
     Texture* acquire(int width, int height, Format format = Format::RGBA8);
     IRect scissor() const;
-    Pipeline& pipeline(Format target, const BlendState& blend, bool mesh = false);
+    // The pipeline for a batch (made once); none if this device can't make one.
+    Pipeline* pipeline(Format target, const BlendState& blend, bool mesh, const ShaderVariant& variant, int how);
     void execute(Pass& pass);
 
     Device& device_;
@@ -303,6 +319,8 @@ private:
         Format format;
         BlendState blend;
         bool mesh;  // vsMesh's triangles, not vs's quads
+        ShaderVariant variant;
+        int how;  // how the coverage goes in (the blend plan's)
         bool operator==(const PipelineKey&) const = default;
     };
     std::vector<std::pair<PipelineKey, std::unique_ptr<Pipeline>>> pipelines_;
