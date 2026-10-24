@@ -119,7 +119,7 @@ public:
     BlendState blend;
 };
 
-constexpr size_t kStreamSize = 4 << 20;  // the instance buffer's size each frame starts with
+constexpr size_t kChunkSize = 4 << 20;  // a frame's memory comes in pieces this big (or as big as asked)
 
 class GlesDevice final : public Device {
 public:
@@ -130,12 +130,29 @@ public:
     bool floatTargets = false;  // half- and full-float textures drawn into (EXT_color_buffer_float or _half_float)
     int errors = 0;
 
-    // Per frame: memory handed out (allocate) on the CPU, copied into the instance buffer as each
-    // draw takes it; the uniforms' buffer.
+    // Per frame: memory handed out (allocate) on the CPU, in pieces; the draws' uniforms, each at
+    // an aligned offset of theirs. A pass's calls are recorded and made at its end, when the
+    // instance and uniform buffers get new storage holding what the frame handed out so far (the
+    // pieces one after another, piece i from base[i]): written into instead while the GPU still read
+    // them for what was drawn before, a driver copied all of the buffer first (Adreno's did, a
+    // copy a draw, then a pass).
     std::vector<std::vector<uint8_t>> chunks;
-    std::vector<size_t> used;
+    std::vector<size_t> used, base;
+    std::vector<uint8_t> uniforms;
+    size_t uniformAlign = 256;
     GLuint stream = 0, uniformBuffer = 0, vertexArray = 0;
-    size_t streamSize = 0, streamUsed = 0;
+    struct Call {
+        enum Kind : uint8_t { Pipeline, Scissor, Uniforms, Texture, Draw } kind;
+        GlesPipeline* pipeline = nullptr;
+        IRect rect;
+        size_t chunk = 0, offset = 0;  // the instances' piece and offset in it; the uniforms' offset
+        int slot = 0;
+        GlesTexture* texture = nullptr;
+        Sampler sampler;
+        uint32_t vertexCount = 0, instanceCount = 0;
+        bool instances = false;  // (a draw that reads some)
+    };
+    std::vector<Call> calls;
 
     std::unique_ptr<GlesTexture> window;  // the window's image this frame
     bool inFrame = false, haveWindow = false;
@@ -195,9 +212,9 @@ public:
         gl.BindVertexArray(vertexArray);
         gl.GenBuffers(1, &stream);
         gl.GenBuffers(1, &uniformBuffer);
-        gl.BindBuffer(GL_UNIFORM_BUFFER, uniformBuffer);
-        gl.BufferData(GL_UNIFORM_BUFFER, kMaxUniforms, nullptr, GL_DYNAMIC_DRAW);
-        gl.BindBufferBase(GL_UNIFORM_BUFFER, 0, uniformBuffer);
+        GLint align = 0;
+        gl.GetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &align);
+        uniformAlign = std::max<size_t>(size_t(align), 16);
         gl.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
         gl.PixelStorei(GL_PACK_ALIGNMENT, 1);
         gl.Disable(GL_DITHER);
@@ -339,11 +356,7 @@ public:
         inFrame = true;
         haveWindow = false;
         for (size_t& u : used) u = 0;
-        // A new instance buffer each frame (the driver keeps the old one while the GPU reads it).
-        streamSize = std::max(streamSize, kStreamSize);
-        gl.BindBuffer(GL_ARRAY_BUFFER, stream);
-        gl.BufferData(GL_ARRAY_BUFFER, GLsizeiptr(streamSize), nullptr, GL_STREAM_DRAW);
-        streamUsed = 0;
+        uniforms.clear();
     }
 
     Texture* swapchainTexture() override {
@@ -369,8 +382,9 @@ public:
                 return chunks[i].data() + start;
             }
         }
-        chunks.emplace_back(std::max(kStreamSize, size));
+        chunks.emplace_back(std::max(kChunkSize, size));
         used.push_back(size);
+        base.push_back(0);
         *ref = {chunks.back().data(), 0};
         return chunks.back().data();
     }
@@ -418,83 +432,125 @@ public:
         setScissor({0, 0, t.width(), t.height()});
     }
 
-    void setPipeline(Pipeline& p) override {
-        auto& gp = static_cast<GlesPipeline&>(p);
-        if (&gp != pipeline) {
-            gl.UseProgram(gp.program);
-            pipeline = &gp;
-        }
-        if (!blendSet || !(gp.blend == blend)) {
-            const BlendState& b = gp.blend;
-            if (b.enabled) {
-                gl.Enable(GL_BLEND);
-                gl.BlendFuncSeparate(glFactor(b.srcColor), glFactor(b.dstColor), glFactor(b.srcAlpha), glFactor(b.dstAlpha));
-                gl.BlendEquationSeparate(glOp(b.colorOp), glOp(b.alphaOp));
-            } else {
-                gl.Disable(GL_BLEND);
-            }
-            blend = b;
-            blendSet = true;
-        }
-    }
+    // --- A pass's calls: recorded, made at its end -------------------------------------------
+
+    void setPipeline(Pipeline& p) override { calls.push_back({Call::Pipeline, static_cast<GlesPipeline*>(&p)}); }
 
     void setScissor(const IRect& r) override {
         int x0 = std::max(0, r.x), y0 = std::max(0, r.y);
         int x1 = target ? std::min(r.x + r.width, target->width()) : r.x + r.width;
         int y1 = target ? std::min(r.y + r.height, target->height()) : r.y + r.height;
-        gl.Scissor(x0, y0, std::max(0, x1 - x0), std::max(0, y1 - y0));  // (rows from the top: see above)
+        Call c{Call::Scissor};
+        c.rect = {x0, y0, std::max(0, x1 - x0), std::max(0, y1 - y0)};  // (rows from the top: see above)
+        calls.push_back(c);
     }
 
     void setUniforms(const void* data, size_t size) override {
-        gl.BindBuffer(GL_UNIFORM_BUFFER, uniformBuffer);
-        gl.BufferSubData(GL_UNIFORM_BUFFER, 0, GLsizeiptr(std::min(size, kMaxUniforms)), data);
+        size_t at = (uniforms.size() + uniformAlign - 1) / uniformAlign * uniformAlign;
+        uniforms.resize(at + kMaxUniforms);
+        std::memcpy(uniforms.data() + at, data, std::min(size, kMaxUniforms));
+        Call c{Call::Uniforms};
+        c.offset = at;
+        calls.push_back(c);
     }
 
     void setTexture(int slot, Texture& texture, const Sampler& s) override {
-        auto& t = static_cast<GlesTexture&>(texture);
-        gl.ActiveTexture(GLenum(GL_TEXTURE0 + slot));
-        gl.BindTexture(GL_TEXTURE_2D, t.name);
-        gl.BindSampler(GLuint(slot), sampler(s));
+        Call c{Call::Texture};
+        c.slot = slot;
+        c.texture = static_cast<GlesTexture*>(&texture);
+        c.sampler = s;
+        calls.push_back(c);
     }
 
     void draw(const BufferRef& instances, uint32_t vertexCount, uint32_t instanceCount) override {
-        if (instanceCount == 0 || !pipeline) return;
-        std::vector<uint32_t> enable;
-        if (pipeline->stride && instances.buffer) {
-            // The instances into the frame's instance buffer, after those drawn before.
-            size_t size = size_t(pipeline->stride) * instanceCount;
-            if (streamUsed + size > streamSize) {
-                streamSize = std::max(streamSize * 2, size);
-                gl.BindBuffer(GL_ARRAY_BUFFER, stream);
-                gl.BufferData(GL_ARRAY_BUFFER, GLsizeiptr(streamSize), nullptr, GL_STREAM_DRAW);
-                streamUsed = 0;
-            }
-            gl.BindBuffer(GL_ARRAY_BUFFER, stream);
-            gl.BufferSubData(GL_ARRAY_BUFFER, GLintptr(streamUsed), GLsizeiptr(size), static_cast<const uint8_t*>(instances.buffer) + instances.offset);
-            for (const VertexAttribute& a : pipeline->attributes) {
-                const void* at = reinterpret_cast<const void*>(uintptr_t(streamUsed + a.offset));
-                GLsizei stride = GLsizei(pipeline->stride);
-                switch (a.format) {
-                case VertexFormat::Float: gl.VertexAttribPointer(a.location, 1, GL_FLOAT, GL_FALSE, stride, at); break;
-                case VertexFormat::Float2: gl.VertexAttribPointer(a.location, 2, GL_FLOAT, GL_FALSE, stride, at); break;
-                case VertexFormat::Float3: gl.VertexAttribPointer(a.location, 3, GL_FLOAT, GL_FALSE, stride, at); break;
-                case VertexFormat::Float4: gl.VertexAttribPointer(a.location, 4, GL_FLOAT, GL_FALSE, stride, at); break;
-                case VertexFormat::UInt4: gl.VertexAttribIPointer(a.location, 4, GL_UNSIGNED_INT, stride, at); break;
-                }
-                gl.VertexAttribDivisor(a.location, 1);
-                enable.push_back(a.location);
-            }
-            streamUsed += (size + 255) / 256 * 256;
-        }
-        for (uint32_t l : enabledAttributes)
-            if (std::find(enable.begin(), enable.end(), l) == enable.end()) gl.DisableVertexAttribArray(l);
-        for (uint32_t l : enable)
-            if (std::find(enabledAttributes.begin(), enabledAttributes.end(), l) == enabledAttributes.end()) gl.EnableVertexAttribArray(l);
-        enabledAttributes = std::move(enable);
-        gl.DrawArraysInstanced(GL_TRIANGLES, 0, GLsizei(vertexCount), GLsizei(instanceCount));
+        if (instanceCount == 0) return;
+        Call c{Call::Draw};
+        for (size_t i = 0; i < chunks.size(); ++i)
+            if (chunks[i].data() == instances.buffer) c.chunk = i;
+        c.offset = size_t(instances.offset);
+        c.vertexCount = vertexCount;
+        c.instanceCount = instanceCount;
+        c.instances = instances.buffer != nullptr;
+        calls.push_back(c);
     }
 
-    void endPass() override { target = nullptr; }
+    void endPass() override {
+        // The buffers' new storage: the pieces handed out so far, one after another, and the uniforms.
+        size_t total = 0;
+        for (size_t i = 0; i < chunks.size(); ++i) {
+            base[i] = total;
+            total += (used[i] + 255) / 256 * 256;
+        }
+        gl.BindBuffer(GL_ARRAY_BUFFER, stream);
+        gl.BufferData(GL_ARRAY_BUFFER, GLsizeiptr(total), nullptr, GL_STREAM_DRAW);
+        for (size_t i = 0; i < chunks.size(); ++i)
+            if (used[i]) gl.BufferSubData(GL_ARRAY_BUFFER, GLintptr(base[i]), GLsizeiptr(used[i]), chunks[i].data());
+        gl.BindBuffer(GL_UNIFORM_BUFFER, uniformBuffer);
+        gl.BufferData(GL_UNIFORM_BUFFER, GLsizeiptr(uniforms.size()), uniforms.empty() ? nullptr : uniforms.data(), GL_STREAM_DRAW);
+        for (const Call& c : calls) make(c);
+        calls.clear();
+        target = nullptr;
+    }
+
+    void make(const Call& c) {
+        switch (c.kind) {
+        case Call::Pipeline: {
+            GlesPipeline& gp = *c.pipeline;
+            if (&gp != pipeline) {
+                gl.UseProgram(gp.program);
+                pipeline = &gp;
+            }
+            if (!blendSet || !(gp.blend == blend)) {
+                const BlendState& b = gp.blend;
+                if (b.enabled) {
+                    gl.Enable(GL_BLEND);
+                    gl.BlendFuncSeparate(glFactor(b.srcColor), glFactor(b.dstColor), glFactor(b.srcAlpha), glFactor(b.dstAlpha));
+                    gl.BlendEquationSeparate(glOp(b.colorOp), glOp(b.alphaOp));
+                } else {
+                    gl.Disable(GL_BLEND);
+                }
+                blend = b;
+                blendSet = true;
+            }
+            break;
+        }
+        case Call::Scissor: gl.Scissor(c.rect.x, c.rect.y, c.rect.width, c.rect.height); break;
+        case Call::Uniforms: gl.BindBufferRange(GL_UNIFORM_BUFFER, 0, uniformBuffer, GLintptr(c.offset), GLsizeiptr(kMaxUniforms)); break;
+        case Call::Texture:
+            gl.ActiveTexture(GLenum(GL_TEXTURE0 + c.slot));
+            gl.BindTexture(GL_TEXTURE_2D, c.texture->name);
+            gl.BindSampler(GLuint(c.slot), sampler(c.sampler));
+            break;
+        case Call::Draw: {
+            if (!pipeline) break;
+            std::vector<uint32_t> enable;
+            if (pipeline->stride && c.instances) {
+                gl.BindBuffer(GL_ARRAY_BUFFER, stream);
+                size_t at = base[c.chunk] + c.offset;
+                for (const VertexAttribute& a : pipeline->attributes) {
+                    const void* offset = reinterpret_cast<const void*>(uintptr_t(at + a.offset));
+                    GLsizei stride = GLsizei(pipeline->stride);
+                    switch (a.format) {
+                    case VertexFormat::Float: gl.VertexAttribPointer(a.location, 1, GL_FLOAT, GL_FALSE, stride, offset); break;
+                    case VertexFormat::Float2: gl.VertexAttribPointer(a.location, 2, GL_FLOAT, GL_FALSE, stride, offset); break;
+                    case VertexFormat::Float3: gl.VertexAttribPointer(a.location, 3, GL_FLOAT, GL_FALSE, stride, offset); break;
+                    case VertexFormat::Float4: gl.VertexAttribPointer(a.location, 4, GL_FLOAT, GL_FALSE, stride, offset); break;
+                    case VertexFormat::UInt4: gl.VertexAttribIPointer(a.location, 4, GL_UNSIGNED_INT, stride, offset); break;
+                    }
+                    gl.VertexAttribDivisor(a.location, 1);
+                    enable.push_back(a.location);
+                }
+            }
+            for (uint32_t l : enabledAttributes)
+                if (std::find(enable.begin(), enable.end(), l) == enable.end()) gl.DisableVertexAttribArray(l);
+            for (uint32_t l : enable)
+                if (std::find(enabledAttributes.begin(), enabledAttributes.end(), l) == enabledAttributes.end()) gl.EnableVertexAttribArray(l);
+            enabledAttributes = std::move(enable);
+            gl.DrawArraysInstanced(GL_TRIANGLES, 0, GLsizei(c.vertexCount), GLsizei(c.instanceCount));
+            break;
+        }
+        }
+    }
 
     void copyTexture(Texture& source, const IRect& region, Texture& destination, int x, int y) override {
         auto& src = static_cast<GlesTexture&>(source);

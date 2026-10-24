@@ -94,6 +94,7 @@ inline constexpr GLenum GL_TEXTURE_WRAP_S = 0x2802;
 inline constexpr GLenum GL_TEXTURE_WRAP_T = 0x2803;
 inline constexpr GLenum GL_TRIANGLES = 0x0004;
 inline constexpr GLenum GL_UNIFORM_BUFFER = 0x8A11;
+inline constexpr GLenum GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT = 0x8A34;
 inline constexpr GLenum GL_UNPACK_ALIGNMENT = 0x0CF5;
 inline constexpr GLenum GL_UNPACK_ROW_LENGTH = 0x0CF2;
 inline constexpr GLenum GL_UNSIGNED_BYTE = 0x1401;
@@ -108,6 +109,7 @@ inline constexpr GLenum GL_ZERO = 0;
     X(void, AttachShader, (GLuint program, GLuint shader)) \
     X(void, BindBuffer, (GLenum target, GLuint buffer)) \
     X(void, BindBufferBase, (GLenum target, GLuint index, GLuint buffer)) \
+    X(void, BindBufferRange, (GLenum target, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size)) \
     X(void, BindFramebuffer, (GLenum target, GLuint framebuffer)) \
     X(void, BindSampler, (GLuint unit, GLuint sampler)) \
     X(void, BindTexture, (GLenum target, GLuint texture)) \
