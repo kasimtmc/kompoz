@@ -238,7 +238,7 @@ public:
             if (error) *error = std::move(why);
             return false;
         };
-        if (!s.vulkanGetInstanceProcAddr || !s.createVulkanSurface) return fail("no Vulkan surface from the window system");
+        if (!s.vulkanGetInstanceProcAddr) return fail("no Vulkan loader");
         drawableSize = s.drawableSize;
         vk.vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(s.vulkanGetInstanceProcAddr);
         auto global = [&](const char* name) { return vk.vkGetInstanceProcAddr(VK_NULL_HANDLE, name); };
@@ -291,11 +291,13 @@ public:
             mci.pUserData = this;
             vk.vkCreateDebugUtilsMessengerEXT(instance, &mci, nullptr, &messenger);
         }
-        uint64_t rawSurface = 0;
-        if (!s.createVulkanSurface(instance, &rawSurface)) return fail("no Vulkan surface for the window");
-        surface = VkSurfaceKHR(rawSurface);
+        if (s.createVulkanSurface) {  // (else it draws only into textures)
+            uint64_t rawSurface = 0;
+            if (!s.createVulkanSurface(instance, &rawSurface)) return fail("no Vulkan surface for the window");
+            surface = VkSurfaceKHR(rawSurface);
+        }
 
-        if (!pickPhysicalDevice()) return fail("no GPU that can present to the window with Vulkan 1.1");
+        if (!pickPhysicalDevice()) return fail(surface ? "no GPU that can present to the window with Vulkan 1.1" : "no GPU with Vulkan 1.1");
         float priority = 1;
         VkDeviceQueueCreateInfo qci{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
         qci.queueFamilyIndex = queueFamily;
@@ -305,7 +307,7 @@ public:
         VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
         dci.queueCreateInfoCount = 1;
         dci.pQueueCreateInfos = &qci;
-        dci.enabledExtensionCount = 1;
+        dci.enabledExtensionCount = surface ? 1 : 0;
         dci.ppEnabledExtensionNames = &swapchainExt;
         if (VkResult r = vk.vkCreateDevice(physical, &dci, nullptr, &device); r != VK_SUCCESS)
             return fail("vkCreateDevice failed (" + std::to_string(int(r)) + ")");
@@ -366,8 +368,9 @@ public:
         return true;
     }
 
-    // A GPU with a queue that draws and presents to the surface: the one KOMPOZ_GPU_DEVICE
-    // names part of, else an integrated one (it saves power), else a discrete one, else any.
+    // A GPU with a queue that draws (and presents to the surface, if there is one): the one
+    // KOMPOZ_GPU_DEVICE names part of, else an integrated one (it saves power), else a discrete
+    // one, else any.
     bool pickPhysicalDevice() {
         uint32_t count = 0;
         vk.vkEnumeratePhysicalDevices(instance, &count, nullptr);
@@ -383,16 +386,17 @@ public:
             vk.vkEnumerateDeviceExtensionProperties(d, nullptr, &extCount, nullptr);
             std::vector<VkExtensionProperties> exts(extCount);
             vk.vkEnumerateDeviceExtensionProperties(d, nullptr, &extCount, exts.data());
-            if (std::none_of(exts.begin(), exts.end(),
-                             [](const VkExtensionProperties& e) { return std::string_view(e.extensionName) == VK_KHR_SWAPCHAIN_EXTENSION_NAME; }))
+            if (surface && std::none_of(exts.begin(), exts.end(), [](const VkExtensionProperties& e) {
+                    return std::string_view(e.extensionName) == VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+                }))
                 continue;
             uint32_t qCount = 0;
             vk.vkGetPhysicalDeviceQueueFamilyProperties(d, &qCount, nullptr);
             std::vector<VkQueueFamilyProperties> families(qCount);
             vk.vkGetPhysicalDeviceQueueFamilyProperties(d, &qCount, families.data());
             for (uint32_t q = 0; q < qCount; ++q) {
-                VkBool32 present = VK_FALSE;
-                vk.vkGetPhysicalDeviceSurfaceSupportKHR(d, q, surface, &present);
+                VkBool32 present = surface ? VK_FALSE : VK_TRUE;
+                if (surface) vk.vkGetPhysicalDeviceSurfaceSupportKHR(d, q, surface, &present);
                 if (!(families[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) || !present) continue;
                 int rank = p.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ? 3
                            : p.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 2
@@ -723,6 +727,7 @@ public:
     }
 
     Texture* swapchainTexture() override {
+        if (!surface) return nullptr;
         if (!acquired) {
             int w = 0, h = 0;
             if (drawableSize) drawableSize(&w, &h);

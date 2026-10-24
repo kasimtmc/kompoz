@@ -12,7 +12,8 @@
 //   KOMPOZ_GPU=metal         Metal's (on Apple's systems, where it is the default)
 //   KOMPOZ_GOLDEN_DIR=<dir>  the pictures from there (a phone's copy)
 //
-// On Android it is a program run from adb shell, on OpenGL ES 3 through EGL (no SDL video there):
+// On Android it is a program run from adb shell, on OpenGL ES 3 through EGL (no SDL video there),
+// or on Vulkan (KOMPOZ_GPU=vulkan) without a window:
 //   adb push kompoz_gpu_tests libSDL3.so assets/fonts tests/golden /data/local/tmp/kgt/
 //   adb shell 'cd /data/local/tmp/kgt && LD_LIBRARY_PATH=. KOMPOZ_GOLDEN_DIR=golden ./kompoz_gpu_tests'
 // On the web it is a page on the browser's WebGL 2, the variables its query, which emrun opens and
@@ -81,12 +82,20 @@ struct Gpu {
     std::unique_ptr<gpu::Renderer> renderer;
 
 #ifdef __ANDROID__
-    // On Android, a program run from adb shell has no SDL (it needs an app's Java side): an OpenGL
-    // ES 3 context of its own, through EGL, current on a pbuffer.
+    // On Android, a program run from adb shell has no SDL (it needs an app's Java side): Vulkan
+    // (KOMPOZ_GPU=vulkan) from the system's loader, drawing only into textures; else an OpenGL ES 3
+    // context of its own, through EGL, current on a pbuffer.
     void* egl = nullptr;
     void* glesLibrary = nullptr;
     bool start(std::string* why) {
         using Fn = void* (*)(...);
+        if (const char* choice = std::getenv("KOMPOZ_GPU"); choice && std::string(choice) == "vulkan") {
+            void* loader = dlopen("libvulkan.so", RTLD_NOW);
+            gpu::Surface s;
+            s.vulkanGetInstanceProcAddr = loader ? reinterpret_cast<void* (*)(void*, const char*)>(dlsym(loader, "vkGetInstanceProcAddr")) : nullptr;
+            device = gpu::Device::create(gpu::Backend::Vulkan, s, why);
+            return device && startRenderer(why);
+        }
         egl = dlopen("libEGL.so", RTLD_NOW);
         glesLibrary = dlopen("libGLESv3.so", RTLD_NOW);
         if (!egl || !glesLibrary) {
