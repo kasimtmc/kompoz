@@ -258,7 +258,8 @@ public:
         return false;
     }
     // The frames timed (that drew something) whose GPU work is done since the last call, oldest
-    // first: a frame or two after their endFrame.
+    // first: a frame or two after their endFrame. A pass the driver timed nonsensically (as
+    // Adreno's OpenGL ES ends some before they begin) is left out.
     virtual std::vector<GpuFrameTime> takeGpuTimes() { return {}; }
     // Waits for the GPU to finish everything (before resources it uses go).
     virtual void waitIdle() = 0;

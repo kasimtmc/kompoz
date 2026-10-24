@@ -772,11 +772,22 @@ public:
             gl.GetIntegerv(GL_GPU_DISJOINT_EXT, &disjoint);
             GpuFrameTime time;
             for (auto& [label, query] : frame) {
-                GLuint ns = 0;
-                gl.GetQueryObjectuiv(query, GL_QUERY_RESULT, &ns);
+                spareQueries.push_back(query);
+                // (64 bits where the extension reads them; a pass a driver timed as ending before it
+                // began, as Adreno's does some on its tiles, gets no time: negative there, 32 bits'
+                // most otherwise.)
+                uint64_t ns = 0;
+                if (gl.GetQueryObjectui64vEXT) {
+                    gl.GetQueryObjectui64vEXT(query, GL_QUERY_RESULT, &ns);
+                    if (int64_t(ns) < 0) continue;
+                } else {
+                    GLuint low = 0;
+                    gl.GetQueryObjectuiv(query, GL_QUERY_RESULT, &low);
+                    if (low == 0xffffffff) continue;
+                    ns = low;
+                }
                 time.passes.push_back({std::move(label), double(ns) / 1e6});
                 time.ms += double(ns) / 1e6;
-                spareQueries.push_back(query);
             }
             if (!disjoint) timed.push_back(std::move(time));
             waitingTimes.pop_front();

@@ -197,6 +197,8 @@ struct Gl {
     void(KOMPOZ_GL_API* GetProgramBinary)(GLuint program, GLsizei bufSize, GLsizei* length, GLenum* binaryFormat, void* binary) = nullptr;
     void(KOMPOZ_GL_API* ProgramBinary)(GLuint program, GLenum binaryFormat, const void* binary, GLsizei length) = nullptr;
     void(KOMPOZ_GL_API* ProgramParameteri)(GLuint program, GLenum pname, GLint value) = nullptr;
+    // A timer query's result in 64 bits, not required: EXT_disjoint_timer_query's.
+    void(KOMPOZ_GL_API* GetQueryObjectui64vEXT)(GLuint id, GLenum pname, uint64_t* params) = nullptr;
 
     // Every function from `lookup` (glName); false (and *missing the first one's name) if one isn't
     // there.
@@ -214,6 +216,7 @@ struct Gl {
         GetProgramBinary = reinterpret_cast<decltype(GetProgramBinary)>(lookup("glGetProgramBinary"));
         ProgramBinary = reinterpret_cast<decltype(ProgramBinary)>(lookup("glProgramBinary"));
         ProgramParameteri = reinterpret_cast<decltype(ProgramParameteri)>(lookup("glProgramParameteri"));
+        GetQueryObjectui64vEXT = reinterpret_cast<decltype(GetQueryObjectui64vEXT)>(lookup("glGetQueryObjectui64vEXT"));
         return true;
     }
 };
