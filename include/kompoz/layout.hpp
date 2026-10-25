@@ -2162,6 +2162,9 @@ Size wholePxAbove(Size size);  // (at layoutDensity())
 // How many times a node was measured afresh or moved so far: a layout that leaves it as it was
 // changed nothing.
 uint64_t& relaidOutCount();
+// Layout nodes (of this thread) with popups composed inside them: while none has, nothing need
+// look for them.
+int& nodesWithPopups();
 // While one is alive, every node is measured afresh, none kept as it was (the layout check's
 // reference layout).
 struct MeasureEverything {

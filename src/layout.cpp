@@ -1589,6 +1589,7 @@ Modifier Modifier::then(std::shared_ptr<const ModifierElement> element) const {
 }
 
 LayoutNode::~LayoutNode() {
+    if (!overlays.empty()) --detail::nodesWithPopups();
     if (handle_) *handle_ = nullptr;
     if (host_) host_->nodeRemoved(this);
 }
@@ -1690,6 +1691,10 @@ void LayoutNode::place(float x, float y, float zIndex) {
 }
 uint64_t& detail::relaidOutCount() {
     thread_local uint64_t count = 0;
+    return count;
+}
+int& detail::nodesWithPopups() {
+    thread_local int count = 0;
     return count;
 }
 

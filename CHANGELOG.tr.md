@@ -223,6 +223,8 @@
   hemen önünde kendi maske geçişinde değil. Bir maskenin alabileceğini aşan bir kuşak kendi maskesine gider, böylece hiçbir
   geçiş onun için bölünmez. Bir Redmi Note 9 Pro'nun Vulkan'ında Bileşenler ekranının bir karesi GPU'da 48–50 yerine
   38–40 ms sürdü.
+- **Düzen açılır pencereleri yalnızca varken arar**: açılır pencere taşıyan düğümler sayılır; hiçbiri yokken her
+  düzenden sonra onları aramak için bütün ağacın gezilmesi atlanır.
 - **Düzeltildi**: GPU renderer'ın döndürülmüş, gerilmiş ve eğik kenarları, köşe noktalarını kaba bir ızgaraya oturtan
   GPU'larda (4 alt piksel biti, SwiftShader gibi: Chrome'un GPU kullanmadığı yerdeki WebGL'i) 10/255'e kadar
   sapıyordu: bir dörtgenin köşeleri böyle bir GPU'nun koyacağı yere konur, pikselleri oradan boyanır.

@@ -25,9 +25,11 @@ void collectNodes(const Group& g, std::vector<LayoutNode*>& out, std::vector<Lay
 }
 
 void rebuildChildren(Group& nodeGroup) {
+    if (!nodeGroup.node->overlays.empty()) --detail::nodesWithPopups();
     nodeGroup.node->children.clear();
     nodeGroup.node->overlays.clear();
     collectNodes(nodeGroup, nodeGroup.node->children, nodeGroup.node->overlays);
+    if (!nodeGroup.node->overlays.empty()) ++detail::nodesWithPopups();
     for (auto* child : nodeGroup.node->children) child->parent = nodeGroup.node.get();
     for (auto* popup : nodeGroup.node->overlays) popup->parent = nodeGroup.node.get();
     nodeGroup.node->invalidateMeasure();

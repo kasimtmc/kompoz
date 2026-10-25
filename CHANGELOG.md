@@ -211,6 +211,8 @@
   the mask's shelves and are rasterized in one pass before the passes run, not each layer's in a mask pass of its own
   just before it; past what a mask holds, a generation goes into a mask of its own, so no pass is split for it. On a
   Redmi Note 9 Pro's Vulkan a frame of the Components screen took the GPU 38–40 ms instead of 48–50.
+- **Layout looks for popups only while there are some**: the nodes holding popups are counted, and while none does
+  the walk of the whole tree after each layout looking for them is left out.
 - **Fixed**: the GPU renderer's turned, stretched and leaning edges were up to 10/255 off on GPUs that snap vertices
   coarsely (4 subpixel bits, as SwiftShader does: Chrome's WebGL where it doesn't use the GPU): a quad's corners are
   put where such a GPU would put them, and its pixels shaded from there.

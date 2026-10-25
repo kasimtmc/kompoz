@@ -11561,6 +11561,28 @@ TEST(a_full_screen_popup_gives_its_content_the_window) {
     CHECK(sameRect(rule.onNodeWithTag("icerik").bounds(), {0, 0, 400, 800}));
 }
 
+// The nodes holding popups are counted (layout looks for popups only while some node has one): a
+// popup shown counts its node; hidden, or its node gone, it no longer does.
+TEST(nodes_holding_popups_are_counted) {
+    int before = detail::nodesWithPopups();
+    auto shown = mutableStateOf(true);
+    {
+        ComposeTestRule rule([&] {
+            Box([&] {
+                if (shown.get()) Popup({}, [] { Box(Modifier().size(10).testTag("p")); });
+            });
+        }, {200, 200});
+        CHECK(detail::nodesWithPopups() == before + 1 && rule.onNodeWithTag("p").exists());
+        shown.set(false);
+        rule.waitForIdle();
+        CHECK(detail::nodesWithPopups() == before && !rule.onNodeWithTag("p").exists());
+        shown.set(true);
+        rule.waitForIdle();
+        CHECK(detail::nodesWithPopups() == before + 1 && rule.onNodeWithTag("p").exists());
+    }
+    CHECK(detail::nodesWithPopups() == before);
+}
+
 TEST(tri_state_checkbox_shows_a_partly_checked_group) {
     auto a = mutableStateOf(false), b = mutableStateOf(false);
     ComposeTestRule rule([&] {

@@ -711,7 +711,7 @@ void ComposeHost::measureAndPlace() {
         return;
     }
     overlays_.clear();
-    layoutOverlays(r);
+    if (detail::nodesWithPopups() > 0) layoutOverlays(r);  // (else no node has any: none to look for)
 }
 
 bool ComposeHost::layout() {
