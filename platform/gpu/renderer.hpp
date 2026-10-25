@@ -144,8 +144,10 @@ private:
     struct EdgeInstance {
         float edge[4], region[4], mode[4];  // (mode.x: not anti-aliased)
     };
-    // A pass's paths are rasterized into the coverage mask before it runs. When the mask is full a
-    // new generation starts: the mask is made again for the batches recorded after that.
+    // The paths of the passes recorded until a flush with none still open are rasterized into one
+    // coverage mask, all of them in one go before the passes run (a mask pass between one pass and
+    // the next held a tiling GPU up at each). When it is full a new generation starts, in a mask of
+    // its own.
     struct MaskShelf {
         int width = 0, height = 0;  // what a generation has
         int x = 0, y = 0, row = 0;
@@ -168,7 +170,6 @@ private:
         std::vector<Batch> batches;
         std::vector<EdgeInstance> edges;
         std::vector<uint32_t> edgeGenerations;  // the generation each edge is in
-        MaskShelf shelf;
         std::optional<EffectDraw> effect;  // set: this instead of the rest
         std::optional<std::pair<Texture*, IRect>> copy;  // set: that part of that texture copied to the target's top left, instead
     };
@@ -306,6 +307,7 @@ private:
     // The pipeline for a batch (made once); none if this device can't make one.
     Pipeline* pipeline(Format target, const BlendState& blend, bool mesh, const ShaderVariant& variant, int how);
     void execute(Pass& pass);
+    void drawMasks();  // the coverage of the paths of the passes about to run
 
     Device& device_;
     TextSource& text_;
@@ -327,7 +329,8 @@ private:
     std::unique_ptr<Texture> dstCopy_;  // a target's pixels under a draw whose blend mode reads them
     std::unique_ptr<Pipeline> coveragePipeline_;
     std::unique_ptr<Pipeline> effectPipeline_;
-    std::unique_ptr<Texture> mask_;  // the coverage mask, as big as a generation needed so far
+    MaskShelf shelf_;  // (started over once no pass is open: a clip's row lives no longer than its target)
+    std::vector<std::unique_ptr<Texture>> masks_;  // a generation's coverage mask each, as big as it needed so far
     // Gradients' stops this frame, a row each (see shaders/primitives.slang), and their texture.
     static constexpr int kStopsWidth = 256;  // texels: 128 stops
     std::vector<float> stops_;

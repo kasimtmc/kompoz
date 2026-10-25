@@ -9,6 +9,7 @@
 #include "shaders/generated/primitives.h"
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
 #include <cstring>
 #include <numbers>
@@ -186,7 +187,7 @@ std::optional<Rect> Renderer::mapped(float x0, float y0, float x1, float y1) con
 
 int Renderer::clipRow(int chain) {
     ClipChain& c = clipChains_[size_t(chain)];
-    MaskShelf& shelf = passes_[targets_.back().pass].shelf;
+    MaskShelf& shelf = shelf_;
     if (c.row >= 0 && (!c.paths || (c.generation == shelf.generation && c.pass == targets_.back().pass))) return c.row;
     // Its paths in this generation's coverage mask, all of them (one that starts a new generation
     // starts them all over in it).
@@ -223,7 +224,7 @@ int Renderer::clipRow(int chain) {
 
 std::optional<Offset> Renderer::rasterizeInClips(const std::vector<Contour>& contours, IRect region, bool aliased) {
     int chain = clips_.empty() ? -1 : clips_.back().chain;
-    MaskShelf& shelf = passes_[targets_.back().pass].shelf;
+    MaskShelf& shelf = shelf_;
     std::optional<Offset> origin;
     for (int attempt = 0; attempt < 4; ++attempt) {
         if (chain >= 0) clipRow(chain);
@@ -338,7 +339,7 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Ma
     if (!texture5) texture5 = white_.get();
     if (!texture) texture = white_.get();
     if (!texture1) texture1 = white_.get();
-    uint32_t generation = pass.shelf.generation;
+    uint32_t generation = shelf_.generation;
     // What it needs of the fragment shader (a composite paint: its two paints may be any). (A
     // mesh's extra is its vertex's color: its flags may be any.)
     ShaderVariant variant{uint16_t(1 << kind), uint8_t(paintKind == 5 ? 0x3f : 1 << paintKind), uint8_t(kind == MESH ? 0xff : int(p.extra[3])),
@@ -424,10 +425,63 @@ void Renderer::flush() {
                        stops_.data() + size_t(stopsUploaded_) * kStopsWidth * 4, kStopsWidth * 16);
         stopsUploaded_ = rows;
     }
+    drawMasks();
     for (size_t index : order_) execute(passes_[index]);
     order_.clear();
-    // Passes still being drawn into keep their places; the others go.
-    if (targets_.empty()) passes_.clear();
+    // Passes still being drawn into keep their places (and the shelves theirs); the others go.
+    if (targets_.empty()) {
+        passes_.clear();
+        shelf_ = {};
+    }
+}
+
+void Renderer::drawMasks() {
+    for (uint32_t g = 0; g <= shelf_.generation; ++g) {
+        // This generation's paths in the passes going now, cleared where they are first (and the
+        // texel around each: sampled linearly, a layer's cut reads it).
+        std::vector<EdgeInstance> edges;
+        int x0 = INT_MAX, y0 = INT_MAX, x1 = 0, y1 = 0;
+        for (size_t index : order_) {
+            const Pass& pass = passes_[index];
+            for (size_t i = 0; i < pass.edges.size(); ++i)
+                if (pass.edgeGenerations[i] == g) {
+                    const float* r = pass.edges[i].region;
+                    x0 = std::min(x0, int(r[0]) - 1), y0 = std::min(y0, int(r[1]) - 1);
+                    x1 = std::max(x1, int(r[2]) + 1), y1 = std::max(y1, int(r[3]) + 1);
+                    edges.push_back(pass.edges[i]);
+                }
+        }
+        if (edges.empty()) continue;
+        if (masks_.size() <= g) masks_.resize(g + 1);
+        std::unique_ptr<Texture>& mask = masks_[g];
+        if (!mask || mask->width() < shelf_.width || mask->height() < shelf_.height)
+            mask = device_.createTexture(std::max(shelf_.width, mask ? mask->width() : 0), std::max(shelf_.height, mask ? mask->height() : 0),
+                                         Format::R16F, TextureUsage::Sampled | TextureUsage::RenderTarget);
+        if (!coveragePipeline_) {
+            PipelineDesc desc;
+            desc.vertex = &kCoverageVertex;
+            desc.fragment = &kCoverageFragment;
+            desc.instanceAttributes = {{0, VertexFormat::Float4, 0}, {1, VertexFormat::Float4, 16}, {2, VertexFormat::Float4, 32}};
+            desc.instanceStride = sizeof(EdgeInstance);
+            desc.blend = {true, BlendFactor::One, BlendFactor::One, BlendFactor::One, BlendFactor::One};
+            desc.target = Format::R16F;
+            coveragePipeline_ = device_.createPipeline(desc);
+        }
+        BufferRef buffer;
+        void* memory = device_.allocate(edges.size() * sizeof(EdgeInstance), 16, &buffer);
+        std::memcpy(memory, edges.data(), edges.size() * sizeof(EdgeInstance));
+        bool yDown = device_.clipYDown();
+        float mw = float(mask->width()), mh = float(mask->height());
+        float toMask[8] = {2 / mw, yDown ? 2 / mh : -2 / mh, -1, yDown ? -1.f : 1.f, 0, 0, 0, 0};
+        IRect area{std::max(x0, 0), std::max(y0, 0), 0, 0};
+        area.width = x1 - area.x, area.height = y1 - area.y;
+        device_.beginPass(*mask, ClearColor{}, {}, area);
+        device_.setPipeline(*coveragePipeline_);
+        device_.setUniforms(toMask, sizeof toMask);
+        device_.setScissor(area);
+        device_.draw(buffer, 6, uint32_t(edges.size()));
+        device_.endPass();
+    }
 }
 
 void Renderer::execute(Pass& pass) {
@@ -479,52 +533,27 @@ void Renderer::execute(Pass& pass) {
     }
     float w = float(pass.target->width()), h = float(pass.target->height());
     bool yDown = device_.clipYDown();
-    uint32_t generations = pass.batches.empty() ? 1 : pass.batches.back().generation + 1;
+    // A pass in each generation its batches are in (each reads that generation's mask).
+    uint32_t firstGeneration = pass.batches.empty() ? 0 : pass.batches.front().generation;
+    uint32_t lastGeneration = pass.batches.empty() ? 0 : pass.batches.back().generation;
     bool masked = !pass.edges.empty();
-    if (masked && (!mask_ || mask_->width() < pass.shelf.width || mask_->height() < pass.shelf.height)) {
-        int mw = std::max(pass.shelf.width, mask_ ? mask_->width() : 0), mh = std::max(pass.shelf.height, mask_ ? mask_->height() : 0);
-        mask_ = device_.createTexture(mw, mh, Format::R16F, TextureUsage::Sampled | TextureUsage::RenderTarget);
-    }
-    size_t edge = 0, batch = 0;
-    for (uint32_t g = 0; g < generations; ++g) {
-        size_t firstEdge = edge;
-        while (edge < pass.edges.size() && pass.edgeGenerations[edge] == g) ++edge;
-        if (edge > firstEdge) {
-            if (!coveragePipeline_) {
-                PipelineDesc desc;
-                desc.vertex = &kCoverageVertex;
-                desc.fragment = &kCoverageFragment;
-                desc.instanceAttributes = {{0, VertexFormat::Float4, 0}, {1, VertexFormat::Float4, 16}, {2, VertexFormat::Float4, 32}};
-                desc.instanceStride = sizeof(EdgeInstance);
-                desc.blend = {true, BlendFactor::One, BlendFactor::One, BlendFactor::One, BlendFactor::One};
-                desc.target = Format::R16F;
-                coveragePipeline_ = device_.createPipeline(desc);
-            }
-            BufferRef edges;
-            void* memory = device_.allocate((edge - firstEdge) * sizeof(EdgeInstance), 16, &edges);
-            std::memcpy(memory, pass.edges.data() + firstEdge, (edge - firstEdge) * sizeof(EdgeInstance));
-            float mw = float(mask_->width()), mh = float(mask_->height());
-            float toMask[8] = {2 / mw, yDown ? 2 / mh : -2 / mh, -1, yDown ? -1.f : 1.f, 0, 0, 0, 0};
-            device_.beginPass(*mask_, ClearColor{}, {}, IRect{0, 0, pass.shelf.width, pass.shelf.height});  // (the part in use)
-            device_.setPipeline(*coveragePipeline_);
-            device_.setUniforms(toMask, sizeof toMask);
-            device_.setScissor({0, 0, mask_->width(), mask_->height()});
-            device_.draw(edges, 6, uint32_t(edge - firstEdge));
-            device_.endPass();
-        }
+    size_t batch = 0;
+    for (uint32_t g = firstGeneration; g <= lastGeneration; ++g) {
+        Texture* mask = masked && g < masks_.size() && masks_[g] ? masks_[g].get() : white_.get();
+        bool first = g == firstGeneration;
         std::vector<Texture*> reads;
         size_t firstBatch = batch;
         while (batch < pass.batches.size() && pass.batches[batch].generation == g) ++batch;
         bool readsTarget = false;
         for (size_t i = firstBatch; i < batch; ++i) {
             const Batch& b = pass.batches[i];
-            for (Texture* t : {b.mask == Mask::Texture0 ? mask_.get() : b.texture, b.mask == Mask::Texture1 ? mask_.get() : b.texture1, b.texture5})
+            for (Texture* t : {b.mask == Mask::Texture0 ? mask : b.texture, b.mask == Mask::Texture1 ? mask : b.texture1, b.texture5})
                 if (std::find(reads.begin(), reads.end(), t) == reads.end()) reads.push_back(t);
             readsTarget = readsTarget || planFor(b.blend, b.opaque).readsTarget;
         }
         if (stopsTexture_) reads.push_back(stopsTexture_.get());
         // (The clips' paths are read from the coverage mask by any primitive in them.)
-        if (masked && std::find(reads.begin(), reads.end(), mask_.get()) == reads.end()) reads.push_back(mask_.get());
+        if (masked && std::find(reads.begin(), reads.end(), mask) == reads.end()) reads.push_back(mask);
         if (readsTarget) {
             if (!dstCopy_ || dstCopy_->width() < pass.target->width() || dstCopy_->height() < pass.target->height() ||
                 dstCopy_->format() != pass.target->format())
@@ -536,16 +565,16 @@ void Renderer::execute(Pass& pass) {
         // Only where its batches draw, kept around it (a tiling GPU then loads and stores no more):
         // all of the target where it is cleared.
         std::optional<IRect> drawn;
-        if (!(g == 0 && pass.clear))
+        if (!(first && pass.clear))
             for (size_t i = firstBatch; i < batch; ++i) {
                 const IRect& s = pass.batches[i].scissor;
                 if (!drawn) drawn = s;
                 int x0 = std::min(drawn->x, s.x), y0 = std::min(drawn->y, s.y);
                 drawn = IRect{x0, y0, std::max(drawn->x + drawn->width, s.x + s.width) - x0, std::max(drawn->y + drawn->height, s.y + s.height) - y0};
             }
-        device_.beginPass(*pass.target, g == 0 ? pass.clear : std::nullopt, reads, drawn);
+        device_.beginPass(*pass.target, first ? pass.clear : std::nullopt, reads, drawn);
         float uniforms[12] = {2 / w, yDown ? 2 / h : -2 / h, -1, yDown ? -1.f : 1.f,
-                              mask_ ? 1 / float(mask_->width()) : 0.f, mask_ ? 1 / float(mask_->height()) : 0.f,
+                              1 / float(mask->width()), 1 / float(mask->height()),
                               stopsTexture_ ? 1 / float(stopsTexture_->width()) : 0.f, stopsTexture_ ? 1 / float(stopsTexture_->height()) : 0.f,
                               0, 0,
                               // A texel of the target's copy (which may be bigger than the target: one copy for all).
@@ -564,16 +593,16 @@ void Renderer::execute(Pass& pass) {
                 device_.setPipeline(*drawing);
                 device_.setUniforms(uniforms, sizeof uniforms);
                 if (b.mask == Mask::Texture0)
-                    device_.setTexture(0, *mask_, nearest);
+                    device_.setTexture(0, *mask, nearest);
                 else
                     device_.setTexture(0, *b.texture, b.sampler);
                 if (b.mask == Mask::Texture1)  // (a layer's cut, which may be turned: filtered)
-                    device_.setTexture(1, *mask_, Sampler{});
+                    device_.setTexture(1, *mask, Sampler{});
                 else
                     device_.setTexture(1, *b.texture1, b.sampler1);
                 device_.setTexture(2, stopsTexture_ ? *stopsTexture_ : *white_, nearest);
                 device_.setTexture(3, readsTarget ? *dstCopy_ : *white_, nearest);
-                device_.setTexture(4, masked ? *mask_ : *white_, nearest);
+                device_.setTexture(4, *mask, nearest);
                 device_.setTexture(5, *b.texture5, b.sampler5);
             };
             bind();
@@ -1234,7 +1263,7 @@ void Renderer::drawShadow(const Rect& rect, const CornerRadii& radii, const Shad
 std::optional<Offset> Renderer::rasterize(const std::vector<Contour>& contours, IRect region, bool aliased) {
     if (region.empty() || targets_.empty()) return std::nullopt;
     Pass& pass = passes_[targets_.back().pass];
-    MaskShelf& shelf = pass.shelf;
+    MaskShelf& shelf = shelf_;
     // As big as the target, or as a region bigger than it (a layer reaching past it).
     shelf.width = std::max({shelf.width, kMaskSize, pass.target->width() + 2, region.width + 1});
     shelf.height = std::max({shelf.height, kMaskSize, pass.target->height() + 2, region.height + 1});

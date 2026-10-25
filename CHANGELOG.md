@@ -207,6 +207,10 @@
   an Adreno 618's OpenGL ES four times the load), OpenGL ES invalidates the screen before its copy into it, and on Vulkan
   the kept frame is submitted before the window's image is waited for. A frame's GPU time is what it was busy with, its
   passes together, not the waits between its submits.
+- **A frame's paths in one coverage mask, drawn once**: the paths of every pass until a flush (each layer's too) share
+  the mask's shelves and are rasterized in one pass before the passes run, not each layer's in a mask pass of its own
+  just before it; past what a mask holds, a generation goes into a mask of its own, so no pass is split for it. On a
+  Redmi Note 9 Pro's Vulkan a frame of the Components screen took the GPU 38–40 ms instead of 48–50.
 - **Fixed**: the GPU renderer's turned, stretched and leaning edges were up to 10/255 off on GPUs that snap vertices
   coarsely (4 subpixel bits, as SwiftShader does: Chrome's WebGL where it doesn't use the GPU): a quad's corners are
   put where such a GPU would put them, and its pixels shaded from there.

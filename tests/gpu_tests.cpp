@@ -3566,22 +3566,23 @@ void passAreasClearOnlyThere(Gpu& g) {
     CHECK(wrong == 0);
 }
 
-// A device that can't make the shader's variants (as an Adreno 6xx's Vulkan compiler couldn't
-// one): the renderer draws with the whole shader instead, the same pictures.
-class WithoutVariants final : public gpu::Device {
+// A device passing all to another, watched: what it refuses (a variant of the shader, as an Adreno
+// 6xx's Vulkan compiler couldn't make one) and the coverage masks (R16F textures) it made.
+class WatchedDevice final : public gpu::Device {
 public:
-    explicit WithoutVariants(gpu::Device& d) : d_(d) {}
-    int refused = 0;
+    explicit WatchedDevice(gpu::Device& d, bool refuseVariants) : d_(d), refuseVariants_(refuseVariants) {}
+    int refused = 0, masks = 0;
     gpu::Backend backend() const override { return d_.backend(); }
     std::string deviceName() const override { return d_.deviceName(); }
     int validationErrors() const override { return d_.validationErrors(); }
     bool clipYDown() const override { return d_.clipYDown(); }
     bool renderTargetsBottomUp() const override { return d_.renderTargetsBottomUp(); }
     std::unique_ptr<gpu::Texture> createTexture(int width, int height, gpu::Format format, uint8_t usage) override {
+        if (format == gpu::Format::R16F) ++masks;
         return d_.createTexture(width, height, format, usage);
     }
     std::unique_ptr<gpu::Pipeline> createPipeline(const gpu::PipelineDesc& desc) override {
-        if (!desc.constants.empty()) {
+        if (refuseVariants_ && !desc.constants.empty()) {
             ++refused;
             return nullptr;
         }
@@ -3613,32 +3614,111 @@ public:
 
 private:
     gpu::Device& d_;
+    bool refuseVariants_;
 };
 
+// `draw` into a new w x h target, cleared white, by `renderer` on `device`, in a frame of its own;
+// read back.
+Pixels renderBy(gpu::Device& device, gpu::Renderer& renderer, sdl::FontSystem& fonts, int w, int h,
+                const std::function<void(GraphicsContext&)>& draw) {
+    fonts.setScale(1);
+    renderer.scale = 1;
+    device.beginFrame();
+    auto target = device.createTexture(w, h, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+    renderer.beginTarget(*target, gpu::ClearColor{1, 1, 1, 1});
+    draw(renderer);
+    renderer.endTarget();
+    renderer.flush();
+    Pixels out{w, h, device.readPixels(*target, {0, 0, w, h})};
+    device.endFrame(false);
+    renderer.endFrame();
+    fonts.endFrame();
+    return out;
+}
+
+// The device can't make the shader's variants: the renderer draws with the whole shader instead,
+// the same pictures.
 void variantsFallBackToTheWholeShader(Gpu& g) {
-    WithoutVariants device(*g.device);
+    WatchedDevice device(*g.device, true);
     std::unique_ptr<sdl::FontSystem> fonts = Gpu::loadFonts();  // (an atlas of its own: a renderer takes what changed on its atlas)
     auto renderer = std::make_unique<gpu::Renderer>(device, *fonts);
     for (auto draw : {rects, text, blendModes, effects}) {
         Pixels expected = g.render(192, 192, 1, draw);
-        fonts->setScale(1);
-        renderer->scale = 1;
-        device.beginFrame();
-        auto target = device.createTexture(192, 192, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
-        renderer->beginTarget(*target, gpu::ClearColor{1, 1, 1, 1});
-        draw(*renderer);
-        renderer->endTarget();
-        renderer->flush();
-        Pixels actual{192, 192, device.readPixels(*target, {0, 0, 192, 192})};
-        device.endFrame(false);
-        renderer->endFrame();
-        fonts->endFrame();
+        Pixels actual = renderBy(device, *renderer, *fonts, 192, 192, draw);
         // (Within the pictures' tolerance: a driver may round the two shaders' float math apart.)
         int worst = worstAgainst(actual, [&](int x, int y) { return expected.at(x, y); });
         CHECK(worst <= 2);
         if (worst > 2) std::printf("  the whole shader: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
     }
     CHECK(device.refused > 0);
+    renderer.reset();
+}
+
+// A frame's paths all go into one coverage mask, drawn once before the passes; past what a mask
+// holds, into more generations, each a mask of its own: the same picture as frames that each
+// held fewer. Frames after it start the masks over (a mask a generation, not one more a frame),
+// and a path's mask is cleared a texel around it too (a layer's cut, filtered, reads that far:
+// what the frame before left there doesn't show).
+void pathsShareTheirMasks(Gpu& g) {
+    const int size = 512, count = 24;  // (a region of about 512 px: nine to a mask)
+    auto triangle = [&](int i) {
+        Path p;
+        float apex = float(i * size / count);
+        p.moveTo(apex, 0);
+        p.lineTo(float(size), float(size));
+        p.lineTo(0, float(size - i * 10));
+        p.close();
+        return p;
+    };
+    auto color = [](int i) { return Color{float(i % 5) / 4, float(i % 3) / 2, float(i % 7) / 6, 1}; };
+    auto paint = [&](GraphicsContext& c, int from, int to) {
+        for (int i = from; i < to; ++i) c.drawPath(triangle(i), {}, Brush::solid(color(i)), {}, {});
+    };
+    WatchedDevice device(*g.device, false);
+    std::unique_ptr<sdl::FontSystem> fonts = Gpu::loadFonts();
+    auto renderer = std::make_unique<gpu::Renderer>(device, *fonts);
+    Pixels all = renderBy(device, *renderer, *fonts, size, size, [&](GraphicsContext& c) { paint(c, 0, count); });
+    CHECK(device.masks >= 3);
+    // The same, eight a frame, into one texture.
+    auto kept = g.device->createTexture(size, size, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+    for (int from = 0; from < count; from += 8) {
+        device.beginFrame();
+        if (from == 0) renderer->beginTarget(*kept, gpu::ClearColor{1, 1, 1, 1});
+        else renderer->beginTarget(*kept);
+        paint(*renderer, from, from + 8);
+        renderer->endTarget();
+        renderer->flush();
+        device.endFrame(false);
+        renderer->endFrame();
+    }
+    device.beginFrame();
+    Pixels inFrames{size, size, device.readPixels(*kept, {0, 0, size, size})};
+    device.endFrame(false);
+    // (Within a 255th: frames apart, a variant of the shader may round apart.)
+    CHECK(worstAgainst(all, [&](int x, int y) { return inFrames.at(x, y); }) <= 1);
+    // Frames of one path each: the masks made already do.
+    int masks = device.masks;
+    for (int i = 0; i < 6; ++i) renderBy(device, *renderer, *fonts, 64, 64, [&](GraphicsContext& c) { paint(c, i, i + 1); });
+    CHECK(device.masks == masks);
+    // A turned layer cut by a small path (its mask sampled between texels, so past its edge), after
+    // a frame whose path covered all of the mask's corner: as a renderer that had drawn nothing
+    // before draws it.
+    auto cut = [&](GraphicsContext& c) {
+        c.pushOutlineLayer({12, 12, 40, 40}, star(20, 20, 19), 1, {.rotationZ = 30});
+        c.fillRoundRect({0, 0, 64, 64}, CornerRadii(), Color{0.8f, 0.2f, 0.2f, 1});
+        c.popLayer();
+    };
+    renderBy(device, *renderer, *fonts, size, size, [&](GraphicsContext& c) {
+        Path all;
+        all.addRect({0, 0, float(size), float(size)});
+        c.drawPath(all, {}, Brush::solid(colors::Black), {}, {});
+    });
+    Pixels after = renderBy(device, *renderer, *fonts, 64, 64, cut);
+    std::unique_ptr<sdl::FontSystem> freshFonts = Gpu::loadFonts();
+    auto fresh = std::make_unique<gpu::Renderer>(*g.device, *freshFonts);
+    Pixels first = renderBy(*g.device, *fresh, *freshFonts, 64, 64, cut);
+    CHECK(after.rgba == first.rgba);
+    fresh.reset();
     renderer.reset();
 }
 
@@ -3791,6 +3871,7 @@ int main() {
             variantsFallBackToTheWholeShader(g);
             passAreasClearOnlyThere(g);
             discardedTexturesAreDrawnOver(g);
+            pathsShareTheirMasks(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
         }
