@@ -3583,7 +3583,10 @@ void variantsFallBackToTheWholeShader(Gpu& g) {
         device.endFrame(false);
         renderer->endFrame();
         fonts->endFrame();
-        CHECK(actual.rgba == expected.rgba);
+        // (Within the pictures' tolerance: a driver may round the two shaders' float math apart.)
+        int worst = worstAgainst(actual, [&](int x, int y) { return expected.at(x, y); });
+        CHECK(worst <= 2);
+        if (worst > 2) std::printf("  the whole shader: off by %d at (%g, %g)\n", worst, worstAt.x, worstAt.y);
     }
     CHECK(device.refused > 0);
     renderer.reset();
