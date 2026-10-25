@@ -109,6 +109,7 @@ public:
     WGPUTexture texture = nullptr;
     WGPUTextureView view = nullptr;
     bool owned = true;  // (the surface's texture isn't: it is the surface's)
+    bool discarded = false;  // (Device::discard)
     uint64_t serial;    // which texture it is (one made after another is gone may be where it was)
     WebGPUTexture(int width, int height, Format format, WGPUTexture t, bool own) : Texture(width, height, format), texture(t), owned(own) {
         static uint64_t made = 0;
@@ -173,6 +174,7 @@ public:
     WGPUCommandEncoder encoder = nullptr;
     WGPURenderPassEncoder pass = nullptr;
     WebGPUTexture* target = nullptr;
+    IRect passArea;  // where the pass draws: scissors stay within it
     std::unique_ptr<WebGPUTexture> window;  // the surface's texture this frame
     bool inFrame = false;
 
@@ -659,13 +661,14 @@ public:
         wgpuCommandEncoderCopyTextureToTexture(encoder, &from, &to, &size);
     }
 
-    void beginPass(Texture& texture, const std::optional<ClearColor>& clear, std::span<Texture* const>) override {
+    void beginPass(Texture& texture, const std::optional<ClearColor>& clear, std::span<Texture* const>, const std::optional<IRect>& area) override {
         auto& t = static_cast<WebGPUTexture&>(texture);
         WGPURenderPassColorAttachment attachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
         attachment.view = t.view;
-        attachment.loadOp = clear ? WGPULoadOp_Clear : WGPULoadOp_Load;
+        attachment.loadOp = clear || t.discarded ? WGPULoadOp_Clear : WGPULoadOp_Load;  // (no "don't care" in WebGPU: cleared)
         attachment.storeOp = WGPUStoreOp_Store;
         if (clear) attachment.clearValue = {clear->r, clear->g, clear->b, clear->a};
+        t.discarded = false;
         WGPURenderPassDescriptor d = WGPU_RENDER_PASS_DESCRIPTOR_INIT;
         d.colorAttachmentCount = 1;
         d.colorAttachments = &attachment;
@@ -675,7 +678,9 @@ public:
         pipeline = nullptr;
         uniformBuffer = nullptr;
         for (Bound& b : bound) b = Bound{};
-        setScissor({0, 0, t.width(), t.height()});
+        // (Its area only bounds its scissors here: all of the target is loaded and stored, or cleared.)
+        passArea = area ? *area : IRect{0, 0, t.width(), t.height()};
+        setScissor(passArea);
     }
 
     void setPipeline(Pipeline& p) override {
@@ -685,9 +690,12 @@ public:
         wgpuRenderPassEncoderSetPipeline(pass, pipeline->pipeline);
     }
 
+    void discard(Texture& texture) override { static_cast<WebGPUTexture&>(texture).discarded = true; }
+
     void setScissor(const IRect& r) override {
-        int x0 = std::max(0, r.x), y0 = std::max(0, r.y);
-        int x1 = std::max(x0, std::min(r.x + r.width, target->width())), y1 = std::max(y0, std::min(r.y + r.height, target->height()));
+        int x0 = std::max({0, r.x, passArea.x}), y0 = std::max({0, r.y, passArea.y});
+        int x1 = std::max(x0, std::min({r.x + r.width, target->width(), passArea.x + passArea.width}));
+        int y1 = std::max(y0, std::min({r.y + r.height, target->height(), passArea.y + passArea.height}));
         wgpuRenderPassEncoderSetScissorRect(pass, uint32_t(x0), uint32_t(y0), uint32_t(x1 - x0), uint32_t(y1 - y0));
     }
 
@@ -861,8 +869,8 @@ public:
         return &passTimes;
     }
 
-    // The frames read back since: each pass from its start to its end, the frame from its first
-    // pass's start to its last's end (nanoseconds; a browser may round them).
+    // The frames read back since: each pass from its start to its end, the frame theirs together
+    // (nanoseconds; a browser may round them).
     void collectTimes() {
         if (std::any_of(timedFrames.begin(), timedFrames.end(), [](const TimedFrame& f) { return f.state == TimedFrame::Mapping; }))
             wgpuInstanceProcessEvents(instance);
@@ -873,13 +881,11 @@ public:
             auto* t = static_cast<const uint64_t*>(wgpuBufferGetConstMappedRange(f.read, 0, n * 8));
             if (t) {
                 GpuFrameTime frame;
-                uint64_t first = UINT64_MAX, last = 0;
                 for (size_t i = 0; i < f.labels.size(); ++i) {
                     uint64_t a = t[2 * i], b = std::max(t[2 * i + 1], a);
                     frame.passes.push_back({f.labels[i], double(b - a) / 1e6});
-                    first = std::min(first, a), last = std::max(last, b);
+                    frame.ms += frame.passes.back().ms;
                 }
-                frame.ms = double(last - first) / 1e6;
                 timed.push_back(std::move(frame));
             }
             wgpuBufferUnmap(f.read);

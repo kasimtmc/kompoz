@@ -178,10 +178,10 @@ void writePipelineCache(const std::string& path, const std::vector<uint8_t>& dat
 // FNV-1a, 64 bits: what the caches check and key what they keep by.
 uint64_t fnv1a(const void* data, size_t size, uint64_t hash = 0xcbf29ce484222325);
 
-// The GPU's time for a frame (Device::setGpuTiming): from its first work to its last, and each
-// pass's, named by what it draws into ("window", "1080x2400", "2048x2048 R16F"), or "copy WxH",
+// The GPU's time for a frame (Device::setGpuTiming): what it was busy with, its passes' times
+// together (not the waits between its submits), and each pass's, named by what it draws into ("window", "1080x2400", "2048x2048 R16F"), or "copy WxH",
 // "mipmaps WxH" (OpenGL ES's own copy of the window into its framebuffer: "copy to screen"); on
-// Metal the frame alone.
+// Metal the frame alone (its command buffers' times together).
 struct GpuPassTime {
     std::string label;
     double ms = 0;
@@ -235,8 +235,12 @@ public:
     virtual void upload(Texture& texture, const IRect& region, const void* pixels, size_t rowBytes) = 0;
     // Draws into `target` (cleared first if `clear`), sampling `reads` (each read before by
     // what was drawn into it). A pass starts with nothing bound: its pipeline, uniforms and
-    // textures are set in it (as Metal's and WebGPU's encoders have them).
-    virtual void beginPass(Texture& target, const std::optional<ClearColor>& clear, std::span<Texture* const> reads) = 0;
+    // textures are set in it (as Metal's and WebGPU's encoders have them). With `area`, it draws
+    // only there (its scissor stays within it): the rest of the target is kept as it was, and a
+    // clear may leave it so; a tiling GPU then loads and stores only that part (Vulkan's render
+    // area; OpenGL ES clears only there).
+    virtual void beginPass(Texture& target, const std::optional<ClearColor>& clear, std::span<Texture* const> reads,
+                           const std::optional<IRect>& area = std::nullopt) = 0;
     virtual void setPipeline(Pipeline& pipeline) = 0;
     virtual void setScissor(const IRect& rect) = 0;
     virtual void setUniforms(const void* data, size_t size) = 0;
@@ -247,6 +251,10 @@ public:
     // A mipmapped texture's smaller copies, each from the one before (filtered), after its
     // pixels are uploaded; outside passes.
     virtual void generateMipmaps(Texture& texture) = 0;
+    // What `texture` holds no longer matters: its next pass that doesn't clear needn't load it, a
+    // tiling GPU's cheapest start (Vulkan's and Metal's "don't care", OpenGL ES's invalidation;
+    // WebGPU, which has none, clears). For a pass that draws over all of it; outside passes.
+    virtual void discard(Texture& texture) { (void)texture; }
     // Part of one texture into another of the same format, at (x, y); outside passes.
     virtual void copyTexture(Texture& source, const IRect& region, Texture& destination, int x, int y) = 0;
     // A texture's pixels (RGBA8, or its own format's texels: half floats for RGBA16F; top row

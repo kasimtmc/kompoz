@@ -3518,6 +3518,54 @@ void gpuTimesComeBack(Gpu& g) {
     CHECK(g.device->takeGpuTimes().empty());
 }
 
+// A texture discarded, then drawn over whole: its pass needn't load it, and what it draws is all
+// there is (whether a backend loaded it, cleared it or left anything under it).
+void discardedTexturesAreDrawnOver(Gpu& g) {
+    const int w = 40, h = 30;
+    auto frame = g.device->createTexture(w, h, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+    auto out = g.device->createTexture(w, h, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+    Pixels kept = g.render(w, h, 1, [&](GraphicsContext&) {
+        gpu::Renderer& r = *g.renderer;
+        r.beginTarget(*out, gpu::ClearColor{1, 0, 0, 1});  // (what it held before: never to show)
+        r.endTarget();
+        r.beginTarget(*frame, gpu::ClearColor{0, 1, 0, 1});
+        r.fillRoundRect({4, 4, 10, 8}, CornerRadii(), Color{0, 0, 1, 1});
+        r.endTarget();
+        r.flush();
+        g.device->discard(*out);
+        r.beginTarget(*out);
+        r.blit(*frame);
+        r.endTarget();
+        r.blit(*frame);
+    });
+    g.device->beginFrame();
+    Pixels shown{w, h, g.device->readPixels(*out, {0, 0, w, h})};
+    g.device->endFrame(false);
+    CHECK(shown.rgba == kept.rgba);
+}
+
+// A pass with an area clears there (Vulkan's render area, OpenGL ES's scissored clear), the rest
+// of the target kept; Metal and WebGPU may clear all of it.
+void passAreasClearOnlyThere(Gpu& g) {
+    const int w = 48, h = 32;
+    g.device->beginFrame();
+    auto target = g.device->createTexture(w, h, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+    g.device->beginPass(*target, gpu::ClearColor{1, 0, 0, 1}, {});
+    g.device->endPass();
+    g.device->beginPass(*target, gpu::ClearColor{0, 0, 1, 1}, {}, gpu::IRect{10, 6, 20, 12});
+    g.device->endPass();
+    Pixels p{w, h, g.device->readPixels(*target, {0, 0, w, h})};
+    g.device->endFrame(false);
+    bool kept = g.device->backend() == gpu::Backend::Vulkan || g.device->backend() == gpu::Backend::GLES;
+    int wrong = 0;
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            bool inside = x >= 10 && x < 30 && y >= 6 && y < 18;
+            if (inside ? !near(p.at(x, y), 0, 0, 255) : kept && !near(p.at(x, y), 255, 0, 0)) ++wrong;
+        }
+    CHECK(wrong == 0);
+}
+
 // A device that can't make the shader's variants (as an Adreno 6xx's Vulkan compiler couldn't
 // one): the renderer draws with the whole shader instead, the same pictures.
 class WithoutVariants final : public gpu::Device {
@@ -3544,8 +3592,9 @@ public:
     gpu::Texture* swapchainTexture() override { return d_.swapchainTexture(); }
     void* allocate(size_t size, size_t alignment, gpu::BufferRef* ref) override { return d_.allocate(size, alignment, ref); }
     void upload(gpu::Texture& t, const gpu::IRect& region, const void* pixels, size_t rowBytes) override { d_.upload(t, region, pixels, rowBytes); }
-    void beginPass(gpu::Texture& target, const std::optional<gpu::ClearColor>& clear, std::span<gpu::Texture* const> reads) override {
-        d_.beginPass(target, clear, reads);
+    void beginPass(gpu::Texture& target, const std::optional<gpu::ClearColor>& clear, std::span<gpu::Texture* const> reads,
+                   const std::optional<gpu::IRect>& area) override {
+        d_.beginPass(target, clear, reads, area);
     }
     void setPipeline(gpu::Pipeline& p) override { d_.setPipeline(p); }
     void setScissor(const gpu::IRect& rect) override { d_.setScissor(rect); }
@@ -3554,6 +3603,7 @@ public:
     void draw(const gpu::BufferRef& instances, uint32_t vertexCount, uint32_t instanceCount) override { d_.draw(instances, vertexCount, instanceCount); }
     void endPass() override { d_.endPass(); }
     void generateMipmaps(gpu::Texture& t) override { d_.generateMipmaps(t); }
+    void discard(gpu::Texture& t) override { d_.discard(t); }
     void copyTexture(gpu::Texture& source, const gpu::IRect& region, gpu::Texture& destination, int x, int y) override {
         d_.copyTexture(source, region, destination, x, y);
     }
@@ -3739,6 +3789,8 @@ int main() {
             readbacksLeaveTheFrameGoing(g);
             gpuTimesComeBack(g);
             variantsFallBackToTheWholeShader(g);
+            passAreasClearOnlyThere(g);
+            discardedTexturesAreDrawnOver(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
         }

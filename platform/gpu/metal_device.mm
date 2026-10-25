@@ -88,6 +88,7 @@ MTLSamplerAddressMode mtlWrap(Wrap w) {
 class MetalTexture final : public Texture {
 public:
     id<MTLTexture> texture;
+    bool discarded = false;  // (Device::discard)
     MetalTexture(int width, int height, Format format, id<MTLTexture> t) : Texture(width, height, format), texture(t) {}
 };
 
@@ -128,6 +129,7 @@ public:
     id<MTLRenderCommandEncoder> pass;
     id<MTLBlitCommandEncoder> blit;
     MetalTexture* target = nullptr;
+    IRect passArea;  // where the pass draws: scissors stay within it
     bool scissorEmpty = false;
     id<CAMetalDrawable> drawable;
     std::unique_ptr<MetalTexture> window;  // the drawable's texture this frame
@@ -308,8 +310,9 @@ public:
         if (f.submitted) [f.submitted waitUntilCompleted];
         f.submitted = nil;
         if (!f.timedBuffers.empty()) {  // (done in order: the last done, all are)
-            CFTimeInterval start = f.timedBuffers.front().GPUStartTime, end = f.timedBuffers.back().GPUEndTime;
-            if (end > start) timed.push_back({(end - start) * 1000, {}});
+            double ms = 0;
+            for (id<MTLCommandBuffer> b : f.timedBuffers) ms += std::max(0.0, b.GPUEndTime - b.GPUStartTime) * 1000;
+            timed.push_back({ms, {}});
             f.timedBuffers.clear();
         }
         drewSomething = false;
@@ -389,26 +392,32 @@ public:
                      destinationOrigin:MTLOriginMake(NSUInteger(x), NSUInteger(y), 0)];
     }
 
-    void beginPass(Texture& texture, const std::optional<ClearColor>& clear, std::span<Texture* const>) override {
+    void beginPass(Texture& texture, const std::optional<ClearColor>& clear, std::span<Texture* const>, const std::optional<IRect>& area) override {
         endBlit();
         drewSomething = true;
         auto& t = static_cast<MetalTexture&>(texture);
         MTLRenderPassDescriptor* d = [MTLRenderPassDescriptor renderPassDescriptor];
         d.colorAttachments[0].texture = t.texture;
-        d.colorAttachments[0].loadAction = clear ? MTLLoadActionClear : MTLLoadActionLoad;
+        d.colorAttachments[0].loadAction = clear ? MTLLoadActionClear : t.discarded ? MTLLoadActionDontCare : MTLLoadActionLoad;
+        t.discarded = false;
         if (clear) d.colorAttachments[0].clearColor = MTLClearColorMake(clear->r, clear->g, clear->b, clear->a);
         d.colorAttachments[0].storeAction = MTLStoreActionStore;
         pass = [commands renderCommandEncoderWithDescriptor:d];
         target = &t;
         for (Bound& b : bound) b = Bound{};
-        setScissor({0, 0, t.width(), t.height()});
+        // (Its area only bounds its scissors here: all of the target is loaded and stored, or cleared.)
+        passArea = area ? *area : IRect{0, 0, t.width(), t.height()};
+        setScissor(passArea);
     }
 
     void setPipeline(Pipeline& pipeline) override { [pass setRenderPipelineState:static_cast<MetalPipeline&>(pipeline).state]; }
 
+    void discard(Texture& texture) override { static_cast<MetalTexture&>(texture).discarded = true; }
+
     void setScissor(const IRect& r) override {
-        int x0 = std::max(0, r.x), y0 = std::max(0, r.y);
-        int x1 = std::min(r.x + r.width, target->width()), y1 = std::min(r.y + r.height, target->height());
+        int x0 = std::max({0, r.x, passArea.x}), y0 = std::max({0, r.y, passArea.y});
+        int x1 = std::min({r.x + r.width, target->width(), passArea.x + passArea.width});
+        int y1 = std::min({r.y + r.height, target->height(), passArea.y + passArea.height});
         scissorEmpty = x1 <= x0 || y1 <= y0;  // (Metal takes no empty scissor: nothing is drawn instead)
         if (!scissorEmpty) [pass setScissorRect:MTLScissorRect{NSUInteger(x0), NSUInteger(y0), NSUInteger(x1 - x0), NSUInteger(y1 - y0)}];
     }

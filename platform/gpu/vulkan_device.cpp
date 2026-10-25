@@ -140,6 +140,7 @@ public:
     VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;  // (all its mip levels')
     uint32_t mipLevels = 1;
     std::vector<std::pair<VkRenderPass, VkFramebuffer>> framebuffers;
+    bool discarded = false;  // (Device::discard)
 };
 
 class VulkanPipeline final : public Pipeline {
@@ -213,11 +214,13 @@ public:
     bool inFrame = false;
     VkCommandBuffer cmd = VK_NULL_HANDLE;
     bool waitImage = false;  // the next submit waits for the swapchain image to be acquired
+    bool recorded = false;   // something in the command buffer since it was started (a barrier at least)
 
     // Render state.
-    std::map<std::pair<VkFormat, bool>, VkRenderPass> renderPasses;  // by format and clear
+    std::map<std::pair<VkFormat, VkAttachmentLoadOp>, VkRenderPass> renderPasses;  // by format and how it starts
     std::vector<std::pair<Sampler, VkSampler>> samplers;
     VulkanTexture* target = nullptr;
+    IRect passArea;  // where the pass draws (its render area): scissors stay within it
     VkPipeline boundPipeline = VK_NULL_HANDLE;
     std::array<std::pair<VulkanTexture*, Sampler>, kMaxTextures> textures{};
     bool texturesDirty = true;
@@ -573,7 +576,7 @@ public:
         gpci.pColorBlendState = &cb;
         gpci.pDynamicState = &dyn;
         gpci.layout = pipelineLayout;
-        gpci.renderPass = renderPass(vkFormat(desc.target), false);  // compatible with the clearing one too
+        gpci.renderPass = renderPass(vkFormat(desc.target), VK_ATTACHMENT_LOAD_OP_LOAD);  // compatible with the others too
         VkPipeline pipeline = VK_NULL_HANDLE;
         VkResult r = vk.vkCreateGraphicsPipelines(device, pipelineCache, 1, &gpci, nullptr, &pipeline);
         vk.vkDestroyShaderModule(device, vs, nullptr);
@@ -588,13 +591,13 @@ public:
         return std::make_unique<VulkanPipeline>(*this, pipeline);
     }
 
-    VkRenderPass renderPass(VkFormat format, bool clear) {
-        auto [it, added] = renderPasses.try_emplace({format, clear}, VK_NULL_HANDLE);
+    VkRenderPass renderPass(VkFormat format, VkAttachmentLoadOp load) {
+        auto [it, added] = renderPasses.try_emplace({format, load}, VK_NULL_HANDLE);
         if (!added) return it->second;
         VkAttachmentDescription a{};
         a.format = format;
         a.samples = VK_SAMPLE_COUNT_1_BIT;
-        a.loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+        a.loadOp = load;
         a.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         a.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         a.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -796,7 +799,8 @@ public:
         f.marks.push_back(std::move(label));
     }
 
-    // The frame's times, once its GPU work is done: each pass from its start to its end.
+    // The frame's times, once its GPU work is done: each pass from its start to its end, the frame
+    // theirs together.
     void readTimestamps(Frame& f) {
         std::vector<std::string> marks = std::exchange(f.marks, {});
         if (marks.size() < 2 || marks.back() != "end of frame") return;
@@ -804,11 +808,11 @@ public:
         if (vk.vkGetQueryPoolResults(device, f.timestamps, 0, uint32_t(t.size()), t.size() * 8, t.data(), 8, VK_QUERY_RESULT_64_BIT) != VK_SUCCESS)
             return;
         double toMs = double(properties.limits.timestampPeriod) / 1e6;
-        GpuFrameTime frame{double(t.back() - t.front()) * toMs, {}};
+        GpuFrameTime frame;
         size_t start = 0;
         for (size_t i = 1; i + 1 < marks.size(); ++i) {
             if (!marks[i].empty()) start = i;
-            else if (start) frame.passes.push_back({marks[start], double(t[i] - t[start]) * toMs}), start = 0;
+            else if (start) frame.passes.push_back({marks[start], double(t[i] - t[start]) * toMs}), frame.ms += frame.passes.back().ms, start = 0;
         }
         if (!frame.passes.empty()) timed.push_back(std::move(frame));
     }
@@ -825,6 +829,7 @@ public:
             f.buffers.push_back(b);
         }
         cmd = f.buffers[f.nextBuffer++];
+        recorded = false;
         VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         vk.vkBeginCommandBuffer(cmd, &bi);
@@ -840,6 +845,12 @@ public:
             if (w <= 0 || h <= 0) return nullptr;  // minimized
             if (!swapchain || int(swapExtent.width) != w || int(swapExtent.height) != h)
                 if (!makeSwapchain()) return nullptr;
+            // What was recorded so far (the kept frame drawn) goes to the GPU now: in the submit that
+            // waits for the image, it would wait for it too.
+            if (recorded) {
+                submit(VK_NULL_HANDLE, false);
+                startCommands();
+            }
             Frame& f = frames[size_t(frameIndex)];
             VkResult r = vk.vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, f.imageAvailable, VK_NULL_HANDLE, &swapIndex);
             if (r == VK_ERROR_OUT_OF_DATE_KHR) {  // resized meanwhile: made again at the next frame
@@ -898,6 +909,7 @@ public:
     // Moves a texture to `layout`, waiting for what used it before (always: a texture drawn into
     // twice in a row is waited on too).
     void transition(VulkanTexture& t, VkImageLayout layout) {
+        recorded = true;  // (every pass, copy and upload starts with one)
         VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
         VkPipelineStageFlags srcStage, dstStage;
         stageOf(t.layout, srcStage, b.srcAccessMask);
@@ -972,12 +984,16 @@ public:
         vk.vkCmdCopyBufferToImage(cmd, VkBuffer(const_cast<void*>(ref.buffer)), t.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
     }
 
-    void beginPass(Texture& texture, const std::optional<ClearColor>& clear, std::span<Texture* const> reads) override {
+    void beginPass(Texture& texture, const std::optional<ClearColor>& clear, std::span<Texture* const> reads,
+                   const std::optional<IRect>& area) override {
         for (Texture* r : reads)
             if (r && r != &texture) transition(static_cast<VulkanTexture&>(*r), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         auto& t = static_cast<VulkanTexture&>(texture);
         transition(t, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        VkRenderPass pass = renderPass(vkFormat(t.format()), clear.has_value());
+        VkRenderPass pass = renderPass(vkFormat(t.format()), clear ? VK_ATTACHMENT_LOAD_OP_CLEAR
+                                                             : t.discarded ? VK_ATTACHMENT_LOAD_OP_DONT_CARE
+                                                                           : VK_ATTACHMENT_LOAD_OP_LOAD);
+        t.discarded = false;
         VkFramebuffer fb = VK_NULL_HANDLE;
         for (auto& [p, f] : t.framebuffers)
             if (p == pass) fb = f;
@@ -997,15 +1013,19 @@ public:
         VkRenderPassBeginInfo rbi{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
         rbi.renderPass = pass;
         rbi.framebuffer = fb;
-        rbi.renderArea = {{0, 0}, {uint32_t(t.width()), uint32_t(t.height())}};
+        int x0 = 0, y0 = 0, x1 = t.width(), y1 = t.height();
+        if (area) x0 = std::clamp(area->x, 0, x1), y0 = std::clamp(area->y, 0, y1), x1 = std::clamp(area->x + area->width, x0, x1),
+                  y1 = std::clamp(area->y + area->height, y0, y1);
+        passArea = {x0, y0, x1 - x0, y1 - y0};
+        rbi.renderArea = {{x0, y0}, {uint32_t(x1 - x0), uint32_t(y1 - y0)}};
         rbi.clearValueCount = clear ? 1 : 0;
         rbi.pClearValues = &cv;
         mark(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, passLabel(t.width(), t.height(), t.format(), !t.allocation));
         vk.vkCmdBeginRenderPass(cmd, &rbi, VK_SUBPASS_CONTENTS_INLINE);
         VkViewport viewport{0, 0, float(t.width()), float(t.height()), 0, 1};
         vk.vkCmdSetViewport(cmd, 0, 1, &viewport);
-        setScissor({0, 0, t.width(), t.height()});
         target = &t;
+        setScissor(passArea);
         texturesDirty = true;
     }
 
@@ -1017,9 +1037,8 @@ public:
     }
 
     void setScissor(const IRect& r) override {
-        int x0 = std::max(0, r.x), y0 = std::max(0, r.y);
-        int x1 = target ? std::min(r.x + r.width, target->width()) : r.x + r.width;
-        int y1 = target ? std::min(r.y + r.height, target->height()) : r.y + r.height;
+        int x0 = std::max(passArea.x, r.x), y0 = std::max(passArea.y, r.y);
+        int x1 = std::min(r.x + r.width, passArea.x + passArea.width), y1 = std::min(r.y + r.height, passArea.y + passArea.height);
         VkRect2D rect{{x0, y0}, {uint32_t(std::max(0, x1 - x0)), uint32_t(std::max(0, y1 - y0))}};
         vk.vkCmdSetScissor(cmd, 0, 1, &rect);
     }
@@ -1098,6 +1117,8 @@ public:
         }
         vk.vkQueueSubmit(queue, 1, &si, fence);
     }
+
+    void discard(Texture& texture) override { static_cast<VulkanTexture&>(texture).discarded = true; }
 
     void copyTexture(Texture& source, const IRect& region, Texture& destination, int x, int y) override {
         auto& src = static_cast<VulkanTexture&>(source);

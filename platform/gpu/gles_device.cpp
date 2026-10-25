@@ -157,6 +157,7 @@ public:
     std::unique_ptr<GlesTexture> window;  // the window's image this frame
     bool inFrame = false, haveWindow = false;
     GlesTexture* target = nullptr;
+    IRect passArea;  // where the pass draws: scissors stay within it
     GlesPipeline* pipeline = nullptr;
     std::vector<std::pair<Sampler, GLuint>> samplers;
     // A program for each pair of shaders (and the fragment one's constants), by their hash:
@@ -545,19 +546,28 @@ public:
         endTimed();
     }
 
-    void beginPass(Texture& texture, const std::optional<ClearColor>& clear, std::span<Texture* const>) override {
+    void beginPass(Texture& texture, const std::optional<ClearColor>& clear, std::span<Texture* const>, const std::optional<IRect>& area) override {
         auto& t = static_cast<GlesTexture&>(texture);
         beginTimed(passLabel(t.width(), t.height(), t.format(), &t == window.get()));
+        target = &t;
+        int x0 = 0, y0 = 0, x1 = t.width(), y1 = t.height();
+        if (area) x0 = std::clamp(area->x, 0, x1), y0 = std::clamp(area->y, 0, y1), x1 = std::clamp(area->x + area->width, x0, x1),
+                  y1 = std::clamp(area->y + area->height, y0, y1);
+        passArea = {x0, y0, x1 - x0, y1 - y0};
         gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer(t));
         gl.Viewport(0, 0, t.width(), t.height());
-        target = &t;
-        if (clear) {  // (all of it, as a render pass clears: not cut by a scissor)
-            gl.Disable(GL_SCISSOR_TEST);
+        if (clear) {  // (all of its area, as a render pass clears: not cut by a scissor)
+            if (area) {
+                gl.Enable(GL_SCISSOR_TEST);
+                gl.Scissor(x0, y0, x1 - x0, y1 - y0);
+            } else {
+                gl.Disable(GL_SCISSOR_TEST);
+            }
             gl.ClearColor(clear->r, clear->g, clear->b, clear->a);
             gl.Clear(GL_COLOR_BUFFER_BIT);
         }
         gl.Enable(GL_SCISSOR_TEST);
-        setScissor({0, 0, t.width(), t.height()});
+        setScissor(passArea);
     }
 
     // --- A pass's calls: recorded, made at its end -------------------------------------------
@@ -565,9 +575,8 @@ public:
     void setPipeline(Pipeline& p) override { calls.push_back({Call::Pipeline, static_cast<GlesPipeline*>(&p)}); }
 
     void setScissor(const IRect& r) override {
-        int x0 = std::max(0, r.x), y0 = std::max(0, r.y);
-        int x1 = target ? std::min(r.x + r.width, target->width()) : r.x + r.width;
-        int y1 = target ? std::min(r.y + r.height, target->height()) : r.y + r.height;
+        int x0 = std::max(passArea.x, r.x), y0 = std::max(passArea.y, r.y);
+        int x1 = std::min(r.x + r.width, passArea.x + passArea.width), y1 = std::min(r.y + r.height, passArea.y + passArea.height);
         Call c{Call::Scissor};
         c.rect = {x0, y0, std::max(0, x1 - x0), std::max(0, y1 - y0)};  // (rows from the top: see above)
         calls.push_back(c);
@@ -681,6 +690,13 @@ public:
         }
     }
 
+    void discard(Texture& texture) override {
+        gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer(static_cast<GlesTexture&>(texture)));
+        GLenum color = GL_COLOR_ATTACHMENT0;
+        gl.InvalidateFramebuffer(GL_FRAMEBUFFER, 1, &color);
+        gl.BindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
     void copyTexture(Texture& source, const IRect& region, Texture& destination, int x, int y) override {
         auto& src = static_cast<GlesTexture&>(source);
         auto& dst = static_cast<GlesTexture&>(destination);
@@ -726,6 +742,8 @@ public:
             // The window's image into the default framebuffer, upside down (its first row is the top).
             gl.BindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer(*window));
             gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            GLenum color = GL_COLOR;  // (all of it copied over: what it held needn't be loaded, on a tiling GPU)
+            gl.InvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &color);
             gl.Disable(GL_SCISSOR_TEST);
             int w = window->width(), h = window->height();
             beginTimed("copy to screen");

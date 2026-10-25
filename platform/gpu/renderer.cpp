@@ -505,7 +505,7 @@ void Renderer::execute(Pass& pass) {
             std::memcpy(memory, pass.edges.data() + firstEdge, (edge - firstEdge) * sizeof(EdgeInstance));
             float mw = float(mask_->width()), mh = float(mask_->height());
             float toMask[8] = {2 / mw, yDown ? 2 / mh : -2 / mh, -1, yDown ? -1.f : 1.f, 0, 0, 0, 0};
-            device_.beginPass(*mask_, ClearColor{}, {});
+            device_.beginPass(*mask_, ClearColor{}, {}, IRect{0, 0, pass.shelf.width, pass.shelf.height});  // (the part in use)
             device_.setPipeline(*coveragePipeline_);
             device_.setUniforms(toMask, sizeof toMask);
             device_.setScissor({0, 0, mask_->width(), mask_->height()});
@@ -533,7 +533,17 @@ void Renderer::execute(Pass& pass) {
                                                  TextureUsage::Sampled);
             reads.push_back(dstCopy_.get());
         }
-        device_.beginPass(*pass.target, g == 0 ? pass.clear : std::nullopt, reads);
+        // Only where its batches draw, kept around it (a tiling GPU then loads and stores no more):
+        // all of the target where it is cleared.
+        std::optional<IRect> drawn;
+        if (!(g == 0 && pass.clear))
+            for (size_t i = firstBatch; i < batch; ++i) {
+                const IRect& s = pass.batches[i].scissor;
+                if (!drawn) drawn = s;
+                int x0 = std::min(drawn->x, s.x), y0 = std::min(drawn->y, s.y);
+                drawn = IRect{x0, y0, std::max(drawn->x + drawn->width, s.x + s.width) - x0, std::max(drawn->y + drawn->height, s.y + s.height) - y0};
+            }
+        device_.beginPass(*pass.target, g == 0 ? pass.clear : std::nullopt, reads, drawn);
         float uniforms[12] = {2 / w, yDown ? 2 / h : -2 / h, -1, yDown ? -1.f : 1.f,
                               mask_ ? 1 / float(mask_->width()) : 0.f, mask_ ? 1 / float(mask_->height()) : 0.f,
                               stopsTexture_ ? 1 / float(stopsTexture_->width()) : 0.f, stopsTexture_ ? 1 / float(stopsTexture_->height()) : 0.f,
@@ -602,7 +612,7 @@ void Renderer::execute(Pass& pass) {
                 if (under.empty()) continue;
                 device_.endPass();
                 device_.copyTexture(*pass.target, under, *dstCopy_, under.x, under.y);
-                device_.beginPass(*pass.target, std::nullopt, reads);
+                device_.beginPass(*pass.target, std::nullopt, reads, drawn);  // (the batches after it draw in it too)
                 bind();
                 device_.setScissor(under);
                 device_.draw({prims.buffer, prims.offset + uint64_t(k) * sizeof(Prim)}, corners, 1);

@@ -33,6 +33,7 @@ using GLDEBUGPROC = void(KOMPOZ_GL_API*)(GLenum source, GLenum type, GLuint id, 
 inline constexpr GLenum GL_ARRAY_BUFFER = 0x8892;
 inline constexpr GLenum GL_BLEND = 0x0BE2;
 inline constexpr GLenum GL_CLAMP_TO_EDGE = 0x812F;
+inline constexpr GLenum GL_COLOR = 0x1800;
 inline constexpr GLenum GL_COLOR_ATTACHMENT0 = 0x8CE0;
 inline constexpr GLenum GL_COLOR_BUFFER_BIT = 0x00004000;
 inline constexpr GLenum GL_COMPILE_STATUS = 0x8B81;
@@ -167,6 +168,7 @@ inline constexpr GLenum GL_ZERO = 0;
     X(const GLubyte *, GetString, (GLenum name)) \
     X(const GLubyte *, GetStringi, (GLenum name, GLuint index)) \
     X(GLint, GetUniformLocation, (GLuint program, const GLchar *name)) \
+    X(void, InvalidateFramebuffer, (GLenum target, GLsizei numAttachments, const GLenum *attachments)) \
     X(void, LinkProgram, (GLuint program)) \
     X(void, PixelStorei, (GLenum pname, GLint param)) \
     X(void, ReadPixels, (GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void *pixels)) \

@@ -200,6 +200,13 @@
   starts from the last opaque solid rect that covers all of what changed, under nothing but translations, scales and rect
   clips: what came before it there, and the white under everything, are left out (`DisplayList::opaqueCover`, `replay`'s
   `hidden`). On Intel's GPU the showcase's Components screen took 5.9 ms to draw instead of 7.3–10.1.
+- **The GPU renderer's passes touch only what they draw**, as a tiling GPU (a phone's) wants: a pass drawing into part of
+  a target loads and stores only that part (`beginPass`'s `area`: Vulkan's render area, a scissored clear on OpenGL ES;
+  scissors kept within it everywhere), the coverage mask clears only what it uses, the copy to the window doesn't load
+  what the window held (`Device::discard`: Vulkan's and Metal's "don't care", OpenGL ES's invalidation; a clear cost
+  an Adreno 618's OpenGL ES four times the load), OpenGL ES invalidates the screen before its copy into it, and on Vulkan
+  the kept frame is submitted before the window's image is waited for. A frame's GPU time is what it was busy with, its
+  passes together, not the waits between its submits.
 - **Fixed**: the GPU renderer's turned, stretched and leaning edges were up to 10/255 off on GPUs that snap vertices
   coarsely (4 subpixel bits, as SwiftShader does: Chrome's WebGL where it doesn't use the GPU): a quad's corners are
   put where such a GPU would put them, and its pixels shaded from there.

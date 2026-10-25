@@ -2796,6 +2796,7 @@ Drawn drawFrameGpu(App& app, const std::string& shot) {
     gpu::Texture* swapchain = device.swapchainTexture();
     if (swapchain) {
         app.showFrame = false;
+        device.discard(*swapchain);  // (all of it copied over: what it held isn't loaded, on a tiling GPU)
         r.beginTarget(*swapchain);
         int turns = device.swapchainTurns();
         r.blit(*app.gpuFrame, turns);

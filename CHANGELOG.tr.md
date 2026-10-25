@@ -210,6 +210,14 @@
   alanın tamamını kaplayan ve yalnızca öteleme, ölçek ve dikdörtgen kırpma altında olan son opak düz dikdörtgenden
   başlar: oradan önce gelenler ve her şeyin altındaki beyaz atlanır (`DisplayList::opaqueCover`, `replay`'in `hidden`'ı).
   Intel GPU'sunda vitrinin Bileşenler ekranının çizimi 7.3–10.1 yerine 5.9 ms sürdü.
+- **GPU renderer'ın geçişleri yalnızca çizdikleri yere dokunur**, döşemeli bir GPU'nun (bir telefonunkinin) istediği gibi:
+  bir hedefin bir kısmına çizen geçiş yalnızca o kısmı yükleyip yazar (`beginPass`'in `area`'sı: Vulkan'ın render
+  area'sı, OpenGL ES'te kırpılmış temizleme; kırpma dikdörtgenleri her yerde onun içinde kalır), kaplama maskesi
+  yalnızca kullandığını temizler, pencereye kopya pencerenin tuttuğunu yüklemez (`Device::discard`: Vulkan'ın ve
+  Metal'in "don't care"i, OpenGL ES'in geçersiz kılması; bir Adreno 618'in OpenGL ES'inde temizlemek yüklemenin dört
+  katı tuttu), OpenGL ES ekrana kopyasından önce ekranı geçersiz kılar, Vulkan'da da tutulan kare pencerenin görüntüsü
+  beklenmeden önce gönderilir. Bir karenin GPU süresi meşgul olduğu süredir, geçişlerinin toplamı; gönderimleri arasındaki beklemeler
+  değil.
 - **Düzeltildi**: GPU renderer'ın döndürülmüş, gerilmiş ve eğik kenarları, köşe noktalarını kaba bir ızgaraya oturtan
   GPU'larda (4 alt piksel biti, SwiftShader gibi: Chrome'un GPU kullanmadığı yerdeki WebGL'i) 10/255'e kadar
   sapıyordu: bir dörtgenin köşeleri böyle bir GPU'nun koyacağı yere konur, pikselleri oradan boyanır.
