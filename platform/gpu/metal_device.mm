@@ -212,7 +212,10 @@ public:
             }
             libraries.emplace_back(code.msl.data(), library);
         }
-        if (constants.empty()) return [library newFunctionWithName:@(code.entry)];
+        // (A function with constants is made through them even with none given: those keep their
+        // defaults.)
+        id<MTLFunction> plain = [library newFunctionWithName:@(code.entry)];
+        if (!plain || plain.functionConstantsDictionary.count == 0) return plain;
         MTLFunctionConstantValues* values = [MTLFunctionConstantValues new];
         for (size_t i = 0; i < constants.size(); ++i) [values setConstantValue:&constants[i] type:MTLDataTypeInt atIndex:i];
         NSError* failure = nil;
