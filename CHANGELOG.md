@@ -213,6 +213,10 @@
   Redmi Note 9 Pro's Vulkan a frame of the Components screen took the GPU 38–40 ms instead of 48–50.
 - **Layout looks for popups only while there are some**: the nodes holding popups are counted, and while none does
   the walk of the whole tree after each layout looking for them is left out.
+- **The walk after layout finds out once what each element is to it**: a node keeps, for each of its modifier's
+  elements, which of the kinds acted on after layout it is (and whether it clips), found out when the elements change,
+  instead of trying each kind on every element at every walk. On a Redmi Note 9 Pro scrolling the Components screen,
+  compose and layout of a slow frame took 13.7 ms (median) with this and the popup count, instead of 15.9.
 - **Fixed**: the GPU renderer's turned, stretched and leaning edges were up to 10/255 off on GPUs that snap vertices
   coarsely (4 subpixel bits, as SwiftShader does: Chrome's WebGL where it doesn't use the GPU): a quad's corners are
   put where such a GPU would put them, and its pixels shaded from there.

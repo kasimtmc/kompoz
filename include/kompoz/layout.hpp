@@ -2289,8 +2289,10 @@ private:
     detail::LayoutPass measuredIn_ = detail::LayoutPass::Plain;
     std::vector<const void*> layoutReads_;  // the states its last measure read
     bool relaidOut_ = true;  // measured or moved since its absolute place was last worked out
-    // The host's walk after layout: whether none of these elements is one it acts on.
+    // The host's walk after layout: what each of these elements is to it (bits), and whether none
+    // is one it acts on.
     std::vector<std::shared_ptr<const ModifierElement>> reportCheckedFor_;
+    std::vector<uint16_t> reported_;
     bool reportsNothing_ = false;
     friend class ComposeHost;
 };
