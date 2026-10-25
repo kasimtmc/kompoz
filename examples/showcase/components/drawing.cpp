@@ -114,21 +114,28 @@ void DrawingSection(CallSite site) {
                        d.drawPath(ring, t, 1, Stroke(1, 4, StrokeCap::Butt, StrokeJoin::Miter,
                                                   PathEffect::stampedPathEffect(bar, 26.7f, slide, StampedPathEffectStyle::Morph)));
                    });
-            // Path.op: two circles combined four ways (union, intersect, difference, xor).
-            Canvas(Modifier().fillMaxWidth().height(96).background(cs.surfaceContainerHigh, 12),
-                   [c = cs.primary, o = cs.onSurfaceVariant](DrawScope& d) {
-                       float cell = d.size().width / 4;
-                       const PathOperation ops[] = {PathOperation::Union, PathOperation::Intersect, PathOperation::Difference, PathOperation::Xor};
-                       const char* names[] = {"Union", "Intersect", "Difference", "Xor"};
-                       for (int i = 0; i < 4; ++i) {
-                           float x = cell * float(i) + cell / 2;
-                           Path left, right;
-                           left.addOval({x - 30, 14, 40, 40});
-                           right.addOval({x - 10, 14, 40, 40});
-                           d.drawPath(Path::combine(ops[i], left, right), c);
-                           d.drawText(names[i], {cell * float(i) + 8, 72}, Font{11}, o);
-                       }
-                   });
+            // Path.op: two circles combined four ways (union, intersect, difference, xor), worked out
+            // once for its size (drawWithCache), not every frame.
+            Box(Modifier().fillMaxWidth().height(96).background(cs.surfaceContainerHigh, 12).drawWithCache(
+                [c = cs.primary, o = cs.onSurfaceVariant](CacheDrawScope& cache) {
+                    float cell = cache.size().width / 4;
+                    const PathOperation ops[] = {PathOperation::Union, PathOperation::Intersect, PathOperation::Difference, PathOperation::Xor};
+                    std::vector<Path> combined;
+                    for (int i = 0; i < 4; ++i) {
+                        float x = cell * float(i) + cell / 2;
+                        Path left, right;
+                        left.addOval({x - 30, 14, 40, 40});
+                        right.addOval({x - 10, 14, 40, 40});
+                        combined.push_back(Path::combine(ops[i], left, right));
+                    }
+                    return cache.onDrawBehind([combined, cell, c, o](DrawScope& d) {
+                        const char* names[] = {"Union", "Intersect", "Difference", "Xor"};
+                        for (int i = 0; i < 4; ++i) {
+                            d.drawPath(combined[size_t(i)], c);
+                            d.drawText(names[i], {cell * float(i) + 8, 72}, Font{11}, o);
+                        }
+                    });
+                }));
             // Path.addArc slices of a pie, drawOval, a gradient clipped to a star (clipPath: any path,
             // its edge smooth) and withTransform (moved, then turned).
             Canvas(Modifier().fillMaxWidth().height(96).background(cs.surfaceContainerHigh, 12),
