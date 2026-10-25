@@ -573,7 +573,54 @@ std::optional<Rect> DisplayList::end() {
     return damage;
 }
 
-void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& area) const {
+std::optional<size_t> DisplayList::opaqueCover(const Rect& area) const {
+    // (A pixel more: the cover's anti-aliased edge, half covering a pixel of `area`'s border.)
+    Rect need = grown(area, framePixel_);
+    auto squareToScreen = [](const Projective& p) { return p.m[1] == 0 && p.m[3] == 0 && p.m[6] == 0 && p.m[7] == 0 && p.m[8] == 1; };
+    struct Open {
+        uint32_t end;
+        Rect clip;   // what the clips so far let through
+        bool hides;  // something the cover would show through: a layer, a blend mode, a filter, a clip not a rect
+    };
+    std::vector<Open> open;
+    std::optional<size_t> cover;
+    constexpr float kFar = 1e9f;
+    for (size_t i = 0; i < frame_.size(); ++i) {
+        while (!open.empty() && open.back().end <= i) open.pop_back();
+        const Command& c = frame_[i];
+        Rect clip = open.empty() ? Rect{-kFar, -kFar, 2 * kFar, 2 * kFar} : open.back().clip;
+        bool hides = !open.empty() && open.back().hides;
+        switch (c.kind) {
+        case Kind::PushClip:
+            if (c.f1 == 0 && !c.flag && squareToScreen(c.m)) clip = clip.intersect(c.m.map(c.rect));
+            else hides = true;
+            open.push_back({c.end, clip, hides});
+            break;
+        case Kind::PushTranslation:
+        case Kind::PushTransform:  // (what is drawn inside comes with its transform)
+        case Kind::PushAlias:
+            open.push_back({c.end, clip, hides});
+            break;
+        case Kind::PushLayer:
+        case Kind::PushBlend:
+        case Kind::PushFilter:
+            open.push_back({c.end, clip, true});
+            break;
+        case Kind::FillRoundRect: {
+            const CornerRadii& r = c.radii;
+            bool square = r.topLeft <= 0 && r.topRight <= 0 && r.bottomRight <= 0 && r.bottomLeft <= 0;
+            if (hides || !square || c.color.alpha() < 1 || !squareToScreen(c.m)) break;
+            Rect painted = c.m.map(c.rect).intersect(clip);
+            if (painted.x <= need.x && painted.y <= need.y && painted.right() >= need.right() && painted.bottom() >= need.bottom()) cover = i;
+            break;
+        }
+        default: break;
+        }
+    }
+    return cover;
+}
+
+void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& area, size_t hidden) const {
     auto skip = [&](const Command& c) { return area && !overlaps(c.bounds, *area); };
     for (size_t i = 0; i < frame_.size();) {
         const Command& c = frame_[i];
@@ -585,7 +632,7 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
         case Kind::PushAlias:
         case Kind::PushFilter:
         case Kind::PushTransform:
-            if (skip(c) && c.end > i) {  // nothing inside touches the area
+            if ((skip(c) || c.end <= hidden) && c.end > i) {  // nothing inside touches the area, or shows
                 i = c.end;
                 continue;
             }
@@ -609,7 +656,7 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
         case Kind::PopTranslation: canvas.popTranslation(); break;
         case Kind::PopTransform: canvas.popTransform(); break;
         default:
-            if (skip(c)) break;
+            if (skip(c) || i < hidden) break;
             switch (c.kind) {
             case Kind::FillRoundRect: canvas.fillRoundRect(c.rect, c.radii, c.color); break;
             case Kind::StrokeRoundRect: canvas.strokeRoundRect(c.rect, c.radii, c.f2, c.color); break;

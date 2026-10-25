@@ -196,6 +196,10 @@
   Redmi Note 9 Pro's Adreno 618 a frame of the showcase's Components screen took the GPU 30–50 ms instead of 400–460, a
   plain copy to the window 1.3 ms instead of 34. Where a driver can't make a variant (that Adreno's Vulkan compiler
   couldn't one), the whole shader draws it; `PipelineDesc::constants` carries them.
+- **What an opaque background hides isn't drawn**: a frame drawn again (on the GPU renderer and SDL_Renderer alike)
+  starts from the last opaque solid rect that covers all of what changed, under nothing but translations, scales and rect
+  clips: what came before it there, and the white under everything, are left out (`DisplayList::opaqueCover`, `replay`'s
+  `hidden`). On Intel's GPU the showcase's Components screen took 5.9 ms to draw instead of 7.3–10.1.
 - **Fixed**: the GPU renderer's turned, stretched and leaning edges were up to 10/255 off on GPUs that snap vertices
   coarsely (4 subpixel bits, as SwiftShader does: Chrome's WebGL where it doesn't use the GPU): a quad's corners are
   put where such a GPU would put them, and its pixels shaded from there.

@@ -206,6 +206,10 @@
   karesi GPU'da 400–460 yerine 30–50 ms, pencereye düz bir kopya 34 yerine 1.3 ms sürdü. Bir sürücünün bir varyantı
   yapamadığı yerde (o Adreno'nun Vulkan derleyicisi birini yapamadı) onu bütün shader çizer; sabitleri
   `PipelineDesc::constants` taşır.
+- **Opak bir zeminin gizlediği çizilmez**: yeniden çizilen bir kare (GPU renderer'da da SDL_Renderer'da da), değişen
+  alanın tamamını kaplayan ve yalnızca öteleme, ölçek ve dikdörtgen kırpma altında olan son opak düz dikdörtgenden
+  başlar: oradan önce gelenler ve her şeyin altındaki beyaz atlanır (`DisplayList::opaqueCover`, `replay`'in `hidden`'ı).
+  Intel GPU'sunda vitrinin Bileşenler ekranının çizimi 7.3–10.1 yerine 5.9 ms sürdü.
 - **Düzeltildi**: GPU renderer'ın döndürülmüş, gerilmiş ve eğik kenarları, köşe noktalarını kaba bir ızgaraya oturtan
   GPU'larda (4 alt piksel biti, SwiftShader gibi: Chrome'un GPU kullanmadığı yerdeki WebGL'i) 10/255'e kadar
   sapıyordu: bir dörtgenin köşeleri böyle bir GPU'nun koyacağı yere konur, pikselleri oradan boyanır.

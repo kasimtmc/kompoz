@@ -2769,12 +2769,14 @@ Drawn drawFrameGpu(App& app, const std::string& shot) {
     app.host->draw(*app.display);
     if (app.fullRedraw) app.display->invalidate();
     std::optional<Rect> damage = app.display->end();
-    // Drawn again: the area made white, then what touches it, clipped to it.
+    // Drawn again: the area made white, then what touches it, clipped to it. What an opaque rect
+    // covering all of it hides (the white too) isn't drawn.
     auto drawInto = [&](gpu::Texture& target, const std::optional<Rect>& area) {
         r.beginTarget(target);
         if (area) r.pushClip(*area);
-        r.fillOpaque({0, 0, target.width(), target.height()}, colors::White);
-        app.display->replay(r, area);
+        std::optional<size_t> cover = app.display->opaqueCover(area.value_or(Rect{0, 0, screen.width, screen.height}));
+        if (!cover) r.fillOpaque({0, 0, target.width(), target.height()}, colors::White);
+        app.display->replay(r, area, cover.value_or(0));
         if (area) r.popClip();
         r.endTarget();
     };
@@ -2844,15 +2846,19 @@ Drawn drawFrame(App& app, const std::string& shot) {
     app.host->draw(*app.display);
     if (app.fullRedraw) app.display->invalidate();
     std::optional<Rect> damage = app.display->end();
-    // Drawn again: the area cleared, then what touches it, clipped to it.
+    // Drawn again: the area cleared, then what touches it, clipped to it. What an opaque rect
+    // covering all of it hides (the white too) isn't drawn.
     DrawInto drawInto = [&](SDL_Texture* target, const std::optional<Rect>& area) {
         SDL_SetRenderTarget(app.renderer, target);
         if (area) app.canvas->pushClip(*area);
-        SDL_SetRenderDrawBlendMode(app.renderer, SDL_BLENDMODE_NONE);
-        SDL_SetRenderDrawColor(app.renderer, 255, 255, 255, 255);
-        SDL_RenderFillRect(app.renderer, nullptr);
-        SDL_SetRenderDrawBlendMode(app.renderer, SDL_BLENDMODE_BLEND);
-        app.display->replay(*app.canvas, area);
+        std::optional<size_t> cover = app.display->opaqueCover(area.value_or(Rect{0, 0, screen.width, screen.height}));
+        if (!cover) {
+            SDL_SetRenderDrawBlendMode(app.renderer, SDL_BLENDMODE_NONE);
+            SDL_SetRenderDrawColor(app.renderer, 255, 255, 255, 255);
+            SDL_RenderFillRect(app.renderer, nullptr);
+            SDL_SetRenderDrawBlendMode(app.renderer, SDL_BLENDMODE_BLEND);
+        }
+        app.display->replay(*app.canvas, area, cover.value_or(0));
         if (area) app.canvas->popClip();
         SDL_SetRenderTarget(app.renderer, nullptr);
     };

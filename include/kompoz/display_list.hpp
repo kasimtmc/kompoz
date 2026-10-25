@@ -35,8 +35,13 @@ public:
     void begin(Size viewport, float pixel);
     // Ends it: the area whose pixels differ from the last frame's (dp), or nothing.
     std::optional<Rect> end();
-    // Draws the last recorded frame into `canvas`: what touches `area`, or everything.
-    void replay(GraphicsContext& canvas, const std::optional<Rect>& area = std::nullopt) const;
+    // Draws the last recorded frame into `canvas`: what touches `area`, or everything. What comes
+    // before command `hidden` (opaqueCover's) is left out but its state.
+    void replay(GraphicsContext& canvas, const std::optional<Rect>& area = std::nullopt, size_t hidden = 0) const;
+    // The last recorded frame's last command that paints all of `area` (dp) opaquely: a solid
+    // opaque rect, square to the screen, under nothing but translations, scales and rect clips.
+    // Nothing before it shows in `area` (replay leaves it out); none if no command covers it.
+    std::optional<size_t> opaqueCover(const Rect& area) const;
     // The next frame is damaged all over (the kept pixels were lost).
     void invalidate() { invalid_ = true; }
     size_t size() const { return frame_.size(); }  // commands in the last frame

@@ -4740,6 +4740,88 @@ TEST(display_list_lines_frames_up_by_node_and_replays_an_area) {
     CHECK(part.rects.size() == 1 && part.rects[0].width == 100 && part.layers == 0 && part.clips.empty());
 }
 
+// An opaque rect square to the screen that covers all of an area hides what came before it there:
+// replayed with it, that is left out (its state isn't). One that lets something through doesn't.
+TEST(display_list_leaves_out_what_an_opaque_rect_hides) {
+    testing::FakeTextMeasurer measurer;
+    DisplayList list(measurer);
+    int node = 0;
+    Rect area{10, 10, 100, 100};
+    Color blue{0, 0, 1, 1};
+    auto record = [&](const std::function<void()>& draw) {
+        list.begin({400, 400}, 1);
+        list.beginNode(&node);
+        draw();
+        list.endNode();
+        list.end();
+    };
+    record([&] {
+        list.fillRoundRect({0, 0, 400, 400}, 0, colors::White);   // 0
+        list.pushTranslation({20, 20});                           // 1: all of it hidden
+        list.fillRoundRect({0, 0, 30, 30}, 4, colors::Red);       // 2
+        list.popTranslation();                                    // 3
+        list.pushTranslation({5, 5});                             // 4
+        list.pushClip({0, 0, 300, 300});                          // 5
+        list.fillRoundRect({0, 0, 200, 200}, 0, blue);            // 6: covers 5..205
+        list.popClip();                                           // 7
+        list.popTranslation();                                    // 8
+        list.fillRoundRect({50, 50, 10, 10}, 0, colors::Black);   // 9
+    });
+    std::optional<size_t> cover = list.opaqueCover(area);
+    CHECK(cover && *cover == 6);
+    testing::RecordingCanvas replayed, all;
+    list.replay(replayed, area, *cover);
+    CHECK(replayed.rects.size() == 2 && replayed.rectColors[0] == blue && replayed.rectColors[1] == colors::Black && replayed.stack == "MCcm");
+    list.replay(all, area);
+    CHECK(all.rects.size() == 4 && all.stack == "MmMCcm");
+    // What lets something through: none covers.
+    auto covers = [&](const std::function<void()>& draw) {
+        record([&] {
+            list.fillRoundRect({0, 0, 400, 400}, 0, colors::White);
+            draw();
+        });
+        std::optional<size_t> c = list.opaqueCover(area);
+        return c && *c > 0;
+    };
+    CHECK(covers([&] { list.fillRoundRect({0, 0, 200, 200}, 0, blue); }));
+    CHECK(covers([&] {  // after a layer, once it is done
+        list.pushLayer({0, 0, 200, 200}, 0, 0.5f);
+        list.fillRoundRect({20, 20, 50, 50}, 0, blue);
+        list.popLayer();
+        list.fillRoundRect({0, 0, 200, 200}, 0, blue);
+    }));
+    CHECK(!covers([&] { list.fillRoundRect({0, 0, 200, 200}, 0, Color{0, 0, 1, 0.5f}); }));  // translucent
+    CHECK(!covers([&] { list.fillRoundRect({0, 0, 200, 200}, 8, blue); }));                  // round corners
+    CHECK(!covers([&] { list.fillRoundRect(area, 0, blue); }));  // its edges anti-aliased on the area's border pixels
+    CHECK(!covers([&] {  // a clip that cuts the area
+        list.pushClip({0, 0, 50, 400});
+        list.fillRoundRect({0, 0, 200, 200}, 0, blue);
+        list.popClip();
+    }));
+    CHECK(!covers([&] {
+        list.pushClipRoundRect({0, 0, 200, 200}, CornerRadii(16), ClipOp::Intersect);
+        list.fillRoundRect({0, 0, 200, 200}, 0, blue);
+        list.popClip();
+    }));
+    CHECK(!covers([&] {
+        list.pushLayer({0, 0, 200, 200}, 0, 1);
+        list.fillRoundRect({0, 0, 200, 200}, 0, blue);
+        list.popLayer();
+    }));
+    CHECK(!covers([&] {
+        list.pushBlendMode(BlendMode::Multiply);
+        list.fillRoundRect({0, 0, 200, 200}, 0, blue);
+        list.popBlendMode();
+    }));
+    CHECK(!covers([&] {
+        Matrix turned;
+        turned.rotateZ(10);
+        list.pushTransform(turned);
+        list.fillRoundRect({-50, -50, 300, 300}, 0, blue);
+        list.popTransform();
+    }));
+}
+
 std::string pathText(const Path& path);  // (below)
 
 // A path drawn the same but through another path effect has changed: damage where it is.
