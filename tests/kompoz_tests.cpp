@@ -3340,8 +3340,9 @@ TEST(overscroll_effect_takes_the_touch_drags_and_flings_past_the_ends) {
     drag({200, 300}, 200, ComposeHost::PointerType::Touch);
     CHECK(effect->pulled > 150 && scroll.value() == 0 && !rule.onNodeWithTag("list").node()->stretch);  // no stretch of its own
     testing::RecordingCanvas canvas;
+    int draws = effect->draws;  // (the frames' too, checked by the tests)
     host.draw(canvas);
-    CHECK(effect->draws == 1 && sameRect(effect->drawnAt, {0, 0, 400, 800}));
+    CHECK(effect->draws == draws + 1 && sameRect(effect->drawnAt, {0, 0, 400, 800}));
     // Let go moving down: the fling has nowhere to go, all of it is left for the effect.
     host.pointerUp({200, 500});
     rule.waitForIdle();
@@ -4931,6 +4932,119 @@ TEST(display_list_tells_canvases_which_layers_stayed_the_same) {
 // What a layer holds is kept as its content, not as far as its transform takes it: what shows at
 // rest stays recorded as the layer grows past the screen (a stretch pulled further: the same
 // layer), and what only its transform brings onto the screen (shrinking) is recorded too.
+// Where nodes are kept, one unchanged since the last frame records again what it drew then, moved
+// as far as it moved, as drawing it would record it; where what it left out or asked comes out
+// otherwise (scrolled into view, a quickReject answered otherwise), or it can't be moved so (a
+// transform, the light of a shadow), it is drawn.
+TEST(display_list_keeps_what_unchanged_nodes_drew) {
+    testing::FakeTextMeasurer measurer;
+    DisplayList kept(measurer), drawn(measurer);
+    kept.keepNodes(true);
+    int root = 0, list = 0, items[10] = {}, icons[10] = {};
+    float scroll = 0;
+    bool listChanged = false, clipWide = false, twice = false;
+    int itemChanged = -1;
+    std::vector<GraphicsContext::NodeRecording> answers;  // the list's, then each item's (kept's)
+    using R = GraphicsContext::NodeRecording;
+    auto node = [&](GraphicsContext& g, const void* n, Offset origin, bool unchanged, const std::function<void()>& body) {
+        R r = g.recordNode(n, origin, unchanged);
+        if (&g == &kept) answers.push_back(r);
+        if (r == R::Kept) return;
+        g.beginNode(n);
+        body();
+        g.endNode();
+    };
+    auto scene = [&](GraphicsContext& g) {
+        node(g, &root, {0, 0}, false, [&] {
+            g.pushClip({0, 0, clipWide ? 400.f : 300.f, 400});
+            auto drawList = [&] {
+                node(g, &list, {0, -scroll}, !listChanged, [&] {
+                    g.fillRoundRect({0, -scroll, 300, 600}, 0, colors::White);
+                    for (int i = 0; i < 10; ++i) {
+                        float y = float(i) * 60 - scroll;
+                        node(g, &items[i], {0, y}, itemChanged != i, [&] {
+                            if (i == 7 && g.quickReject({0, y, 300, 50})) return;  // (a card clipped to itself)
+                            g.fillRoundRect({4, y + 4, 292, 42}, 8, Color{0, 0, float(i) / 10, 1});
+                            g.drawText("item", {60, y + 30}, Font{14}, colors::Black);
+                            if (i == 3) (void)g.lightCenter();  // (a shadow cast from the light)
+                            if (i == 9) g.drawElevationShadow(Outline::Rectangle({0, 0, 292, 42}), {4, y + 4}, {});  // (clipped away)
+                            if (i == 9) g.drawElevationShadow(Outline::Rectangle({0, 0, 292, 42}), {4, y + 4}, ElevationShadow{});  // (off the screen)
+                            if (i == 5) {
+                                Matrix m;
+                                m.translate(10, y);
+                                g.pushTransform(m);
+                                g.fillRoundRect({0, 0, 4, 4}, 0, colors::Black);
+                                g.popTransform();
+                            }
+                            node(g, &icons[i], {12, y + 13}, true, [&] {
+                                Path p;
+                                p.addOval({0, 0, 24, 24});
+                                g.drawPath(p, {12, y + 13}, Brush::solid(colors::Black), {12, y + 13, 24, 24}, {});
+                            });
+                        });
+                    }
+                });
+            };
+            drawList();
+            if (twice) drawList();  // (a second time in the frame: drawn)
+            g.popClip();
+        });
+    };
+    auto frame = [&] {
+        answers.clear();
+        kept.begin({400, 400}, 1);
+        scene(kept);
+        auto a = kept.end();
+        drawn.begin({400, 400}, 1);
+        scene(drawn);
+        auto b = drawn.end();
+        std::string why;
+        bool same = kept.sameFrame(drawn, &why) && a.has_value() == b.has_value() && (!a || sameRect(*a, *b));
+        if (!same) std::printf("  %s\n", why.c_str());
+        return same;
+    };
+    auto count = [&](R r) { return std::ranges::count(answers, r); };
+    CHECK(frame() && count(R::Kept) == 0 && count(R::Fresh) == 21);  // (the root, the list, ten items and their icons)
+    // Nothing changed: the list is kept whole.
+    CHECK(frame() && answers.size() == 2 && answers[1] == R::Kept && kept.areas().empty());
+    // Scrolled: the item scrolled into view was left out, so the list is drawn; of its items, those
+    // that showed are kept, moved; the one that came into view, the one cast from the light and
+    // the one with a transform are drawn.
+    scroll = 30;
+    CHECK(frame() && answers[1] == R::Fresh);
+    auto itemAnswer = [&](int i) {  // its answer, after the list's (and those of the items before it, and their icons)
+        size_t at = 2;
+        for (int k = 0; k < i; ++k) at += answers[at] == R::Kept ? 1 : 2;
+        return answers[at];
+    };
+    CHECK(itemAnswer(0) == R::Kept && itemAnswer(1) == R::Kept && itemAnswer(2) == R::Kept && itemAnswer(4) == R::Kept && itemAnswer(6) == R::Kept);
+    CHECK(itemAnswer(3) == R::Fresh && itemAnswer(5) == R::Fresh);
+    CHECK(itemAnswer(9) == R::Fresh);  // its shadow clipped away still: where it reaches is from the light, not moved with it
+    CHECK(itemAnswer(9) == R::Fresh);  // its shadow clipped away is clipped from the light, which doesn't move with it
+    // Scrolled further: the card rejected while off the screen comes into view.
+    scroll = 80;
+    CHECK(frame() && itemAnswer(7) == R::Fresh);
+    CHECK(frame() && answers.size() == 2 && answers[1] == R::Kept);  // and staying put, it is all kept again
+    // A changed item is drawn, the rest kept; a node drawn in other clips is drawn.
+    listChanged = true, itemChanged = 4;
+    CHECK(frame() && itemAnswer(4) == R::Fresh && itemAnswer(2) == R::Kept);
+    listChanged = false, itemChanged = -1;
+    clipWide = true;
+    CHECK(frame() && answers[1] == R::Fresh);
+    clipWide = false;
+    CHECK(frame());
+    // Drawn twice in a frame: the second time is another's.
+    twice = true;
+    CHECK(frame() && answers.back() != R::Kept && std::ranges::count(answers, R::Other) >= 1);
+    twice = false;
+    CHECK(frame());
+    // Scrolled back and forth by fractions: what is kept is still what drawing it records.
+    for (float to : {12.5f, 47.25f, 0.f, 133.f, 7.f}) {
+        scroll = to;
+        CHECK(frame());
+    }
+}
+
 TEST(display_list_keeps_a_layers_content_whatever_its_transform) {
     testing::FakeTextMeasurer measurer;
     DisplayList list(measurer);
@@ -22264,6 +22378,76 @@ struct HeardFactory final : IndicationNodeFactory {
     }
 };
 
+// An indication that draws a mark while its source is pressed, from what it heard (no state).
+struct PressMark final : IndicationNode {
+    bool pressed = false;
+    void onInteraction(const Interaction& i) override {
+        if (i.type == Interaction::Type::Press) pressed = true;
+        if (i.type == Interaction::Type::Release || i.type == Interaction::Type::Cancel) pressed = false;
+    }
+    void draw(ContentDrawScope& d) override {
+        d.drawContent();
+        if (pressed) d.drawRect(Color::hex(0x00ff00), {}, Size{6, 6});
+    }
+};
+struct PressMarkFactory final : IndicationNodeFactory {
+    std::shared_ptr<IndicationNode> create() const override { return std::make_shared<PressMark>(); }
+};
+
+// What a frame keeps of a node is what drawing it records: the tests check every frame (the keep
+// check), so each of these drawing changes fails there if the node isn't drawn again.
+TEST(nodes_are_drawn_again_when_what_they_draw_from_changes) {
+    auto mark = std::make_shared<PressMarkFactory>();
+    MutableInteractionSource shared;
+    auto tint = mutableStateOf(Color::hex(0xff0000));
+    ComposeTestRule rule([&] {
+        auto layer = rememberGraphicsLayer();
+        Column([&] {
+            Box(Modifier().size(100, 50).clickable([] {}, {.indication = Indication::Kind::StateLayer}).testTag("düz"));
+            // Pressed through another's source: only its indication hears of it.
+            Box(Modifier().size(100, 50).clickable([] {}, {.interactionSource = shared, .indication = Indication(mark)}));
+            Box(Modifier().size(100, 50).clickable([] {}, {.interactionSource = shared, .indication = false}).testTag("kaynak"));
+            // Drawn into a layer of its own and that drawn: the nodes in it are drawn there.
+            Box(Modifier().size(100, 50).drawWithContent([layer](ContentDrawScope& d) {
+                d.record(layer, [&](DrawScope&) { d.drawContent(); });
+                d.drawLayer(layer);
+            }), [&] {
+                Box(Modifier().padding(4), [&] {  // (read while drawing: nothing measured again)
+                    Box(Modifier().size(20).drawBehind([tint](DrawScope& d) { d.drawRect(tint.get()); }));
+                });
+            });
+        });
+    }, {400, 800});
+    int before = detail::keepCheckMismatches();
+    // A press, and the screen drawn before the next frame (an accessibility service's, a test's):
+    // the press still shows next frame; let go, it goes.
+    Offset flat = rule.onNodeWithTag("düz").bounds().center();
+    rule.host().pointerDown(flat);
+    (void)rule.drawnTexts();
+    rule.advanceFrame();
+    rule.advanceTimeBy(100);
+    rule.host().pointerUp(flat);
+    rule.waitForIdle();
+    // Pressed again, and a second finger makes it no tap: the press goes.
+    rule.host().pointerDown(flat, -1, 0);
+    rule.advanceTimeBy(100);
+    rule.host().pointerDown({flat.x + 30, flat.y}, -1, 1);
+    rule.advanceTimeBy(100);
+    rule.host().pointerUp({flat.x + 30, flat.y}, -1, 1);
+    rule.host().pointerUp(flat, -1, 0);
+    rule.waitForIdle();
+    // Its source pressed elsewhere: the mark shows, then goes.
+    Offset other = rule.onNodeWithTag("kaynak").bounds().center();
+    rule.host().pointerDown(other);
+    rule.advanceTimeBy(100);
+    rule.host().pointerUp(other);
+    rule.waitForIdle();
+    // What is drawn into the layer changes, deep in it.
+    tint.set(Color::hex(0x0000ff));
+    rule.waitForIdle();
+    CHECK(detail::keepCheckMismatches() == before);
+}
+
 TEST(custom_indication_hears_its_component_and_draws_around_it) {
     auto red = std::make_shared<HeardFactory>(Color::hex(0xff0000)), blue = std::make_shared<HeardFactory>(Color::hex(0x0000ff));
     auto useBlue = mutableStateOf(false), enabled = mutableStateOf(true);
@@ -28823,12 +29007,17 @@ TEST(previews_register_and_show_alone_or_all_together) {
 
 int main(int argc, char** argv) {
     detail::setLayoutCheck(true);
+    detail::setKeepCheck(true);
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;  // kompoz_tests <part of a name>
-        int before = failures, mismatches = detail::layoutCheckMismatches();
+        int before = failures, mismatches = detail::layoutCheckMismatches(), unkept = detail::keepCheckMismatches();
         fn();
         if (int missed = detail::layoutCheckMismatches() - mismatches) {  // incremental layout != all of it measured again
             std::printf("  layout check: %d nodes laid out differently\n", missed);
+            failures += missed;
+        }
+        if (int missed = detail::keepCheckMismatches() - unkept) {  // a frame keeping nodes != drawn afresh
+            std::printf("  keep check: %d frames recorded otherwise\n", missed);
             failures += missed;
         }
         std::printf("%s %s\n", failures == before ? "[ OK ]" : "[FAIL]", name);

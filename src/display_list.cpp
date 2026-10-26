@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <numbers>
 
 namespace kompoz {
@@ -40,6 +41,8 @@ Rect united(const Rect& a, const Rect& b) {
 }
 
 uint64_t mix(uint64_t h, uint64_t v) { return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2)); }
+// A node's key in a recording: it, and the how many-th time it is drawn in it.
+uint64_t nodeKey(const void* node, uint32_t occurrence) { return mix(mix(uint64_t(reinterpret_cast<uintptr_t>(node)), occurrence), 0x51ed27); }
 
 float area(const Rect& r) { return empty(r) ? 0 : r.width * r.height; }
 Rect moved(const Rect& r, Offset by) { return {r.x + by.x, r.y + by.y, r.width, r.height}; }
@@ -223,6 +226,11 @@ void DisplayList::begin(Size viewport, float pixel) {
     recording_.clear();
     recordingSegments_.clear();
     occurrences_.clear();
+    recordingEvents_.clear();
+    recordingRanges_.clear();
+    openRanges_.clear();
+    nextOrigin_.reset();
+    keptNodes_ = drawnNodes_ = 0;
     states_.assign(1, {{}, {0, 0, viewport.width, viewport.height}, 0, {}, {0, 0, viewport.width, viewport.height}});
     nodes_.assign(1, {0x6b6f6d706f7aull});  // the root: what is drawn outside any node
     segmentOpen_ = false;
@@ -231,7 +239,12 @@ void DisplayList::begin(Size viewport, float pixel) {
 void DisplayList::beginNode(const void* node) {
     segmentOpen_ = false;
     uint32_t occurrence = occurrences_[reinterpret_cast<uintptr_t>(node)]++;  // a node drawn twice (a shared element's overlay)
-    nodes_.push_back({mix(mix(uint64_t(reinterpret_cast<uintptr_t>(node)), occurrence), 0x51ed27)});
+    nodes_.push_back({nodeKey(node, occurrence)});
+    if (!keepNodes_) return;
+    openRanges_.push_back(uint32_t(recordingRanges_.size()));
+    recordingRanges_.push_back({nodes_.back().key, uint32_t(recordingEvents_.size()), 0, uint32_t(recording_.size()), 0,
+                                std::exchange(nextOrigin_, std::nullopt), states_.back()});
+    recordingEvents_.push_back({Event::Begin, uint32_t(recording_.size()), openRanges_.back(), node, {}});
 }
 
 void DisplayList::endNode() {
@@ -240,6 +253,12 @@ void DisplayList::endNode() {
     nodes_.pop_back();
     nodes_.back().after = child;  // what the parent draws next follows this child: a child added before it leaves that alone
     segmentOpen_ = false;
+    if (!keepNodes_ || openRanges_.empty()) return;
+    Range& r = recordingRanges_[openRanges_.back()];
+    openRanges_.pop_back();
+    recordingEvents_.push_back({Event::End, uint32_t(recording_.size())});
+    r.endEvent = uint32_t(recordingEvents_.size());
+    r.endCommand = uint32_t(recording_.size());
 }
 
 DisplayList::Command& DisplayList::add(Kind kind) {
@@ -261,13 +280,22 @@ DisplayList::Command& DisplayList::add(Kind kind) {
 
 DisplayList::Command* DisplayList::draw(Kind kind, const Rect& local, float pad) {
     const State& s = states_.back();
+    Rect reach = grown(local, pad);
     // Two pixels more: anti-aliased edges, and backends snapping to whole pixels.
-    Rect area = grown(s.m.map(grown(local, pad)), 2 * pixel_).intersect(s.clip);
-    if (empty(area) && empty(grown(s.restM.map(grown(local, pad)), 2 * pixel_).intersect(s.restClip)))
-        return nullptr;  // clipped away: it changes no pixel (kept in a layer if it shows there at rest)
+    Rect area = grown(s.m.map(reach), 2 * pixel_).intersect(s.clip);
+    if (empty(area) && !shows(reach)) {  // clipped away: it changes no pixel (kept in a layer if it shows there at rest)
+        // (A shadow's reach is from the light, not moved with its node.)
+        if (keepNodes_) recordingEvents_.push_back({kind == Kind::ElevationShadow ? Event::Light : Event::Culled, uint32_t(recording_.size()), 0, nullptr, reach});
+        return nullptr;
+    }
     Command& c = add(kind);
     c.bounds = area;
     return &c;
+}
+
+bool DisplayList::shows(const Rect& reach) const {
+    const State& s = states_.back();
+    return !empty(grown(s.m.map(reach), 2 * pixel_).intersect(s.clip)) || !empty(grown(s.restM.map(reach), 2 * pixel_).intersect(s.restClip));
 }
 
 void DisplayList::fillRoundRect(const Rect& rect, const CornerRadii& radii, Color color) {
@@ -488,9 +516,14 @@ void DisplayList::drawBackdrop(const Rect& bounds, const RenderEffect& effect, f
     }
 }
 
+Offset DisplayList::lightCenter() const {
+    if (keepNodes_) recordingEvents_.push_back({Event::Light, uint32_t(recording_.size())});
+    return lightCenterHere();
+}
+
 // The light's center through the inverse of the transform drawn through (where it isn't one,
 // as given).
-Offset DisplayList::lightCenter() const {
+Offset DisplayList::lightCenterHere() const {
     const float* m = states_.back().m.m;
     float a = m[4] * m[8] - m[5] * m[7], b = m[5] * m[6] - m[3] * m[8], c = m[3] * m[7] - m[4] * m[6];
     float det = m[0] * a + m[1] * b + m[2] * c;
@@ -507,7 +540,7 @@ Offset DisplayList::lightCenter() const {
 void DisplayList::drawElevationShadow(const Outline& outline, Offset origin, const kompoz::ElevationShadow& shadow) {
     Rect b = outline.bounds();
     b.x += origin.x, b.y += origin.y;
-    if (Command* c = draw(Kind::ElevationShadow, shadow.reach(b, light, lightCenter()), 0)) {
+    if (Command* c = draw(Kind::ElevationShadow, shadow.reach(b, light, lightCenterHere()), 0)) {
         c->p1 = origin;
         c->elevated = std::pair{outline, shadow};
     }
@@ -616,7 +649,9 @@ void DisplayList::popTransform() { pop(Kind::PopTransform); }
 
 bool DisplayList::quickReject(const Rect& rect) const {
     const State& s = states_.back();
-    return empty(grown(s.m.map(rect), pixel_).intersect(s.clip)) && empty(grown(s.restM.map(rect), pixel_).intersect(s.restClip));
+    bool rejected = empty(grown(s.m.map(rect), pixel_).intersect(s.clip)) && empty(grown(s.restM.map(rect), pixel_).intersect(s.restClip));
+    if (keepNodes_) recordingEvents_.push_back({rejected ? Event::Rejected : Event::Accepted, uint32_t(recording_.size()), 0, nullptr, rect});
+    return rejected;
 }
 
 void DisplayList::addDamage(std::vector<Rect>& damage, const std::vector<Command>& commands, uint32_t first, uint32_t count) {
@@ -753,6 +788,11 @@ std::optional<Rect> DisplayList::end() {
     }
     std::swap(recording_, frame_);
     std::swap(recordingSegments_, frameSegments_);
+    std::swap(recordingEvents_, frameEvents_);
+    std::swap(recordingRanges_, frameRanges_);
+    rangeLookup_.clear();
+    for (uint32_t i = 0; i < frameRanges_.size(); ++i)  // (those recordNode placed and that ended)
+        if (frameRanges_[i].origin && frameRanges_[i].endEvent) rangeLookup_.emplace(frameRanges_[i].key, i);
     frameViewport_ = viewport_;
     framePixel_ = pixel_;
     invalid_ = false;
@@ -1013,17 +1053,7 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
                 continue;
             }
             if (c.kind == Kind::PushLayer) canvas.keyLayer(c.layerKey, c.layerSame);
-            if (c.kind == Kind::PushLayer && !c.path.isEmpty()) canvas.pushOutlineLayer(c.rect, c.path, c.f2, c.transform);
-            else if (c.kind == Kind::PushLayer && c.effect) canvas.pushEffectLayer(c.rect, *c.effect, c.f2);
-            else if (c.kind == Kind::PushLayer) canvas.pushLayer(c.rect, c.radii, c.f2, c.transform);
-            else if (c.kind == Kind::PushClip && c.f1 == 1) canvas.pushClipRoundRect(c.rect, c.radii, c.flag ? ClipOp::Difference : ClipOp::Intersect);
-            else if (c.kind == Kind::PushClip && c.f1 == 2) canvas.pushClipPath(c.path, c.p1, c.flag ? ClipOp::Difference : ClipOp::Intersect);
-            else if (c.kind == Kind::PushClip) canvas.pushClip(c.rect);
-            else if (c.kind == Kind::PushBlend) canvas.pushBlendMode(BlendMode(int(c.f1)));
-            else if (c.kind == Kind::PushAlias) canvas.pushAntiAlias(c.flag);
-            else if (c.kind == Kind::PushFilter) canvas.pushColorFilter(*c.filter);
-            else if (c.kind == Kind::PushTransform) canvas.pushTransform(c.matrix);
-            else canvas.pushTranslation(c.p1);
+            replayCommand(canvas, c, {});
             if (c.kind == Kind::PushLayer && c.end > i) {
                 GraphicsContext::LayerContent content = canvas.layerContent();
                 if (content == GraphicsContext::LayerContent::Kept) {  // (on to its pop)
@@ -1033,40 +1063,201 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
                 if (content == GraphicsContext::LayerContent::DrawAll) whole = std::max(whole, size_t(c.end));
             }
             break;
-        case Kind::PopBlend: canvas.popBlendMode(); break;
-        case Kind::PopAlias: canvas.popAntiAlias(); break;
-        case Kind::PopFilter: canvas.popColorFilter(); break;
-        case Kind::PopLayer: canvas.popLayer(); break;
-        case Kind::PopClip: canvas.popClip(); break;
-        case Kind::PopTranslation: canvas.popTranslation(); break;
-        case Kind::PopTransform: canvas.popTransform(); break;
+        case Kind::PopBlend: case Kind::PopAlias: case Kind::PopFilter: case Kind::PopLayer: case Kind::PopClip: case Kind::PopTranslation:
+        case Kind::PopTransform:
+            replayCommand(canvas, c, {});
+            break;
         default:
-            if (skip(i) || i < hidden) break;
-            switch (c.kind) {
-            case Kind::FillRoundRect: canvas.fillRoundRect(c.rect, c.radii, c.color); break;
-            case Kind::StrokeRoundRect: canvas.strokeRoundRect(c.rect, c.radii, c.f2, c.color); break;
-            case Kind::Line: canvas.drawLine(c.p1, c.p2, c.f2, c.color); break;
-            case Kind::Text: canvas.drawText(c.text, c.p1, c.font, c.color, c.flag); break;
-            case Kind::TextBrush: canvas.drawTextBrush(c.text, c.p1, c.font, *c.brush, c.rect2, c.flag); break;
-            case Kind::TextShadow: canvas.drawTextShadow(c.text, c.p1, c.font, c.color, c.f1, c.flag); break;
-            case Kind::Shadow: canvas.drawShadow(c.rect, c.radii, {c.color, c.p1, c.f1, c.f2}, c.flag); break;
-            case Kind::ShadowPath: canvas.drawShadowPath(c.path, c.p2, {c.color, c.p1, c.f1, c.f2}, c.flag); break;
-            case Kind::Backdrop: canvas.drawBackdrop(c.rect, *c.effect, c.f2); break;
-            case Kind::ElevationShadow: canvas.drawElevationShadow(c.elevated->first, c.p1, c.elevated->second); break;
-            case Kind::ShapeShadow: canvas.drawShapeShadow(c.rect, c.shaped->first, c.flag, c.shaped->second, c.f1 != 0); break;
-            case Kind::Arc: canvas.drawArc(c.rect, c.f1, c.f2, c.f3, c.color, c.flag); break;
-            case Kind::Image: canvas.drawImage(c.image, c.rect2, c.rect, c.f1, FilterQuality(int(c.f2))); break;
-            case Kind::Gradient: canvas.fillGradient(c.rect, c.radii, *c.brush, c.rect2); break;
-            case Kind::Path: canvas.drawPath(c.path, c.p1, *c.brush, c.rect2, c.stroke); break;
-            case Kind::Vertices: canvas.drawVertices(*c.vertices, c.p1, BlendMode(int(c.f2)), *c.brush, c.rect2, c.f1); break;
-            case Kind::ImageMask:
-                canvas.drawImageMask(c.image, c.rect2, c.rect, *c.brush, {c.p1.x, c.p1.y, c.p2.x, c.p2.y}, c.f1, FilterQuality(int(c.f2)));
-                break;
-            default: break;
-            }
+            if (!skip(i) && i >= hidden) replayCommand(canvas, c, {});
         }
         ++i;
     }
+}
+
+void DisplayList::replayCommand(GraphicsContext& canvas, const Command& c, Offset by) {
+    auto r = [&](const Rect& rect) { return moved(rect, by); };
+    auto p = [&](Offset o) { return Offset{o.x + by.x, o.y + by.y}; };
+    ClipOp op = c.flag ? ClipOp::Difference : ClipOp::Intersect;
+    switch (c.kind) {
+    case Kind::PushLayer:
+        if (!c.path.isEmpty()) canvas.pushOutlineLayer(r(c.rect), c.path, c.f2, c.transform);  // (the outline from its top left)
+        else if (c.effect) canvas.pushEffectLayer(r(c.rect), *c.effect, c.f2);
+        else canvas.pushLayer(r(c.rect), c.radii, c.f2, c.transform);
+        break;
+    case Kind::PushClip:
+        if (c.f1 == 1) canvas.pushClipRoundRect(r(c.rect), c.radii, op);
+        else if (c.f1 == 2) canvas.pushClipPath(c.path, p(c.p1), op);
+        else canvas.pushClip(r(c.rect));
+        break;
+    case Kind::PushBlend: canvas.pushBlendMode(BlendMode(int(c.f1))); break;
+    case Kind::PushAlias: canvas.pushAntiAlias(c.flag); break;
+    case Kind::PushFilter: canvas.pushColorFilter(*c.filter); break;
+    case Kind::PushTransform: canvas.pushTransform(c.matrix); break;  // (not moved: keep() doesn't move one)
+    case Kind::PushTranslation: canvas.pushTranslation(c.p1); break;
+    case Kind::PopBlend: canvas.popBlendMode(); break;
+    case Kind::PopAlias: canvas.popAntiAlias(); break;
+    case Kind::PopFilter: canvas.popColorFilter(); break;
+    case Kind::PopLayer: canvas.popLayer(); break;
+    case Kind::PopClip: canvas.popClip(); break;
+    case Kind::PopTranslation: canvas.popTranslation(); break;
+    case Kind::PopTransform: canvas.popTransform(); break;
+    case Kind::FillRoundRect: canvas.fillRoundRect(r(c.rect), c.radii, c.color); break;
+    case Kind::StrokeRoundRect: canvas.strokeRoundRect(r(c.rect), c.radii, c.f2, c.color); break;
+    case Kind::Line: canvas.drawLine(p(c.p1), p(c.p2), c.f2, c.color); break;
+    case Kind::Text: canvas.drawText(c.text, p(c.p1), c.font, c.color, c.flag); break;
+    case Kind::TextBrush: canvas.drawTextBrush(c.text, p(c.p1), c.font, *c.brush, r(c.rect2), c.flag); break;
+    case Kind::TextShadow: canvas.drawTextShadow(c.text, p(c.p1), c.font, c.color, c.f1, c.flag); break;
+    case Kind::Shadow: canvas.drawShadow(r(c.rect), c.radii, {c.color, c.p1, c.f1, c.f2}, c.flag); break;
+    case Kind::ShadowPath: canvas.drawShadowPath(c.path, p(c.p2), {c.color, c.p1, c.f1, c.f2}, c.flag); break;
+    case Kind::Backdrop: canvas.drawBackdrop(r(c.rect), *c.effect, c.f2); break;
+    case Kind::ElevationShadow: canvas.drawElevationShadow(c.elevated->first, p(c.p1), c.elevated->second); break;
+    case Kind::ShapeShadow: canvas.drawShapeShadow(r(c.rect), c.shaped->first, c.flag, c.shaped->second, c.f1 != 0); break;
+    case Kind::Arc: canvas.drawArc(r(c.rect), c.f1, c.f2, c.f3, c.color, c.flag); break;
+    case Kind::Image: canvas.drawImage(c.image, c.rect2, r(c.rect), c.f1, FilterQuality(int(c.f2))); break;
+    case Kind::Gradient: canvas.fillGradient(r(c.rect), c.radii, *c.brush, r(c.rect2)); break;
+    case Kind::Path: canvas.drawPath(c.path, p(c.p1), *c.brush, r(c.rect2), c.stroke); break;
+    case Kind::Vertices: canvas.drawVertices(*c.vertices, p(c.p1), BlendMode(int(c.f2)), *c.brush, r(c.rect2), c.f1); break;
+    case Kind::ImageMask:
+        canvas.drawImageMask(c.image, c.rect2, r(c.rect), *c.brush, {c.p1.x + by.x, c.p1.y + by.y, c.p2.x, c.p2.y}, c.f1, FilterQuality(int(c.f2)));
+        break;
+    }
+}
+
+GraphicsContext::NodeRecording DisplayList::recordNode(const void* node, Offset origin, bool unchanged) {
+    if (!keepNodes_) return NodeRecording::Other;
+    if (const uint32_t* drawn = occurrences_.find(reinterpret_cast<uintptr_t>(node)); drawn && *drawn) return NodeRecording::Other;
+    if (unchanged && pixel_ == framePixel_)
+        if (const uint32_t* last = rangeLookup_.find(nodeKey(node, 0))) {
+            const Range& r = frameRanges_[*last];
+            const State& s = states_.back();
+            if (r.entry.m == s.m && same(r.entry.clip, s.clip) && r.entry.restM == s.restM && same(r.entry.restClip, s.restClip) &&
+                keep(r, {origin.x - r.origin->x, origin.y - r.origin->y})) {
+                ++keptNodes_;
+                return NodeRecording::Kept;
+            }
+        }
+    nextOrigin_ = origin;
+    ++drawnNodes_;
+    return NodeRecording::Fresh;
+}
+
+bool DisplayList::keep(const Range& r, Offset by) {
+    bool moving = by.x != 0 || by.y != 0;
+    // What is recorded from here on goes again if anything comes out otherwise.
+    size_t commands = recording_.size(), segments = recordingSegments_.size(), events = recordingEvents_.size();
+    size_t ranges = recordingRanges_.size(), states = states_.size(), nodes = nodes_.size(), open = openRanges_.size();
+    bool segmentOpen = segmentOpen_;
+    uint32_t layers = layersInSegment_;
+    keptBegun_.clear();
+    bool same = true;
+    uint32_t next = r.firstCommand;
+    for (uint32_t i = r.firstEvent; same && i < r.endEvent; ++i) {
+        const Event& e = frameEvents_[i];
+        for (; same && next < e.at; ++next) {
+            const Command& c = frame_[next];
+            if (moving && c.kind == Kind::PushTransform) same = false;  // (its matrix is from where the node was)
+            else replayCommand(*this, c, by);
+        }
+        if (!same) break;
+        switch (e.type) {
+        case Event::Begin:
+            if (const std::optional<Offset>& at = frameRanges_[e.range].origin) nextOrigin_ = Offset{at->x + by.x, at->y + by.y};
+            keptBegun_.push_back(e.node);
+            beginNode(e.node);
+            break;
+        case Event::End: endNode(); break;
+        case Event::Culled: {
+            Rect reach = moved(e.rect, by);
+            if (shows(reach)) same = false;  // (it was left out: it would be drawn now)
+            else recordingEvents_.push_back({Event::Culled, uint32_t(recording_.size()), 0, nullptr, reach});
+            break;
+        }
+        case Event::Rejected:
+        case Event::Accepted: same = quickReject(moved(e.rect, by)) == (e.type == Event::Rejected); break;
+        case Event::Light:
+            if (moving) same = false;
+            else recordingEvents_.push_back({Event::Light, uint32_t(recording_.size())});
+            break;
+        }
+    }
+    if (same) return true;
+    recording_.erase(recording_.begin() + ptrdiff_t(commands), recording_.end());
+    recordingSegments_.resize(segments);
+    recordingEvents_.resize(events);
+    recordingRanges_.resize(ranges);
+    states_.resize(states);
+    nodes_.resize(nodes);
+    openRanges_.resize(open);
+    segmentOpen_ = segmentOpen;
+    layersInSegment_ = layers;
+    for (const void* node : keptBegun_) --occurrences_[reinterpret_cast<uintptr_t>(node)];
+    nextOrigin_.reset();
+    return false;
+}
+
+namespace {
+std::string describe(const Rect& r) {
+    char out[96];
+    std::snprintf(out, sizeof out, "(%g, %g, %g x %g)", r.x, r.y, r.width, r.height);
+    return out;
+}
+std::string describe(Offset p) {
+    char out[64];
+    std::snprintf(out, sizeof out, "(%g, %g)", p.x, p.y);
+    return out;
+}
+} // namespace
+
+bool DisplayList::sameFrame(const DisplayList& other, std::string* why) const {
+    auto fail = [&](const std::string& what) {
+        if (why) *why = what;
+        return false;
+    };
+    if (frame_.size() != other.frame_.size()) return fail(std::to_string(frame_.size()) + " commands, not " + std::to_string(other.frame_.size()));
+    if (frameSegments_.size() != other.frameSegments_.size()) return fail("segments differ in number");
+    for (size_t i = 0; i < frameSegments_.size(); ++i) {
+        const Segment &a = frameSegments_[i], &b = other.frameSegments_[i];
+        if (a.key != b.key || a.first != b.first || a.count != b.count) return fail("segment " + std::to_string(i) + " differs");
+    }
+    auto nearRect = [](const Rect& a, const Rect& b) { return near(a.x, b.x) && near(a.y, b.y) && near(a.width, b.width) && near(a.height, b.height); };
+    for (size_t i = 0; i < frame_.size(); ++i) {
+        const Command &a = frame_[i], &b = other.frame_[i];
+        bool m = true;
+        for (int k = 0; k < 9; ++k) m = m && near(a.m.m[k], b.m.m[k]);
+        // The fields that differ, by name.
+        std::string fields;
+        auto check = [&](bool same, const char* name) {
+            if (!same) fields += std::string(fields.empty() ? "" : ", ") + name;
+        };
+        check(a.kind == b.kind, "kind");
+        check(m, "transform");
+        check(nearRect(a.bounds, b.bounds), "bounds");
+        check(nearRect(a.rect, b.rect), "rect");
+        check(nearRect(a.rect2, b.rect2), "rect2");
+        check(near(a.p1, b.p1) && near(a.p2, b.p2), "points");
+        check(a.radii == b.radii, "radii");
+        check(a.f1 == b.f1 && a.f2 == b.f2 && a.f3 == b.f3, "numbers");
+        check(a.color == b.color, "color");
+        check(a.flag == b.flag, "flag");
+        check(a.font == b.font && a.text == b.text, "text");
+        check(a.image == b.image && a.imageVersion == b.imageVersion, "image");
+        check(kompoz::same(a.stroke, b.stroke), "stroke");
+        check(kompoz::same(a.transform, b.transform), "layer transform");
+        check(a.brush == b.brush, "brush");
+        check(a.vertices == b.vertices, "vertices");
+        check(a.filter == b.filter, "filter");
+        check(a.effect == b.effect, "effect");
+        check(a.elevated == b.elevated, "elevation shadow");
+        check(a.shaped == b.shaped, "shape shadow");
+        check(a.path == b.path, "path");
+        check(a.matrix == b.matrix, "matrix");
+        // (A layer's key is its list's too: two lists' differ. It is made from the segments'.)
+        check(a.parent == b.parent && a.end == b.end, "nesting");
+        if (!fields.empty())
+            return fail("command " + std::to_string(i) + " (kind " + std::to_string(int(a.kind)) + ", at " + describe(a.rect) + " " + describe(a.p1) +
+                        ") differs in " + fields);
+    }
+    return true;
 }
 
 } // namespace kompoz

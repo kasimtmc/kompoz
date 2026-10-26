@@ -107,7 +107,7 @@ void Row1(const std::string& title) {
 
 ## Profiling frames
 
-`KOMPOZ_PROFILE=1` logs frame times. A frame is slow when its work takes longer than the display's refresh period, or it comes more than two periods after the one before; for each slow frame it logs the time spent on input, composition and layout, waiting for the GPU to be done with an earlier frame (`wait`), drawing and presenting, with the offscreen layers it drew (and of them how many were composited from the pixels they kept, their content the same as before) and the glyphs it rasterized. Every second a summary follows: the frames, how many were shown and how many refreshes of the display went by without a frame between two shown back to back, the work's average with its parts (composition and layout, drawing, and of the drawing the recording: the tree drawn into the display list and compared with the last frame's), the wait's average, and on Kompoz's GPU renderer the GPU's own time for a frame. A frame that took the GPU longer than a refresh period is logged with its costliest passes, each named by what it draws into (`window`, `1080x2400`, `2048x2048 R16F`) or `copy WxH`:
+`KOMPOZ_PROFILE=1` logs frame times. A frame is slow when its work takes longer than the display's refresh period, or it comes more than two periods after the one before; for each slow frame it logs the time spent on input, composition and layout, waiting for the GPU to be done with an earlier frame (`wait`), drawing and presenting, with the nodes it drew and those it kept as they were (with all in them, see [Phases](phases.md#drawing-only-what-changed)), the offscreen layers it drew (and of them how many were composited from the pixels they kept, their content the same as before) and the glyphs it rasterized. Every second a summary follows: the frames, how many were shown and how many refreshes of the display went by without a frame between two shown back to back, the work's average with its parts (composition and layout, drawing, and of the drawing the recording: the tree drawn into the display list and compared with the last frame's), the wait's average, and on Kompoz's GPU renderer the GPU's own time for a frame. A frame that took the GPU longer than a refresh period is logged with its costliest passes, each named by what it draws into (`window`, `1080x2400`, `2048x2048 R16F`) or `copy WxH`:
 
 ```
 kompoz: GPU frame 12.2 ms: 1080x2400 10.5, window 1.6, 2048x2402 R16F 0.1
@@ -121,7 +121,7 @@ Android has no environment variables, so there the profiler looks for a file in 
 adb shell run-as dev.kompoz.showcase touch files/kompoz-profile
 ```
 
-Where `run-as` is refused (SELinux: a LineageOS build, for one), these files (`kompoz-profile`, `kompoz-damage-check`, `kompoz-script`, `kompoz-gpu`) can go in the app's external files instead: `adb shell touch /sdcard/Android/data/dev.kompoz.showcase/files/kompoz-profile`.
+Where `run-as` is refused (SELinux: a LineageOS build, for one), these files (`kompoz-profile`, `kompoz-damage-check`, `kompoz-keep-check`, `kompoz-script`, `kompoz-gpu`) can go in the app's external files instead: `adb shell touch /sdcard/Android/data/dev.kompoz.showcase/files/kompoz-profile`.
 
 A script, too, comes from a file there (the same commands; a frame benchmark repeats on every device):
 
@@ -134,6 +134,7 @@ Kompoz records each frame first and draws again only what changed since the fram
 - `KOMPOZ_DAMAGE_SHOW=1` outlines what was drawn again in each frame (each of its areas).
 - `KOMPOZ_DAMAGE_CHECK=1` also draws each frame from scratch and logs any pixel that differs (on Android, a file named `kompoz-damage-check` in the app's files, as `kompoz-profile` above).
 - `KOMPOZ_FULL_REDRAW=1` draws every frame from scratch.
+- `KOMPOZ_KEEP_CHECK=1` also records each frame drawing every node and logs where what the frame kept of the nodes that didn't change differs from it, with the number of such frames at exit (on Android, a file named `kompoz-keep-check`).
 
 ## Environment variables
 
@@ -157,6 +158,7 @@ On the web, the page's query sets them: `showcase.html?KOMPOZ_GPU=gles&KOMPOZ_PR
 | `KOMPOZ_GPU_DEVICE=name`, `KOMPOZ_GPU_VALIDATION=1` | With it: the GPU whose name contains `name` (Vulkan, Metal on macOS); Vulkan's validation layers where they are installed, Metal's API validation, OpenGL ES's debug output (a debug context): an error either reports is counted (`kompoz_gpu_tests` fails on one). |
 | `KOMPOZ_DAMAGE_SHOW=1`, `KOMPOZ_DAMAGE_CHECK=1`, `KOMPOZ_FULL_REDRAW=1` | Show, check or turn off redrawing only what changed. |
 | `KOMPOZ_LAYOUT_CHECK=1` | Checks every incremental layout against a full one (the tests always do). |
+| `KOMPOZ_KEEP_CHECK=1` | Checks what each frame kept of the nodes that didn't change against drawing every node (the tests always do). |
 | `KOMPOZ_IMAGE_CACHE=dir` | Where `AsyncImage` keeps the images it downloaded. |
 | `KOMPOZ_IMAGE_LOG=1` | Logs where each image came from and how big it was. |
 

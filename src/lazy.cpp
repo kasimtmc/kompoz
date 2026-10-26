@@ -398,9 +398,13 @@ struct AnimateItemElement final : ModifierElement {
     }
 };
 
-const AnimateItemElement* animatedItem(LayoutNode& item) {
+// (`carrier`: the node it is on, drawn again when its alpha changes.)
+const AnimateItemElement* animatedItem(LayoutNode& item, LayoutNode** carrier) {
     for (auto* content : item.children)  // the item's own nodes, inside its container
-        if (auto* e = content->modifier.find<AnimateItemElement>()) return e;
+        if (auto* e = content->modifier.find<AnimateItemElement>()) {
+            *carrier = content;
+            return e;
+        }
     return nullptr;
 }
 
@@ -527,7 +531,8 @@ MeasurePolicy listPolicy(LazyListState state, bool vertical, LazyListOptions opt
         for (int k = 0; k < range; ++k) {
             int j = childAt(k);
             float main = pos[size_t(k)];
-            if (auto* e = animatedItem(*node.children[size_t(j)]); e && !detail::isProbeMeasure()) {
+            LayoutNode* carrier = nullptr;
+            if (auto* e = animatedItem(*node.children[size_t(j)], &carrier); e && !detail::isProbeMeasure()) {
                 // Indices only change when the data does (scrolling keeps them): then glide from
                 // where the item was shown. A key that wasn't in the data before fades in.
                 d.animatesItems = true;
@@ -547,13 +552,14 @@ MeasurePolicy listPolicy(LazyListState state, bool vertical, LazyListOptions opt
                     offset = a.from * (1 - p);
                     if (finished) a.moveStart = -1;
                 }
-                e->alpha = 1;
+                float alpha = 1;
                 if (a.appearStart >= 0) {
                     bool done = true;
-                    e->alpha = std::clamp(e->fadeInSpec.progress(float(now - a.appearStart) / 1e6f, done), 0.f, 1.f);
+                    alpha = std::clamp(e->fadeInSpec.progress(float(now - a.appearStart) / 1e6f, done), 0.f, 1.f);
                     if (done) a.appearStart = -1;
                     finished = finished && done;
                 }
+                if (alpha != e->alpha) e->alpha = alpha, carrier->invalidateDraw();  // (drawn faded)
                 if (!finished) node.host()->requestLayoutFrame();
                 a.index = index;
                 main += offset;
@@ -602,10 +608,15 @@ MeasurePolicy listPolicy(LazyListState state, bool vertical, LazyListOptions opt
             float main = onScreen(gone.shown, mainOf(s));
             if (vertical) child.place(cross, main);
             else child.place(main, cross);
-            auto* e = animatedItem(child);
+            LayoutNode* carrier = nullptr;
+            auto* e = animatedItem(child, &carrier);
             bool done = true;
             float fade = e ? e->fadeOutSpec.progress(float(now - gone.start) / 1e6f, done) : 1.f;
-            if (e) e->alpha = std::clamp(1 - fade, 0.f, 1.f), e->leaving = true;
+            if (e) {
+                float alpha = std::clamp(1 - fade, 0.f, 1.f);
+                if (alpha != e->alpha) e->alpha = alpha, carrier->invalidateDraw();  // (drawn faded)
+                e->leaving = true;
+            }
             if (detail::isProbeMeasure()) continue;
             if (!done) node.host()->requestLayoutFrame();
             else if (!gone.done) gone.done = true, d.window.set(d.window.peek() + 1);

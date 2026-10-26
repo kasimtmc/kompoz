@@ -107,7 +107,7 @@ void Row1(const std::string& title) {
 
 ## Karelerin profilini çıkarmak
 
-`KOMPOZ_PROFILE=1` kare sürelerini günlüğe yazar. İşi ekranın yenileme süresinden uzun süren ya da bir öncekinden iki yenileme süresinden fazla sonra gelen kare yavaştır; her yavaş kare için girdiye, kompozisyon ve yerleşime, GPU'nun daha önceki bir kareyi bitirmesini beklemeye (`wait`), çizime ve sunuma harcanan süreyi, çizdiği ekran dışı katmanlarla (ve bunlardan kaçının, içerikleri öncekiyle aynı olduğundan sakladıkları piksellerden birleştirildiğini) rasterleştirdiği glifleri yazar. Her saniye bir özet gelir: kareler, kaçının gösterildiği ve arka arkaya gösterilen iki kare arasında ekranın kaç yenilemesinin karesiz geçtiği, işin ortalaması ve parçaları (kompozisyon ve yerleşim, çizim ve çizimin içinde kayıt: ağacın görüntü listesine çizilip önceki kareyle karşılaştırılması), beklemenin ortalaması, Kompoz'un GPU renderer'ında da bir karenin GPU'daki kendi süresi. GPU'da bir yenileme süresinden uzun süren kare, en pahalı geçişleriyle yazılır; her biri çizdiği yerle (`window`, `1080x2400`, `2048x2048 R16F`) ya da `copy WxH` olarak adlandırılır:
+`KOMPOZ_PROFILE=1` kare sürelerini günlüğe yazar. İşi ekranın yenileme süresinden uzun süren ya da bir öncekinden iki yenileme süresinden fazla sonra gelen kare yavaştır; her yavaş kare için girdiye, kompozisyon ve yerleşime, GPU'nun daha önceki bir kareyi bitirmesini beklemeye (`wait`), çizime ve sunuma harcanan süreyi, çizdiği düğümlerle olduğu gibi tuttuklarını (içlerindekilerle, bkz. [Aşamalar](phases.md#yalnız-değişeni-çizmek)), çizdiği ekran dışı katmanlarla (ve bunlardan kaçının, içerikleri öncekiyle aynı olduğundan sakladıkları piksellerden birleştirildiğini) rasterleştirdiği glifleri yazar. Her saniye bir özet gelir: kareler, kaçının gösterildiği ve arka arkaya gösterilen iki kare arasında ekranın kaç yenilemesinin karesiz geçtiği, işin ortalaması ve parçaları (kompozisyon ve yerleşim, çizim ve çizimin içinde kayıt: ağacın görüntü listesine çizilip önceki kareyle karşılaştırılması), beklemenin ortalaması, Kompoz'un GPU renderer'ında da bir karenin GPU'daki kendi süresi. GPU'da bir yenileme süresinden uzun süren kare, en pahalı geçişleriyle yazılır; her biri çizdiği yerle (`window`, `1080x2400`, `2048x2048 R16F`) ya da `copy WxH` olarak adlandırılır:
 
 ```
 kompoz: GPU frame 12.2 ms: 1080x2400 10.5, window 1.6, 2048x2402 R16F 0.1
@@ -121,7 +121,7 @@ Android'de ortam değişkeni yoktur; orada profil aracı uygulamanın depolamas�
 adb shell run-as dev.kompoz.showcase touch files/kompoz-profile
 ```
 
-`run-as`'in reddedildiği yerde (SELinux: örneğin bir LineageOS derlemesi) bu dosyalar (`kompoz-profile`, `kompoz-damage-check`, `kompoz-script`, `kompoz-gpu`) uygulamanın harici dosyalarına da konabilir: `adb shell touch /sdcard/Android/data/dev.kompoz.showcase/files/kompoz-profile`.
+`run-as`'in reddedildiği yerde (SELinux: örneğin bir LineageOS derlemesi) bu dosyalar (`kompoz-profile`, `kompoz-damage-check`, `kompoz-keep-check`, `kompoz-script`, `kompoz-gpu`) uygulamanın harici dosyalarına da konabilir: `adb shell touch /sdcard/Android/data/dev.kompoz.showcase/files/kompoz-profile`.
 
 Bir betik de oradaki bir dosyadan gelir (aynı komutlar; bir kare ölçümü her cihazda aynı tekrarlanır):
 
@@ -134,6 +134,7 @@ Kompoz her kareyi önce kaydeder ve yalnızca bir önceki kareden beri değişen
 - `KOMPOZ_DAMAGE_SHOW=1` her karede yeniden çizilenin (her bir alanının) çevresini çizer.
 - `KOMPOZ_DAMAGE_CHECK=1` her kareyi ayrıca sıfırdan çizer ve farklı çıkan her pikseli günlüğe yazar (Android'de, yukarıdaki `kompoz-profile` gibi uygulamanın dosyalarında `kompoz-damage-check` adlı bir dosya).
 - `KOMPOZ_FULL_REDRAW=1` her kareyi sıfırdan çizer.
+- `KOMPOZ_KEEP_CHECK=1` her kareyi ayrıca her düğümü çizerek kaydeder; karenin değişmeyen düğümlerden tuttuğu şeyin bundan farklı çıktığı yeri, çıkışta da böyle karelerin sayısını günlüğe yazar (Android'de `kompoz-keep-check` adlı bir dosya).
 
 ## Ortam değişkenleri
 
@@ -157,6 +158,7 @@ Web'de onları sayfanın sorgusu belirler: `showcase.html?KOMPOZ_GPU=gles&KOMPOZ
 | `KOMPOZ_GPU_DEVICE=name`, `KOMPOZ_GPU_VALIDATION=1` | Onunla birlikte: adında `name` geçen GPU (Vulkan, macOS'ta Metal); kuruluysa Vulkan'ın validation katmanları, Metal'in API doğrulaması, OpenGL ES'in hata ayıklama çıktısı (debug context): ikisinin bildirdiği her hata sayılır (`kompoz_gpu_tests` birinde başarısız olur). |
 | `KOMPOZ_DAMAGE_SHOW=1`, `KOMPOZ_DAMAGE_CHECK=1`, `KOMPOZ_FULL_REDRAW=1` | Yalnızca değişeni yeniden çizmeyi gösterir, kontrol eder ya da kapatır. |
 | `KOMPOZ_LAYOUT_CHECK=1` | Her artımlı yerleşimi tam bir yerleşimle karşılaştırır (testler bunu hep yapar). |
+| `KOMPOZ_KEEP_CHECK=1` | Her karenin değişmeyen düğümlerden tuttuğunu her düğümü çizmekle karşılaştırır (testler bunu hep yapar). |
 | `KOMPOZ_IMAGE_CACHE=dir` | `AsyncImage`'ın indirdiği resimleri tuttuğu yer. |
 | `KOMPOZ_IMAGE_LOG=1` | Her resmin nereden geldiğini ve ne kadar büyük olduğunu günlüğe yazar. |
 

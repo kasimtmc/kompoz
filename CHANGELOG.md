@@ -242,6 +242,12 @@
   0.65 ms of a frame of the Components screen instead of 3.1.
 - **`KOMPOZ_PROFILE`'s summary gives the work's parts**: composition and layout, drawing, and of the drawing the
   recording (the tree drawn into the display list, compared with the last frame's).
+- **Nodes whose drawing didn't change aren't drawn again**, as Compose's render nodes: a frame records again what such
+  a node and all in it drew last frame, moved as far as it moved (a list scrolled by). A node is drawn again when it is
+  measured, when a state its drawing read changes, when it asks for a redraw as it draws, and when it is pressed,
+  hovered or focused or its ripple moves. `KOMPOZ_KEEP_CHECK` (and the tests) check each frame against one drawing every
+  node; `KOMPOZ_PROFILE`'s slow frames count the nodes drawn and kept. On a Xiaomi 14 Ultra a frame of the Components
+  screen that changes nothing on it took 0.4 ms instead of 5.
 - **Fixed**: a shared element whose partner was drawn after it saw its partner's place only when drawn again: a frame
   drawn twice (a magnifier's) drew it in two places. Where each belongs is noted before any is drawn.
 - **Recording a frame allocates nothing a node**: the display list's maps (the times each node was drawn, the last

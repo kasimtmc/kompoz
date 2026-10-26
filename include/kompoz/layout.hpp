@@ -2149,6 +2149,9 @@ struct MinIntrinsicWidth {
 bool isMinIntrinsicWidth();
 // The node being measured, if any: a state read now is read by its layout.
 LayoutNode* measuringNode();
+// The node being drawn, if any: a state read now is read by its drawing, and a redraw asked for
+// now is its (ComposeHost::requestRedraw).
+LayoutNode* drawingNode();
 // Layout is in whole pixels, as Compose's (its sizes, constraints and places are Int px): the
 // px a dp of the host measuring now (1 with none), and a length in dp at the nearest whole px
 // there (a half up, as Kotlin's roundToInt; an infinite one as it is).
@@ -2257,6 +2260,11 @@ public:
     }
 
     void draw(GraphicsContext& canvas);
+    // What it draws, or what something in it draws, changed since a frame kept it
+    // (DisplayList::keepNodes): the next frame draws it again, and its parents. Its measure, the
+    // states its drawing read, asking for a redraw as it draws (an animation drawn on), the host's
+    // pressed, hovered, focused and ripples say so; a drawing from anything else says so itself.
+    void invalidateDraw() const;
     // Draws what `element` (one of its modifier's) wraps, without it and the elements before it:
     // shared elements are drawn this way above everything, wherever their parents are.
     void drawAfter(GraphicsContext& canvas, const ModifierElement* element);
@@ -2272,6 +2280,8 @@ private:
     float contentAlignmentLine(AlignmentLine line) const;  // from the content's top
     float alignmentLineInside(size_t layer, AlignmentLine line) const;  // from that layer's top
     void drawLayer(GraphicsContext& canvas, size_t index);
+    mutable bool drawChanged_ = true;  // invalidateDraw's: not kept (its parents' too, up to one that is so already)
+    std::vector<const void*> drawReads_;  // the states its last drawing read
 
     struct Layer {
         Size size;

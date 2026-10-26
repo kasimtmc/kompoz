@@ -2533,6 +2533,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     auto touching = remember([] { return mutableStateOf(false); });  // touch selection: handles and toolbar
     auto toolbarShown = remember([] { return mutableStateOf(false); });
     auto selecting = remember([] { return mutableStateOf(false); });  // a selection (two handles) or a caret (one)
+    auto edits = remember([] { return mutableStateOf(0); });  // one more each edit: what is drawn from `ime` is drawn again
     auto handleDragged = remember([] { return mutableStateOf(false); });  // a handle: no toolbar meanwhile
     // What the handles' gestures need, kept across recompositions (a drag outlives them).
     struct HandleState {
@@ -2657,11 +2658,12 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
         touching.set(on);
         toolbarShown.set(on && toolbar);
     };
-    focusable->onEdit = [ime, onValueChange, singleLine, readOnly = o.readOnly, value, known, selecting, state, history,
+    focusable->onEdit = [ime, onValueChange, singleLine, readOnly = o.readOnly, value, known, selecting, edits, state, history,
                          undone](const TextEditState& edit) {
         if (readOnly && edit.text != value) return;  // the caret and selection may move, the text stays
         TextRange before = ime->text == *known ? TextRange{ime->selectionStart, ime->selectionEnd} : TextRange{int(known->size()), int(known->size())};
         *ime = edit;
+        edits.set(edits.peek() + 1);
         selecting.set(edit.selectionStart != edit.selectionEnd);
         if (singleLine) std::replace(ime->text.begin(), ime->text.end(), '\n', ' ');  // pasted lines join
         if (state) TextFieldStateAccess::set(*state, ime->text, {ime->selectionStart, ime->selectionEnd});
@@ -2771,6 +2773,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     };
     // Multi-line: lines from the top, the caret's line kept in view.
     auto drawLines = [=, placeholder = o.placeholder](GraphicsContext& canvas, const Rect& b, const LayoutNode& node) {
+        (void)edits.get();  // (the caret, the selection and the composition are `ime`'s)
         bool focusedNow = node.focused;
         TextMeasurer& tm = node.textMeasurer();
         FontMetrics m = tm.metrics(font);
@@ -2844,6 +2847,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     };
     auto drawText = [=, placeholder = o.placeholder](GraphicsContext& canvas, const Rect& b, const LayoutNode& node) {
         if (!singleLine) return drawLines(canvas, b, node);
+        (void)edits.get();  // (the caret, the selection and the composition are `ime`'s)
         bool focusedNow = node.focused;
         Rect inner{b.x + padStart, b.y, std::max(0.f, b.width - padStart - padEnd), b.height};
         TextMeasurer& tm = node.textMeasurer();

@@ -2296,6 +2296,7 @@ struct App {
     // The frame is recorded, and only what changed on the screen is drawn again, into pixels
     // kept in a texture (`frame`) that is then shown; a frame that changes nothing isn't shown.
     std::unique_ptr<kompoz::DisplayList> display;
+    std::unique_ptr<kompoz::DisplayList> fresh;  // KOMPOZ_KEEP_CHECK's: each frame recorded drawing every node
     SDL_Texture* frame = nullptr;
     int frameW = 0, frameH = 0;
     bool showFrame = true;  // the window needs the kept pixels again (exposed, first frame)
@@ -2307,6 +2308,7 @@ struct App {
     bool focused = true, minimized = false, hidden = false;  // desktops' and browsers' lifecycle
     uint64_t framePeriodNs = 16'666'667;  // the display's refresh interval: frames not shown are paced to it
     bool damageCheck = SDL_getenv("KOMPOZ_DAMAGE_CHECK") != nullptr;  // each frame compared with all of it drawn
+    bool keepCheck = SDL_getenv("KOMPOZ_KEEP_CHECK") != nullptr;      // each frame's recording compared with one drawing every node
     bool damageShow = SDL_getenv("KOMPOZ_DAMAGE_SHOW") != nullptr;    // outlines what was drawn again
     bool fullRedraw = SDL_getenv("KOMPOZ_FULL_REDRAW") != nullptr;    // all of every frame drawn, as before
     // A drag from another app coming in: what it drops, gathered until it is complete.
@@ -2314,7 +2316,7 @@ struct App {
     std::vector<std::string> dropFiles;
     std::string dropText;
     kompoz::Offset dropAt;
-    int damageFrames = 0, damageWrong = 0;
+    int damageFrames = 0, damageWrong = 0, keepFrames = 0, keepWrong = 0;
     SDL_TimerID wakeTimer = 0;  // wakes the idle loop when a coroutine delay is due
     int64_t wakeDeadline = -1;
     kompoz::detail::RecompositionStats traced;
@@ -2324,6 +2326,7 @@ struct App {
         if (wakeTimer) SDL_RemoveTimer(wakeTimer);
         if (frame) SDL_DestroyTexture(frame);
         if (damageCheck) SDL_Log("kompoz: damage check: %d of %d frames differed", damageWrong, damageFrames);
+        if (keepCheck) SDL_Log("kompoz: keep check: %d of %d frames recorded otherwise", keepWrong, keepFrames);
 #ifdef SDL_PLATFORM_ANDROID
         android_ime::setHandlers(nullptr, nullptr, nullptr, nullptr);
         android_ime::setMediaHandler(nullptr);
@@ -2674,6 +2677,22 @@ ImageBitmap renderImage(App& app, Size size, const std::function<void(GraphicsCo
     return image;
 }
 
+// KOMPOZ_KEEP_CHECK: the frame just recorded, which kept the nodes that didn't change, against
+// one drawing every node (what was kept must be what drawing them records).
+void checkKept(App& app, Size screen, float pixel) {
+    if (!app.fresh) app.fresh = std::make_unique<kompoz::DisplayList>(*app.fonts);
+    app.fresh->light = app.display->light;  // (the elevation shadows')
+    app.fresh->begin(screen, pixel);
+    app.host->draw(*app.fresh);
+    app.fresh->end();
+    ++app.keepFrames;
+    std::string why;
+    if (!app.display->sameFrame(*app.fresh, &why)) {
+        ++app.keepWrong;
+        SDL_Log("kompoz: keep check: %s", why.c_str());
+    }
+}
+
 // KOMPOZ_DAMAGE_CHECK: the kept pixels (a), with only what changed drawn again, against all of
 // the frame drawn afresh (b), w x h, rows `pitch` bytes apart. Differences are logged: they would
 // be stale pixels on the screen.
@@ -2780,6 +2799,7 @@ Drawn drawFrameGpu(App& app, const std::string& shot) {
     if (app.fullRedraw) app.display->invalidate();
     std::optional<Rect> damage = app.display->end();
     app.prof.recordNs = SDL_GetTicksNS() - recording;
+    if (app.keepCheck) checkKept(app, screen, 1 / scale);
     if (damage) r.drawFrame(*app.gpuFrame, *app.display, true);
     if (damage && app.damageCheck) {
         auto full = device.createTexture(pw, ph, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
@@ -2849,6 +2869,7 @@ Drawn drawFrame(App& app, const std::string& shot) {
     if (app.fullRedraw) app.display->invalidate();
     std::optional<Rect> damage = app.display->end();
     app.prof.recordNs = SDL_GetTicksNS() - recording;
+    if (app.keepCheck) checkKept(app, screen, 1 / scale);
     // Drawn again: the area cleared, then what touches it, clipped to it. What an opaque rect
     // covering all of it hides (the white too) isn't drawn.
     DrawInto drawInto = [&](SDL_Texture* target, const std::optional<Rect>& area) {
@@ -2913,10 +2934,11 @@ void profileFrame(App& app, uint64_t start, uint64_t composed, uint64_t waited, 
     }
     if (work > period || interval > 2 * period + 1) {
         ++p.slow;
-        SDL_Log("kompoz: frame %.1f ms after the last: input %.1f, compose+layout %.1f, wait %.1f, draw %.1f, present %.1f ms; %d layers "
-                "(%d kept), %d glyphs, %.0f%% drawn again",
-                interval, events, compose, wait, draw, present, app.gpuCanvas ? app.gpuCanvas->layerCount : app.canvas->layerCount,
-                app.gpuCanvas ? app.gpuCanvas->keptLayers : 0, glyphs, (area < 0 ? 1 : area) * 100);
+        SDL_Log("kompoz: frame %.1f ms after the last: input %.1f, compose+layout %.1f, wait %.1f, draw %.1f, present %.1f ms; %d nodes "
+                "drawn (%d kept), %d layers (%d kept), %d glyphs, %.0f%% drawn again",
+                interval, events, compose, wait, draw, present, app.display->drawnNodes(), app.display->keptNodes(),
+                app.gpuCanvas ? app.gpuCanvas->layerCount : app.canvas->layerCount, app.gpuCanvas ? app.gpuCanvas->keptLayers : 0, glyphs,
+                (area < 0 ? 1 : area) * 100);
     }
     if (start - p.summaryStart >= 1'000'000'000) {
         char gpu[96] = "";
@@ -3577,11 +3599,12 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     //   adb shell run-as <package> touch files/kompoz-profile
     // or, where run-as is refused (SELinux), in its external storage, which the app creates:
     //   adb shell touch /sdcard/Android/data/<package>/files/kompoz-profile
-    // and kompoz-damage-check, KOMPOZ_DAMAGE_CHECK.
+    // and kompoz-damage-check, KOMPOZ_DAMAGE_CHECK; kompoz-keep-check, KOMPOZ_KEEP_CHECK.
     for (const char* dir : {SDL_GetAndroidInternalStoragePath(), SDL_GetAndroidExternalStoragePath()}) {
         if (!dir) continue;
         app->profile = app->profile || SDL_GetPathInfo((std::string(dir) + "/kompoz-profile").c_str(), nullptr);
         app->damageCheck = app->damageCheck || SDL_GetPathInfo((std::string(dir) + "/kompoz-damage-check").c_str(), nullptr);
+        app->keepCheck = app->keepCheck || SDL_GetPathInfo((std::string(dir) + "/kompoz-keep-check").c_str(), nullptr);
     }
 #endif
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
@@ -3652,6 +3675,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
         app->canvas = std::make_unique<kompoz::sdl::SdlCanvas>(app->renderer, *app->fonts);
     app->display = std::make_unique<kompoz::DisplayList>(*app->fonts);
     app->display->allowMoves(app->gpuCanvas != nullptr);  // (a kept frame on the GPU moves its pixels)
+    app->display->keepNodes(true);  // (nodes that didn't change aren't drawn again)
     app->bitmaps = std::make_unique<kompoz::sdl::AppBitmaps>(*app);
     kompoz::detail::setBitmapRenderer(app->bitmaps.get());
     app->host = std::make_unique<kompoz::ComposeHost>(*app->fonts, app->config.content);

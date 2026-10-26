@@ -255,6 +255,13 @@
   ekranının bir karesinde 3.1 yerine 0.65 ms sürdü.
 - **`KOMPOZ_PROFILE`'ın özeti işin parçalarını verir**: kompozisyon ve yerleşim, çizim ve çizimin içinde kayıt (ağacın
   görüntü listesine çizilip önceki kareyle karşılaştırılması).
+- **Çizimi değişmeyen düğümler yeniden çizilmez**, Compose'un render düğümleri gibi: kare, böyle bir düğümün ve
+  içindeki her şeyin geçen kare çizdiğini, düğüm ne kadar kaydıysa o kadar kaydırarak (kaydırılan bir liste) yeniden
+  kaydeder. Bir düğüm ölçüldüğünde, çiziminin okuduğu bir durum değiştiğinde, çizerken yeniden çizim istediğinde ve
+  basıldığında, üzerine gelindiğinde ya da odaklandığında veya dalgası ilerlediğinde yeniden çizilir. `KOMPOZ_KEEP_CHECK`
+  (ve testler) her kareyi her düğümü çizen bir kareyle karşılaştırır; `KOMPOZ_PROFILE`'ın yavaş kareleri çizilen ve
+  tutulan düğümleri sayar. Bir Xiaomi 14 Ultra'da Bileşenler ekranının ekranda hiçbir şeyi değiştirmeyen bir karesi 5
+  yerine 0.4 ms sürdü.
 - **Düzeltildi**: eşi kendisinden sonra çizilen bir paylaşılan öğe, eşinin yerini ancak yeniden çizildiğinde görüyordu:
   iki kez çizilen bir kare (bir büyütecinki) onu iki yerde çiziyordu. Her birinin ait olduğu yer, hiçbiri çizilmeden
   önce not edilir.

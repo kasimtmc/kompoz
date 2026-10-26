@@ -23,7 +23,7 @@ struct MarqueeWidths {
 struct MarqueeData {
     MutableState<MarqueeWidths> widths = mutableStateOf(MarqueeWidths{});
     MutableState<bool> focused = mutableStateOf(false);
-    float offset = 0;    // dp, from 0 to `distance`
+    MutableState<float> offset = mutableStateOf(0.f);  // dp, from 0 to `distance` (read while drawing: drawn again)
     float distance = 0;  // the content and the gap after it: where its copy follows
 };
 
@@ -41,23 +41,24 @@ struct MarqueeElement final : ModifierElement {
 
     void draw(GraphicsContext& g, const Rect& bounds, const LayoutNode& node, const std::function<void()>& drawContent) const override {
         const MarqueeData& d = *data;
+        float offset = d.offset.get();
         g.pushClip(bounds);
-        if (d.offset <= 0) {
+        if (offset <= 0) {
             drawContent();
         } else {
             MarqueeWidths w = d.widths.peek();
             float way = towardsStart != node.rtl ? -1.f : 1.f;  // the drawing moves left (-1) or right
             // Moving towards its start, the content leaves first and the copy comes in from
             // the end; the other way round, the content stays until it has crossed the room.
-            bool first = d.offset < (towardsStart ? w.content : w.container);
-            bool second = d.offset > d.distance - (towardsStart ? w.container : w.content);
+            bool first = offset < (towardsStart ? w.content : w.container);
+            bool second = offset > d.distance - (towardsStart ? w.container : w.content);
             if (first) {
-                g.pushTranslation({way * d.offset, 0});
+                g.pushTranslation({way * offset, 0});
                 drawContent();
                 g.popTranslation();
             }
             if (second) {
-                g.pushTranslation({way * (d.offset - d.distance), 0});
+                g.pushTranslation({way * (offset - d.distance), 0});
                 drawContent();
                 g.popTranslation();
             }
@@ -80,10 +81,9 @@ struct MarqueeRun {
 
 // The passes: each one from the start to where the copy was, at `speed` dp per second, then
 // back to the start (where the copy is now, so nothing jumps).
-Task scroll(std::shared_ptr<MarqueeData> data, ComposeHost* host, MarqueeRun run) {
-    data->offset = 0;
+Task scroll(std::shared_ptr<MarqueeData> data, MarqueeRun run) {
     data->distance = run.distance;
-    host->requestRedraw();
+    data->offset.set(0);
     if (!run.running) co_return;
     float seconds = run.distance / run.speed;
     if (run.initialDelay > 0) co_await delay(std::chrono::milliseconds(run.initialDelay));
@@ -94,10 +94,9 @@ Task scroll(std::shared_ptr<MarqueeData> data, ComposeHost* host, MarqueeRun run
         while (t < seconds) {
             int64_t now = co_await awaitFrame();
             t = float(now - start) / 1e9f;
-            data->offset = std::min(run.distance, t * run.speed);
-            host->requestRedraw();
+            data->offset.set(std::min(run.distance, t * run.speed));
         }
-        data->offset = 0;
+        data->offset.set(0);
     }
 }
 
@@ -115,8 +114,7 @@ Modifier Modifier::basicMarquee(const MarqueeOptions& o, CallSite site) const {
                    o.iterations,
                    o.repeatDelayMillis,
                    o.initialDelayMillis.value_or(whileFocused ? 0 : o.repeatDelayMillis)};
-    ComposeHost* host = &detail::Composer::require().host();
-    LaunchedEffect(run, [data, host, run]() -> Task { return scroll(data, host, run); }, site);
+    LaunchedEffect(run, [data, run]() -> Task { return scroll(data, run); }, site);
 
     auto e = std::make_shared<MarqueeElement>();
     e->data = data;

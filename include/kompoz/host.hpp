@@ -28,12 +28,17 @@ class Dispatcher;
 }
 
 class ViewModelStore;
+class DisplayList;
 
 namespace detail {
 // Every layout checked against all of it measured again (KOMPOZ_LAYOUT_CHECK; the tests): the
 // differences found so far.
 void setLayoutCheck(bool on);
 int layoutCheckMismatches();
+// Every frame drawn twice after it is done, keeping nodes and afresh, the two compared
+// (DisplayList::sameFrame; the tests): the frames that came out otherwise so far.
+void setKeepCheck(bool on);
+int keepCheckMismatches();
 } // namespace detail
 
 class ComposeHost {
@@ -319,6 +324,10 @@ public:
     void recordLayoutRead(const void* key, LayoutNode& node);
     void forgetLayoutReads(LayoutNode& node);
     void invalidateLayoutReaders(const void* key);
+    // The same for drawing (what a frame that keeps nodes draws again).
+    void recordDrawRead(const void* key, LayoutNode& node);
+    void forgetDrawReads(LayoutNode& node);
+    void invalidateDrawReaders(const void* key);
     const detail::RecompositionStats& stats() const { return composer_.stats(); }
     TextMeasurer& textMeasurer() { return measurer_; }
     ImageBitmap loadImage(std::string_view path) { return callbacks_.loadImage ? callbacks_.loadImage(path) : ImageBitmap{}; }
@@ -462,6 +471,9 @@ private:
     bool layoutEverything_ = true;  // next layout measures every node again
     std::vector<std::weak_ptr<LayoutNode*>> animatingLayouts_;  // measured again next frame
     std::unordered_map<const void*, std::vector<LayoutNode*>> layoutReaders_;
+    std::unordered_map<const void*, std::vector<LayoutNode*>> drawReaders_;
+    std::unique_ptr<std::pair<DisplayList, DisplayList>> keepCheck_;  // setKeepCheck's: keeping nodes, afresh
+    void checkKept();
 
     std::vector<std::pair<LayoutNode*, LayoutNode*>> overlays_;  // popup, anchor; bottom to top
     std::vector<std::weak_ptr<std::function<bool(const KeyEvent&)>>> keyHandlers_;  // addKeyHandler's
@@ -507,6 +519,7 @@ private:
         const LayoutNode* node = nullptr;
         Offset origin;  // where it was pressed, in the clickable
         int64_t start = 0, released = -1;
+        bool moved = true;  // it moved last frame: this one draws where it stopped
     };
     std::vector<Ripple> ripples_;
     // onGloballyPositioned / onPlaced: what each was last told, by node and element.

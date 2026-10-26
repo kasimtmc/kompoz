@@ -451,6 +451,7 @@ void ClickableElement::draw(GraphicsContext& canvas, const Rect& bounds, const L
         if (!enabled || !node.indicationNode) return drawContent();
         ContentDrawScope scope(canvas, bounds, node, drawContent);
         node.indicationNode->draw(scope);
+        node.invalidateDraw();  // (a custom indication draws from what it holds: drawn every frame)
         return;
     }
     drawContent();
@@ -1180,6 +1181,7 @@ void OverscrollElement::draw(GraphicsContext& canvas, const Rect& bounds, const 
     if (!effect) return drawContent();
     ContentDrawScope scope(canvas, bounds, node, drawContent);
     effect->draw(scope);
+    node.invalidateDraw();  // (as a scroll container's: drawn every frame)
 }
 Modifier Modifier::overscroll(std::shared_ptr<OverscrollEffect> overscrollEffect) const {
     return with<OverscrollElement>(*this, [&](auto& e) { e.effect = std::move(overscrollEffect); });
@@ -1281,6 +1283,7 @@ void IndicationElement::draw(GraphicsContext& canvas, const Rect& bounds, const 
         if (!node.indicationNode) return drawContent();
         ContentDrawScope scope(canvas, bounds, node, drawContent);
         node.indicationNode->draw(scope);
+        node.invalidateDraw();  // (a custom indication draws from what it holds: drawn every frame)
         return;
     }
     drawContent();
@@ -1637,6 +1640,9 @@ Size LayoutNode::measure(const Constraints& given) {
     detail::LayoutPass pass = detail::currentLayoutPass();
     if (!needsMeasure_ && !probe && measuredWith_ == constraints && measuredIn_ == pass && !gMeasureEverything) return size_;  // as it was
     if (host_) host_->forgetLayoutReads(*this);  // what it reads this time counts
+    // Measured again: drawn again, as it may be drawn otherwise (not when the layout check
+    // measures everything again: that comes out as it was, or is a mismatch).
+    if (!gMeasureEverything) invalidateDraw();
     if (!pointerInputs.empty()) detail::syncPointerInputs(*this);  // drop blocks whose modifier is gone
     for (const auto& e : modifier.elements()) e->attach(*this);
     checkReported();  // (what composing it gave it comes to be measured)
@@ -1675,6 +1681,18 @@ void LayoutNode::recountReported() {
 }
 
 LayoutNode* detail::measuringNode() { return gMeasuring; }
+
+namespace {
+thread_local LayoutNode* gDrawing = nullptr;
+thread_local bool gKeptPass = false;  // drawing into a frame that keeps nodes (inside one drawn Fresh)
+} // namespace
+
+LayoutNode* detail::drawingNode() { return gDrawing; }
+
+void LayoutNode::invalidateDraw() const {
+    drawChanged_ = true;
+    for (LayoutNode* n = parent; n && !n->drawChanged_; n = n->parent) n->drawChanged_ = true;
+}
 
 float detail::layoutDensity() { return gLayoutDensity; }
 float detail::toWholePx(float dp) {
@@ -1833,18 +1851,31 @@ ParentData LayoutNode::parentData() const {
 }
 
 void LayoutNode::draw(GraphicsContext& canvas) {
+    using Recording = GraphicsContext::NodeRecording;
+    Recording r = canvas.recordNode(this, {bounds_.x, bounds_.y}, !drawChanged_);
+    if (r == Recording::Kept) return;  // what it drew last frame, recorded again
+    // Drawn into what is kept (itself, or inside what is): that has what changed now.
+    bool kept = r == Recording::Fresh || (r == Recording::Other && gKeptPass);
+    if (kept) drawChanged_ = false;
+    bool outerPass = std::exchange(gKeptPass, kept);
+    LayoutNode* outer = std::exchange(gDrawing, this);
+    if (host_) host_->forgetDrawReads(*this);  // what it reads this time counts
     canvas.beginNode(this);
     drawLayer(canvas, 0);
     canvas.endNode();
+    gDrawing = outer;
+    gKeptPass = outerPass;
 }
 
 void LayoutNode::drawAfter(GraphicsContext& canvas, const ModifierElement* element) {
     const auto& elements = modifier.elements();
     for (size_t i = 0; i < elements.size(); ++i)
         if (elements[i].get() == element) {
+            LayoutNode* outer = std::exchange(gDrawing, this);
             canvas.beginNode(this);
             drawLayer(canvas, i + 1);
             canvas.endNode();
+            gDrawing = outer;
             return;
         }
 }
@@ -1880,6 +1911,7 @@ void LayoutNode::drawLayer(GraphicsContext& canvas, size_t index) {
                     ContentDrawScope scope(into, view, *this, content);
                     effect->draw(scope);
                 });
+                invalidateDraw();  // (an effect draws from what it holds, which says nothing when it changes: drawn every frame)
                 return;
             }
     if (index < elements.size() && index < layers_.size()) {

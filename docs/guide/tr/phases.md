@@ -16,7 +16,7 @@ Aşamalar normalde bu sırayla gider, ama her biri atlanabilir. Bir durum deği�
 |---|---|
 | Bir composable'ın gövdesinde | Onu okuyan scope'ların kompozisyonu, ardından değişen şeyin yerleşimi ve çizimi. |
 | Ölçerken ya da yerleştirirken (`Modifier().offset([] { … })`, bir `Layout`'un ölçüm politikası) | Yerleşim ve çizim; kompozisyon yok. |
-| Çizerken (`graphicsLayer([] (GraphicsLayerScope&) { … })`, `drawBehind`, bir `Canvas`) | Çizim; bir yerleşim geçişi bakar ama hiçbir şey ölçmez. |
+| Çizerken (`graphicsLayer([] (GraphicsLayerScope&) { … })`, `drawBehind`, bir `Canvas`) | Onu okuyan düğümlerin çizimi; bir yerleşim geçişi bakar ama hiçbir şey ölçmez. |
 
 ## Durum okumalarını ertelemek
 
@@ -60,6 +60,8 @@ Bunun için bir şey yapmanız gerekmez. Ama şu anlama gelir: büyük bir ağac
 ## Yalnız değişeni çizmek
 
 Kompoz her kareyi bir çizim komutları listesi olarak kaydeder ve önceki kareyle karşılaştırır. Ekranın yalnız değişen bölümleri yeniden çizilir; piksellerin geri kalanı korunur. Kompoz'un GPU renderer'ında kaydırılan bir liste de yeniden çizilmez: pikselleri kaydırılır, yalnızca görünüme giren şerit ve onunla birlikte kaymayanlar (üstündeki yüzen bir düğme) çizilir. Bu, listenin altı tek renkken işler: kendi zemini ya da ekranınki; bir gradyanın ya da resmin üstünde liste kaydıkça yeniden çizilir. Bunu, yeniden çizileni çerçeveleyen `KOMPOZ_DAMAGE_SHOW=1` ile görebilirsiniz. Bkz. [Araçlar](tools.md#karelerin-profilini-çıkarmak).
+
+Compose'daki gibi, çizdiği şeylerden hiçbiri değişmeyen bir düğümün çizimi de yeniden çalışmaz: kare, düğümün ve içindeki her şeyin geçen sefer çizdiğini, düğüm ne kadar kaydıysa o kadar kaydırarak (kaydırılan bir liste) yeniden kaydeder; böylece üstünde küçük bir animasyon olan büyük bir ekranı kaydetmek aşağı yukarı animasyon kadar tutar. Bir düğüm şu durumlarda yeniden çizilir: yeniden ölçüldüğünde, çiziminin okuduğu bir durum değiştiğinde, çizerken yeniden çizim istediğinde (karenin zamanıyla çizilenler: bir `Canvas`'ta okunan sonsuz bir geçişin durumu, bir ilerleme göstergesi) ve basıldığında, üzerine gelindiğinde ya da odaklandığında veya dalgası (ripple) ilerlediğinde. Bu yüzden çizim kodu değişen şeyi Compose'daki gibi bir durumdan alır: başka yerde değiştirilip çizerken okunan düz bir değer, düğümü başka bir şey yeniden çizene kadar görülmez. `KOMPOZ_KEEP_CHECK=1` her kareyi her düğümü çizen bir kareyle karşılaştırır; testler bunu hep yapar.
 
 ## Performans ipuçları
 

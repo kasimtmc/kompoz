@@ -21,6 +21,13 @@
 // rect clip, as a scrolled list does, moves them (moves(), before the areas) instead of being
 // drawn again: only what that leaves wrong is, the strip that came into view and what didn't move
 // with it.
+//
+// Where nodes are kept (keepNodes), a node whose drawing didn't change since the last frame
+// (recordNode's "unchanged") isn't drawn again: what it drew last frame is recorded again, moved
+// as far as the node moved (a list scrolled), exactly as drawing it would record it. What its
+// drawing left out or asked (what was clipped away, quickReject's answers) is recorded with it and
+// asked again there: where any of that comes out otherwise (something scrolled into view), or
+// it can't be moved so (a transform, the light of a shadow), the node is drawn.
 
 #include "graphics.hpp"
 
@@ -49,6 +56,11 @@ public:
     };
     // Lets end() find moves (off at first): the canvas the frame is kept on can move its pixels.
     void allowMoves(bool on) { allowMoves_ = on; }
+    // Keeps what nodes drew from one frame to the next, for recordNode (off at first).
+    void keepNodes(bool on) { keepNodes_ = on; }
+    // In the last recording, the nodes recordNode kept (with all in them) and those it had drawn.
+    int keptNodes() const { return keptNodes_; }
+    int drawnNodes() const { return drawnNodes_; }
     // The last end()'s damage as separate rects (dp), each to be drawn again clipped to itself
     // (after the moves), and its moves.
     const std::vector<Rect>& areas() const { return areas_; }
@@ -63,7 +75,12 @@ public:
     // The next frame is damaged all over (the kept pixels were lost).
     void invalidate() { invalid_ = true; }
     size_t size() const { return frame_.size(); }  // commands in the last frame
+    // The last frame recorded the same as `other`'s (where things are, within a thousandth of a
+    // dp): what kept nodes recorded is what drawing them would have (KOMPOZ_KEEP_CHECK). If not,
+    // `why` says where.
+    bool sameFrame(const DisplayList& other, std::string* why = nullptr) const;
 
+    NodeRecording recordNode(const void* node, Offset origin, bool unchanged) override;
     void beginNode(const void* node) override;
     void endNode() override;
     void fillRoundRect(const Rect& rect, const CornerRadii& radii, Color color) override;
@@ -180,9 +197,37 @@ private:
     Command& add(Kind kind);
     // Records a draw command touching `local` (padded by `pad` dp), unless that is clipped away.
     Command* draw(Kind kind, const Rect& local, float pad);
+    // What reaches `reach` (dp where drawn) shows on the screen, now or at rest (draw()'s test).
+    bool shows(const Rect& reach) const;
     // Records text (any kind of it) whose glyphs may reach `blur` further.
     Command* text(Kind kind, std::string_view utf8, Offset baseline, const Font& font, bool rtl, float blur = 0);
     void pop(Kind kind);
+    // `c` drawn into `canvas` moved by `by` (its place, as sameMoved says it; replay()'s, keep()'s).
+    static void replayCommand(GraphicsContext& canvas, const Command& c, Offset by);
+    // What happened in a recording besides its commands, before command `at`: a node begun (its
+    // range) or ended, something it drew clipped away (its reach, dp where drawn), quickReject
+    // asked (the rect, its answer), the light's center asked (what is drawn from it doesn't move
+    // with the node).
+    struct Event {
+        enum Type : uint8_t { Begin, End, Culled, Rejected, Accepted, Light };
+        Type type;
+        uint32_t at;
+        uint32_t range = 0;  // Begin's
+        const void* node = nullptr;
+        Rect rect;
+    };
+    // A node's part of a recording: its events and commands, Begin to End; where it was (its top
+    // left, if recordNode said: else it isn't kept) and the state it was drawn in.
+    struct Range {
+        uint64_t key;
+        uint32_t firstEvent, endEvent = 0, firstCommand, endCommand = 0;
+        std::optional<Offset> origin;
+        State entry;
+    };
+    // Last frame's range `r` recorded again, moved by `by`, if what it left out and asked comes
+    // out as it did; if not, nothing is recorded.
+    bool keep(const Range& r, Offset by);
+    Offset lightCenterHere() const;  // lightCenter(), not told
     // What `count` commands from `first` touch on the screen, as one rect (none if nothing).
     static void addDamage(std::vector<Rect>& damage, const std::vector<Command>& commands, uint32_t first, uint32_t count);
     // How far all of segment `s` moved (on the screen) from what last frame's `p` drew: the same
@@ -237,6 +282,15 @@ private:
     std::vector<Rect> areas_;
     std::vector<Move> moves_;
     bool allowMoves_ = false;
+    bool keepNodes_ = false;
+    int keptNodes_ = 0, drawnNodes_ = 0;
+    mutable std::vector<Event> recordingEvents_;  // (quickReject and lightCenter tell them too)
+    std::vector<Event> frameEvents_;
+    std::vector<Range> recordingRanges_, frameRanges_;
+    std::vector<uint32_t> openRanges_;  // the ranges being recorded, innermost last
+    IndexTable rangeLookup_;  // the last frame's ranges by key
+    std::optional<Offset> nextOrigin_;  // recordNode's, for the range beginNode starts
+    std::vector<const void*> keptBegun_;  // (keep()'s: the nodes it began)
     uint32_t layersInSegment_ = 0;  // (the layers pushed in the segment being recorded so far)
     bool segmentOpen_ = false, invalid_ = true;
     Size viewport_, frameViewport_;

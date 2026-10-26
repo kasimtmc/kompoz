@@ -1853,6 +1853,17 @@ public:
     // display_list.hpp); others ignore them.
     virtual void beginNode(const void* node) { (void)node; }
     virtual void endNode() {}
+    // Asked as a node is about to be drawn (before beginNode), where the canvas keeps what nodes
+    // drew from one frame to the next (a DisplayList's frames, keepNodes): Kept, it drew again
+    // what the node drew last frame, moved from where it was to `origin` (its top left),
+    // as the node would ("unchanged": nothing that it and those in it draw from changed), and the
+    // node draws nothing; Fresh, the node is drawn, into the frame kept; Other: it is drawn, but
+    // not into what is kept (any other canvas, or a node drawn a second time in a frame).
+    enum class NodeRecording : uint8_t { Other, Fresh, Kept };
+    virtual NodeRecording recordNode(const void* node, Offset origin, bool unchanged) {
+        (void)node, (void)origin, (void)unchanged;
+        return NodeRecording::Other;
+    }
     // What is drawn into a layer, where the canvas keeps layers' pixels from one frame to the next
     // (a recording replayed tells it which layer comes next): as usual, all of it (even what is
     // outside the area replayed: the canvas keeps it), or nothing (it has the pixels already).

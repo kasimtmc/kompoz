@@ -63,6 +63,8 @@ void recordRead(const void* key) {
         c->recordRead(key);
     else if (LayoutNode* node = measuringNode(); node && node->host())  // read by a layout: changed, it's measured again
         node->host()->recordLayoutRead(key, *node);
+    else if (LayoutNode* node = drawingNode(); node && node->host())  // read by a drawing: changed, it's drawn again
+        node->host()->recordDrawRead(key, *node);
 }
 
 Scope::~Scope() { composer.forget(*this); }
@@ -107,7 +109,10 @@ void Composer::invalidateScope(Scope& scope) {
 }
 
 void Composer::invalidateReaders(const void* key, const Group* within) {
-    if (!within) host_.invalidateLayoutReaders(key);
+    if (!within) {
+        host_.invalidateLayoutReaders(key);
+        host_.invalidateDrawReaders(key);
+    }
     auto it = readers_.find(key);
     if (it == readers_.end()) return;
     for (Scope* s : std::vector<Scope*>(it->second))

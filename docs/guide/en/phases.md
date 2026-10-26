@@ -16,7 +16,7 @@ The phases normally go in that order, but each can be skipped. When a state chan
 |---|---|
 | In a composable's body | Composition of the scopes that read it, then layout and drawing of what changed. |
 | While measuring or placing (`Modifier().offset([] { … })`, a `Layout`'s measure policy) | Layout and drawing; no composition. |
-| While drawing (`graphicsLayer([] (GraphicsLayerScope&) { … })`, `drawBehind`, a `Canvas`) | Drawing; a layout pass looks, but measures nothing. |
+| While drawing (`graphicsLayer([] (GraphicsLayerScope&) { … })`, `drawBehind`, a `Canvas`) | Drawing of the nodes that read it; a layout pass looks, but measures nothing. |
 
 ## Deferring state reads
 
@@ -60,6 +60,8 @@ You don't need to do anything for this. It does mean a change deep in a large tr
 ## Drawing only what changed
 
 Kompoz records each frame as a list of drawing commands and compares it with the frame before. Only the parts of the screen that changed are drawn again; the rest of the pixels are kept. On Kompoz's GPU renderer a scrolled list isn't drawn again either: its pixels are moved, and only the strip that comes into view is drawn, with what doesn't scroll along (a floating button over it). That works where what is under the list is one color, its own background or the screen's; over a gradient or an image the list is drawn again as it scrolls. You can see this with `KOMPOZ_DAMAGE_SHOW=1`, which outlines what was redrawn. See [Tools](tools.md#profiling-frames).
+
+Nor is a node's drawing run again when nothing it draws from changed, as in Compose: the frame records again what the node and everything in it drew last time, moved as far as it moved (a list scrolled by), so a large screen with a small animation on it costs about as much to record as the animation. A node is drawn again when it is measured again, when a state its drawing read changes, when it asks for a redraw while it draws (what draws by the frame's time: an endless transition's state read in a `Canvas`, a progress indicator) and when it is pressed, hovered or focused or its ripple moves. So drawing code takes what changes from a state, as Compose's does: a plain value changed elsewhere and read while drawing isn't seen until something else draws the node again. `KOMPOZ_KEEP_CHECK=1` checks each frame against one drawing every node; the tests always do.
 
 ## Performance tips
 

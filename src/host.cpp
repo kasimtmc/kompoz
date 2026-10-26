@@ -1,5 +1,6 @@
 #include <kompoz/animation.hpp>
 #include <kompoz/coroutines.hpp>
+#include <kompoz/display_list.hpp>
 #include <kompoz/host.hpp>
 #include <kompoz/nested_scroll.hpp>
 #include <kompoz/viewmodel.hpp>
@@ -25,6 +26,8 @@ constexpr int64_t kTapTimeoutNanos = 100000000;  // Android ViewConfiguration.ge
 
 std::mutex gMutex;
 std::vector<ComposeHost*> gHosts;
+bool gKeepCheck = false;  // (detail::setKeepCheck: the tests'; an app's platform checks its own frames, KOMPOZ_KEEP_CHECK)
+int gKeepMismatches = 0;
 std::vector<std::function<void()>> gTasks;
 
 template <class T>
@@ -411,14 +414,39 @@ bool ComposeHost::frame(int64_t frameTimeNanos) {
     bool rippling = false;
     std::erase_if(ripples_, [&](Ripple& r) {
         if (r.released < 0 && r.node != pressed_) r.released = frameTimeNanos;
-        if (rippleDone(r.start, r.released, frameTimeNanos)) return true;
-        rippling = rippling || rippleMoving(r.start, r.released, frameTimeNanos);  // held after spreading: nothing moves
-        return false;
+        bool done = rippleDone(r.start, r.released, frameTimeNanos), moving = !done && rippleMoving(r.start, r.released, frameTimeNanos);
+        if (done || moving || r.moved) r.node->invalidateDraw();  // (held after spreading: nothing moves)
+        r.moved = moving;
+        rippling = rippling || moving;
+        return done;
     });
     if (rippling) redraw_ = true;
     animating_ = composer_.hasFrameScopes() || flingNode_ || wheel_ || rippling;
     if (redraw_ && mouseOver_ && !pointerDown_) updateHover(lastPosition_);  // content may have moved under a resting mouse
+    if (gKeepCheck) checkKept();
     return std::exchange(redraw_, false);
+}
+
+void ComposeHost::checkKept() {
+    if (!keepCheck_) {
+        keepCheck_ = std::make_unique<std::pair<DisplayList, DisplayList>>(std::piecewise_construct, std::forward_as_tuple(measurer_),
+                                                                          std::forward_as_tuple(measurer_));
+        keepCheck_->first.keepNodes(true);
+    }
+    bool redraw = redraw_;  // (drawn for the check: no frame asked for by it)
+    auto record = [&](DisplayList& list) {
+        list.begin(viewport_, 1 / std::max(density_.density, 1e-3f));
+        draw(list);
+        list.end();
+    };
+    record(keepCheck_->first);
+    record(keepCheck_->second);
+    redraw_ = redraw;
+    std::string why;
+    if (!keepCheck_->first.sameFrame(keepCheck_->second, &why)) {
+        ++gKeepMismatches;
+        std::fprintf(stderr, "kompoz: keep check: %s\n", why.c_str());
+    }
 }
 
 bool ComposeHost::hasPendingWork() const {
@@ -742,6 +770,8 @@ bool sameRect(const Rect& a, const Rect& b) {
 } // namespace
 
 void detail::setLayoutCheck(bool on) { gLayoutCheck = on; }
+void detail::setKeepCheck(bool on) { gKeepCheck = on; }
+int detail::keepCheckMismatches() { return gKeepMismatches; }
 int detail::layoutCheckMismatches() { return gLayoutMismatches; }
 
 void ComposeHost::measureAndPlace() {
@@ -1355,7 +1385,31 @@ void ComposeHost::invalidateLayoutReaders(const void* key) {
     for (LayoutNode* node : it->second) node->invalidateMeasure();
     layoutDirty_ = true;
 }
-void ComposeHost::requestRedraw() { redraw_ = true; }
+void ComposeHost::recordDrawRead(const void* key, LayoutNode& node) {
+    if (std::find(node.drawReads_.begin(), node.drawReads_.end(), key) != node.drawReads_.end()) return;
+    node.drawReads_.push_back(key);
+    drawReaders_[key].push_back(&node);
+}
+void ComposeHost::forgetDrawReads(LayoutNode& node) {
+    for (const void* key : node.drawReads_) {
+        auto it = drawReaders_.find(key);
+        if (it == drawReaders_.end()) continue;
+        std::erase(it->second, &node);
+        if (it->second.empty()) drawReaders_.erase(it);
+    }
+    node.drawReads_.clear();
+}
+void ComposeHost::invalidateDrawReaders(const void* key) {
+    auto it = drawReaders_.find(key);
+    if (it == drawReaders_.end()) return;
+    for (LayoutNode* node : it->second) node->invalidateDraw();
+    redraw_ = true;
+}
+void ComposeHost::requestRedraw() {
+    // Asked as a node is drawn (an animation drawn on): the next frame draws that node again.
+    if (LayoutNode* drawing = detail::drawingNode(); drawing && drawing->host() == this) drawing->invalidateDraw();
+    redraw_ = true;
+}
 
 Rect ComposeHost::touchBoundsOf(const LayoutNode& node, const ModifierElement* element) const {
     Rect r = hitBoundsOf(node, element);
@@ -1570,7 +1624,10 @@ void ComposeHost::startDelayedPress(int64_t time) {
 
 void ComposeHost::unpress() {
     if (pressed_) releaseRipples(pressed_, lastFrameTime_);
-    if (pressed_) std::exchange(pressed_, nullptr)->pressed = false;
+    if (pressed_) {
+        pressed_->invalidateDraw();
+        std::exchange(pressed_, nullptr)->pressed = false;
+    }
     endInteraction(pressInteraction_, &Interaction::cancel);
     longPressAt_ = triggerLongPressAt_ = textLongPressAt_ = -1;
     requestRedraw();
@@ -1683,7 +1740,10 @@ void ComposeHost::pointerDown(Offset p, int64_t time, int64_t pointerId, Pointer
     samples_.push_back({timeOr(time), 0});
     if (pendingClick_ && pendingClick_ != pressed_) fireClick(nullptr, time);  // another node: no double click
     secondPress_ = pendingClick_ && pendingClick_ == pressed_;
-    if (pressed_) pressed_->pressed = true;
+    if (pressed_) {
+        pressed_->pressed = true;
+        pressed_->invalidateDraw();
+    }
     // The press, told to the clickable's interaction source (or a text field's).
     if (pressed_) {
         auto* click = pressed_->modifier.find<ClickableElement>();
@@ -2081,7 +2141,10 @@ void ComposeHost::pointerUp(Offset p, int64_t time, int64_t pointerId) {
     pointerTargets_.clear();
     startDelayedPress(timeOr(time));  // a tap before the timeout: pressed, then let go
     LayoutNode* target = std::exchange(pressed_, nullptr);
-    if (target) target->pressed = false;
+    if (target) {
+        target->pressed = false;
+        target->invalidateDraw();
+    }
     if (target) releaseRipples(target, timeOr(time));
     if (pressInteraction_) {  // let go where it was pressed: a release (before the click); slid off it: a cancel
         auto* click = target ? target->modifier.find<ClickableElement>() : nullptr;
@@ -2306,7 +2369,10 @@ void ComposeHost::stopFling() {
 }
 
 void ComposeHost::pointerExit() {
-    if (hovered_) std::exchange(hovered_, nullptr)->hovered = false;
+    if (hovered_) {
+        hovered_->invalidateDraw();
+        std::exchange(hovered_, nullptr)->hovered = false;
+    }
     mouseOver_ = false;
     updateHoverInteractions(lastPosition_);  // ends them (Exit where the mouse was last)
     setHoveredTrigger(nullptr);
@@ -2456,9 +2522,9 @@ void ComposeHost::updateHover(Offset p) {
     Cursor cursor = overriding ? *overriding : cursorFound.value_or(Cursor::Default);
     if (!mouseOver_) hover = nullptr;  // a finger lifted over it: no hover
     if (hover != hovered_) {
-        if (hovered_) hovered_->hovered = false;
+        if (hovered_) hovered_->hovered = false, hovered_->invalidateDraw();
         hovered_ = hover;
-        if (hover) hover->hovered = true;
+        if (hover) hover->hovered = true, hover->invalidateDraw();
         requestRedraw();
     }
     updateHoverInteractions(p);
@@ -2946,8 +3012,9 @@ void ComposeHost::setFocus(LayoutNode* node, bool touched) {
     if (node) bringFocusedIntoView_ = true;  // whatever focused it (a FocusRequester too), as Compose's focusables
     requestLayout();
     bool hadInput = isTextField(focused_);
-    if (focused_) focused_->focused = false;
+    if (focused_) focused_->focused = false, focused_->invalidateDraw();
     focused_ = node;
+    if (node) node->invalidateDraw();
     if (isTextField(node)) {
         node->focused = true;
         auto* f = node->modifier.find<FocusableElement>();
@@ -3241,6 +3308,7 @@ void ComposeHost::autofillDone(bool commit) {
 
 void ComposeHost::nodeRemoved(LayoutNode* node) {
     forgetLayoutReads(*node);
+    forgetDrawReads(*node);
     if (mouseSelection_ && mouseSelection_->field == node) mouseSelection_.reset();
     if (lastMousePressField_ == node) lastMousePressField_ = nullptr;
     std::erase(pointerEntered_, node);
