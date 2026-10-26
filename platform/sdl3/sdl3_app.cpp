@@ -2288,7 +2288,8 @@ struct App {
         int shown = 0, missed = 0;                // missed: display refreshes between frames shown back to back
         double workTotal = 0, workMax = 0, waitTotal = 0, intervalMax = 0, drawnArea = 0;  // drawnArea: fractions of the screen, summed
         double composeTotal = 0, drawTotal = 0, recordTotal = 0;  // the work's parts (recording: of the drawing)
-        uint64_t recordNs = 0;  // this frame's recording (drawFrame)
+        uint64_t recordNs = 0;   // this frame's recording (drawFrame)
+        uint64_t acquireNs = 0;  // and its wait for an image of the window to draw into (a wait, not work)
         int gpuFrames = 0;
         double gpuTotal = 0, gpuMax = 0;
     } prof;
@@ -2813,7 +2814,9 @@ Drawn drawFrameGpu(App& app, const std::string& shot) {
         r.flush();
         return {false, 0};
     }
+    uint64_t acquiring = SDL_GetTicksNS();
     gpu::Texture* swapchain = device.swapchainTexture();
+    app.prof.acquireNs = SDL_GetTicksNS() - acquiring;
     if (swapchain) {
         app.showFrame = false;
         device.discard(*swapchain);  // (all of it copied over: what it held isn't loaded, on a tiling GPU)
@@ -2910,8 +2913,9 @@ void profileFrame(App& app, uint64_t start, uint64_t composed, uint64_t waited, 
     App::Profile& p = app.prof;
     double period = ms(app.framePeriodNs);
     double interval = p.lastStart ? ms(start - p.lastStart) : 0;
-    double events = ms(p.eventsNs), compose = ms(composed - start), wait = ms(waited), draw = ms(drawn - composed - waited),
-           present = ms(presented - drawn);
+    double acquire = ms(p.acquireNs);
+    double events = ms(p.eventsNs), compose = ms(composed - start), wait = ms(waited) + acquire,
+           draw = ms(drawn - composed - waited) - acquire, present = ms(presented - drawn);
     double work = events + compose + draw;
     p.lastStart = start;
     p.eventsNs = 0;
@@ -2919,7 +2923,7 @@ void profileFrame(App& app, uint64_t start, uint64_t composed, uint64_t waited, 
     ++p.frames;
     p.workTotal += work;
     p.composeTotal += compose, p.drawTotal += draw, p.recordTotal += ms(p.recordNs);
-    p.recordNs = 0;
+    p.recordNs = p.acquireNs = 0;
     p.workMax = std::max(p.workMax, work);
     p.waitTotal += wait;
     p.intervalMax = std::max(p.intervalMax, interval);
