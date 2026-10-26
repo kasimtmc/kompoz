@@ -255,6 +255,9 @@
   ekranının bir karesinde 3.1 yerine 0.65 ms sürdü.
 - **`KOMPOZ_PROFILE`'ın özeti işin parçalarını verir**: kompozisyon ve yerleşim, çizim ve çizimin içinde kayıt (ağacın
   görüntü listesine çizilip önceki kareyle karşılaştırılması).
+- **Kare zamanları ekranın vuruşuna düşer**, Android'in Choreographer'ının verdiği gibi: son karenin zamanından tam
+  sayıda yenileme süresi sonra, şimdiye en yakın olanı; böylece her kare kendi süresinin ne kadar geç bir yerinde
+  başlarsa başlasın animasyonlar eşit adımlarla ilerler (`detail::frameTimeOnBeat`).
 - **`KOMPOZ_PROFILE` pencerenin görüntüsünü beklemeyi bekleme sayar**, çizim değil: ekranın FIFO sunumunda bu, bir
   sonraki yenilemenin bir görüntüyü geri vermesini bekler.
 - **Çizimi değişmeyen düğümler yeniden çizilmez**, Compose'un render düğümleri gibi: kare, böyle bir düğümün ve

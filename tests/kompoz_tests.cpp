@@ -19591,6 +19591,18 @@ TEST(tooltip_box_shows_on_long_press_and_hover) {
     CHECK(!state->isVisible());
 }
 
+// Frame times on the display's beat (Choreographer's): whole periods after the last, the nearest
+// to now, never going back.
+TEST(frame_times_fall_on_the_displays_beat) {
+    CHECK(detail::frameTimeOnBeat(-1, 1000, 100) == 1000);  // the first: now
+    CHECK(detail::frameTimeOnBeat(1000, 1090, 100) == 1100);  // started a little early in its period
+    CHECK(detail::frameTimeOnBeat(1100, 1149, 100) == 1100);  // within half a period: the same frame time
+    CHECK(detail::frameTimeOnBeat(1100, 1240, 100) == 1200);  // late in its period
+    CHECK(detail::frameTimeOnBeat(1200, 1460, 100) == 1500);  // two refreshes missed: three periods on
+    CHECK(detail::frameTimeOnBeat(1500, 1300, 100) == 1500);  // (a clock behind it: never back)
+    CHECK(detail::frameTimeOnBeat(1500, 1600, 0) == 1600);   // no period known: now
+}
+
 TEST(a_lifted_finger_hovers_nothing) {
     // A platform that doesn't say the finger left (no pointerExit after it): what it lifted over
     // isn't hovered, however many frames are drawn after (and none of them hit tests for hover).

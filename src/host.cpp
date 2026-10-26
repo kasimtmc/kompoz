@@ -771,6 +771,10 @@ bool sameRect(const Rect& a, const Rect& b) {
 
 void detail::setLayoutCheck(bool on) { gLayoutCheck = on; }
 void detail::setKeepCheck(bool on) { gKeepCheck = on; }
+int64_t detail::frameTimeOnBeat(int64_t last, int64_t now, int64_t period) {
+    if (last < 0 || period <= 0) return now;
+    return last + std::max<int64_t>(0, (now - last + period / 2) / period) * period;
+}
 int detail::keepCheckMismatches() { return gKeepMismatches; }
 int detail::layoutCheckMismatches() { return gLayoutMismatches; }
 

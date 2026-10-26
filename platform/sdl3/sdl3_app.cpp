@@ -2308,6 +2308,7 @@ struct App {
     int resizeFrames = 0;
     bool focused = true, minimized = false, hidden = false;  // desktops' and browsers' lifecycle
     uint64_t framePeriodNs = 16'666'667;  // the display's refresh interval: frames not shown are paced to it
+    int64_t lastFrameTime = -1;           // the last frame's time, on the display's beat (frameTimeOnBeat)
     bool damageCheck = SDL_getenv("KOMPOZ_DAMAGE_CHECK") != nullptr;  // each frame compared with all of it drawn
     bool keepCheck = SDL_getenv("KOMPOZ_KEEP_CHECK") != nullptr;      // each frame's recording compared with one drawing every node
     bool damageShow = SDL_getenv("KOMPOZ_DAMAGE_SHOW") != nullptr;    // outlines what was drawn again
@@ -3881,7 +3882,9 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 #endif
     bool scripted = app.script.running();
     std::string shot = app.script.enabled() ? kompoz::sdl::stepScript(app) : std::string{};
-    int64_t now = scripted && !app.script.realtime ? (app.script.clock += 16'666'667) : app.clock();
+    int64_t now = scripted && !app.script.realtime
+                      ? (app.script.clock += 16'666'667)
+                      : (app.lastFrameTime = kompoz::detail::frameTimeOnBeat(app.lastFrameTime, app.clock(), int64_t(app.framePeriodNs)));
     if (scripted) app.script.clock = std::max(app.script.clock, now);
     if (scripted && !app.script.running())  // its last frame: real time from here, never back
         app.clockOffset = std::max<int64_t>(0, now - int64_t(SDL_GetTicksNS()));

@@ -242,6 +242,9 @@
   0.65 ms of a frame of the Components screen instead of 3.1.
 - **`KOMPOZ_PROFILE`'s summary gives the work's parts**: composition and layout, drawing, and of the drawing the
   recording (the tree drawn into the display list, compared with the last frame's).
+- **Frame times fall on the display's beat**, as Android's Choreographer gives them: a whole number of refresh
+  periods after the last frame's, the nearest to now, so animations move by equal steps however late in its period
+  each frame starts (`detail::frameTimeOnBeat`).
 - **`KOMPOZ_PROFILE` counts waiting for the window's image as a wait**, not as drawing: with the display's FIFO
   presentation that waits for the next refresh to give one back.
 - **Nodes whose drawing didn't change aren't drawn again**, as Compose's render nodes: a frame records again what such

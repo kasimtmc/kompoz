@@ -39,6 +39,11 @@ int layoutCheckMismatches();
 // (DisplayList::sameFrame; the tests): the frames that came out otherwise so far.
 void setKeepCheck(bool on);
 int keepCheckMismatches();
+// A frame's time on the display's beat, as Android's Choreographer gives it: a whole number of
+// refresh periods after the last frame's (`last`; none yet: negative), the nearest to `now`, so that
+// what animates moves by equal steps however late in its period each frame starts. At most half a
+// period from `now`, and never before `last` (frames within half a period of it share its time).
+int64_t frameTimeOnBeat(int64_t last, int64_t now, int64_t period);
 } // namespace detail
 
 class ComposeHost {
