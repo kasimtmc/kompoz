@@ -1409,6 +1409,25 @@ void ComposeHost::invalidateDrawReaders(const void* key) {
     for (LayoutNode* node : it->second) node->invalidateDraw();
     redraw_ = true;
 }
+ImageBitmap ComposeHost::loadImage(std::string_view path) {
+    std::string key(path);
+    if (auto it = images_.find(key); it != images_.end()) {
+        it->second.used = ++imageUses_;
+        return it->second.image;
+    }
+    ImageBitmap image = callbacks_.loadImage ? callbacks_.loadImage(path) : ImageBitmap{};
+    if (image.empty()) return image;
+    size_t bytes = size_t(image.width()) * size_t(image.height()) * 4;
+    images_[key] = {image, bytes, ++imageUses_};
+    imageBytes_ += bytes;
+    while (imageBytes_ > kImageCacheBytes && images_.size() > 1) {  // the least recently used go (not the one just loaded)
+        auto oldest = std::min_element(images_.begin(), images_.end(), [](const auto& a, const auto& b) { return a.second.used < b.second.used; });
+        imageBytes_ -= oldest->second.bytes;
+        images_.erase(oldest);
+    }
+    return image;
+}
+
 void ComposeHost::requestRedraw() {
     // Asked as a node is drawn (an animation drawn on): the next frame draws that node again.
     if (LayoutNode* drawing = detail::drawingNode(); drawing && drawing->host() == this) drawing->invalidateDraw();

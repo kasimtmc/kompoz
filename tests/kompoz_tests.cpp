@@ -19593,6 +19593,45 @@ TEST(tooltip_box_shows_on_long_press_and_hover) {
 
 // Frame times on the display's beat (Choreographer's): whole periods after the last, the nearest
 // to now, never going back.
+// Image assets: decoded once wherever they are used and however often their screen comes back,
+// as Android's resources; the least recently used go past the host's budget.
+TEST(image_assets_are_decoded_once_wherever_they_are_used) {
+    auto shown = mutableStateOf(0);  // 0 nothing, 1 a and b twice, 2 two large ones, 3 a again
+    std::vector<std::string> decoded;
+    ComposeTestRule rule([&] {
+        if (shown.get() == 1) {
+            ImageBitmap first = imageResource("a.png"), second = imageResource("a.png");
+            Image(first, "a");
+            Image(second, "a again");
+            Image(imageResource("b.png"), "b");
+            CHECK(first.id() == second.id());
+        }
+        if (shown.get() == 2) {
+            Image(imageResource("c.png"), "c");
+            Image(imageResource("d.png"), "d");
+        }
+        if (shown.get() == 3) Image(imageResource("a.png"), "a");
+    });
+    rule.host().setCallbacks({.loadImage = [&](std::string_view path) {
+        decoded.emplace_back(path);
+        int side = path == "c.png" || path == "d.png" ? 2048 : 8;  // 16 MB each: past the budget with the others
+        return ImageBitmap::fromPixels(side, side, std::vector<uint8_t>(size_t(side) * size_t(side) * 4, 255));
+    }});
+    shown.set(1);
+    rule.waitForIdle();
+    CHECK((decoded == std::vector<std::string>{"a.png", "b.png"}));
+    shown.set(0);  // the screen goes and comes back: nothing decoded again
+    rule.waitForIdle();
+    shown.set(1);
+    rule.waitForIdle();
+    CHECK(decoded.size() == 2);
+    shown.set(2);  // 32 MB more: a, used least recently, goes
+    rule.waitForIdle();
+    shown.set(3);
+    rule.waitForIdle();
+    CHECK((decoded == std::vector<std::string>{"a.png", "b.png", "c.png", "d.png", "a.png"}));
+}
+
 TEST(frame_times_fall_on_the_displays_beat) {
     CHECK(detail::frameTimeOnBeat(-1, 1000, 100) == 1000);  // the first: now
     CHECK(detail::frameTimeOnBeat(1000, 1090, 100) == 1100);  // started a little early in its period

@@ -255,6 +255,10 @@
   ekranının bir karesinde 3.1 yerine 0.65 ms sürdü.
 - **`KOMPOZ_PROFILE`'ın özeti işin parçalarını verir**: kompozisyon ve yerleşim, çizim ve çizimin içinde kayıt (ağacın
   görüntü listesine çizilip önceki kareyle karşılaştırılması).
+- **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
+  geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
+  piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine
+  9 ms'de açıldı.
 - **Android 13 ve sonrasında ADPF**: her karenin işi (beklemeleri hariç) ekranın yenileme süresine karşı sisteme
   bildirilir (`APerformanceHint`); sistem de kareleri çizen thread'e sığması için gereken çekirdeği ve frekansı verir.
 - **Kare zamanları ekranın vuruşuna düşer**, Android'in Choreographer'ının verdiği gibi: son karenin zamanından tam

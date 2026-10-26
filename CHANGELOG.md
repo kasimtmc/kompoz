@@ -242,6 +242,10 @@
   0.65 ms of a frame of the Components screen instead of 3.1.
 - **`KOMPOZ_PROFILE`'s summary gives the work's parts**: composition and layout, drawing, and of the drawing the
   recording (the tree drawn into the display list, compared with the last frame's).
+- **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
+  and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
+  32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and
+  in 9 instead of 18 after.
 - **ADPF on Android 13 and later**: each frame's work (its waits left out) is told to the system against the display's
   refresh period (`APerformanceHint`), so that it gives the thread drawing the frames the cores and clock it needs.
 - **Frame times fall on the display's beat**, as Android's Choreographer gives them: a whole number of refresh

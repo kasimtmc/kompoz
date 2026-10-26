@@ -691,7 +691,9 @@ void Image(const ImageBitmap& bitmap, std::string contentDescription, const Modi
            CallSite site = CallSite::current());
 
 // Loads an image asset once ("images/photo.png"), like painterResource: JPEG, PNG, WebP, BMP
-// (on the web PNG and BMP: the browser decodes the others asynchronously, use AsyncImage).
+// (on the web PNG and BMP: the browser decodes the others asynchronously, use AsyncImage). The
+// same path gives the same bitmap wherever it is asked for, while the host keeps it (as Android's
+// resources): draw into a copy of it, not into it.
 ImageBitmap imageResource(const std::string& path, CallSite site = CallSite::current());
 // The same as a Painter (Compose's painterResource, for bitmaps).
 Painter painterResource(const std::string& path, CallSite site = CallSite::current());

@@ -335,7 +335,10 @@ public:
     void invalidateDrawReaders(const void* key);
     const detail::RecompositionStats& stats() const { return composer_.stats(); }
     TextMeasurer& textMeasurer() { return measurer_; }
-    ImageBitmap loadImage(std::string_view path) { return callbacks_.loadImage ? callbacks_.loadImage(path) : ImageBitmap{}; }
+    // An image asset, decoded (imageResource): the same bitmap for the same path while it is among
+    // those used last (up to kImageCacheBytes of pixels), as Android keeps its resources'.
+    ImageBitmap loadImage(std::string_view path);
+    static constexpr size_t kImageCacheBytes = 32u << 20;
     std::vector<uint8_t> readAsset(std::string_view path) const { return callbacks_.readAsset ? callbacks_.readAsset(path) : std::vector<uint8_t>{}; }
     const auto& imageLoader() const { return callbacks_.loadImageAsync; }
     LayoutNode* focusedNode() const { return focused_; }
@@ -477,6 +480,14 @@ private:
     std::vector<std::weak_ptr<LayoutNode*>> animatingLayouts_;  // measured again next frame
     std::unordered_map<const void*, std::vector<LayoutNode*>> layoutReaders_;
     std::unordered_map<const void*, std::vector<LayoutNode*>> drawReaders_;
+    struct CachedImage {
+        ImageBitmap image;
+        size_t bytes = 0;
+        uint64_t used = 0;  // (imageUses_ when last asked for)
+    };
+    std::unordered_map<std::string, CachedImage> images_;  // loadImage's
+    size_t imageBytes_ = 0;
+    uint64_t imageUses_ = 0;
     std::unique_ptr<std::pair<DisplayList, DisplayList>> keepCheck_;  // setKeepCheck's: keeping nodes, afresh
     void checkKept();
 
