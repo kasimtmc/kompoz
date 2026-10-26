@@ -121,7 +121,7 @@ Android'de ortam değişkeni yoktur; orada profil aracı uygulamanın depolamas�
 adb shell run-as dev.kompoz.showcase touch files/kompoz-profile
 ```
 
-`run-as`'in reddedildiği yerde (SELinux: örneğin bir LineageOS derlemesi) bu dosyalar (`kompoz-profile`, `kompoz-script`, `kompoz-gpu`) uygulamanın harici dosyalarına da konabilir: `adb shell touch /sdcard/Android/data/dev.kompoz.showcase/files/kompoz-profile`.
+`run-as`'in reddedildiği yerde (SELinux: örneğin bir LineageOS derlemesi) bu dosyalar (`kompoz-profile`, `kompoz-damage-check`, `kompoz-script`, `kompoz-gpu`) uygulamanın harici dosyalarına da konabilir: `adb shell touch /sdcard/Android/data/dev.kompoz.showcase/files/kompoz-profile`.
 
 Bir betik de oradaki bir dosyadan gelir (aynı komutlar; bir kare ölçümü her cihazda aynı tekrarlanır):
 
@@ -132,7 +132,7 @@ adb shell run-as dev.kompoz.showcase sh -c "'echo \"realtime; wait 60; swipe 200
 Kompoz her kareyi önce kaydeder ve yalnızca bir önceki kareden beri değişeni yeniden çizer; ekranda hiçbir şeyin değişmediği bir kare ne çizilir ne sunulur. Bunu görmek ya da kontrol etmek için:
 
 - `KOMPOZ_DAMAGE_SHOW=1` her karede yeniden çizilenin (her bir alanının) çevresini çizer.
-- `KOMPOZ_DAMAGE_CHECK=1` her kareyi ayrıca sıfırdan çizer ve farklı çıkan her pikseli günlüğe yazar.
+- `KOMPOZ_DAMAGE_CHECK=1` her kareyi ayrıca sıfırdan çizer ve farklı çıkan her pikseli günlüğe yazar (Android'de, yukarıdaki `kompoz-profile` gibi uygulamanın dosyalarında `kompoz-damage-check` adlı bir dosya).
 - `KOMPOZ_FULL_REDRAW=1` her kareyi sıfırdan çizer.
 
 ## Ortam değişkenleri
