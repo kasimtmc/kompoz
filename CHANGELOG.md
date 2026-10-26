@@ -232,6 +232,10 @@
   its area), each layer known by its node (`GraphicsContext::keyLayer`, `layerContent`). On a Redmi Note 9 Pro, a list
   pulled past its top took the GPU 27–33 ms a frame instead of 43–44. `KOMPOZ_PROFILE` says how many of a slow frame's
   layers were kept.
+- **What a layer holds is its content, whatever its transform**: what is drawn in a layer is recorded where it shows
+  at rest (without the layers' own transforms) as well as through them, so a layer that grows past the screen (a list's
+  stretch pulled further) holds what it held and stays kept; one that shrinks still gets what it brings onto the screen.
+  On a Redmi Note 9 Pro, a list pulled past its top took the GPU 22–24 ms a frame instead of 27–33.
 - **Fixed**: on an Adreno 618 (a Redmi Note 9 Pro's), the GPU renderer drew clips, color filters and gradients from
   other rows of its frame's table than theirs, the further off the more of them came before (a button's corner, cut to
   its shape, up to 220/255 off): the table's texels are fetched, not sampled.

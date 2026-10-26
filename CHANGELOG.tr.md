@@ -244,6 +244,11 @@
   olsun aynıdır), her katman düğümüyle tanınır (`GraphicsContext::keyLayer`, `layerContent`). Bir Redmi Note 9 Pro'da
   tepesinden öte çekilen bir liste karede GPU'da 43–44 yerine 27–33 ms sürdü. `KOMPOZ_PROFILE`, yavaş bir karenin
   katmanlarından kaçının saklandığını söyler.
+- **Bir katmanın tuttuğu, dönüşümü ne olursa olsun içeriğidir**: bir katmanda çizilen, katmanların kendi dönüşümleri
+  olmadan (dinlenme halinde) göründüğü yerde de, onlardan geçerek göründüğü yerde de kaydedilir; böylece ekranın ötesine
+  büyüyen bir katman (daha çok çekilen bir listenin esnemesi) tuttuğunu tutar ve saklı kalır; küçülen bir katman ekrana
+  getirdiğini yine alır. Bir Redmi Note 9 Pro'da tepesinden öte çekilen bir liste karede GPU'da 27–33 yerine 22–24 ms
+  sürdü.
 - **Düzeltildi**: Bir Adreno 618'de (bir Redmi Note 9 Pro'nunki) GPU renderer clip'leri, renk filtrelerini ve
   gradyanları karenin tablosunun kendilerininkinden başka satırlarından çiziyordu; önlerinde ne kadar çok varsa o kadar
   uzak (biçimine kırpılmış bir düğmenin köşesi 220/255'e kadar sapıyordu): tablonun texel'leri örneklenmez, olduğu gibi

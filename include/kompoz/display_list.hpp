@@ -167,6 +167,11 @@ private:
         Projective m;
         Rect clip;
         uint32_t push;  // its command
+        // The same but for the layers' own transforms (as they are at rest): what is drawn in a
+        // layer is kept if it shows either way, so that what a layer holds is what its content
+        // is, not how far its transform takes it (a stretch's, growing and shrinking).
+        Projective restM;
+        Rect restClip;
     };
     struct OpenNode {
         uint64_t key;

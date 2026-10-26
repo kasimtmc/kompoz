@@ -189,7 +189,7 @@ void DisplayList::begin(Size viewport, float pixel) {
     recording_.clear();
     recordingSegments_.clear();
     occurrences_.clear();
-    states_.assign(1, {{}, {0, 0, viewport.width, viewport.height}, 0});
+    states_.assign(1, {{}, {0, 0, viewport.width, viewport.height}, 0, {}, {0, 0, viewport.width, viewport.height}});
     nodes_.assign(1, {0x6b6f6d706f7aull});  // the root: what is drawn outside any node
     segmentOpen_ = false;
 }
@@ -229,7 +229,8 @@ DisplayList::Command* DisplayList::draw(Kind kind, const Rect& local, float pad)
     const State& s = states_.back();
     // Two pixels more: anti-aliased edges, and backends snapping to whole pixels.
     Rect area = grown(s.m.map(grown(local, pad)), 2 * pixel_).intersect(s.clip);
-    if (empty(area)) return nullptr;  // clipped away: it changes no pixel
+    if (empty(area) && empty(grown(s.restM.map(grown(local, pad)), 2 * pixel_).intersect(s.restClip)))
+        return nullptr;  // clipped away: it changes no pixel (kept in a layer if it shows there at rest)
     Command& c = add(kind);
     c.bounds = area;
     return &c;
@@ -418,7 +419,7 @@ void DisplayList::pushLayer(const Rect& bounds, const CornerRadii& radii, float 
     c.f2 = alpha;
     c.transform = transform;
     c.bounds = area;
-    states_.push_back({m, area, uint32_t(recording_.size() - 1)});
+    states_.push_back({m, area, uint32_t(recording_.size() - 1), s.restM, grown(s.restM.map(grown(bounds, pixel_)), 2 * pixel_).intersect(s.restClip)});
 }
 
 void DisplayList::pushOutlineLayer(const Rect& bounds, const Path& outline, float alpha, const LayerTransform& transform) {
@@ -436,7 +437,8 @@ void DisplayList::pushEffectLayer(const Rect& bounds, const RenderEffect& effect
     // bounds, off the screen too (a blur brings it in): popLayer() makes each of those commands'
     // area its own, as a change to any of them changes all of it.
     c.bounds = grown(s.m.map(effect.outputBounds(bounds)), 2 * pixel_).intersect(s.clip);
-    states_.push_back({s.m, grown(s.m.map(grown(bounds, pixel_)), 2 * pixel_), uint32_t(recording_.size() - 1)});
+    states_.push_back({s.m, grown(s.m.map(grown(bounds, pixel_)), 2 * pixel_), uint32_t(recording_.size() - 1), s.restM,
+                       grown(s.restM.map(grown(bounds, pixel_)), 2 * pixel_)});
 }
 
 // It shows where the effect takes what is under it, and reads that from as far around it as the
@@ -483,42 +485,45 @@ void DisplayList::pushClip(const Rect& rect) {
     Command& c = add(Kind::PushClip);
     c.rect = rect;
     c.bounds = area;
-    states_.push_back({s.m, area, uint32_t(recording_.size() - 1)});
+    states_.push_back({s.m, area, uint32_t(recording_.size() - 1), s.restM, grown(s.restM.map(rect), pixel_).intersect(s.restClip)});
 }
 
 void DisplayList::pushClipRoundRect(const Rect& rect, const CornerRadii& radii, ClipOp op) {
     State s = states_.back();
     // Inside: where the rect is; outside: anywhere the clips around it leave.
     Rect area = op == ClipOp::Intersect ? grown(s.m.map(rect), pixel_).intersect(s.clip) : s.clip;
+    Rect rest = op == ClipOp::Intersect ? grown(s.restM.map(rect), pixel_).intersect(s.restClip) : s.restClip;
     Command& c = add(Kind::PushClip);
     c.rect = rect;
     c.radii = radii;
     c.f1 = 1;
     c.flag = op == ClipOp::Difference;
     c.bounds = area;
-    states_.push_back({s.m, area, uint32_t(recording_.size() - 1)});
+    states_.push_back({s.m, area, uint32_t(recording_.size() - 1), s.restM, rest});
 }
 
 void DisplayList::pushClipPath(const Path& path, Offset origin, ClipOp op) {
     State s = states_.back();
     Rect b = path.bounds();
-    Rect area = op == ClipOp::Intersect ? grown(s.m.map({b.x + origin.x, b.y + origin.y, b.width, b.height}), pixel_).intersect(s.clip) : s.clip;
+    b.x += origin.x, b.y += origin.y;
+    Rect area = op == ClipOp::Intersect ? grown(s.m.map(b), pixel_).intersect(s.clip) : s.clip;
+    Rect rest = op == ClipOp::Intersect ? grown(s.restM.map(b), pixel_).intersect(s.restClip) : s.restClip;
     Command& c = add(Kind::PushClip);
     c.path = path;
     c.p1 = origin;
     c.f1 = 2;
     c.flag = op == ClipOp::Difference;
     c.bounds = area;
-    states_.push_back({s.m, area, uint32_t(recording_.size() - 1)});
+    states_.push_back({s.m, area, uint32_t(recording_.size() - 1), s.restM, rest});
 }
 
 void DisplayList::pushTranslation(Offset by) {
     State s = states_.back();
-    Projective moved = compose(s.m, Projective{{1, 0, by.x, 0, 1, by.y, 0, 0, 1}});
+    Projective shift{{1, 0, by.x, 0, 1, by.y, 0, 0, 1}};
     Command& c = add(Kind::PushTranslation);
     c.p1 = by;
     c.bounds = s.clip;  // what anything inside can touch (replay skips it when that's outside the area)
-    states_.push_back({moved, s.clip, uint32_t(recording_.size() - 1)});
+    states_.push_back({compose(s.m, shift), s.clip, uint32_t(recording_.size() - 1), compose(s.restM, shift), s.restClip});
 }
 
 void DisplayList::pop(Kind kind) {
@@ -537,7 +542,7 @@ void DisplayList::pushBlendMode(BlendMode mode) {
     Command& c = add(Kind::PushBlend);
     c.f1 = float(int(mode));
     c.bounds = s.clip;  // what anything inside can touch (replay skips it when that's outside the area)
-    states_.push_back({s.m, s.clip, uint32_t(recording_.size() - 1)});
+    states_.push_back({s.m, s.clip, uint32_t(recording_.size() - 1), s.restM, s.restClip});
 }
 
 void DisplayList::popBlendMode() { pop(Kind::PopBlend); }
@@ -547,7 +552,7 @@ void DisplayList::pushAntiAlias(bool on) {
     Command& c = add(Kind::PushAlias);
     c.flag = on;
     c.bounds = s.clip;
-    states_.push_back({s.m, s.clip, uint32_t(recording_.size() - 1)});
+    states_.push_back({s.m, s.clip, uint32_t(recording_.size() - 1), s.restM, s.restClip});
 }
 
 void DisplayList::popAntiAlias() { pop(Kind::PopAlias); }
@@ -557,7 +562,7 @@ void DisplayList::pushColorFilter(const ColorFilter& filter) {
     Command& c = add(Kind::PushFilter);
     c.filter = filter;
     c.bounds = s.clip;  // what anything inside can touch (replay skips it when that's outside the area)
-    states_.push_back({s.m, s.clip, uint32_t(recording_.size() - 1)});
+    states_.push_back({s.m, s.clip, uint32_t(recording_.size() - 1), s.restM, s.restClip});
 }
 
 void DisplayList::popColorFilter() { pop(Kind::PopFilter); }
@@ -570,14 +575,14 @@ void DisplayList::pushTransform(const Matrix& matrix) {
     Command& c = add(Kind::PushTransform);
     c.matrix = matrix;
     c.bounds = s.clip;  // what anything inside can touch (replay skips it when that's outside the area)
-    states_.push_back({compose(s.m, planeMap(matrix)), s.clip, uint32_t(recording_.size() - 1)});
+    states_.push_back({compose(s.m, planeMap(matrix)), s.clip, uint32_t(recording_.size() - 1), compose(s.restM, planeMap(matrix)), s.restClip});
 }
 
 void DisplayList::popTransform() { pop(Kind::PopTransform); }
 
 bool DisplayList::quickReject(const Rect& rect) const {
     const State& s = states_.back();
-    return empty(grown(s.m.map(rect), pixel_).intersect(s.clip));
+    return empty(grown(s.m.map(rect), pixel_).intersect(s.clip)) && empty(grown(s.restM.map(rect), pixel_).intersect(s.restClip));
 }
 
 void DisplayList::addDamage(std::vector<Rect>& damage, const std::vector<Command>& commands, uint32_t first, uint32_t count) {

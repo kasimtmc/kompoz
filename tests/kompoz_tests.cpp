@@ -4928,6 +4928,53 @@ TEST(display_list_tells_canvases_which_layers_stayed_the_same) {
     CHECK(whole.layers == 1 && whole.rects.size() == 2 && part.layers == 1 && part.rects.size() == 1);
 }
 
+// What a layer holds is kept as its content, not as far as its transform takes it: what shows at
+// rest stays recorded as the layer grows past the screen (a stretch pulled further: the same
+// layer), and what only its transform brings onto the screen (shrinking) is recorded too.
+TEST(display_list_keeps_a_layers_content_whatever_its_transform) {
+    testing::FakeTextMeasurer measurer;
+    DisplayList list(measurer);
+    int node = 0;
+    auto frame = [&](float scaleY) {
+        list.begin({100, 200}, 1);
+        list.beginNode(&node);
+        list.pushLayer({0, 0, 100, 200}, CornerRadii(), 1, {.scaleY = scaleY, .origin = {0.5f, 0}});
+        for (int i = 0; i < 5; ++i) list.fillRoundRect({10, float(i) * 50 + 5, 80, 40}, CornerRadii(), colors::Black);  // (the last below the screen)
+        list.popLayer();
+        list.endNode();
+        list.end();
+        testing::RecordingCanvas canvas;
+        canvas.layerAnswer = GraphicsContext::LayerContent::DrawAll;
+        list.replay(canvas);
+        return std::pair{canvas.rects.size(), canvas.layerKeys.empty() ? false : canvas.layerKeys[0].second};
+    };
+    CHECK(frame(1).first == 4);  // at rest: the four on the screen
+    auto [shown, same] = frame(1.1f);
+    CHECK(shown == 4 && same);  // grown
+    std::tie(shown, same) = frame(1.35f);
+    CHECK(shown == 4 && same);  // grown so far the fourth is past the screen's edge: kept all the same
+    std::tie(shown, same) = frame(0.6f);
+    CHECK(shown == 5 && !same);  // shrunk: the fifth comes onto the screen
+    // What a clip around it or in it cuts off, at rest and grown alike, isn't kept.
+    list.begin({100, 200}, 1);
+    list.beginNode(&node);
+    list.pushClip({0, 0, 100, 100});
+    list.pushLayer({0, 0, 100, 200}, CornerRadii(), 1, {.scaleY = 1.35f, .origin = {0.5f, 0}});
+    CHECK(!list.quickReject({10, 80, 80, 10}) && list.quickReject({10, 150, 80, 10}));  // shown at rest only; neither way
+    list.fillRoundRect({10, 150, 80, 10}, CornerRadii(), colors::Black);  // past the clip around it
+    list.pushClip({0, 0, 100, 50});
+    list.fillRoundRect({10, 60, 80, 10}, CornerRadii(), colors::Black);  // past the clip in it
+    list.popClip();
+    list.popLayer();
+    list.popClip();
+    list.endNode();
+    list.end();
+    testing::RecordingCanvas cut;
+    cut.layerAnswer = GraphicsContext::LayerContent::DrawAll;
+    list.replay(cut);
+    CHECK(cut.rects.empty());
+}
+
 TEST(display_list_lines_frames_up_by_node_and_replays_an_area) {
     testing::FakeTextMeasurer measurer;
     DisplayList list(measurer);
