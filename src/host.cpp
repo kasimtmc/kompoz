@@ -485,21 +485,30 @@ enum Reported : uint16_t {
     kClips = 1 << 13,  // (cuts what is inside it: not acted on, followed)
 };
 uint16_t reported(const ModifierElement& e) {
+    // (Only where there is something to do: a clickable's custom indication, a callback, ...)
     uint16_t r = 0;
-    auto is = [&](auto* cast, uint16_t bit) { r |= cast ? bit : 0; };
+    auto is = [&](bool yes, uint16_t bit) { r |= yes ? bit : 0; };
     is(dynamic_cast<const ScrollableElement*>(&e), kScrollable);
-    is(dynamic_cast<const ClickableElement*>(&e), kClickable);
-    is(dynamic_cast<const IndicationElement*>(&e), kIndication);
-    is(dynamic_cast<const PositionedElement*>(&e), kPositioned);
+    auto* click = dynamic_cast<const ClickableElement*>(&e);
+    is(click && click->enabled && click->indication.kind == Indication::Kind::Custom, kClickable);
+    auto* indication = dynamic_cast<const IndicationElement*>(&e);
+    is(indication && indication->indication.kind == Indication::Kind::Custom, kIndication);
+    auto* positioned = dynamic_cast<const PositionedElement*>(&e);
+    is(positioned && positioned->onPositioned, kPositioned);
     is(dynamic_cast<const LayoutBoundsElement*>(&e), kLayoutBounds);
     is(dynamic_cast<const KeepScreenOnElement*>(&e), kKeepScreenOn);
-    is(dynamic_cast<const SensitiveContentElement*>(&e), kSensitive);
+    auto* sensitive = dynamic_cast<const SensitiveContentElement*>(&e);
+    is(sensitive && sensitive->sensitive, kSensitive);
     is(dynamic_cast<const FrameRateElement*>(&e), kFrameRate);
-    is(dynamic_cast<const FocusableElement*>(&e), kFocusable);
-    is(dynamic_cast<const OverscrollElement*>(&e), kOverscroll);
+    auto* focusable = dynamic_cast<const FocusableElement*>(&e);
+    is(focusable && focusable->onEdit, kFocusable);
+    auto* overscroll = dynamic_cast<const OverscrollElement*>(&e);
+    is(overscroll && overscroll->effect, kOverscroll);
     is(dynamic_cast<const SystemGestureExclusionElement*>(&e), kGestureExclusion);
-    is(dynamic_cast<const LayoutRectElement*>(&e), kLayoutRect);
-    is(dynamic_cast<const VisibilityElement*>(&e), kVisibility);
+    auto* rect = dynamic_cast<const LayoutRectElement*>(&e);
+    is(rect && rect->callback, kLayoutRect);
+    auto* visibility = dynamic_cast<const VisibilityElement*>(&e);
+    is(visibility && (visibility->onChanged || visibility->onFirst), kVisibility);
     if (e.clipsContent()) r |= kClips;
     return r;
 }
@@ -509,6 +518,18 @@ const T* as(const std::shared_ptr<const ModifierElement>& e, uint16_t kinds, uin
     return kinds & bit ? static_cast<const T*>(e.get()) : nullptr;
 }
 } // namespace
+
+void LayoutNode::checkReported() {
+    const auto& elements = modifier.elements();
+    if (!std::ranges::equal(reportCheckedFor_, elements, {}, &std::shared_ptr<const ModifierElement>::get,
+                            &std::shared_ptr<const ModifierElement>::get)) {
+        reportCheckedFor_ = elements;
+        reported_.resize(elements.size());
+        for (size_t i = 0; i < elements.size(); ++i) reported_[i] = reported(*elements[i]);
+        reportsNothing_ = std::ranges::all_of(reported_, [](uint16_t r) { return (r & ~kClips) == 0; });
+    }
+    setReports(!reportsNothing_ || stretch || indicationNode);
+}
 
 void ComposeHost::reportPositions(int64_t now) {
     std::vector<std::pair<std::function<void(const LayoutCoordinates&)>, LayoutCoordinates>> calls;
@@ -539,20 +560,12 @@ void ComposeHost::reportPositions(int64_t now) {
     std::function<void(LayoutNode&, Rect, const Frame*)> walk = [&](LayoutNode& node, Rect clip, const Frame* up) {
         Frame self{&node, clip, up};
         const auto& elements = node.modifier.elements();
-        // What its elements are, found out once per modifier: most nodes have none acted on below.
-        if (!std::ranges::equal(node.reportCheckedFor_, elements, {}, &std::shared_ptr<const ModifierElement>::get,
-                                &std::shared_ptr<const ModifierElement>::get)) {
-            node.reportCheckedFor_ = elements;
-            node.reported_.resize(elements.size());
-            for (size_t i = 0; i < elements.size(); ++i) node.reported_[i] = reported(*elements[i]);
-            node.reportsNothing_ = std::ranges::all_of(node.reported_, [](uint16_t r) { return (r & ~kClips) == 0; });
-        }
-        const std::vector<uint16_t>& kinds = node.reported_;
+        const std::vector<uint16_t>& kinds = node.reported_;  // (what its elements are: found out as it was measured)
         if (node.reportsNothing_ && !node.stretch && !node.indicationNode) {
             for (size_t i = 0; i < elements.size(); ++i)
                 if (kinds[i] & kClips) clip = clip.intersect(elements[i]->clipBounds(node.layerBounds(i)));
             for (LayoutNode* child : node.children)
-                if (child->isPlaced()) walk(*child, clip, &self);
+                if (child->isPlaced() && child->reportedBelow_ > 0) walk(*child, clip, &self);  // (none to act on below: not walked)
             return;
         }
         // A scroll container with no overscroll effect of its own keeps a stretch on its node
@@ -579,6 +592,7 @@ void ComposeHost::reportPositions(int64_t now) {
             }
         }
         syncIndicationNode(node, custom, heard);
+        node.setReports(!node.reportsNothing_ || node.stretch || node.indicationNode);
         for (size_t i = 0; i < elements.size(); ++i) {
             if (auto* p = as<PositionedElement>(elements[i], kinds[i], kPositioned); p && p->onPositioned) {
                 Rect b = node.layerBounds(i);
@@ -663,10 +677,11 @@ void ComposeHost::reportPositions(int64_t now) {
             if (kinds[i] & kClips) clip = clip.intersect(elements[i]->clipBounds(node.layerBounds(i)));  // scrollers, clipToBounds, clip(shape)
         }
         for (LayoutNode* child : node.children)
-            if (child->isPlaced()) walk(*child, clip, &self);
+            if (child->isPlaced() && child->reportedBelow_ > 0) walk(*child, clip, &self);
     };
-    walk(root(), window, nullptr);
-    for (const auto& [popup, anchor] : overlays_) walk(*popup, window, nullptr);
+    if (root().reportedBelow_ > 0) walk(root(), window, nullptr);
+    for (const auto& [popup, anchor] : overlays_)
+        if (popup->reportedBelow_ > 0) walk(*popup, window, nullptr);
     // Those no longer laid out (left the layout, gone): not visible, at once.
     for (auto it = visibility_.begin(); it != visibility_.end();) {
         if (it->second.seen) {
@@ -756,6 +771,22 @@ bool ComposeHost::layout() {
         settled = pendingChanges_.empty();
     }
     if (gLayoutCheck && settled) {
+        // The walk after layout's counts and what it knows of each node, as worked out afresh.
+        std::function<int(const LayoutNode&)> recount = [&](const LayoutNode& n) {
+            int count = n.reports_ ? 1 : 0;
+            for (const auto* list : {&n.children, &n.overlays})
+                for (const LayoutNode* child : *list) count += recount(*child);
+            bool known = !n.isPlaced() || std::ranges::equal(n.reportCheckedFor_, n.modifier.elements(), {},
+                                                             &std::shared_ptr<const ModifierElement>::get,
+                                                             &std::shared_ptr<const ModifierElement>::get);
+            if (count != n.reportedBelow_ || !known || n.reports_ != (!n.reportsNothing_ || n.stretch || n.indicationNode)) {
+                ++gLayoutMismatches;
+                std::fprintf(stderr, "kompoz: layout check: node %p '%s' counted %d acted on in it, has %d%s\n", (const void*)&n,
+                             n.semanticsText.c_str(), n.reportedBelow_, count, known ? "" : ", its elements unknown");
+            }
+            return count;
+        };
+        recount(r);
         std::unordered_map<const LayoutNode*, LaidOut> incremental, full;
         collectLayout(r, incremental);
         detail::MeasureEverything everything;  // as it was before layout was incremental

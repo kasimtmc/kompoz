@@ -236,6 +236,10 @@
   at rest (without the layers' own transforms) as well as through them, so a layer that grows past the screen (a list's
   stretch pulled further) holds what it held and stays kept; one that shrinks still gets what it brings onto the screen.
   On a Redmi Note 9 Pro, a list pulled past its top took the GPU 22–24 ms a frame instead of 27–33.
+- **The walk after layout goes only where there is something to do**: what a node's elements want of it (positions,
+  visibility, gesture exclusion, keeping the screen on, a frame rate, a custom indication) is found out as the node is
+  measured, each node counts those in its subtree, and the walk skips subtrees with none. On a Redmi Note 9 Pro it took
+  0.65 ms of a frame of the Components screen instead of 3.1.
 - **Fixed**: on an Adreno 618 (a Redmi Note 9 Pro's), the GPU renderer drew clips, color filters and gradients from
   other rows of its frame's table than theirs, the further off the more of them came before (a button's corner, cut to
   its shape, up to 220/255 off): the table's texels are fetched, not sampled.

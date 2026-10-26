@@ -2232,6 +2232,10 @@ public:
     // marks it, and the nodes around it, to be measured again.
     void invalidateMeasure();
     bool needsMeasure() const { return needsMeasure_; }
+    // The host's walk after layout goes only where nodes it acts on are: how many its subtree
+    // holds (itself too) is kept as their elements change (worked out when a node is measured) and
+    // worked out again from its children when they change.
+    void recountReported();
     // Where its parent puts it: at the nearest whole pixels (detail::toWholePx).
     void place(float x, float y, float zIndex = 0);
     Size size() const { return size_; }
@@ -2293,7 +2297,11 @@ private:
     // is one it acts on.
     std::vector<std::shared_ptr<const ModifierElement>> reportCheckedFor_;
     std::vector<uint16_t> reported_;
-    bool reportsNothing_ = false;
+    bool reportsNothing_ = true;  // (none: nothing)
+    bool reports_ = false;   // the walk acts on it (its elements, a stretch or an indication node it keeps)
+    int reportedBelow_ = 0;  // nodes the walk acts on in its subtree, itself too
+    void checkReported();    // its elements found out again if they changed (host.cpp)
+    void setReports(bool on);
     friend class ComposeHost;
 };
 

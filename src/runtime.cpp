@@ -32,6 +32,7 @@ void rebuildChildren(Group& nodeGroup) {
     if (!nodeGroup.node->overlays.empty()) ++detail::nodesWithPopups();
     for (auto* child : nodeGroup.node->children) child->parent = nodeGroup.node.get();
     for (auto* popup : nodeGroup.node->overlays) popup->parent = nodeGroup.node.get();
+    nodeGroup.node->recountReported();
     nodeGroup.node->invalidateMeasure();
 }
 

@@ -1639,6 +1639,7 @@ Size LayoutNode::measure(const Constraints& given) {
     if (host_) host_->forgetLayoutReads(*this);  // what it reads this time counts
     if (!pointerInputs.empty()) detail::syncPointerInputs(*this);  // drop blocks whose modifier is gone
     for (const auto& e : modifier.elements()) e->attach(*this);
+    checkReported();  // (what composing it gave it comes to be measured)
     layers_.resize(modifier.elements().size());
     LayoutNode* outer = std::exchange(gMeasuring, this);
     size_ = measureLayer(0, constraints);
@@ -1657,6 +1658,20 @@ Size LayoutNode::measure(const Constraints& given) {
 
 void LayoutNode::invalidateMeasure() {
     for (LayoutNode* n = this; n && !n->needsMeasure_; n = n->parent) n->needsMeasure_ = true;
+}
+
+void LayoutNode::setReports(bool on) {
+    if (on == reports_) return;
+    reports_ = on;
+    for (LayoutNode* n = this; n; n = n->parent) n->reportedBelow_ += on ? 1 : -1;
+}
+
+void LayoutNode::recountReported() {
+    int count = reports_ ? 1 : 0;
+    for (const auto* list : {&children, &overlays})
+        for (const LayoutNode* child : *list) count += child->reportedBelow_;
+    int change = count - reportedBelow_;
+    for (LayoutNode* n = this; n && change; n = n->parent) n->reportedBelow_ += change;
 }
 
 LayoutNode* detail::measuringNode() { return gMeasuring; }
