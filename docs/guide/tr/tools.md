@@ -131,7 +131,7 @@ adb shell run-as dev.kompoz.showcase sh -c "'echo \"realtime; wait 60; swipe 200
 
 Kompoz her kareyi önce kaydeder ve yalnızca bir önceki kareden beri değişeni yeniden çizer; ekranda hiçbir şeyin değişmediği bir kare ne çizilir ne sunulur. Bunu görmek ya da kontrol etmek için:
 
-- `KOMPOZ_DAMAGE_SHOW=1` her karede yeniden çizilenin çevresini çizer.
+- `KOMPOZ_DAMAGE_SHOW=1` her karede yeniden çizilenin (her bir alanının) çevresini çizer.
 - `KOMPOZ_DAMAGE_CHECK=1` her kareyi ayrıca sıfırdan çizer ve farklı çıkan her pikseli günlüğe yazar.
 - `KOMPOZ_FULL_REDRAW=1` her kareyi sıfırdan çizer.
 

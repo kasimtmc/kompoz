@@ -2749,6 +2749,13 @@ void savePixels(const std::string& path, int w, int h, std::vector<uint8_t>& pix
     SDL_DestroySurface(surface);
 }
 
+// How much of the screen the last frame drew again (its areas), 0 if nothing (a little if anything).
+float drawnArea(const DisplayList& display, Size screen) {
+    float drawn = 0;
+    for (const Rect& a : display.areas()) drawn += a.width * a.height;
+    return display.areas().empty() ? 0 : std::max(1e-4f, drawn / (screen.width * screen.height));
+}
+
 // drawFrame on the GPU renderer: the same, its kept frame a texture drawn into in a frame of the
 // device's (begun by the caller), copied onto the swapchain image.
 Drawn drawFrameGpu(App& app, const std::string& shot) {
@@ -2769,26 +2776,15 @@ Drawn drawFrameGpu(App& app, const std::string& shot) {
     app.host->draw(*app.display);
     if (app.fullRedraw) app.display->invalidate();
     std::optional<Rect> damage = app.display->end();
-    // Drawn again: the area made white, then what touches it, clipped to it. What an opaque rect
-    // covering all of it hides (the white too) isn't drawn.
-    auto drawInto = [&](gpu::Texture& target, const std::optional<Rect>& area) {
-        r.beginTarget(target);
-        if (area) r.pushClip(*area);
-        std::optional<size_t> cover = app.display->opaqueCover(area.value_or(Rect{0, 0, screen.width, screen.height}));
-        if (!cover) r.fillOpaque({0, 0, target.width(), target.height()}, colors::White);
-        app.display->replay(r, area, cover.value_or(0));
-        if (area) r.popClip();
-        r.endTarget();
-    };
-    if (damage) drawInto(*app.gpuFrame, damage);
+    if (damage) r.drawFrame(*app.gpuFrame, *app.display, true);
     if (damage && app.damageCheck) {
         auto full = device.createTexture(pw, ph, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
-        drawInto(*full, std::nullopt);
+        r.drawFrame(*full, *app.display, false);
         r.flush();
         std::vector<uint8_t> kept = device.readPixels(*app.gpuFrame, {0, 0, pw, ph}), fresh = device.readPixels(*full, {0, 0, pw, ph});
         if (kept.size() == fresh.size() && !kept.empty()) compareDamage(app, *damage, kept.data(), pw * 4, fresh.data(), pw * 4, pw, ph);
     }
-    float area = damage ? std::max(1e-4f, damage->width * damage->height / (screen.width * screen.height)) : 0;
+    float area = drawnArea(*app.display, screen);
     if (!damage && shot.empty() && !app.showFrame) {
         r.flush();
         return {false, 0};
@@ -2808,7 +2804,7 @@ Drawn drawFrameGpu(App& app, const std::string& shot) {
             turned(3, 0) = (turns & 3) == 1 ? screen.height : (turns & 3) == 2 ? screen.width : 0;
             turned(3, 1) = (turns & 3) == 2 ? screen.height : (turns & 3) == 3 ? screen.width : 0;
             r.pushTransform(turned);
-            r.strokeRoundRect(*damage, CornerRadii(), 3 / scale, Color{1, 0, 80 / 255.f, 1});
+            for (const Rect& a : app.display->areas()) r.strokeRoundRect(a, CornerRadii(), 3 / scale, Color{1, 0, 80 / 255.f, 1});
             r.popTransform();
         }
         r.endTarget();
@@ -2863,16 +2859,19 @@ Drawn drawFrame(App& app, const std::string& shot) {
         if (area) app.canvas->popClip();
         SDL_SetRenderTarget(app.renderer, nullptr);
     };
-    if (damage) drawInto(app.frame, damage);
+    if (damage)
+        for (const Rect& a : app.display->areas()) drawInto(app.frame, a);
     if (damage && app.damageCheck) checkDamage(app, *damage, drawInto);
-    float area = damage ? std::max(1e-4f, damage->width * damage->height / (screen.width * screen.height)) : 0;
+    float area = drawnArea(*app.display, screen);
     if (!damage && shot.empty() && !app.showFrame) return {false, 0};
     app.showFrame = false;
     SDL_RenderTexture(app.renderer, app.frame, nullptr, nullptr);
     if (damage && app.damageShow) {  // what was drawn again, outlined (only in the window, not the kept pixels)
         SDL_SetRenderDrawColor(app.renderer, 255, 0, 80, 255);
-        SDL_FRect r{damage->x * scale, damage->y * scale, damage->width * scale, damage->height * scale};
-        for (int i = 0; i < 3; ++i, r = {r.x + 1, r.y + 1, r.w - 2, r.h - 2}) SDL_RenderRect(app.renderer, &r);
+        for (const Rect& a : app.display->areas()) {
+            SDL_FRect r{a.x * scale, a.y * scale, a.width * scale, a.height * scale};
+            for (int i = 0; i < 3; ++i, r = {r.x + 1, r.y + 1, r.w - 2, r.h - 2}) SDL_RenderRect(app.renderer, &r);
+        }
     }
     if (!shot.empty()) saveScreenshot(app.renderer, shot, app.frame);
     return {true, area};
@@ -3638,6 +3637,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     else
         app->canvas = std::make_unique<kompoz::sdl::SdlCanvas>(app->renderer, *app->fonts);
     app->display = std::make_unique<kompoz::DisplayList>(*app->fonts);
+    app->display->allowMoves(app->gpuCanvas != nullptr);  // (a kept frame on the GPU moves its pixels)
     app->bitmaps = std::make_unique<kompoz::sdl::AppBitmaps>(*app);
     kompoz::detail::setBitmapRenderer(app->bitmaps.get());
     app->host = std::make_unique<kompoz::ComposeHost>(*app->fonts, app->config.content);

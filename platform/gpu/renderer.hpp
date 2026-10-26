@@ -46,6 +46,14 @@ public:
     // Copies `texture` into the target as it is, texel for pixel, turned by `quarterTurns`
     // (clockwise, about the target: Device::swapchainTurns).
     void blit(Texture& texture, int quarterTurns = 0);
+    // Moves the target's pixels in `from` by (dx, dy) (as it is: the pixels it leaves keep theirs).
+    // False if it can't (no texture to copy them through).
+    bool move(const IRect& from, int dx, int dy);
+    // Draws the frame `list` recorded last (DisplayList::end) into `target`: all of it, or with
+    // `changes` only that, into the frame before it (its moves made, its areas drawn again each
+    // clipped to itself). What isn't drawn on is white; what an opaque rect covering an area hides
+    // (the white too) isn't drawn.
+    void drawFrame(Texture& target, const DisplayList& list, bool changes);
     // Submits what the targets ended so far recorded (glyphs and images uploaded first).
     void flush();
     // After each frame: textures of images that are gone, and layer targets unused for a while, go.
@@ -171,7 +179,12 @@ private:
         std::vector<EdgeInstance> edges;
         std::vector<uint32_t> edgeGenerations;  // the generation each edge is in
         std::optional<EffectDraw> effect;  // set: this instead of the rest
-        std::optional<std::pair<Texture*, IRect>> copy;  // set: that part of that texture copied to the target's top left, instead
+        struct Copy {
+            Texture* from;
+            IRect region;
+            int x = 0, y = 0;  // where in the target
+        };
+        std::optional<Copy> copy;  // set: that part of that texture copied into the target, instead
     };
     // A clip in effect: the pixels it leaves (whole ones), and the clips that cut them finer (a
     // rect turned, say), if any: their chain.

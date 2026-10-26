@@ -6,8 +6,9 @@
 //
 //   list.begin(viewport, onePixel);
 //   host.draw(list);                       // records
-//   if (auto area = list.end())            // what differs from the last frame (dp)
-//       list.replay(canvas, *area);        // into the kept frame, clipped to the area
+//   if (list.end())                        // something differs from the last frame
+//       for (Rect area : list.areas())     // where (dp)
+//           list.replay(canvas, area);     // into the kept frame, clipped to the area
 //
 // Each command knows the screen area it can touch: its own bounds through the transforms of
 // the layers around it, cut by their clips, padded for anti-aliasing. Frames are lined up by
@@ -15,6 +16,11 @@
 // goes doesn't make everything after it look changed: what a node drew (before its first
 // child, after each child) is compared with what it drew last time, and the areas of what
 // differs, before and after, are the damage.
+//
+// Where the kept frame's pixels can be moved (allowMoves), what moved by whole pixels within a
+// rect clip, as a scrolled list does, moves them (moves(), before the areas) instead of being
+// drawn again: only what that leaves wrong is, the strip that came into view and what didn't move
+// with it.
 
 #include "graphics.hpp"
 
@@ -33,8 +39,21 @@ public:
 
     // Starts recording a frame of `viewport` (dp); `pixel` is a pixel's size in dp.
     void begin(Size viewport, float pixel);
-    // Ends it: the area whose pixels differ from the last frame's (dp), or nothing.
+    // Ends it: the area whose pixels differ from the last frame's (dp), or nothing. That is
+    // areas()'s bounds; with moves allowed, what moves() leaves to draw.
     std::optional<Rect> end();
+    // Pixels of the kept frame to move before areas are drawn again: content that moved by whole
+    // pixels within a rect clip, as a scrolled list's does. From `from` (dp, whole pixels) by `by`.
+    struct Move {
+        Rect from;
+        Offset by;
+    };
+    // Lets end() find moves (off at first): the canvas the frame is kept on can move its pixels.
+    void allowMoves(bool on) { allowMoves_ = on; }
+    // The last end()'s damage as separate rects (dp), each to be drawn again clipped to itself
+    // (after the moves), and its moves.
+    const std::vector<Rect>& areas() const { return areas_; }
+    const std::vector<Move>& moves() const { return moves_; }
     // Draws the last recorded frame into `canvas`: what touches `area`, or everything. What comes
     // before command `hidden` (opaqueCover's) is left out but its state.
     void replay(GraphicsContext& canvas, const std::optional<Rect>& area = std::nullopt, size_t hidden = 0) const;
@@ -129,8 +148,14 @@ private:
         Projective m;         // the transform it is drawn through
         Rect bounds;          // what it can touch on the screen (a layer: where it is composited)
         uint32_t end = 0;     // a push: the index after its pop
+        uint32_t parent = kNone;  // the push it is drawn in (the innermost)
         bool same(const Command& o) const;
+        // The same as `o` moved by `by` (in its own space), but for its bounds (a clip may cut them).
+        bool sameMoved(const Command& o, Offset by) const;
+        // Where it is (in its own space), to tell how far it moved; none if it has no place.
+        std::optional<Offset> place() const;
     };
+    static constexpr uint32_t kNone = UINT32_MAX;
     struct Segment {  // what one node drew between its children
         uint64_t key;
         uint32_t first, count;
@@ -151,7 +176,17 @@ private:
     // Records text (any kind of it) whose glyphs may reach `blur` further.
     Command* text(Kind kind, std::string_view utf8, Offset baseline, const Font& font, bool rtl, float blur = 0);
     void pop(Kind kind);
-    static void addDamage(std::optional<Rect>& damage, const std::vector<Command>& commands, uint32_t first, uint32_t count);
+    // What `count` commands from `first` touch on the screen, as one rect (none if nothing).
+    static void addDamage(std::vector<Rect>& damage, const std::vector<Command>& commands, uint32_t first, uint32_t count);
+    // How far all of segment `s` moved (on the screen) from what last frame's `p` drew: the same
+    // commands but for their place, all moved alike.
+    std::optional<Offset> movedBy(const Segment& s, const Segment& p) const;
+    // Of the segments that moved, those that moved together within a rect clip become moves
+    // (their pixels moved, not drawn again: damage only where that leaves the frame wrong); the
+    // rest are damage where they were and are.
+    void settleMoves(std::vector<Rect>& damage);
+    // The last command before `limit` in `commands` that paints all of `area` opaquely (opaqueCover).
+    static std::optional<size_t> coverBefore(const std::vector<Command>& commands, size_t limit, const Rect& area, float pixel, Size screen);
 
     TextMeasurer& measurer_;
     std::vector<Command> recording_, frame_;
@@ -161,6 +196,17 @@ private:
     std::unordered_map<const void*, uint32_t> occurrences_;
     std::unordered_map<uint64_t, uint32_t> lookup_;  // end(): the last frame's segments by key
     std::vector<char> matched_;
+    // end(), finding moves: the segments that moved (this frame's, last frame's, by how far);
+    // which commands moved (1, then 2 + the move they are in), this frame's and last frame's.
+    struct MovedSegment {
+        uint32_t segment, last;
+        Offset by;
+    };
+    std::vector<MovedSegment> moved_;
+    std::vector<uint32_t> group_, lastGroup_;
+    std::vector<Rect> areas_;
+    std::vector<Move> moves_;
+    bool allowMoves_ = false;
     bool segmentOpen_ = false, invalid_ = true;
     Size viewport_, frameViewport_;
     float pixel_ = 1, framePixel_ = 0;

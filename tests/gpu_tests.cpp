@@ -3722,6 +3722,82 @@ void pathsShareTheirMasks(Gpu& g) {
     renderer.reset();
 }
 
+// A kept frame brought up to date with only what changed, the pixels of what scrolled moved
+// (Renderer::drawFrame, DisplayList's moves and areas): the same as the frame drawn afresh, frame
+// after frame. Scrolled up, down and across, by whole pixels and by part of one, with what stays
+// over it and under it (a backdrop blurring it too), an item changing as it moves, shadows (of
+// paths too) and text in the items.
+void keptFramesMoveWhatScrolled(Gpu& g) {
+    const int w = 240, h = 320;
+    const float scale = 2;  // (120 x 160 dp)
+    WatchedDevice device(*g.device, true);  // (the whole shader: what is drawn again shaded as all of it is)
+    std::unique_ptr<sdl::FontSystem> fonts = Gpu::loadFonts();
+    auto renderer = std::make_unique<gpu::Renderer>(device, *fonts);
+    fonts->setScale(scale);
+    renderer->scale = scale;
+    DisplayList list(*fonts);
+    list.allowMoves(true);
+    int screen = 0, scroller = 0, items[20] = {}, fab = 0;
+    Path mark;
+    mark.moveTo(0, 0);
+    mark.lineTo(10, 5);
+    mark.lineTo(0, 10);
+    mark.close();
+    auto record = [&](float scroll, float across, int changed) {
+        list.begin({120, 160}, 1 / scale);
+        list.beginNode(&screen);
+        list.fillRoundRect({0, 0, 120, 160}, 0, Color{0.95f, 0.95f, 0.97f, 1});
+        list.drawText("Başlık", {6, 14}, Font{12}, colors::Black);
+        list.beginNode(&scroller);
+        list.pushClip({0, 20, 120, 140});
+        for (int i = 0; i < 20; ++i) {
+            list.beginNode(&items[i]);
+            float x = 6 - across, y = 22 + float(i) * 30 - scroll;
+            list.drawShadow({x, y, 108, 26}, CornerRadii(6), Shadow{Color{0, 0, 0, 0.3f}, {0, 2}, 4, 0}, false);
+            list.fillRoundRect({x, y, 108, 26}, CornerRadii(6), i == changed ? Color{1, 0.6f, 0.2f, 1} : Color{0.3f, 0.5f, 0.9f - float(i) * 0.03f, 1});
+            list.drawText("Öğe " + std::to_string(i), {x + 8, y + 17}, Font{11}, colors::White);
+            list.drawShadowPath(mark, {x + 90, y + 8}, Shadow{Color{0, 0, 0, 0.5f}, {1, 1}, 1, 0}, false);
+            list.endNode();
+        }
+        list.popClip();
+        list.drawBackdrop({10, 100, 60, 20}, BlurEffect(3, 3), 1);  // (frosted: what moved under it, blurred anew)
+        list.endNode();
+        list.beginNode(&fab);
+        list.fillRoundRect({84, 124, 28, 28}, CornerRadii(14), Color{0.9f, 0.2f, 0.4f, 1});
+        list.endNode();
+        list.endNode();
+        return list.end();
+    };
+    auto kept = g.device->createTexture(w, h, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+    auto fresh = g.device->createTexture(w, h, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+    struct Step {
+        float scroll, across;
+        int changed;
+    };
+    const Step steps[] = {{0, 0, -1},  {10, 0, -1},  {25, 0, -1},    {25, 0, -1},   {24.5f, 0, -1}, {40, 0, 3},  {30, 0, 3},  {31.5f, 0, -1},
+                          {100, 0, 5}, {99.5f, 0, 5}, {41.25f, 0, -1}, {60, 0, -1},   {0, 0, -1},     {7, 0, -1},  {7, 6, -1}, {7, -3.5f, -1}};
+    size_t moves = 0;
+    for (const Step& step : steps) {
+        device.beginFrame();
+        std::optional<Rect> damage = record(step.scroll, step.across, step.changed);
+        if (damage) renderer->drawFrame(*kept, list, true);
+        renderer->drawFrame(*fresh, list, false);
+        renderer->flush();
+        Pixels a{w, h, device.readPixels(*kept, {0, 0, w, h})}, b{w, h, device.readPixels(*fresh, {0, 0, w, h})};
+        device.endFrame(false);
+        renderer->endFrame();
+        fonts->endFrame();
+        moves += list.moves().size();
+        int worst = worstAgainst(a, [&](int x, int y) { return b.at(x, y); });
+        CHECK(worst == 0);
+        if (worst) std::printf("  scrolled to %g: off by %d at (%g, %g)\n", step.scroll, worst, worstAt.x, worstAt.y);
+    }
+    // (All but the first, the one that changed nothing, those by part of a pixel, and those that
+    // leave as much to draw as all of the clip: jumps far, or across past the backdrop.)
+    CHECK(moves == 9);
+    renderer.reset();
+}
+
 void scenesMatchTheirPictures(Gpu& g) {
     struct Scene {
         const char* name;
@@ -3872,6 +3948,7 @@ int main() {
             passAreasClearOnlyThere(g);
             discardedTexturesAreDrawnOver(g);
             pathsShareTheirMasks(g);
+            keptFramesMoveWhatScrolled(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
         }

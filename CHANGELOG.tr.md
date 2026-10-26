@@ -229,6 +229,15 @@
   düzenden sonra ele alınan türlerden hangisi olduğunu (ve kırpıp kırpmadığını) öğeler değiştiğinde bulup saklar; her
   gezintide her öğede her tür denenmez. Bir Redmi Note 9 Pro'da Bileşenler ekranı kaydırılırken yavaş bir karenin
   compose ve düzeni bununla ve açılır pencere sayacıyla 15.9 yerine 13.7 ms sürdü (medyan).
+- **Kaydırma tutulan pikselleri taşır** (Kompoz'un GPU renderer'ı): bir dikdörtgen clip içinde tam piksel kayan,
+  kaydırılan bir listedeki gibi, tutulan karede taşınır, yeniden çizilmez; yalnızca görünüme giren şerit ve onunla
+  kaymayanlar (bulunduğu yerde ve taşımanın götürdüğü yerde) çizilir. Taşınan piksellerin yanlış olacağı yerde (altları
+  tek renk değilse, çevrelerinde başka biçimde bir clip ya da bir katman varsa, piksel parçası kadar kaydıysa) ya da o
+  kadar çizilecekse, değişen eskisi gibi çizilir. Hasar, hepsini saran tek bir dikdörtgen değil, tam piksellerde en
+  fazla sekiz ayrı alandır (`DisplayList::areas`, `moves`, `allowMoves`; `gpu::Renderer::drawFrame`, `move`); opak bir
+  dikdörtgen, bir alanın dokunduğu tam pikselleri örttüğünde onu örter. Bir Redmi Note 9 Pro'da Bileşenler ekranı
+  kaydırılırken bir kare GPU'da 27–38 yerine 4–14 ms sürdü, saniyede 11–41 yerine 50–60 kare gösterildi; ekranın altıda
+  biri ile üçte ikisi yerine yirmide biri ile beşte biri yeniden çizildi.
 - **Düzeltildi**: GPU renderer'ın döndürülmüş, gerilmiş ve eğik kenarları, köşe noktalarını kaba bir ızgaraya oturtan
   GPU'larda (4 alt piksel biti, SwiftShader gibi: Chrome'un GPU kullanmadığı yerdeki WebGL'i) 10/255'e kadar
   sapıyordu: bir dörtgenin köşeleri böyle bir GPU'nun koyacağı yere konur, pikselleri oradan boyanır.

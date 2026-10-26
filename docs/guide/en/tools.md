@@ -131,7 +131,7 @@ adb shell run-as dev.kompoz.showcase sh -c "'echo \"realtime; wait 60; swipe 200
 
 Kompoz records each frame first and draws again only what changed since the frame before; a frame in which nothing on the screen changes is neither drawn nor presented. To see or check this:
 
-- `KOMPOZ_DAMAGE_SHOW=1` outlines what was drawn again in each frame.
+- `KOMPOZ_DAMAGE_SHOW=1` outlines what was drawn again in each frame (each of its areas).
 - `KOMPOZ_DAMAGE_CHECK=1` also draws each frame from scratch and logs any pixel that differs.
 - `KOMPOZ_FULL_REDRAW=1` draws every frame from scratch.
 

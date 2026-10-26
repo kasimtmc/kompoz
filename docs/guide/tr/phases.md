@@ -59,7 +59,7 @@ Bunun için bir şey yapmanız gerekmez. Ama şu anlama gelir: büyük bir ağac
 
 ## Yalnız değişeni çizmek
 
-Kompoz her kareyi bir çizim komutları listesi olarak kaydeder ve önceki kareyle karşılaştırır. Ekranın yalnız değişen bölümleri yeniden çizilir; piksellerin geri kalanı korunur. Bunu, yeniden çizileni çerçeveleyen `KOMPOZ_DAMAGE_SHOW=1` ile görebilirsiniz. Bkz. [Araçlar](tools.md#karelerin-profilini-çıkarmak).
+Kompoz her kareyi bir çizim komutları listesi olarak kaydeder ve önceki kareyle karşılaştırır. Ekranın yalnız değişen bölümleri yeniden çizilir; piksellerin geri kalanı korunur. Kompoz'un GPU renderer'ında kaydırılan bir liste de yeniden çizilmez: pikselleri kaydırılır, yalnızca görünüme giren şerit ve onunla birlikte kaymayanlar (üstündeki yüzen bir düğme) çizilir. Bu, listenin altı tek renkken işler: kendi zemini ya da ekranınki; bir gradyanın ya da resmin üstünde liste kaydıkça yeniden çizilir. Bunu, yeniden çizileni çerçeveleyen `KOMPOZ_DAMAGE_SHOW=1` ile görebilirsiniz. Bkz. [Araçlar](tools.md#karelerin-profilini-çıkarmak).
 
 ## Performans ipuçları
 

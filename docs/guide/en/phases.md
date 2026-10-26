@@ -59,7 +59,7 @@ You don't need to do anything for this. It does mean a change deep in a large tr
 
 ## Drawing only what changed
 
-Kompoz records each frame as a list of drawing commands and compares it with the frame before. Only the parts of the screen that changed are drawn again; the rest of the pixels are kept. You can see this with `KOMPOZ_DAMAGE_SHOW=1`, which outlines what was redrawn. See [Tools](tools.md#profiling-frames).
+Kompoz records each frame as a list of drawing commands and compares it with the frame before. Only the parts of the screen that changed are drawn again; the rest of the pixels are kept. On Kompoz's GPU renderer a scrolled list isn't drawn again either: its pixels are moved, and only the strip that comes into view is drawn, with what doesn't scroll along (a floating button over it). That works where what is under the list is one color, its own background or the screen's; over a gradient or an image the list is drawn again as it scrolls. You can see this with `KOMPOZ_DAMAGE_SHOW=1`, which outlines what was redrawn. See [Tools](tools.md#profiling-frames).
 
 ## Performance tips
 

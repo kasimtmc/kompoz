@@ -217,6 +217,15 @@
   elements, which of the kinds acted on after layout it is (and whether it clips), found out when the elements change,
   instead of trying each kind on every element at every walk. On a Redmi Note 9 Pro scrolling the Components screen,
   compose and layout of a slow frame took 13.7 ms (median) with this and the popup count, instead of 15.9.
+- **Scrolling moves the kept pixels** (Kompoz's GPU renderer): what moved by whole pixels within a rect clip, as a
+  scrolled list does, is moved in the kept frame, not drawn again; only the strip that came into view is drawn, with what
+  didn't move along (where it is and where moving took it). Where moved pixels would be wrong (what is under them isn't
+  one color, a clip of another shape or a layer around them, part of a pixel) or as much would be drawn, what changed is
+  drawn as before. Damage comes in up to eight separate areas, in whole pixels, not one rect around all of it
+  (`DisplayList::areas`, `moves`, `allowMoves`; `gpu::Renderer::drawFrame`, `move`); an opaque rect covers an area
+  when it covers the whole pixels the area touches. On a Redmi Note 9 Pro scrolling the Components screen, a frame took
+  the GPU 4–14 ms instead of 27–38 and 50–60 frames a second were shown instead of 11–41, a twentieth to a fifth of the
+  screen drawn again instead of a sixth to two thirds.
 - **Fixed**: the GPU renderer's turned, stretched and leaning edges were up to 10/255 off on GPUs that snap vertices
   coarsely (4 subpixel bits, as SwiftShader does: Chrome's WebGL where it doesn't use the GPU): a quad's corners are
   put where such a GPU would put them, and its pixels shaded from there.

@@ -4701,6 +4701,173 @@ TEST(display_list_damage_is_what_changed_on_the_screen) {
     CHECK(d && d->x == 0 && d->y >= 199 && d->bottom() <= 251 && d->right() < 52);  // only the box that came into view
 }
 
+// What changed in separate places is drawn again in separate areas (bounded in number: those that
+// grow least by it are made one); end() gives their bounds.
+TEST(display_list_damage_comes_in_separate_areas) {
+    testing::FakeTextMeasurer measurer;
+    DisplayList list(measurer);
+    int nodes[12] = {};
+    auto frame = [&](int changed) {  // the first `changed` boxes in another color
+        list.begin({400, 400}, 1);
+        for (int i = 0; i < 12; ++i) {
+            list.beginNode(&nodes[i]);
+            list.fillRoundRect({float(i % 4) * 100 + 10, float(i / 4) * 130 + 10, 20, 20}, 0, i < changed ? colors::Black : colors::White);
+            list.endNode();
+        }
+        return list.end();
+    };
+    frame(0);
+    auto d = frame(2);  // the first two: a box at 10 and one at 110 across
+    CHECK(d && list.areas().size() == 2 && sameRect(list.areas()[0], {8, 8, 24, 24}) && sameRect(list.areas()[1], {108, 8, 24, 24}));
+    CHECK(sameRect(*d, {8, 8, 124, 24}));
+    d = frame(12);  // ten more change: no more than eight areas, nothing left out
+    float drawn = 0;
+    for (const Rect& a : list.areas()) drawn += a.width * a.height;
+    CHECK(d && list.areas().size() <= 8 && list.areas().size() >= 2 && sameRect(*d, {8, 8, 324, 284}) && drawn < 324 * 284 / 2);
+    for (int i = 2; i < 12; ++i) {
+        Rect box{float(i % 4) * 100 + 8, float(i / 4) * 130 + 8, 24, 24};
+        CHECK(std::ranges::any_of(list.areas(), [&](const Rect& a) { return a.x <= box.x && a.y <= box.y && a.right() >= box.right() && a.bottom() >= box.bottom(); }));
+    }
+    CHECK(!frame(12) && list.areas().empty());
+}
+
+// Content that moved by whole pixels within a rect clip (a scrolled list) moves the kept pixels:
+// only what that leaves wrong is drawn again (the strip that came into view, what doesn't move
+// with it where it is and where moving took it). What would make moved pixels wrong (something
+// under them that isn't one color, a clip of another shape, a part of a pixel) draws what changed
+// again instead.
+TEST(display_list_moves_what_scrolled_by_whole_pixels) {
+    ScrollState scroll;
+    auto fab = mutableStateOf(false), gradient = mutableStateOf(false), rounded = mutableStateOf(false);
+    Color red{1, 0, 0, 1};
+    ComposeTestRule rule([&] {
+        Box(Modifier().fillMaxSize().background(colors::White), [&] {
+            Modifier list = Modifier().fillMaxSize();
+            if (rounded.get()) list = list.clip(RoundedCornerShape(16));
+            if (gradient.get()) list = list.background(Brush::verticalGradient({red, Color{0, 0, 1, 1}}));
+            Column(list.verticalScroll(scroll), [&] {
+                for (int i = 0; i < 30; ++i) Box(Modifier().fillMaxWidth().height(50).padding(4).background(Color{0, 0.5f, float(i) / 30, 1}, 8));
+            });
+            if (fab.get()) Box(Modifier().align(Alignment::BottomEnd).padding(16).size(56).background(red, 16));
+        });
+    }, {400, 800});
+    DisplayList list(rule.host().textMeasurer());
+    list.allowMoves(true);
+    auto frame = [&] {
+        list.begin({400, 800}, 1);
+        rule.host().draw(list);
+        return list.end();
+    };
+    auto scrollBy = [&](float dp) {
+        scroll.scrollTo(scroll.value() + dp);
+        rule.waitForIdle();
+        return frame();
+    };
+    auto drawnAgain = [&](const Rect& r) {
+        return std::ranges::any_of(list.areas(), [&](const Rect& a) { return a.x <= r.x && a.y <= r.y && a.right() >= r.right() && a.bottom() >= r.bottom(); });
+    };
+    auto drawn = [&] {
+        float all = 0;
+        for (const Rect& a : list.areas()) all += a.width * a.height;
+        return all;
+    };
+    frame();
+    auto d = scrollBy(30);  // up by 30: the pixels below 30 move up, the strip at the bottom is new
+    CHECK(d && list.moves().size() == 1 && sameRect(list.moves()[0].from, {0, 30, 400, 770}) && list.moves()[0].by.x == 0 &&
+          list.moves()[0].by.y == -30);
+    CHECK(list.areas().size() == 1 && sameRect(list.areas()[0], {0, 770, 400, 30}));
+    d = scrollBy(-10);  // and back down
+    CHECK(d && list.moves().size() == 1 && list.moves()[0].by.y == 10 && list.areas().size() == 1 && sameRect(list.areas()[0], {0, 0, 400, 10}));
+    CHECK(!frame() && list.moves().empty());
+    // Over it, what doesn't move: drawn again where it is and where its pixels moved to.
+    fab.set(true);
+    rule.waitForIdle();
+    frame();
+    d = scrollBy(20);
+    CHECK(d && list.moves().size() == 1 && drawnAgain({0, 780, 400, 20}) && drawnAgain({328, 728, 56, 56}) && drawnAgain({328, 708, 56, 56}));
+    CHECK(drawn() < 400 * 800 / 8);
+    fab.set(false);
+    rule.waitForIdle();
+    frame();
+    // Under it, a gradient that stays: moved pixels would take it along. What changed is drawn again.
+    gradient.set(true);
+    rule.waitForIdle();
+    frame();
+    d = scrollBy(20);
+    CHECK(d && list.moves().empty() && d->y <= 0 && d->bottom() >= 800);
+    gradient.set(false);
+    rounded.set(true);  // a clip of another shape around it
+    rule.waitForIdle();
+    frame();
+    d = scrollBy(20);
+    CHECK(d && list.moves().empty() && d->y <= 0 && d->bottom() >= 800);
+    rounded.set(false);
+    rule.waitForIdle();
+    frame();
+    list.allowMoves(false);
+    d = scrollBy(20);
+    CHECK(d && list.moves().empty() && d->y <= 0 && d->bottom() >= 800);
+    // By hand: an item in a scroller's clip (drawn through `shift`).
+    testing::FakeTextMeasurer measurer;
+    DisplayList part(measurer);
+    part.allowMoves(true);
+    int scroller = 0, item = 0;
+    auto record = [&](const std::function<void()>& draw, float clipHeight = 100, float shift = 0) {
+        part.begin({100, 100}, 0.5f);
+        part.beginNode(&scroller);
+        part.pushClip({0, 0, 100, clipHeight});
+        part.pushTranslation({0, shift});
+        part.beginNode(&item);
+        draw();
+        part.endNode();
+        part.popTranslation();
+        part.popClip();
+        part.endNode();
+        return part.end();
+    };
+    auto box = [&](float y) {
+        return [&part, y, red] { part.fillRoundRect({10, y, 50, 50}, 0, red); };
+    };
+    record(box(20));
+    d = record(box(30));
+    CHECK(d && part.moves().size() == 1 && part.moves()[0].by.y == 10 && sameRect(part.moves()[0].from, {0, 0, 100, 90}));
+    // Moved by part of a pixel: drawn again where it was and is (in whole pixels).
+    d = record(box(30.25f));
+    CHECK(d && part.moves().empty() && sameRect(*d, {9, 29, 52, 52.5f}) && d->bottom() == 81.5f);
+    // Its parts moved apart: the text further than the box.
+    record([&] {
+        box(20)();
+        part.drawText("a", {12, 40}, Font{10}, red);
+    });
+    d = record([&] {
+        box(30)();
+        part.drawText("a", {12, 52}, Font{10}, red);
+    });
+    CHECK(d && part.moves().empty());
+    // A part drawn twice the size: moved as far in its place, twice as far on the screen.
+    auto scaled = [&](float y) {
+        return [&part, y, red] {
+            part.fillRoundRect({10, y, 20, 20}, 0, red);
+            Matrix twice;
+            twice.scale(2, 2);
+            part.pushTransform(twice);
+            part.fillRoundRect({10, y, 10, 10}, 0, red);
+            part.popTransform();
+        };
+    };
+    record(scaled(10));
+    d = record(scaled(20));
+    CHECK(d && part.moves().empty());
+    // The clip around it changed (pixels it cut before would come into it).
+    record(box(20), 80);
+    d = record(box(30));
+    CHECK(d && part.moves().empty());
+    // Drawn through a translation that changed as much the other way: in its place on the screen.
+    record(box(30));
+    d = record(box(20), 100, 10);
+    CHECK(d && part.moves().empty());
+}
+
 TEST(display_list_lines_frames_up_by_node_and_replays_an_area) {
     testing::FakeTextMeasurer measurer;
     DisplayList list(measurer);
@@ -4792,7 +4959,10 @@ TEST(display_list_leaves_out_what_an_opaque_rect_hides) {
     }));
     CHECK(!covers([&] { list.fillRoundRect({0, 0, 200, 200}, 0, Color{0, 0, 1, 0.5f}); }));  // translucent
     CHECK(!covers([&] { list.fillRoundRect({0, 0, 200, 200}, 8, blue); }));                  // round corners
-    CHECK(!covers([&] { list.fillRoundRect(area, 0, blue); }));  // its edges anti-aliased on the area's border pixels
+    CHECK(covers([&] { list.fillRoundRect(area, 0, blue); }));  // all of its pixels: its edges on theirs
+    CHECK(!covers([&] { list.fillRoundRect({10.5f, 10, 100, 100}, 0, blue); }));  // its edge anti-aliased on the area's border pixels
+    record([&] { list.fillRoundRect({10.5f, 10, 100, 100}, 0, blue); });
+    CHECK(!list.opaqueCover({10.5f, 10, 100, 100}));  // an area through a pixel: all of that pixel
     CHECK(!covers([&] {  // a clip that cuts the area
         list.pushClip({0, 0, 50, 400});
         list.fillRoundRect({0, 0, 200, 200}, 0, blue);

@@ -369,6 +369,52 @@ void Renderer::fillOpaque(const IRect& rect, Color color) {
     add(FILL, p, nullptr, true);
 }
 
+bool Renderer::move(const IRect& from, int dx, int dy) {
+    if (targets_.empty()) return false;
+    Target& t = targets_.back();
+    Texture* target = passes_[t.pass].target;
+    IRect all{0, 0, target->width(), target->height()};
+    IRect region = intersect(intersect(from, all), {-dx, -dy, all.width, all.height});
+    if (region.empty() || (dx == 0 && dy == 0)) return true;
+    // Through a texture of its own (a texture's copy into itself where they overlap isn't one):
+    // after what the target's pass drew so far, which what follows goes on from.
+    Texture* copy = acquire(region.width, region.height, target->format());
+    if (!copy) return false;
+    order_.push_back(t.pass);
+    Pass out{copy, std::nullopt, {}, {}}, in{target, std::nullopt, {}, {}};
+    out.copy = Pass::Copy{target, region};
+    in.copy = Pass::Copy{copy, {0, 0, region.width, region.height}, region.x + dx, region.y + dy};
+    for (Pass* p : {&out, &in}) {
+        order_.push_back(passes_.size());
+        passes_.push_back(std::move(*p));
+    }
+    t.pass = passes_.size();
+    passes_.push_back({target, std::nullopt, {}, {}});
+    return true;
+}
+
+void Renderer::drawFrame(Texture& target, const DisplayList& list, bool changes) {
+    beginTarget(target);
+    std::vector<std::optional<Rect>> areas;
+    for (size_t i = 0; changes && i < list.moves().size(); ++i) {
+        const DisplayList::Move& m = list.moves()[i];  // (in whole pixels, as DisplayList finds them)
+        IRect from{int(std::lround(m.from.x * scale)), int(std::lround(m.from.y * scale)), int(std::lround(m.from.width * scale)),
+                   int(std::lround(m.from.height * scale))};
+        changes = move(from, int(std::lround(m.by.x * scale)), int(std::lround(m.by.y * scale)));
+    }
+    if (changes) areas.assign(list.areas().begin(), list.areas().end());
+    else areas.push_back(std::nullopt);
+    Rect all{0, 0, float(target.width()) / scale, float(target.height()) / scale};
+    for (const std::optional<Rect>& area : areas) {
+        if (area) pushClip(*area);
+        std::optional<size_t> cover = list.opaqueCover(area.value_or(all));
+        if (!cover) fillOpaque({0, 0, target.width(), target.height()}, colors::White);
+        list.replay(*this, area, cover.value_or(0));
+        if (area) popClip();
+    }
+    endTarget();
+}
+
 void Renderer::blit(Texture& texture, int quarterTurns) {
     float w = float(texture.width()), h = float(texture.height());
     Prim p;
@@ -486,7 +532,7 @@ void Renderer::drawMasks() {
 
 void Renderer::execute(Pass& pass) {
     if (pass.copy) {
-        device_.copyTexture(*pass.copy->first, pass.copy->second, *pass.target, 0, 0);
+        device_.copyTexture(*pass.copy->from, pass.copy->region, *pass.target, pass.copy->x, pass.copy->y);
         return;
     }
     if (pass.effect) {
@@ -524,6 +570,7 @@ void Renderer::execute(Pass& pass) {
         device_.endPass();
         return;
     }
+    if (pass.batches.empty() && !pass.clear) return;  // (nothing drawn: what it holds stays)
     // The instances, all at once; then each mask generation: its paths' coverage, then the
     // batches that read it (the target cleared only before the first).
     BufferRef prims;
@@ -1612,7 +1659,7 @@ void Renderer::drawBackdrop(const Rect& bounds, const RenderEffect& effect, floa
     if (!copy) return;
     order_.push_back(t.pass);
     Pass copying{copy, std::nullopt, {}, {}};
-    copying.copy = std::pair{target, region};
+    copying.copy = Pass::Copy{target, region};
     order_.push_back(passes_.size());
     passes_.push_back(std::move(copying));
     t.pass = passes_.size();

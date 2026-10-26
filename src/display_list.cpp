@@ -41,7 +41,46 @@ Rect united(const Rect& a, const Rect& b) {
 
 uint64_t mix(uint64_t h, uint64_t v) { return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2)); }
 
+float area(const Rect& r) { return empty(r) ? 0 : r.width * r.height; }
+Rect moved(const Rect& r, Offset by) { return {r.x + by.x, r.y + by.y, r.width, r.height}; }
+// Where things moved to are a thousandth of a dp off at most (whole px summed in floats).
+bool near(float a, float b) { return std::abs(a - b) <= 1e-3f; }
+bool near(Offset a, Offset b) { return near(a.x, b.x) && near(a.y, b.y); }
+bool movedTo(Offset a, Offset o, Offset by) { return near(a.x, o.x + by.x) && near(a.y, o.y + by.y); }
+bool movedTo(const Rect& a, const Rect& o, Offset by) { return movedTo(Offset{a.x, a.y}, Offset{o.x, o.y}, by) && a.width == o.width && a.height == o.height; }
+// `r` added to `rects` (that don't overlap): made one with those it overlaps.
+void join(std::vector<Rect>& rects, Rect r) {
+    for (size_t i = 0; i < rects.size();)
+        if (overlaps(rects[i], r)) {
+            r = united(r, rects[i]);
+            rects.erase(rects.begin() + ptrdiff_t(i));
+            i = 0;  // (grown: it may reach those already passed)
+        } else {
+            ++i;
+        }
+    rects.push_back(r);
+}
+
+// What is left of `r` outside `hole` (a rect within it, or not), in up to four rects that don't
+// overlap: the bands above and below it all across, those beside it between them.
+void subtract(const Rect& r, const Rect& hole, std::vector<Rect>& out) {
+    Rect h = hole.intersect(r);
+    if (empty(h)) {
+        if (!empty(r)) out.push_back(r);
+        return;
+    }
+    auto add = [&](Rect piece) {
+        if (!empty(piece)) out.push_back(piece);
+    };
+    add({r.x, r.y, r.width, h.y - r.y});
+    add({r.x, h.bottom(), r.width, r.bottom() - h.bottom()});
+    add({r.x, h.y, h.x - r.x, h.height});
+    add({h.right(), h.y, r.right() - h.right(), h.height});
+}
+
 using Projective = DisplayList::Projective;
+
+bool squareToScreen(const Projective& p) { return p.m[1] == 0 && p.m[3] == 0 && p.m[6] == 0 && p.m[7] == 0 && p.m[8] == 1; }
 
 // A layer's compositing (as backends do it): scaled and rotated around its origin, then moved.
 Projective layerMap(const Rect& bounds, const LayerTransform& t) {
@@ -95,6 +134,51 @@ bool DisplayList::Command::same(const Command& o) const {
            matrix == o.matrix;
 }
 
+std::optional<Offset> DisplayList::Command::place() const {
+    switch (kind) {
+    case Kind::FillRoundRect: case Kind::StrokeRoundRect: case Kind::Arc: case Kind::Gradient: case Kind::Shadow: case Kind::ShapeShadow:
+    case Kind::Image: case Kind::ImageMask: case Kind::PushLayer:
+        return Offset{rect.x, rect.y};
+    case Kind::PushClip: return f1 == 2 ? p1 : Offset{rect.x, rect.y};
+    case Kind::Line: case Kind::Text: case Kind::TextBrush: case Kind::TextShadow: case Kind::Path: case Kind::ElevationShadow:
+    case Kind::Vertices:
+        return p1;
+    case Kind::ShadowPath: return p2;
+    default: return std::nullopt;
+    }
+}
+
+// Which of its fields say where it is, by kind: its rect (a shape's, an image's destination, a
+// layer's or clip's bounds), its brush's area (rect2, or p1 and the size in p2 for an image
+// mask's), its first point (a baseline, an origin, a line's start) and its second (a line's end, a
+// path shadow's origin). The rest (an image's source, a shadow's offset) stays as it was.
+bool DisplayList::Command::sameMoved(const Command& o, Offset by) const {
+    if (kind != o.kind || kind == Kind::Backdrop || !(m == o.m)) return false;  // (what a backdrop reads moved too: not the same)
+    if (kind == Kind::PushLayer && !(path.isEmpty() && o.path.isEmpty())) return false;  // (an outline's place isn't told)
+    bool rectMoves = false, brushMoves = false, p1Moves = false, p2Moves = false;
+    switch (kind) {
+    case Kind::FillRoundRect: case Kind::StrokeRoundRect: case Kind::Arc: case Kind::Shadow: case Kind::ShapeShadow: case Kind::Image:
+    case Kind::PushLayer:
+        rectMoves = true;
+        break;
+    case Kind::Gradient: rectMoves = brushMoves = true; break;
+    case Kind::ImageMask: rectMoves = p1Moves = true; break;
+    case Kind::PushClip: (f1 == 2 ? p1Moves : rectMoves) = true; break;
+    case Kind::Line: p1Moves = p2Moves = true; break;
+    case Kind::Text: case Kind::TextShadow: case Kind::ElevationShadow: p1Moves = true; break;
+    case Kind::TextBrush: case Kind::Path: case Kind::Vertices: p1Moves = brushMoves = true; break;
+    case Kind::ShadowPath: p2Moves = true; break;
+    default: break;
+    }
+    return (rectMoves ? movedTo(rect, o.rect, by) : kompoz::same(rect, o.rect)) &&
+           (brushMoves ? movedTo(rect2, o.rect2, by) : kompoz::same(rect2, o.rect2)) &&
+           (p1Moves ? movedTo(p1, o.p1, by) : kompoz::same(p1, o.p1)) && (p2Moves ? movedTo(p2, o.p2, by) : kompoz::same(p2, o.p2)) &&
+           radii == o.radii && f1 == o.f1 && f2 == o.f2 && f3 == o.f3 && color == o.color && flag == o.flag && font == o.font &&
+           image == o.image && imageVersion == o.imageVersion && kompoz::same(stroke, o.stroke) && kompoz::same(transform, o.transform) &&
+           text == o.text && brush == o.brush && vertices == o.vertices && filter == o.filter && effect == o.effect && elevated == o.elevated &&
+           shaped == o.shaped && path == o.path && matrix == o.matrix;
+}
+
 void DisplayList::begin(Size viewport, float pixel) {
     viewport_ = viewport;
     pixel_ = pixel;
@@ -130,6 +214,7 @@ DisplayList::Command& DisplayList::add(Kind kind) {
     Command& c = recording_.emplace_back();
     c.kind = kind;
     c.m = states_.back().m;
+    if (states_.size() > 1) c.parent = states_.back().push;
     return c;
 }
 
@@ -488,7 +573,8 @@ bool DisplayList::quickReject(const Rect& rect) const {
     return empty(grown(s.m.map(rect), pixel_).intersect(s.clip));
 }
 
-void DisplayList::addDamage(std::optional<Rect>& damage, const std::vector<Command>& commands, uint32_t first, uint32_t count) {
+void DisplayList::addDamage(std::vector<Rect>& damage, const std::vector<Command>& commands, uint32_t first, uint32_t count) {
+    std::optional<Rect> all;
     for (uint32_t i = first; i < first + count; ++i) {
         const Command& c = commands[i];
         if (c.kind == Kind::PopLayer || c.kind == Kind::PushClip || c.kind == Kind::PopClip || c.kind == Kind::PushTranslation ||
@@ -496,8 +582,9 @@ void DisplayList::addDamage(std::optional<Rect>& damage, const std::vector<Comma
             c.kind == Kind::PopAlias || c.kind == Kind::PushFilter ||
             c.kind == Kind::PopFilter || c.kind == Kind::PushTransform || c.kind == Kind::PopTransform || empty(c.bounds))
             continue;
-        damage = damage ? united(*damage, c.bounds) : c.bounds;
+        all = all ? united(*all, c.bounds) : c.bounds;
     }
+    if (all) damage.push_back(*all);
 }
 
 std::optional<Rect> DisplayList::end() {
@@ -512,18 +599,22 @@ std::optional<Rect> DisplayList::end() {
                                             : Kind::PopLayer);
     }
     Rect screen{0, 0, viewport_.width, viewport_.height};
-    std::optional<Rect> damage;
+    areas_.clear();
+    moves_.clear();
     if (invalid_ || !(viewport_ == frameViewport_) || pixel_ != framePixel_) {
-        damage = screen;
+        areas_.push_back(screen);
     } else {
         // What each node drew is compared with what it drew last time: what differs is damage
         // where it was and where it is. So is all of what moved in front of or behind something
         // else: the segments kept are those that follow each other as they did.
+        std::vector<Rect> damage;
         lookup_.clear();
         for (uint32_t i = 0; i < frameSegments_.size(); ++i) lookup_.emplace(frameSegments_[i].key, i);
         matched_.assign(frameSegments_.size(), 0);
+        moved_.clear();
         int64_t last = -1;  // the last frame's segment those kept so far end with
-        for (const Segment& s : recordingSegments_) {
+        for (uint32_t si = 0; si < recordingSegments_.size(); ++si) {
+            const Segment& s = recordingSegments_[si];
             auto it = lookup_.find(s.key);
             if (it == lookup_.end() || matched_[it->second]) {  // new
                 addDamage(damage, recording_, s.first, s.count);
@@ -538,31 +629,70 @@ std::optional<Rect> DisplayList::end() {
                 continue;
             }
             last = o;
-            // What it drew first and last as before stays; the rest changed.
+            // What it drew first and last as before stays; the rest changed (or all of it moved).
             uint32_t n = s.count, m = p.count, head = 0, tail = 0;
             while (head < n && head < m && recording_[s.first + head].same(frame_[p.first + head])) ++head;
             while (tail < n - head && tail < m - head && recording_[s.first + n - 1 - tail].same(frame_[p.first + m - 1 - tail])) ++tail;
+            if (head + tail < std::max(n, m) && allowMoves_ && n == m)
+                if (std::optional<Offset> by = movedBy(s, p)) {
+                    moved_.push_back({si, o, *by});
+                    continue;
+                }
             addDamage(damage, frame_, p.first + head, m - head - tail);
             addDamage(damage, recording_, s.first + head, n - head - tail);
         }
         for (uint32_t i = 0; i < frameSegments_.size(); ++i)
             if (!matched_[i]) addDamage(damage, frame_, frameSegments_[i].first, frameSegments_[i].count);
+        if (!moved_.empty()) settleMoves(damage);
         // A backdrop that damage reaches (what it reads, or where it shows) is drawn anew with all
         // that is under what it reads.
-        for (bool widened = damage.has_value(); widened;) {
+        for (bool widened = !damage.empty(); widened;) {
             widened = false;
             for (const Command& c : recording_) {
                 if (c.kind != Kind::Backdrop) continue;
                 Rect all = united(c.bounds, c.rect2);
-                if (!overlaps(*damage, all)) continue;
-                Rect more = united(*damage, all);
-                widened = widened || !same(more, *damage);
-                damage = more;
+                bool reached = false, inside = false;
+                for (const Rect& d : damage) {
+                    reached = reached || overlaps(d, all);
+                    inside = inside || (d.x <= all.x && d.y <= all.y && d.right() >= all.right() && d.bottom() >= all.bottom());
+                }
+                if (!reached || inside) continue;
+                damage.push_back(all);
+                widened = true;
             }
         }
-        if (damage) {
-            *damage = damage->intersect(screen);
-            if (empty(*damage)) damage.reset();
+        // As a few rects: those that overlap made one, then the two that grow least by it while
+        // there are too many.
+        constexpr size_t kMaxAreas = 8;
+        for (Rect d : damage) {
+            // In whole pixels: a clip's edge then cuts none (what is drawn again there is all of
+            // it, not mixed with what was there by how much of the pixel it covers).
+            d = d.intersect(screen);
+            if (empty(d)) continue;
+            float x0 = std::floor(d.x / pixel_ + 1e-3f), y0 = std::floor(d.y / pixel_ + 1e-3f);
+            float x1 = std::ceil(d.right() / pixel_ - 1e-3f), y1 = std::ceil(d.bottom() / pixel_ - 1e-3f);
+            join(areas_, Rect{x0 * pixel_, y0 * pixel_, (x1 - x0) * pixel_, (y1 - y0) * pixel_}.intersect(screen));
+        }
+        while (areas_.size() > kMaxAreas) {
+            size_t bi = 0, bj = 1;
+            float best = kInfinity;
+            for (size_t i = 0; i < areas_.size(); ++i)
+                for (size_t j = i + 1; j < areas_.size(); ++j) {
+                    float grows = area(united(areas_[i], areas_[j])) - area(areas_[i]) - area(areas_[j]);
+                    if (grows < best) best = grows, bi = i, bj = j;
+                }
+            Rect both = united(areas_[bi], areas_[bj]);
+            areas_.erase(areas_.begin() + ptrdiff_t(bj));
+            areas_[bi] = both;
+            for (size_t i = 0; i < areas_.size();)  // (what it now overlaps joins it)
+                if (i != bi && overlaps(areas_[i], areas_[bi])) {
+                    areas_[bi] = united(areas_[bi], areas_[i]);
+                    areas_.erase(areas_.begin() + ptrdiff_t(i));
+                    if (i < bi) --bi;
+                    i = 0;
+                } else {
+                    ++i;
+                }
         }
     }
     std::swap(recording_, frame_);
@@ -570,13 +700,191 @@ std::optional<Rect> DisplayList::end() {
     frameViewport_ = viewport_;
     framePixel_ = pixel_;
     invalid_ = false;
-    return damage;
+    if (areas_.empty()) return std::nullopt;
+    Rect bounds = areas_[0];
+    for (const Rect& a : areas_) bounds = united(bounds, a);
+    return bounds;
+}
+
+std::optional<Offset> DisplayList::movedBy(const Segment& s, const Segment& p) const {
+    // How far its first command with a place moved, on the screen; then each command the same
+    // but for its place, which moved as far on the screen.
+    std::optional<Offset> local, screen;
+    for (uint32_t i = 0; i < s.count && !local; ++i) {
+        std::optional<Offset> now = recording_[s.first + i].place(), then = frame_[p.first + i].place();
+        if (now && then) local = Offset{now->x - then->x, now->y - then->y};
+    }
+    if (!local) return std::nullopt;
+    for (uint32_t i = 0; i < s.count; ++i) {
+        const Command& c = recording_[s.first + i];
+        if (!c.sameMoved(frame_[p.first + i], *local)) return std::nullopt;
+        if (!c.place()) continue;
+        const float* m = c.m.m;
+        if (m[6] != 0 || m[7] != 0 || m[8] == 0) return std::nullopt;  // (in perspective it moves unevenly)
+        Offset on{(m[0] * local->x + m[1] * local->y) / m[8], (m[3] * local->x + m[4] * local->y) / m[8]};
+        if (!screen) screen = on;
+        else if (!near(*screen, on)) return std::nullopt;
+    }
+    return screen;
+}
+
+void DisplayList::settleMoves(std::vector<Rect>& damage) {
+    auto isPush = [](Kind k) {
+        return k == Kind::PushLayer || k == Kind::PushClip || k == Kind::PushTranslation || k == Kind::PushBlend || k == Kind::PushAlias ||
+               k == Kind::PushFilter || k == Kind::PushTransform;
+    };
+    auto paints = [&](const Command& c) {  // a command that draws (not a push or a pop)
+        return !isPush(c.kind) && c.kind != Kind::PopLayer && c.kind != Kind::PopClip && c.kind != Kind::PopTranslation &&
+               c.kind != Kind::PopBlend && c.kind != Kind::PopAlias && c.kind != Kind::PopFilter && c.kind != Kind::PopTransform && !empty(c.bounds);
+    };
+    // Pushes that change pixels as they are, wherever they are (no clip, no texture of their own).
+    auto inPlace = [](const Command& c) {
+        return c.kind == Kind::PushTranslation || c.kind == Kind::PushBlend || c.kind == Kind::PushAlias || c.kind == Kind::PushFilter ||
+               c.kind == Kind::PushTransform;
+    };
+    auto squareClip = [](const Command& c) { return c.kind == Kind::PushClip && c.f1 == 0 && !c.flag && squareToScreen(c.m); };
+    group_.assign(recording_.size(), 0);
+    lastGroup_.assign(frame_.size(), 0);
+    for (const MovedSegment& ms : moved_) {
+        const Segment& s = recordingSegments_[ms.segment];
+        const Segment& p = frameSegments_[ms.last];
+        std::fill_n(group_.begin() + s.first, s.count, 1u);
+        std::fill_n(lastGroup_.begin() + p.first, p.count, 1u);
+    }
+    // Segments that moved alike within the same rect clip (the innermost that stayed, with only
+    // pushes that change pixels in place between) move together.
+    struct Group {
+        uint32_t clip;
+        Offset by;
+        std::vector<uint32_t> moved;  // in moved_
+        size_t commands = 0;
+        Rect exact, area;  // the clip's (and those around it), and the whole pixels in it
+        bool ok = true;
+    };
+    std::vector<Group> groups;
+    std::vector<uint32_t> rejected;  // moved_ that move with none
+    // (in this frame's commands, or the last frame's)
+    auto clipOf = [&](const std::vector<Command>& commands, const std::vector<uint32_t>& moving, uint32_t i) {
+        uint32_t p = commands[i].parent;
+        while (p != kNone && moving[p]) p = commands[p].parent;
+        while (p != kNone && inPlace(commands[p])) p = commands[p].parent;
+        return p != kNone && squareClip(commands[p]) ? p : kNone;
+    };
+    for (uint32_t k = 0; k < moved_.size(); ++k) {
+        const Segment& s = recordingSegments_[moved_[k].segment];
+        const Segment& last = frameSegments_[moved_[k].last];
+        uint32_t p = clipOf(recording_, group_, s.first);
+        for (uint32_t i = s.first + 1; i < s.first + s.count && p != kNone; ++i)
+            if (clipOf(recording_, group_, i) != p) p = kNone;  // (all of it in the same one)
+        // It was in the same clip as it is.
+        uint32_t then = clipOf(frame_, lastGroup_, last.first);
+        if (p != kNone && (then == kNone || !recording_[p].same(frame_[then]))) p = kNone;
+        if (p == kNone) {
+            rejected.push_back(k);
+            continue;
+        }
+        auto g = std::find_if(groups.begin(), groups.end(), [&](const Group& g) { return g.clip == p && near(g.by, moved_[k].by); });
+        if (g == groups.end()) g = groups.insert(groups.end(), Group{p, moved_[k].by});
+        g->moved.push_back(k);
+        g->commands += s.count;
+    }
+    Rect screen{0, 0, viewport_.width, viewport_.height};
+    for (Group& g : groups) {
+        for (const Group& o : groups)  // of a clip's, the one that moved most
+            if (&o != &g && o.clip == g.clip && (o.commands > g.commands || (o.commands == g.commands && &o < &g))) g.ok = false;
+        // By whole pixels, within the clip in whole pixels (and the rect clips around it).
+        float px = g.by.x / pixel_, py = g.by.y / pixel_;
+        if (std::abs(px - std::round(px)) > 0.01f || std::abs(py - std::round(py)) > 0.01f) g.ok = false;
+        g.by = {std::round(px) * pixel_, std::round(py) * pixel_};
+        Rect c = recording_[g.clip].m.map(recording_[g.clip].rect).intersect(screen);
+        for (uint32_t q = recording_[g.clip].parent; q != kNone && g.ok; q = recording_[q].parent)
+            if (squareClip(recording_[q])) c = c.intersect(recording_[q].m.map(recording_[q].rect));
+            else if (!inPlace(recording_[q])) g.ok = false;  // (a layer's texture, a clip of another shape)
+        g.exact = c;
+        float x0 = std::ceil(c.x / pixel_ - 1e-3f), y0 = std::ceil(c.y / pixel_ - 1e-3f);
+        float x1 = std::floor(c.right() / pixel_ + 1e-3f), y1 = std::floor(c.bottom() / pixel_ + 1e-3f);
+        g.area = {x0 * pixel_, y0 * pixel_, (x1 - x0) * pixel_, (y1 - y0) * pixel_};
+        if (empty(g.area) || std::abs(g.by.x) >= g.area.width || std::abs(g.by.y) >= g.area.height || (g.by.x == 0 && g.by.y == 0))
+            g.ok = false;
+    }
+    // The largest first; none overlapping one taken.
+    std::vector<Group*> order;
+    for (Group& g : groups) order.push_back(&g);
+    std::stable_sort(order.begin(), order.end(), [](const Group* a, const Group* b) { return area(a->area) > area(b->area); });
+    std::vector<Rect> taken;
+    for (uint32_t gi = 0; gi < order.size(); ++gi) {
+        Group& g = *order[gi];
+        if (g.ok)
+            for (const Rect& t : taken) g.ok = g.ok && !overlaps(t, g.area);
+        if (!g.ok) continue;
+        uint32_t id = gi + 2, first = kNone, lastFirst = kNone;
+        for (uint32_t k : g.moved) {
+            const Segment& s = recordingSegments_[moved_[k].segment];
+            const Segment& p = frameSegments_[moved_[k].last];
+            std::fill_n(group_.begin() + s.first, s.count, id);
+            std::fill_n(lastGroup_.begin() + p.first, p.count, id);
+            first = std::min(first, s.first), lastFirst = std::min(lastFirst, p.first);
+        }
+        // Under it all there, a color: the opaque rect covering the clip (or the white under
+        // everything; one that changed is damage over all of it). What else touches the clip,
+        // before or after what moved, is damage where it is and where moving would have taken it.
+        std::optional<size_t> cover = coverBefore(recording_, first, g.area, pixel_, viewport_),
+                              lastCover = coverBefore(frame_, lastFirst, g.area, pixel_, viewport_);
+        size_t from = cover ? *cover + 1 : 0, lastFrom = lastCover ? *lastCover + 1 : 0;
+        std::vector<Rect> wrong;
+        for (size_t i = from; i < recording_.size(); ++i)
+            if (group_[i] != id && paints(recording_[i]) && overlaps(recording_[i].bounds, g.area))
+                wrong.push_back(recording_[i].bounds.intersect(g.area));
+        for (size_t i = lastFrom; i < frame_.size(); ++i)
+            if (lastGroup_[i] != id && paints(frame_[i]) && overlaps(moved(frame_[i].bounds, g.by), g.area))
+                wrong.push_back(moved(frame_[i].bounds, g.by).intersect(g.area));
+        // The pixels moved: what was where the clip is less how far, to there; the rest of the clip
+        // is new.
+        Rect from_ = g.area.intersect(moved(g.area, {-g.by.x, -g.by.y}));
+        Rect to = moved(from_, g.by);
+        subtract(g.area, to, wrong);
+        // Around it, the pixels the clip's edge cuts (none when that is on whole pixels).
+        float x0 = std::floor(g.exact.x / pixel_ + 1e-3f), y0 = std::floor(g.exact.y / pixel_ + 1e-3f);
+        float x1 = std::ceil(g.exact.right() / pixel_ - 1e-3f), y1 = std::ceil(g.exact.bottom() / pixel_ - 1e-3f);
+        subtract({x0 * pixel_, y0 * pixel_, (x1 - x0) * pixel_, (y1 - y0) * pixel_}, g.area, wrong);
+        std::vector<Rect> drawn;  // (as end() makes them areas)
+        for (const Rect& w : wrong) join(drawn, w);
+        float worth = 0;
+        for (const Rect& d : drawn) worth += area(d);
+        if (worth >= area(g.area)) {  // as much drawn as without moving
+            for (uint32_t k : g.moved) {
+                const Segment& s = recordingSegments_[moved_[k].segment];
+                const Segment& p = frameSegments_[moved_[k].last];
+                std::fill_n(group_.begin() + s.first, s.count, 1u);
+                std::fill_n(lastGroup_.begin() + p.first, p.count, 1u);
+            }
+            g.ok = false;
+            continue;
+        }
+        taken.push_back(g.area);
+        moves_.push_back({from_, g.by});
+        damage.insert(damage.end(), wrong.begin(), wrong.end());
+    }
+    for (Group& g : groups)
+        if (!g.ok) rejected.insert(rejected.end(), g.moved.begin(), g.moved.end());
+    for (uint32_t k : rejected) {  // damage where it was and is
+        const Segment& s = recordingSegments_[moved_[k].segment];
+        const Segment& p = frameSegments_[moved_[k].last];
+        addDamage(damage, frame_, p.first, p.count);
+        addDamage(damage, recording_, s.first, s.count);
+    }
 }
 
 std::optional<size_t> DisplayList::opaqueCover(const Rect& area) const {
-    // (A pixel more: the cover's anti-aliased edge, half covering a pixel of `area`'s border.)
-    Rect need = grown(area, framePixel_);
-    auto squareToScreen = [](const Projective& p) { return p.m[1] == 0 && p.m[3] == 0 && p.m[6] == 0 && p.m[7] == 0 && p.m[8] == 1; };
+    return coverBefore(frame_, frame_.size(), area, framePixel_, frameViewport_);
+}
+
+std::optional<size_t> DisplayList::coverBefore(const std::vector<Command>& commands, size_t limit, const Rect& area, float pixel, Size screen) {
+    // All of the pixels `area` touches (an edge of the cover in one would leave it part of what is
+    // under; none off the screen, where there are no pixels).
+    float x0 = std::floor(area.x / pixel + 1e-3f), y0 = std::floor(area.y / pixel + 1e-3f);
+    float x1 = std::ceil(area.right() / pixel - 1e-3f), y1 = std::ceil(area.bottom() / pixel - 1e-3f);
+    Rect need = Rect{x0 * pixel, y0 * pixel, (x1 - x0) * pixel, (y1 - y0) * pixel}.intersect({0, 0, screen.width, screen.height});
     struct Open {
         uint32_t end;
         Rect clip;   // what the clips so far let through
@@ -585,9 +893,9 @@ std::optional<size_t> DisplayList::opaqueCover(const Rect& area) const {
     std::vector<Open> open;
     std::optional<size_t> cover;
     constexpr float kFar = 1e9f;
-    for (size_t i = 0; i < frame_.size(); ++i) {
+    for (size_t i = 0; i < limit && i < commands.size(); ++i) {
         while (!open.empty() && open.back().end <= i) open.pop_back();
-        const Command& c = frame_[i];
+        const Command& c = commands[i];
         Rect clip = open.empty() ? Rect{-kFar, -kFar, 2 * kFar, 2 * kFar} : open.back().clip;
         bool hides = !open.empty() && open.back().hides;
         switch (c.kind) {
