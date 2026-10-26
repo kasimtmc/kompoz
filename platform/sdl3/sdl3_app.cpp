@@ -44,6 +44,7 @@
 
 #ifdef SDL_PLATFORM_ANDROID
 #include "android_ime.hpp"
+#include "android_performance.hpp"
 #endif
 
 #include <algorithm>
@@ -2331,6 +2332,7 @@ struct App {
         if (keepCheck) SDL_Log("kompoz: keep check: %d of %d frames recorded otherwise", keepWrong, keepFrames);
 #ifdef SDL_PLATFORM_ANDROID
         android_ime::setHandlers(nullptr, nullptr, nullptr, nullptr);
+        kompoz::android_performance::stop();
         android_ime::setMediaHandler(nullptr);
         android_ime::setDeepLinkHandler(nullptr);
         android_ime::setBackHandler(nullptr);
@@ -2442,6 +2444,10 @@ void updateMetrics(App& app) {
         if (c) c->light = light;
     const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(app.window));
     app.framePeriodNs = uint64_t(1e9 / (mode && mode->refresh_rate > 0 ? mode->refresh_rate : 60.f));
+#ifdef SDL_PLATFORM_ANDROID
+    kompoz::android_performance::start(int64_t(app.framePeriodNs));  // (the first time: a frame's work told to ADPF)
+    kompoz::android_performance::setTarget(int64_t(app.framePeriodNs));
+#endif
 
     // System bars and display cutouts (iOS notch, desktop). Android reports its own insets
     // through KompozInput, without SDL's gesture-navigation edges.
@@ -3972,12 +3978,17 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
     uint64_t waited = 0;  // in beginFrame: for the GPU to be done with a frame before
     if (redraw || !shot.empty() || app.showFrame) {
         if (app.gpu) {
-            uint64_t before = app.profile ? SDL_GetTicksNS() : 0;
+            uint64_t before = SDL_GetTicksNS();
             app.gpu->beginFrame();
-            if (app.profile) waited = SDL_GetTicksNS() - before;
+            waited = SDL_GetTicksNS() - before;
             app.gpuInFrame = true;
         }
+        app.prof.acquireNs = 0;  // (a frame with nothing to show asks for no image)
         drawn = kompoz::sdl::drawFrame(app, shot);
+#ifdef SDL_PLATFORM_ANDROID
+        // The frame's work so far (its waits for the GPU and the window's image left out).
+        kompoz::android_performance::report(int64_t(SDL_GetTicksNS() - iterationStart - waited - app.prof.acquireNs));
+#endif
         t2 = app.profile ? SDL_GetTicksNS() : 0;
         if (app.gpu) {
             app.gpu->endFrame(drawn.shown);

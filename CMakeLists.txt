@@ -277,7 +277,8 @@ if(KOMPOZ_BUILD_SDL3)
         message(STATUS "Kompoz: HarfBuzz not found; text is drawn character by character (no ligatures, joining or emoji sequences)")
     endif()
     if(ANDROID)
-        target_sources(kompoz_sdl3 PRIVATE platform/sdl3/android_ime.cpp)  # + platform/android/java
+        target_sources(kompoz_sdl3 PRIVATE platform/sdl3/android_ime.cpp  # + platform/android/java
+                                           platform/sdl3/android_performance.cpp)
     elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
         # The desktop's accent color from the XDG portal (libdbus loaded at run time): dynamic color.
         # Screen readers read the semantics tree through AT-SPI (the same libdbus).

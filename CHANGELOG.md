@@ -242,6 +242,8 @@
   0.65 ms of a frame of the Components screen instead of 3.1.
 - **`KOMPOZ_PROFILE`'s summary gives the work's parts**: composition and layout, drawing, and of the drawing the
   recording (the tree drawn into the display list, compared with the last frame's).
+- **ADPF on Android 13 and later**: each frame's work (its waits left out) is told to the system against the display's
+  refresh period (`APerformanceHint`), so that it gives the thread drawing the frames the cores and clock it needs.
 - **Frame times fall on the display's beat**, as Android's Choreographer gives them: a whole number of refresh
   periods after the last frame's, the nearest to now, so animations move by equal steps however late in its period
   each frame starts (`detail::frameTimeOnBeat`).
