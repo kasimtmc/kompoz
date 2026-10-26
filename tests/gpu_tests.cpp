@@ -3788,9 +3788,11 @@ void keptFramesMoveWhatScrolled(Gpu& g) {
         renderer->endFrame();
         fonts->endFrame();
         moves += list.moves().size();
+        // (Within a 255th: drawn somewhere else, some drivers round an edge's coverage apart, as
+        // lavapipe and WARP do.)
         int worst = worstAgainst(a, [&](int x, int y) { return b.at(x, y); });
-        CHECK(worst == 0);
-        if (worst) std::printf("  scrolled to %g: off by %d at (%g, %g)\n", step.scroll, worst, worstAt.x, worstAt.y);
+        CHECK(worst <= 1);
+        if (worst > 1) std::printf("  scrolled to %g, %g: off by %d at (%g, %g)\n", step.scroll, step.across, worst, worstAt.x, worstAt.y);
     }
     // (All but the first, the one that changed nothing, those by part of a pixel, and those that
     // leave as much to draw as all of the clip: jumps far, or across past the backdrop.)
