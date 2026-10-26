@@ -94,8 +94,17 @@ struct Uniforms {
 [[vk::binding(6, 0)]] Sampler2D texture5;  // a composite paint's source image
 
 // Texel x of row `row` of the table (texture2), as it is: fetched, not sampled (sampling a float
-// texture, an Adreno 618 reads other rows than the coordinates say).
-float4 tableTexel(float x, float row) { return texture2.Load(int3(int(x + 0.5), int(row + 0.5), 0)); }
+// texture, an Adreno 618 reads other rows than the coordinates say). In WGSL and Metal as
+// themselves: Slang's code there for a combined sampler's Load loses where it loads from (there
+// `table` is its texture, $0, and its sampler, $1).
+float4 tableLoad(Sampler2D table, int2 at) {
+    __target_switch {
+    case wgsl: __intrinsic_asm "textureLoad($0, $2, 0)";
+    case metal: __intrinsic_asm "$0.read(uint2($2))";
+    default: return table.Load(int3(at, 0));
+    }
+}
+float4 tableTexel(float x, float row) { return tableLoad(texture2, int2(int(x + 0.5), int(row + 0.5))); }
 float tableWidth() { return round(1 / uniforms.texels.z); }  // (texels)
 
 struct Instance {

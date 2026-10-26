@@ -42,6 +42,15 @@ struct Uniforms {
 [[vk::binding(1, 0)]] Sampler2D source;
 [[vk::binding(2, 0)]] Sampler2D table;  // PROGRESSIVE's stops: stop i at texel i (fraction, radius over the widest); or its mask
 
+// A texel of the table as it is (see primitives.slang's tableLoad).
+float4 tableLoad(Sampler2D from, int2 at) {
+    __target_switch {
+    case wgsl: __intrinsic_asm "textureLoad($0, $2, 0)";
+    case metal: __intrinsic_asm "$0.read(uint2($2))";
+    default: return from.Load(int3(at, 0));
+    }
+}
+
 struct Instance {
     float4 rect : RECT;  // what it draws: x0, y0, x1, y1
 };
@@ -87,16 +96,15 @@ float4 fetch(float2 t) {
 // them, the last's after.
 float intensity(float fraction) {
     int n = int(uniforms.mask.z + 0.5);
-    // (Its texels fetched as they are, not sampled: see primitives.slang's tableTexel.)
     int row = int(uniforms.mask.y + 0.5);
-    float2 a = table.Load(int3(0, row, 0)).xy;
+    float2 a = tableLoad(table, int2(0, row)).xy;
     if (fraction <= a.x) return a.y;
     // (A result of its own, not a return from the loop: that leaves an undefined value in what
     // SPIR-V becomes, which OpenGL ES compilers warn of.)
     float result = 0;
     bool between = false;
     for (int i = 1; i < n; ++i) {
-        float2 b = table.Load(int3(i, row, 0)).xy;
+        float2 b = tableLoad(table, int2(i, row)).xy;
         if (fraction >= a.x && fraction <= b.x) {
             result = lerp(a.y, b.y, saturate((fraction - a.x) / max(b.x - a.x, 0.0001)));
             between = true;
