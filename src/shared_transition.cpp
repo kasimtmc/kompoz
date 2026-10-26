@@ -233,6 +233,12 @@ void drawMoving(GraphicsContext& canvas, const SharedElementModifier& element, c
 struct SharedOverlayElement final : ModifierElement {
     std::shared_ptr<SharedRegistry> registry;
     void draw(GraphicsContext& canvas, const Rect&, const LayoutNode&, const std::function<void()>& drawContent) const override {
+        // Where each one belongs this frame, before any is drawn: what one draws from its partner's
+        // is the same however many times the frame is drawn (a magnifier's, a check's).
+        for (const auto& weak : registry->instances)
+            if (auto self = weak.lock(); self && self->element)
+                if (auto handle = self->node.lock(); handle && *handle)
+                    if (std::optional<Rect> placed = (*handle)->boundsOf(self->element)) self->placed = placed;
         drawContent();
         int64_t now = registry->now();
         bool moving = false;

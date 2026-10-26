@@ -242,6 +242,8 @@
   0.65 ms of a frame of the Components screen instead of 3.1.
 - **`KOMPOZ_PROFILE`'s summary gives the work's parts**: composition and layout, drawing, and of the drawing the
   recording (the tree drawn into the display list, compared with the last frame's).
+- **Fixed**: a shared element whose partner was drawn after it saw its partner's place only when drawn again: a frame
+  drawn twice (a magnifier's) drew it in two places. Where each belongs is noted before any is drawn.
 - **Recording a frame allocates nothing a node**: the display list's maps (the times each node was drawn, the last
   frame's segments and layers) are one open-addressing table emptied without being freed, and drawing asks no cast
   whether an element is a scrollable. On a Redmi Note 9 Pro an idle screen's recording took 4.4 ms instead of 5.7.
