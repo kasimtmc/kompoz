@@ -3931,6 +3931,115 @@ void keptFramesMoveWhatScrolled(Gpu& g) {
     renderer.reset();
 }
 
+// Layers whose content stays the same are composited from the pixels they had, and what their
+// effect made of them (Renderer::keyLayer, as DisplayList::replay tells it): the same pixels as the
+// frame drawn afresh, frame after frame, as they fade, turn, grow, move by whole pixels and by
+// part of one, change in part or all of them, as an effect's blur grows, and a layer drawn in two
+// areas of a frame drawn whole once and kept for the other; two of a node's alike in size.
+void keptLayersDrawAsDrawnAfresh(Gpu& g) {
+    const int w = 240, h = 200;
+    const float scale = 2;  // (120 x 100 dp)
+    WatchedDevice device(*g.device, true);  // (the whole shader: what is drawn again shaded as all of it is)
+    std::unique_ptr<sdl::FontSystem> fonts = Gpu::loadFonts();
+    auto renderer = std::make_unique<gpu::Renderer>(device, *fonts);
+    fonts->setScale(scale);
+    renderer->scale = scale;
+    DisplayList list(*fonts);
+    int screen = 0, card = 0, frosted = 0, turned = 0, twins = 0, corner = 0;
+    Path starPath = star(8, 8, 7);
+    struct Step {
+        float alpha = 1, turn = 0, x = 10;
+        int frostedLook = 0;     // what is in the blurred layer
+        bool corners = false;    // a mark at two corners of the card: two areas over it
+        float twinAlpha = 1;     // the two alike layers'
+        int text = 0;            // the card's text's color (a part of it changed)
+        float blur = 3, grown = 1;  // the frosted layer's blur; the turned layer's scale
+        bool wide = false;       // the card's layer wider (what is in it the same)
+    };
+    auto record = [&](DisplayList& into, const Step& s) {
+        into.begin({120, 100}, 1 / scale);
+        into.beginNode(&screen);
+        into.fillRoundRect({0, 0, 120, 100}, CornerRadii(), Color{0.95f, 0.95f, 0.97f, 1});
+        into.beginNode(&card);
+        into.pushLayer({s.x, 10, s.wide ? 66.f : 59.75f, 44}, CornerRadii(8), s.alpha);  // (part of a pixel wide)
+        into.fillRoundRect({s.x, 10, 60, 44}, CornerRadii(), Color{0.3f, 0.5f, 0.9f, 1});
+        into.drawText("Kart", {s.x + 6, 30}, Font{12}, s.text ? Color{1, 0.9f, 0.3f, 1} : colors::White);
+        into.drawPath(starPath, {s.x + 40, 30}, Brush::solid(Color{1, 0.8f, 0.2f, 1}), {}, {});
+        into.popLayer();
+        into.endNode();
+        into.beginNode(&frosted);
+        into.pushEffectLayer({8, 60, 50, 30}, BlurEffect(s.blur, s.blur), 1);
+        into.fillRoundRect({12, 64, 20, 20}, CornerRadii(4), s.frostedLook ? Color{0.9f, 0.2f, 0.3f, 1} : Color{0.2f, 0.7f, 0.3f, 1});
+        into.drawText("Bulanık", {14, 82}, Font{10}, colors::Black);
+        into.popLayer();
+        into.endNode();
+        into.beginNode(&turned);
+        into.pushLayer({76, 58, 34, 34}, CornerRadii(), 1, {.scaleX = s.grown, .scaleY = s.grown, .rotationZ = s.turn});
+        into.drawShadow({80, 62, 24, 24}, CornerRadii(6), Shadow{Color{0, 0, 0, 0.4f}, {0, 2}, 3, 0}, false);
+        into.fillRoundRect({80, 62, 24, 24}, CornerRadii(6), Color{0.8f, 0.4f, 0.1f, 1});
+        into.popLayer();
+        into.endNode();
+        into.beginNode(&twins);
+        into.pushLayer({90, 6, 10, 10}, CornerRadii(3), s.twinAlpha);
+        into.fillRoundRect({90, 6, 10, 10}, CornerRadii(), Color{0.1f, 0.6f, 0.2f, 1});
+        into.popLayer();
+        into.pushLayer({104, 6, 10, 10}, CornerRadii(3), s.twinAlpha);
+        into.fillRoundRect({104, 6, 10, 10}, CornerRadii(), Color{0.6f, 0.1f, 0.5f, 1});
+        into.popLayer();
+        into.endNode();
+        into.beginNode(&corner);
+        if (s.corners) {
+            into.fillRoundRect({s.x - 2, 8, 4, 4}, CornerRadii(), colors::Black);
+            into.fillRoundRect({s.x + 58, 52, 4, 4}, CornerRadii(), colors::Black);
+        }
+        into.endNode();
+        into.endNode();
+        return into.end();
+    };
+    auto kept = g.device->createTexture(w, h, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+    auto fresh = g.device->createTexture(w, h, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+    Step later{.alpha = 1, .x = 15.625f, .frostedLook = 1};  // (from the tenth step on: a quarter of a pixel on, as wide in pixels)
+    auto then = [&](auto change) {
+        change(later);
+        return later;
+    };
+    const Step steps[] = {{},
+                          {.corners = true, .twinAlpha = 0.9f},  // (the card the same: drawn whole in the first area, kept for the second)
+                          {.alpha = 0.8f, .twinAlpha = 0.8f},
+                          {.alpha = 0.6f, .turn = 10},
+                          {.alpha = 0.6f, .turn = 25, .x = 12},
+                          {.alpha = 0.6f, .turn = 25, .x = 12, .frostedLook = 1},
+                          {.alpha = 0.6f, .turn = 25, .x = 12, .frostedLook = 1},
+                          {.alpha = 0.4f, .turn = 40, .x = 15.5f, .frostedLook = 1, .corners = true},
+                          {.alpha = 1, .x = 15.5f, .frostedLook = 1},
+                          later,                                          // by a quarter of a pixel
+                          then([](Step& s) { s.text = 1; }),              // part of the card changed
+                          then([](Step& s) { s.alpha = 0.7f; }),          // and it faded
+                          then([](Step& s) { s.blur = 5; }),              // the blur grew
+                          then([](Step& s) { s.grown = 1.6f; }),          // the turned layer grew
+                          then([](Step& s) { s.wide = true; })};          // the card's layer wider
+    int keptLayers = 0;
+    for (const Step& step : steps) {
+        device.beginFrame();
+        renderer->keptLayers = 0;
+        if (record(list, step)) renderer->drawFrame(*kept, list, true);
+        keptLayers += renderer->keptLayers;
+        DisplayList afresh(*fonts);  // (a recording of its own: its layers are none kept)
+        record(afresh, step);
+        renderer->drawFrame(*fresh, afresh, false);
+        renderer->flush();
+        Pixels a{w, h, device.readPixels(*kept, {0, 0, w, h})}, b{w, h, device.readPixels(*fresh, {0, 0, w, h})};
+        device.endFrame(false);
+        renderer->endFrame();
+        fonts->endFrame();
+        int worst = worstAgainst(a, [&](int x, int y) { return b.at(x, y); });
+        CHECK(worst <= 1);
+        if (worst > 1) std::printf("  step %d: off by %d at (%g, %g)\n", int(&step - steps), worst, worstAt.x, worstAt.y);
+    }
+    CHECK(keptLayers >= 10);
+    renderer.reset();
+}
+
 void scenesMatchTheirPictures(Gpu& g) {
     struct Scene {
         const char* name;
@@ -4084,6 +4193,7 @@ int main() {
             discardedTexturesAreDrawnOver(g);
             pathsShareTheirMasks(g);
             keptFramesMoveWhatScrolled(g);
+            keptLayersDrawAsDrawnAfresh(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
         }

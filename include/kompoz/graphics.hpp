@@ -1853,6 +1853,18 @@ public:
     // display_list.hpp); others ignore them.
     virtual void beginNode(const void* node) { (void)node; }
     virtual void endNode() {}
+    // What is drawn into a layer, where the canvas keeps layers' pixels from one frame to the next
+    // (a recording replayed tells it which layer comes next): as usual, all of it (even what is
+    // outside the area replayed: the canvas keeps it), or nothing (it has the pixels already).
+    enum class LayerContent : uint8_t { Draw, DrawAll, Kept };
+    // The next layer pushed is the one known as `key`; `same`: what is drawn in it is what was
+    // drawn in it last frame (but for where it is), so the pixels it had then do.
+    virtual void keyLayer(uint64_t key, bool same) {
+        (void)key;
+        (void)same;
+    }
+    // How to draw into the layer just pushed.
+    virtual LayerContent layerContent() const { return LayerContent::Draw; }
 };
 
 namespace detail {

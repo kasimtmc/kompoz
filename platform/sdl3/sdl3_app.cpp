@@ -2769,7 +2769,7 @@ Drawn drawFrameGpu(App& app, const std::string& shot) {
         app.display->invalidate();
         app.showFrame = true;
     }
-    r.layerCount = 0;
+    r.layerCount = r.keptLayers = 0;
     float scale = r.scale;
     Size screen{float(pw) / scale, float(ph) / scale};
     app.display->begin(screen, 1 / scale);
@@ -2905,10 +2905,10 @@ void profileFrame(App& app, uint64_t start, uint64_t composed, uint64_t waited, 
     }
     if (work > period || interval > 2 * period + 1) {
         ++p.slow;
-        SDL_Log("kompoz: frame %.1f ms after the last: input %.1f, compose+layout %.1f, wait %.1f, draw %.1f, present %.1f ms; %d layers, "
-                "%d glyphs, %.0f%% drawn again",
-                interval, events, compose, wait, draw, present, app.gpuCanvas ? app.gpuCanvas->layerCount : app.canvas->layerCount, glyphs,
-                (area < 0 ? 1 : area) * 100);
+        SDL_Log("kompoz: frame %.1f ms after the last: input %.1f, compose+layout %.1f, wait %.1f, draw %.1f, present %.1f ms; %d layers "
+                "(%d kept), %d glyphs, %.0f%% drawn again",
+                interval, events, compose, wait, draw, present, app.gpuCanvas ? app.gpuCanvas->layerCount : app.canvas->layerCount,
+                app.gpuCanvas ? app.gpuCanvas->keptLayers : 0, glyphs, (area < 0 ? 1 : area) * 100);
     }
     if (start - p.summaryStart >= 1'000'000'000) {
         char gpu[96] = "";

@@ -719,6 +719,29 @@ void Renderer::endFrame() {
         p.inUse = false;
         return p.idleFrames > 60;
     });
+    // Kept layers' pixels unused for a second go back (the layer may not be on the screen any more).
+    for (auto it = kept_.begin(); it != kept_.end();)
+        if (++it->second.idleFrames > 60) {
+            giveToPool(std::move(it->second.texture));
+            giveToPool(std::move(it->second.effected));
+            it = kept_.erase(it);
+        } else {
+            ++it;
+        }
+}
+
+void Renderer::keyLayer(uint64_t key, bool same) { nextLayer_ = std::pair{key, same}; }
+
+std::unique_ptr<Texture> Renderer::takeFromPool(Texture* texture) {
+    auto it = std::find_if(pool_.begin(), pool_.end(), [&](const PooledTexture& p) { return p.texture.get() == texture; });
+    if (it == pool_.end()) return nullptr;
+    std::unique_ptr<Texture> t = std::move(it->texture);
+    pool_.erase(it);
+    return t;
+}
+
+void Renderer::giveToPool(std::unique_ptr<Texture> texture) {
+    if (texture) pool_.push_back({std::move(texture), true});  // (in use: what was drawn this frame may read it)
 }
 
 // A layer target (or a target's copy, in its format) at least w x h, not used yet this frame (one that is would still be read by the
@@ -1585,15 +1608,43 @@ void Renderer::pushLayer(const Rect& bounds, const CornerRadii& radii, float alp
     if (r > 1 && std::max(lw, lh) * r > float(kMaxLayer)) r = std::max(1.f, float(kMaxLayer) / std::max(lw, lh));
     int x0 = int(std::floor(lx * r)), y0 = int(std::floor(ly * r));
     int x1 = int(std::ceil((lx + lw) * r)), y1 = int(std::ceil((ly + lh) * r));
-    if (within && (x1 - x0 > kMaxLayer || y1 - y0 > kMaxLayer)) {
+    bool part = within && (x1 - x0 > kMaxLayer || y1 - y0 > kMaxLayer);  // (what can show of it)
+    if (part) {
         x0 = std::max(x0, int(std::floor(within->x))), y0 = std::max(y0, int(std::floor(within->y)));
         x1 = std::min(x1, int(std::ceil(within->right()))), y1 = std::min(y1, int(std::ceil(within->bottom())));
     }
     Layer layer{nullptr, {x0, y0, std::max(1, x1 - x0), std::max(1, y1 - y0)}, {lx * r, ly * r, lw * r, lh * r}, radii.scaled(scale * r),
                 alpha, transform, r, scale};
-    if (layer.rect.width <= kMaxLayer && layer.rect.height <= kMaxLayer) layer.texture = acquire(layer.rect.width, layer.rect.height);
+    bool fits = layer.rect.width <= kMaxLayer && layer.rect.height <= kMaxLayer;
+    // Its pixels kept from a frame before (made as big, its bounds as far into a pixel, at the same
+    // resolution), or to keep (all of it in its texture).
+    pushed_ = LayerContent::Draw;
+    if (std::optional<std::pair<uint64_t, bool>> next = std::exchange(nextLayer_, std::nullopt)) {
+        auto [key, same] = *next;
+        auto it = kept_.find(key);
+        float fx = layer.shape.x - float(x0), fy = layer.shape.y - float(y0);
+        if (it != kept_.end() && same && fits && !part && it->second.width == layer.rect.width && it->second.height == layer.rect.height &&
+            std::abs(it->second.fractionX - fx) < 1e-3f && std::abs(it->second.fractionY - fy) < 1e-3f && it->second.resolution == r &&
+            it->second.parentScale == scale) {
+            layer.texture = it->second.texture.get();
+            layer.key = key;
+            layer.kept = true;
+            it->second.idleFrames = 0;
+            pushed_ = LayerContent::Kept;
+            ++keptLayers;
+        } else {
+            if (it != kept_.end()) {  // (what it holds is gone)
+                giveToPool(std::move(it->second.texture));
+                giveToPool(std::move(it->second.effected));
+                kept_.erase(it);
+            }
+            if (same && fits && !part) layer.key = key, pushed_ = LayerContent::DrawAll;
+        }
+    }
+    if (fits && !layer.kept) layer.texture = acquire(layer.rect.width, layer.rect.height);
+    if (!layer.texture) layer.key = 0, pushed_ = LayerContent::Draw;
     // Too big: drawn straight into the target (no rounding, alpha or transform), in its clips.
-    if (layer.texture) {
+    if (layer.texture && !layer.kept) {
         beginTarget(*layer.texture, ClearColor{});
         scale *= r;
         ox_ = targets_.back().ox * r + float(x0);
@@ -2074,12 +2125,36 @@ void Renderer::popLayer() {
     Layer layer = layers_.back();
     layers_.pop_back();
     if (!layer.texture) return;
-    endTarget();
+    if (!layer.kept) endTarget();
     scale = layer.parentScale;
     float res = layer.resolution;
+    KeptLayer* keeping = nullptr;
+    if (layer.key && !layer.kept) {  // drawn whole: kept
+        KeptLayer& k = kept_[layer.key];
+        giveToPool(std::move(k.texture));
+        giveToPool(std::move(k.effected));
+        k = {takeFromPool(layer.texture), nullptr, layer.rect.width, layer.rect.height, layer.shape.x - float(layer.rect.x),
+             layer.shape.y - float(layer.rect.y), res, scale};
+    }
+    if (layer.key) keeping = &kept_[layer.key];
     if (layer.effect) {
-        // What the effect made, its pixels where they show, back in the parent's pixels.
-        EffectImage image = applyEffect(layer);
+        // What the effect made (kept, or made now), its pixels where they show, back in the parent's pixels.
+        EffectImage image;
+        if (keeping && keeping->effect == layer.effect) {
+            image = keeping->image;
+            image.texture = keeping->effected ? keeping->effected.get() : layer.texture;
+            image.originX += layer.rect.x, image.originY += layer.rect.y, image.shown.x += layer.rect.x, image.shown.y += layer.rect.y;
+        } else {
+            image = applyEffect(layer);
+            if (keeping) {
+                giveToPool(std::move(keeping->effected));
+                keeping->effect = layer.effect;
+                keeping->effected = image.texture != layer.texture ? takeFromPool(image.texture) : nullptr;
+                keeping->image = image;
+                keeping->image.originX -= layer.rect.x, keeping->image.originY -= layer.rect.y;
+                keeping->image.shown.x -= layer.rect.x, keeping->image.shown.y -= layer.rect.y;
+            }
+        }
         const Texture& t = *image.texture;
         float x0 = float(image.shown.x) + image.offsetX, y0 = float(image.shown.y) + image.offsetY;
         float x1 = x0 + float(image.shown.width), y1 = y0 + float(image.shown.height);

@@ -37,6 +37,7 @@ public:
 
     float scale = 1;     // px per dp
     int layerCount = 0;  // layers pushed (KOMPOZ_PROFILE)
+    int keptLayers = 0;  // of them, composited from the pixels they had in a frame before
 
     // Draws into `target` until endTarget(), cleared first to `clear` if given.
     void beginTarget(Texture& target, const std::optional<ClearColor>& clear = std::nullopt);
@@ -106,6 +107,11 @@ public:
     void pushEffectLayer(const Rect& bounds, const RenderEffect& effect, float alpha) override;
     void drawBackdrop(const Rect& bounds, const RenderEffect& effect, float alpha) override;
     void drawElevationShadow(const Outline& outline, Offset origin, const ElevationShadow& shadow) override;
+    // A layer whose content is the same as when it was last drawn (whole) is composited from the
+    // pixels it had (and what its effect made of them), not drawn again; one that stays the same
+    // is drawn whole, and kept.
+    void keyLayer(uint64_t key, bool same) override;
+    LayerContent layerContent() const override { return pushed_; }
 
 private:
     // One quad: what shaders/primitives.slang's Instance says.
@@ -243,6 +249,8 @@ private:
         float parentScale = 1;  // the px per dp outside it
         std::optional<Path> outline;  // cut to this (dp from the bounds' top left) instead of the corners
         std::optional<RenderEffect> effect;  // an effect layer's (not cut, its own way of compositing)
+        uint64_t key = 0;   // keyLayer's: kept (the texture is the kept one's) or to keep
+        bool kept = false;
     };
     // What an effect layer's steps make of its texture: `texels` of `texture`, whose texel (0, 0)
     // is at `origin` in the layer's pixels, each texel `step` of them across and down; it shows
@@ -263,6 +271,18 @@ private:
     struct PooledTexture {
         std::unique_ptr<Texture> texture;  // (its format: a target's copy has the target's)
         bool inUse = false;
+        int idleFrames = 0;
+    };
+    // A layer's pixels kept from frame to frame (by its key): its texture as it was made, where
+    // its exact bounds were in it (a fraction of a pixel), at what resolution and px per dp; what
+    // its effect made of it, if it has one (its texture, unless that is the layer's own, and where
+    // it goes from the layer's rect's corner).
+    struct KeptLayer {
+        std::unique_ptr<Texture> texture, effected;
+        int width = 0, height = 0;
+        float fractionX = 0, fractionY = 0, resolution = 1, parentScale = 1;
+        std::optional<RenderEffect> effect;
+        EffectImage image{};
         int idleFrames = 0;
     };
 
@@ -330,6 +350,12 @@ private:
     std::unordered_map<uint64_t, ImageTexture> images_;
     std::vector<std::unique_ptr<Texture>> retired_;  // bitmaps' textures drawn again: gone after the frame (its draws read them)
     std::vector<PooledTexture> pool_;  // layer targets
+    std::unordered_map<uint64_t, KeptLayer> kept_;
+    std::optional<std::pair<uint64_t, bool>> nextLayer_;  // keyLayer's, for the next pushLayer
+    LayerContent pushed_ = LayerContent::Draw;
+    // A pooled texture taken out of the pool (to keep), and one given back (still in use this frame).
+    std::unique_ptr<Texture> takeFromPool(Texture* texture);
+    void giveToPool(std::unique_ptr<Texture> texture);
     struct PipelineKey {
         Format format;
         BlendState blend;

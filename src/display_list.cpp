@@ -152,8 +152,8 @@ std::optional<Offset> DisplayList::Command::place() const {
 // layer's or clip's bounds), its brush's area (rect2, or p1 and the size in p2 for an image
 // mask's), its first point (a baseline, an origin, a line's start) and its second (a line's end, a
 // path shadow's origin). The rest (an image's source, a shadow's offset) stays as it was.
-bool DisplayList::Command::sameMoved(const Command& o, Offset by) const {
-    if (kind != o.kind || kind == Kind::Backdrop || !(m == o.m)) return false;  // (what a backdrop reads moved too: not the same)
+bool DisplayList::Command::sameMoved(const Command& o, Offset by, bool withTransform) const {
+    if (kind != o.kind || kind == Kind::Backdrop || (withTransform && !(m == o.m))) return false;  // (what a backdrop reads moved too: not the same)
     if (kind == Kind::PushLayer && !(path.isEmpty() && o.path.isEmpty())) return false;  // (an outline's place isn't told)
     bool rectMoves = false, brushMoves = false, p1Moves = false, p2Moves = false;
     switch (kind) {
@@ -170,9 +170,13 @@ bool DisplayList::Command::sameMoved(const Command& o, Offset by) const {
     case Kind::ShadowPath: p2Moves = true; break;
     default: break;
     }
+    // A brush of one color is that wherever its area is (rect2; an image mask's, p1 and p2).
+    bool solid = brush && brush->isSolid() && o.brush && o.brush->isSolid();
+    bool anyArea = solid && brushMoves, anyMaskArea = solid && kind == Kind::ImageMask;
     return (rectMoves ? movedTo(rect, o.rect, by) : kompoz::same(rect, o.rect)) &&
-           (brushMoves ? movedTo(rect2, o.rect2, by) : kompoz::same(rect2, o.rect2)) &&
-           (p1Moves ? movedTo(p1, o.p1, by) : kompoz::same(p1, o.p1)) && (p2Moves ? movedTo(p2, o.p2, by) : kompoz::same(p2, o.p2)) &&
+           (anyArea || (brushMoves ? movedTo(rect2, o.rect2, by) : kompoz::same(rect2, o.rect2))) &&
+           (anyMaskArea || (p1Moves ? movedTo(p1, o.p1, by) : kompoz::same(p1, o.p1))) &&
+           (anyMaskArea || (p2Moves ? movedTo(p2, o.p2, by) : kompoz::same(p2, o.p2))) &&
            radii == o.radii && f1 == o.f1 && f2 == o.f2 && f3 == o.f3 && color == o.color && flag == o.flag && font == o.font &&
            image == o.image && imageVersion == o.imageVersion && kompoz::same(stroke, o.stroke) && kompoz::same(transform, o.transform) &&
            text == o.text && brush == o.brush && vertices == o.vertices && filter == o.filter && effect == o.effect && elevated == o.elevated &&
@@ -209,12 +213,15 @@ DisplayList::Command& DisplayList::add(Kind kind) {
         const OpenNode& n = nodes_.back();
         recordingSegments_.push_back({mix(n.key, n.after), uint32_t(recording_.size()), 0});
         segmentOpen_ = true;
+        layersInSegment_ = 0;
     }
     ++recordingSegments_.back().count;
     Command& c = recording_.emplace_back();
     c.kind = kind;
     c.m = states_.back().m;
     if (states_.size() > 1) c.parent = states_.back().push;
+    // (its node's n-th, in this recording: another's layers are others)
+    if (kind == Kind::PushLayer) c.layerKey = mix(mix(recordingSegments_.back().key, ++layersInSegment_), reinterpret_cast<uintptr_t>(this));
     return c;
 }
 
@@ -601,7 +608,17 @@ std::optional<Rect> DisplayList::end() {
     Rect screen{0, 0, viewport_.width, viewport_.height};
     areas_.clear();
     moves_.clear();
-    if (invalid_ || !(viewport_ == frameViewport_) || pixel_ != framePixel_) {
+    bool afresh = invalid_ || !(viewport_ == frameViewport_) || pixel_ != framePixel_;
+    // Each layer: what is drawn in it the same as last frame?
+    layerLookup_.clear();
+    for (uint32_t i = 0; i < frame_.size(); ++i)  // (drawn afresh, the pixels a canvas kept of a layer still are its)
+        if (frame_[i].kind == Kind::PushLayer) layerLookup_.emplace(frame_[i].layerKey, i);
+    for (uint32_t i = 0; i < recording_.size(); ++i)
+        if (recording_[i].kind == Kind::PushLayer) {
+            auto it = layerLookup_.find(recording_[i].layerKey);
+            recording_[i].layerSame = it != layerLookup_.end() && sameInLayer(i, it->second);
+        }
+    if (afresh) {
         areas_.push_back(screen);
     } else {
         // What each node drew is compared with what it drew last time: what differs is damage
@@ -704,6 +721,17 @@ std::optional<Rect> DisplayList::end() {
     Rect bounds = areas_[0];
     for (const Rect& a : areas_) bounds = united(bounds, a);
     return bounds;
+}
+
+bool DisplayList::sameInLayer(uint32_t push, uint32_t last) const {
+    // In the layer's space: what it draws moved as it did (through whatever transform: one in it
+    // is a push of it, the same, and what is around it is the layer's too).
+    const Command &a = recording_[push], &b = frame_[last];
+    if (a.end - push != b.end - last) return false;
+    Offset by{a.rect.x - b.rect.x, a.rect.y - b.rect.y};
+    for (uint32_t k = 1; k + push + 1 < a.end; ++k)  // (what is drawn in it: not its pop, drawn outside)
+        if (!recording_[push + k].sameMoved(frame_[last + k], by, false)) return false;
+    return true;
 }
 
 std::optional<Offset> DisplayList::movedBy(const Segment& s, const Segment& p) const {
@@ -929,7 +957,8 @@ std::optional<size_t> DisplayList::coverBefore(const std::vector<Command>& comma
 }
 
 void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& area, size_t hidden) const {
-    auto skip = [&](const Command& c) { return area && !overlaps(c.bounds, *area); };
+    size_t whole = 0;  // what comes before it is drawn wherever it is (a layer the canvas keeps)
+    auto skip = [&](size_t i) { return area && i >= whole && !overlaps(frame_[i].bounds, *area); };
     for (size_t i = 0; i < frame_.size();) {
         const Command& c = frame_[i];
         switch (c.kind) {
@@ -940,10 +969,11 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
         case Kind::PushAlias:
         case Kind::PushFilter:
         case Kind::PushTransform:
-            if ((skip(c) || c.end <= hidden) && c.end > i) {  // nothing inside touches the area, or shows
+            if ((skip(i) || c.end <= hidden) && c.end > i) {  // nothing inside touches the area, or shows
                 i = c.end;
                 continue;
             }
+            if (c.kind == Kind::PushLayer) canvas.keyLayer(c.layerKey, c.layerSame);
             if (c.kind == Kind::PushLayer && !c.path.isEmpty()) canvas.pushOutlineLayer(c.rect, c.path, c.f2, c.transform);
             else if (c.kind == Kind::PushLayer && c.effect) canvas.pushEffectLayer(c.rect, *c.effect, c.f2);
             else if (c.kind == Kind::PushLayer) canvas.pushLayer(c.rect, c.radii, c.f2, c.transform);
@@ -955,6 +985,14 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
             else if (c.kind == Kind::PushFilter) canvas.pushColorFilter(*c.filter);
             else if (c.kind == Kind::PushTransform) canvas.pushTransform(c.matrix);
             else canvas.pushTranslation(c.p1);
+            if (c.kind == Kind::PushLayer && c.end > i) {
+                GraphicsContext::LayerContent content = canvas.layerContent();
+                if (content == GraphicsContext::LayerContent::Kept) {  // (on to its pop)
+                    i = c.end - 1;
+                    continue;
+                }
+                if (content == GraphicsContext::LayerContent::DrawAll) whole = std::max(whole, size_t(c.end));
+            }
             break;
         case Kind::PopBlend: canvas.popBlendMode(); break;
         case Kind::PopAlias: canvas.popAntiAlias(); break;
@@ -964,7 +1002,7 @@ void DisplayList::replay(GraphicsContext& canvas, const std::optional<Rect>& are
         case Kind::PopTranslation: canvas.popTranslation(); break;
         case Kind::PopTransform: canvas.popTransform(); break;
         default:
-            if (skip(c) || i < hidden) break;
+            if (skip(i) || i < hidden) break;
             switch (c.kind) {
             case Kind::FillRoundRect: canvas.fillRoundRect(c.rect, c.radii, c.color); break;
             case Kind::StrokeRoundRect: canvas.strokeRoundRect(c.rect, c.radii, c.f2, c.color); break;

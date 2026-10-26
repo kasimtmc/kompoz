@@ -149,9 +149,12 @@ private:
         Rect bounds;          // what it can touch on the screen (a layer: where it is composited)
         uint32_t end = 0;     // a push: the index after its pop
         uint32_t parent = kNone;  // the push it is drawn in (the innermost)
+        uint64_t layerKey = 0;    // a layer's: its node's, the same from frame to frame
+        bool layerSame = false;   // a layer's: what is drawn in it is what was last frame
         bool same(const Command& o) const;
-        // The same as `o` moved by `by` (in its own space), but for its bounds (a clip may cut them).
-        bool sameMoved(const Command& o, Offset by) const;
+        // The same as `o` moved by `by` (in its own space), but for its bounds (a clip may cut them);
+        // `withTransform`: drawn through the same transform too.
+        bool sameMoved(const Command& o, Offset by, bool withTransform = true) const;
         // Where it is (in its own space), to tell how far it moved; none if it has no place.
         std::optional<Offset> place() const;
     };
@@ -185,6 +188,9 @@ private:
     // (their pixels moved, not drawn again: damage only where that leaves the frame wrong); the
     // rest are damage where they were and are.
     void settleMoves(std::vector<Rect>& damage);
+    // Whether what this frame's layer `push` draws is what last frame's layer `last` drew, in the
+    // layer's own space (moved with it, through its transform).
+    bool sameInLayer(uint32_t push, uint32_t last) const;
     // The last command before `limit` in `commands` that paints all of `area` opaquely (opaqueCover).
     static std::optional<size_t> coverBefore(const std::vector<Command>& commands, size_t limit, const Rect& area, float pixel, Size screen);
 
@@ -195,6 +201,7 @@ private:
     std::vector<OpenNode> nodes_;
     std::unordered_map<const void*, uint32_t> occurrences_;
     std::unordered_map<uint64_t, uint32_t> lookup_;  // end(): the last frame's segments by key
+    std::unordered_map<uint64_t, uint32_t> layerLookup_;  // and its layers
     std::vector<char> matched_;
     // end(), finding moves: the segments that moved (this frame's, last frame's, by how far);
     // which commands moved (1, then 2 + the move they are in), this frame's and last frame's.
@@ -207,6 +214,7 @@ private:
     std::vector<Rect> areas_;
     std::vector<Move> moves_;
     bool allowMoves_ = false;
+    uint32_t layersInSegment_ = 0;  // (the layers pushed in the segment being recorded so far)
     bool segmentOpen_ = false, invalid_ = true;
     Size viewport_, frameViewport_;
     float pixel_ = 1, framePixel_ = 0;

@@ -238,6 +238,12 @@
   dikdörtgen, bir alanın dokunduğu tam pikselleri örttüğünde onu örter. Bir Redmi Note 9 Pro'da Bileşenler ekranı
   kaydırılırken bir kare GPU'da 27–38 yerine 4–14 ms sürdü, saniyede 11–41 yerine 50–60 kare gösterildi; ekranın altıda
   biri ile üçte ikisi yerine yirmide biri ile beşte biri yeniden çizildi.
+- **İçeriği değişmeyen katmanlar piksellerini saklar** (Kompoz'un GPU renderer'ı): yalnızca solan, dönen, büyüyen ya da
+  tam piksel kayan bir katman, sahip olduğu dokudan ve efektinin ondan yaptığından birleştirilir, yeniden çizilmez; bir
+  katmanda çizilen, katmanın kendi uzayında geçen karedekiyle karşılaştırılır (tek renkli bir fırça alanı ne olursa
+  olsun aynıdır), her katman düğümüyle tanınır (`GraphicsContext::keyLayer`, `layerContent`). Bir Redmi Note 9 Pro'da
+  tepesinden öte çekilen bir liste karede GPU'da 43–44 yerine 27–33 ms sürdü. `KOMPOZ_PROFILE`, yavaş bir karenin
+  katmanlarından kaçının saklandığını söyler.
 - **Düzeltildi**: Bir Adreno 618'de (bir Redmi Note 9 Pro'nunki) GPU renderer clip'leri, renk filtrelerini ve
   gradyanları karenin tablosunun kendilerininkinden başka satırlarından çiziyordu; önlerinde ne kadar çok varsa o kadar
   uzak (biçimine kırpılmış bir düğmenin köşesi 220/255'e kadar sapıyordu): tablonun texel'leri örneklenmez, olduğu gibi

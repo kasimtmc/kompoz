@@ -226,6 +226,12 @@
   when it covers the whole pixels the area touches. On a Redmi Note 9 Pro scrolling the Components screen, a frame took
   the GPU 4–14 ms instead of 27–38 and 50–60 frames a second were shown instead of 11–41, a twentieth to a fifth of the
   screen drawn again instead of a sixth to two thirds.
+- **Layers whose content stays the same keep their pixels** (Kompoz's GPU renderer): a layer that only fades, turns,
+  grows or moves by whole pixels is composited from the texture it had, and what its effect made of it, not drawn
+  again; what is drawn in a layer is compared with last frame's in the layer's own space (a brush of one color whatever
+  its area), each layer known by its node (`GraphicsContext::keyLayer`, `layerContent`). On a Redmi Note 9 Pro, a list
+  pulled past its top took the GPU 27–33 ms a frame instead of 43–44. `KOMPOZ_PROFILE` says how many of a slow frame's
+  layers were kept.
 - **Fixed**: on an Adreno 618 (a Redmi Note 9 Pro's), the GPU renderer drew clips, color filters and gradients from
   other rows of its frame's table than theirs, the further off the more of them came before (a button's corner, cut to
   its shape, up to 220/255 off): the table's texels are fetched, not sampled.

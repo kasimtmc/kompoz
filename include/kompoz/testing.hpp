@@ -57,6 +57,10 @@ public:
     std::vector<CornerRadii> strokeCorners;
     std::vector<CornerRadii> layerCorners;
     std::vector<Rect> clips;  // pushClip calls
+    std::vector<std::pair<uint64_t, bool>> layerKeys;  // keyLayer's: each layer's key, whether it is the same
+    LayerContent layerAnswer = LayerContent::Draw;      // what layerContent says
+    void keyLayer(uint64_t key, bool same) override { layerKeys.emplace_back(key, same); }
+    LayerContent layerContent() const override { return layerAnswer; }
     std::vector<Rect> strokes;  // stroked (rounded) rects: borders, focus rings
     std::vector<Color> strokeColors;
     std::string order;  // the fills as they came: 'r' a rect, 'p' a path (the nth of each in rects, paths)

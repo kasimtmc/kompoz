@@ -4868,6 +4868,66 @@ TEST(display_list_moves_what_scrolled_by_whole_pixels) {
     CHECK(d && part.moves().empty());
 }
 
+// A layer is known by its node from frame to frame (keyLayer), with whether what is drawn in it is
+// what was last frame in its own space: so when it only faded, turned or moved with it, not when
+// what is in it changed. Kept by the canvas, what is in it isn't replayed; to be kept, all of it is
+// (outside the area replayed too).
+TEST(display_list_tells_canvases_which_layers_stayed_the_same) {
+    testing::FakeTextMeasurer measurer;
+    DisplayList list(measurer);
+    int node = 0, other = 0;
+    struct Look {
+        float alpha = 1;
+        LayerTransform transform{};
+        float x = 50, inside = 0;  // where the layer is; where its first rect is in it
+        Color color = colors::Black;
+    };
+    auto keys = [&](Look l) {
+        list.begin({400, 400}, 1);
+        list.beginNode(&node);
+        list.pushLayer({l.x, 50, 100, 100}, CornerRadii(8), l.alpha, l.transform);
+        list.fillRoundRect({l.x + 10 + l.inside, 60, 30, 30}, CornerRadii(), l.color);
+        list.fillRoundRect({l.x + 60, 110, 30, 30}, CornerRadii(), colors::Black);
+        list.popLayer();
+        list.endNode();
+        list.beginNode(&other);
+        list.pushLayer({300, 300, 50, 50}, CornerRadii(), 1);
+        list.fillRoundRect({300, 300, 20, 20}, CornerRadii(), colors::Black);
+        list.popLayer();
+        list.pushLayer({300, 300, 50, 50}, CornerRadii(), 1);  // (another of the same node's)
+        list.fillRoundRect({310, 310, 20, 20}, CornerRadii(), colors::White);
+        list.popLayer();
+        list.endNode();
+        list.end();
+        testing::RecordingCanvas canvas;
+        list.replay(canvas);
+        return canvas.layerKeys;
+    };
+    auto first = keys({});
+    CHECK(first.size() == 3 && !first[0].second && !first[1].second && !first[2].second);  // (none before)
+    CHECK(first[0].first != first[1].first && first[1].first != first[2].first && first[0].first != first[2].first);
+    auto again = keys({});
+    CHECK(again.size() == 3 && again[0].second && again[1].second && again[2].second && again[0].first == first[0].first &&
+          again[1].first == first[1].first && again[2].first == first[2].first);
+    CHECK(keys({.alpha = 0.5f})[0].second);                                       // faded
+    CHECK(keys({.alpha = 0.5f, .transform = {.scaleX = 1.2f, .rotationZ = 8}})[0].second);  // turned
+    CHECK(keys({.alpha = 0.5f, .transform = {.scaleX = 1.2f, .rotationZ = 8}, .x = 70})[0].second);  // moved, with what is in it
+    auto changed = keys({.x = 70, .color = colors::White});
+    CHECK(!changed[0].second && changed[1].second);  // what is in it changed (not in the other)
+    CHECK(!keys({.x = 70, .inside = 5, .color = colors::White})[0].second);  // moved in it
+    // Kept by the canvas: what is in the layers isn't replayed (they are, to be composited).
+    testing::RecordingCanvas kept;
+    kept.layerAnswer = GraphicsContext::LayerContent::Kept;
+    list.replay(kept);
+    CHECK(kept.layers == 3 && kept.rects.empty() && kept.depth == 0);
+    // To be kept: all of what is in it, though one of its rects is outside the area replayed.
+    testing::RecordingCanvas whole, part;
+    whole.layerAnswer = GraphicsContext::LayerContent::DrawAll;
+    list.replay(whole, Rect{75, 55, 20, 20});
+    list.replay(part, Rect{75, 55, 20, 20});
+    CHECK(whole.layers == 1 && whole.rects.size() == 2 && part.layers == 1 && part.rects.size() == 1);
+}
+
 TEST(display_list_lines_frames_up_by_node_and_replays_an_area) {
     testing::FakeTextMeasurer measurer;
     DisplayList list(measurer);
