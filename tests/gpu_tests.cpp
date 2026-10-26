@@ -3654,6 +3654,137 @@ void variantsFallBackToTheWholeShader(Gpu& g) {
     renderer.reset();
 }
 
+// Each kind of primitive draws the same pixels whatever it shares its batch with (the variant of
+// the shader made for the batch's kinds): alone, and among one of every other kind, each in a cell
+// of its own, at a phone's 2.75 px a dp.
+void primitivesDrawAloneAsAmongOthers(Gpu& g) {
+    const float k = 2.75f;
+    const int cell = 40, columns = 5;  // (dp)
+    Color blue{0.2f, 0.4f, 0.9f, 1}, black{0, 0, 0, 1};
+    Path starPath = star(14, 14, 13);
+    using Draw = std::function<void(GraphicsContext&)>;
+    const std::vector<std::pair<const char*, Draw>> kinds = {
+        {"a rounded rect", [&](GraphicsContext& c) { c.fillRoundRect({6, 6, 26, 20}, CornerRadii(6), blue); }},
+        {"a stroke", [&](GraphicsContext& c) { c.strokeRoundRect({6, 6, 26, 20}, CornerRadii(6), 2.3f, blue); }},
+        {"a gradient", [&](GraphicsContext& c) {
+             c.fillGradient({6, 6, 26, 20}, CornerRadii(4), Brush::linearGradient({blue, Color{0.9f, 0.3f, 0.2f, 1}}), {6, 6, 26, 20});
+         }},
+        {"text", [&](GraphicsContext& c) { c.drawText("Kq", {8, 24}, Font{14}, black); }},
+        {"a shadow", [&](GraphicsContext& c) { c.drawShadow({8, 8, 22, 16}, CornerRadii(5), Shadow{Color{0, 0, 0, 0.5f}, {1, 2}, 4, 0}, false); }},
+        {"an elevation shadow", [&](GraphicsContext& c) {
+             c.drawElevationShadow(Outline::Rounded({{0, 0, 22, 16}, 6, 6, 6, 6}), {8, 8}, ElevationShadow{{0, 0, 6}, black, black, 1});
+         }},
+        {"a star's elevation shadow", [&](GraphicsContext& c) { c.drawElevationShadow(Outline::Generic(starPath), {6, 6}, ElevationShadow{{0, 0, 4}}); }},
+        {"an arc", [&](GraphicsContext& c) { c.drawArc({8, 6, 22, 22}, 30, 250, 3, blue, true); }},
+        {"a line", [&](GraphicsContext& c) { c.drawLine({6, 8}, {32, 27}, 1.7f, black); }},
+        {"a path", [&](GraphicsContext& c) { c.drawPath(starPath, {6, 4}, Brush::solid(blue), {}, {}); }},
+        {"a faded rounded layer", [&](GraphicsContext& c) {
+             c.pushLayer({6, 6, 26, 22}, CornerRadii(7), 0.6f);
+             c.fillRoundRect({0, 0, 40, 40}, CornerRadii(), blue);
+             c.popLayer();
+         }},
+        {"a turned layer", [&](GraphicsContext& c) {
+             c.pushLayer({8, 8, 22, 18}, CornerRadii(), 1, {.scaleX = 0.8f, .scaleY = 0.8f, .rotationZ = 12});
+             c.fillRoundRect({8, 8, 22, 18}, CornerRadii(4), blue);
+             c.popLayer();
+         }},
+        {"a round clip", [&](GraphicsContext& c) {
+             c.pushClipRoundRect({6, 6, 26, 22}, CornerRadii(9), ClipOp::Intersect);
+             c.fillRoundRect({0, 0, 40, 40}, CornerRadii(), blue);
+             c.popClip();
+         }},
+        {"a tinted icon", [&](GraphicsContext& c) {  // (a color filter's)
+             c.pushColorFilter(ColorFilter::tint(Color{0.1f, 0.6f, 0.3f, 1}));
+             c.drawPath(starPath, {6, 4}, Brush::solid(black), {}, {});
+             c.popColorFilter();
+         }},
+        {"a shadowed button in a growing box", [&](GraphicsContext& c) {  // (a FAB coming in from its corner)
+             c.pushLayer({20.3f, 17.6f, 13.4f, 11.2f}, CornerRadii(), 0.9f);
+             c.drawElevationShadow(Outline::Rounded({{0, 0, 26, 22}, 7, 7, 7, 7}), {7, 6}, ElevationShadow{{0, 0, 6}, black, black, 1});
+             c.fillRoundRect({7, 6, 26, 22}, CornerRadii(7), Color{0, 0.25f, 0.25f, 1});
+             c.popLayer();
+         }},
+    };
+    int n = int(kinds.size()), rows = (n + columns - 1) / columns;
+    int w = int(float(columns * cell) * k), h = int(float(rows * cell) * k);
+    auto at = [&](GraphicsContext& c, int i, const Draw& draw) {
+        c.pushTranslation({float(i % columns * cell), float(i / columns * cell)});
+        draw(c);
+        c.popTranslation();
+    };
+    Pixels all = g.render(w, h, k, [&](GraphicsContext& c) {
+        for (int i = 0; i < n; ++i) at(c, i, kinds[size_t(i)].second);
+    });
+    for (int i = 0; i < n; ++i) {
+        Pixels alone = g.render(w, h, k, [&](GraphicsContext& c) { at(c, i, kinds[size_t(i)].second); });
+        int x0 = int(float(i % columns * cell) * k), y0 = int(float(i / columns * cell) * k), size = int(float(cell) * k);
+        int worst = worstAgainst(alone, [&](int x, int y) { return all.at(x, y); },
+                                 [&](int x, int y) { return x < x0 || y < y0 || x >= x0 + size || y >= y0 + size; });
+        // (Within the pictures' tolerance: a driver may round two variants' float math apart.)
+        CHECK(worst <= 2);
+        if (worst > 2) std::printf("  %s: off by %d at (%g, %g) among the others\n", kinds[size_t(i)].first, worst, worstAt.x - float(x0), worstAt.y - float(y0));
+    }
+}
+
+// The same drawn twice in a frame (a kept frame's area and all of it, say) into two targets, its
+// clips and color filters in other rows of the frame's table the second time (many more before
+// them): the same pixels. (An Adreno 618 sampling the table read other rows than its coordinates
+// said, the further down the further off: its texels are fetched.)
+void drawnTwiceInAFrameAlike(Gpu& g) {
+    const float k = 2.75f;
+    const int w = int(120 * k), h = int(100 * k);
+    Color black{0, 0, 0, 1};
+    Path starPath = star(8, 8, 7);
+    auto scene = [&](GraphicsContext& c, float grow) {
+        c.fillRoundRect({0, 0, 120, 100}, CornerRadii(), Color{0.11f, 0.12f, 0.12f, 1});
+        c.fillRoundRect({8, 50, 104, 40}, CornerRadii(12), Color{0.2f, 0.25f, 0.5f, 1});
+        // A FAB coming in from its corner: a box growing over it, its button cut to its shape.
+        float s = 26 * grow;
+        c.pushLayer({90 - s, 74 - s, s, s}, CornerRadii(), 1);
+        c.pushClip({90 - s, 74 - s, s, s});
+        c.drawElevationShadow(Outline::Rounded({{0, 0, 26, 26}, 7, 7, 7, 7}), {64, 48}, ElevationShadow{{0, 0, 6}, black, black, 1});
+        c.pushClipRoundRect({64, 48, 26, 26}, CornerRadii(7), ClipOp::Intersect);
+        c.fillRoundRect({64, 48, 26, 26}, CornerRadii(), Color{0, 0.25f, 0.25f, 1});
+        c.pushColorFilter(ColorFilter::tint(Color{0.6f, 0.9f, 0.9f, 1}));
+        c.drawPath(starPath, {69, 53}, Brush::solid(black), {}, {});
+        c.popColorFilter();
+        c.popClip();
+        c.popClip();
+        c.popLayer();
+    };
+    const int y0 = int(40 * k) + 1;  // (what is compared: below the corner the second one fills the table from)
+    for (float grow : {0.1f, 0.35f, 0.6f, 1.f}) {
+        g.fonts->setScale(k);
+        g.renderer->scale = k;
+        g.device->beginFrame();
+        auto a = g.device->createTexture(w, h, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+        auto b = g.device->createTexture(w, h, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+        g.renderer->beginTarget(*a, gpu::ClearColor{1, 1, 1, 1});
+        g.renderer->pushClip({0, 40, 120, 60});  // (an area of a kept frame: whole pixels)
+        scene(*g.renderer, grow);
+        g.renderer->popClip();
+        g.renderer->endTarget();
+        g.renderer->beginTarget(*b, gpu::ClearColor{1, 1, 1, 1});
+        for (int i = 0; i < 60; ++i) {
+            g.renderer->pushClipRoundRect({1, 1, 5, 5}, CornerRadii(2), ClipOp::Intersect);
+            g.renderer->pushColorFilter(ColorFilter::tint(Color{0.5f, 0.5f, float(i) / 60, 1}));
+            g.renderer->fillRoundRect({0, 0, 8, 8}, CornerRadii(), black);
+            g.renderer->popColorFilter();
+            g.renderer->popClip();
+        }
+        scene(*g.renderer, grow);
+        g.renderer->endTarget();
+        g.renderer->flush();
+        Pixels pa{w, h, g.device->readPixels(*a, {0, 0, w, h})}, pb{w, h, g.device->readPixels(*b, {0, 0, w, h})};
+        g.device->endFrame(false);
+        g.renderer->endFrame();
+        g.fonts->endFrame();
+        int worst = worstAgainst(pa, [&](int x, int y) { return pb.at(x, y); }, [&](int, int y) { return y < y0; });
+        CHECK(worst <= 1);
+        if (worst > 1) std::printf("  grown %g: off by %d at (%g, %g)\n", grow, worst, worstAt.x, worstAt.y);
+    }
+}
+
 // A frame's paths all go into one coverage mask, drawn once before the passes; past what a mask
 // holds, into more generations, each a mask of its own: the same picture as frames that each
 // held fewer. Frames after it start the masks over (a mask a generation, not one more a frame),
@@ -3947,6 +4078,8 @@ int main() {
             readbacksLeaveTheFrameGoing(g);
             gpuTimesComeBack(g);
             variantsFallBackToTheWholeShader(g);
+            primitivesDrawAloneAsAmongOthers(g);
+            drawnTwiceInAFrameAlike(g);
             passAreasClearOnlyThere(g);
             discardedTexturesAreDrawnOver(g);
             pathsShareTheirMasks(g);

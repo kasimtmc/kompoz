@@ -622,7 +622,7 @@ void Renderer::execute(Pass& pass) {
         device_.beginPass(*pass.target, first ? pass.clear : std::nullopt, reads, drawn);
         float uniforms[12] = {2 / w, yDown ? 2 / h : -2 / h, -1, yDown ? -1.f : 1.f,
                               1 / float(mask->width()), 1 / float(mask->height()),
-                              stopsTexture_ ? 1 / float(stopsTexture_->width()) : 0.f, stopsTexture_ ? 1 / float(stopsTexture_->height()) : 0.f,
+                              stopsTexture_ ? 1 / float(stopsTexture_->width()) : 0.f, 0,  // (the table's width: its texels are fetched)
                               0, 0,
                               // A texel of the target's copy (which may be bigger than the target: one copy for all).
                               readsTarget ? 1 / float(dstCopy_->width()) : 0.f, readsTarget ? 1 / float(dstCopy_->height()) : 0.f};

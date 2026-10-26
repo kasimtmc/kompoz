@@ -81,7 +81,7 @@ bool paints(int paint) { return (PAINTS & (1 << paint)) != 0; }
 
 struct Uniforms {
     float4 toClip;   // clip = position * toClip.xy + toClip.zw
-    float4 texels;   // a texel's size in the coverage mask (xy) and in the table (zw)
+    float4 texels;   // a texel's size in the coverage mask (xy), the table's (zw: z its width's inverse)
     float4 blend;    // the blend mode (x), how the coverage goes in (y: see finish), a texel of the target's copy (zw)
 };
 [[vk::push_constant]] ConstantBuffer<Uniforms> uniforms;
@@ -92,6 +92,11 @@ struct Uniforms {
 [[vk::binding(4, 0)]] Sampler2D texture3;
 [[vk::binding(5, 0)]] Sampler2D texture4;  // the coverage mask, for the clips' paths
 [[vk::binding(6, 0)]] Sampler2D texture5;  // a composite paint's source image
+
+// Texel x of row `row` of the table (texture2), as it is: fetched, not sampled (sampling a float
+// texture, an Adreno 618 reads other rows than the coordinates say).
+float4 tableTexel(float x, float row) { return texture2.Load(int3(int(x + 0.5), int(row + 0.5), 0)); }
+float tableWidth() { return round(1 / uniforms.texels.z); }  // (texels)
 
 struct Instance {
     float4 bounds : BOUNDS;  // the quad: x0, y0, x1, y1
@@ -266,12 +271,11 @@ float4 paintOne(float2 p, float4 color, float4 paint, float4 g, bool second) {
     int kind = int(paint.x + 0.5);
     if (kind == 0 || (PAINTS & ~1) == 0) return color;
     int bits = int(paint.y + 0.5);
-    float v = (paint.w + 0.5) * uniforms.texels.w;
+    float row = paint.w;
     if ((bits & 8) != 0) {
         float3 h = float3(p, 1);
-        float3 r0 = texture2.SampleLevel(float2(1 - 2.5 * uniforms.texels.z, v), 0).xyz;
-        float3 r1 = texture2.SampleLevel(float2(1 - 1.5 * uniforms.texels.z, v), 0).xyz;
-        float3 r2 = texture2.SampleLevel(float2(1 - 0.5 * uniforms.texels.z, v), 0).xyz;
+        float last = tableWidth() - 1;
+        float3 r0 = tableTexel(last - 2, row).xyz, r1 = tableTexel(last - 1, row).xyz, r2 = tableTexel(last, row).xyz;
         float3 q = float3(dot(r0, h), dot(r1, h), dot(r2, h));
         p = q.xy / q.z;
     }
@@ -313,13 +317,13 @@ float4 paintOne(float2 p, float4 color, float4 paint, float4 g, bool second) {
     }
     // The stop t falls after and the one it falls before (straight colors), mixed.
     int count = int(paint.z + 0.5);
-    float4 previous = texture2.SampleLevel(float2(0.5 * uniforms.texels.z, v), 0);
-    float before = texture2.SampleLevel(float2(1.5 * uniforms.texels.z, v), 0).x;
+    float4 previous = tableTexel(0, row);
+    float before = tableTexel(1, row).x;
     float4 straight = previous;
     bool found = t <= before;
     for (int i = 1; i < count; ++i) {
-        float4 next = texture2.SampleLevel(float2((float(i) * 2 + 0.5) * uniforms.texels.z, v), 0);
-        float offset = texture2.SampleLevel(float2((float(i) * 2 + 1.5) * uniforms.texels.z, v), 0).x;
+        float4 next = tableTexel(float(i) * 2, row);
+        float offset = tableTexel(float(i) * 2 + 1, row).x;
         if (!found && t <= offset) {
             float span = offset - before;
             straight = lerp(previous, next, span > 0 ? (t - before) / span : 1);
@@ -406,9 +410,6 @@ float4 blendColors(float4 s, float4 d, int mode) {
 
 // --- Color filters, as ColorFilter::apply works them out --------------------------------------
 
-float4 tableTexel(float x, float row) {
-    return texture2.SampleLevel(float2((x + 0.5) * uniforms.texels.z, (row + 0.5) * uniforms.texels.w), 0);
-}
 
 // A premultiplied color through the filters (each on the straight color).
 float4 applyFilters(float4 color, float4 filter) {
@@ -570,9 +571,8 @@ float4 cubicSample(float2 uv, float2 size) {
 // the destination, as Skia's SkShaders::Blend does, at the color's alpha.
 float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
     if (!paints(COMPOSITE_PAINT) || int(paint.x + 0.5) != COMPOSITE_PAINT) return paintOne(p, color, paint, g, false);
-    float v = (paint.w + 0.5) * uniforms.texels.w;
     float4 texel[5];
-    for (int i = 0; i < 5; ++i) texel[i] = texture2.SampleLevel(float2((i + 0.5) * uniforms.texels.z, v), 0);
+    for (int i = 0; i < 5; ++i) texel[i] = tableTexel(float(i), paint.w);
     float4 one = float4(1, 1, 1, 1);
     float4 d = paintOne(p, one, texel[0], texel[1], false), s = paintOne(p, one, texel[2], texel[3], true);
     return blendColors(s, d, int(texel[4].x + 0.5)) * color.a;

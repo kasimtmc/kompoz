@@ -226,6 +226,9 @@
   when it covers the whole pixels the area touches. On a Redmi Note 9 Pro scrolling the Components screen, a frame took
   the GPU 4–14 ms instead of 27–38 and 50–60 frames a second were shown instead of 11–41, a twentieth to a fifth of the
   screen drawn again instead of a sixth to two thirds.
+- **Fixed**: on an Adreno 618 (a Redmi Note 9 Pro's), the GPU renderer drew clips, color filters and gradients from
+  other rows of its frame's table than theirs, the further off the more of them came before (a button's corner, cut to
+  its shape, up to 220/255 off): the table's texels are fetched, not sampled.
 - **Fixed**: the GPU renderer's turned, stretched and leaning edges were up to 10/255 off on GPUs that snap vertices
   coarsely (4 subpixel bits, as SwiftShader does: Chrome's WebGL where it doesn't use the GPU): a quad's corners are
   put where such a GPU would put them, and its pixels shaded from there.
