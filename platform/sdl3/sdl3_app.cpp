@@ -2287,6 +2287,8 @@ struct App {
         int frames = 0, slow = 0, unchanged = 0;  // unchanged: recorded, nothing on the screen differed
         int shown = 0, missed = 0;                // missed: display refreshes between frames shown back to back
         double workTotal = 0, workMax = 0, waitTotal = 0, intervalMax = 0, drawnArea = 0;  // drawnArea: fractions of the screen, summed
+        double composeTotal = 0, drawTotal = 0, recordTotal = 0;  // the work's parts (recording: of the drawing)
+        uint64_t recordNs = 0;  // this frame's recording (drawFrame)
         int gpuFrames = 0;
         double gpuTotal = 0, gpuMax = 0;
     } prof;
@@ -2772,10 +2774,12 @@ Drawn drawFrameGpu(App& app, const std::string& shot) {
     r.layerCount = r.keptLayers = 0;
     float scale = r.scale;
     Size screen{float(pw) / scale, float(ph) / scale};
+    uint64_t recording = SDL_GetTicksNS();
     app.display->begin(screen, 1 / scale);
     app.host->draw(*app.display);
     if (app.fullRedraw) app.display->invalidate();
     std::optional<Rect> damage = app.display->end();
+    app.prof.recordNs = SDL_GetTicksNS() - recording;
     if (damage) r.drawFrame(*app.gpuFrame, *app.display, true);
     if (damage && app.damageCheck) {
         auto full = device.createTexture(pw, ph, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
@@ -2839,10 +2843,12 @@ Drawn drawFrame(App& app, const std::string& shot) {
     }
     float scale = app.canvas->scale;
     Size screen{float(pw) / scale, float(ph) / scale};
+    uint64_t recording = SDL_GetTicksNS();
     app.display->begin(screen, 1 / scale);
     app.host->draw(*app.display);
     if (app.fullRedraw) app.display->invalidate();
     std::optional<Rect> damage = app.display->end();
+    app.prof.recordNs = SDL_GetTicksNS() - recording;
     // Drawn again: the area cleared, then what touches it, clipped to it. What an opaque rect
     // covering all of it hides (the white too) isn't drawn.
     DrawInto drawInto = [&](SDL_Texture* target, const std::optional<Rect>& area) {
@@ -2891,6 +2897,8 @@ void profileFrame(App& app, uint64_t start, uint64_t composed, uint64_t waited, 
     if (!p.summaryStart) p.summaryStart = start;
     ++p.frames;
     p.workTotal += work;
+    p.composeTotal += compose, p.drawTotal += draw, p.recordTotal += ms(p.recordNs);
+    p.recordNs = 0;
     p.workMax = std::max(p.workMax, work);
     p.waitTotal += wait;
     p.intervalMax = std::max(p.intervalMax, interval);
@@ -2914,9 +2922,11 @@ void profileFrame(App& app, uint64_t start, uint64_t composed, uint64_t waited, 
         char gpu[96] = "";
         if (p.gpuFrames) std::snprintf(gpu, sizeof gpu, ", GPU avg %.1f max %.1f ms", p.gpuTotal / p.gpuFrames, p.gpuMax);
         SDL_Log("kompoz: %d frames in %.0f ms (%d shown, %d refreshes missed; %d changed nothing on the screen; %.0f%% of it drawn again on "
-                "average), work avg %.1f max %.1f ms, wait avg %.1f ms%s, longest gap %.1f ms, %d slow",
+                "average), work avg %.1f max %.1f ms (compose+layout %.1f, draw %.1f, of it recording %.1f), wait avg %.1f ms%s, longest gap "
+                "%.1f ms, %d slow",
                 p.frames, ms(start - p.summaryStart), p.shown, p.missed, p.unchanged, p.drawnArea / p.frames * 100, p.workTotal / p.frames,
-                p.workMax, p.waitTotal / p.frames, gpu, p.intervalMax, p.slow);
+                p.workMax, p.composeTotal / p.frames, p.drawTotal / p.frames, p.recordTotal / p.frames, p.waitTotal / p.frames, gpu,
+                p.intervalMax, p.slow);
         uint64_t lastShown = p.lastShown;
         bool busy = p.busy;
         p = {};
