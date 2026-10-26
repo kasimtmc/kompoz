@@ -108,6 +108,7 @@ public:
     Gl& gl;
     GLuint name = 0, framebuffer = 0;
     int levels = 1;
+    bool screen = false;  // the window's own framebuffer (OpenGL's default, 0), no texture of its own
 };
 
 class GlesPipeline final : public Pipeline {
@@ -462,7 +463,7 @@ public:
 
     // A texture's framebuffer (made the first time it is drawn into, read from or copied).
     GLuint framebuffer(GlesTexture& t) {
-        if (!t.framebuffer) {
+        if (!t.framebuffer && !t.screen) {
             gl.GenFramebuffers(1, &t.framebuffer);
             gl.BindFramebuffer(GL_FRAMEBUFFER, t.framebuffer);
             gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t.name, 0);
@@ -485,18 +486,21 @@ public:
         uniforms.clear();
     }
 
+    // The window's framebuffer itself, drawn into upside down (swapchainFlipped): presented as it
+    // is, not copied over.
     Texture* swapchainTexture() override {
         if (haveWindow) return window.get();
         int w = 0, h = 0;
         if (drawableSize) drawableSize(&w, &h);
         if (w <= 0 || h <= 0) return nullptr;  // minimized
         if (!window || window->width() != w || window->height() != h) {
-            auto t = createTexture(w, h, Format::RGBA8, TextureUsage::Sampled | TextureUsage::RenderTarget);
-            window.reset(static_cast<GlesTexture*>(t.release()));
+            window = std::make_unique<GlesTexture>(gl, w, h, Format::RGBA8, 0, 1);
+            window->screen = true;
         }
-        haveWindow = window != nullptr;
+        haveWindow = true;
         return window.get();
     }
+    bool swapchainFlipped() const override { return true; }
 
     void* allocate(size_t size, size_t alignment, BufferRef* ref) override {
         alignment = std::max<size_t>(alignment, 16);
@@ -691,8 +695,9 @@ public:
     }
 
     void discard(Texture& texture) override {
-        gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer(static_cast<GlesTexture&>(texture)));
-        GLenum color = GL_COLOR_ATTACHMENT0;
+        auto& t = static_cast<GlesTexture&>(texture);
+        gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer(t));
+        GLenum color = t.screen ? GL_COLOR : GL_COLOR_ATTACHMENT0;
         gl.InvalidateFramebuffer(GL_FRAMEBUFFER, 1, &color);
         gl.BindFramebuffer(GL_FRAMEBUFFER, 0);
     }
@@ -739,16 +744,6 @@ public:
     void endFrame(bool present) override {
         if (!inFrame) return;
         if (present && haveWindow && window) {
-            // The window's image into the default framebuffer, upside down (its first row is the top).
-            gl.BindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer(*window));
-            gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-            GLenum color = GL_COLOR;  // (all of it copied over: what it held needn't be loaded, on a tiling GPU)
-            gl.InvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &color);
-            gl.Disable(GL_SCISSOR_TEST);
-            int w = window->width(), h = window->height();
-            beginTimed("copy to screen");
-            gl.BlitFramebuffer(0, 0, w, h, 0, h, w, 0, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-            endTimed();
             gl.BindFramebuffer(GL_FRAMEBUFFER, 0);
             if (swap) swap();
         } else {

@@ -415,7 +415,7 @@ void Renderer::drawFrame(Texture& target, const DisplayList& list, bool changes)
     endTarget();
 }
 
-void Renderer::blit(Texture& texture, int quarterTurns) {
+void Renderer::blit(Texture& texture, int quarterTurns, bool flipped) {
     float w = float(texture.width()), h = float(texture.height());
     Prim p;
     set(p.bounds, 0, 0, w, h);
@@ -427,6 +427,10 @@ void Renderer::blit(Texture& texture, int quarterTurns) {
     case 1: set(p.xform, 0, 1, -1, 0), p.extra[0] = h; break;
     case 2: set(p.xform, -1, 0, 0, -1), p.extra[0] = w, p.extra[1] = h; break;
     case 3: set(p.xform, 0, -1, 1, 0), p.extra[1] = w; break;
+    }
+    if (flipped) {  // upside down after that, in a target as high as it is turned to be
+        p.xform[1] = -p.xform[1], p.xform[3] = -p.xform[3];
+        p.extra[1] = ((quarterTurns & 1) ? w : h) - p.extra[1];
     }
     add(IMAGE, p, &texture, true, Mask::None, nullptr, false, Sampler{Filter::Nearest});  // (texel for pixel, on any GPU)
 }

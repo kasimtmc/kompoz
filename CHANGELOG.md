@@ -242,6 +242,8 @@
   0.65 ms of a frame of the Components screen instead of 3.1.
 - **`KOMPOZ_PROFILE`'s summary gives the work's parts**: composition and layout, drawing, and of the drawing the
   recording (the tree drawn into the display list, compared with the last frame's).
+- **OpenGL ES draws the frame straight into the window**: its framebuffer, drawn into upside down, instead of a texture
+  copied over to it, one copy of the whole window less each frame shown.
 - **A composition local's readers are its provider's**: a provider giving another value recomposes the scopes that
   read it from it, found at once, not by going through every reader of the local and up from each; a scope leaving
   the composition leaves the readers at once. Switching the showcase's tabs took a fifth less of the main thread.

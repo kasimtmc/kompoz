@@ -229,6 +229,9 @@ public:
     // for an odd number): where the system leaves turning to the app, so that the compositor
     // doesn't turn every frame (Android's Vulkan, the screen turned from its natural way up).
     virtual int swapchainTurns() const { return 0; }
+    // Its rows go from the bottom of the window up (OpenGL's default framebuffer): what is drawn
+    // into it is drawn upside down, to show the right way up.
+    virtual bool swapchainFlipped() const { return false; }
     // `size` bytes of this frame's memory (aligned to `alignment`), to write now.
     virtual void* allocate(size_t size, size_t alignment, BufferRef* ref) = 0;
     // Texels (in the texture's format, `rowBytes` apart) into part of a texture; outside passes.

@@ -2829,7 +2829,8 @@ Drawn drawFrameGpu(App& app, const std::string& shot) {
         device.discard(*swapchain);  // (all of it copied over: what it held isn't loaded, on a tiling GPU)
         r.beginTarget(*swapchain);
         int turns = device.swapchainTurns();
-        r.blit(*app.gpuFrame, turns);
+        bool flipped = device.swapchainFlipped();
+        r.blit(*app.gpuFrame, turns, flipped);
         if (damage && app.damageShow) {  // what was drawn again, outlined (only in the window, not the kept pixels)
             Matrix turned;  // (as the frame is: a point's x and y from these, then moved)
             float c[4][2] = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}};  // (cos, sin) of the turns
@@ -2837,6 +2838,10 @@ Drawn drawFrameGpu(App& app, const std::string& shot) {
             turned(0, 0) = cs, turned(0, 1) = sn, turned(1, 0) = -sn, turned(1, 1) = cs;
             turned(3, 0) = (turns & 3) == 1 ? screen.height : (turns & 3) == 2 ? screen.width : 0;
             turned(3, 1) = (turns & 3) == 2 ? screen.height : (turns & 3) == 3 ? screen.width : 0;
+            if (flipped) {  // (upside down after that)
+                turned(0, 1) = -turned(0, 1), turned(1, 1) = -turned(1, 1);
+                turned(3, 1) = ((turns & 1) ? screen.width : screen.height) - turned(3, 1);
+            }
             r.pushTransform(turned);
             for (const Rect& a : app.display->areas()) r.strokeRoundRect(a, CornerRadii(), 3 / scale, Color{1, 0, 80 / 255.f, 1});
             r.popTransform();

@@ -46,7 +46,7 @@ public:
     void fillOpaque(const IRect& rect, Color color);
     // Copies `texture` into the target as it is, texel for pixel, turned by `quarterTurns`
     // (clockwise, about the target: Device::swapchainTurns).
-    void blit(Texture& texture, int quarterTurns = 0);
+    void blit(Texture& texture, int quarterTurns = 0, bool flipped = false);
     // Moves the target's pixels in `from` by (dx, dy) (as it is: the pixels it leaves keep theirs).
     // False if it can't (no texture to copy them through).
     bool move(const IRect& from, int dx, int dy);
