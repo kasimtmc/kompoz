@@ -63,10 +63,12 @@ void DrawingSection(CallSite site) {
                 });
             // PathEffect (dashes, rounded corners), drawPoints, and a wave drawn bit by bit through
             // PathMeasure (getSegment up to a share of its length, getPosition for its tip).
-            float traced = rememberInfiniteTransition().animateFloat(0, 1, infiniteRepeatable(tween(2400, 0, LinearEasing), RepeatMode::Reverse));
+            // (The phases are read while drawing: the Canvas is drawn again, nothing composed again.)
+            auto tracing = rememberInfiniteTransition().animateFloatState(0, 1, infiniteRepeatable(tween(2400, 0, LinearEasing), RepeatMode::Reverse));
             Canvas(Modifier().fillMaxWidth().height(84).background(cs.surfaceContainerHigh, 12),
-                   [c = cs.primary, o = cs.outline, t = cs.tertiary, traced](DrawScope& d) {
+                   [c = cs.primary, o = cs.outline, t = cs.tertiary, tracing](DrawScope& d) {
                        Size s = d.size();
+                       float traced = tracing.get();
                        d.drawLine(o, {12, 10}, {s.width - 12, 10}, 2, StrokeCap::Round, PathEffect::dashPathEffect({8, 6}));
                        d.drawCircle(c, 22, Offset{40, 50}, 1, Stroke(3, 4, StrokeCap::Round, StrokeJoin::Round, PathEffect::dashPathEffect({7, 5})));
                        Path triangle;
@@ -90,10 +92,11 @@ void DrawingSection(CallSite site) {
                    });
             // stampedPathEffect: arrows turned along a wave (Rotate), and a short bar bent round a
             // circle (Morph) sliding with the phase.
-            float slide = rememberInfiniteTransition().animateFloat(0, 24, infiniteRepeatable(tween(1200, 0, LinearEasing)));
+            auto sliding = rememberInfiniteTransition().animateFloatState(0, 24, infiniteRepeatable(tween(1200, 0, LinearEasing)));
             Canvas(Modifier().fillMaxWidth().height(84).background(cs.surfaceContainerHigh, 12),
-                   [c = cs.primary, t = cs.tertiary, slide](DrawScope& d) {
+                   [c = cs.primary, t = cs.tertiary, sliding](DrawScope& d) {
                        Size s = d.size();
+                       float slide = sliding.get();
                        Path arrow;  // pointing along +x, its tip at the origin
                        arrow.moveTo(0, 0);
                        arrow.lineTo(-8, -5);

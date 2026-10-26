@@ -746,7 +746,8 @@ void FrameRateSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
         auto choice = remember([] { return mutableStateOf(0); });
-        float x = rememberInfiniteTransition().animateFloat(0, 1, infiniteRepeatable(tween(1600, 0, LinearEasing), RepeatMode::Reverse));
+        // (Read while laying out: the dot is placed again, nothing composed again.)
+        auto x = rememberInfiniteTransition().animateFloatState(0, 1, infiniteRepeatable(tween(1600, 0, LinearEasing), RepeatMode::Reverse));
         static const char* const labels[] = {"Yok", "30 Hz", "Normal", "En yüksek"};
         Modifier wish = choice.get() == 1   ? Modifier().preferredFrameRate(30)
                         : choice.get() == 2 ? Modifier().preferredFrameRate(FrameRateCategory::Normal)
@@ -757,7 +758,7 @@ void FrameRateSection(CallSite site) {
                 for (int i = 0; i < 4; ++i) SegmentedButton(choice.get() == i, [choice, i] { choice.set(i); }, [&, i] { Text(labels[i]); });
             });
             BoxWithConstraints(Modifier().fillMaxWidth().height(32).then(wish), [&](const Constraints& box) {
-                Box(Modifier().offset(x * (box.maxWidth - 32), 0).size(32).background(cs.primary, CircleShape));
+                Box(Modifier().offset([x, room = box.maxWidth - 32] { return Offset{x.get() * room, 0}; }).size(32).background(cs.primary, CircleShape));
             });
             Text("Seçim, bu bölüm ekrandayken ekranın tazeleme hızına istek olarak gider (Android 11+; telefon ayarı ve pil durumu son sözü söyler).",
                  {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
