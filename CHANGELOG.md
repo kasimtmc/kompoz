@@ -242,6 +242,8 @@
   0.65 ms of a frame of the Components screen instead of 3.1.
 - **`KOMPOZ_PROFILE`'s summary gives the work's parts**: composition and layout, drawing, and of the drawing the
   recording (the tree drawn into the display list, compared with the last frame's).
+- **Fixed**: a lifted finger hovered what was under it where the platform didn't say the pointer left: a tooltip's
+  anchor tapped showed its tooltip, and every frame drawn hit tested for hover. Hover now follows a resting mouse only.
 - **Fixed**: on an Adreno 618 (a Redmi Note 9 Pro's), the GPU renderer drew clips, color filters and gradients from
   other rows of its frame's table than theirs, the further off the more of them came before (a button's corner, cut to
   its shape, up to 220/255 off): the table's texels are fetched, not sampled.

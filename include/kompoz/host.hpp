@@ -661,7 +661,7 @@ private:
     int64_t dragStartTime_ = -1;  // when the current drag claimed the gesture, and how far it went
     float dragTravel_ = 0;
     int64_t lastFrameTime_ = 0;
-    bool pointerDown_ = false, pointerInside_ = false;
+    bool pointerDown_ = false;
     Offset downPosition_, lastPosition_;
     Cursor cursor_ = Cursor::Default;
     TextEditState imeState_;  // the focused field's state as the platform input method knows it

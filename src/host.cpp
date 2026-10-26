@@ -417,7 +417,7 @@ bool ComposeHost::frame(int64_t frameTimeNanos) {
     });
     if (rippling) redraw_ = true;
     animating_ = composer_.hasFrameScopes() || flingNode_ || wheel_ || rippling;
-    if (redraw_ && pointerInside_ && !pointerDown_) updateHover(lastPosition_);  // content may have moved
+    if (redraw_ && mouseOver_ && !pointerDown_) updateHover(lastPosition_);  // content may have moved under a resting mouse
     return std::exchange(redraw_, false);
 }
 
@@ -1607,7 +1607,7 @@ void ComposeHost::pointerDown(Offset p, int64_t time, int64_t pointerId, Pointer
     pointerType_ = type;
     if (type == PointerType::Touch && mouseOver_) {
         mouseOver_ = false;
-        updateHoverInteractions(p);  // ends them
+        updateHover(p);  // a finger hovers nothing: what the mouse did ends
     }
     endInteraction(dragInteraction_, &Interaction::cancel);
     setUserScrolled(nullptr, 0);
@@ -1824,7 +1824,6 @@ void ComposeHost::applyTapFocus() {
 
 void ComposeHost::pointerMove(Offset p, int64_t time, int64_t pointerId) {
     dispatcher_->advanceTo(timeOr(time));
-    pointerInside_ = true;
     if (swallowGesture_) {
         lastPosition_ = p;
         return;
@@ -2305,7 +2304,6 @@ void ComposeHost::stopFling() {
 }
 
 void ComposeHost::pointerExit() {
-    pointerInside_ = false;
     if (hovered_) std::exchange(hovered_, nullptr)->hovered = false;
     mouseOver_ = false;
     updateHoverInteractions(lastPosition_);  // ends them (Exit where the mouse was last)
@@ -2463,11 +2461,12 @@ void ComposeHost::updateHover(Offset p) {
     }
     updateHoverInteractions(p);
     LayoutNode* trigger = nullptr;
-    for (const Hit& hit : hitTest(p))
-        if (elementOf<TooltipTriggerElement>(hit.element)) {
-            trigger = hit.node;
-            break;
-        }
+    if (mouseOver_)  // (a finger hovers no tooltip's anchor either)
+        for (const Hit& hit : hitTest(p))
+            if (elementOf<TooltipTriggerElement>(hit.element)) {
+                trigger = hit.node;
+                break;
+            }
     setHoveredTrigger(trigger);
     if (cursor != cursor_) {
         cursor_ = cursor;

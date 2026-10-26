@@ -19477,6 +19477,35 @@ TEST(tooltip_box_shows_on_long_press_and_hover) {
     CHECK(!state->isVisible());
 }
 
+TEST(a_lifted_finger_hovers_nothing) {
+    // A platform that doesn't say the finger left (no pointerExit after it): what it lifted over
+    // isn't hovered, however many frames are drawn after (and none of them hit tests for hover).
+    std::optional<TooltipState> state;
+    ComposeTestRule rule([&] {
+        Row(Modifier().padding(150, 300, 0, 0), [&] {
+            auto s = rememberTooltipState();
+            state = s;
+            TooltipBox([] { PlainTooltip([] { Text("Favorilere ekle"); }); }, s, Modifier(), [&] {
+                IconButton([] {}, [] { Icon(Icons::Filled::Favorite, "Favori"); });
+            });
+        });
+    }, {400, 800});
+    auto& host = rule.host();
+    Rect anchor = rule.onNodeWithText("Favori").bounds();
+    host.pointerMove(anchor.center());  // a mouse rests on it: it is the hovered clickable
+    rule.advanceFrame();
+    LayoutNode* button = rule.onNodeWithText("Favori").node();
+    while (button && !button->modifier.find<ClickableElement>()) button = button->parent;
+    CHECK(button && button->hovered);
+    host.pointerDown(anchor.center());  // then a finger taps it
+    rule.advanceTimeBy(100);
+    host.pointerUp(anchor.center());
+    rule.advanceFrame();
+    CHECK(!button->hovered);
+    rule.advanceTimeBy(1500);  // the ripple drawn all along
+    CHECK(!state->isVisible() && !button->hovered);
+}
+
 TEST(rich_tooltip_stays_until_a_tap_outside) {
     std::optional<TooltipState> state;
     ComposeTestRule rule([&] {
@@ -28446,8 +28475,9 @@ TEST(checkboxes_and_radio_buttons_ripple_and_hover_in_a_40_dp_circle) {
     rule.host().pointerMove(b.center());  // and over the checkbox
     rule.waitForIdle();
     CHECK(source.collectIsHoveredAsState() && circles() == 1);
-    // A press near the corner: the ripple still spreads from the middle, up to 40 dp.
-    rule.host().pointerDown({b.x + 2, b.y + 2});
+    // The mouse pressed near the corner: the ripple still spreads from the middle, up to 40 dp
+    // (over the hover's circle).
+    rule.host().pointerDown({b.x + 2, b.y + 2}, -1, 0, ComposeHost::PointerType::Mouse);
     rule.advanceTimeBy(1000);
     CHECK(circles() == 2);
     rule.host().pointerUp({b.x + 2, b.y + 2});
