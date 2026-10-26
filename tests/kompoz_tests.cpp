@@ -19636,6 +19636,44 @@ TEST(composition_local_readers_are_their_providers) {
     CHECK(ran(0, 30));
 }
 
+// A list scrolled moves what is in it without measuring it: the places inside are worked out where
+// they are asked for (a popup's anchor, a hit) and written down where they are drawn, also out of
+// the tree's order (the shared transition overlay's).
+TEST(a_scrolled_lists_places_are_worked_out_where_they_are_asked_for) {
+    ScrollState scroll;
+    Color yellow = Color::hex(0xffff00);
+    ComposeTestRule rule([&] {
+        SharedTransitionLayout(Modifier().fillMaxSize(), [&](const SharedTransitionScope& shared) {
+            Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+                Box(Modifier().height(100));
+                Box(Modifier().padding(10), [&] {  // (nested: what is in it is placed from it)
+                    Box(Modifier().size(20).renderInSharedTransitionScopeOverlay(shared, [] { return true; }).background(yellow).testTag("üstte"));
+                });
+                Box(Modifier().padding(5).size(30).testTag("çapa"), [&] {
+                    Popup({.position = [](const Rect& anchor, Size, Size) { return Offset{anchor.right(), anchor.y}; }, .focusable = false},
+                          [] { Box(Modifier().size(10).testTag("açılır")); });
+                });
+                Box(Modifier().height(2000));
+            });
+        });
+    }, {400, 800});
+    auto check = [&](float scrolled) {
+        Rect box = rule.onNodeWithTag("üstte").bounds(), anchor = rule.onNodeWithTag("çapa").bounds(), popup = rule.onNodeWithTag("açılır").bounds();
+        testing::RecordingCanvas canvas;
+        rule.host().draw(canvas);
+        auto drawn = std::find(canvas.rectColors.begin(), canvas.rectColors.end(), yellow);
+        Rect at = drawn == canvas.rectColors.end() ? Rect{} : canvas.rects[size_t(drawn - canvas.rectColors.begin())];
+        return near(box.y, 110 - scrolled) && near(anchor.y, 140 - scrolled) && near(popup.x, anchor.right()) && near(popup.y, anchor.y) &&
+               near(at.y, box.y) && near(at.x, box.x);
+    };
+    CHECK(check(0));
+    for (float to : {37.f, 12.f, 80.f}) {  // (whole px: places are)
+        scroll.scrollTo(to);
+        rule.waitForIdle();
+        CHECK(check(to));
+    }
+}
+
 // Frame times on the display's beat (Choreographer's): whole periods after the last, the nearest
 // to now, never going back.
 // Image assets: decoded once wherever they are used and however often their screen comes back,

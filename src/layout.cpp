@@ -1592,6 +1592,7 @@ Modifier Modifier::then(std::shared_ptr<const ModifierElement> element) const {
 }
 
 LayoutNode::~LayoutNode() {
+    setChildrenStale(false);
     if (!overlays.empty()) --detail::nodesWithPopups();
     if (handle_) *handle_ = nullptr;
     if (host_) host_->nodeRemoved(this);
@@ -1803,11 +1804,16 @@ float LayoutNode::alignmentLineInside(size_t layer, AlignmentLine line) const {
 
 float LayoutNode::alignmentLine(AlignmentLine line) const { return alignmentLineInside(0, line); }
 
-void LayoutNode::updateAbsolutePosition(Offset parentContentOrigin) {
-    Offset o{parentContentOrigin.x + position_.x, parentContentOrigin.y + position_.y};
-    // Nothing in it measured or moved, and it is where it was: so is everything in it.
-    if (!relaidOut_ && o.x == bounds_.x && o.y == bounds_.y) return;
-    relaidOut_ = false;
+namespace {
+thread_local int gStaleNodes = 0;  // nodes whose children's places are stale
+} // namespace
+
+void LayoutNode::setChildrenStale(bool stale) {
+    if (stale != childrenStale_) gStaleNodes += stale ? 1 : -1;
+    childrenStale_ = stale;
+}
+
+void LayoutNode::placeAt(Offset o) {
     bounds_ = {o.x, o.y, size_.width, size_.height};
     for (auto& layer : layers_) {
         layer.bounds = {o.x, o.y, layer.size.width, layer.size.height};
@@ -1815,6 +1821,78 @@ void LayoutNode::updateAbsolutePosition(Offset parentContentOrigin) {
         o.y += layer.contentOffset.y;
     }
     contentBounds_ = {o.x, o.y, contentSize_.width, contentSize_.height};
+}
+
+void LayoutNode::settleChildren() {
+    if (!childrenStale_) return;
+    setChildrenStale(false);
+    for (auto* child : children) {
+        Offset o{contentBounds_.x + child->position_.x, contentBounds_.y + child->position_.y};
+        if (o.x == child->bounds_.x && o.y == child->bounds_.y) continue;  // (where it was written down: so is all in it)
+        child->placeAt(o);
+        child->setChildrenStale(true);
+    }
+}
+
+const std::vector<const LayoutNode*>& LayoutNode::staleChain(const LayoutNode& node) {
+    thread_local std::vector<const LayoutNode*> chain;
+    chain.clear();
+    if (!gStaleNodes) return chain;
+    size_t top = 0;
+    for (const LayoutNode* n = &node; !n->overlay && n->parent; n = n->parent) {
+        chain.push_back(n);
+        if (n->parent->childrenStale_) top = chain.size();
+    }
+    chain.resize(top);
+    std::reverse(chain.begin(), chain.end());
+    return chain;
+}
+
+void LayoutNode::settlePlace() {
+    for (const LayoutNode* n : staleChain(*this)) n->parent->settleChildren();
+}
+
+Offset LayoutNode::trueOrigin() const {
+    const auto& chain = staleChain(*this);
+    if (chain.empty()) return {bounds_.x, bounds_.y};
+    Offset o{chain.front()->parent->contentBounds_.x, chain.front()->parent->contentBounds_.y};  // (written down: nothing above it stale)
+    for (size_t i = 0; i < chain.size(); ++i) {
+        const LayoutNode& n = *chain[i];
+        o = {o.x + n.position_.x, o.y + n.position_.y};
+        if (i + 1 < chain.size())
+            for (const auto& layer : n.layers_) o.x += layer.contentOffset.x, o.y += layer.contentOffset.y;
+    }
+    return o;
+}
+
+Rect LayoutNode::bounds() const {
+    Offset o = trueOrigin();
+    return {o.x, o.y, bounds_.width, bounds_.height};
+}
+
+Rect LayoutNode::layerBounds(size_t index) const {
+    if (index >= layers_.size()) return bounds();
+    Offset o = trueOrigin();
+    for (size_t i = 0; i < index; ++i) o.x += layers_[i].contentOffset.x, o.y += layers_[i].contentOffset.y;
+    return {o.x, o.y, layers_[index].bounds.width, layers_[index].bounds.height};
+}
+
+Rect LayoutNode::contentBounds() const {
+    Offset o = trueOrigin();
+    for (const auto& layer : layers_) o.x += layer.contentOffset.x, o.y += layer.contentOffset.y;
+    return {o.x, o.y, contentBounds_.width, contentBounds_.height};
+}
+
+void LayoutNode::updateAbsolutePosition(Offset parentContentOrigin) {
+    Offset o{parentContentOrigin.x + position_.x, parentContentOrigin.y + position_.y};
+    // Nothing in it measured or moved, and it is where it was: so is everything in it.
+    if (!relaidOut_ && o.x == bounds_.x && o.y == bounds_.y) return;
+    bool moved = !relaidOut_;  // only moved: nothing in it was measured (its parents would have been)
+    relaidOut_ = false;
+    placeAt(o);
+    if (moved) return setChildrenStale(true);
+    setChildrenStale(false);
+    o = {contentBounds_.x, contentBounds_.y};
     zIndex_ = placedZIndex_;
     for (const auto& e : modifier.elements())
         if (auto* z = dynamic_cast<const ZIndexElement*>(e.get())) zIndex_ += z->zIndex;
@@ -1852,6 +1930,7 @@ ParentData LayoutNode::parentData() const {
 
 void LayoutNode::draw(GraphicsContext& canvas) {
     using Recording = GraphicsContext::NodeRecording;
+    settlePlace();  // (its stale parents' children written down on the way: what is in it is, as it is drawn)
     Recording r = canvas.recordNode(this, {bounds_.x, bounds_.y}, !drawChanged_);
     if (r == Recording::Kept) return;  // what it drew last frame, recorded again
     // Drawn into what is kept (itself, or inside what is): that has what changed now.
@@ -1871,6 +1950,7 @@ void LayoutNode::drawAfter(GraphicsContext& canvas, const ModifierElement* eleme
     const auto& elements = modifier.elements();
     for (size_t i = 0; i < elements.size(); ++i)
         if (elements[i].get() == element) {
+            settlePlace();  // (drawn on its own, out of the tree's order)
             LayoutNode* outer = std::exchange(gDrawing, this);
             canvas.beginNode(this);
             drawLayer(canvas, i + 1);

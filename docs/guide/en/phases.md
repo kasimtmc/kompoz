@@ -53,7 +53,7 @@ Dragging the ball changes `x` on every pointer move. Because only the layout pha
 
 Layout in Kompoz is incremental, as in Compose. A node measured again with the same constraints as last time, with nothing changed in it or below it, keeps its size and its children's positions without measuring them. Only nodes that were composed again, or that read a state that changed while they were measured, are measured again, along with the parents whose size depends on them.
 
-You don't need to do anything for this. It does mean a change deep in a large tree costs little, as long as it doesn't change the size of what is around it.
+You don't need to do anything for this. It does mean a change deep in a large tree costs little, as long as it doesn't change the size of what is around it. Nor does scrolling walk what scrolls: what is moved without being measured again keeps the places of what is in it as they were, and works them out when they are asked for or drawn.
 
 `KOMPOZ_LAYOUT_CHECK=1` checks each incremental layout against a full one, and logs any difference; the tests always run with it.
 

@@ -255,6 +255,9 @@
   ekranının bir karesinde 3.1 yerine 0.65 ms sürdü.
 - **`KOMPOZ_PROFILE`'ın özeti işin parçalarını verir**: kompozisyon ve yerleşim, çizim ve çizimin içinde kayıt (ağacın
   görüntü listesine çizilip önceki kareyle karşılaştırılması).
+- **Kaydırmak kayanı dolaşmaz**: yeniden ölçülmeden taşınan bir şey (bir listenin içeriği) içindeki yerleri yazıldıkları
+  gibi bırakır; istendiklerinde hesaplanır, çizildiklerinde yazılırlar. Showcase'in Bileşenler ekranını kaydırmak ana
+  thread'in %16 yerine %1'ini yerlere harcadı.
 - **OpenGL ES kareyi doğrudan pencereye çizer**: üzerine kopyalanan bir dokuya değil, ters çizilen kendi
   framebuffer'ına; gösterilen her karede pencerenin tamamının bir kopyası eksik.
 - **Bir composition local'ın okuyucuları sağlayıcısınındır**: başka bir değer veren sağlayıcı, onu kendisinden okuyan

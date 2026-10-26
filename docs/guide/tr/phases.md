@@ -53,7 +53,7 @@ Topu sürüklemek her işaretçi hareketinde `x`'i değiştirir. Onu yalnız yer
 
 Kompoz'da yerleşim, Compose'daki gibi artımlıdır. Geçen seferkiyle aynı kısıtlarla yeniden ölçülen ve kendisinde ya da altında hiçbir şey değişmemiş bir düğüm, çocuklarını ölçmeden boyutunu ve çocuklarının konumlarını korur. Yalnız yeniden kompoze edilen ya da ölçülürken okuduğu bir durum değişen düğümler, boyutu onlara bağlı ebeveynlerle birlikte yeniden ölçülür.
 
-Bunun için bir şey yapmanız gerekmez. Ama şu anlama gelir: büyük bir ağacın derinliklerindeki bir değişiklik, etrafındakilerin boyutunu değiştirmediği sürece az şeye mal olur.
+Bunun için bir şey yapmanız gerekmez. Ama şu anlama gelir: büyük bir ağacın derinliklerindeki bir değişiklik, etrafındakilerin boyutunu değiştirmediği sürece az şeye mal olur. Kaydırmak da kayanı dolaşmaz: yeniden ölçülmeden taşınan bir düğüm, içindekilerin yerlerini olduğu gibi bırakır ve onları istendiklerinde ya da çizildiklerinde hesaplar.
 
 `KOMPOZ_LAYOUT_CHECK=1` her artımlı yerleşimi tam bir yerleşimle karşılaştırır ve her farkı kaydeder; testler her zaman onunla çalışır.
 

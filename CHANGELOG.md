@@ -242,6 +242,9 @@
   0.65 ms of a frame of the Components screen instead of 3.1.
 - **`KOMPOZ_PROFILE`'s summary gives the work's parts**: composition and layout, drawing, and of the drawing the
   recording (the tree drawn into the display list, compared with the last frame's).
+- **Scrolling doesn't walk what scrolls**: what is moved without being measured again (a list's content) leaves the
+  places in it as they were written down, worked out when asked for and written down when drawn. Scrolling the
+  showcase's Components screen spent 1% of the main thread on places instead of 16%.
 - **OpenGL ES draws the frame straight into the window**: its framebuffer, drawn into upside down, instead of a texture
   copied over to it, one copy of the whole window less each frame shown.
 - **A composition local's readers are its provider's**: a provider giving another value recomposes the scopes that

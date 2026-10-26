@@ -2245,13 +2245,16 @@ public:
     // Placed by its parent's last layout. One only measured (a size probe, a subcomposed slot
     // left out) isn't drawn, hit or told to accessibility services, as in Compose.
     bool isPlaced() const { return placedNow_; }
+    // Its place and those of all in it, from where its parent's content starts. Moved without being
+    // measured again (a list scrolled), nothing in it was: its children's places are only marked
+    // stale (worked out when asked, written down when drawn), not walked into.
     void updateAbsolutePosition(Offset parentContentOrigin);
     // Once measured: where `line` is, from its top (Compose's placeable[FirstBaseline]); NaN when
     // nothing in it has the line. For a layout of your own lining children up.
     float alignmentLine(AlignmentLine line) const;
-    Rect bounds() const { return bounds_; }
-    Rect contentBounds() const { return contentBounds_; }
-    Rect layerBounds(size_t index) const { return index < layers_.size() ? layers_[index].bounds : bounds_; }
+    Rect bounds() const;
+    Rect contentBounds() const;
+    Rect layerBounds(size_t index) const;
     ParentData parentData() const;
     float zIndex() const { return zIndex_; }  // where it was placed and Modifier::zIndex, from the last layout
     // The children bottom to top: as composed, or by zIndex where some have one.
@@ -2281,6 +2284,17 @@ private:
     float alignmentLineInside(size_t layer, AlignmentLine line) const;  // from that layer's top
     void drawLayer(GraphicsContext& canvas, size_t index);
     mutable bool drawChanged_ = true;  // invalidateDraw's: not kept (its parents' too, up to one that is so already)
+    bool childrenStale_ = false;  // it moved since its children's places were written down (updateAbsolutePosition)
+    void setChildrenStale(bool stale);
+    void placeAt(Offset origin);  // its own places written down, from its top left (not its children's)
+    void settleChildren();        // its children's places written down from its (theirs marked stale if they moved)
+    void settlePlace();           // its own written down, its stale parents' children's on the way to it
+    // Its top left as it is: written down, or worked out from its nearest parent that is (each one
+    // down from there as updateAbsolutePosition would, to the same floats).
+    Offset trueOrigin() const;
+    // `node` and its parents up to the highest whose parent's children are stale, that last first
+    // (none stale: empty). A popup's root is placed on its own, not from its parent.
+    static const std::vector<const LayoutNode*>& staleChain(const LayoutNode& node);
     std::vector<const void*> drawReads_;  // the states its last drawing read
 
     struct Layer {

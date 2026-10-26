@@ -825,10 +825,31 @@ bool ComposeHost::layout() {
         recount(r);
         std::unordered_map<const LayoutNode*, LaidOut> incremental, full;
         collectLayout(r, incremental);
+        // The places as the incremental layout left them written down (some stale: worked out when
+        // asked, written down when drawn), as they are again after, for what is drawn and hit next.
+        struct Written {
+            LayoutNode* node;
+            Rect bounds, content;
+            std::vector<Rect> layers;
+            bool stale;
+        };
+        std::vector<Written> written;
+        std::function<void(LayoutNode&)> keep = [&](LayoutNode& n) {
+            Written& w = written.emplace_back(Written{&n, n.bounds_, n.contentBounds_, {}, n.childrenStale_});
+            for (const auto& layer : n.layers_) w.layers.push_back(layer.bounds);
+            for (const auto* list : {&n.children, &n.overlays})
+                for (LayoutNode* child : *list) keep(*child);
+        };
+        keep(r);
         detail::MeasureEverything everything;  // as it was before layout was incremental
         measureAllAgain(r);
         measureAndPlace();
         collectLayout(r, full);
+        for (const Written& w : written) {
+            w.node->bounds_ = w.bounds, w.node->contentBounds_ = w.content;
+            for (size_t i = 0; i < w.layers.size() && i < w.node->layers_.size(); ++i) w.node->layers_[i].bounds = w.layers[i];
+            w.node->setChildrenStale(w.stale);
+        }
         int reported = 0;
         for (const auto& [node, laid] : full) {
             auto it = incremental.find(node);
