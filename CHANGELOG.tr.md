@@ -255,6 +255,10 @@
   ekranının bir karesinde 3.1 yerine 0.65 ms sürdü.
 - **`KOMPOZ_PROFILE`'ın özeti işin parçalarını verir**: kompozisyon ve yerleşim, çizim ve çizimin içinde kayıt (ağacın
   görüntü listesine çizilip önceki kareyle karşılaştırılması).
+- **Bir kareyi kaydetmek düğüm başına bellek ayırmaz**: görüntü listesinin eşlemleri (her düğümün kaç kez çizildiği,
+  önceki karenin segmentleri ve katmanları) boşaltılırken serbest bırakılmayan tek bir açık adresleme tablosudur; çizim
+  bir elemanın kaydırılabilir olup olmadığını cast ile sormaz. Bir Redmi Note 9 Pro'da boştaki bir ekranın kaydı 5.7
+  yerine 4.4 ms sürdü.
 - **Düzeltildi**: Platformun işaretçinin ayrıldığını söylemediği yerde kalkmış bir parmak altındakinin üzerinde
   duruyor sayılıyordu: dokunulan bir tooltip çapası tooltip'ini gösteriyor, çizilen her kare hover için isabet testi
   yapıyordu. Hover artık yalnızca duran bir fareyi izler.

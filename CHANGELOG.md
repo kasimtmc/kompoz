@@ -242,6 +242,9 @@
   0.65 ms of a frame of the Components screen instead of 3.1.
 - **`KOMPOZ_PROFILE`'s summary gives the work's parts**: composition and layout, drawing, and of the drawing the
   recording (the tree drawn into the display list, compared with the last frame's).
+- **Recording a frame allocates nothing a node**: the display list's maps (the times each node was drawn, the last
+  frame's segments and layers) are one open-addressing table emptied without being freed, and drawing asks no cast
+  whether an element is a scrollable. On a Redmi Note 9 Pro an idle screen's recording took 4.4 ms instead of 5.7.
 - **Fixed**: a lifted finger hovered what was under it where the platform didn't say the pointer left: a tooltip's
   anchor tapped showed its tooltip, and every frame drawn hit tested for hover. Hover now follows a resting mouse only.
 - **Fixed**: on an Adreno 618 (a Redmi Note 9 Pro's), the GPU renderer drew clips, color filters and gradients from

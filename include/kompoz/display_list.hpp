@@ -28,7 +28,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace kompoz {
@@ -204,9 +203,28 @@ private:
     std::vector<Segment> recordingSegments_, frameSegments_;
     std::vector<State> states_;
     std::vector<OpenNode> nodes_;
-    std::unordered_map<const void*, uint32_t> occurrences_;
-    std::unordered_map<uint64_t, uint32_t> lookup_;  // end(): the last frame's segments by key
-    std::unordered_map<uint64_t, uint32_t> layerLookup_;  // and its layers
+    // Numbers by key (a node, a segment's or layer's key), filled again every frame: open addressing,
+    // at most half full, emptied without being freed (no allocation an entry, as a map's).
+    class IndexTable {
+    public:
+        void clear();
+        uint32_t& operator[](uint64_t key);  // (0 if it wasn't there)
+        void emplace(uint64_t key, uint32_t value);  // unless it is there
+        const uint32_t* find(uint64_t key) const;
+
+    private:
+        struct Slot {
+            uint64_t key = 0;
+            uint32_t value = 0;
+            bool used = false;
+        };
+        size_t index(uint64_t key) const;
+        std::vector<Slot> slots_;
+        size_t used_ = 0;
+    };
+    IndexTable occurrences_;  // how many times each node was drawn so far in the recording
+    IndexTable lookup_;  // end(): the last frame's segments by key
+    IndexTable layerLookup_;  // and its layers
     std::vector<char> matched_;
     // end(), finding moves: the segments that moved (this frame's, last frame's, by how far);
     // which commands moved (1, then 2 + the move they are in), this frame's and last frame's.

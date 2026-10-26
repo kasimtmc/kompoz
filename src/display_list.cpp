@@ -183,6 +183,40 @@ bool DisplayList::Command::sameMoved(const Command& o, Offset by, bool withTrans
            shaped == o.shaped && path == o.path && matrix == o.matrix;
 }
 
+void DisplayList::IndexTable::clear() {
+    std::fill(slots_.begin(), slots_.end(), Slot{});
+    used_ = 0;
+}
+
+size_t DisplayList::IndexTable::index(uint64_t key) const {
+    size_t mask = slots_.size() - 1;  // (a power of two)
+    size_t i = size_t((key * 0x9E3779B97F4A7C15ull) >> 32) & mask;
+    while (slots_[i].used && slots_[i].key != key) i = (i + 1) & mask;
+    return i;
+}
+
+uint32_t& DisplayList::IndexTable::operator[](uint64_t key) {
+    if (2 * (used_ + 1) > slots_.size()) {  // twice as many slots, the entries moved over
+        std::vector<Slot> old(std::max<size_t>(256, 2 * slots_.size()));
+        old.swap(slots_);
+        for (const Slot& e : old)
+            if (e.used) slots_[index(e.key)] = e;
+    }
+    Slot& slot = slots_[index(key)];
+    if (!slot.used) slot = {key, 0, true}, ++used_;
+    return slot.value;
+}
+
+void DisplayList::IndexTable::emplace(uint64_t key, uint32_t value) {
+    if (!find(key)) (*this)[key] = value;
+}
+
+const uint32_t* DisplayList::IndexTable::find(uint64_t key) const {
+    if (slots_.empty()) return nullptr;
+    const Slot& slot = slots_[index(key)];
+    return slot.used ? &slot.value : nullptr;
+}
+
 void DisplayList::begin(Size viewport, float pixel) {
     viewport_ = viewport;
     pixel_ = pixel;
@@ -196,7 +230,7 @@ void DisplayList::begin(Size viewport, float pixel) {
 
 void DisplayList::beginNode(const void* node) {
     segmentOpen_ = false;
-    uint32_t occurrence = occurrences_[node]++;  // a node drawn twice (a shared element's overlay)
+    uint32_t occurrence = occurrences_[reinterpret_cast<uintptr_t>(node)]++;  // a node drawn twice (a shared element's overlay)
     nodes_.push_back({mix(mix(uint64_t(reinterpret_cast<uintptr_t>(node)), occurrence), 0x51ed27)});
 }
 
@@ -620,8 +654,8 @@ std::optional<Rect> DisplayList::end() {
         if (frame_[i].kind == Kind::PushLayer) layerLookup_.emplace(frame_[i].layerKey, i);
     for (uint32_t i = 0; i < recording_.size(); ++i)
         if (recording_[i].kind == Kind::PushLayer) {
-            auto it = layerLookup_.find(recording_[i].layerKey);
-            recording_[i].layerSame = it != layerLookup_.end() && sameInLayer(i, it->second);
+            const uint32_t* last = layerLookup_.find(recording_[i].layerKey);
+            recording_[i].layerSame = last && sameInLayer(i, *last);
         }
     if (afresh) {
         areas_.push_back(screen);
@@ -637,12 +671,12 @@ std::optional<Rect> DisplayList::end() {
         int64_t last = -1;  // the last frame's segment those kept so far end with
         for (uint32_t si = 0; si < recordingSegments_.size(); ++si) {
             const Segment& s = recordingSegments_[si];
-            auto it = lookup_.find(s.key);
-            if (it == lookup_.end() || matched_[it->second]) {  // new
+            const uint32_t* found = lookup_.find(s.key);
+            if (!found || matched_[*found]) {  // new
                 addDamage(damage, recording_, s.first, s.count);
                 continue;
             }
-            uint32_t o = it->second;
+            uint32_t o = *found;
             matched_[o] = 1;
             const Segment& p = frameSegments_[o];
             if (int64_t(o) < last) {  // drawn in another order

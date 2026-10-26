@@ -1869,8 +1869,8 @@ detail::DrawPart& detail::drawPart() {
 void LayoutNode::drawLayer(GraphicsContext& canvas, size_t index) {
     const auto& elements = modifier.elements();
     // A scroll container draws its overscroll effect around its content, in its viewport.
-    if (index < elements.size() && index < layers_.size())
-        if (auto* s = dynamic_cast<const ScrollableElement*>(elements[index].get()); s && s->drawsOverscroll())
+    if (index < elements.size() && index < layers_.size() && scrollableAt(index))
+        if (auto* s = static_cast<const ScrollableElement*>(elements[index].get()); s->drawsOverscroll())
             if (OverscrollEffect* effect = overscrollOf(*s)) {
                 Rect view = layers_[index].bounds;
                 if (canvas.quickReject(s->clipBounds(view))) return;

@@ -2301,6 +2301,7 @@ private:
     bool reports_ = false;   // the walk acts on it (its elements, a stretch or an indication node it keeps)
     int reportedBelow_ = 0;  // nodes the walk acts on in its subtree, itself too
     void checkReported();    // its elements found out again if they changed (host.cpp)
+    bool scrollableAt(size_t index) const;  // its element `index` is a ScrollableElement (as found out; host.cpp)
     void setReports(bool on);
     friend class ComposeHost;
 };

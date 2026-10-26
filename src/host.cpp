@@ -531,6 +531,8 @@ void LayoutNode::checkReported() {
     setReports(!reportsNothing_ || stretch || indicationNode);
 }
 
+bool LayoutNode::scrollableAt(size_t index) const { return index < reported_.size() && (reported_[index] & kScrollable); }
+
 void ComposeHost::reportPositions(int64_t now) {
     std::vector<std::pair<std::function<void(const LayoutCoordinates&)>, LayoutCoordinates>> calls;
     for (auto& [key, v] : visibility_) v.seen = false;
