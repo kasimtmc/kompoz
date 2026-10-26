@@ -19591,6 +19591,51 @@ TEST(tooltip_box_shows_on_long_press_and_hover) {
     CHECK(!state->isVisible());
 }
 
+const CompositionLocal<int> LocalTestNumber{0};
+
+void LocalNumberReader(int i, std::vector<int>* counts, CallSite site = CallSite::current()) {
+    composable(site, i, counts, [=] {
+        (void)LocalTestNumber.current();
+        ++(*counts)[size_t(i)];
+    });
+}
+
+// A local's readers are its provider's: one that gives another value recomposes those that read it
+// from it, not those under a provider of their own; readers going in numbers leave the rest as
+// they were (their places closed up).
+TEST(composition_local_readers_are_their_providers) {
+    auto outer = mutableStateOf(1), readers = mutableStateOf(40);
+    std::vector<int> counts(41, 0);
+    ComposeTestRule rule([&] {
+        CompositionLocalProvider({LocalTestNumber.provides(outer.get())}, [&] {
+            for (int i = 0; i < readers.get(); ++i) key(i, [&, i] { LocalNumberReader(i, &counts); });
+            CompositionLocalProvider({LocalTestNumber.provides(7)}, [&] { LocalNumberReader(40, &counts); });  // its own
+        });
+    });
+    auto ran = [&](int from, int to) {  // each of these readers ran once since, the rest not
+        bool all = true;
+        for (int i = 0; i <= 40; ++i) all = all && counts[size_t(i)] == (i >= from && i < to ? 1 : 0);
+        std::fill(counts.begin(), counts.end(), 0);
+        return all;
+    };
+    std::fill(counts.begin(), counts.end(), 0);
+    outer.set(2);
+    rule.waitForIdle();
+    CHECK(ran(0, 40));  // not the one under its own provider
+    readers.set(8);  // most of them go
+    rule.waitForIdle();
+    std::fill(counts.begin(), counts.end(), 0);
+    outer.set(3);
+    rule.waitForIdle();
+    CHECK(ran(0, 8));
+    readers.set(30);  // and come back
+    rule.waitForIdle();
+    std::fill(counts.begin(), counts.end(), 0);
+    outer.set(4);
+    rule.waitForIdle();
+    CHECK(ran(0, 30));
+}
+
 // Frame times on the display's beat (Choreographer's): whole periods after the last, the nearest
 // to now, never going back.
 // Image assets: decoded once wherever they are used and however often their screen comes back,

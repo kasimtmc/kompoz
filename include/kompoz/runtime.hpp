@@ -80,11 +80,13 @@ struct Args final : ArgsBase {
 };
 
 // A value given to a CompositionLocal by CompositionLocalProvider.
+struct Group;
 struct Provided {
     const void* key;
     std::shared_ptr<const void> value;
     bool (*equals)(const void*, const void*);
     bool ifMissing = false;  // providesDefault: only where nothing above provides one
+    const Group* provider = nullptr;  // the group providing it (its readers are that provider's)
 };
 
 class Composer;
@@ -105,7 +107,12 @@ struct Scope {
     std::function<void()> onInvalidated;
     std::function<void()> body;
     std::unique_ptr<ArgsBase> args;
-    std::vector<const void*> reads;  // states and composition locals
+    // States and composition locals read, each with its place among the key's readers.
+    struct Read {
+        const void* key;
+        uint32_t slot;
+    };
+    std::vector<Read> reads;
     bool invalid = false;
 };
 
@@ -161,7 +168,7 @@ public:
     bool recompose(int64_t frameTimeNanos);
     bool hasInvalidScopes() const { return !invalid_.empty(); }
     void invalidateRoot();
-    void invalidateReaders(const void* key, const Group* within = nullptr);
+    void invalidateReaders(const void* key);
     bool recording() const { return currentScope_ != nullptr; }  // reads now are a scope's
     void invalidateScope(Scope& scope);
     void invalidateFrameScopes();  // scopes that asked for the next animation frame
@@ -187,6 +194,9 @@ public:
 
     void provide(uint64_t key, std::vector<Provided> values, const Content& content);
     const void* findLocal(const void* key) const;
+    // The same, the running scope subscribed to the provider giving it (recomposed when that gives
+    // another value); none provided: null.
+    const void* readLocal(const void* key);
     const std::vector<Provided>& locals() const { return locals_; }  // all provided here, outermost first
     void recordRead(const void* key);
     // Runs `fn` with its reads recorded into `observer` (a group-less scope), from inside or
@@ -228,7 +238,13 @@ private:
     std::vector<Provided> locals_;
     std::vector<std::function<void()>> effects_;
     Scope* currentScope_ = nullptr;
-    std::unordered_map<const void*, std::vector<Scope*>> readers_;
+    // Who read each key, in the order they did (a scope gone leaves a hole, filled in as they mount
+    // up: removal is quick and the order stays).
+    struct Readers {
+        std::vector<Scope*> scopes;
+        uint32_t holes = 0;
+    };
+    std::unordered_map<const void*, Readers> readers_;
     std::vector<Scope*> invalid_;
     std::vector<Scope*> frameScopes_;
     std::vector<std::unique_ptr<Group>> parked_;
@@ -513,10 +529,8 @@ public:
     // Reading a local subscribes the running scope: it recomposes when a provider above it
     // starts providing a different value.
     const T& current() const {
-        if (auto* c = detail::Composer::current()) {
-            c->recordRead(this);
-            if (auto* v = c->findLocal(this)) return *static_cast<const T*>(v);
-        }
+        if (auto* c = detail::Composer::current())
+            if (auto* v = c->readLocal(this)) return *static_cast<const T*>(v);
         if (!default_) default_.emplace(factory_());
         return *default_;
     }
@@ -581,7 +595,7 @@ struct CompositionLocalContext {
 // Reading it subscribes to them all.
 inline CompositionLocalContext currentCompositionLocalContext() {
     auto& c = detail::Composer::require();
-    for (const detail::Provided& p : c.locals()) c.recordRead(p.key);
+    for (const detail::Provided& p : c.locals()) (void)c.readLocal(p.key);
     return {c.locals()};
 }
 inline void CompositionLocalProvider(const CompositionLocalContext& context, const Content& content, CallSite site = CallSite::current()) {

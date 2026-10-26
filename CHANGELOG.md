@@ -242,6 +242,9 @@
   0.65 ms of a frame of the Components screen instead of 3.1.
 - **`KOMPOZ_PROFILE`'s summary gives the work's parts**: composition and layout, drawing, and of the drawing the
   recording (the tree drawn into the display list, compared with the last frame's).
+- **A composition local's readers are its provider's**: a provider giving another value recomposes the scopes that
+  read it from it, found at once, not by going through every reader of the local and up from each; a scope leaving
+  the composition leaves the readers at once. Switching the showcase's tabs took a fifth less of the main thread.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

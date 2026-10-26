@@ -255,6 +255,10 @@
   ekranının bir karesinde 3.1 yerine 0.65 ms sürdü.
 - **`KOMPOZ_PROFILE`'ın özeti işin parçalarını verir**: kompozisyon ve yerleşim, çizim ve çizimin içinde kayıt (ağacın
   görüntü listesine çizilip önceki kareyle karşılaştırılması).
+- **Bir composition local'ın okuyucuları sağlayıcısınındır**: başka bir değer veren sağlayıcı, onu kendisinden okuyan
+  scope'ları yeniden kompoze eder; bunlar local'ın her okuyucusu dolaşılıp her birinden yukarı çıkılarak değil, hemen
+  bulunur. Kompozisyondan çıkan bir scope okuyuculardan da hemen çıkar. Showcase'in sekmelerini değiştirmek ana
+  thread'in beşte bir daha azını aldı.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

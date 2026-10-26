@@ -36,10 +36,10 @@ void rebuildChildren(Group& nodeGroup) {
     nodeGroup.node->invalidateMeasure();
 }
 
-bool isInside(const Group& g, const Group& ancestor) {
-    for (const Group* p = &g; p; p = p->parent)
-        if (p == &ancestor) return true;
-    return false;
+// A local's key among the readers: theirs who read it from `provider` (a hash: one equal to another
+// key's would only recompose more).
+const void* providedKey(const void* key, const Group* provider) {
+    return reinterpret_cast<const void*>(uintptr_t(mixKey(uint64_t(uintptr_t(key)), uint64_t(uintptr_t(provider)))));
 }
 
 } // namespace
@@ -108,15 +108,13 @@ void Composer::invalidateScope(Scope& scope) {
     invalid_.push_back(&scope);
 }
 
-void Composer::invalidateReaders(const void* key, const Group* within) {
-    if (!within) {
-        host_.invalidateLayoutReaders(key);
-        host_.invalidateDrawReaders(key);
-    }
+void Composer::invalidateReaders(const void* key) {
+    host_.invalidateLayoutReaders(key);
+    host_.invalidateDrawReaders(key);
     auto it = readers_.find(key);
     if (it == readers_.end()) return;
-    for (Scope* s : std::vector<Scope*>(it->second))
-        if (!within || (s->group && isInside(*s->group, *within))) invalidateScope(*s);
+    for (Scope* s : std::vector<Scope*>(it->second.scopes))  // (an observer's recomputing reads again)
+        if (s) invalidateScope(*s);
 }
 
 void Composer::invalidateFrameScopes() {
@@ -185,9 +183,10 @@ void Composer::run(Scope& scope) {
 
 void Composer::recordRead(const void* key) {
     Scope* s = currentScope_;
-    if (!s || std::find(s->reads.begin(), s->reads.end(), key) != s->reads.end()) return;
-    s->reads.push_back(key);
-    readers_[key].push_back(s);
+    if (!s || std::ranges::any_of(s->reads, [&](const Scope::Read& r) { return r.key == key; })) return;
+    Readers& readers = readers_[key];
+    s->reads.push_back({key, uint32_t(readers.scopes.size())});
+    readers.scopes.push_back(s);
 }
 
 void Composer::observeReads(Scope& observer, const std::function<void()>& fn) {
@@ -200,11 +199,20 @@ void Composer::observeReads(Scope& observer, const std::function<void()>& fn) {
 }
 
 void Composer::clearReads(Scope& scope) {
-    for (const void* key : scope.reads) {
-        auto it = readers_.find(key);
+    for (const Scope::Read& read : scope.reads) {
+        auto it = readers_.find(read.key);
         if (it == readers_.end()) continue;
-        std::erase(it->second, &scope);
-        if (it->second.empty()) readers_.erase(it);
+        Readers& readers = it->second;
+        readers.scopes[read.slot] = nullptr;
+        if (++readers.holes == readers.scopes.size()) {
+            readers_.erase(it);
+        } else if (readers.holes > 16 && 2 * readers.holes > readers.scopes.size()) {  // mostly holes: closed up
+            std::erase(readers.scopes, nullptr);
+            readers.holes = 0;
+            for (uint32_t i = 0; i < readers.scopes.size(); ++i)
+                for (Scope::Read& r : readers.scopes[i]->reads)
+                    if (r.key == read.key) r.slot = i;
+        }
     }
     scope.reads.clear();
 }
@@ -345,10 +353,11 @@ void Composer::provide(uint64_t key, std::vector<Provided> values, const Content
     std::erase_if(values, [&](const Provided& v) { return v.ifMissing && findLocal(v.key); });  // provided above already
     startGroup(key);
     Group& g = group();
-    // A provider that now gives a different value recomposes the scopes below it that read it.
-    for (const Provided& v : values) {
+    // A provider that now gives a different value recomposes the scopes that read it from it.
+    for (Provided& v : values) {
+        v.provider = &g;
         auto old = std::find_if(g.provided.begin(), g.provided.end(), [&](const Provided& p) { return p.key == v.key; });
-        if (old != g.provided.end() && !v.equals(old->value.get(), v.value.get())) invalidateReaders(v.key, &g);
+        if (old != g.provided.end() && !v.equals(old->value.get(), v.value.get())) invalidateReaders(providedKey(v.key, &g));
     }
     g.provided = values;
     size_t mark = locals_.size();
@@ -362,6 +371,15 @@ const void* Composer::findLocal(const void* key) const {
     for (auto it = locals_.rbegin(); it != locals_.rend(); ++it)
         if (it->key == key) return it->value.get();
     return nullptr;
+}
+
+const void* Composer::readLocal(const void* key) {
+    for (auto it = locals_.rbegin(); it != locals_.rend(); ++it)
+        if (it->key == key) {
+            recordRead(providedKey(key, it->provider));
+            return it->value.get();
+        }
+    return nullptr;  // (the default: nothing to recompose for)
 }
 
 std::vector<Provided> Composer::localsAbove(const Group& g) const {
