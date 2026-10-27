@@ -261,6 +261,15 @@
 - **Bir bottom sheet scaffold'un sayfası hiçbir şey oluşturmadan kayar**: sayfanın nerede olduğu (sürüklenirken,
   yerine otururken) Compose'taki gibi scaffold oluşturulurken değil yerleştirilirken okunur: onu sürüklemek scaffold'u
   yeniden yerleştirir, ne onu ne içeriğini yeniden oluşturur.
+- **Bir scaffold'un içerik dolgusu, içerik yeniden oluşturulmadan çubuklarını izler**: `Scaffold`'un ve
+  `BottomSheetScaffold`'un dolgusu Compose'taki gibi kullanıldığı yerde okunur. `Modifier::padding`,
+  `consumeWindowInsets` ve listelerin, ızgaraların, pager'ların, carousel'lerin ve düğmelerin `contentPadding`'i onu
+  yerleşim sırasında okur; böylece bir liste kaydıkça daralan bir üst çubuk altındakini yeniden yerleştirir, hiçbir
+  şey oluşturmaz. `PaddingValues`'un `calculateTopPadding()`'i (ve start, end, bottom) onu şimdi okur, nerede
+  çağrılırsa (onu okuyan bir composable, dolgu değişince yeniden oluşturulur); alanları içerik oluşturulduğu andaki
+  değeri tutar ve böyle iki dolgu aynı scaffold'u izliyorsa aynıdır. (`ButtonDefaults`'un dolguları artık
+  `constexpr` değil, `const`.) Showcase'in Bileşenler ekranını daralan çubuğunun altında kaydırmak ekranı bir kez
+  oluşturdu.
 - **Kaydırmak kayanı dolaşmaz**: yeniden ölçülmeden taşınan bir şey (bir listenin içeriği) içindeki yerleri yazıldıkları
   gibi bırakır; istendiklerinde hesaplanır, çizildiklerinde yazılırlar. Showcase'in Bileşenler ekranını kaydırmak ana
   thread'in %16 yerine %1'ini yerlere harcadı.

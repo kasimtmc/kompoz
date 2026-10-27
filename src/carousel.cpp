@@ -212,10 +212,11 @@ void carousel(const CarouselState& state, float itemWidth, Kind kind, const Modi
     int first = std::max(0, int(std::floor(pos)) - behind), last = std::min(count - 1, int(std::floor(pos)) + d->shown + 1);
     auto coroutines = rememberCoroutineScope();
     Modifier m = options.userScrollEnabled ? modifier.then(std::make_shared<CarouselElement>(d, coroutines)) : modifier.clipToBounds();
-    PaddingValues padding = options.contentPadding;
+    PaddingValues contentPadding = options.contentPadding;
     float spacing = options.itemSpacing, minSmall = options.minSmallItemWidth, maxSmall = options.maxSmallItemWidth;
 
-    auto policy = [d, first, padding, spacing, multiBrowse, kind, itemWidth, minSmall, maxSmall](LayoutNode& n, const Constraints& c) {
+    auto policy = [d, first, contentPadding, spacing, multiBrowse, kind, itemWidth, minSmall, maxSmall](LayoutNode& n, const Constraints& c) {
+        PaddingValues padding = detail::paddingNow(contentPadding);
         if (kind == Kind::Hero) return heroLayout(n, c, *d, first, padding, spacing, itemWidth, std::max(minSmall, maxSmall));
         float w = c.hasBoundedWidth() ? c.maxWidth : c.minWidth;
         float window = std::max(0.f, w - padding.start - padding.end);

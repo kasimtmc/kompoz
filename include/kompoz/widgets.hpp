@@ -585,10 +585,10 @@ struct ButtonStyle {
 // Compose 1.4's ButtonDefaults sizes: an icon before the label takes ButtonWithIconContentPadding
 // (TextButtonWithIconContentPadding for a TextButton), IconSize big and IconSpacing from it.
 namespace ButtonDefaults {
-inline constexpr PaddingValues ContentPadding{24, 8, 24, 8};
-inline constexpr PaddingValues ButtonWithIconContentPadding{16, 8, 24, 8};
-inline constexpr PaddingValues TextButtonContentPadding{12, 8, 12, 8};
-inline constexpr PaddingValues TextButtonWithIconContentPadding{12, 8, 16, 8};
+inline const PaddingValues ContentPadding{24, 8, 24, 8};
+inline const PaddingValues ButtonWithIconContentPadding{16, 8, 24, 8};
+inline const PaddingValues TextButtonContentPadding{12, 8, 12, 8};
+inline const PaddingValues TextButtonWithIconContentPadding{12, 8, 16, 8};
 inline constexpr float MinWidth = 58, MinHeight = 40, IconSize = 18, IconSpacing = 8;
 } // namespace ButtonDefaults
 

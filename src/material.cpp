@@ -18,9 +18,10 @@ void Scaffold(const Modifier& modifier, const ScaffoldSlots& slots, const std::f
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     WindowInsets insets = slots.contentWindowInsets.value_or(detail::systemBarsForVisualComponents());
-    // The content's padding comes from the measured bars: layout writes it, and the frame
-    // loop recomposes the content with it before drawing.
-    auto padding = remember([] { return mutableStateOf(PaddingValues{}); });
+    // The content's padding comes from the measured bars: layout writes it before measuring the
+    // content, and what reads it (calculate*Padding: a padding, a list's content padding) follows,
+    // without the content recomposing (as Compose's: a top bar collapsing as a list scrolls).
+    auto padding = remember([] { return std::make_shared<PaddingValues>(); });
     Color container = slots.containerColor.value_or(cs.background);
 
     auto policy = [padding, all = insets, position = slots.floatingActionButtonPosition](LayoutNode& node, const Constraints& c) {
@@ -43,11 +44,11 @@ void Scaffold(const Modifier& modifier, const ScaffoldSlots& slots, const std::f
         ch[4]->place(fabX, fabY);
         Size snack = ch[3]->measure({0, std::min(w, 640.f), 0, h});
         ch[3]->place((w - snack.width) / 2, (fab.height > 0 ? fabY - 8 : bottomEdge) - snack.height);
-        ch[0]->measure(loose);  // (as Compose's: content that doesn't fill keeps its size)
-        ch[0]->place(0, 0);
         PaddingValues inner{insets.left, top.height > 0 ? top.height : insets.top, insets.right,
                             bottom.height > 0 ? bottom.height : insets.bottom};
-        if (!detail::isProbeMeasure() && !(inner == padding.peek())) padding.set(inner);
+        if (!detail::isProbeMeasure() && !(inner == *padding)) *padding = inner, detail::notifyStateChanged(padding.get());
+        ch[0]->measure(loose);  // (as Compose's: content that doesn't fill keeps its size)
+        ch[0]->place(0, 0);
         return Size{w, h};
     };
 
@@ -60,7 +61,7 @@ void Scaffold(const Modifier& modifier, const ScaffoldSlots& slots, const std::f
                 node.drawContent = {};
             },
             [&] {
-                detail::stackSlot([&] { content(padding.get()); });
+                detail::stackSlot([&] { content({padding->start, padding->top, padding->end, padding->bottom, padding}); });
                 detail::stackSlot(slots.topBar);
                 detail::stackSlot(slots.bottomBar);
                 detail::stackSlot(slots.snackbarHost);

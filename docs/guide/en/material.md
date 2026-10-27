@@ -31,6 +31,8 @@ void Inbox() {
 
 Top app bars come in the sizes Material defines: `TopAppBar`, `CenterAlignedTopAppBar`, `MediumTopAppBar` and `LargeTopAppBar`. With a scroll behavior (`TopAppBarDefaults::enterAlwaysScrollBehavior()`, `exitUntilCollapsedScrollBehavior()`, `pinnedScrollBehavior()`) and the behavior's `nestedScrollConnection` on the `Scaffold`, they collapse and change color as the content scrolls (see [Lists and grids](lists.md#nested-scrolling)). `BottomAppBar` and `BottomSheetScaffold` exist too.
 
+The content's padding follows the bars as they change size, a top bar collapsing as the list scrolls, without composing the content again: `Modifier::padding`, `consumeWindowInsets` and the `contentPadding` of lists, pagers and carousels read it as they lay out, as in Compose. To read a side yourself, call `calculateTopPadding()` (and `calculateStartPadding()`, `calculateEndPadding()`, `calculateBottomPadding()`): read in a composable, it composes that composable again when the padding changes; read in a layout, it lays that layout out again. The fields (`padding.top`) hold what the padding was when the content was composed.
+
 ## Navigation
 
 | Component | Use |

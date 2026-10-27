@@ -1611,7 +1611,7 @@ void FlexibleBottomAppBar(const Modifier& modifier, const Content& content, cons
                 .background(options.containerColor.value_or(cs.surfaceContainer))
                 .padding(insets.start, 0, insets.end, insets.bottom)
                 .height(options.expandedHeight)
-                .padding(options.contentPadding.start, options.contentPadding.top, options.contentPadding.end, options.contentPadding.bottom),
+                .padding(options.contentPadding),
             {.horizontalArrangement = options.horizontalArrangement, .verticalAlignment = Alignment::CenterVertically}, content);
     });
 }

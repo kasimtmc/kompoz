@@ -144,7 +144,7 @@ void BottomSheetScaffold(const Content& sheetContent, const Modifier& modifier, 
     // Kept clear of the system bars the layouts around it haven't kept clear of yet (inside an
     // app's Scaffold, none): found as it is laid out, so the sheet's bottom padding follows.
     WindowInsets bars = detail::systemBarsForVisualComponents();
-    auto padding = remember([] { return mutableStateOf(PaddingValues{}); });
+    auto padding = remember([] { return std::make_shared<PaddingValues>(); });  // (as Scaffold's: read where it is used)
     auto sheetBottom = remember([] { return mutableStateOf(0.f); });
     auto coroutines = rememberCoroutineScope();
     bool swipe = options.sheetSwipeEnabled;
@@ -217,12 +217,12 @@ void BottomSheetScaffold(const Content& sheetContent, const Modifier& modifier, 
             d->placed = true;
         }
         ch[2]->place((w - sheet.width) / 2, d->offset.value());  // (read here: laid out again as it moves, not composed)
+        PaddingValues inner{insets.left, top.height > 0 ? top.height : insets.top, insets.right, peeking};
+        if (!detail::isProbeMeasure() && !(inner == *padding)) *padding = inner, detail::notifyStateChanged(padding.get());
         ch[0]->measure(loose);  // (as Compose's: content that doesn't fill keeps its size)
         ch[0]->place(0, 0);
         Size snack = ch[3]->measure({0, std::min(w, 640.f), 0, h});
         ch[3]->place((w - snack.width) / 2, std::min(d->offset.peek(), h - insets.bottom) - snack.height - 8);
-        PaddingValues inner{insets.left, top.height > 0 ? top.height : insets.top, insets.right, peeking};
-        if (!detail::isProbeMeasure() && !(inner == padding.peek())) padding.set(inner);
         if (!detail::isProbeMeasure() && insets.bottom != sheetBottom.peek()) sheetBottom.set(insets.bottom);
         return Size{w, h};
     };
@@ -238,7 +238,7 @@ void BottomSheetScaffold(const Content& sheetContent, const Modifier& modifier, 
                 node.drawContent = {};
             },
             [&] {
-                detail::stackSlot([&] { content(padding.get()); });
+                detail::stackSlot([&] { content({padding->start, padding->top, padding->end, padding->bottom, padding}); });
                 detail::stackSlot(options.topBar);
                 Modifier sheet = Modifier().widthIn(0, 640).fillMaxWidth().shadow(options.sheetShadowElevation, kCorner).background(sheetColor, kCorner);
                 if (swipe)

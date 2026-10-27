@@ -158,8 +158,9 @@ Shape morphingShape(const Shape& target, CallSite site = CallSite::current()) { 
 // A button's padding, which gives way before its label does: given an exact width narrower
 // than the label and its padding (squeezed in a ButtonGroup, a fixed width), the sides shrink
 // first (each by its share) and the label wraps only once they're gone.
-Modifier buttonPadding(const Modifier& m, PaddingValues padding) {
-    return m.layout([padding](const MeasureNext& next, const Constraints& c, Offset& at) {
+Modifier buttonPadding(const Modifier& m, PaddingValues contentPadding) {
+    return m.layout([contentPadding](const MeasureNext& next, const Constraints& c, Offset& at) {
+        PaddingValues padding = detail::paddingNow(contentPadding);
         float sides = padding.start + padding.end, vertical = padding.top + padding.bottom;
         Constraints inner = c.deflate(sides, vertical);
         float start = padding.start, end = padding.end;

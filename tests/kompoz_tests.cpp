@@ -2371,8 +2371,8 @@ TEST(scaffold_pads_content_by_its_bars_and_insets) {
             });
         },
         {400, 800});
-    CHECK(near(seen.top, 64 + 24));  // the top bar includes the status bar
-    CHECK(near(seen.bottom, 16));    // no bottom bar: the navigation bar inset
+    CHECK(near(seen.calculateTopPadding(), 64 + 24));  // the top bar includes the status bar
+    CHECK(near(seen.calculateBottomPadding(), 16));    // no bottom bar: the navigation bar inset
     CHECK(near(rule.onNodeWithTag("content").node()->contentBounds().y, 88));
     Rect fab = rule.onNodeWithText("Ekle").bounds();
     CHECK(near(fab.right(), 400 - 16 - 16) && near(fab.bottom(), 800 - 16 - 16 - 16));  // icon inside a 56dp FAB
@@ -11226,7 +11226,7 @@ TEST(bottom_sheet_scaffold_peeks_expands_and_follows_drags) {
     // 48 of drag handle, then the content: 348 tall; 100 of it peeks out.
     auto top = [&] { return rule.onNodeWithText("Ayrıntılar").bounds().y - 48; };
     using V = SheetValue;
-    CHECK(near(top(), 700) && sheet.currentValue() == V::PartiallyExpanded && near(seen.bottom, 100) && sheet.hasExpandedState());
+    CHECK(near(top(), 700) && sheet.currentValue() == V::PartiallyExpanded && near(seen.calculateBottomPadding(), 100) && sheet.hasExpandedState());
     rule.host().pointerDown({200, 750});  // the sheet takes the touch, not the content under it
     rule.host().pointerUp({200, 750});
     rule.waitForIdle();
@@ -11370,13 +11370,13 @@ TEST(bottom_sheet_scaffold_keeps_clear_of_the_system_bars_once) {
     rule.host().setSystemInsets({.statusBars = {0, 24, 0, 0}, .navigationBars = {0, 0, 0, 48}});
     rule.waitForIdle();
     // 100 peeks out above the navigation bar; all the way up it stops under the status bar.
-    CHECK(near(sheet.requireOffset(), 800 - 48 - 100) && near(seen.top, 24) && near(seen.bottom, 148));
+    CHECK(near(sheet.requireOffset(), 800 - 48 - 100) && near(seen.calculateTopPadding(), 24) && near(seen.calculateBottomPadding(), 148));
     rule.swipe({200, 680}, {200, 600}, 4);
     rule.waitForIdle();
     CHECK(sheet.currentValue() == SheetValue::Expanded && near(sheet.requireOffset(), 24));
     inside.set(true);  // the bars are kept clear of around it: not again
     rule.waitForIdle();
-    CHECK(near(seen.bottom, 100) && near(seen.top, 0) && near(sheet.requireOffset(), 0));
+    CHECK(near(seen.calculateBottomPadding(), 100) && near(seen.calculateTopPadding(), 0) && near(sheet.requireOffset(), 0));
 }
 
 TEST(drag_and_drop_carries_data_from_a_source_to_a_target) {
@@ -11555,7 +11555,7 @@ TEST(navigation_suite_scaffold_moves_its_items_and_keeps_the_screen) {
     rule.waitForIdle();
     // Compact: a bar at the bottom; the screen's Scaffold pads by the status bar only (the bar
     // already keeps clear of the navigation bar).
-    CHECK(rule.onNodeWithText("Ev").bounds().y > 650 && near(seen.top, 24) && near(seen.bottom, 0));
+    CHECK(rule.onNodeWithText("Ev").bounds().y > 650 && near(seen.calculateTopPadding(), 24) && near(seen.calculateBottomPadding(), 0));
     rule.onNodeWithText("Ayarlar").performClick();
     CHECK(tab.peek() == 1);
     rule.onNodeWithTag("sayac").performClick();
@@ -11574,7 +11574,7 @@ TEST(navigation_suite_scaffold_moves_its_items_and_keeps_the_screen) {
     rule.waitForIdle();
     Rect home = rule.onNodeWithText("Ev").bounds();
     CHECK(home.x < 80 && home.y < 300 && rule.onNodeWithText("sayaç 1").exists());
-    CHECK(rule.onNodeWithTag("sayac").bounds().x >= 80 && near(seen.bottom, 48));  // the rail doesn't keep clear of the bottom
+    CHECK(rule.onNodeWithTag("sayac").bounds().x >= 80 && near(seen.calculateBottomPadding(), 48));  // the rail doesn't keep clear of the bottom
     forced.set(NavigationSuiteType::NavigationDrawer);  // asked for: a drawer
     rule.waitForIdle();
     CHECK(rule.onNodeWithTag("sayac").bounds().x > 250 && rule.onNodeWithText("sayaç 1").exists() && rule.onNodeWithText("Ayarlar").exists());
@@ -12791,6 +12791,145 @@ TEST(top_app_bar_enter_always_hides_before_the_list_scrolls) {
     rule.swipe({200, 300}, {200, 320}, 2);
     rule.waitForIdle();
     CHECK(near(state.heightOffset(), 0) || near(state.heightOffset(), -64));
+}
+
+TEST(a_collapsing_top_bar_moves_the_content_without_recomposing_it) {
+    std::optional<TopAppBarScrollBehavior> behavior;
+    LazyListState list;
+    int composed = 0;
+    PaddingValues seen;
+    ComposeTestRule rule([&] {
+        auto scroll = TopAppBarDefaults::enterAlwaysScrollBehavior();
+        behavior = scroll;
+        Scaffold(Modifier().fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
+                 {.topBar = [&] { TopAppBar({.title = [] { Text("Başlık"); }, .scrollBehavior = scroll}); }},
+                 [&](PaddingValues padding) {
+                     ++composed;
+                     seen = padding;
+                     Box(Modifier().fillMaxSize(), [&] {
+                         LazyColumn(Modifier().fillMaxSize(), {.state = list, .contentPadding = padding}, [](LazyListScope& s) {
+                             s.items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
+                         });
+                         // What is left of 120 at the top once the bar's padding is kept clear of.
+                         Box(Modifier().fillMaxWidth().padding(padding).consumeWindowInsets(padding).windowInsetsTopHeight({0, 120, 0, 0}).testTag("kenar"));
+                     });
+                 });
+    }, {400, 800});
+    TopAppBarState state = behavior->state;
+    auto edge = [&] { return rule.onNodeWithTag("kenar").node()->contentBounds(); };
+    int before = composed;
+    CHECK(near(seen.calculateTopPadding(), 64) && near(rule.onNodeWithTag("row0").bounds().y, 64));
+    CHECK(near(edge().y, 64) && near(edge().height, 120 - 64));
+    slowDrag(rule, {200, 400}, {200, 360}, 20);  // 2 dp per move; past the slop after 10
+    CHECK(near(state.heightOffset(), -30) && near(seen.calculateTopPadding(), 64 - 30));
+    CHECK(near(rule.onNodeWithTag("row0").bounds().y, 64 - 30));      // the list's content padding
+    CHECK(near(edge().y, 64 - 30) && near(edge().height, 120 - 34));  // Modifier::padding, consumeWindowInsets
+    CHECK(composed == before);  // laid out again, not composed again
+}
+
+TEST(what_lays_out_by_a_scaffolds_padding_follows_it_without_recomposing) {
+    auto bar = mutableStateOf(50.f);
+    int composed = 0;
+    ComposeTestRule rule([&] {
+        Scaffold(Modifier().fillMaxSize(),
+                 {.topBar = [&] {
+                     // As tall as `bar`, read as it is measured: the content's padding changes, nothing is recomposed.
+                     Box(Modifier().fillMaxWidth().layout([&](const MeasureNext& next, const Constraints& c, Offset& at) {
+                         at = {};
+                         float h = bar.get();
+                         next({c.maxWidth, c.maxWidth, h, h});
+                         return Size{c.maxWidth, h};
+                     }));
+                 }},
+                 [&](PaddingValues padding) {
+                     ++composed;
+                     auto pager = rememberPagerState(0, [] { return 3; });
+                     auto carousel = rememberCarouselState(0, [] { return 5; });
+                     Column(Modifier().fillMaxSize(), [&] {
+                         LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxWidth().height(150).testTag("grid"),
+                                                   {.contentPadding = padding}, [](LazyGridScope& g) {
+                                                       g.items(10, [](int i) { Box(Modifier().fillMaxWidth().height(40).testTag("g" + std::to_string(i))); });
+                                                   });
+                         HorizontalPager(pager, Modifier().fillMaxWidth().height(150).testTag("pager"),
+                                         [](int p) { Box(Modifier().fillMaxSize().testTag("p" + std::to_string(p))); }, {.contentPadding = padding});
+                         HorizontalUncontainedCarousel(carousel, 100, Modifier().fillMaxWidth().height(150).testTag("carousel"),
+                                                       {.contentPadding = padding},
+                                                       [](int i) { Box(Modifier().fillMaxSize().testTag("c" + std::to_string(i))); });
+                         Button([] {}, Modifier().testTag("button"), {.contentPadding = padding}, [] { Text("Düğme", Modifier().testTag("label")); });
+                         // Read while composing: this one is composed again.
+                         composable(CallSite::current(), [padding] { Text("Üst " + std::to_string(int(padding.calculateTopPadding()))); });
+                     });
+                 });
+    }, {400, 1000});
+    // How far below its container's top each one's first item (the button's label) is.
+    auto inset = [&] {
+        auto below = [&](const char* container, const char* item) { return rule.onNodeWithTag(item).bounds().y - rule.onNodeWithTag(container).bounds().y; };
+        return std::array{below("grid", "g0"), below("pager", "p0"), below("carousel", "c0"), below("button", "label")};
+    };
+    int before = composed;
+    std::array<float, 4> was = inset();
+    CHECK(near(was[0], 50) && near(was[1], 50) && near(was[2], 50) && rule.onNodeWithText("Üst 50").exists());
+    bar.set(80);
+    rule.waitForIdle();
+    std::array<float, 4> now = inset();
+    for (int i = 0; i < 4; ++i) CHECK(near(now[i] - was[i], 30));
+    CHECK(rule.onNodeWithText("Üst 80").exists() && composed == before);
+}
+
+TEST(a_scaffolds_content_is_measured_with_the_padding_its_bars_give_it_then) {
+    auto bar = mutableStateOf(50.f), tall = mutableStateOf(100.f);
+    std::vector<Rect> told;
+    auto sized = [](MutableState<float> height) {  // as tall as `height`, read as it is measured
+        return Modifier().fillMaxWidth().layout([height](const MeasureNext& next, const Constraints& c, Offset& at) {
+            at = {};
+            float h = height.get();
+            next({c.maxWidth, c.maxWidth, h, h});
+            return Size{c.maxWidth, h};
+        });
+    };
+    ComposeTestRule rule([&] {
+        Scaffold(Modifier().fillMaxSize(), {.topBar = [&] { Box(sized(bar)); }}, [&](PaddingValues padding) {
+            Box(Modifier().fillMaxSize().padding(padding), [&] {
+                Box(sized(tall).onGloballyPositioned([&](const LayoutCoordinates& at) {
+                    told.push_back({at.positionInRoot().x, at.positionInRoot().y, at.size().width, at.size().height});
+                }));
+            });
+        });
+    }, {400, 800});
+    CHECK(told.size() == 1 && near(told.back().y, 50) && near(told.back().height, 100));
+    // The bar and the content change together: the content is laid out once, under the bar as it is now.
+    bar.set(80);
+    tall.set(130);
+    rule.waitForIdle();
+    CHECK(told.size() == 2 && near(told.back().y, 80) && near(told.back().height, 130));
+}
+
+TEST(a_bottom_sheet_scaffolds_padding_follows_the_sheet_without_recomposing) {
+    auto tall = mutableStateOf(40.f);
+    int composed = 0;
+    ComposeTestRule rule([&] {
+        BottomSheetScaffold(
+            [&] {
+                // As tall as `tall`, read as it is measured: less than the peek, so the sheet peeks out as tall as it is.
+                Box(Modifier().fillMaxWidth().layout([&](const MeasureNext& next, const Constraints& c, Offset& at) {
+                    at = {};
+                    float h = tall.get();
+                    next({c.maxWidth, c.maxWidth, h, h});
+                    return Size{c.maxWidth, h};
+                }));
+            },
+            Modifier().fillMaxSize(), {.sheetPeekHeight = 300}, [&](PaddingValues padding) {
+                ++composed;
+                Box(Modifier().fillMaxSize().padding(padding).testTag("içerik"));
+            });
+    }, {400, 800});
+    auto bottom = [&] { return rule.onNodeWithTag("içerik").node()->contentBounds().bottom(); };
+    int before = composed;
+    float was = bottom();
+    CHECK(was < 800 - 40 && was > 800 - 300);
+    tall.set(70);
+    rule.waitForIdle();
+    CHECK(near(bottom(), was - 30) && composed == before);
 }
 
 TEST(large_top_app_bar_exit_until_collapsed) {
@@ -14530,15 +14669,15 @@ TEST(scaffold_and_navigation_bar_leave_the_keyboard_to_ime_padding) {
     rule.host().setSystemInsets({.navigationBars = {0, 0, 0, 48}});
     rule.waitForIdle();
     float barHeight = rule.onNodeWithTag("bar").bounds().height;
-    CHECK(near(seen.bottom, barHeight) && near(rule.onNodeWithTag("content").node()->contentBounds().bottom(), 800 - barHeight));
+    CHECK(near(seen.calculateBottomPadding(), barHeight) && near(rule.onNodeWithTag("content").node()->contentBounds().bottom(), 800 - barHeight));
     rule.host().setSystemInsets({.navigationBars = {0, 0, 0, 48}, .ime = {0, 0, 0, 320}});
     rule.waitForIdle();
     CHECK(near(rule.onNodeWithTag("bar").bounds().height, barHeight));  // the keyboard covers it, doesn't lift it
-    CHECK(near(seen.bottom, barHeight));
+    CHECK(near(seen.calculateBottomPadding(), barHeight));
     CHECK(near(rule.onNodeWithTag("content").node()->contentBounds().bottom(), 800 - 320));  // above the keyboard
     rule.host().setSystemInsets({.navigationBars = {0, 0, 0, 48}, .displayCutout = {30, 0, 0, 0}});  // a camera at the side
     rule.waitForIdle();
-    CHECK(near(seen.start, 30) && near(rule.onNodeWithTag("bar").bounds().height, barHeight));
+    CHECK(near(seen.calculateStartPadding(), 30) && near(rule.onNodeWithTag("bar").bounds().height, barHeight));
 }
 
 TEST(system_bars_appearance_reaches_the_platform_when_it_changes) {

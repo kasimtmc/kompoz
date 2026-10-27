@@ -248,6 +248,14 @@
 - **A bottom sheet scaffold's sheet moves without composing anything**: where the sheet is (dragged, settling) is read
   as the scaffold is laid out, not as it is composed, as Compose's: dragging it lays the scaffold out again and
   composes neither it nor its content.
+- **A scaffold's content padding follows its bars without composing the content again**: `Scaffold`'s and
+  `BottomSheetScaffold`'s padding is read where it is used, as Compose's. `Modifier::padding`, `consumeWindowInsets`
+  and the `contentPadding` of lists, grids, pagers, carousels and buttons read it as they lay out, so a top bar
+  collapsing as a list scrolls lays out again what is under it and composes nothing. `PaddingValues`'
+  `calculateTopPadding()` (and start, end, bottom) read it now, wherever they are called (a composable reading it is
+  composed again when it changes); its fields keep what it was when the content was composed, and two such paddings
+  are the same when they follow the same scaffold. (`ButtonDefaults`' paddings are `const`, no longer `constexpr`.)
+  Scrolling the showcase's Components screen under its collapsing bar composed the screen once.
 - **Scrolling doesn't walk what scrolls**: what is moved without being measured again (a list's content) leaves the
   places in it as they were written down, worked out when asked for and written down when drawn. Scrolling the
   showcase's Components screen spent 1% of the main thread on places instead of 16%.

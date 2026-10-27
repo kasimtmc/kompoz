@@ -232,17 +232,18 @@ void pager(PagerState state, const Modifier& modifier, const std::function<void(
         m = m.clipToBounds();
     }
 
-    PaddingValues padding = options.contentPadding;
+    PaddingValues contentPadding = options.contentPadding;
     float spacing = options.pageSpacing;
     float crossBias = vertical ? options.horizontalAlignment.bias : options.verticalAlignment.bias;
     detail::Composer::require().emit(
         detail::keyOf(CallSite::current()),
         [&](LayoutNode& node) {
             node.modifier = m;
-            node.measurePolicy = [d, first, last, padding, spacing, vertical, crossBias, pageSize = options.pageSize,
+            node.measurePolicy = [d, first, last, contentPadding, spacing, vertical, crossBias, pageSize = options.pageSize,
                                   snap = options.snapPosition, reverse = options.reverseLayout](LayoutNode& n, const Constraints& c) {
                 // Main axis: the pages' direction; cross axis: the other one. Reversed: laid out as
                 // from the end (its padding first), then mirrored.
+                PaddingValues padding = detail::paddingNow(contentPadding);
                 float mainPadStart = vertical ? padding.top : padding.start, mainPadEnd = vertical ? padding.bottom : padding.end;
                 if (reverse) std::swap(mainPadStart, mainPadEnd);
                 float crossPadStart = vertical ? padding.start : padding.top, crossPadEnd = vertical ? padding.end : padding.bottom;

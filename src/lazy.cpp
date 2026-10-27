@@ -415,7 +415,7 @@ MeasurePolicy listPolicy(LazyListState state, bool vertical, LazyListOptions opt
     return [state, vertical, options](LayoutNode& node, const Constraints& c) {
         LazyListState::Data& d = *state.data_;
         detail::recordRead(&d);  // scrolled (scrollBy, scrollToItem): measured again
-        const PaddingValues& p = options.contentPadding;
+        PaddingValues p = detail::paddingNow(options.contentPadding);
         bool reverse = options.reverseLayout;  // laid out from the start edge as usual, then mirrored
         float before = vertical ? p.top : p.start, after = vertical ? p.bottom : p.end;
         if (reverse) std::swap(before, after);
@@ -1111,7 +1111,7 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
     // Every item's place, in order: after the shortest lane, or across all of them. "Main" is
     // the scrolling axis (y of a vertical grid), "cross" the lanes'.
     auto policy = [d, lanesOf, options, scroll, sd, horizontal](LayoutNode& node, const Constraints& c) {
-        const PaddingValues& pad = options.contentPadding;
+        PaddingValues pad = detail::paddingNow(options.contentPadding);
         float crossPadStart = horizontal ? pad.top : pad.start, crossPadEnd = horizontal ? pad.bottom : pad.end;
         float mainPadStart = horizontal ? pad.start : pad.top, mainPadEnd = horizontal ? pad.end : pad.bottom;
         bool bounded = horizontal ? c.hasBoundedHeight() : c.hasBoundedWidth();

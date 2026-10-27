@@ -41,7 +41,9 @@ struct ScaffoldSlots {
     std::optional<WindowInsets> contentWindowInsets;
 };
 
-// `content` gets the padding that keeps it clear of the bars and the system insets; it is
+// `content` gets the padding that keeps it clear of the bars and the system insets, live (as
+// they change size, a top bar collapsing as a list scrolls, what reads it as it lays out
+// follows without the content recomposing; PaddingValues::calculate*Padding); it is
 // laid out full size so lists can scroll behind the bars. With a text field, pad it as in
 // Compose: Modifier().padding(padding).consumeWindowInsets(padding).imePadding().
 void Scaffold(const Modifier& modifier, const ScaffoldSlots& slots, const std::function<void(PaddingValues)>& content,

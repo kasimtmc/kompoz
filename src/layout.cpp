@@ -75,6 +75,7 @@ struct PaddingElement final : ModifierElement {
     bool absolute = false;  // start/end are left/right
     Size measure(const Constraints& c, const MeasureNext& next, Offset& contentOffset) const override {
         using detail::toWholePx;  // each side in whole px, as Compose's
+        PaddingValues p = detail::paddingNow(this->p);
         float start = toWholePx(p.start), top = toWholePx(p.top), h = start + toWholePx(p.end), v = top + toWholePx(p.bottom);
         Size s = next(c.deflate(h, v));
         contentOffset = {start, top};
@@ -526,7 +527,9 @@ WindowInsets consumedInsetsAbove(const ModifierElement* self);
 
 struct InsetsElement final : ModifierElement {
     WindowInsets insets;
+    PaddingValues live;  // consumeWindowInsets(PaddingValues) of a live padding: its sides now
     bool pad = true;
+    WindowInsets held() const { return live.live ? WindowInsets::of(detail::paddingNow(live)) : insets; }
     Size measure(const Constraints& c, const MeasureNext& next, Offset& contentOffset) const override {
         WindowInsets p = pad ? insets.exclude(consumedInsetsAbove(this)) : WindowInsets{};
         float h = p.left + p.right, v = p.top + p.bottom;
@@ -537,7 +540,7 @@ struct InsetsElement final : ModifierElement {
     bool mirrorsInRtl() const override { return false; }  // the screen's left and right
     bool equals(const ModifierElement& other) const override {
         auto* o = as<InsetsElement>(other);
-        return o && o->insets == insets && o->pad == pad;
+        return o && o->insets == insets && o->live == live && o->pad == pad;
     }
 };
 
@@ -546,7 +549,7 @@ WindowInsets consumedInsetsAbove(const ModifierElement* self) {
     const LayoutNode* node = gMeasuring;
     if (!node) return consumed;
     auto add = [&](const ModifierElement* e) {
-        if (auto* i = dynamic_cast<const InsetsElement*>(e)) consumed = consumed.unionWith(i->insets);
+        if (auto* i = dynamic_cast<const InsetsElement*>(e)) consumed = consumed.unionWith(i->held());
     };
     for (const auto& e : node->modifier.elements()) {
         if (e.get() == self) break;
@@ -597,7 +600,7 @@ WindowInsets consumedBy(const LayoutNode& node) {
     WindowInsets consumed;
     for (const LayoutNode* n = &node; n; n = n->overlay ? nullptr : n->parent)
         for (const auto& e : n->modifier.elements())
-            if (auto* i = dynamic_cast<const InsetsElement*>(e.get())) consumed = consumed.unionWith(i->insets);
+            if (auto* i = dynamic_cast<const InsetsElement*>(e.get())) consumed = consumed.unionWith(i->held());
     return consumed;
 }
 
@@ -739,7 +742,11 @@ Modifier Modifier::consumeWindowInsets(const WindowInsets& insets) const {
     });
 }
 Modifier Modifier::consumeWindowInsets(PaddingValues padding) const {
-    return consumeWindowInsets(WindowInsets::of(padding));
+    return with<InsetsElement>(*this, [&](auto& e) {
+        e.insets = WindowInsets::of(padding);
+        if (padding.live) e.live = std::move(padding);
+        e.pad = false;
+    });
 }
 Modifier Modifier::size(float s) const { return size(s, s); }
 Modifier Modifier::size(float w, float h) const {

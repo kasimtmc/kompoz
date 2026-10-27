@@ -31,6 +31,8 @@ void Inbox() {
 
 Üst uygulama çubukları Material'ın tanımladığı boyutlarda gelir: `TopAppBar`, `CenterAlignedTopAppBar`, `MediumTopAppBar` ve `LargeTopAppBar`. Bir kaydırma davranışıyla (`TopAppBarDefaults::enterAlwaysScrollBehavior()`, `exitUntilCollapsedScrollBehavior()`, `pinnedScrollBehavior()`) ve bu davranışın `nestedScrollConnection`'ı `Scaffold`'a verildiğinde, içerik kaydıkça daralır ve renk değiştirirler (bkz. [Listeler ve ızgaralar](lists.md#iç-içe-kaydırma)). `BottomAppBar` ve `BottomSheetScaffold` da var.
 
+İçeriğin iç boşluğu, çubukların boyu değiştikçe (liste kaydıkça daralan bir üst çubuk) içerik yeniden oluşturulmadan onları izler: Compose'taki gibi `Modifier::padding`, `consumeWindowInsets` ve listelerin, pager'ların, carousel'lerin `contentPadding`'i onu yerleşim sırasında okur. Bir kenarı kendiniz okumak için `calculateTopPadding()` (ve `calculateStartPadding()`, `calculateEndPadding()`, `calculateBottomPadding()`) çağırın. Bir composable'da okunursa iç boşluk değiştiğinde o composable yeniden oluşturulur; bir yerleşimde okunursa o yerleşim yeniden yerleştirilir. Alanlar (`padding.top`) iç boşluğun içerik oluşturulduğu andaki değerini tutar.
+
 ## Gezinme
 
 | Bileşen | Kullanım |

@@ -1170,8 +1170,38 @@ struct ParentDataElement final : ModifierElement {
 
 struct PaddingValues {
     float start = 0, top = 0, end = 0, bottom = 0;
-    friend constexpr bool operator==(const PaddingValues&, const PaddingValues&) = default;
+    // A padding that follows a layout (a Scaffold's content padding, from its bars): what that
+    // layout last measured. The fields are what it was when this copy was made.
+    std::shared_ptr<const PaddingValues> live;
+
+    // Compose's calculate*Padding: the padding now. Reading a live one subscribes the reader where
+    // it reads (a composable, a layout, a drawing): when it changes, that reader runs again, and
+    // only it: a layout reading it in measure is measured again, nothing is recomposed.
+    float calculateStartPadding() const { return now().start; }
+    float calculateTopPadding() const { return now().top; }
+    float calculateEndPadding() const { return now().end; }
+    float calculateBottomPadding() const { return now().bottom; }
+
+    // Live ones are the same when they follow the same layout, whatever they were when copied.
+    friend bool operator==(const PaddingValues& a, const PaddingValues& b) {
+        return a.live == b.live && (a.live || (a.start == b.start && a.top == b.top && a.end == b.end && a.bottom == b.bottom));
+    }
+
+private:
+    const PaddingValues& now() const {
+        if (!live) return *this;
+        detail::recordRead(live.get());
+        return *live;
+    }
 };
+namespace detail {
+// The four sides now (PaddingValues::calculate*Padding), read once.
+inline PaddingValues paddingNow(const PaddingValues& p) {
+    if (!p.live) return p;
+    recordRead(p.live.get());
+    return *p.live;
+}
+} // namespace detail
 
 // Modifier::blur's edges (Compose's BlurredEdgeTreatment): with a shape, the blur is cut to it
 // (Rectangle: the bounds), the pixels past the bounds taken as the edge's (TileMode::Clamp);
@@ -1265,7 +1295,7 @@ struct SystemInsets {
     // where it was to where it is going; whether it is (or is coming) up.
     bool imeAnimating = false, imeVisible = false;
     PaddingValues imeAnimationSource, imeAnimationTarget;
-    friend constexpr bool operator==(const SystemInsets&, const SystemInsets&) = default;
+    friend bool operator==(const SystemInsets&, const SystemInsets&) = default;
 };
 inline const CompositionLocal<SystemInsets> LocalSystemInsets{SystemInsets{}};
 // ...the union of the bars, the cutout and the keyboard (WindowInsets::safeDrawing())...
