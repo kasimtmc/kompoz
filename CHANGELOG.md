@@ -261,6 +261,9 @@
   while drawing (`drawBehind`, `graphicsLayer { }`), only that node is drawn again, and while laying out only it is
   laid out again; read nowhere, it asks for no frames. A new target on the way goes on from where it is then.
   (Code that kept the result in `auto` and used it as a `float` or `Color`, `std::max` or a member, takes `.value()`.)
+- **A composition local can be provided from a state**: `LocalContentColor.provides(animateColorAsState(...))` gives
+  the local's readers the state's value where they read it, so as it moves only they are composed again (an `Icon`, a
+  `Text`), not the composable providing it.
 - **Scrolling doesn't walk what scrolls**: what is moved without being measured again (a list's content) leaves the
   places in it as they were written down, worked out when asked for and written down when drawn. Scrolling the
   showcase's Components screen spent 1% of the main thread on places instead of 16%.

@@ -32,7 +32,7 @@ void LikeButton() {
 }
 ```
 
-Where the value is read decides what follows it, as in Compose. Used as a value in a composable (`Color tint = ...`, or `.value()` there), that scope recomposes on each frame of the animation, not its parents. Read with `.value()` while drawing (`drawBehind`, `graphicsLayer { }`, a `Canvas`), only that node is drawn again; while laying out (`offset { }`, a `layout`), only it is laid out again (see [Phases](phases.md#deferring-state-reads)). An animation read nowhere asks for no frames. `targetValue()` and `isRunning()` say where it is going and whether it is on its way.
+Where the value is read decides what follows it, as in Compose. Used as a value in a composable (`Color tint = ...`, or `.value()` there), that scope recomposes on each frame of the animation, not its parents. Read with `.value()` while drawing (`drawBehind`, `graphicsLayer { }`, a `Canvas`), only that node is drawn again; while laying out (`offset { }`, a `layout`), only it is laid out again (see [Phases](phases.md#deferring-state-reads)). An animation read nowhere asks for no frames. `targetValue()` and `isRunning()` say where it is going and whether it is on its way. A composition local can be given one too, `LocalContentColor.provides(color)`: then only the composables that read the local follow it, not the one providing it.
 
 The second argument is an animation spec, or a duration in milliseconds for a tween.
 

@@ -13669,6 +13669,61 @@ TEST(animated_states_are_read_where_they_are_needed) {
     CHECK(composedTurn == composedTurned && x->value() < back && x->targetValue() == 0 && x->isRunning());
 }
 
+TEST(a_local_provided_from_an_animated_state_is_followed_by_its_readers_alone) {
+    auto on = mutableStateOf(false);
+    int composed = 0, reads = 0;
+    Color seen;
+    ComposeTestRule rule([&] {
+        ++composed;
+        auto color = animateColorAsState(on.get() ? colors::White : colors::Black, tween(160, 0, LinearEasing));
+        CompositionLocalProvider({LocalContentColor.provides(color)}, [&] {
+            composable(CallSite::current(), [&] {  // a reader of its own, as Icon and Text are
+                ++reads;
+                seen = LocalContentColor.current();
+            });
+        });
+    });
+    CHECK(seen == colors::Black);
+    on.set(true);
+    rule.advanceFrame();  // the provider composed again with the new target...
+    int before = composed, readsBefore = reads;
+    rule.advanceTimeBy(80);
+    CHECK(composed == before && reads > readsBefore);  // ...and from then on only the reader
+    CHECK(seen != colors::Black && seen != colors::White);
+    rule.waitForIdle();
+    CHECK(seen == colors::White && composed == before && !rule.host().hasPendingWork());
+    // The provider composed again for something else, giving the same state: its readers stay.
+    auto tick = mutableStateOf(0);
+    int ticks = 0, tickReads = 0;
+    ComposeTestRule same([&] {
+        ticks += tick.get() >= 0;
+        auto color = animateColorAsState(colors::Red, snap());
+        CompositionLocalProvider({LocalContentColor.provides(color)}, [&] {
+            composable(CallSite::current(), [&] {
+                ++tickReads;
+                (void)LocalContentColor.current();
+            });
+        });
+    });
+    int readsOnce = tickReads;
+    tick.set(1);
+    same.waitForIdle();
+    CHECK(ticks == 2 && tickReads == readsOnce);
+    // Given another state (or a plain value) again, its readers read that.
+    auto other = mutableStateOf(false);
+    ComposeTestRule swapped([&] {
+        auto a = animateColorAsState(colors::Red, snap()), b = animateColorAsState(colors::Blue, snap());
+        CompositionLocalProvider({other.get() ? LocalContentColor.provides(colors::Green) : LocalContentColor.provides(a)}, [&] {
+            composable(CallSite::current(), [&] { seen = LocalContentColor.current(); });
+        });
+        (void)b;
+    });
+    CHECK(seen == colors::Red);
+    other.set(true);
+    swapped.waitForIdle();
+    CHECK(seen == colors::Green);
+}
+
 TEST(infinite_transition_states_are_read_where_they_are_needed) {
     // As Compose's State from animateFloat: read while drawing, only drawn again; while laying
     // out, only laid out again; in a composition, composed again.

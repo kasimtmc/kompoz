@@ -87,6 +87,9 @@ struct Provided {
     bool (*equals)(const void*, const void*);
     bool ifMissing = false;  // providesDefault: only where nothing above provides one
     const Group* provider = nullptr;  // the group providing it (its readers are that provider's)
+    // A value that changes by itself (a state's, an animation's): what it is now, read by the
+    // reader (who follows it), not by the provider.
+    const void* (*read)(const void* value) = nullptr;
 };
 
 class Composer;
@@ -542,6 +545,29 @@ public:
                     else
                         return a == b;
                 }};
+    }
+    // A state's value (an animation's: animateColorAsState): read where the local is read, so as
+    // it changes only the readers follow it, not the provider (which doesn't read it).
+    //   auto color = animateColorAsState(selected ? cs.primary : cs.onSurface);
+    //   CompositionLocalProvider({LocalContentColor.provides(color)}, content);
+    template <class S>
+        requires(!std::same_as<std::remove_cvref_t<S>, T>) && requires(const S& s) {
+            { s.value() } -> std::convertible_to<T>;
+            { s == s } -> std::convertible_to<bool>;
+        }
+    detail::Provided provides(S state) const {
+        struct Live {
+            S state;
+            mutable std::optional<T> now;  // (what the last reader read)
+        };
+        detail::Provided p{this, std::make_shared<const Live>(Live{std::move(state), std::nullopt}),
+                           [](const void* a, const void* b) { return static_cast<const Live*>(a)->state == static_cast<const Live*>(b)->state; }};
+        p.read = [](const void* value) -> const void* {
+            auto* live = static_cast<const Live*>(value);
+            live->now = live->state.value();
+            return &*live->now;
+        };
+        return p;
     }
     // Only where no provider above gives one (Compose's providesDefault): a library's own
     // default the app may have set already.

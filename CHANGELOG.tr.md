@@ -276,6 +276,9 @@
   çizilir, yerleşim sırasında okunursa yalnızca o yeniden yerleştirilir; hiçbir yerde okunmazsa kare istemez. Yoldayken
   verilen yeni bir hedefe o anda bulunduğu yerden gider. (Sonucu `auto` ile tutup `float` ya da `Color` gibi, `std::max`
   ile ya da bir üyesiyle kullanan kod `.value()` alır.)
+- **Bir composition local bir durumdan sağlanabilir**: `LocalContentColor.provides(animateColorAsState(...))`, local'i
+  okuyanlara durumun değerini okudukları yerde verir; böylece o hareket ettikçe onu sağlayan composable değil, yalnızca
+  onlar yeniden oluşturulur (bir `Icon`, bir `Text`).
 - **Kaydırmak kayanı dolaşmaz**: yeniden ölçülmeden taşınan bir şey (bir listenin içeriği) içindeki yerleri yazıldıkları
   gibi bırakır; istendiklerinde hesaplanır, çizildiklerinde yazılırlar. Showcase'in Bileşenler ekranını kaydırmak ana
   thread'in %16 yerine %1'ini yerlere harcadı.

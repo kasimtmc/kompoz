@@ -357,7 +357,8 @@ void Composer::provide(uint64_t key, std::vector<Provided> values, const Content
     for (Provided& v : values) {
         v.provider = &g;
         auto old = std::find_if(g.provided.begin(), g.provided.end(), [&](const Provided& p) { return p.key == v.key; });
-        if (old != g.provided.end() && !v.equals(old->value.get(), v.value.get())) invalidateReaders(providedKey(v.key, &g));
+        if (old != g.provided.end() && (old->read != v.read || !v.equals(old->value.get(), v.value.get())))
+            invalidateReaders(providedKey(v.key, &g));
     }
     g.provided = values;
     size_t mark = locals_.size();
@@ -377,7 +378,7 @@ const void* Composer::readLocal(const void* key) {
     for (auto it = locals_.rbegin(); it != locals_.rend(); ++it)
         if (it->key == key) {
             recordRead(providedKey(key, it->provider));
-            return it->value.get();
+            return it->read ? it->read(it->value.get()) : it->value.get();
         }
     return nullptr;  // (the default: nothing to recompose for)
 }
