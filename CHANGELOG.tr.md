@@ -258,6 +258,9 @@
 - **Bir karenin yerinde tuttuğu kopyalanır, yeniden çizilmez**: aynı yerde ve durumda, değişmemiş bir düğüm geçen
   karenin komutlarını ve içindeki düğümler hakkında bildiklerini tek tek dolaşmadan olduğu gibi alır; çizilen bir
   düğüm yalnızca kendi yerini yazar. Bir Redmi Note 9 Pro'da boştaki bir ekranın kaydı 4 yerine 3.2 ms sürdü.
+- **Bir bottom sheet scaffold'un sayfası hiçbir şey oluşturmadan kayar**: sayfanın nerede olduğu (sürüklenirken,
+  yerine otururken) Compose'taki gibi scaffold oluşturulurken değil yerleştirilirken okunur: onu sürüklemek scaffold'u
+  yeniden yerleştirir, ne onu ne içeriğini yeniden oluşturur.
 - **Kaydırmak kayanı dolaşmaz**: yeniden ölçülmeden taşınan bir şey (bir listenin içeriği) içindeki yerleri yazıldıkları
   gibi bırakır; istendiklerinde hesaplanır, çizildiklerinde yazılırlar. Showcase'in Bileşenler ekranını kaydırmak ana
   thread'in %16 yerine %1'ini yerlere harcadı.

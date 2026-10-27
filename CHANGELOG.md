@@ -245,6 +245,9 @@
 - **What a frame keeps where it was is copied, not drawn again**: a node unchanged, in the same place and state, takes
   last frame's commands and what it knew of the nodes in it as they were, without going through them one by one; a
   node drawn writes down only its own place. On a Redmi Note 9 Pro an idle screen's recording took 3.2 ms instead of 4.
+- **A bottom sheet scaffold's sheet moves without composing anything**: where the sheet is (dragged, settling) is read
+  as the scaffold is laid out, not as it is composed, as Compose's: dragging it lays the scaffold out again and
+  composes neither it nor its content.
 - **Scrolling doesn't walk what scrolls**: what is moved without being measured again (a list's content) leaves the
   places in it as they were written down, worked out when asked for and written down when drawn. Scrolling the
   showcase's Components screen spent 1% of the main thread on places instead of 16%.

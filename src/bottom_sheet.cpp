@@ -216,7 +216,7 @@ void BottomSheetScaffold(const Content& sheetContent, const Modifier& modifier, 
             }
             d->placed = true;
         }
-        ch[2]->place((w - sheet.width) / 2, d->offset.peek());
+        ch[2]->place((w - sheet.width) / 2, d->offset.value());  // (read here: laid out again as it moves, not composed)
         ch[0]->measure(loose);  // (as Compose's: content that doesn't fill keeps its size)
         ch[0]->place(0, 0);
         Size snack = ch[3]->measure({0, std::min(w, 640.f), 0, h});
@@ -229,7 +229,6 @@ void BottomSheetScaffold(const Content& sheetContent, const Modifier& modifier, 
 
     Color container = options.containerColor.value_or(cs.surface);
     Color sheetColor = options.sheetContainerColor.value_or(cs.surfaceContainerLow);
-    d->offset.value();  // laid out again as it moves
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
         detail::Composer::require().emit(
             detail::keyOf(CallSite::current()),

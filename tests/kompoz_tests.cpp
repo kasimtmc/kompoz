@@ -11266,6 +11266,30 @@ TEST(bottom_sheet_scaffold_peeks_expands_and_follows_drags) {
     CHECK(near(top(), 800) && sheet.currentValue() == V::Hidden && !sheet.isVisible());
 }
 
+TEST(a_dragged_bottom_sheet_moves_without_recomposing_the_scaffold) {
+    SheetState sheet;
+    int composed = 0;
+    ComposeTestRule rule([&] {
+        BottomSheetScaffold([] { Box(Modifier().fillMaxWidth().height(400).testTag("sayfa")); }, Modifier().fillMaxSize(),
+                            {.scaffoldState = BottomSheetScaffoldState{sheet}, .sheetPeekHeight = 100}, [&](PaddingValues) {
+                                ++composed;
+                                Box(Modifier().fillMaxSize());
+                            });
+    }, {400, 800});
+    int before = composed;
+    float top = rule.onNodeWithTag("sayfa").bounds().y;
+    rule.host().pointerDown({200, 750});
+    for (int i = 1; i <= 30; ++i) {
+        rule.advanceFrame();
+        rule.host().pointerMove({200, 750 - 4.f * float(i)});
+    }
+    rule.advanceFrame();
+    CHECK(rule.onNodeWithTag("sayfa").bounds().y < top - 50);  // it followed the finger: laid out again
+    CHECK(composed == before);                                  // not composed again
+    rule.host().pointerUp({200, 630});
+    rule.waitForIdle();
+}
+
 TEST(bottom_sheet_scaffold_moves_before_the_list_in_it_scrolls) {
     SheetState sheet;
     LazyListState list;
