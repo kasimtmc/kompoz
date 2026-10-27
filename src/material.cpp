@@ -71,30 +71,30 @@ void Scaffold(const Modifier& modifier, const ScaffoldSlots& slots, const std::f
 }
 
 struct TopAppBarState::Data {
-    float limit = -kInfinity;
+    MutableState<float> limit{-kInfinity};  // (a state, as Compose's: what reads it follows it once a bar sets it)
     Animatable<float> heightOffset{0.f};  // animated when a half collapsed bar settles
     MutableState<float> contentOffset{0.f};
 };
 
 TopAppBarState::TopAppBarState(float initialHeightOffsetLimit, float initialHeightOffset, float initialContentOffset)
     : data_(std::make_shared<Data>()) {
-    data_->limit = initialHeightOffsetLimit;
+    data_->limit.set(initialHeightOffsetLimit);
     data_->heightOffset.snapTo(std::clamp(initialHeightOffset, initialHeightOffsetLimit, 0.f));
     data_->contentOffset.set(initialContentOffset);
 }
 
-float TopAppBarState::heightOffsetLimit() const { return data_->limit; }
+float TopAppBarState::heightOffsetLimit() const { return data_->limit.get(); }
 
 void TopAppBarState::setHeightOffsetLimit(float limit) const {
-    if (limit == data_->limit) return;
-    data_->limit = limit;
+    if (limit == data_->limit.peek()) return;
+    data_->limit.set(limit);
     setHeightOffset(data_->heightOffset.peek());
 }
 
 float TopAppBarState::heightOffset() const { return data_->heightOffset.value(); }
 
 void TopAppBarState::setHeightOffset(float offset) const {
-    float v = std::clamp(offset, std::min(data_->limit, 0.f), 0.f);
+    float v = std::clamp(offset, std::min(data_->limit.peek(), 0.f), 0.f);
     if (v != data_->heightOffset.peek() || data_->heightOffset.isRunning()) data_->heightOffset.snapTo(v);
 }
 
@@ -105,18 +105,18 @@ void TopAppBarState::setContentOffset(float offset) const {
 }
 
 float TopAppBarState::collapsedFraction() const {
-    float limit = data_->limit;
+    float limit = data_->limit.get();
     return limit < 0 && limit != -kInfinity ? heightOffset() / limit : 0.f;
 }
 
 float TopAppBarState::overlappedFraction() const {
-    float limit = data_->limit;
+    float limit = data_->limit.get();
     if (!(limit < 0) || limit == -kInfinity) return 0;
     return 1 - std::clamp(limit - contentOffset(), limit, 0.f) / limit;
 }
 
 SavedValue Saver<TopAppBarState>::save(const TopAppBarState& s) {
-    return SavedValue::List{s.data_->limit, s.data_->heightOffset.peek(), s.data_->contentOffset.peek()};
+    return SavedValue::List{s.data_->limit.peek(), s.data_->heightOffset.peek(), s.data_->contentOffset.peek()};
 }
 std::optional<TopAppBarState> Saver<TopAppBarState>::restore(const SavedValue& v) {
     const SavedValue::List* l = v.list();

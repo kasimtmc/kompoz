@@ -264,6 +264,10 @@
 - **A composition local can be provided from a state**: `LocalContentColor.provides(animateColorAsState(...))` gives
   the local's readers the state's value where they read it, so as it moves only they are composed again (an `Icon`, a
   `Text`), not the composable providing it.
+- **A top app bar takes its scrolled color however it was first composed**: its state's height offset limit is a
+  state, as Compose's, so what reads how far content has gone under the bar follows the limit once the bar sets it.
+  Worked out before that (in the bar's first composition), the scrolled container color never followed the content,
+  and the bar kept its color unless something composed it again for another reason.
 - **Scrolling doesn't walk what scrolls**: what is moved without being measured again (a list's content) leaves the
   places in it as they were written down, worked out when asked for and written down when drawn. Scrolling the
   showcase's Components screen spent 1% of the main thread on places instead of 16%.

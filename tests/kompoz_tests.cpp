@@ -13012,6 +13012,33 @@ TEST(pinned_top_app_bar_knows_when_content_is_under_it) {
     CHECK(near(scroll.value(), 0) && near(state.overlappedFraction(), 0));
 }
 
+TEST(a_top_app_bar_takes_its_scrolled_color) {
+    std::optional<TopAppBarScrollBehavior> behavior;
+    ScrollState scroll;
+    ColorScheme cs = lightColorScheme();
+    ComposeTestRule rule([&] {
+        auto pinned = TopAppBarDefaults::pinnedScrollBehavior();
+        behavior = pinned;
+        Scaffold(Modifier().fillMaxSize().nestedScroll(pinned.nestedScrollConnection),
+                 {.topBar = [&] { TopAppBar({.title = [] { Text("Başlık"); }, .scrollBehavior = pinned}); }},
+                 [&](PaddingValues padding) {
+                     Column(Modifier().fillMaxSize().verticalScroll(scroll).padding(padding), [] { Box(Modifier().height(2000)); });
+                 });
+    }, {400, 800});
+    auto barColor = [&] {
+        testing::RecordingCanvas c;
+        rule.host().draw(c);
+        for (size_t i = 0; i < c.rects.size(); ++i)
+            if (sameRect(c.rects[i], {0, 0, 400, 64})) return c.rectColors[i];  // the bar's container
+        return Color{};
+    };
+    CHECK(barColor() == cs.surface);
+    slowDrag(rule, {200, 500}, {200, 300});
+    rule.waitForIdle();
+    CHECK(behavior->state.overlappedFraction() > 0.5f);
+    CHECK(barColor() == cs.surfaceContainer);
+}
+
 TEST(nested_scroll_dispatcher_offers_a_custom_drag_to_the_parents) {
     auto log = std::make_shared<std::vector<std::string>>();
     auto parent = std::make_shared<RecordingConnection>(log, "P", true);
