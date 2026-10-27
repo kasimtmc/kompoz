@@ -11,8 +11,18 @@ namespace {
 // from its far edge (like Compose's expandFrom = Bottom / End), offset by a fraction of its size.
 struct RevealElement final : ModifierElement {
     float widthFraction = 1, heightFraction = 1, slideX = 0, slideY = 0;
+    // Read as it is laid out instead: the fractions and the slide at that progress.
+    std::optional<detail::Live<float>> progress;
+    bool expandWidth = false, expandHeight = false;
+    float hiddenX = 0, hiddenY = 0;
 
     Size measure(const Constraints& c, const MeasureNext& next, Offset& contentOffset) const override {
+        float widthFraction = this->widthFraction, heightFraction = this->heightFraction, slideX = this->slideX, slideY = this->slideY;
+        if (progress) {
+            float p = std::max(0.f, (*progress)());
+            widthFraction = expandWidth ? p : 1, heightFraction = expandHeight ? p : 1;
+            slideX = (1 - p) * hiddenX, slideY = (1 - p) * hiddenY;
+        }
         Constraints inner = c;
         if (widthFraction < 1) inner.minWidth = 0;
         if (heightFraction < 1) inner.minHeight = 0;
@@ -29,8 +39,8 @@ struct RevealElement final : ModifierElement {
     bool clipsContent() const override { return true; }
     bool equals(const ModifierElement& other) const override {
         auto* o = dynamic_cast<const RevealElement*>(&other);
-        return o && o->widthFraction == widthFraction && o->heightFraction == heightFraction && o->slideX == slideX &&
-               o->slideY == slideY;
+        return o && !progress && !o->progress && o->widthFraction == widthFraction && o->heightFraction == heightFraction &&
+               o->slideX == slideX && o->slideY == slideY;
     }
 };
 
@@ -85,6 +95,48 @@ Modifier TransitionParts::apply(const Modifier& m, float progress) const {
         out = out.then(std::move(e));
     }
     return out;
+}
+
+Modifier TransitionParts::apply(const Modifier& m, const Live<float>& progress) const {
+    Modifier out = m;
+    if (fade) out = animatedAlpha(out, Live<float>{[progress, hidden = hiddenAlpha] { return lerp(hidden, 1, std::clamp(progress(), 0.f, 1.f)); }});
+    if (scale)
+        out = out.graphicsLayer([progress, hidden = hiddenScale, origin = transformOrigin](GraphicsLayerScope& l) {
+            l.scaleX = l.scaleY = lerp(hidden, 1, std::max(0.f, progress()));
+            l.transformOrigin = origin;
+        });
+    if (expandWidth || expandHeight || slideX != 0 || slideY != 0) {
+        auto e = std::make_shared<RevealElement>();
+        e->progress = progress;
+        e->expandWidth = expandWidth, e->expandHeight = expandHeight;
+        e->hiddenX = slideX, e->hiddenY = slideY;
+        out = out.then(std::move(e));
+    }
+    return out;
+}
+
+float TransitionProgress::at(int64_t frameTime, bool* done) const {
+    bool finished = from == to;
+    float t = finished ? 1.f : spec.progress(float(frameTime - start) / 1e6f, finished);
+    if (done) *done = finished;
+    return finished ? to : lerp(from, to, t);
+}
+
+void TransitionProgress::turn(float target, const AnimationSpec& with, int64_t frameTime) {
+    from = at(frameTime);
+    to = target;
+    spec = with;
+    start = frameTime;
+    end = animationEnd(spec, frameTime);
+}
+
+Live<float> live(const std::shared_ptr<const TransitionProgress>& progress) {
+    return {[progress] {
+        bool done = false;
+        float p = progress->at(animationReadTime(progress->host), &done);
+        if (!done) animationNextFrame(progress->host, progress->end);
+        return p;
+    }};
 }
 
 float totalDurationMillis(const AnimationSpec& spec) {
@@ -174,36 +226,31 @@ Modifier AnimatedVisibilityScope::animateEnterExit(CallSite site) const { return
 
 Modifier AnimatedVisibilityScope::animateEnterExit(const EnterTransition& enter, const ExitTransition& exit, CallSite site) const {
     struct Child {
-        float from, to, progress;
-        int64_t start;
+        std::shared_ptr<detail::TransitionProgress> clock = std::make_shared<detail::TransitionProgress>();
         std::shared_ptr<bool> leaving = std::make_shared<bool>(false);
     };
     ComposableScope scope(site);
     auto& c = detail::Composer::require();
     int64_t now = c.frameTimeNanos();
     detail::VisibilityState& parent = *state_;
+    const auto& parts = parent.visible ? enter.parts : exit.parts;
     auto& child = remember([&] {
         // Composed as the content comes in: it comes in too (from hidden); otherwise shown.
         bool entering = parent.visible && parent.shownAt == now;
-        Child made{entering ? 0.f : 1.f, 1.f, entering ? 0.f : 1.f, now};
+        Child made;
+        made.clock->from = made.clock->to = entering ? 0.f : 1.f;
+        made.clock->host = &c.host();
+        if (entering) made.clock->turn(1, parts.spec.value_or(defaultVisibilitySpec()), now);
         parent.children.push_back(made.leaving);
         return made;
     });
     float to = parent.visible ? 1.f : 0.f;
-    if (to != child.to) {  // turned: from where it is
-        child.from = child.progress;
-        child.to = to;
-        child.start = now;
-    }
-    const auto& parts = parent.visible ? enter.parts : exit.parts;
-    bool finished = child.progress == child.to;
-    if (!finished) {
-        float t = parts.spec.value_or(defaultVisibilitySpec()).progress(float(now - child.start) / 1e6f, finished);
-        child.progress = finished ? child.to : lerp(child.from, child.to, t);
-        if (!finished) c.requestFrame();
-    }
-    *child.leaving = !parent.visible && child.progress > 0;
-    return parts.apply(Modifier(), child.progress);
+    if (to != child.clock->to) child.clock->turn(to, parts.spec.value_or(defaultVisibilitySpec()), now);  // turned: from where it is
+    bool done = false;
+    float progress = child.clock->at(now, &done);
+    *child.leaving = !parent.visible && !done;
+    // On the way it is laid out and drawn (leaving, its parent looks again every frame until it is out).
+    return done ? parts.apply(Modifier(), progress) : parts.apply(Modifier(), detail::live(child.clock));
 }
 
 EnterTransition fadeIn(float initialAlpha, AnimationSpec spec) {
@@ -250,10 +297,20 @@ void animatedVisibility(bool visible, bool initiallyVisible, const std::shared_p
                         const Modifier& modifier, const EnterTransition& enterTransition, const ExitTransition& exitTransition,
                         const std::function<void(const AnimatedVisibilityScope&)>& content) {
     const auto& parts = visible ? enterTransition.parts : exitTransition.parts;
-    float progress = detail::animateValueFrom(initiallyVisible ? 1.f : 0.f, visible ? 1.f : 0.f, parts.spec.value_or(defaultVisibilitySpec()),
-                                              CallSite::current());
-    auto state = remember([] { return std::make_shared<detail::VisibilityState>(); });
     auto& composer = detail::Composer::require();
+    int64_t now = composer.frameTimeNanos();
+    // Its progress, worked out here when it turns and gets there, read on the way where it is
+    // used (as the content is laid out and drawn).
+    auto clock = remember([&] {
+        auto made = std::make_shared<detail::TransitionProgress>();
+        made->from = made->to = initiallyVisible ? 1.f : 0.f;
+        made->host = &composer.host();
+        return made;
+    });
+    if (clock->to != (visible ? 1.f : 0.f)) clock->turn(visible ? 1.f : 0.f, parts.spec.value_or(defaultVisibilitySpec()), now);
+    bool done = false;
+    float progress = clock->at(now, &done);
+    auto state = remember([] { return std::make_shared<detail::VisibilityState>(); });
     auto tell = [&](bool arrived) {
         if (!told) return;
         SideEffect([told, visible, arrived] {
@@ -263,8 +320,8 @@ void animatedVisibility(bool visible, bool initiallyVisible, const std::shared_p
     };
     // Fully hidden: the content leaves the composition, once its shared elements are done
     // moving and its children with their own exits are gone (they hear of the hiding first).
-    if (!visible && progress <= 0) {
-        bool waiting = composer.frameTimeNanos() < state->holdUntil || (state->visible ? state->hasChildren() : state->childrenLeaving());
+    if (!visible && done) {
+        bool waiting = now < state->holdUntil || (state->visible ? state->hasChildren() : state->childrenLeaving());
         if (!waiting) {
             state->composed = false, state->started = true;
             tell(true);
@@ -272,12 +329,13 @@ void animatedVisibility(bool visible, bool initiallyVisible, const std::shared_p
         }
         composer.requestFrame();
     }
-    tell(visible && progress >= 1);
-    if (visible && !state->composed && state->started) state->shownAt = composer.frameTimeNanos();  // coming (back) in
+    tell(visible && done);
+    if (visible && !state->composed && state->started) state->shownAt = now;  // coming (back) in
     state->composed = state->started = true;
     state->visible = visible;
-    state->running = visible ? progress < 1 : true;
-    Modifier m = parts.apply(modifier, progress);
+    state->running = visible ? !done : true;
+    if (!done) composer.requestFrameAt(clock->end);  // composed again when it gets there
+    Modifier m = done ? parts.apply(modifier, progress) : parts.apply(modifier, detail::live(clock));
     Box(visible ? m : detail::ignoringInput(m), [&] { content(AnimatedVisibilityScope(state)); });
 }
 

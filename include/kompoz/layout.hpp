@@ -2213,10 +2213,18 @@ WindowInsets unconsumedInsets(const LayoutNode& node, const WindowInsets& insets
 // background(), alpha(), scale() and shadow() of what an animation moves, read while drawing (as
 // Compose's components read theirs in drawBehind and graphicsLayer { }): as it moves, the node is
 // drawn again, nothing composed.
-Modifier animatedBackground(const Modifier& m, const AnimatedState<Color>& color, Shape shape = RectangleShape);
-Modifier animatedAlpha(const Modifier& m, const AnimatedState<float>& alpha);
-Modifier animatedScale(const Modifier& m, const AnimatedState<float>& scale);
-Modifier animatedShadow(const Modifier& m, const AnimatedState<float>& elevation, Shape shape);
+Modifier animatedBackground(const Modifier& m, const Live<Color>& color, Shape shape = RectangleShape);
+Modifier animatedAlpha(const Modifier& m, const Live<float>& alpha);
+Modifier animatedScale(const Modifier& m, const Live<float>& scale);
+Modifier animatedShadow(const Modifier& m, const Live<float>& elevation, Shape shape);
+inline Modifier animatedBackground(const Modifier& m, const AnimatedState<Color>& color, Shape shape = RectangleShape) {
+    return animatedBackground(m, liveOf(color), shape);
+}
+inline Modifier animatedAlpha(const Modifier& m, const AnimatedState<float>& alpha) { return animatedAlpha(m, liveOf(alpha)); }
+inline Modifier animatedScale(const Modifier& m, const AnimatedState<float>& scale) { return animatedScale(m, liveOf(scale)); }
+inline Modifier animatedShadow(const Modifier& m, const AnimatedState<float>& elevation, Shape shape) {
+    return animatedShadow(m, liveOf(elevation), shape);
+}
 } // namespace detail
 
 // Measures the node's children (placing them with LayoutNode::place) and returns the content size.

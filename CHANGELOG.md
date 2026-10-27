@@ -273,6 +273,10 @@
   and label their animated colors as states (only those are composed again); a top app bar's container color goes over
   as it is drawn. An animation read while drawing keeps frames coming until it is done, drawn or not, and
   `ComposeTestRule::waitForIdle` waits for it.
+- **Transitions compose around them only as they start and end**: `AnimatedVisibility`, `AnimatedContent` (and so
+  `NavHost` and `Crossfade`) and `animateEnterExit` read their progress as the content is laid out and drawn, as
+  Compose's do, and compose their caller again when they get there (a frame asked for at that time), not on every frame
+  on the way. A transition turned on its way goes back from where it is at that frame.
 - **Scrolling doesn't walk what scrolls**: what is moved without being measured again (a list's content) leaves the
   places in it as they were written down, worked out when asked for and written down when drawn. Scrolling the
   showcase's Components screen spent 1% of the main thread on places instead of 16%.

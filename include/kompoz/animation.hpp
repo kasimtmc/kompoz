@@ -179,6 +179,20 @@ class AnimatedState;
 template <class T>
 AnimatedState<T> animateValueAsState(const T& target, const AnimationSpec& spec, CallSite site);
 
+namespace detail {
+// A value read where it is used (an animation's, while laying out or drawing). Two are the same
+// when they read the same `source` (one animation's state); without one, never.
+template <class T>
+struct Live {
+    std::function<T()> read;
+    const void* source = nullptr;
+    T operator()() const { return read(); }
+    friend bool operator==(const Live& a, const Live& b) { return a.source && a.source == b.source; }
+};
+template <class T>
+Live<T> liveOf(const AnimatedState<T>& state);
+} // namespace detail
+
 // What animate*AsState gives (Compose's State<T>): the value where it is now, read where it is
 // needed. Read in a composition (or used there as a T), the reader is composed again on every
 // frame it moves; read while drawing (drawBehind, graphicsLayer { }, a Canvas) it is only drawn
@@ -203,6 +217,7 @@ public:
 
 private:
     friend AnimatedState animateValueAsState<T>(const T& target, const AnimationSpec& spec, CallSite site);
+    friend detail::Live<T> detail::liveOf<T>(const AnimatedState& state);
     struct Data {
         T from, to, value;
         AnimationSpec spec;
@@ -227,6 +242,11 @@ private:
     };
     std::shared_ptr<Data> d_;
 };
+
+template <class T>
+detail::Live<T> detail::liveOf(const AnimatedState<T>& state) {
+    return {[state] { return state.value(); }, state.d_.get()};
+}
 
 // Animates towards `target` whenever it changes (from where it is then, along `spec`).
 template <class T>

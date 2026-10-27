@@ -32,7 +32,23 @@ struct TransitionParts {
 
     TransitionParts merged(const TransitionParts& o) const;
     Modifier apply(const Modifier& m, float progress) const;
+    // With the progress read where it is used: as the content is laid out and drawn.
+    Modifier apply(const Modifier& m, const Live<float>& progress) const;
 };
+
+// A transition's progress (0: hidden, 1: shown), from where it was when it last turned, along
+// its spec: worked out at a frame by the composition (at), or where it is read (live: as the
+// content is laid out and drawn, asking for their next frames until it is done).
+struct TransitionProgress {
+    float from = 0, to = 0;
+    AnimationSpec spec;
+    int64_t start = 0, end = 0;
+    ComposeHost* host = nullptr;
+    float at(int64_t frameTime, bool* done = nullptr) const;
+    // On to `target` from where it is at `frameTime`, along `spec`.
+    void turn(float target, const AnimationSpec& spec, int64_t frameTime);
+};
+Live<float> live(const std::shared_ptr<const TransitionProgress>& progress);
 
 // Content on its way out takes no taps or focus (the cards of a list fading out can't be
 // picked while the next screen comes in).
@@ -222,6 +238,7 @@ void AnimatedContent(const T& targetState,
         float zIndex = 0;                     // the transform it came with gave it
         std::shared_ptr<detail::VisibilityState> visibility = std::make_shared<detail::VisibilityState>();
         bool seeking = false;  // seekState's, coming in part way
+        std::shared_ptr<const detail::TransitionProgress> clock;  // on its way: its progress, read as it is laid out and drawn
     };
     struct State {
         std::vector<Item> items;
@@ -292,8 +309,10 @@ void AnimatedContent(const T& targetState,
     bool seeking = seeked() != s.items.end();
     if (seeking) s.seekTime = std::clamp(options.seekFraction, 0.f, 1.f) * s.seekDuration;
     bool animating = false;
+    int64_t due = INT64_MAX;  // when the first one on its way gets there
     for (auto& it : s.items) {
         bool done = false;
+        it.clock = nullptr;
         if (it.seeking) {  // in as far as the seek says, and the one shown out as far
             it.progress = it.enter.spec.value_or(defaultVisibilitySpec()).progress(s.seekTime, done);
             continue;
@@ -307,10 +326,18 @@ void AnimatedContent(const T& targetState,
             continue;
         }
         const auto& parts = it.exiting ? it.exit : it.enter;
+        AnimationSpec spec = parts.spec.value_or(defaultVisibilitySpec());
         bool finished = false;
-        float t = parts.spec.value_or(defaultVisibilitySpec()).progress(float(now - it.start) / 1e6f, finished);
+        float t = spec.progress(float(now - it.start) / 1e6f, finished);
         it.progress = finished ? (it.exiting ? 0.f : 1.f) : it.exiting ? it.from * (1 - t) : t;
-        if (!finished) animating = true;
+        if (!finished) {
+            animating = true;
+            auto clock = std::make_shared<detail::TransitionProgress>();
+            clock->from = it.exiting ? it.from : 0.f, clock->to = it.exiting ? 0.f : 1.f;
+            clock->spec = spec, clock->start = it.start, clock->end = detail::animationEnd(spec, it.start), clock->host = &c.host();
+            due = std::min(due, clock->end);
+            it.clock = std::move(clock);
+        }
     }
     bool held = false;  // leaving content whose shared elements still move
     std::erase_if(s.items, [&](const Item& it) {
@@ -320,7 +347,10 @@ void AnimatedContent(const T& targetState,
             return !(held = true);
         return true;
     });
-    if (animating || held) c.requestFrame();
+    // Composed again as each gets there (or each frame while leaving content is held); on the
+    // way they are only laid out and drawn again.
+    if (held) c.requestFrame();
+    else if (animating) c.requestFrameAt(due);
     int target = -1;
     for (size_t i = 0; i < s.items.size(); ++i) {
         auto& it = s.items[i];
@@ -333,7 +363,8 @@ void AnimatedContent(const T& targetState,
         for (const auto& it : s.items) {
             key(it.id, [&] {
                 const detail::TransitionParts& parts = it.exiting ? it.exit : seeking && !it.seeking ? s.seekExit : it.enter;
-                Modifier m = parts.apply(Modifier().zIndex(it.zIndex), it.progress);
+                Modifier m = it.clock ? parts.apply(Modifier().zIndex(it.zIndex), detail::live(it.clock))
+                                      : parts.apply(Modifier().zIndex(it.zIndex), it.progress);
                 Box(it.exiting ? detail::ignoringInput(m) : m, [&] { content(AnimatedContentScope(it.visibility), it.state); });
             });
         }

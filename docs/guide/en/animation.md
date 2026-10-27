@@ -68,6 +68,8 @@ void Details() {
 
 Enter transitions are `fadeIn`, `slideInHorizontally`, `slideInVertically`, `scaleIn`, `expandIn`, `expandHorizontally` and `expandVertically`; exit transitions are their `fadeOut`, `slideOut…`, `scaleOut` and `shrink…` counterparts. Combine them with `+`. `EnterTransition::None` and `ExitTransition::None` animate nothing, for when the children animate themselves with `animateEnterExit` from the content's `AnimatedVisibilityScope`.
 
+As in Compose, a transition is read as its content is laid out and drawn: the composable around it is composed again when it starts and when it is done, not on the frames in between.
+
 ## AnimatedContent and Crossfade
 
 `AnimatedContent` animates between contents when its target state changes: the old content leaves while the new one enters, and the size animates between them.

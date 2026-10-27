@@ -22150,6 +22150,56 @@ TEST(animated_content_aligns_its_contents_and_keeps_same_key_content) {
     CHECK(rule.onNodeWithText("veri 10 (2)").exists());  // a new loaded content
 }
 
+TEST(transitions_compose_their_caller_as_they_start_and_end) {
+    auto page = mutableStateOf(0);
+    auto shown = mutableStateOf(true);
+    int composed = 0;
+    ComposeTestRule rule([&] {
+        ++composed;
+        Column([&] {
+            AnimatedContent(page.get(), [](const int& p) { Box(Modifier().size(100, 40).testTag("sayfa" + std::to_string(p))); }, Modifier(),
+                            togetherWith(fadeIn(0, tween(320)), fadeOut(0, tween(200))));
+            AnimatedVisibility(shown.get(), Modifier(), fadeIn(0, tween(300)) + expandVertically(tween(300)),
+                               fadeOut(0, tween(300)) + shrinkVertically(tween(300)),
+                               [](const AnimatedVisibilityScope&) { Box(Modifier().size(100, 40).testTag("kutu")); });
+            Box(Modifier().size(100, 10).testTag("alt"));
+        });
+    });
+    auto alphas = [&] {
+        testing::RecordingCanvas canvas;
+        rule.host().draw(canvas);
+        return canvas.layerAlphas;
+    };
+    float below = rule.onNodeWithTag("alt").bounds().y;
+    page.set(1);
+    shown.set(false);
+    rule.advanceFrame();  // composed with the new targets
+    int before = composed;
+    rule.advanceTimeBy(96);
+    // On their way, laid out and drawn as they go, composed neither.
+    auto a = alphas();
+    CHECK(composed == before && rule.onNodeWithTag("sayfa0").exists() && rule.onNodeWithTag("sayfa1").exists());
+    CHECK(a.size() == 3 && std::all_of(a.begin(), a.end(), [](float x) { return x > 0.05f && x < 0.95f; }));
+    float y = rule.onNodeWithTag("alt").bounds().y;
+    CHECK(y < below - 5 && y > below - 35);  // what is under the shrinking box comes up with it
+    rule.advanceTimeBy(128);  // the page that left is out (at 200 ms), the rest still on their way
+    CHECK(composed == before + 1 && !rule.onNodeWithTag("sayfa0").exists() && rule.onNodeWithTag("kutu").exists());
+    rule.waitForIdle();
+    // There: composed as each got there (the page out at 200 ms, the box at 300, the page in at 320).
+    CHECK(!rule.onNodeWithTag("sayfa0").exists() && rule.onNodeWithTag("sayfa1").exists() && !rule.onNodeWithTag("kutu").exists());
+    CHECK(composed == before + 3 && alphas().empty() && near(rule.onNodeWithTag("alt").bounds().y, below - 40));
+    // Turned back on its way: composed as it turns and when it gets back, not when it would have arrived.
+    shown.set(true);
+    rule.advanceTimeBy(160);
+    shown.set(false);
+    rule.advanceFrame();
+    before = composed;
+    rule.advanceTimeBy(200);  // past where the way in would have ended, not yet out
+    CHECK(composed == before && rule.onNodeWithTag("kutu").exists());
+    rule.waitForIdle();
+    CHECK(composed == before + 1 && !rule.onNodeWithTag("kutu").exists());
+}
+
 TEST(animate_enter_exit_gives_children_their_own_transitions) {
     auto open = mutableStateOf(false);
     auto later = mutableStateOf(false);
@@ -22210,10 +22260,11 @@ TEST(animate_enter_exit_gives_children_their_own_transitions) {
     rule.advanceTimeBy(300);
     float turned = rule.onNodeWithTag("sayfa").bounds().y;
     open.set(true);
-    rule.advanceFrame();
-    rule.advanceFrame();
+    rule.advanceFrame();  // turned at this frame, from where it is then (a frame further out)
+    float back = rule.onNodeWithTag("sayfa").bounds().y;
+    rule.advanceTimeBy(48);
     y = rule.onNodeWithTag("sayfa").bounds().y;
-    CHECK(y > rest && y <= turned + 0.5f);
+    CHECK(back <= turned + 4 && y > rest && y < back);  // (eased: slow at first)
     rule.waitForIdle();
     CHECK(rule.onNodeWithTag("perde").exists() && near(rule.onNodeWithTag("sayfa").bounds().y, rest));
 }

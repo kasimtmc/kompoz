@@ -257,13 +257,13 @@ struct RequiredSizeInElement final : ModifierElement {
 struct BackgroundElement final : ModifierElement {
     Color color;
     std::optional<Brush> brush;
-    std::optional<AnimatedState<Color>> animated;  // its color read as it is drawn
+    std::optional<detail::Live<Color>> animated;  // its color read as it is drawn
     Shape shape;
     void draw(GraphicsContext& canvas, const Rect& bounds, const LayoutNode& node, const std::function<void()>& drawContent) const override {
         if (brush)
             canvas.fillShape(bounds, shape, node.rtl, *brush, bounds);
         else
-            canvas.fillShape(bounds, shape, node.rtl, animated ? animated->value() : color);
+            canvas.fillShape(bounds, shape, node.rtl, animated ? (*animated)() : color);
         drawContent();
     }
     bool equals(const ModifierElement& other) const override {
@@ -305,9 +305,9 @@ struct ShapeClipElement final : ModifierElement {
 
 struct AlphaElement final : ModifierElement {
     float alpha = 1;
-    std::optional<AnimatedState<float>> animated;  // read as it is drawn
+    std::optional<detail::Live<float>> animated;  // read as it is drawn
     void draw(GraphicsContext& canvas, const Rect& bounds, const LayoutNode&, const std::function<void()>& drawContent) const override {
-        float alpha = animated ? std::clamp(animated->value(), 0.f, 1.f) : this->alpha;
+        float alpha = animated ? std::clamp((*animated)(), 0.f, 1.f) : this->alpha;
         if (alpha >= 1) return drawContent();
         if (alpha <= 0 || canvas.quickReject(bounds)) return;  // the layer shows nothing outside its bounds
         canvas.pushLayer(bounds, 0, alpha);
@@ -919,21 +919,21 @@ Modifier Modifier::clip(Shape shape) const {
 Modifier Modifier::alpha(float alpha) const {
     return with<AlphaElement>(*this, [&](auto& e) { e.alpha = std::clamp(alpha, 0.f, 1.f); });
 }
-Modifier detail::animatedBackground(const Modifier& m, const AnimatedState<Color>& color, Shape shape) {
+Modifier detail::animatedBackground(const Modifier& m, const Live<Color>& color, Shape shape) {
     return with<BackgroundElement>(m, [&](auto& e) {
         e.animated = color;
         e.shape = shape;
     });
 }
-Modifier detail::animatedAlpha(const Modifier& m, const AnimatedState<float>& alpha) {
+Modifier detail::animatedAlpha(const Modifier& m, const Live<float>& alpha) {
     return with<AlphaElement>(m, [&](auto& e) { e.animated = alpha; });
 }
-Modifier detail::animatedScale(const Modifier& m, const AnimatedState<float>& scale) {
-    return m.graphicsLayer([scale](GraphicsLayerScope& l) { l.scaleX = l.scaleY = scale.value(); });
+Modifier detail::animatedScale(const Modifier& m, const Live<float>& scale) {
+    return m.graphicsLayer([scale](GraphicsLayerScope& l) { l.scaleX = l.scaleY = scale(); });
 }
-Modifier detail::animatedShadow(const Modifier& m, const AnimatedState<float>& elevation, Shape shape) {
+Modifier detail::animatedShadow(const Modifier& m, const Live<float>& elevation, Shape shape) {
     return m.graphicsLayer([elevation, shape](GraphicsLayerScope& l) {  // (as shadow(): clipped to its shape while it has one)
-        float e = elevation.value();
+        float e = elevation();
         l.shadowElevation = std::max(0.f, e);
         l.shape = shape;
         l.clip = e > 0;

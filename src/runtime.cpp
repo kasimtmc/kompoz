@@ -117,8 +117,21 @@ void Composer::invalidateReaders(const void* key) {
         if (s) invalidateScope(*s);
 }
 
-void Composer::invalidateFrameScopes() {
+void Composer::invalidateFrameScopes(int64_t frameTimeNanos) {
     for (Scope* s : std::exchange(frameScopes_, {})) invalidateScope(*s);
+    std::vector<Scope*> due;
+    std::erase_if(timedScopes_, [&](const auto& t) { return t.first <= frameTimeNanos && (due.push_back(t.second), true); });
+    for (Scope* s : due) invalidateScope(*s);
+}
+
+void Composer::requestFrameAt(int64_t frameTimeNanos) {
+    if (!currentScope_) return;
+    for (auto& [at, scope] : timedScopes_)
+        if (scope == currentScope_) {
+            at = std::min(at, frameTimeNanos);
+            return;
+        }
+    timedScopes_.push_back({frameTimeNanos, currentScope_});
 }
 
 void Composer::requestFrame() {
@@ -173,6 +186,7 @@ void Composer::restart(Scope& scope) {
 void Composer::run(Scope& scope) {
     Scope* outer = std::exchange(currentScope_, &scope);
     clearReads(scope);
+    std::erase_if(timedScopes_, [&](const auto& t) { return t.second == &scope; });  // (asked again if still due)
     scope.invalid = false;
     enter(*scope.group);
     scope.body();
@@ -221,6 +235,7 @@ void Composer::forget(Scope& scope) {
     clearReads(scope);
     std::erase(invalid_, &scope);
     std::erase(frameScopes_, &scope);
+    std::erase_if(timedScopes_, [&](const auto& t) { return t.second == &scope; });
     if (currentScope_ == &scope) currentScope_ = nullptr;
 }
 

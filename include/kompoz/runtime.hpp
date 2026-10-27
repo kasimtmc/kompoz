@@ -174,8 +174,8 @@ public:
     void invalidateReaders(const void* key);
     bool recording() const { return currentScope_ != nullptr; }  // reads now are a scope's
     void invalidateScope(Scope& scope);
-    void invalidateFrameScopes();  // scopes that asked for the next animation frame
-    bool hasFrameScopes() const { return !frameScopes_.empty(); }
+    void invalidateFrameScopes(int64_t frameTimeNanos);  // scopes that asked for this frame (the next, or one by now)
+    bool hasFrameScopes() const { return !frameScopes_.empty() || !timedScopes_.empty(); }
     const RecompositionStats& stats() const { return stats_; }
 
     // ---- Used by composables ----
@@ -219,6 +219,9 @@ public:
     void afterComposition(std::function<void()> effect) { effects_.push_back(std::move(effect)); }
     int64_t frameTimeNanos() const { return frameTime_; }
     void requestFrame();
+    // The running scope composed again at the frame at `frameTimeNanos` (or the first after),
+    // not on those before: an animation read elsewhere telling its scope when it is done.
+    void requestFrameAt(int64_t frameTimeNanos);
     ComposeHost& host() { return host_; }
 
     void forget(Scope& scope);  // a scope left the composition
@@ -250,6 +253,7 @@ private:
     std::unordered_map<const void*, Readers> readers_;
     std::vector<Scope*> invalid_;
     std::vector<Scope*> frameScopes_;
+    std::vector<std::pair<int64_t, Scope*>> timedScopes_;
     std::vector<std::unique_ptr<Group>> parked_;
     uint64_t pass_ = 0;  // which composition this is
     int64_t frameTime_ = 0;

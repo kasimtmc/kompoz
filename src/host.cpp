@@ -395,7 +395,7 @@ bool ComposeHost::frame(int64_t frameTimeNanos) {
             composer_.invalidateRoot();
             layoutEverything_ = true;
         }
-        if (pass == 0) composer_.invalidateFrameScopes();
+        if (pass == 0) composer_.invalidateFrameScopes(frameTimeNanos);
         if (composer_.recompose(frameTimeNanos)) {
             layoutDirty_ = true;
             syncTextInput();

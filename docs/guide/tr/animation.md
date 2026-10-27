@@ -68,6 +68,8 @@ void Details() {
 
 Giriş geçişleri `fadeIn`, `slideInHorizontally`, `slideInVertically`, `scaleIn`, `expandIn`, `expandHorizontally` ve `expandVertically`'dir; çıkış geçişleri bunların karşılıkları olan `fadeOut`, `slideOut…`, `scaleOut` ve `shrink…`'tir. Bunları `+` ile birleştirin. `EnterTransition::None` ve `ExitTransition::None` hiçbir şeyi canlandırmaz; çocuklar kendilerini içeriğin `AnimatedVisibilityScope`'undan `animateEnterExit` ile canlandırdığında kullanılır.
 
+Compose'taki gibi bir geçiş, içeriği yerleştirilip çizilirken okunur: çevresindeki composable geçiş başladığında ve bittiğinde yeniden oluşturulur, aradaki karelerde değil.
+
 ## AnimatedContent ve Crossfade
 
 `AnimatedContent`, hedef durumu değiştiğinde içerikler arasında canlandırır: eski içerik çıkarken yenisi girer ve boyut ikisi arasında canlanır.
