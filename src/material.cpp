@@ -634,21 +634,33 @@ void ToggleFloatingActionButton(bool checked, std::function<void(bool)> onChecke
                                 const ToggleFloatingActionButtonOptions& options, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
-    float p = animateFloatAsState(checked ? 1.f : 0.f, motionScheme().fastSpatialSpec);
-    float t = std::clamp(p, 0.f, 1.f);
-    float size = options.containerSize + (options.checkedContainerSize - options.containerSize) * p;
-    float radius = options.cornerRadius + (size / 2 - options.cornerRadius) * t;
-    Color container = lerp(options.containerColor.value_or(cs.primaryContainer), options.checkedContainerColor.value_or(cs.primary), t);
-    Color contentColor = lerp(cs.onPrimaryContainer, cs.onPrimary, t);
+    // Its size, corners and colors along the progress, read as it is laid out and drawn.
+    auto progress = animateFloatAsState(checked ? 1.f : 0.f, motionScheme().fastSpatialSpec);
+    auto sizeAt = [from = options.containerSize, to = options.checkedContainerSize](float p) { return from + (to - from) * p; };
+    Shape shape{Shape::Kind::Rounded, 0, 0, true};
+    shape.animatedCorners = std::make_shared<const std::function<std::array<CornerSize, 4>()>>([progress, sizeAt, corner = options.cornerRadius] {
+        float p = progress.value(), radius = corner + (sizeAt(p) / 2 - corner) * std::clamp(p, 0.f, 1.f);
+        return std::array<CornerSize, 4>{CornerSize{radius}, CornerSize{radius}, CornerSize{radius}, CornerSize{radius}};
+    });
+    Color off = options.containerColor.value_or(cs.primaryContainer), on = options.checkedContainerColor.value_or(cs.primary);
+    detail::Live<Color> container{[progress, off, on] { return lerp(off, on, std::clamp(progress.value(), 0.f, 1.f)); }};
+    struct ContentColor {  // (a state for LocalContentColor: its readers follow it)
+        AnimatedState<float> progress;
+        Color off, on;
+        Color value() const { return lerp(off, on, std::clamp(progress.value(), 0.f, 1.f)); }
+        bool operator==(const ContentColor&) const = default;
+    };
+    Modifier sized = Modifier().layout([progress, sizeAt](const MeasureNext& next, const Constraints& c, Offset& at) {
+        at = {};  // (as size(size))
+        float s = sizeAt(progress.value()), w = std::clamp(s, c.minWidth, c.maxWidth), h = std::clamp(s, c.minHeight, c.maxHeight);
+        next({w, w, h, h});
+        return Size{w, h};
+    });
     float outer = std::max(options.containerSize, options.checkedContainerSize);
     Box(modifier.size(outer), options.contentAlignment, [&] {
-        CompositionLocalProvider({LocalContentColor.provides(contentColor)}, [&] {
-            Box(Modifier()
-                    .size(size)
-                    .shadow(6, RoundedCornerShape(radius))
-                    .background(container, RoundedCornerShape(radius))
-                    .toggleable(checked, std::move(onCheckedChange)),
-                Alignment::Center, [&] { content(ToggleFloatingActionButtonScope(p)); });
+        CompositionLocalProvider({LocalContentColor.provides(ContentColor{progress, cs.onPrimaryContainer, cs.onPrimary})}, [&] {
+            Box(detail::animatedBackground(sized.shadow(6, shape), container, shape).toggleable(checked, std::move(onCheckedChange)),
+                Alignment::Center, [&] { content(ToggleFloatingActionButtonScope(progress)); });
         });
     });
 }

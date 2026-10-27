@@ -59,10 +59,9 @@ void FabMenuSection(CallSite site) {
                      {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
                 FloatingActionButtonMenu(fabOpen.get(), [&] {
                     ToggleFloatingActionButton(fabOpen.get(), [fabOpen](bool on) { fabOpen.set(on); },
-                                               [](const ToggleFloatingActionButtonScope& s) {
-                                                   float turn = 45 * s.checkedProgress();
+                                               [](const ToggleFloatingActionButtonScope& s) {  // (turned as it is drawn)
                                                    Icon(Icons::Filled::Add, "Menü",
-                                                        Modifier().graphicsLayer([turn](GraphicsLayerScope& l) { l.rotationZ = turn; }));
+                                                        Modifier().graphicsLayer([s](GraphicsLayerScope& l) { l.rotationZ = 45 * s.checkedProgress(); }));
                                                });
                 }, [&](const FloatingActionButtonMenuScope& menu) {
                     struct Action {

@@ -506,5 +506,10 @@ Painter BitmapPainter(ImageBitmap image);
 Painter VectorPainter(ImageVector image);
 Painter ColorPainter(Color color);
 Painter BrushPainter(Brush brush);  // (a color filter isn't applied to it)
+namespace detail {
+// A vector that changes (an animated vector's at the time), read as it is drawn and drawn as a
+// VectorPainter draws one (the same one again: its bitmap kept). Equal only to itself.
+Painter changingVectorPainter(std::function<ImageVector()> vectorNow, ImageVector first);
+} // namespace detail
 
 } // namespace kompoz

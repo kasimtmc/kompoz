@@ -88,7 +88,7 @@ WaveShift waveShift(bool moving, const Resolved& r) {
 // The determinate wave's height (0..1), animating to what `amplitude` asks for this progress: in
 // 500 ms, rising with the standard easing, falling with the emphasized accelerating one (Compose's
 // Increasing/DecreasingAmplitudeAnimationSpec).
-float determinateAmplitude(float progress, const WavyProgressIndicatorOptions& o) {
+AnimatedState<float> determinateAmplitude(float progress, const WavyProgressIndicatorOptions& o) {  // (read as it is drawn)
     float target = std::clamp(o.amplitude ? o.amplitude(progress) : WavyProgressIndicatorDefaults::indicatorAmplitude(progress), 0.f, 1.f);
     auto& previous = remember([target] { return std::pair{target, true}; });  // the last target, and whether it rose to it
     if (target != previous.first) previous = {target, target > previous.first};
@@ -185,11 +185,12 @@ void LinearWavyProgressIndicator(float progress, const Modifier& modifier, const
     composable(site, progress, modifier, options, [=] {
         Resolved r = resolve(options, WavyProgressIndicatorDefaults::LinearDeterminateWavelength);
         float p = std::clamp(progress, 0.f, 1.f);
-        float amplitude = determinateAmplitude(p, options);
-        WaveShift shift = waveShift(amplitude > 0, r);
+        auto waves = determinateAmplitude(p, options);
+        WaveShift shift = waveShift(waves.targetValue() > 0 || waves.isRunning(), r);
         progressNode(
             CallSite::current(), modifier.semantics({.progressBarRangeInfo = ProgressBarRangeInfo{p, 0, 1}}), {WavyProgressIndicatorDefaults::LinearContainerWidth, WavyProgressIndicatorDefaults::LinearContainerHeight},
             [=](GraphicsContext& canvas, const Rect& b, const LayoutNode& node) {
+                float amplitude = waves.value();
                 LinearLook look{{}, amplitude * std::max(0.f, (b.height - options.strokeWidth) / 2), shift(node), options.stopSize};
                 if (p > 0) look.lines.push_back({0.f, b.width * p});
                 drawLinear(canvas, b, node.rtl, look, r, options);
@@ -220,13 +221,13 @@ void CircularWavyProgressIndicator(float progress, const Modifier& modifier, con
     composable(site, progress, modifier, options, [=] {
         Resolved r = resolve(options, WavyProgressIndicatorDefaults::CircularWavelength);
         float p = std::clamp(progress, 0.f, 1.f);
-        float amplitude = determinateAmplitude(p, options);
-        WaveShift shift = waveShift(amplitude > 0, r);
+        auto waves = determinateAmplitude(p, options);
+        WaveShift shift = waveShift(waves.targetValue() > 0 || waves.isRunning(), r);
         float size = WavyProgressIndicatorDefaults::CircularContainerSize;
         progressNode(
             CallSite::current(), modifier.semantics({.progressBarRangeInfo = ProgressBarRangeInfo{p, 0, 1}}), {size, size},
             [=](GraphicsContext& canvas, const Rect& b, const LayoutNode& node) {
-                drawCircular(canvas, b, -kPi / 2, 2 * kPi * p, amplitude * WavyProgressIndicatorDefaults::CircularAmplitude, shift(node), r, options);
+                drawCircular(canvas, b, -kPi / 2, 2 * kPi * p, waves.value() * WavyProgressIndicatorDefaults::CircularAmplitude, shift(node), r, options);
             },
             percent(p));
     });

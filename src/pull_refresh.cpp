@@ -149,7 +149,7 @@ namespace {
 // CircularArrowProgressIndicator, after SwipeRefreshLayout).
 void ArrowIndicator(float progress, Color color, CallSite site = CallSite::current()) {
     ComposableScope scope(site);
-    float alpha = animateFloatAsState(progress >= 1 ? 1.f : 0.3f, tween(150));
+    auto shown = animateFloatAsState(progress >= 1 ? 1.f : 0.3f, tween(150));  // (read as it is drawn)
     Canvas(Modifier().size(kSpinnerSize), [=](DrawScope& s) {
         float adjusted = std::max(std::min(1.f, progress) - 0.4f, 0.f) * 5 / 3;  // the first 40% shows nothing
         float tension = std::clamp(std::abs(progress) - 1, 0.f, 2.f);
@@ -157,7 +157,7 @@ void ArrowIndicator(float progress, Color color, CallSite site = CallSite::curre
         float turn = (-0.25f + 0.4f * adjusted + tension) * 0.5f;  // of a full turn
         float start = turn * 360, end = (turn + adjusted * 0.8f) * 360, scale = std::min(1.f, adjusted);
         if (scale <= 0) return;
-        Color c = color.copy(color.alpha() * alpha);
+        Color c = color.copy(color.alpha() * shown.value());
         float r = kArcRadius + kStrokeWidth / 2;
         Offset o = s.center();
         s.drawArc(c, start, end - start, false, {o.x - r, o.y - r}, Size{2 * r, 2 * r}, 1, Stroke(kStrokeWidth));

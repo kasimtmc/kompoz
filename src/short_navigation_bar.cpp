@@ -1,5 +1,6 @@
 // M3 Expressive's navigation: the short navigation bar and the wide navigation rail.
 #include <kompoz/adaptive.hpp>
+#include <kompoz/animated.hpp>
 #include <kompoz/animation.hpp>
 #include <kompoz/draw.hpp>
 #include <kompoz/gestures.hpp>
@@ -144,8 +145,9 @@ PaddingValues railInsets(const std::optional<WindowInsets>& given) {
         .asPaddingValues();
 }
 
-// The rail itself: its header and items, laid out collapsed or expanded, `width` wide.
-void railColumn(bool expanded, float width, Color container, Shape shape, const Modifier& modifier, const Content& header,
+// The rail itself: its header and items, laid out collapsed or expanded, `width` wide (read as it
+// is laid out: one on its way lays it out again, composes nothing).
+void railColumn(bool expanded, const detail::Live<float>& width, Color container, Shape shape, const Modifier& modifier, const Content& header,
                 const Content& content, PaddingValues insets, Arrangement::Kind arrangement = Arrangement::Kind::Start) {
     const ColorScheme& cs = colorScheme();
     float spacing = expanded ? 0.f : 4.f;
@@ -153,7 +155,11 @@ void railColumn(bool expanded, float width, Color container, Shape shape, const 
         Column(modifier.fillMaxHeight()
                    .background(container, shape)
                    .padding(insets.start, insets.top, 0, insets.bottom)
-                   .width(width + insets.start)
+                   .layout([width, start = insets.start](const MeasureNext& next, const Constraints& c, Offset& at) {
+                       at = {};  // (as width(width + start))
+                       float w = std::clamp(width() + start, c.minWidth, c.maxWidth);
+                       return c.constrain({w, next({w, w, c.minHeight, c.maxHeight}).height});
+                   })
                    .clipToBounds()
                    .padding(0, 44, 0, 12),
                {.verticalArrangement = Arrangement::spacedBy(spacing),
@@ -173,8 +179,8 @@ void WideNavigationRail(const Modifier& modifier, const Content& content, const 
     ComposableScope scope(site);
     WideNavigationRailState state = options.state ? *options.state : rememberWideNavigationRailState();
     bool expanded = state.isExpanded();
-    float p = animateFloatAsState(expanded ? 1.f : 0.f, motionScheme().defaultSpatialSpec);
-    float width = options.collapsedWidth + (options.expandedWidth - options.collapsedWidth) * p;
+    auto p = animateFloatAsState(expanded ? 1.f : 0.f, motionScheme().defaultSpatialSpec);
+    detail::Live<float> width{[p, from = options.collapsedWidth, to = options.expandedWidth] { return from + (to - from) * p.value(); }};
     railColumn(expanded, width, options.containerColor.value_or(colorScheme().surface), RectangleShape, modifier, options.header, content,
                railInsets(options.windowInsets), options.arrangement);
 }
@@ -184,24 +190,37 @@ void ModalWideNavigationRail(const Modifier& modifier, const Content& content, c
     const ColorScheme& cs = colorScheme();
     WideNavigationRailState state = options.state ? *options.state : rememberWideNavigationRailState();
     bool expanded = state.isExpanded();
-    float p = animateFloatAsState(expanded ? 1.f : 0.f, spring(1, 700));
+    // Its progress worked out here as it turns and gets there, read on the way as the scrim is
+    // drawn and the rail laid out.
+    auto& composer = detail::Composer::require();
+    int64_t now = composer.frameTimeNanos();
+    auto clock = remember([&] {
+        auto made = std::make_shared<detail::TransitionProgress>();
+        made->from = made->to = expanded ? 1.f : 0.f;
+        made->host = &composer.host();
+        return made;
+    });
+    if (clock->to != (expanded ? 1.f : 0.f)) clock->turn(expanded ? 1.f : 0.f, spring(1, 700), now);
+    bool done = false;
+    clock->at(now, &done);
+    if (!done) composer.requestFrameAt(clock->end);
+    detail::Live<float> p = detail::live(clock);
     PaddingValues insets = railInsets(options.windowInsets);
-    if (!options.hideOnCollapse) railColumn(false, options.collapsedWidth, cs.surface, RectangleShape, modifier, options.header, content, insets);
-    if (!expanded && p <= 0.001f) return;
+    if (!options.hideOnCollapse)
+        railColumn(false, {{}, nullptr, options.collapsedWidth}, cs.surface, RectangleShape, modifier, options.header, content, insets);
+    if (!expanded && done) return;
     // Expanded: over everything, sliding in from the start above a scrim; a tap on the scrim or
     // Back collapses it.
     Popup({.fullScreen = true, .onDismissRequest = [state] { state.collapse(); }, .dismissOnOutsideClick = false}, [&] {
-        Box(Modifier()
-                .fillMaxSize()
-                .background(colorScheme().scrim.copy(colorScheme().scrim.alpha() * 0.32f * std::clamp(p, 0.f, 1.f)))
+        Box(detail::animatedBackground(Modifier().fillMaxSize(),
+                                       {[p, scrim = colorScheme().scrim] { return scrim.copy(scrim.alpha() * 0.32f * std::clamp(p(), 0.f, 1.f)); }})
                 .pointerInput(0, [state](PointerInputScope& s) -> Task {
                     co_await detectTapGestures(s, {.onTap = [state](Offset) { state.collapse(); }});
                 }),
             Alignment::TopStart, [&] {
-                float shift = (1 - p) * (options.expandedWidth + insets.start);
                 Box(Modifier()
                         .fillMaxHeight()
-                        .offset([shift] { return Offset{-shift, 0}; })
+                        .offset([p, across = options.expandedWidth + insets.start] { return Offset{-(1 - p()) * across, 0}; })
                         .pointerInput(0, [](PointerInputScope& s) -> Task {  // taps on the rail stay on it
                             while (true) {
                                 PointerEvent e = co_await s.awaitPointerEvent();
@@ -209,7 +228,7 @@ void ModalWideNavigationRail(const Modifier& modifier, const Content& content, c
                             }
                         }),
                     [&] {
-                        railColumn(true, options.expandedWidth, cs.surfaceContainer, RoundedCornerShape(0, 16, 16, 0), Modifier(), options.header,
+                        railColumn(true, {{}, nullptr, options.expandedWidth}, cs.surfaceContainer, RoundedCornerShape(0, 16, 16, 0), Modifier(), options.header,
                                    content, insets);
                     });
             });

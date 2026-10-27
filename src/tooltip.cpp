@@ -1,5 +1,6 @@
 // Material 3 tooltips: TooltipBox with plain and rich tooltips.
 
+#include <kompoz/animated.hpp>
 #include <kompoz/animation.hpp>
 #include <kompoz/coroutines.hpp>
 #include <kompoz/draw.hpp>
@@ -122,8 +123,24 @@ void tooltipBox(const TooltipPosition& position, const std::shared_ptr<Caret>& c
     });
     // Compose 1.4's: in and out growing from (shrinking to) 80% on the fast spatial spring and
     // fading on the fast effects one; shown until it has faded out.
-    float alpha = animated ? animateFloatAsState(visible ? 1.f : 0.f, motionScheme().fastEffectsSpec) : float(visible);
-    float scale = animated ? animateFloatAsState(visible ? 1.f : 0.8f, motionScheme().fastSpatialSpec) : 1.f;
+    // Worked out here as it turns and gets there; on the way, read as it is drawn.
+    auto& composer = detail::Composer::require();
+    int64_t now = composer.frameTimeNanos();
+    auto clock = [&](float shown) {
+        auto made = std::make_shared<detail::TransitionProgress>();
+        made->from = made->to = shown;
+        made->host = &composer.host();
+        return made;
+    };
+    auto fade = remember([&] { return clock(visible ? 1.f : 0.f); });
+    auto grow = remember([&] { return clock(visible ? 1.f : 0.8f); });
+    if (animated && fade->to != (visible ? 1.f : 0.f)) fade->turn(visible ? 1.f : 0.f, motionScheme().fastEffectsSpec, now);
+    if (animated && grow->to != (visible ? 1.f : 0.8f)) grow->turn(visible ? 1.f : 0.8f, motionScheme().fastSpatialSpec, now);
+    bool faded = false, grown = false;
+    float alpha = animated ? fade->at(now, &faded) : float(visible), scale = animated ? grow->at(now, &grown) : 1.f;
+    if (!animated) faded = grown = true;
+    if (!faded) composer.requestFrameAt(fade->end);
+    if (!grown) composer.requestFrameAt(grow->end);
     Modifier anchor = modifier;
     if (input) {
         auto trigger = std::make_shared<TooltipTriggerElement>();
@@ -133,10 +150,16 @@ void tooltipBox(const TooltipPosition& position, const std::shared_ptr<Caret>& c
     }
     Box(anchor, [&] {
         content();
-        if (!visible && alpha <= 0.001f) return;
+        if (!visible && faded) return;  // faded out
         Popup({.position = position, .onDismissRequest = [state] { state.dismiss(); }, .focusable = focusable}, [&] {
             auto shown = [&] {
-                if (animated) Box(Modifier().graphicsLayer({.scaleX = scale, .scaleY = scale, .alpha = alpha}), tooltip);
+                if (animated && (!faded || !grown))
+                    Box(Modifier().graphicsLayer([fading = detail::live(fade), growing = detail::live(grow)](GraphicsLayerScope& l) {
+                            l.scaleX = l.scaleY = growing(), l.alpha = fading();
+                        }),
+                        tooltip);
+                else if (animated)
+                    Box(Modifier().graphicsLayer({.scaleX = scale, .scaleY = scale, .alpha = alpha}), tooltip);
                 else tooltip();
             };
             if (caretInfo) CompositionLocalProvider({LocalTooltipCaret.provides(caretInfo)}, shown);

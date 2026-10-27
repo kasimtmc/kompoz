@@ -204,8 +204,20 @@ namespace {
 
 // A menu's popup under its anchor, on a card or (expressive, with groups for cards) bare.
 void menuPopup(bool expanded, std::function<void()> onDismissRequest, const Content& content, const Modifier& modifier, bool card) {
-    float p = animateFloatAsState(expanded ? 1.f : 0.f, tween(expanded ? 120 : 75));
-    if (!expanded && p <= 0) return;  // closed: not composed at all
+    // Its progress worked out here as it turns and gets there, read on the way as it is drawn.
+    auto& composer = detail::Composer::require();
+    int64_t now = composer.frameTimeNanos();
+    auto clock = remember([&] {
+        auto made = std::make_shared<detail::TransitionProgress>();
+        made->from = made->to = expanded ? 1.f : 0.f;
+        made->host = &composer.host();
+        return made;
+    });
+    if (clock->to != (expanded ? 1.f : 0.f)) clock->turn(expanded ? 1.f : 0.f, tween(expanded ? 120 : 75), now);
+    bool done = false;
+    float p = clock->at(now, &done);
+    if (!expanded && done) return;  // closed: not composed at all
+    if (!done) composer.requestFrameAt(clock->end);
     const ColorScheme& cs = colorScheme();
     PaddingValues insets = WindowInsets::safeDrawing().asPaddingValues();
     auto dismiss = rememberUpdatedState(std::move(onDismissRequest));
@@ -226,10 +238,15 @@ void menuPopup(bool expanded, std::function<void()> onDismissRequest, const Cont
     Popup(std::move(spec), [&] {
         CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
             float s = 0.8f + 0.2f * p;
+            detail::Live<float> progress = detail::live(clock);
             detail::Composer::require().emit(
                 detail::keyOf(CallSite::current()),
                 [&](LayoutNode& node) {
-                    Modifier m = Modifier().graphicsLayer({.scaleX = s, .scaleY = s, .alpha = p, .transformOrigin = {0, 0}});
+                    Modifier m = done ? Modifier().graphicsLayer({.scaleX = s, .scaleY = s, .alpha = p, .transformOrigin = {0, 0}})
+                                      : Modifier().graphicsLayer([progress](GraphicsLayerScope& l) {
+                                            float now = progress();
+                                            l.scaleX = l.scaleY = 0.8f + 0.2f * now, l.alpha = now, l.transformOrigin = {0, 0};
+                                        });
                     node.modifier = card ? m.shadow(3, 4).background(cs.surfaceContainer, 4).then(modifier).padding(0, 8) : m.then(modifier);
                     node.measurePolicy = menuPolicy;
                     node.drawContent = {};
@@ -260,14 +277,14 @@ void menuItem(const Modifier& modifier, Color textColor, Color iconColor, const 
 // A checked or selected item: in tertiaryContainer, 12 dp round, its check before the text.
 void markedItem(bool marked, const std::function<Modifier(const Modifier&)>& interact, const Content& text, const MenuItemOptions& o) {
     const ColorScheme& cs = colorScheme();
-    Color container = animateColorAsState(marked ? cs.tertiaryContainer : cs.tertiaryContainer.copy(0), 150);
+    auto container = animateColorAsState(marked ? cs.tertiaryContainer : cs.tertiaryContainer.copy(0), 150);  // (read as it is drawn)
     Color content = !o.enabled ? cs.onSurface.copy(0.38f) : marked ? cs.onTertiaryContainer : cs.onSurface;
     Color icon = !o.enabled ? cs.onSurface.copy(0.38f) : marked ? cs.onTertiaryContainer : cs.onSurfaceVariant;
     Shape shape = marked ? RoundedCornerShape(12) : o.shape.value_or(RoundedCornerShape(4));
     Content leading = !marked ? o.leadingIcon
                       : o.checkedLeadingIcon ? o.checkedLeadingIcon
                                              : Content([] { Icon(Icons::Filled::Check, "", Modifier().size(24)); });
-    menuItem(interact(Modifier().padding(4, 0).background(container, shape)), content, icon, text, leading, o);
+    menuItem(interact(detail::animatedBackground(Modifier().padding(4, 0), container, shape)), content, icon, text, leading, o);
 }
 
 } // namespace
@@ -459,7 +476,7 @@ void ModalBottomSheet(std::function<void()> onDismissRequest, const ModalBottomS
             return {0, available.y};
         },
     });
-    float scrim = animateFloatAsState(anchored.targetValue() != SheetValue::Hidden ? kScrimAlpha : 0.f, motionScheme().defaultEffectsSpec);
+    auto scrim = animateFloatAsState(anchored.targetValue() != SheetValue::Hidden ? kScrimAlpha : 0.f, motionScheme().defaultEffectsSpec);  // (read as it is drawn)
     constexpr float kHiddenCorner = 28;  // the sheet reaches below the window so only its top corners are round
 
     // Shrunk by a back gesture as M3's: up to 48 dp narrower and 24 dp lower, towards its bottom
@@ -492,7 +509,10 @@ void ModalBottomSheet(std::function<void()> onDismissRequest, const ModalBottomS
             .enabled = anchored.targetValue() != SheetValue::Hidden,
         });
         // Stays clear of the status bar: a tall sheet leaves some scrim to tap.
-        Box(onTap(Modifier().fillMaxSize().background(cs.scrim.copy(cs.scrim.alpha() * scrim)), close).padding(0, insets.top + 48, 0, 0)
+        Box(onTap(detail::animatedBackground(Modifier().fillMaxSize(),
+                                             detail::Live<Color>{[scrim, color = cs.scrim] { return color.copy(color.alpha() * scrim.value()); }}),
+                  close)
+                .padding(0, insets.top + 48, 0, 0)
                 .onSizeChanged([d](Size s) {
                     d->room = s.height;
                     d->updateAnchors();

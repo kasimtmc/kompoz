@@ -302,6 +302,13 @@
   topuzu, bir radyo düğmesinin halkası ve noktası, bir liste öğesinin kabı, bir bölümlü düğmenin işareti ve etiketi,
   bir sekmenin göstergesi ve rengi, bir kaydırıcının topuzu ve bir sürükleme tutamacı yerleştirilip çizilirken okunur;
   işaretlendiklerinde, seçildiklerinde ya da tutulduklarında çağıran bir kez yeniden oluşturulur.
+- **Menüler, ipuçları, alanlar ve göstergeler çevrelerini oluşturmadan canlanır**: bir menünün ve bir ipucunun giriş
+  ve çıkışı, modal geniş rayın kayması ve perdesi ile geniş rayın genişliği, bir modal alt sayfanın perdesi, bir metin
+  alanının yüzen etiketi ve göstergesi, bir açma-kapama FAB'inin boyu, köşeleri ve renkleri, dalgalı bir göstergenin
+  dalgası, kaydırma çubuğunun rengi, işaretli bir menü öğesi, bir çipin simgesi, çekip yenileme oku, açılır menü ve
+  bölünmüş düğme okları ve canlandırılmış bir vektörün resmi (`rememberAnimatedVectorPainter`) yerleştirilip çizilirken
+  okunur; çıktığında giden şey, vardığında yeniden oluşturulur. `ToggleFloatingActionButtonScope::checkedProgress()`
+  ilerlemeyi çağrıldığı yerde okur (bir `graphicsLayer` içinde yalnızca o yeniden çizilir).
 - **Kaydırmak kayanı dolaşmaz**: yeniden ölçülmeden taşınan bir şey (bir listenin içeriği) içindeki yerleri yazıldıkları
   gibi bırakır; istendiklerinde hesaplanır, çizildiklerinde yazılırlar. Showcase'in Bileşenler ekranını kaydırmak ana
   thread'in %16 yerine %1'ini yerlere harcadı.

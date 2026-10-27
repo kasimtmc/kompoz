@@ -1423,9 +1423,9 @@ void TrailingButton(bool checked, std::function<void(bool)> onCheckedChange, con
 }
 void TrailingButtonIcon(bool checked, CallSite site) {
     ComposableScope scope(site);
-    float turn = animateFloatAsState(checked ? 180.f : 0.f, motionScheme().fastSpatialSpec);
+    auto turn = animateFloatAsState(checked ? 180.f : 0.f, motionScheme().fastSpatialSpec);  // (read as it is drawn)
     Icon(Icons::Filled::KeyboardArrowDown, checked ? LocalStrings.current().closeMenu : LocalStrings.current().openMenu,
-         Modifier().size(18).graphicsLayer([turn](GraphicsLayerScope& l) { l.rotationZ = turn; }));
+         Modifier().size(18).graphicsLayer([turn](GraphicsLayerScope& l) { l.rotationZ = turn.value(); }));
 }
 
 } // namespace SplitButtonDefaults
@@ -1647,11 +1647,9 @@ AnimatedImageVector animatedVectorResource(const std::string& path, CallSite sit
 Painter rememberAnimatedVectorPainter(const AnimatedImageVector& vector, bool atEnd, CallSite site) {
     ComposableScope scope(site);
     float total = float(vector.totalDurationMillis());
-    float millis = animateFloatAsState(atEnd ? total : 0.f, tween(total, 0, LinearEasing));
-    ImageVector now = vector.vectorAt(millis);
-    ImageVector& last = remember([] { return ImageVector(); });
-    if (last.empty() || !(last == now)) last = now;  // (drawn the same: the same vector, its bitmap kept)
-    return VectorPainter(last);
+    auto millis = animateFloatAsState(atEnd ? total : 0.f, tween(total, 0, LinearEasing));
+    // The vector at the time, made as it is drawn (only that is drawn again as it plays).
+    return remember(vector, [&] { return detail::changingVectorPainter([vector, millis] { return vector.vectorAt(millis.value()); }, vector.vectorAt(millis.targetValue())); });
 }
 
 namespace {
@@ -2586,7 +2584,8 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     bool labelAbove = !o.label.empty() && !plainKind && o.labelPosition.kind == TextFieldLabelPosition::Kind::Above;
     bool hasLabel = !o.label.empty() && !plainKind && !labelAbove;
     bool alwaysUp = hasLabel && o.labelPosition.alwaysMinimize;
-    float p = animateFloatAsState(isFocused || !value.empty() || alwaysUp ? 1.f : 0.f, 150);  // 1: label floated
+    // 1: label floated. Read as the field is drawn (the label, the affixes, the outline's gap).
+    auto floated = animateFloatAsState(isFocused || !value.empty() || alwaysUp ? 1.f : 0.f, 150);
     // Disabled: no focus (a focused field lets go of it).
     bool enabled = o.enabled;
     SideEffect([enabled, isFocused, focus] {
@@ -2617,10 +2616,10 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                              quiet.copy(0.38f), quiet);
     Color suffixColor = pick(tc.focusedSuffixColor, tc.unfocusedSuffixColor, tc.disabledSuffixColor, tc.errorSuffixColor, quiet, quiet,
                              quiet.copy(0.38f), quiet);
-    Color indicator = animateColorAsState(pick(tc.focusedIndicatorColor, tc.unfocusedIndicatorColor, tc.disabledIndicatorColor,
-                                               tc.errorIndicatorColor, cs.primary, kind == FieldKind::Outlined ? cs.outline : quiet,
-                                               cs.onSurface.copy(kind == FieldKind::Outlined ? 0.12f : 0.38f), cs.error),
-                                          150);
+    auto indicatorColor = animateColorAsState(pick(tc.focusedIndicatorColor, tc.unfocusedIndicatorColor, tc.disabledIndicatorColor,
+                                                   tc.errorIndicatorColor, cs.primary, kind == FieldKind::Outlined ? cs.outline : quiet,
+                                                   cs.onSurface.copy(kind == FieldKind::Outlined ? 0.12f : 0.38f), cs.error),
+                                              150);  // (read as it is drawn)
     Color labelColor = pick(tc.focusedLabelColor, tc.unfocusedLabelColor, tc.disabledLabelColor, tc.errorLabelColor, cs.primary, quiet,
                             faded, cs.error);
     float indicatorWidth = isFocused ? 2.f : 1.f;
@@ -2634,7 +2633,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     float prefixWidth = o.prefix.empty() ? 0.f : measurer->measureWidth(o.prefix, font) + kAffixGap;
     float suffixWidth = o.suffix.empty() ? 0.f : measurer->measureWidth(o.suffix, font) + kAffixGap;
     padStart += prefixWidth, padEnd += suffixWidth;
-    float affixAlpha = hasLabel ? p : 1.f;  // shown with the floated label
+    auto affixAlpha = [floated, hasLabel] { return hasLabel ? floated.value() : 1.f; };  // shown with the floated label
     float textShift = kind == FieldKind::Filled && hasLabel ? 8.f : 0.f;  // below the floated label
     Display transform = secure ? (secure->visible ? nullptr : passwordDisplay(value, secure->bullet, secure->revealed))
                         : o.visualTransformation == VisualTransformation::Password ? passwordDisplay(value)
@@ -2783,11 +2782,12 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     };
     // The prefix and suffix on the (first) line's baseline, at the text area's ends.
     auto drawAffixes = [=, prefix = o.prefix, suffix = o.suffix](GraphicsContext& canvas, const Rect& b, float baseline) {
-        if (affixAlpha < 0.01f) return;
+        float alpha = affixAlpha();
+        if (alpha < 0.01f) return;
         if (!prefix.empty())
-            canvas.drawText(prefix, {b.x + padStart - prefixWidth, baseline}, font, prefixColor.copy(prefixColor.alpha() * affixAlpha));
+            canvas.drawText(prefix, {b.x + padStart - prefixWidth, baseline}, font, prefixColor.copy(prefixColor.alpha() * alpha));
         if (!suffix.empty())
-            canvas.drawText(suffix, {b.right() - padEnd + kAffixGap, baseline}, font, suffixColor.copy(suffixColor.alpha() * affixAlpha));
+            canvas.drawText(suffix, {b.right() - padEnd + kAffixGap, baseline}, font, suffixColor.copy(suffixColor.alpha() * alpha));
     };
     // Multi-line: lines from the top, the caret's line kept in view.
     auto drawLines = [=, placeholder = o.placeholder](GraphicsContext& canvas, const Rect& b, const LayoutNode& node) {
@@ -3059,6 +3059,8 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
 
     // The container (outline or fill, indicator line) and the label, around the row.
     auto decoration = [=, label = o.label](ContentDrawScope& d) {
+        float p = floated.value();
+        Color indicator = indicatorColor.value();
         Size s = d.size();
         float h = s.height;
         Font small{lerp(16, 12, p)};

@@ -740,14 +740,15 @@ void LargeExtendedFloatingActionButton(std::function<void()> onClick, const Imag
 // M3 Expressive's FAB that stays checked (Compose's ToggleFloatingActionButton), the button of a
 // FloatingActionButtonMenu: checked, it turns from primaryContainer to primary and from its
 // rounded square to a circle (and to checkedContainerSize, shrinking towards contentAlignment).
-// The content reads checkedProgress() (0..1, animated); its content color follows too.
+// The content reads checkedProgress() (0..1, animated: read while drawing, as in a graphicsLayer,
+// only that is drawn again; in a composition, it is composed again); its content color follows too.
 class ToggleFloatingActionButtonScope {
 public:
-    explicit ToggleFloatingActionButtonScope(float progress) : progress_(progress) {}
-    float checkedProgress() const { return progress_; }
+    explicit ToggleFloatingActionButtonScope(AnimatedState<float> progress) : progress_(std::move(progress)) {}
+    float checkedProgress() const { return progress_.value(); }
 
 private:
-    float progress_;
+    AnimatedState<float> progress_;
 };
 struct ToggleFloatingActionButtonOptions {
     float containerSize = 56, checkedContainerSize = 56;  // dp (a medium one: 80 to 56)
@@ -763,8 +764,8 @@ void ToggleFloatingActionButton(bool checked, std::function<void(bool)> onChecke
 // above the button, one after another from the bottom, and close from the top.
 //   FloatingActionButtonMenu(open.get(), [&] {
 //       ToggleFloatingActionButton(open.get(), [open](bool on) { open.set(on); }, [](const ToggleFloatingActionButtonScope& s) {
-//           float turn = 45 * s.checkedProgress();  // the plus turns into a cross
-//           Icon(Icons::Filled::Add, "Menü", Modifier().graphicsLayer([turn](GraphicsLayerScope& l) { l.rotationZ = turn; }));
+//           // The plus turns into a cross, as it is drawn.
+//           Icon(Icons::Filled::Add, "Menü", Modifier().graphicsLayer([s](GraphicsLayerScope& l) { l.rotationZ = 45 * s.checkedProgress(); }));
 //       });
 //   }, [&](const FloatingActionButtonMenuScope& menu) {
 //       FloatingActionButtonMenuItem(menu, [] { ... }, [] { Text("Belge"); }, [] { Icon(Icons::Filled::Edit, ""); });

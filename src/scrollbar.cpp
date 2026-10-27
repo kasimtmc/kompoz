@@ -77,7 +77,7 @@ void scrollbar(bool vertical, const std::shared_ptr<ScrollbarAdapter>& adapter, 
     auto own = remember([] { return MutableInteractionSource(); });
     MutableInteractionSource source = o.interactionSource.value_or(own);
     bool active = source.collectIsHoveredAsState() || source.collectIsDraggedAsState();
-    Color color = animateColorAsState(active ? style.hoverColor : style.unhoverColor, tween(float(style.hoverDurationMillis)));
+    auto color = animateColorAsState(active ? style.hoverColor : style.unhoverColor, tween(float(style.hoverDurationMillis)));  // (read as it is drawn)
     bool reverse = o.reverseLayout;
     float minimal = style.minimalHeight;
     auto along = [vertical](Size s) { return vertical ? s.height : s.width; };
@@ -104,7 +104,7 @@ void scrollbar(bool vertical, const std::shared_ptr<ScrollbarAdapter>& adapter, 
                          Thumb t = thumbOf(*adapter, along(d.size()), minimal, reverse);
                          if (t.length <= 0) return;
                          Rect r = vertical ? Rect{0, t.start, d.size().width, t.length} : Rect{t.start, 0, t.length, d.size().height};
-                         d.drawRoundRect(color, {r.x, r.y}, Size{r.width, r.height}, CornerRadius(shape.radiusFor(r)));
+                         d.drawRoundRect(color.value(), {r.x, r.y}, Size{r.width, r.height}, CornerRadius(shape.radiusFor(r)));
                      })
                      .pointerInput(key, [adapter, minimal, reverse, along, at](PointerInputScope& scope) -> Task {
                          // A click on the track beside the thumb pages towards it.

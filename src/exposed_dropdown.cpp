@@ -44,9 +44,9 @@ namespace ExposedDropdownMenuDefaults {
 
 void TrailingIcon(bool expanded, CallSite site) {
     ComposableScope scope(site);
-    float turn = animateFloatAsState(expanded ? 180.f : 0.f, tween(150));
+    auto turn = animateFloatAsState(expanded ? 180.f : 0.f, tween(150));  // (read as it is drawn)
     Icon(Icons::Filled::ArrowDropDown, expanded ? LocalStrings.current().close : LocalStrings.current().open,
-         Modifier().graphicsLayer([turn](GraphicsLayerScope& l) { l.rotationZ = turn; }));
+         Modifier().graphicsLayer([turn](GraphicsLayerScope& l) { l.rotationZ = turn.value(); }));
 }
 
 } // namespace ExposedDropdownMenuDefaults

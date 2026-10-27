@@ -1257,7 +1257,7 @@ void GraphicsLayer::setPathOutline(const Path& path) const { data_->properties.o
 // ---- Painter -------------------------------------------------------------------------------
 
 struct Painter::Data {
-    enum class Kind { Bitmap, Vector, Fill, Gradient, Custom };
+    enum class Kind { Bitmap, Vector, Fill, Gradient, Custom, ChangingVector };
     Kind kind = Kind::Custom;
     ImageBitmap bitmap;
     ImageVector vector;
@@ -1265,6 +1265,8 @@ struct Painter::Data {
     std::optional<Brush> brush;
     std::function<void(DrawScope&)> onDraw;
     std::optional<Size> intrinsic;
+    std::function<ImageVector()> vectorNow;   // Kind::ChangingVector: what to draw now...
+    std::shared_ptr<ImageVector> lastVector;  // ...and what it last drew (kept while the same)
 };
 
 namespace {
@@ -1288,6 +1290,12 @@ Painter VectorPainter(ImageVector image) {
     if (!image.empty()) size = Size{image.defaultWidth(), image.defaultHeight()};
     return painterOf({.kind = Painter::Data::Kind::Vector, .vector = std::move(image), .intrinsic = size});
 }
+Painter detail::changingVectorPainter(std::function<ImageVector()> vectorNow, ImageVector first) {
+    std::optional<Size> size;
+    if (!first.empty()) size = Size{first.defaultWidth(), first.defaultHeight()};
+    return painterOf({.kind = Painter::Data::Kind::ChangingVector, .intrinsic = size, .vectorNow = std::move(vectorNow),
+                      .lastVector = std::make_shared<ImageVector>(std::move(first))});
+}
 Painter ColorPainter(Color color) { return painterOf({.kind = Painter::Data::Kind::Fill, .color = color}); }
 Painter BrushPainter(Brush brush) { return painterOf({.kind = Painter::Data::Kind::Gradient, .brush = std::move(brush)}); }
 
@@ -1304,12 +1312,18 @@ void Painter::draw(GraphicsContext& canvas, const Rect& b, float alpha, const st
         DrawScope scope(canvas, b, nullptr, density, direction);
         return detail::drawVector(scope, d.vector, alpha, colorFilter);
     }
+    if (d.kind == Kind::ChangingVector) {  // (as a vector)
+        if (ImageVector now = d.vectorNow(); !(*d.lastVector == now)) *d.lastVector = std::move(now);
+        DrawScope scope(canvas, b, nullptr, density, direction);
+        return detail::drawVector(scope, *d.lastVector, alpha, colorFilter);
+    }
     detail::Filtering filtering(canvas, colorFilter);  // what it draws, through the filter
     switch (d.kind) {
     case Kind::Bitmap:
         if (!d.bitmap.empty()) canvas.drawImage(d.bitmap, {0, 0, float(d.bitmap.width()), float(d.bitmap.height())}, b, alpha);
         break;
-    case Kind::Vector: break;
+    case Kind::Vector:
+    case Kind::ChangingVector: break;
     case Kind::Fill: canvas.fillRoundRect(b, CornerRadii(), d.color.copy(d.color.alpha() * alpha)); break;
     case Kind::Gradient:
     case Kind::Custom: {
@@ -1333,7 +1347,8 @@ bool operator==(const Painter& a, const Painter& b) {
     case Painter::Data::Kind::Vector: return x.vector == y.vector;
     case Painter::Data::Kind::Fill: return x.color == y.color;
     case Painter::Data::Kind::Gradient: return x.brush == y.brush;
-    case Painter::Data::Kind::Custom: return false;
+    case Painter::Data::Kind::Custom:
+    case Painter::Data::Kind::ChangingVector: return false;
     }
     return false;
 }

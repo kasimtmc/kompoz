@@ -27,8 +27,8 @@ void chipIcon(const Content& icon, Color color, bool animated, CallSite site = C
     ComposableScope scope(site);
     if (!animated) return provide(color, typography().labelLarge, icon);
     const MotionScheme& motion = motionScheme();
-    float alpha = animateFloatAsState(icon ? 1.f : 0.f, icon ? motion.slowEffectsSpec : snap());
-    Box(Modifier().animateContentSize(icon ? motion.fastSpatialSpec : motion.defaultEffectsSpec).alpha(alpha), Alignment::Center,
+    auto alpha = animateFloatAsState(icon ? 1.f : 0.f, icon ? motion.slowEffectsSpec : snap());  // (read as it is drawn)
+    Box(detail::animatedAlpha(Modifier().animateContentSize(icon ? motion.fastSpatialSpec : motion.defaultEffectsSpec), alpha), Alignment::Center,
         [&] { provide(color, typography().labelLarge, icon); });
 }
 

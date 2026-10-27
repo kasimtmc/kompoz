@@ -286,6 +286,13 @@
   button's ring and dot, a list item's container, a segmented button's check and label, a tab's indicator and color, a
   slider's thumb and a drag handle are read as they are laid out and drawn; checked, selected or held, the caller is
   composed again once.
+- **Menus, tooltips, fields and indicators animate without composing around them**: a menu's and a tooltip's way in
+  and out, the modal wide rail's slide and scrim and the wide rail's width, a modal bottom sheet's scrim, a text
+  field's floating label and indicator, a toggle FAB's size, corners and colors, a wavy indicator's wave, the
+  scrollbar's color, a marked menu item, a chip's icon, the pull-to-refresh arrow, the dropdown and split button arrows
+  and an animated vector's picture (`rememberAnimatedVectorPainter`) are read as they are laid out and drawn; what
+  goes away once it is out is composed again when it gets there. `ToggleFloatingActionButtonScope::checkedProgress()`
+  reads the progress where it is called (in a `graphicsLayer`, only that is drawn again).
 - **Scrolling doesn't walk what scrolls**: what is moved without being measured again (a list's content) leaves the
   places in it as they were written down, worked out when asked for and written down when drawn. Scrolling the
   showcase's Components screen spent 1% of the main thread on places instead of 16%.

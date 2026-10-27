@@ -2063,6 +2063,108 @@ TEST(selection_controls_animate_composing_around_them_only_as_they_turn) {
     rule.waitForIdle();
 }
 
+TEST(overlays_fields_and_indicators_animate_composing_around_them_only_as_they_turn) {
+    auto open = mutableStateOf(false);
+    auto text = mutableStateOf(std::string());
+    WideNavigationRailState rail, wide;
+    std::optional<TooltipState> tip;
+    auto mark = mutableStateOf(false);
+    ScrollState scrolled;
+    AnimatedImageVector blink = AnimatedImageVector::fromAnimatedVectorXml(R"(<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector android:width="8dp" android:height="8dp" android:viewportWidth="8" android:viewportHeight="8">
+            <path android:name="dot" android:pathData="M0,0h8v8h-8z" android:fillColor="#FF0000"/>
+        </vector>
+    </aapt:attr>
+    <target android:name="dot">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:propertyName="fillColor" android:valueFrom="#FF0000" android:valueTo="#0000FF" android:duration="300"/>
+        </aapt:attr>
+    </target>
+</animated-vector>)");
+    int composed = 0;
+    ComposeTestRule rule([&] {
+        ++composed;
+        bool o = open.get();
+        Column([&] {
+            Box([&] {
+                DropdownMenu(o, [&open] { open.set(false); }, [&] {
+                    Text("Seçenek");
+                    DropdownMenuItem(mark.get(), [&mark](bool c) { mark.set(c); }, [] { Text("İşaretli"); });
+                });
+            });
+            Row([&] {
+                ExposedDropdownMenuDefaults::TrailingIcon(o);
+                SplitButtonDefaults::TrailingButtonIcon(o);
+                FilterChip(o, [] {}, [] { Text("Süz"); }, {.leadingIcon = o ? Content([] { Icon(Icons::Filled::Check, ""); }) : Content()});
+                Box(Modifier().size(60, 100), [&] {
+                    Column(Modifier().fillMaxSize().verticalScroll(scrolled), [] { Box(Modifier().height(400)); });
+                    VerticalScrollbar(rememberScrollbarAdapter(scrolled), Modifier().align(Alignment::CenterEnd).fillMaxHeight().testTag("çubuk"));
+                });
+            });
+            if (o) ModalBottomSheet([&open] { open.set(false); }, [] { Text("Sayfa"); });
+            auto t = rememberTooltipState();
+            tip = t;
+            TooltipBox([] { PlainTooltip([] { Text("İpucu"); }); }, t, Modifier(), [] { Box(Modifier().size(40)); });
+            TextField(text.get(), [&text](std::string s) { text.set(std::move(s)); }, Modifier().testTag("alan"), {.label = "Ad"});
+            ToggleFloatingActionButton(o, [&open](bool c) { open.set(c); }, [](const ToggleFloatingActionButtonScope&) { Icon(Icons::Filled::Add, ""); });
+            LinearWavyProgressIndicator(o ? 0.5f : 0.f);  // (the wave rises from none)
+            Image(rememberAnimatedVectorPainter(blink, o), "Göz");
+            ModalWideNavigationRail(Modifier(), [] { Text("Ray"); }, {.state = rail, .hideOnCollapse = true});
+            WideNavigationRail(Modifier().testTag("geniş"), [] {}, {.state = wide});
+        });
+    }, {400, 800});
+    CHECK(!rule.onNodeWithText("Seçenek").exists() && !rule.onNodeWithText("İpucu").exists() && !rule.onNodeWithText("Ray").exists());
+    Offset field = rule.onNodeWithTag("alan").bounds().center();  // tapped, focused: its label floats
+    rule.host().pointerDown(field);
+    rule.host().pointerUp(field);
+    float collapsed = rule.onNodeWithTag("geniş").bounds().width;
+    open.set(true);
+    rail.expand();
+    wide.expand();
+    tip->show();
+    rule.advanceFrame();
+    rule.advanceFrame();  // composed as they turn...
+    int before = composed;
+    rule.advanceTimeBy(48);
+    CHECK(composed == before);  // ...and not on the way
+    float widening = rule.onNodeWithTag("geniş").bounds().width;
+    CHECK(widening > collapsed + 5 && widening < 215);  // laid out as it widens
+    rule.advanceTimeBy(700);  // there (before the tooltip goes by itself, at 1.5 s)
+    CHECK(rule.onNodeWithText("Seçenek").exists() && rule.onNodeWithText("İpucu").exists() && rule.onNodeWithText("Ray").exists());
+    // An item checked: composed as it turns, not as its color goes over.
+    mark.set(true);
+    rule.advanceFrame();
+    rule.advanceFrame();
+    before = composed;
+    rule.advanceTimeBy(48);
+    CHECK(composed == before);
+    // Closed: gone once they are out (composed as they get there).
+    open.set(false);
+    rail.collapse();
+    tip->dismiss();
+    rule.waitForIdle();
+    CHECK(!rule.onNodeWithText("Seçenek").exists() && !rule.onNodeWithText("İpucu").exists() && !rule.onNodeWithText("Ray").exists());
+    // A scrollbar hovered (nothing over it now): the same.
+    rule.host().pointerMove(rule.onNodeWithTag("çubuk").bounds().center());
+    rule.advanceFrame();
+    rule.advanceFrame();
+    before = composed;
+    rule.advanceTimeBy(48);
+    CHECK(composed == before);
+}
+
+TEST(a_wavy_indicators_wave_rises_as_it_is_drawn) {
+    auto progress = mutableStateOf(0.f);
+    ComposeTestRule rule([&] { LinearWavyProgressIndicator(progress.get()); });
+    progress.set(0.5f);  // (a wave from none)
+    rule.advanceFrame();
+    uint64_t ran = rule.host().stats().scopesRun;
+    rule.advanceTimeBy(160);
+    CHECK(rule.host().stats().scopesRun == ran);  // not even the indicator composed again
+}
+
 TEST(icon_sizes_tints_and_draws) {
     ComposeTestRule rule([] {
         CompositionLocalProvider({LocalContentColor.provides(Color::hex(0x123456))}, [] {
