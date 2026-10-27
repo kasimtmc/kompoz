@@ -230,6 +230,7 @@ void DisplayList::begin(Size viewport, float pixel) {
     recordingRanges_.clear();
     openRanges_.clear();
     nextOrigin_.reset();
+    copiedRanges_.clear();
     keptNodes_ = drawnNodes_ = 0;
     states_.assign(1, {{}, {0, 0, viewport.width, viewport.height}, 0, {}, {0, 0, viewport.width, viewport.height}});
     nodes_.assign(1, {0x6b6f6d706f7aull});  // the root: what is drawn outside any node
@@ -238,12 +239,13 @@ void DisplayList::begin(Size viewport, float pixel) {
 
 void DisplayList::beginNode(const void* node) {
     segmentOpen_ = false;
-    uint32_t occurrence = occurrences_[reinterpret_cast<uintptr_t>(node)]++;  // a node drawn twice (a shared element's overlay)
+    // (A node drawn twice: a shared element's overlay, a magnifier's; once in a copied range too.)
+    uint32_t occurrence = occurrences_[reinterpret_cast<uintptr_t>(node)]++ + keptBefore(node);
     nodes_.push_back({nodeKey(node, occurrence)});
     if (!keepNodes_) return;
     openRanges_.push_back(uint32_t(recordingRanges_.size()));
     recordingRanges_.push_back({nodes_.back().key, uint32_t(recordingEvents_.size()), 0, uint32_t(recording_.size()), 0,
-                                std::exchange(nextOrigin_, std::nullopt), states_.back()});
+                                std::exchange(nextOrigin_, std::nullopt), states_.back(), uint32_t(recordingSegments_.size())});
     recordingEvents_.push_back({Event::Begin, uint32_t(recording_.size()), openRanges_.back(), node, {}});
 }
 
@@ -259,6 +261,8 @@ void DisplayList::endNode() {
     recordingEvents_.push_back({Event::End, uint32_t(recording_.size())});
     r.endEvent = uint32_t(recordingEvents_.size());
     r.endCommand = uint32_t(recording_.size());
+    r.endSegment = uint32_t(recordingSegments_.size());
+    r.endRange = uint32_t(recordingRanges_.size());
 }
 
 DisplayList::Command& DisplayList::add(Kind kind) {
@@ -1125,13 +1129,14 @@ void DisplayList::replayCommand(GraphicsContext& canvas, const Command& c, Offse
 
 GraphicsContext::NodeRecording DisplayList::recordNode(const void* node, Offset origin, bool unchanged) {
     if (!keepNodes_) return NodeRecording::Other;
-    if (const uint32_t* drawn = occurrences_.find(reinterpret_cast<uintptr_t>(node)); drawn && *drawn) return NodeRecording::Other;
+    if (const uint32_t* drawn = occurrences_.find(reinterpret_cast<uintptr_t>(node)); (drawn && *drawn) || keptBefore(node))
+        return NodeRecording::Other;
     if (unchanged && pixel_ == framePixel_)
         if (const uint32_t* last = rangeLookup_.find(nodeKey(node, 0))) {
             const Range& r = frameRanges_[*last];
             const State& s = states_.back();
             if (r.entry.m == s.m && same(r.entry.clip, s.clip) && r.entry.restM == s.restM && same(r.entry.restClip, s.restClip) &&
-                keep(r, {origin.x - r.origin->x, origin.y - r.origin->y})) {
+                keep(*last, {origin.x - r.origin->x, origin.y - r.origin->y})) {
                 ++keptNodes_;
                 return NodeRecording::Kept;
             }
@@ -1141,8 +1146,62 @@ GraphicsContext::NodeRecording DisplayList::recordNode(const void* node, Offset 
     return NodeRecording::Fresh;
 }
 
-bool DisplayList::keep(const Range& r, Offset by) {
+uint32_t DisplayList::keptBefore(const void* node) const {
+    if (copiedRanges_.empty()) return 0;
+    const uint32_t* last = rangeLookup_.find(nodeKey(node, 0));
+    if (!last) return 0;
+    for (auto [from, to] : copiedRanges_)
+        if (*last >= from && *last < to) return 1;
+    return 0;
+}
+
+void DisplayList::copyKept(uint32_t index) {
+    const Range& r = frameRanges_[index];
+    segmentOpen_ = false;  // (the parent's segment ends at its child)
+    auto commands = int64_t(recording_.size()) - r.firstCommand, events = int64_t(recordingEvents_.size()) - r.firstEvent;
+    auto segments = int64_t(recordingSegments_.size()) - r.firstSegment, ranges = int64_t(recordingRanges_.size()) - index;
+    uint32_t outer = states_.size() > 1 ? states_.back().push : kNone;  // what is around it now
+    auto moved = [](uint32_t i, int64_t by) { return uint32_t(int64_t(i) + by); };
+    for (uint32_t i = r.firstCommand; i < r.endCommand; ++i) {
+        Command& c = recording_.emplace_back(frame_[i]);
+        c.parent = c.parent != kNone && c.parent >= r.firstCommand ? moved(c.parent, commands) : outer;
+        if (c.end) c.end = moved(c.end, commands);
+        // (What an image holds now: drawn into since, it changed.)
+        if (c.kind == Kind::Image) c.imageVersion = c.image.version();
+        else if (c.kind == Kind::ImageMask) c.imageVersion = c.image.version() * 1000003u + imagesIn(*c.brush, {c.p1.x, c.p1.y, c.p2.x, c.p2.y});
+        else if (c.brush && (c.kind == Kind::Gradient || c.kind == Kind::Path || c.kind == Kind::Vertices || c.kind == Kind::TextBrush))
+            c.imageVersion = imagesIn(*c.brush, c.rect2);
+    }
+    for (uint32_t i = r.firstSegment; i < r.endSegment; ++i) {
+        Segment s = frameSegments_[i];
+        s.first = moved(s.first, commands);
+        recordingSegments_.push_back(s);
+    }
+    for (uint32_t i = r.firstEvent; i < r.endEvent; ++i) {
+        Event e = frameEvents_[i];
+        e.at = moved(e.at, commands);
+        if (e.type == Event::Begin) e.range = moved(e.range, ranges);
+        recordingEvents_.push_back(e);
+    }
+    for (uint32_t i = index; i < r.endRange; ++i) {
+        Range n = frameRanges_[i];
+        n.firstEvent = moved(n.firstEvent, events), n.endEvent = moved(n.endEvent, events);
+        n.firstCommand = moved(n.firstCommand, commands), n.endCommand = moved(n.endCommand, commands);
+        n.firstSegment = moved(n.firstSegment, segments), n.endSegment = moved(n.endSegment, segments);
+        n.endRange = moved(n.endRange, ranges);
+        recordingRanges_.push_back(n);
+    }
+    nodes_.back().after = r.key;  // (what the parent draws next follows this child, as endNode says)
+    copiedRanges_.push_back({index, r.endRange});
+}
+
+bool DisplayList::keep(uint32_t index, Offset by) {
+    const Range& r = frameRanges_[index];
     bool moving = by.x != 0 || by.y != 0;
+    if (!moving) {  // (in the same state: as it was)
+        copyKept(index);
+        return true;
+    }
     // What is recorded from here on goes again if anything comes out otherwise.
     size_t commands = recording_.size(), segments = recordingSegments_.size(), events = recordingEvents_.size();
     size_t ranges = recordingRanges_.size(), states = states_.size(), nodes = nodes_.size(), open = openRanges_.size();

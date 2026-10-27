@@ -1930,7 +1930,9 @@ ParentData LayoutNode::parentData() const {
 
 void LayoutNode::draw(GraphicsContext& canvas) {
     using Recording = GraphicsContext::NodeRecording;
-    settlePlace();  // (its stale parents' children written down on the way: what is in it is, as it is drawn)
+    // Drawn by its parent, which was written down as it was drawn: its place is its parent's to write
+    // down (what is drawn on its own settles its whole way first: settlePlace).
+    if (parent && !overlay && parent->childrenStale_) parent->settleChildren();
     Recording r = canvas.recordNode(this, {bounds_.x, bounds_.y}, !drawChanged_);
     if (r == Recording::Kept) return;  // what it drew last frame, recorded again
     // Drawn into what is kept (itself, or inside what is): that has what changed now.

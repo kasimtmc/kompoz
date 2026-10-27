@@ -1178,6 +1178,7 @@ void ComposeHost::draw(GraphicsContext& canvas) {
         t.translationX = dnd_->pointer.x - dnd_->grab.x - b.x;
         t.translationY = dnd_->pointer.y - dnd_->grab.y - b.y;
         canvas.pushLayer(b, 0, 0.75f, t);
+        source.settlePlace();  // (drawn on its own, out of the tree's order)
         source.draw(canvas);
         canvas.popLayer();
     }

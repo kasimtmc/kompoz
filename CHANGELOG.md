@@ -242,6 +242,9 @@
   0.65 ms of a frame of the Components screen instead of 3.1.
 - **`KOMPOZ_PROFILE`'s summary gives the work's parts**: composition and layout, drawing, and of the drawing the
   recording (the tree drawn into the display list, compared with the last frame's).
+- **What a frame keeps where it was is copied, not drawn again**: a node unchanged, in the same place and state, takes
+  last frame's commands and what it knew of the nodes in it as they were, without going through them one by one; a
+  node drawn writes down only its own place. On a Redmi Note 9 Pro an idle screen's recording took 3.2 ms instead of 4.
 - **Scrolling doesn't walk what scrolls**: what is moved without being measured again (a list's content) leaves the
   places in it as they were written down, worked out when asked for and written down when drawn. Scrolling the
   showcase's Components screen spent 1% of the main thread on places instead of 16%.

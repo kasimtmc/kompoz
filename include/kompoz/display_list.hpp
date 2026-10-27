@@ -223,10 +223,16 @@ private:
         uint32_t firstEvent, endEvent = 0, firstCommand, endCommand = 0;
         std::optional<Offset> origin;
         State entry;
+        uint32_t firstSegment = 0, endSegment = 0, endRange = 0;  // (its nodes' ranges: it and the next up to endRange)
     };
-    // Last frame's range `r` recorded again, moved by `by`, if what it left out and asked comes
+    // Last frame's range `index` recorded again, moved by `by`, if what it left out and asked comes
     // out as it did; if not, nothing is recorded.
-    bool keep(const Range& r, Offset by);
+    bool keep(uint32_t index, Offset by);
+    // The same not moved, drawn in the same state: its commands, segments, events and ranges as
+    // they were (but where they go in this recording, and what images hold now).
+    void copyKept(uint32_t index);
+    // A node drawn in a range copied whole this frame (it isn't in occurrences_ for it): 1, else 0.
+    uint32_t keptBefore(const void* node) const;
     Offset lightCenterHere() const;  // lightCenter(), not told
     // What `count` commands from `first` touch on the screen, as one rect (none if nothing).
     static void addDamage(std::vector<Rect>& damage, const std::vector<Command>& commands, uint32_t first, uint32_t count);
@@ -291,6 +297,7 @@ private:
     IndexTable rangeLookup_;  // the last frame's ranges by key
     std::optional<Offset> nextOrigin_;  // recordNode's, for the range beginNode starts
     std::vector<const void*> keptBegun_;  // (keep()'s: the nodes it began)
+    std::vector<std::pair<uint32_t, uint32_t>> copiedRanges_;  // this frame's copyKept: last frame's ranges, from, to
     uint32_t layersInSegment_ = 0;  // (the layers pushed in the segment being recorded so far)
     bool segmentOpen_ = false, invalid_ = true;
     Size viewport_, frameViewport_;

@@ -19674,6 +19674,58 @@ TEST(a_scrolled_lists_places_are_worked_out_where_they_are_asked_for) {
     }
 }
 
+// A kept node records what its images hold now: one drawn into since is a change to draw again.
+TEST(kept_nodes_draw_what_their_images_hold_now) {
+    ImageBitmap bitmap = ImageBitmap::fromPixels(4, 4, std::vector<uint8_t>(64, 255));
+    ComposeTestRule rule([&] { Image(bitmap, "", Modifier().size(40)); });
+    int before = detail::keepCheckMismatches();
+    uint64_t version = bitmap.version();
+    detail::bitmaps::store(bitmap, std::vector<uint8_t>(64, 128), true);  // drawn into (a Canvas(ImageBitmap)'s)
+    rule.advanceFrame();
+    CHECK(bitmap.version() != version && detail::keepCheckMismatches() == before);
+}
+
+// An item of a scrolled list dragged away is drawn under the finger from where it is, though
+// nothing in the list was drawn again since it scrolled.
+TEST(a_dragged_item_of_a_scrolled_list_is_drawn_from_where_it_is) {
+    ScrollState scroll;
+    Color green = Color::hex(0x00a000);
+    ComposeTestRule rule([&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+            Box(Modifier().height(200));
+            Box(Modifier().padding(2), [&] {  // (nested twice: placed from what is placed from what scrolls)
+                Box(Modifier().padding(2), [&] {
+                    Box(Modifier().size(80, 40).background(green).dragAndDropSource([](Offset) -> std::optional<DragAndDropTransferData> {
+                        return DragAndDropTransferData{.text = "elma"};
+                    }));
+                });
+            });
+            Box(Modifier().height(2000));
+        });
+    }, {400, 800});
+    int before = detail::keepCheckMismatches();
+    scroll.scrollTo(50);
+    rule.waitForIdle();
+    rule.host().pointerDown({40, 174});  // (204 - 50 + 20)
+    rule.advanceTimeBy(500);
+    for (int i = 1; i <= 8; ++i) {
+        rule.advanceFrame();
+        rule.host().pointerMove({40 + 25.f * float(i), 174 + 25.f * float(i)});
+    }
+    scroll.scrollTo(80);  // and the list scrolls under it meanwhile (in code)
+    rule.advanceFrame();
+    rule.advanceFrame();
+    CHECK(detail::keepCheckMismatches() == before);
+    testing::RecordingCanvas canvas;
+    rule.host().draw(canvas);
+    int at = 0;  // the item where it is and its faded copy (the layer moves it under the finger)
+    for (size_t i = 0; i < canvas.rects.size(); ++i)
+        if (canvas.rectColors[i] == green) at += near(canvas.rects[i].y, 124) && near(canvas.rects[i].x, 4);
+    CHECK(at == 2);
+    rule.host().pointerUp({240, 374});
+    rule.waitForIdle();
+}
+
 // Frame times on the display's beat (Choreographer's): whole periods after the last, the nearest
 // to now, never going back.
 // Image assets: decoded once wherever they are used and however often their screen comes back,
