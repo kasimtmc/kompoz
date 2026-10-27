@@ -180,15 +180,6 @@ template <class T>
 AnimatedState<T> animateValueAsState(const T& target, const AnimationSpec& spec, CallSite site);
 
 namespace detail {
-// A value read where it is used (an animation's, while laying out or drawing). Two are the same
-// when they read the same `source` (one animation's state); without one, never.
-template <class T>
-struct Live {
-    std::function<T()> read;
-    const void* source = nullptr;
-    T operator()() const { return read(); }
-    friend bool operator==(const Live& a, const Live& b) { return a.source && a.source == b.source; }
-};
 template <class T>
 Live<T> liveOf(const AnimatedState<T>& state);
 } // namespace detail

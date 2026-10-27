@@ -389,6 +389,15 @@ const void* Composer::findLocal(const void* key) const {
     return nullptr;
 }
 
+const Provided* Composer::readProvided(const void* key) {
+    for (auto it = locals_.rbegin(); it != locals_.rend(); ++it)
+        if (it->key == key) {
+            recordRead(providedKey(key, it->provider));
+            return &*it;
+        }
+    return nullptr;
+}
+
 const void* Composer::readLocal(const void* key) {
     for (auto it = locals_.rbegin(); it != locals_.rend(); ++it)
         if (it->key == key) {

@@ -584,8 +584,8 @@ Modifier fab(const Modifier& m, Shape shape, std::function<void()> onClick, Call
     ComposableScope scope(site);
     auto source = remember([] { return MutableInteractionSource(); });
     bool hovered = source.collectIsHoveredAsState() && !source.collectIsPressedAsState();
-    float elevation = animateFloatAsState(hovered ? 8.f : 6.f, hovered ? tween(120) : tween(150, 0, Easing{0.4f, 0, 0.6f, 1}));
-    return m.shadow(elevation, shape).background(colorScheme().primaryContainer, shape).clickable(std::move(onClick), {.interactionSource = source});
+    auto elevation = animateFloatAsState(hovered ? 8.f : 6.f, hovered ? tween(120) : tween(150, 0, Easing{0.4f, 0, 0.6f, 1}));
+    return detail::animatedShadow(m, elevation, shape).background(colorScheme().primaryContainer, shape).clickable(std::move(onClick), {.interactionSource = source});
 }
 } // namespace
 
@@ -714,17 +714,18 @@ struct ExtendedFabSize {
 void extendedFab(const ExtendedFabSize& size, std::function<void()> onClick, const ImageVector& icon, const std::string& text, bool expanded,
                  const Modifier& modifier) {
     const ColorScheme& cs = colorScheme();
-    float p = animateFloatAsState(expanded ? 1.f : 0.f, spring(1, 700));
-    float shown = std::clamp(p, 0.f, 1.f);
+    auto p = animateFloatAsState(expanded ? 1.f : 0.f, spring(1, 700));  // read as it is laid out and drawn
     CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
         Layout(fab(modifier.height(size.height), RoundedCornerShape(size.radius), std::move(onClick))
                    .semantics({.contentDescription = text})
                    .clipToBounds(),
                [&] {
                    Icon(icon, "", Modifier().size(size.icon));
-                   Text(text, Modifier().graphicsLayer([shown](GraphicsLayerScope& l) { l.alpha = shown; }), {.font = size.label, .maxLines = 1});
+                   Text(text, Modifier().graphicsLayer([p](GraphicsLayerScope& l) { l.alpha = std::clamp(p.value(), 0.f, 1.f); }),
+                        {.font = size.label, .maxLines = 1});
                },
-               [size, p](const std::vector<Measurable>& m, const Constraints& c) {
+               [size, state = p](const std::vector<Measurable>& m, const Constraints& c) {
+                   float p = state.value();
                    Placeable picture = m[0].measure({}), label = m[1].measure({});
                    float h = c.hasBoundedHeight() ? c.maxHeight : size.height;
                    float full = size.padding + picture.width + size.gap + label.width + size.padding;

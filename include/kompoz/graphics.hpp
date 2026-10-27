@@ -511,6 +511,9 @@ struct Shape {
     bool absolute = false;
     // Kind::Generic: what makes its outline in a size and direction (GenericShape, OutlineShape).
     std::shared_ptr<const std::function<Outline(Size, LayoutDirection)>> generic;
+    // Corners that move (a morphing shape's, as a pressed button's): what they are now, read in
+    // place of `corners` where the outline is made (laid out, drawn: those follow them).
+    std::shared_ptr<const std::function<std::array<CornerSize, 4>()>> animatedCorners;
 
     // Its outline in `size` (dp, from the top left), mirrored right to left where it has a start
     // and an end (Compose's createOutline).
@@ -537,7 +540,8 @@ struct Shape {
     constexpr CornerRadii cornersFor(const Rect& r, bool rtl) const {
         float shorter = std::min(r.width, r.height);
         auto px = [shorter](CornerSize c) { return std::max(0.f, c.dp + c.percent / 100 * shorter); };
-        float ts = px(corners[0]), te = px(corners[1]), be = px(corners[2]), bs = px(corners[3]);
+        std::array<CornerSize, 4> at = animatedCorners ? (*animatedCorners)() : corners;
+        float ts = px(at[0]), te = px(at[1]), be = px(at[2]), bs = px(at[3]);
         if (ts + bs > shorter) {
             float k = shorter / (ts + bs);
             ts *= k, bs *= k;

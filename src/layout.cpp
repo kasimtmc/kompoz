@@ -466,7 +466,7 @@ void ClickableElement::draw(GraphicsContext& canvas, const Rect& bounds, const L
     float alpha = flat && node.pressed ? 0.16f : node.focused ? 0.1f : node.hovered ? 0.08f : 0.f;
     std::vector<ComposeHost::RippleDraw> ripples;
     if (!flat && node.host()) ripples = node.host()->ripples(node, bounds, indication);
-    drawStateLayer(canvas, bounds, node, indication, shape, indication.color.value_or(indicationColor), alpha, ripples);
+    drawStateLayer(canvas, bounds, node, indication, shape, indication.color.value_or(indicationColor()), alpha, ripples);
 }
 
 Size ScrollElement::measure(const Constraints& c, const MeasureNext& next, Offset& contentOffset) const {
@@ -1009,7 +1009,7 @@ Modifier Modifier::clickable(std::function<void()> onClick, const ClickableOptio
         e.onDoubleClick = options.onDoubleClick;
         e.enabled = options.enabled;
         e.shape = shape;
-        e.indicationColor = LocalContentColor.current();
+        e.indicationColor = LocalContentColor.currentLive();
         e.indication = options.indication.value_or(LocalIndication.current());
         e.interactionSource = options.interactionSource;
     });
@@ -1334,7 +1334,7 @@ void IndicationElement::draw(GraphicsContext& canvas, const Rect& bounds, const 
         }
         if (moving) node.host()->requestRedraw();  // the next frame draws it on (nothing to lay out)
     }
-    drawStateLayer(canvas, bounds, node, indication, shape, indication.color.value_or(color), alpha, ripples);
+    drawStateLayer(canvas, bounds, node, indication, shape, indication.color.value_or(color()), alpha, ripples);
 }
 
 Modifier Modifier::indication(const MutableInteractionSource& interactionSource, const Indication& indication) const {
@@ -1348,7 +1348,7 @@ Modifier Modifier::indication(const MutableInteractionSource& interactionSource,
         e.source = interactionSource;
         e.indication = indication;
         e.shape = shape;
-        e.color = LocalContentColor.current();
+        e.color = LocalContentColor.currentLive();
     });
 }
 

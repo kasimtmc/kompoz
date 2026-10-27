@@ -1952,6 +1952,64 @@ TEST(layout_is_in_whole_pixels_as_composes) {
     CHECK(near(measured.width * d, 60, 1e-3f) && near(measured.height * d, 50, 1e-3f));
 }
 
+TEST(buttons_animate_composing_around_them_only_as_they_turn) {
+    auto checked = mutableStateOf(false);
+    auto expanded = mutableStateOf(true);
+    MutableInteractionSource held;
+    int composed = 0;
+    ComposeTestRule rule([&] {
+        ++composed;
+        Column([&] {
+            Button([] {}, Modifier().testTag("düğme"), [] { Text("Gönder"); });
+            ToggleButton(checked.get(), [&checked](bool c) { checked.set(c); }, Modifier().testTag("seçim"), {}, [] { Text("Seç"); });
+            SmallExtendedFloatingActionButton([] {}, Icons::Filled::Add, "Ekle", expanded.get(), Modifier().testTag("fab"));
+            ButtonGroup([&held](const ButtonGroupScope& group) {
+                Button([] {}, group.animateWidth(MutableInteractionSource()), [] { Text("Önceki"); });
+                Button([] {}, group.animateWidth(held).testTag("tutulan"), {.interactionSource = held}, [] { Text("Oynat"); });
+            });
+        });
+    }, {400, 800});
+    // Hovered, pressed: composed as they turn, not as the elevation rises and the button grows.
+    float natural = rule.onNodeWithTag("tutulan").bounds().width;
+    int before = composed;
+    for (const char* tag : {"düğme", "fab"}) {
+        rule.host().pointerMove(rule.onNodeWithTag(tag).bounds().center());
+        rule.advanceFrame();
+        before = composed;
+        rule.waitForIdle();
+        CHECK(composed == before);
+    }
+    rule.host().pointerDown(rule.onNodeWithTag("tutulan").bounds().center());
+    rule.advanceFrame();
+    before = composed;
+    rule.advanceTimeBy(500);
+    CHECK(composed == before && rule.onNodeWithTag("tutulan").bounds().width > natural + 3);
+    rule.host().pointerUp(rule.onNodeWithTag("tutulan").bounds().center());
+    rule.waitForIdle();
+    // Checked and collapsed: composed as they turn; the colors, the width and the label go over as
+    // they are drawn and laid out.
+    auto corner = [&] {  // the toggle button's container, as drawn
+        Rect b = rule.onNodeWithTag("seçim").bounds();
+        testing::RecordingCanvas c;
+        rule.host().draw(c);
+        for (size_t i = 0; i < c.rects.size(); ++i)
+            if (b.contains(c.rects[i].center()) && near(c.rects[i].height, 40)) return c.rectRadii[i];
+        return -1.f;
+    };
+    float full = rule.onNodeWithTag("fab").bounds().width, round = corner();
+    checked.set(true);
+    expanded.set(false);
+    rule.advanceFrame();
+    before = composed;
+    rule.advanceTimeBy(64);
+    float narrowing = rule.onNodeWithTag("fab").bounds().width;
+    float morphing = corner();
+    CHECK(composed == before && narrowing < full - 5 && narrowing > 61);
+    CHECK(near(round, 20) && morphing < 19 && morphing > 12.5f);  // from round towards 12 dp corners
+    rule.waitForIdle();
+    CHECK(composed == before && near(rule.onNodeWithTag("fab").bounds().width, 56) && near(corner(), 12));
+}
+
 TEST(icon_sizes_tints_and_draws) {
     ComposeTestRule rule([] {
         CompositionLocalProvider({LocalContentColor.provides(Color::hex(0x123456))}, [] {
@@ -9131,26 +9189,31 @@ TEST(basic_text_fields_take_a_decorator_and_fields_line_limits) {
 TEST(motion_schemes_set_how_material_components_move) {
     auto pressed = mutableStateOf(false);
     std::vector<float> standard, expressive;  // a corner on its way from 0 to 20 dp, frame by frame
+    std::optional<Shape> standardShape, expressiveShape;
     MotionScheme outside, inTheme, inExpressive, given;
     ComposeTestRule rule([&] {
         outside = motionScheme();
         Column([&] {
             MaterialTheme(darkColorScheme(), [&] {
                 inTheme = motionScheme();
-                standard.push_back(detail::morphingShape(RoundedCornerShape(pressed.get() ? 20.f : 0.f)).corners[0].dp);
+                standardShape = detail::morphingShape(RoundedCornerShape(pressed.get() ? 20.f : 0.f));
             });
             MaterialExpressiveTheme(std::nullopt, [&] {
                 inExpressive = motionScheme();
-                expressive.push_back(detail::morphingShape(RoundedCornerShape(pressed.get() ? 20.f : 0.f)).corners[0].dp);
+                expressiveShape = detail::morphingShape(RoundedCornerShape(pressed.get() ? 20.f : 0.f));
                 MaterialTheme(lightColorScheme(), [&] { given = motionScheme(); });  // keeps the one around
             });
         });
     });
+    auto corner = [](const Shape& s) { return (*s.animatedCorners)()[0].dp; };  // (read where an outline is made)
     CHECK(outside == MotionScheme::standard() && inTheme == MotionScheme::standard());
     CHECK(inExpressive == MotionScheme::expressive() && given == MotionScheme::expressive());
     CHECK(MotionScheme::expressive().fastSpatialSpec == spring(0.6f, 800) && MotionScheme::standard().fastSpatialSpec == spring(0.9f, 1400));
     pressed.set(true);
-    rule.waitForIdle();
+    for (int i = 0; i < 90; ++i) {
+        rule.advanceFrame();
+        standard.push_back(corner(*standardShape)), expressive.push_back(corner(*expressiveShape));
+    }
     // The expressive one overshoots (its fast spatial spring bounces); the standard one hardly.
     float most = *std::max_element(standard.begin(), standard.end()), mostExpressive = *std::max_element(expressive.begin(), expressive.end());
     CHECK(most < 20.2f && mostExpressive > 21 && near(standard.back(), 20, 0.05f) && near(expressive.back(), 20, 0.05f));

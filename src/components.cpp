@@ -996,7 +996,7 @@ namespace {
 // How far a button in a ButtonGroup has grown: 0..1 of the group's expandedRatio (its spring
 // can overshoot a little).
 struct ButtonGroupItemElement final : ModifierElement {
-    float expansion = 0;
+    std::optional<AnimatedState<float>> expansion;  // read as the group is laid out
     bool equals(const ModifierElement& other) const override {
         auto* o = dynamic_cast<const ButtonGroupItemElement*>(&other);
         return o && o->expansion == expansion;
@@ -1045,7 +1045,7 @@ void ButtonGroup(const Modifier& modifier, const ButtonGroupOptions& options, co
         auto px = [d](float v) { return std::floor(v + 0.5f) / d; };  // (v in px)
         for (size_t i = 0; i < n; ++i) {
             auto* item = children[i].node->modifier.find<ButtonGroupItemElement>();
-            float growth = item ? natural[i] * d * options.expandedRatio * item->expansion : 0;
+            float growth = item && item->expansion ? natural[i] * d * options.expandedRatio * item->expansion->value() : 0;
             bool before = i > 0, after = i + 1 < n;
             if (growth == 0 || (!before && !after)) continue;
             widths[i] += px(growth);

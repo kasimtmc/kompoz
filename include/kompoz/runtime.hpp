@@ -81,6 +81,21 @@ struct Args final : ArgsBase {
 
 // A value given to a CompositionLocal by CompositionLocalProvider.
 struct Group;
+// A value read where it is used (an animation's, a state-provided local's: while laying out or
+// drawing), or one as it is (`read` empty: `value`). Readings are the same when they read the
+// same `source` (one animation's state; without one, never), values when they are equal.
+template <class T>
+struct Live {
+    std::function<T()> read;
+    const void* source = nullptr;
+    T value{};
+    T operator()() const { return read ? read() : value; }
+    friend bool operator==(const Live& a, const Live& b) {
+        if (a.read || b.read) return a.read && b.read && a.source && a.source == b.source;
+        return a.value == b.value;
+    }
+};
+
 struct Provided {
     const void* key;
     std::shared_ptr<const void> value;
@@ -200,6 +215,8 @@ public:
     // The same, the running scope subscribed to the provider giving it (recomposed when that gives
     // another value); none provided: null.
     const void* readLocal(const void* key);
+    // The provider of `key` nearest above (its read recorded, as readLocal's), or nullptr.
+    const Provided* readProvided(const void* key);
     const std::vector<Provided>& locals() const { return locals_; }  // all provided here, outermost first
     void recordRead(const void* key);
     // Runs `fn` with its reads recorded into `observer` (a group-less scope), from inside or
@@ -540,6 +557,18 @@ public:
             if (auto* v = c->readLocal(this)) return *static_cast<const T*>(v);
         if (!default_) default_.emplace(factory_());
         return *default_;
+    }
+
+    // The value as a reading, for what uses it later (a modifier, as it is drawn): one provided
+    // from a state is read then (and follows it), not here; a plain one is the value. As
+    // current(), this reader is composed again when the provider gives another.
+    detail::Live<T> currentLive() const {
+        if (auto* c = detail::Composer::current())
+            if (const detail::Provided* p = c->readProvided(this)) {
+                if (!p->read) return {{}, nullptr, *static_cast<const T*>(p->value.get())};
+                return {[value = p->value, read = p->read] { return *static_cast<const T*>(read(value.get())); }, p->value.get()};
+            }
+        return {{}, nullptr, current()};
     }
 
     detail::Provided provides(T value) const {

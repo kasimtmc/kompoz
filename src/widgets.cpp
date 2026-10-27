@@ -207,8 +207,8 @@ void buttonImpl(ButtonKind kind, std::function<void()> onClick, const Modifier& 
         contentColor = cs.onSurface.copy(0.38f);
     }
     // Compose 1.4's elevations: filled and tonal ones 1 dp up while hovered, elevated ones 1 dp
-    // (3 hovered); back down while pressed; eased in 120 ms, out 150.
-    float elevation = 0;
+    // (3 hovered); back down while pressed; eased in 120 ms, out 150. Read as it is drawn.
+    std::optional<AnimatedState<float>> elevation;
     if (filled) {
         if (!source) source = remember([] { return MutableInteractionSource(); });
         float rest = kind == ButtonKind::Elevated ? 1.f : 0.f, hover = kind == ButtonKind::Elevated ? 3.f : 1.f;
@@ -218,7 +218,7 @@ void buttonImpl(ButtonKind kind, std::function<void()> onClick, const Modifier& 
     }
 
     Modifier m = modifier.minimumInteractiveComponentSize().heightIn(ButtonDefaults::MinHeight).widthIn(ButtonDefaults::MinWidth);
-    if (elevation > 0) m = m.shadow(elevation, shape);
+    if (elevation && (elevation->targetValue() > 0 || elevation->isRunning())) m = detail::animatedShadow(m, *elevation, shape);
     m = m.background(container, shape);
     if (kind == ButtonKind::Outlined) m = m.border(1, cs.outlineVariant.copy(style.enabled ? 1.f : 0.1f), shape);
 
@@ -252,19 +252,20 @@ void toggleButtonImpl(ToggleKind kind, bool checked, std::function<void(bool)> o
         if (kind != ToggleKind::Outlined || checked) container = cs.onSurface.copy(0.1f);
         contentColor = cs.onSurface.copy(0.38f);
     }
-    container = animateColorAsState(container, 150);
-    contentColor = animateColorAsState(contentColor, 150);
+    // The colors read where they are used: the container as it is drawn, the content's by it.
+    auto containerState = animateColorAsState(container, 150);
+    auto contentState = animateColorAsState(contentColor, 150);
     MutableInteractionSource source = style.interactionSource ? *style.interactionSource : remember([] { return MutableInteractionSource(); });
     bool pressed = source.collectIsPressedAsState();
     Shape shape = morphingShape(pressed ? style.shapes.pressedShape : checked ? style.shapes.checkedShape : style.shapes.shape);
 
     Modifier m = modifier.minimumInteractiveComponentSize().heightIn(40).widthIn(64);
     if (kind == ToggleKind::Elevated && style.enabled) m = m.shadow(2, shape);
-    m = m.background(container, shape);
+    m = detail::animatedBackground(m, containerState, shape);
     if (kind == ToggleKind::Outlined && !checked) m = m.border(1, style.enabled ? cs.outlineVariant : cs.onSurface.copy(0.12f), shape);
 
     CompositionLocalProvider(
-        {LocalContentColor.provides(contentColor), LocalTextStyle.provides(typography().labelLarge)}, [&] {
+        {LocalContentColor.provides(contentState), LocalTextStyle.provides(typography().labelLarge)}, [&] {
             Row(buttonPadding(m.toggleable(checked, std::move(onCheckedChange), SemanticsRole::Checkbox,
                                            {.enabled = style.enabled, .interactionSource = source}),
                               16, 10),
@@ -305,7 +306,15 @@ Shape detail::morphingShape(const Shape& target, CallSite site) {
     ComposableScope scope(site);
     Shape shape = lerp(target, RoundedCornerShape(0, 0, 0, 0), 0);  // corner by corner
     AnimationSpec spec = motionScheme().fastSpatialSpec;
-    for (CornerSize& corner : shape.corners) corner = {animateFloatAsState(corner.dp, spec), animateFloatAsState(corner.percent, spec)};
+    // Each corner's size and share animated, read where the outline is made (as Compose's
+    // animated shapes are), not here: the caller isn't composed again as they move.
+    std::array<std::pair<AnimatedState<float>, AnimatedState<float>>, 4> moving;
+    for (size_t i = 0; i < 4; ++i) moving[i] = {animateFloatAsState(shape.corners[i].dp, spec), animateFloatAsState(shape.corners[i].percent, spec)};
+    shape.animatedCorners = std::make_shared<const std::function<std::array<CornerSize, 4>()>>([moving] {
+        std::array<CornerSize, 4> corners;
+        for (size_t i = 0; i < 4; ++i) corners[i] = {moving[i].first.value(), moving[i].second.value()};
+        return corners;
+    });
     return shape;
 }
 

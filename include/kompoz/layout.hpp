@@ -560,7 +560,7 @@ struct ClickableElement final : ModifierElement {
     std::function<void()> onLongClick, onDoubleClick;  // combinedClickable()
     bool enabled = true;
     Shape shape;  // of the pressed/hover overlay
-    Color indicationColor = colors::Black;
+    detail::Live<Color> indicationColor{{}, nullptr, colors::Black};  // the content color, read as it is drawn
     Indication indication;
     std::optional<MutableInteractionSource> interactionSource;  // told of presses, hovers and focus
     void draw(GraphicsContext&, const Rect&, const LayoutNode&, const std::function<void()>&) const override;
@@ -749,7 +749,7 @@ struct IndicationElement final : ModifierElement {
     MutableInteractionSource source;
     Indication indication;
     Shape shape;  // of the last background(), border() or clip() before it
-    Color color = colors::Black;  // the content color where it was made
+    detail::Live<Color> color{{}, nullptr, colors::Black};  // the content color where it was made, read as it is drawn
     void draw(GraphicsContext&, const Rect&, const LayoutNode&, const std::function<void()>&) const override;
 };
 

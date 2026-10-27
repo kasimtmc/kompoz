@@ -277,6 +277,11 @@
   `NavHost` and `Crossfade`) and `animateEnterExit` read their progress as the content is laid out and drawn, as
   Compose's do, and compose their caller again when they get there (a frame asked for at that time), not on every frame
   on the way. A transition turned on its way goes back from where it is at that frame.
+- **Buttons, FABs and morphing shapes animate without composing around them**: a button's and a FAB's elevation, a
+  toggle button's colors, an extended FAB's width and label and a button group's held button are read as they are
+  laid out and drawn, and so are the corners of a morphing shape (a pressed or checked button's: a `Shape`'s
+  `animatedCorners`, read where its outline is made). A clickable's and an indication's ripple takes the content color
+  as it is drawn (`CompositionLocal::currentLive`), so a color provided from a state doesn't compose them again.
 - **Scrolling doesn't walk what scrolls**: what is moved without being measured again (a list's content) leaves the
   places in it as they were written down, worked out when asked for and written down when drawn. Scrolling the
   showcase's Components screen spent 1% of the main thread on places instead of 16%.
