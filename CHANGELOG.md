@@ -276,7 +276,9 @@
 - **Transitions compose around them only as they start and end**: `AnimatedVisibility`, `AnimatedContent` (and so
   `NavHost` and `Crossfade`) and `animateEnterExit` read their progress as the content is laid out and drawn, as
   Compose's do, and compose their caller again when they get there (a frame asked for at that time), not on every frame
-  on the way. A transition turned on its way goes back from where it is at that frame.
+  on the way. A transition turned on its way goes back from where it is at that frame. With the navigation items' and
+  the app bars', switching the showcase's tabs back and forth five times on a Redmi Note 9 Pro took 2.9–3.1 s of the
+  main thread instead of 3.9, its composition and layout 2.3 s instead of 3.3.
 - **Buttons, FABs and morphing shapes animate without composing around them**: a button's and a FAB's elevation, a
   toggle button's colors, an extended FAB's width and label and a button group's held button are read as they are
   laid out and drawn, and so are the corners of a morphing shape (a pressed or checked button's: a `Shape`'s

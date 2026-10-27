@@ -291,7 +291,9 @@
 - **Geçişler çevrelerini yalnızca başlarken ve biterken oluşturur**: `AnimatedVisibility`, `AnimatedContent` (dolayısıyla
   `NavHost` ve `Crossfade`) ve `animateEnterExit` ilerlemelerini Compose'takiler gibi içerik yerleştirilip çizilirken
   okur ve çağıranlarını yoldaki her karede değil, vardıklarında (o zamana istenen bir karede) yeniden oluşturur. Yolda
-  döndürülen bir geçiş, o karede bulunduğu yerden geri gider.
+  döndürülen bir geçiş, o karede bulunduğu yerden geri gider. Gezinme öğelerininki ve uygulama çubuklarınınkiyle
+  birlikte, bir Redmi Note 9 Pro'da showcase'in sekmeleri arasında beş kez gidip gelmek ana thread'de 3.9 yerine
+  2.9–3.1 s, bunun kompozisyonu ve yerleşimi 3.3 yerine 2.3 s sürdü.
 - **Düğmeler, FAB'ler ve biçim değiştiren şekiller çevrelerini oluşturmadan canlanır**: bir düğmenin ve bir FAB'in
   yükseltisi, bir açma-kapama düğmesinin renkleri, genişletilmiş bir FAB'in genişliği ve etiketi ve bir düğme
   grubunun basılı tutulan düğmesi yerleştirilip çizilirken okunur; biçim değiştiren bir şeklin köşeleri de öyle
