@@ -17,11 +17,11 @@ constexpr float kBarHeight = 64;
 // The bar's arrangement, for its items to lay themselves out by.
 const CompositionLocal<ShortNavigationBarArrangement> LocalShortNavigationBarArrangement{ShortNavigationBarArrangement::EqualWeight};
 
-// Grows from the middle as `shown` goes from 0 to 1.
-Modifier indicator(const Modifier& modifier, Color color, float shown) {
+// Grows from the middle as `shown` goes from 0 to 1 (read as it is drawn).
+Modifier indicator(const Modifier& modifier, Color color, const AnimatedState<float>& shown) {
     return modifier.drawBehind([color, shown](DrawScope& d) {
         Size s = d.size();
-        float w = s.width * std::clamp(shown, 0.f, 1.f);
+        float w = s.width * std::clamp(shown.value(), 0.f, 1.f);
         if (w > 0) d.drawRoundRect(color, {(s.width - w) / 2, 0}, Size{w, s.height}, CornerRadius(s.height / 2));
     });
 }
@@ -70,10 +70,14 @@ void ShortNavigationBarItem(bool selected, std::function<void()> onClick, const 
     bool start = options.iconPosition.value_or(arrangement == ShortNavigationBarArrangement::Centered ? NavigationItemIconPosition::Start
                                                                                                       : NavigationItemIconPosition::Top) ==
                  NavigationItemIconPosition::Start;
-    float shown = animateFloatAsState(selected ? 1.f : 0.f, motionScheme().defaultSpatialSpec);
-    Color iconColor = animateColorAsState(selected ? cs.onSecondaryContainer : cs.onSurfaceVariant, 150);
-    Color labelColor = animateColorAsState(selected ? cs.secondary : cs.onSurfaceVariant, 150);
-    if (!options.enabled) iconColor = labelColor = cs.onSurface.copy(0.38f);
+    // The animations read where they are used: the indicator as it is drawn, the colors by the
+    // icon and the label (not this, which is its caller's scope).
+    auto shown = animateFloatAsState(selected ? 1.f : 0.f, motionScheme().defaultSpatialSpec);
+    auto iconColor = animateColorAsState(selected ? cs.onSecondaryContainer : cs.onSurfaceVariant, 150);
+    auto labelColor = animateColorAsState(selected ? cs.secondary : cs.onSurfaceVariant, 150);
+    auto tinted = [&](const AnimatedState<Color>& color) {
+        return options.enabled ? LocalContentColor.provides(color) : LocalContentColor.provides(cs.onSurface.copy(0.38f));
+    };
     MutableInteractionSource source = options.interactionSource ? *options.interactionSource : remember([] { return MutableInteractionSource(); });
     Modifier item = arrangement == ShortNavigationBarArrangement::EqualWeight ? modifier.weight(1) : modifier;
     item = item.fillMaxHeight().selectable(selected, std::move(onClick), SemanticsRole::Tab,
@@ -87,8 +91,8 @@ void ShortNavigationBarItem(bool selected, std::function<void()> onClick, const 
             .clip(CircleShape)
             .indication(mapped, ripple());
     };
-    auto text = [&] { CompositionLocalProvider({LocalContentColor.provides(labelColor), LocalTextStyle.provides(typography().labelMedium)}, label); };
-    auto picture = [&] { CompositionLocalProvider({LocalContentColor.provides(iconColor)}, icon); };
+    auto text = [&] { CompositionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelMedium)}, label); };
+    auto picture = [&] { CompositionLocalProvider({tinted(iconColor)}, icon); };
     if (start) {
         Box(item, Alignment::Center, [&] {
             Row(pill(Modifier().height(40)).padding(16, 0), {.horizontalArrangement = Arrangement::spacedBy(4), .verticalAlignment = Alignment::CenterVertically},
@@ -217,28 +221,30 @@ void WideNavigationRailItem(bool selected, std::function<void()> onClick, const 
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     bool expanded = options.railExpanded.value_or(LocalWideNavigationRailExpanded.current());
-    float shown = animateFloatAsState(selected ? 1.f : 0.f, motionScheme().defaultSpatialSpec);
-    Color iconColor = animateColorAsState(selected ? cs.onSecondaryContainer : cs.onSurfaceVariant, 150);
-    Color labelColor = animateColorAsState(selected ? cs.secondary : cs.onSurfaceVariant, 150);
-    if (!options.enabled) iconColor = labelColor = cs.onSurface.copy(0.38f);
+    auto shown = animateFloatAsState(selected ? 1.f : 0.f, motionScheme().defaultSpatialSpec);  // (as ShortNavigationBarItem's)
+    auto iconColor = animateColorAsState(selected ? cs.onSecondaryContainer : cs.onSurfaceVariant, 150);
+    auto labelColor = animateColorAsState(selected ? cs.secondary : cs.onSurfaceVariant, 150);
+    auto tinted = [&](const AnimatedState<Color>& color) {
+        return options.enabled ? LocalContentColor.provides(color) : LocalContentColor.provides(cs.onSurface.copy(0.38f));
+    };
     MutableInteractionSource source = options.interactionSource ? *options.interactionSource : remember([] { return MutableInteractionSource(); });
     Modifier item = modifier.fillMaxWidth().selectable(selected, std::move(onClick), SemanticsRole::Tab,
                                                        {.enabled = options.enabled, .interactionSource = source, .indication = false});
     auto pill = [&](const Modifier& m) { return indicator(m, cs.secondaryContainer, shown).clip(CircleShape).indication(source, ripple()); };
-    auto picture = [&] { CompositionLocalProvider({LocalContentColor.provides(iconColor)}, icon); };
+    auto picture = [&] { CompositionLocalProvider({tinted(iconColor)}, icon); };
     if (expanded) {  // the label after the icon, the indicator round both
         Box(item.height(56).padding(20, 0, 20, 0), Alignment::CenterStart, [&] {
             Row(pill(Modifier().height(56)).padding(16, 0), {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically},
                 [&] {
                     picture();
-                    CompositionLocalProvider({LocalContentColor.provides(labelColor), LocalTextStyle.provides(typography().labelLarge)}, label);
+                    CompositionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelLarge)}, label);
                 });
         });
     } else {
         Column(item.height(64), {.verticalArrangement = Arrangement::spacedBy(4, Arrangement::Kind::Center), .horizontalAlignment = Alignment::CenterHorizontally},
                [&] {
                    Box(pill(Modifier().size(56, 32)), Alignment::Center, picture);
-                   CompositionLocalProvider({LocalContentColor.provides(labelColor), LocalTextStyle.provides(typography().labelMedium)}, label);
+                   CompositionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelMedium)}, label);
                });
     }
 }

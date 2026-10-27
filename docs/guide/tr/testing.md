@@ -95,7 +95,7 @@ Diğer her şey için bir düğüm `bounds()`'unu (dp cinsinden, pencere içinde
 
 Rule'un saati sanaldır: zaman yalnızca test öyle dediğinde ilerler; böylece animasyonlar, gecikmeler ve coroutine'ler her çalıştırmada aynı sonucu verir.
 
-- `rule.waitForIdle()` bekleyen hiçbir şey kalmayana kadar kare çalıştırır: recomposition, yerleşim ve birkaç saniye içinde vakti gelen zamanlayıcılar.
+- `rule.waitForIdle()` bekleyen hiçbir şey kalmayana kadar kare çalıştırır: recomposition, yerleşim, yoldaki animasyonlar (çizilirken okunanlar da) ve birkaç saniye içinde vakti gelen zamanlayıcılar.
 - `rule.advanceTimeBy(ms)` saati ileri alır ve aradaki kareleri çalıştırır.
 - `rule.advanceFrame()` bir kare çalıştırır.
 

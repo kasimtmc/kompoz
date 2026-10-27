@@ -265,8 +265,8 @@ void tinted(Color color, const Content& content) {
 }
 
 // The container color: the scrolled one once content is under the bar (recomposes only when
-// that flips, not on every scroll step).
-Color appBarContainer(const TopAppBarSlots& slots) {
+// that flips, not on every scroll step; the color on its way is read as it is drawn).
+AnimatedState<Color> appBarContainer(const TopAppBarSlots& slots) {
     const ColorScheme& cs = colorScheme();
     Color normal = slots.containerColor.value_or(cs.surface);
     Color scrolled = slots.scrolledContainerColor.value_or(cs.surfaceContainer);
@@ -357,7 +357,7 @@ void twoRowsTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, flo
     if (slots.subtitle) expandedHeight += subtitleRoom;
     expandedHeight = std::max(collapsedHeight, slots.expandedHeight.value_or(expandedHeight));
     PaddingValues insets = appBarInsets(slots);
-    Color container = appBarContainer(slots);
+    AnimatedState<Color> container = appBarContainer(slots);
     std::optional<TopAppBarState> state;
     if (slots.scrollBehavior) {
         state = slots.scrollBehavior->state;
@@ -371,7 +371,7 @@ void twoRowsTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, flo
         });
     };
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
-        Column(modifier.fillMaxWidth().background(container).padding(insets.start, insets.top, insets.end, 0), [&] {
+        Column(detail::animatedBackground(modifier.fillMaxWidth(), container).padding(insets.start, insets.top, insets.end, 0), [&] {
             Content smallSubtitle;
             if (slots.subtitle) smallSubtitle = [&] { Box(fade(true), slots.subtitle); };
             Content smallTitle = [&] {
@@ -401,7 +401,7 @@ void twoRowsTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, flo
 void singleRowTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, bool centered) {
     const ColorScheme& cs = colorScheme();
     PaddingValues insets = appBarInsets(slots);
-    Color container = appBarContainer(slots);
+    AnimatedState<Color> container = appBarContainer(slots);
     float height = std::max(0.f, slots.expandedHeight.value_or(TopAppBarDefaults::TopAppBarExpandedHeight));
     const auto& behavior = slots.scrollBehavior;
     if (behavior) behavior->state.setHeightOffsetLimit(-height);
@@ -412,7 +412,7 @@ void singleRowTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, b
             appBarRow(slots, Modifier(), slots.title, slots.subtitle, height);
     };
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
-        Box(modifier.fillMaxWidth().background(container).padding(insets.start, insets.top, insets.end, 0), [&] {
+        Box(detail::animatedBackground(modifier.fillMaxWidth(), container).padding(insets.start, insets.top, insets.end, 0), [&] {
             if (behavior && !behavior->isPinned)
                 Box(collapsing(Modifier().fillMaxWidth(), behavior->state, height, true), row);
             else
@@ -539,11 +539,15 @@ void detail::indicatorNavigationItem(bool selected, std::function<void()> onClic
                                      std::optional<MutableInteractionSource> interactionSource) {
     const ColorScheme& cs = colorScheme();
     const MotionScheme& motion = motionScheme();
-    Color iconColor = animateColorAsState(selected ? cs.onSecondaryContainer : cs.onSurfaceVariant, motion.defaultEffectsSpec);
-    Color labelColor = animateColorAsState(selected ? cs.secondary : cs.onSurfaceVariant, motion.defaultEffectsSpec);
-    if (!enabled) iconColor = labelColor = cs.onSurface.copy(0.38f);
-    float alpha = animateFloatAsState(selected ? 1.f : 0.f, motion.defaultEffectsSpec);
-    float grown = std::max(0.f, animateFloatAsState(selected ? 1.f : 0.f, motion.fastSpatialSpec).value());
+    // The animations read where they are used: the indicator's as it is laid out and drawn, the
+    // colors by the icon and the label (not this, which is its caller's scope).
+    auto iconColor = animateColorAsState(selected ? cs.onSecondaryContainer : cs.onSurfaceVariant, motion.defaultEffectsSpec);
+    auto labelColor = animateColorAsState(selected ? cs.secondary : cs.onSurfaceVariant, motion.defaultEffectsSpec);
+    auto tinted = [&](const AnimatedState<Color>& color) {
+        return enabled ? LocalContentColor.provides(color) : LocalContentColor.provides(cs.onSurface.copy(0.38f));
+    };
+    auto alpha = animateFloatAsState(selected ? 1.f : 0.f, motion.defaultEffectsSpec);
+    auto grown = animateFloatAsState(selected ? 1.f : 0.f, motion.fastSpatialSpec);
     MutableInteractionSource source = interactionSource ? *interactionSource : remember([] { return MutableInteractionSource(); });
     auto shift = remember([] { return std::make_shared<Offset>(); });
     MutableInteractionSource pill = mappedInteractionSource(source, shift);
@@ -551,10 +555,16 @@ void detail::indicatorNavigationItem(bool selected, std::function<void()> onClic
     Box(m.selectable(selected, std::move(onClick), SemanticsRole::Tab, {.enabled = enabled, .interactionSource = source, .indication = false}),
         Alignment::TopCenter, [&] {
             Box(Modifier().offset(0, top).size(indicatorWidth, 32).clip(CircleShape).indication(pill, ripple()));
-            Box(Modifier().offset(0, top).size(indicatorWidth * grown, 32).alpha(alpha).background(cs.secondaryContainer, CircleShape));
-            Box(Modifier().offset(0, top + 4), [&] { CompositionLocalProvider({LocalContentColor.provides(iconColor)}, icon); });
+            Modifier grows = Modifier().offset(0, top).layout([grown, indicatorWidth](const MeasureNext& next, const Constraints& c, Offset& at) {
+                at = {};  // (as size(indicatorWidth * grown, 32))
+                float w = std::clamp(indicatorWidth * std::max(0.f, grown.value()), c.minWidth, c.maxWidth), h = std::clamp(32.f, c.minHeight, c.maxHeight);
+                next({w, w, h, h});
+                return Size{w, h};
+            });
+            Box(detail::animatedAlpha(grows, alpha).background(cs.secondaryContainer, CircleShape));
+            Box(Modifier().offset(0, top + 4), [&] { CompositionLocalProvider({tinted(iconColor)}, icon); });
             Box(Modifier().offset(0, top + 32 + 4), [&] {
-                CompositionLocalProvider({LocalContentColor.provides(labelColor), LocalTextStyle.provides(typography().labelMedium)}, label);
+                CompositionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelMedium)}, label);
             });
         });
 }

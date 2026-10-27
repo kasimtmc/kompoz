@@ -167,9 +167,11 @@ namespace detail {
 // The time an animation read now goes by: the frame being composed, laid out or drawn (the last
 // one between frames).
 int64_t animationReadTime(ComposeHost* host);
-// Asks for the next frame of what is reading an animation that still moves: a composition is
-// composed again, a layout laid out again, a drawing drawn again.
-void animationNextFrame(ComposeHost* host);
+// Asks for the next frame of what is reading an animation that still moves (until `end`, frame
+// time): a composition is composed again, a layout laid out again, a drawing drawn again.
+void animationNextFrame(ComposeHost* host, int64_t end);
+// When an animation along `spec` from `start` (frame time) comes to rest; INT64_MAX: never.
+int64_t animationEnd(const AnimationSpec& spec, int64_t start);
 } // namespace detail
 
 template <class T>
@@ -204,7 +206,7 @@ private:
     struct Data {
         T from, to, value;
         AnimationSpec spec;
-        int64_t start = 0;
+        int64_t start = 0, end = 0;
         bool running = false;
         ComposeHost* host = nullptr;
         // Where it is at `now`; still moving and `ask`: the reader's next frame is asked for.
@@ -219,7 +221,7 @@ private:
                 value = finished && p == 1.f ? to : detail::animationLerp(from, to, p);
             }
             running = !finished;
-            if (running && ask) detail::animationNextFrame(host);
+            if (running && ask) detail::animationNextFrame(host, end);
             return value;
         }
     };
@@ -231,13 +233,14 @@ template <class T>
 AnimatedState<T> animateValueAsState(const T& target, const AnimationSpec& spec, CallSite site) {
     using Data = typename AnimatedState<T>::Data;
     auto& c = detail::Composer::require();
-    auto& d = remember([&] { return std::make_shared<Data>(Data{target, target, target, spec, 0, false, &c.host()}); }, site);
+    auto& d = remember([&] { return std::make_shared<Data>(Data{.from = target, .to = target, .value = target, .spec = spec, .host = &c.host()}); }, site);
     if (!(d->to == target)) {
         int64_t now = c.frameTimeNanos();
         d->from = d->at(now, false);
         d->to = target;
         d->spec = spec;
         d->start = now;
+        d->end = detail::animationEnd(spec, now);
         d->running = true;
         detail::notifyStateChanged(d.get());  // (read while laying out or drawing: that again)
     }

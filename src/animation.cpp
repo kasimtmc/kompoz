@@ -271,11 +271,28 @@ int64_t detail::animationReadTime(ComposeHost* host) {
     return host ? host->frameTime() : 0;
 }
 
-void detail::animationNextFrame(ComposeHost* host) {
+void detail::animationNextFrame(ComposeHost* host, int64_t end) {
     if (Composer* composer = Composer::current(); composer && composer->recording()) composer->requestFrame();
     else if (!host) return;
     else if (measuringNode()) host->requestLayoutFrame();
-    else host->requestRedraw();
+    else host->requestRedraw(), host->animateDrawingUntil(end);
+}
+
+int64_t detail::animationEnd(const AnimationSpec& spec, int64_t start) {
+    if (spec.iterations == 0) return INT64_MAX;  // infiniteRepeatable
+    float ms = 0;
+    switch (spec.kind) {
+    case AnimationSpec::Kind::Snap: ms = spec.delayMillis; break;
+    case AnimationSpec::Kind::Tween:
+    case AnimationSpec::Kind::Keyframes: ms = (spec.delayMillis + spec.durationMillis) * float(spec.iterations); break;
+    case AnimationSpec::Kind::Spring: {
+        bool settled = false;
+        for (; ms < 60000 && !settled; ms += 4) spec.progress(ms, settled);
+        if (!settled) return INT64_MAX;
+        break;
+    }
+    }
+    return start + int64_t(std::ceil(ms)) * 1'000'000;
 }
 
 float detail::infiniteProgress(const std::shared_ptr<int64_t>& start, const AnimationSpec& spec, ComposeHost* host) {

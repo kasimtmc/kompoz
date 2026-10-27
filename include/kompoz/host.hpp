@@ -264,6 +264,9 @@ public:
     void wake();                         // thread-safe: ask the platform for a frame
     void requestLayout();  // everything measured again
     void requestRedraw();
+    // An animation read while drawing goes on until `frameTime`: until then there is work to do
+    // (frames to draw it in), drawn or not.
+    void animateDrawingUntil(int64_t frameTime) { drawingAnimatedUntil_ = std::max(drawingAnimatedUntil_, frameTime); }
     // `draw` (dp, from 0, 0) as pixels, by the platform (Callbacks::renderImage); empty without one.
     ImageBitmap renderImage(Size size, const std::function<void(GraphicsContext&)>& draw) const;
     // The text magnifier (Android's, as Compose shows it while a selection handle or the cursor
@@ -690,6 +693,7 @@ private:
     int64_t dragStartTime_ = -1;  // when the current drag claimed the gesture, and how far it went
     float dragTravel_ = 0;
     int64_t lastFrameTime_ = 0;
+    int64_t drawingAnimatedUntil_ = 0;
     bool pointerDown_ = false;
     Offset downPosition_, lastPosition_;
     Cursor cursor_ = Cursor::Default;

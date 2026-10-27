@@ -3,6 +3,7 @@
 // Layout model: constraints, modifiers and the retained LayoutNode tree.
 // Measuring works like Compose: constraints go down, sizes come up, parents place children.
 
+#include "animation.hpp"
 #include "coroutines.hpp"
 #include "graphics.hpp"
 #include "interaction.hpp"
@@ -2209,6 +2210,13 @@ struct MeasureEverything {
 // What of `insets` the windowInsetsPadding()s / consumeWindowInsets() of `node` and its
 // ancestors haven't taken yet: for a layout that keeps clear of them itself (BottomSheetScaffold).
 WindowInsets unconsumedInsets(const LayoutNode& node, const WindowInsets& insets);
+// background(), alpha(), scale() and shadow() of what an animation moves, read while drawing (as
+// Compose's components read theirs in drawBehind and graphicsLayer { }): as it moves, the node is
+// drawn again, nothing composed.
+Modifier animatedBackground(const Modifier& m, const AnimatedState<Color>& color, Shape shape = RectangleShape);
+Modifier animatedAlpha(const Modifier& m, const AnimatedState<float>& alpha);
+Modifier animatedScale(const Modifier& m, const AnimatedState<float>& scale);
+Modifier animatedShadow(const Modifier& m, const AnimatedState<float>& elevation, Shape shape);
 } // namespace detail
 
 // Measures the node's children (placing them with LayoutNode::place) and returns the content size.

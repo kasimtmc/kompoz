@@ -450,7 +450,8 @@ void ComposeHost::checkKept() {
 }
 
 bool ComposeHost::hasPendingWork() const {
-    if (rootInvalid_ || animating_ || layoutDirty_ || redraw_ || flingNode_ || layoutAnimating_ || composer_.hasInvalidScopes() ||
+    if (rootInvalid_ || animating_ || layoutDirty_ || redraw_ || flingNode_ || layoutAnimating_ || lastFrameTime_ < drawingAnimatedUntil_ ||
+        composer_.hasInvalidScopes() ||
         dispatcher_->hasFrameWaiters() || !unechoed_.empty())
         return true;
     for (const auto& [key, v] : visibility_)

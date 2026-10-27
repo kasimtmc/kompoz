@@ -268,6 +268,11 @@
   state, as Compose's, so what reads how far content has gone under the bar follows the limit once the bar sets it.
   Worked out before that (in the bar's first composition), the scrolled container color never followed the content,
   and the bar kept its color unless something composed it again for another reason.
+- **Navigation items and top app bars animate without composing around them**: the navigation bar's, the short
+  navigation bar's and the wide rail's items read their indicator as they lay it out and draw it, and give their icon
+  and label their animated colors as states (only those are composed again); a top app bar's container color goes over
+  as it is drawn. An animation read while drawing keeps frames coming until it is done, drawn or not, and
+  `ComposeTestRule::waitForIdle` waits for it.
 - **Scrolling doesn't walk what scrolls**: what is moved without being measured again (a list's content) leaves the
   places in it as they were written down, worked out when asked for and written down when drawn. Scrolling the
   showcase's Components screen spent 1% of the main thread on places instead of 16%.

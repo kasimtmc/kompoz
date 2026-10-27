@@ -13016,7 +13016,9 @@ TEST(a_top_app_bar_takes_its_scrolled_color) {
     std::optional<TopAppBarScrollBehavior> behavior;
     ScrollState scroll;
     ColorScheme cs = lightColorScheme();
+    int composed = 0;
     ComposeTestRule rule([&] {
+        ++composed;
         auto pinned = TopAppBarDefaults::pinnedScrollBehavior();
         behavior = pinned;
         Scaffold(Modifier().fillMaxSize().nestedScroll(pinned.nestedScrollConnection),
@@ -13032,11 +13034,47 @@ TEST(a_top_app_bar_takes_its_scrolled_color) {
             if (sameRect(c.rects[i], {0, 0, 400, 64})) return c.rectColors[i];  // the bar's container
         return Color{};
     };
+    int before = composed;
     CHECK(barColor() == cs.surface);
     slowDrag(rule, {200, 500}, {200, 300});
     rule.waitForIdle();
-    CHECK(behavior->state.overlappedFraction() > 0.5f);
+    // Composed again once, as the content came under it; its color went over as it was drawn.
+    CHECK(behavior->state.overlappedFraction() > 0.5f && composed == before + 1);
     CHECK(barColor() == cs.surfaceContainer);
+}
+
+TEST(navigation_items_animate_composing_nothing_around_them) {
+    auto tab = mutableStateOf(0);
+    int composed = 0;
+    std::array<Color, 3> labels{};
+    ColorScheme cs = lightColorScheme();
+    ComposeTestRule rule([&] {
+        ++composed;
+        int selected = tab.get();
+        Column([&] {
+            ShortNavigationBar(Modifier(), [&] {
+                for (int i = 0; i < 3; ++i)
+                    ShortNavigationBarItem(selected == i, [&tab, i] { tab.set(i); }, [] { Icon(Icons::Filled::Home, ""); }, [&labels, i] {
+                        composable(CallSite::current(), [&labels, i] { labels[size_t(i)] = LocalContentColor.current(); });
+                    });
+            });
+            NavigationBar(Modifier(), [&] {
+                for (int i = 0; i < 3; ++i) NavigationBarItem(selected == i, [&tab, i] { tab.set(i); }, Icons::Filled::Home, "Sekme");
+            });
+            WideNavigationRail(Modifier(), [&] {
+                for (int i = 0; i < 3; ++i) WideNavigationRailItem(selected == i, [&tab, i] { tab.set(i); }, [] { Icon(Icons::Filled::Home, ""); }, [] { Text("Ray"); });
+            });
+        });
+    }, {400, 800});
+    CHECK(labels[0] == cs.secondary && labels[1] == cs.onSurfaceVariant);
+    tab.set(1);
+    rule.advanceFrame();  // the caller composed with the new tab...
+    int before = composed;
+    rule.advanceFrame();
+    CHECK(labels[1] != cs.onSurfaceVariant && labels[1] != cs.secondary);  // (on its way)
+    rule.waitForIdle();
+    CHECK(composed == before);  // ...and not again as the items animated
+    CHECK(labels[1] == cs.secondary && labels[0] == cs.onSurfaceVariant);
 }
 
 TEST(nested_scroll_dispatcher_offers_a_custom_drag_to_the_parents) {
@@ -13665,11 +13703,9 @@ TEST(animated_states_are_read_where_they_are_needed) {
     testing::RecordingCanvas canvas;
     drawnOnly.host().draw(canvas);
     CHECK(drawnOnly.host().hasPendingWork() && lastAlpha >= 0 && lastAlpha < 1);
-    for (int i = 0; i < 12; ++i) {
-        drawnOnly.advanceFrame();
-        testing::RecordingCanvas frame;
-        drawnOnly.host().draw(frame);
-    }
+    drawnOnly.waitForIdle();  // frames until it is done, drawn or not
+    testing::RecordingCanvas frame;
+    drawnOnly.host().draw(frame);
     CHECK(lastAlpha == 1 && composedOnly == before && !drawnOnly.host().hasPendingWork());
     // A new target on the way goes on from where it is now, read or not since, and asks no frames
     // of the composition for it.

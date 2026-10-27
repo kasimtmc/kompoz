@@ -95,7 +95,7 @@ For anything else, a node gives its `bounds()` (in dp, in the window) and `text(
 
 The rule's clock is virtual: time moves only when the test says so, so animations, delays and coroutines give the same result on every run.
 
-- `rule.waitForIdle()` runs frames until nothing is pending: recomposition, layout, and timers that are due within a couple of seconds.
+- `rule.waitForIdle()` runs frames until nothing is pending: recomposition, layout, animations on their way (read while drawing too), and timers that are due within a couple of seconds.
 - `rule.advanceTimeBy(ms)` moves the clock forward, running the frames in between.
 - `rule.advanceFrame()` runs one frame.
 

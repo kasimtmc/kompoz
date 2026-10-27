@@ -283,6 +283,11 @@
   kayması sınırı Compose'taki gibi bir durumdur; böylece içeriğin çubuğun altına ne kadar girdiğini okuyan şey, çubuk
   sınırı koyduğunda onu izler. Bundan önce hesaplandığında (çubuğun ilk oluşturulmasında) kaydırılmış kap rengi içeriği
   hiç izlemiyordu ve başka bir sebeple yeniden oluşturulmadıkça çubuk rengini koruyordu.
+- **Gezinme öğeleri ve üst uygulama çubukları çevrelerini oluşturmadan canlanır**: gezinme çubuğunun, kısa gezinme
+  çubuğunun ve geniş rayın öğeleri göstergelerini yerleştirip çizerken okur, simgelerine ve etiketlerine canlanan
+  renklerini durum olarak verir (yalnızca onlar yeniden oluşturulur); bir üst uygulama çubuğunun kap rengi çizilirken
+  geçer. Çizim sırasında okunan bir animasyon, çizilsin çizilmesin bitene kadar kare getirir ve
+  `ComposeTestRule::waitForIdle` onu bekler.
 - **Kaydırmak kayanı dolaşmaz**: yeniden ölçülmeden taşınan bir şey (bir listenin içeriği) içindeki yerleri yazıldıkları
   gibi bırakır; istendiklerinde hesaplanır, çizildiklerinde yazılırlar. Showcase'in Bileşenler ekranını kaydırmak ana
   thread'in %16 yerine %1'ini yerlere harcadı.
