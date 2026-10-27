@@ -2174,22 +2174,28 @@ void checkbox(ToggleableState state, std::function<void()> onClick, const Modifi
     bool on = state != ToggleableState::Off;
     // Compose 1.4's colors (CheckboxDefaults.colors): disabled ones the surface's text faded, at
     // once; enabled ones in by the default effects spring, out by the fast one.
+    // All read as it is drawn.
     AnimationSpec colorSpec = on ? motion.defaultEffectsSpec : motion.fastEffectsSpec;
-    auto colorOf = [&](Color target) { return enabled ? animateColorAsState(target, colorSpec) : target; };
-    Color fill = colorOf(on ? (enabled ? cs.primary : cs.onSurface.copy(0.38f)) : cs.primary.copy(0));
-    Color border = colorOf(enabled ? (on ? cs.primary : cs.onSurfaceVariant) : cs.onSurface.copy(0.38f));
-    Color mark = enabled ? animateColorAsState(on ? cs.onPrimary : cs.onPrimary.copy(0), colorSpec) : on ? cs.onPrimary : cs.onPrimary.copy(0);
+    auto colorOf = [&](Color target) {
+        return enabled ? detail::liveOf(animateColorAsState(target, colorSpec)) : detail::Live<Color>{{}, nullptr, target};
+    };
+    detail::Live<Color> fillColor = colorOf(on ? (enabled ? cs.primary : cs.onSurface.copy(0.38f)) : cs.primary.copy(0));
+    detail::Live<Color> borderColor = colorOf(enabled ? (on ? cs.primary : cs.onSurfaceVariant) : cs.onSurface.copy(0.38f));
+    detail::Live<Color> markColor = enabled ? detail::liveOf(animateColorAsState(on ? cs.onPrimary : cs.onPrimary.copy(0), colorSpec))
+                                            : detail::Live<Color>{{}, nullptr, on ? cs.onPrimary : cs.onPrimary.copy(0)};
     // The tick drawn along (by the default spatial spring), and bent into a dash for the
     // indeterminate state; taken away at once 100 ms after unticking.
     auto& states = remember([state] { return std::pair{state, state}; });  // the one before, the one now
     if (states.second != state) states = {states.second, state};
     ToggleableState from = states.first;
     AnimationSpec gone = snap(100);
-    float drawn = animateFloatAsState(on ? 1.f : 0.f, state == ToggleableState::Off && from != state ? gone : motion.defaultSpatialSpec);
-    float bent = animateFloatAsState(state == ToggleableState::Indeterminate ? 1.f : 0.f,
-                                     from == ToggleableState::Off ? snap() : state == ToggleableState::Off ? gone : motion.defaultSpatialSpec);
+    auto drawnState = animateFloatAsState(on ? 1.f : 0.f, state == ToggleableState::Off && from != state ? gone : motion.defaultSpatialSpec);
+    auto bentState = animateFloatAsState(state == ToggleableState::Indeterminate ? 1.f : 0.f,
+                                         from == ToggleableState::Off ? snap() : state == ToggleableState::Off ? gone : motion.defaultSpatialSpec);
 
     auto draw = [=](GraphicsContext& canvas, const Rect& b, const LayoutNode&) {
+        Color fill = fillColor(), border = borderColor(), mark = markColor();
+        float drawn = drawnState.value(), bent = bentState.value();
         // 20 dp, its 2 dp outline inside it (strokeRoundRect strokes inside the rect).
         Offset c = b.center();
         Rect box{c.x - 10, c.y - 10, 20, 20};
@@ -2251,12 +2257,14 @@ void Switch(bool checked, std::function<void(bool)> onCheckedChange, const Modif
     // 16 dp off, 24 on (or with an icon), 28 while held; moved by the fast spatial spring, but at
     // once to its pressed size (Compose's SnapSpec while pressed).
     AnimationSpec move = motionScheme().fastSpatialSpec, snap = tween(0);
-    float t = animateFloatAsState(checked ? 1.f : 0.f, pressed ? snap : move);
-    float d = animateFloatAsState(pressed ? 28.f : checked || options.thumbContent ? 24.f : 16.f, pressed ? snap : move);
+    // Read as it is laid out (the icon in the thumb) and drawn.
+    auto t = animateFloatAsState(checked ? 1.f : 0.f, pressed ? snap : move);
+    auto thumbSize = animateFloatAsState(pressed ? 28.f : checked || options.thumbContent ? 24.f : 16.f, pressed ? snap : move);
     // Where the thumb's centre is, from the switch's centre (on at the end: the left, right to left).
-    auto thumbX = [t](bool rtl) { return rtl ? lerp(10, -10, t) : lerp(-10, 10, t); };
+    auto thumbX = [t](bool rtl) { return rtl ? lerp(10, -10, t.value()) : lerp(-10, 10, t.value()); };
 
     auto draw = [=](GraphicsContext& canvas, const Rect& b, const LayoutNode& node) {
+        float d = thumbSize.value();
         Rect trackRect{b.center().x - 26, b.center().y - 16, 52, 32};
         canvas.fillRoundRect(trackRect, 16, track);
         canvas.strokeRoundRect(trackRect, 16, 2, outline);

@@ -298,6 +298,10 @@
   (basılan ya da seçilen bir düğmeninki: bir `Shape`'in `animatedCorners`'ı, ana hattı çıkarıldığı yerde okunur). Bir
   clickable'ın ve bir indication'ın dalgası içerik rengini çizilirken alır (`CompositionLocal::currentLive`); böylece
   bir durumdan sağlanan bir renk onları yeniden oluşturmaz.
+- **Seçim denetimleri çevrelerini oluşturmadan canlanır**: bir onay kutusunun renkleri ve işareti, bir anahtarın
+  topuzu, bir radyo düğmesinin halkası ve noktası, bir liste öğesinin kabı, bir bölümlü düğmenin işareti ve etiketi,
+  bir sekmenin göstergesi ve rengi, bir kaydırıcının topuzu ve bir sürükleme tutamacı yerleştirilip çizilirken okunur;
+  işaretlendiklerinde, seçildiklerinde ya da tutulduklarında çağıran bir kez yeniden oluşturulur.
 - **Kaydırmak kayanı dolaşmaz**: yeniden ölçülmeden taşınan bir şey (bir listenin içeriği) içindeki yerleri yazıldıkları
   gibi bırakır; istendiklerinde hesaplanır, çizildiklerinde yazılırlar. Showcase'in Bileşenler ekranını kaydırmak ana
   thread'in %16 yerine %1'ini yerlere harcadı.

@@ -2010,6 +2010,59 @@ TEST(buttons_animate_composing_around_them_only_as_they_turn) {
     CHECK(composed == before && near(rule.onNodeWithTag("fab").bounds().width, 56) && near(corner(), 12));
 }
 
+TEST(selection_controls_animate_composing_around_them_only_as_they_turn) {
+    auto on = mutableStateOf(false);
+    MutableInteractionSource held;
+    int composed = 0;
+    ComposeTestRule rule([&] {
+        ++composed;
+        bool o = on.get();
+        Column([&] {
+            Checkbox(o, [&on](bool c) { on.set(c); });
+            Switch(o, [&on](bool c) { on.set(c); });
+            RadioButton(o, [&on] { on.set(true); });
+            ListItem(o, [&on] { on.set(!on.peek()); }, {.headline = [] { Text("Seç"); }});
+            SingleChoiceSegmentedButtonRow(Modifier().width(300), [&] {
+                for (int i = 0; i < 2; ++i) SegmentedButton(o == (i == 1), [] {}, [i] { Text("S" + std::to_string(i)); });
+            });
+            PrimaryTabRow(o ? 1 : 0, Modifier(), [&] {
+                for (int i = 0; i < 2; ++i)  // (colors of their own: by default the unselected ones are the selected one's)
+                    Tab(o == (i == 1), [] {}, [i] { Text("T" + std::to_string(i)); }, {}, Modifier(),
+                        {.selectedContentColor = colors::Red, .unselectedContentColor = colors::Blue});
+            });
+            VerticalDragHandle(Modifier().testTag("tutamak"), held);
+            Slider(0.5f, [](float) {}, Modifier().width(200).testTag("kaydırıcı"),
+                   {.thumb = [](const SliderState& s) { SliderDefaults::ShapeThumb(s, RectangleShape, {20, 20}); }});
+        });
+    }, {400, 800});
+    on.set(true);
+    rule.advanceFrame();  // composed as they turn...
+    int before = composed;
+    rule.waitForIdle();
+    CHECK(composed == before);  // ...not as they animate
+    float narrow = rule.onNodeWithTag("tutamak").node()->children.empty() ? 0 : rule.onNodeWithTag("tutamak").node()->children[0]->bounds().width;
+    Interaction press = Interaction::press();  // held, by whatever drags it
+    held.tryEmit(press);
+    rule.advanceFrame();
+    before = composed;
+    rule.advanceFrame();
+    rule.advanceFrame();
+    float growing = rule.onNodeWithTag("tutamak").node()->children[0]->bounds().width;
+    CHECK(growing > narrow + 0.5f && growing < 11.5f);  // on its way (12 held)
+    rule.waitForIdle();
+    CHECK(composed == before && rule.onNodeWithTag("tutamak").node()->children[0]->bounds().width > narrow + 5);  // grown, laid out as it went
+    held.tryEmit(press.release());
+    rule.waitForIdle();
+    // A slider's thumb grows as it is held: composed as it is pressed, not as it grows.
+    rule.host().pointerDown(rule.onNodeWithTag("kaydırıcı").bounds().center());
+    rule.advanceFrame();
+    before = composed;
+    rule.advanceTimeBy(300);
+    CHECK(composed == before);
+    rule.host().pointerUp(rule.onNodeWithTag("kaydırıcı").bounds().center());
+    rule.waitForIdle();
+}
+
 TEST(icon_sizes_tints_and_draws) {
     ComposeTestRule rule([] {
         CompositionLocalProvider({LocalContentColor.provides(Color::hex(0x123456))}, [] {

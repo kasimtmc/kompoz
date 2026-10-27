@@ -147,13 +147,13 @@ void interactiveListItem(ListItemKind kind, bool selected, std::function<void()>
                                                    : shapes.shape);
     const ListItemColors& c = o.colors;
     Color faded = cs.onSurface.copy(0.38f);
-    Color container = animateColorAsState(selected ? c.selectedContainerColor.value_or(cs.secondaryContainer) : c.containerColor.value_or(cs.surface), 200);
+    auto container = animateColorAsState(selected ? c.selectedContainerColor.value_or(cs.secondaryContainer) : c.containerColor.value_or(cs.surface), 200);
     Color content = !o.enabled ? faded : selected ? c.selectedContentColor.value_or(cs.onSecondaryContainer) : c.contentColor.value_or(cs.onSurface);
     auto quiet = [&](const std::optional<Color>& color) {
         return !o.enabled ? faded : selected ? c.selectedContentColor.value_or(cs.onSecondaryContainer) : color.value_or(cs.onSurfaceVariant);
     };
     ClickableOptions click{.enabled = o.enabled, .interactionSource = source, .onLongClick = o.onLongClick};
-    Modifier m = modifier.fillMaxWidth().heightIn(56).minimumInteractiveComponentSize().background(container, shape).clip(shape);
+    Modifier m = detail::animatedBackground(modifier.fillMaxWidth().heightIn(56).minimumInteractiveComponentSize(), container, shape).clip(shape);
     m = kind == ListItemKind::Toggle ? m.toggleable(selected, onCheckedChange, SemanticsRole::Checkbox, click)
         : kind == ListItemKind::Select ? m.selectable(selected, onClick, SemanticsRole::None, click)
                                        : m.clickable(onClick, click);
@@ -231,8 +231,9 @@ void RadioButton(bool selected, std::function<void()> onClick, const Modifier& m
     // Compose 1.4's: the color by the default effects spring (disabled: the surface's text faded,
     // at once), the dot's radius by the fast spatial one.
     Color target = enabled ? (selected ? cs.primary : cs.onSurfaceVariant) : cs.onSurface.copy(0.38f);
-    Color ring = enabled ? animateColorAsState(target, motionScheme().defaultEffectsSpec) : target;
-    float dot = animateFloatAsState(selected ? 6.f : 0.f, motionScheme().fastSpatialSpec);
+    // Read as it is drawn.
+    detail::Live<Color> ring = enabled ? detail::liveOf(animateColorAsState(target, motionScheme().defaultEffectsSpec)) : detail::Live<Color>{{}, nullptr, target};
+    auto dot = animateFloatAsState(selected ? 6.f : 0.f, motionScheme().fastSpatialSpec);
     // 24 dp; one that takes taps itself (not a row around it) gets 48 of room and a 40 dp ripple.
     Modifier m = modifier.semantics({.role = SemanticsRole::RadioButton, .checked = selected});
     if (onClick)
@@ -240,8 +241,10 @@ void RadioButton(bool selected, std::function<void()> onClick, const Modifier& m
             std::move(onClick), {.enabled = enabled, .interactionSource = std::move(interactionSource), .indication = ripple(false, 20)});
     Box(m.size(24)
             .drawBehind([ring, dot](DrawScope& d) {
-                d.drawCircle(ring, 9.f, {}, 1, Stroke(2));  // 20 dp
-                if (dot > 1) d.drawCircle(ring, dot - 1);
+                Color color = ring();
+                float radius = dot.value();
+                d.drawCircle(color, 9.f, {}, 1, Stroke(2));  // 20 dp
+                if (radius > 1) d.drawCircle(color, radius - 1);
             }));
 }
 
@@ -530,15 +533,15 @@ void Thumb(const SliderState& state, Size size, CallSite site) {
 void ShapeThumb(const SliderState& state, Shape shape, Size size, CallSite site) {
     ComposableScope scope(site);
     Color c = state.colors().value_or(colors()).thumb(state.enabled());
-    float grow = animateFloatAsState(state.isPressed() ? 1.15f : 1.f, 120);
-    Box(Modifier().size(size.width, size.height).scale(grow).background(c, shape));
+    auto grow = animateFloatAsState(state.isPressed() ? 1.15f : 1.f, 120);  // (read as it is drawn)
+    Box(detail::animatedScale(Modifier().size(size.width, size.height), grow).background(c, shape));
 }
 
 void IconThumb(const SliderState& state, const ImageVector& icon, float size, CallSite site) {
     ComposableScope scope(site);
     Color c = state.colors().value_or(colors()).thumb(state.enabled());
-    float grow = animateFloatAsState(state.isPressed() ? 1.1f : 1.f, 120);
-    Box(Modifier().size(size).scale(grow).background(c, CircleShape), Alignment::Center,
+    auto grow = animateFloatAsState(state.isPressed() ? 1.1f : 1.f, 120);
+    Box(detail::animatedScale(Modifier().size(size), grow).background(c, CircleShape), Alignment::Center,
         [&] { Icon(icon, "", Modifier().size(size * 0.6f), colorScheme().onPrimary); });
 }
 
@@ -546,8 +549,8 @@ void ValueThumb(const SliderState& state, std::function<std::string(float)> labe
     ComposableScope scope(site);
     Color c = state.colors().value_or(colors()).thumb(state.enabled());
     std::string text = label ? label(state.value()) : std::format("{:.0f}", state.value());
-    float grow = animateFloatAsState(state.isPressed() ? 1.1f : 1.f, 120);
-    Box(Modifier().heightIn(28).widthIn(40).scale(grow).background(c, RoundedCornerShape(14)).padding(8, 4), Alignment::Center,
+    auto grow = animateFloatAsState(state.isPressed() ? 1.1f : 1.f, 120);
+    Box(detail::animatedScale(Modifier().heightIn(28).widthIn(40), grow).background(c, RoundedCornerShape(14)).padding(8, 4), Alignment::Center,
         [&] { Text(text, {.font = typography().labelMedium, .color = colorScheme().onPrimary}); });
 }
 
@@ -957,10 +960,12 @@ void segment(bool selected, const std::function<Modifier(const Modifier&)>& clic
     Color content = !options.enabled ? cs.onSurface.copy(0.38f) : selected ? cs.onSecondaryContainer : cs.onSurface;
     Color separator = cs.outline;
     bool icon = options.icon || selected;
-    float grown = animateFloatAsState(selected ? 1.f : 0.f, selected ? motion.fastSpatialSpec : snap());
-    float shown = animateFloatAsState(selected ? 1.f : 0.f, selected ? motion.defaultEffectsSpec : snap());
-    float offset = animateFloatAsState(icon ? 0.f : -13.f, motion.fastSpatialSpec);
-    LayoutMeasurePolicy policy = [icon, offset](const std::vector<Measurable>& m, const Constraints& c) {
+    // Read as they are laid out and drawn.
+    auto grown = animateFloatAsState(selected ? 1.f : 0.f, selected ? motion.fastSpatialSpec : snap());
+    auto shown = animateFloatAsState(selected ? 1.f : 0.f, selected ? motion.defaultEffectsSpec : snap());
+    auto slide = animateFloatAsState(icon ? 0.f : -13.f, motion.fastSpatialSpec);
+    LayoutMeasurePolicy policy = [icon, slide](const std::vector<Measurable>& m, const Constraints& c) {
+        float offset = slide.value();
         std::optional<Placeable> picture;
         if (icon) picture = m[0].measure(c.loosen());
         Placeable text = m[icon ? 1 : 0].measure(c.loosen());
@@ -982,7 +987,11 @@ void segment(bool selected, const std::function<Modifier(const Modifier&)>& clic
                         options.icon();
                     else if (selected)
                         Icon(Icons::Filled::Check, LocalStrings.current().selected,
-                             Modifier().graphicsLayer({.scaleX = grown, .scaleY = grown, .alpha = shown, .transformOrigin = {0, 1}}).size(18));
+                             Modifier()
+                                 .graphicsLayer([grown, shown](GraphicsLayerScope& l) {
+                                     l.scaleX = l.scaleY = grown.value(), l.alpha = shown.value(), l.transformOrigin = {0, 1};
+                                 })
+                                 .size(18));
                     label();
                 }, policy);
             });
@@ -1216,7 +1225,7 @@ void tabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs,
     // The first measured position is taken as is; later ones slide.
     bool first = !*measured;
     AnimationSpec spec = first ? snap() : motionScheme().defaultSpatialSpec;  // Compose 1.4's
-    float shownX = animateFloatAsState(target.first, spec), shownWidth = animateFloatAsState(target.second, spec);
+    auto shownX = animateFloatAsState(target.first, spec), shownWidth = animateFloatAsState(target.second, spec);  // (read as it is drawn)
     if (!s.empty()) *measured = true;
     Color indicator = cs.primary, divider = cs.outlineVariant;
     bool secondary = style.secondary, scrollable = style.scrollable;
@@ -1254,7 +1263,7 @@ void tabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs,
         float h = d.size().height;
         if (!scrollable) d.drawRect(divider, {0, h - 1}, Size{d.size().width, 1});
         float px = d.density().density;  // (placed and sized in whole px along the way, as Compose's indicator)
-        float x = std::floor(shownX * px + 0.5f) / px, width = std::floor(shownWidth * px + 0.5f) / px;
+        float x = std::floor(shownX.value() * px + 0.5f) / px, width = std::floor(shownWidth.value() * px + 0.5f) / px;
         if (width <= 0) return;
         if (secondary)  // Compose 1.4's SecondaryIndicator: 3 dp, the tab's width
             d.drawRect(indicator, {x, h - 3}, Size{width, 3});
@@ -1324,7 +1333,7 @@ void SecondaryScrollableTabRow(int selectedTabIndex, const Modifier& modifier, c
 namespace {
 // A tab's content color (Compose 1.4's TabTransition): eased in by the default effects spring as
 // it is selected, out by the fast one.
-Color tabColor(bool selected, const TabOptions& o) {
+AnimatedState<Color> tabColor(bool selected, const TabOptions& o) {  // (given to the tab's content as a state)
     Color on = o.selectedContentColor.value_or(LocalContentColor.current()), off = o.unselectedContentColor.value_or(on);
     return animateColorAsState(selected ? on : off, selected ? motionScheme().defaultEffectsSpec : motionScheme().fastEffectsSpec);
 }
@@ -1345,7 +1354,7 @@ void Tab(bool selected, std::function<void()> onClick, const Content& text, cons
 void Tab(bool selected, std::function<void()> onClick, const Content& text, const Content& icon, const Modifier& modifier,
          const TabOptions& options, CallSite site) {
     ComposableScope scope(site);
-    Color content = tabColor(selected, options);
+    auto content = tabColor(selected, options);
     // Compose's TabBaselineLayout: the text 16 dp in from the sides; alone, it or the icon in the
     // middle of 48 dp; together in 72, the text's last baseline 17 dp (14 + the indicator's 3; 9
     // for two lines) above the bottom, the icon 20 dp above its first.
@@ -1391,7 +1400,7 @@ void LeadingIconTab(bool selected, std::function<void()> onClick, const Content&
 void LeadingIconTab(bool selected, std::function<void()> onClick, const Content& text, const Content& icon, const Modifier& modifier,
                     const TabOptions& options, CallSite site) {
     ComposableScope scope(site);
-    Color content = tabColor(selected, options);
+    auto content = tabColor(selected, options);
     Row(tabTap(modifier.height(48), selected, std::move(onClick), options).padding(16, 0).fillMaxWidth(),
         {.horizontalArrangement = Arrangement::Center, .verticalAlignment = Alignment::CenterVertically}, [&] {
             CompositionLocalProvider({LocalContentColor.provides(content), LocalTextStyle.provides(typography().titleSmall)}, [&] {
@@ -1409,9 +1418,16 @@ void VerticalDragHandle(const Modifier& modifier, std::optional<MutableInteracti
     MutableInteractionSource source = interactionSource.value_or(own);
     bool held = source.collectIsPressedAsState() || source.collectIsDraggedAsState();
     AnimationSpec spec = spring(Spring::DampingRatioNoBouncy, Spring::StiffnessMedium);
-    float width = animateFloatAsState(held ? 12.f : 4.f, spec), height = animateFloatAsState(held ? 52.f : 48.f, spec);
-    Color color = animateColorAsState(held ? cs.onSurface : cs.outline, 150);
-    Box(modifier, Alignment::Center, [&] { Box(Modifier().size(width, height).background(color, RoundedCornerShapePercent(50))); });
+    // Read as it is laid out and drawn.
+    auto width = animateFloatAsState(held ? 12.f : 4.f, spec), height = animateFloatAsState(held ? 52.f : 48.f, spec);
+    auto color = animateColorAsState(held ? cs.onSurface : cs.outline, 150);
+    Modifier sized = Modifier().layout([width, height](const MeasureNext& next, const Constraints& c, Offset& at) {
+        at = {};  // (as size(width, height))
+        float w = std::clamp(width.value(), c.minWidth, c.maxWidth), h = std::clamp(height.value(), c.minHeight, c.maxHeight);
+        next({w, w, h, h});
+        return Size{w, h};
+    });
+    Box(modifier, Alignment::Center, [&] { Box(detail::animatedBackground(sized, color, RoundedCornerShapePercent(50))); });
 }
 
 struct SwipeToDismissBoxState::Data {
