@@ -134,7 +134,7 @@ cmake --build build-windows -j
 
 Çalıştırılabilir dosyayı yanında `fonts/` ve `licenses/` klasörleriyle dağıtın. Testler Wine altında da çalışır: `WINEPATH=/usr/x86_64-w64-mingw32/bin wine build-windows/kompoz_tests.exe`.
 
-Kompoz'un OpenGL ES üzerindeki GPU renderer'ı (`KOMPOZ_GPU=gles`), uygulamanın yanında ANGLE'ın `libEGL.dll` ve `libGLESv2.dll` dosyaları varsa ANGLE'ı kullanır: Direct3D 11 üzerinde OpenGL ES, her Windows GPU'sunda aynı. vcpkg onları Google'ın kaynağından derler (`vcpkg install angle:x64-windows-release`: `bin/` klasöründeki DLL'leri dağıtın, kullandıkları `zlib1.dll` de onların arasındadır); onlar yoksa GPU sürücüsünün kendi OpenGL ES'i kullanılır.
+Kompoz'un OpenGL ES üzerindeki GPU renderer'ı (`KOMPOZ_GPU=gles`), uygulamanın yanında ANGLE'ın `libEGL.dll` ve `libGLESv2.dll` dosyaları varsa ANGLE'ı kullanır: Direct3D 11 üzerinde OpenGL ES, her Windows GPU'sunda aynı. vcpkg onları Google'ın kaynağından derler (`vcpkg install angle:x64-windows-release`: `bin/` klasöründeki DLL'leri dağıtın, kullandıkları `zlib1.dll` de onların arasındadır); onlar yoksa GPU sürücüsünün kendi OpenGL ES'i kullanılır. Vulkan sürücüsü olmayan bir Windows bilgisayarında (bir sanal makine, Uzak Masaüstü, bir CI makinesi) bunların hiçbiri yoktur: uygulamayla ANGLE'ı da dağıtın; orada Direct3D 11'in WARP'ıyla işlemcide çizer.
 
 ### Android
 

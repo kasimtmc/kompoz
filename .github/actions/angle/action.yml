@@ -1,0 +1,31 @@
+# vcpkg's ANGLE (OpenGL ES over Direct3D 11; WARP on a runner without a GPU), built once per port
+# version and cached: Windows runners have no Vulkan, so this is what Kompoz's GPU renderer draws
+# with there. Its DLLs (libEGL, libGLESv2 and the zlib they use) end up in angle/x64-windows-release/bin.
+name: ANGLE
+description: vcpkg's ANGLE for x64 Windows, cached per port version
+runs:
+  using: composite
+  steps:
+    - name: ANGLE's port, as this runner's vcpkg has it
+      id: port
+      shell: pwsh
+      run: |
+        $port = "$env:VCPKG_INSTALLATION_ROOT\ports\angle"
+        "hash=" + (Get-FileHash "$port\vcpkg.json").Hash.Substring(0, 16) + (Get-FileHash "$port\portfile.cmake").Hash.Substring(0, 16) >> $env:GITHUB_OUTPUT
+    - uses: actions/cache/restore@v4
+      id: cache
+      with:
+        path: angle-cache
+        key: angle-x64-windows-release-${{ steps.port.outputs.hash }}
+    - name: ANGLE (vcpkg's, from Google's source)
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force angle-cache | Out-Null
+        $env:VCPKG_DEFAULT_BINARY_CACHE = "$PWD\angle-cache"
+        & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install angle:x64-windows-release --x-install-root="$PWD\angle"
+        if ($LASTEXITCODE) { exit $LASTEXITCODE }
+    - uses: actions/cache/save@v4  # (built once per port version: kept even when a later step fails)
+      if: steps.cache.outputs.cache-hit != 'true'
+      with:
+        path: angle-cache
+        key: angle-x64-windows-release-${{ steps.port.outputs.hash }}

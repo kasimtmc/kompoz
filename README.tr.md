@@ -241,11 +241,11 @@ yeniden ölçülür.
  │             gezinme (çekmece, ray, suite), uyarlanabilir yerleşimler
  └──────┬─────────────────────────────── GraphicsContext / TextMeasurer arayüzleri
  ┌──────▼─────────────────────────────── platform arka ucu
- │ sdl3      pencere, girdi, IME/yazılım klavyesi, SDL_Renderer ile kenar yumuşatmalı çizim, HarfBuzz + FreeType
- │           glif atlası, resimler, masaüstünün vurgu rengi (Linux)
+ │ sdl3      pencere, girdi, IME/yazılım klavyesi, HarfBuzz + FreeType glif atlası, resimler, masaüstünün vurgu
+ │           rengi (Linux)
  │ android   Java tarafı: klavye (InputConnection), erişilebilirlik, kenar boşlukları, dinamik renk, geri hareketi
- │ gpu       Kompoz'un kendi GPU renderer'ı (KOMPOZ_GPU=vulkan, metal, webgpu ya da gles, yapım aşamasında):
- │           Vulkan, Metal, WebGPU ve OpenGL ES 3 (web'de WebGL 2) için ince katmanların üstünde tek çekirdek
+ │ gpu       Kompoz'un kendi GPU renderer'ı, her şey onunla çizilir: Vulkan, Metal, WebGPU ve OpenGL ES 3 (web'de
+ │           WebGL 2) için ince katmanların üstünde tek çekirdek; KOMPOZ_GPU birini seçer, varsayılan platformun en iyisi
  └──────────────────────────────────────
 ```
 
@@ -492,11 +492,10 @@ deterministiktir; betik bitince gerçek zaman devralır, uygulamayı betiğin ge
 edebilirsiniz):
 
 ```bash
-SDL_VIDEODRIVER=offscreen SDL_RENDER_DRIVER=opengl \
-KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
+SDL_VIDEODRIVER=offscreen KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 ```
 
-macOS'ta `SDL_RENDER_DRIVER=opengl` vermeyin: ekransızken SDL'in OpenGL'i orada EGL ister, macOS'ta EGL yoktur; çizim software renderer ile yapılır.
+Pencere yokken GPU renderer'ı yalnızca sakladığı kareye çizer; ekran görüntüsü ondan alınır.
 
 Komutlar: `click x y`, `rclick x y`, `move x y`, `down x y` / `up x y` (basılı tutma), `drag x1 y1 x2 y2`,
 `mdrag x1 y1 x2 y2` (fareyle), `resize w h`, `swipe x1 y1 x2 y2 kare` (kare başına bir hareket, fling'i de tetikler),
@@ -543,14 +542,11 @@ bir de baştan çizip pikselleri karşılaştırır (fark varsa loglar), `KOMPOZ
    coroutine'ini başlatır).
 3. Metin: sağdan sola metin basitleştirilmiş bir Unicode bidi algoritmasıyla sıralanıyor (yalıtım karakterleri ve
    parantez çiftleri var, açık gömme ve geçersiz kılma karakterleri yok). Eksik glifler sistem yedek fontlarından gelir.
-4. Çizim: gradyanlar köşe renkleri arasında enterpolasyonlu mesh olarak çiziliyor. SDL'in yazılım çizicisi dönüşümlü
-   katmanlarda premultiplied karışımı desteklemediği için orada kenarlar biraz koyu kalır. GPU/Skia arka ucu yok; çizim
-   SDL_Renderer'dan geçiyor.
-5. Recomposition vurgulayıcısının sayaçları snippet'lerdeki gibi 3 saniye sonra sıfırlanmıyor, birikiyor.
-6. Lazy listeler öğelerin kompozisyonunu `contentType`'a göre yeniden kullanmıyor (Compose'un SubcomposeLayout havuzu);
+4. Recomposition vurgulayıcısının sayaçları snippet'lerdeki gibi 3 saniye sonra sıfırlanmıyor, birikiyor.
+5. Lazy listeler öğelerin kompozisyonunu `contentType`'a göre yeniden kullanmıyor (Compose'un SubcomposeLayout havuzu);
    ölçüldü, şimdilik gerek görülmedi.
-7. Kotlin'in `by` delegasyonunun karşılığı yok: durum `.get()` ve `.set()` ile okunup yazılır.
-8. Kütüphanenin kendi metinleri (`LocalStrings`) yalnız İngilizce ve Türkçe; başka dildeki bir uygulama kendi
+6. Kotlin'in `by` delegasyonunun karşılığı yok: durum `.get()` ve `.set()` ile okunup yazılır.
+7. Kütüphanenin kendi metinleri (`LocalStrings`) yalnız İngilizce ve Türkçe; başka dildeki bir uygulama kendi
    `Strings`'ini verir.
 
 ## Katkı

@@ -97,15 +97,17 @@ jobs:
           cmake -S tests/package -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/install" \
             -DCMAKE_CXX_FLAGS="${{ matrix.flags }}" -DCMAKE_EXE_LINKER_FLAGS="${{ matrix.flags }}"
           cmake --build build-package
+      # Kompoz's GPU renderer on Vulkan (lavapipe), drawing only into its kept frame without a window.
       - name: Run it offscreen, click its button, take a screenshot
         working-directory: build-package
         env:
           SDL_VIDEO_DRIVER: offscreen
-          SDL_RENDER_DRIVER: software
-          # ASan still checks every access; only the leak report at exit is off: it lists what Mesa's EGL and
+          # ASan still checks every access; only the leak report at exit is off: it lists what Mesa's drivers and
           # ALSA allocate in libraries already unloaded by then. Kompoz's own leaks are checked by the tests.
           ASAN_OPTIONS: detect_leaks=0
-        run: KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo && test -s shot.png
+        run: |
+          export VK_DRIVER_FILES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"
+          KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo && test -s shot.png
 
   windows:
     name: Windows (MinGW-w64)
@@ -136,30 +138,9 @@ jobs:
         run: build/kompoz_tests.exe
       - name: Platform tests (UI Automation)
         run: build/kompoz_platform_tests.exe
-      - name: ANGLE's port, as this runner's vcpkg has it
-        id: angle-port
-        shell: pwsh
-        run: |
-          $port = "$env:VCPKG_INSTALLATION_ROOT\ports\angle"
-          "hash=" + (Get-FileHash "$port\vcpkg.json").Hash.Substring(0, 16) + (Get-FileHash "$port\portfile.cmake").Hash.Substring(0, 16) >> $env:GITHUB_OUTPUT
-      - uses: actions/cache/restore@v4
-        id: angle-cache
-        with:
-          path: vcpkg-cache
-          key: angle-x64-windows-release-${{ steps.angle-port.outputs.hash }}
-      - name: ANGLE (vcpkg's, from Google's source), beside the GPU tests
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force vcpkg-cache | Out-Null
-          $env:VCPKG_DEFAULT_BINARY_CACHE = "$PWD\vcpkg-cache"
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install angle:x64-windows-release --x-install-root="$PWD\angle"
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          Copy-Item angle\x64-windows-release\bin\*.dll build\  # (libEGL, libGLESv2 and the zlib they use)
-      - uses: actions/cache/save@v4  # (built once per port version: kept even when a later step fails)
-        if: steps.angle-cache.outputs.cache-hit != 'true'
-        with:
-          path: vcpkg-cache
-          key: angle-x64-windows-release-${{ steps.angle-port.outputs.hash }}
+      - uses: ./.github/actions/angle
+      - name: ANGLE beside the GPU tests
+        run: cp angle/x64-windows-release/bin/*.dll build/
       - name: GPU renderer tests (OpenGL ES 3 through ANGLE on Direct3D 11's WARP, validated, against tests/golden)
         working-directory: build
         env:
@@ -172,9 +153,9 @@ jobs:
           cmake --install build --prefix "$PWD/install"
           cmake -S tests/package -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/install"
           cmake --build build-package
-      - name: Run it in a window, click its button, take a screenshot
+      - name: Run it in a window (OpenGL ES through ANGLE beside it), click its button, take a screenshot
         working-directory: build-package
-        run: KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo.exe && test -s shot.png
+        run: cp ../angle/x64-windows-release/bin/*.dll . && KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo.exe && test -s shot.png
 
   macos:
     name: macOS
@@ -200,17 +181,12 @@ jobs:
           cmake --install build --prefix "$PWD/install"
           cmake -S tests/package -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/install"
           cmake --build build-package
-      - name: Run it in a window (Cocoa, Metal), click its button, take a screenshot
-        working-directory: build-package
-        run: KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo && test -s shot.png
-      - name: The same on Kompoz's GPU renderer (Metal, presenting to the window's layer)
+      - name: Run it in a window (Cocoa, Metal presenting to the window's layer, validated), click its button, take a screenshot
         working-directory: build-package
         env:
-          KOMPOZ_GPU: metal
           KOMPOZ_GPU_VALIDATION: 1
-        run: KOMPOZ_SCRIPT="${KOMPOZ_SCRIPT_RUN/shot.png/shot-metal.png}" ./demo && test -s shot-metal.png
-      # Offscreen, with no renderer chosen: SDL's OpenGL there wants EGL, which macOS hasn't, so it
-      # draws with the software renderer.
+        run: KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo && test -s shot.png
+      # Offscreen: Metal without the window's layer, drawing only into the kept frame.
       - name: Run it offscreen, click its button, take a screenshot
         working-directory: build-package
         env:
@@ -252,7 +228,7 @@ jobs:
             libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
             libwayland-dev wayland-protocols libdecor-0-dev libdbus-1-dev libibus-1.0-dev libudev-dev \
             libasound2-dev libpulse-dev autoconf autoconf-archive automake libtool libltdl-dev pkg-config \
-            bison flex gettext python3-jinja2 linux-libc-dev
+            bison flex gettext python3-jinja2 linux-libc-dev libvulkan1 mesa-vulkan-drivers
           echo "CC=gcc-14" >> "$GITHUB_ENV"
           echo "CXX=g++-14" >> "$GITHUB_ENV"
       - name: vcpkg
@@ -278,11 +254,15 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_INSTALLED_DIR="$PWD/vcpkg_installed" -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} -DVCPKG_MANIFEST_MODE=OFF
           cmake --build build-package --config Release
+      - uses: ./.github/actions/angle
+        if: runner.os == 'Windows'
       - name: Run it, click its button, take a screenshot (offscreen on Linux, in a window elsewhere)
         run: |
           app=$(find build-package -type f \( -name demo -o -name demo.exe \) | head -1)
           cd "$(dirname "$app")"
-          if [ "$RUNNER_OS" = Linux ]; then export SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software; fi
+          # Linux: Vulkan on lavapipe without a window; Windows: OpenGL ES through ANGLE beside it.
+          if [ "$RUNNER_OS" = Linux ]; then export SDL_VIDEO_DRIVER=offscreen VK_DRIVER_FILES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"; fi
+          if [ "$RUNNER_OS" = Windows ]; then cp "$GITHUB_WORKSPACE"/angle/x64-windows-release/bin/*.dll .; fi
           KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" "./$(basename "$app")" && test -s shot.png
       - name: The logs of what failed
         if: failure()
@@ -304,7 +284,7 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = Linux ]; then
             sudo apt-get update
-            sudo apt-get install -y --no-install-recommends g++-14 ninja-build
+            sudo apt-get install -y --no-install-recommends g++-14 ninja-build libvulkan1 mesa-vulkan-drivers
             echo "CC=gcc-14" >> "$GITHUB_ENV"
             echo "CXX=g++-14" >> "$GITHUB_ENV"
             export CC=gcc-14 CXX=g++-14
@@ -319,9 +299,14 @@ jobs:
           path: ~/.conan2/p
           key: conan-${{ matrix.os }}-${{ hashFiles('packaging/conan/conanfile.py') }}
           restore-keys: conan-${{ matrix.os }}-
+      - uses: ./.github/actions/angle
+        if: runner.os == 'Windows'
       - name: Create the package and test it (packaging/conan/test_package)
         run: |
           extra=()
+          # The test's demo draws with Vulkan on lavapipe (Linux) or OpenGL ES through ANGLE (Windows).
+          if [ "$RUNNER_OS" = Linux ]; then export VK_DRIVER_FILES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"; fi
+          if [ "$RUNNER_OS" = Windows ]; then export KOMPOZ_ANGLE_BIN="$GITHUB_WORKSPACE/angle/x64-windows-release/bin"; fi
           if [ "$RUNNER_OS" = Linux ]; then
             extra=(-c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
                    -c 'tools.build:compiler_executables={"c": "gcc-14", "cpp": "g++-14"}')

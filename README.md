@@ -242,11 +242,11 @@ changed while it was measured, is measured again.
  │             sheets), navigation (drawers, rails, suites), adaptive layouts
  └──────┬─────────────────────────────── GraphicsContext / TextMeasurer interfaces
  ┌──────▼─────────────────────────────── platform backend
- │ sdl3      window, input, IME/soft keyboard, anti-aliased drawing with SDL_Renderer, HarfBuzz + FreeType
- │           glyph atlas, images, the desktop's accent color (Linux)
+ │ sdl3      window, input, IME/soft keyboard, HarfBuzz + FreeType glyph atlas, images, the desktop's accent
+ │           color (Linux)
  │ android   the Java side: keyboard (InputConnection), accessibility, insets, dynamic color, back gesture
- │ gpu       Kompoz's own GPU renderer (KOMPOZ_GPU=vulkan, metal, webgpu or gles, being built): one core
- │           over thin layers for Vulkan, Metal, WebGPU and OpenGL ES 3 (WebGL 2 on the web)
+ │ gpu       Kompoz's own GPU renderer, what everything is drawn with: one core over thin layers for Vulkan,
+ │           Metal, WebGPU and OpenGL ES 3 (WebGL 2 on the web); KOMPOZ_GPU picks one, the platform's best by default
  └──────────────────────────────────────
 ```
 
@@ -496,11 +496,10 @@ animations are deterministic; when it ends, real time takes over and you can go 
 script left it):
 
 ```bash
-SDL_VIDEODRIVER=offscreen SDL_RENDER_DRIVER=opengl \
-KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
+SDL_VIDEODRIVER=offscreen KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 ```
 
-On macOS leave out `SDL_RENDER_DRIVER=opengl`: offscreen, SDL's OpenGL wants EGL there, which macOS doesn't have, so it draws with the software renderer.
+Without a window the GPU renderer draws only into its kept frame, from which the screenshot is taken.
 
 Commands: `click x y`, `rclick x y`, `move x y`, `down x y` / `up x y` (holding down), `drag x1 y1 x2 y2`,
 `mdrag x1 y1 x2 y2` (with the mouse), `resize w h`, `swipe x1 y1 x2 y2 frames` (a move per frame, so it flings),
@@ -547,14 +546,11 @@ that looks the same) is neither drawn nor shown. `KOMPOZ_DAMAGE_SHOW=1` outlines
    coroutine).
 3. Text: right-to-left text is ordered by a simplified Unicode bidi algorithm (isolates and bracket pairs, but no
    explicit embeddings or overrides). Missing glyphs come from the system's fallback fonts.
-4. Drawing: gradients are drawn as meshes interpolating between their vertices' colors. SDL's software renderer
-   doesn't do premultiplied blending in transformed layers, so their edges come out a little dark there. There is
-   no GPU/Skia backend; drawing goes through SDL_Renderer.
-5. The recompose highlighter's counts don't reset after 3 seconds as the snippets' do; they add up.
-6. Lazy lists don't reuse items' compositions by `contentType` (Compose's SubcomposeLayout pool); measured, it
+4. The recompose highlighter's counts don't reset after 3 seconds as the snippets' do; they add up.
+5. Lazy lists don't reuse items' compositions by `contentType` (Compose's SubcomposeLayout pool); measured, it
    wasn't needed yet.
-7. Kotlin's `by` delegation has no counterpart: state is read and written with `.get()` and `.set()`.
-8. The library's own texts (`LocalStrings`) come in English and Turkish only; an app in another language provides
+6. Kotlin's `by` delegation has no counterpart: state is read and written with `.get()` and `.set()`.
+7. The library's own texts (`LocalStrings`) come in English and Turkish only; an app in another language provides
    its own `Strings`.
 
 ## Contributing

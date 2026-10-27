@@ -311,6 +311,12 @@
   bölünmüş düğme okları ve canlandırılmış bir vektörün resmi (`rememberAnimatedVectorPainter`) yerleştirilip çizilirken
   okunur; çıktığında giden şey, vardığında yeniden oluşturulur. `ToggleFloatingActionButtonScope::checkedProgress()`
   ilerlemeyi çağrıldığı yerde okur (bir `graphicsLayer` içinde yalnızca o yeniden çizilir).
+- **Her şey Kompoz'un GPU renderer'ıyla çizilir**: SDL_Renderer'la çizim kaldırıldı. `KOMPOZ_GPU` verilmezse uygulama
+  onu kullanıyordu; böylece bir telefon ya da masaüstü, adıyla istenmedikçe GPU renderer'ının hiçbir işini
+  çalıştırmıyordu. Artık verilmezse (ya da `auto`) platformun en iyisi seçilir: Metal, WebGPU sonra WebGL 2, Vulkan sonra
+  OpenGL ES 3. Hiçbiri başlamazsa uygulama bir iletiyle biter. Pencere yokken (`SDL_VIDEO_DRIVER=offscreen`) Vulkan ve
+  Metal yalnızca saklanan kareye çizer, ekran görüntüleri ondan alınır. Vulkan sürücüsü olmayan bir Windows bilgisayarı
+  (sanal makine, Uzak Masaüstü, CI) uygulamayla gelen ANGLE üzerinden çizer.
 - **Kaydırmak kayanı dolaşmaz**: yeniden ölçülmeden taşınan bir şey (bir listenin içeriği) içindeki yerleri yazıldıkları
   gibi bırakır; istendiklerinde hesaplanır, çizildiklerinde yazılırlar. Showcase'in Bileşenler ekranını kaydırmak ana
   thread'in %16 yerine %1'ini yerlere harcadı.

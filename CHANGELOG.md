@@ -295,6 +295,12 @@
   and an animated vector's picture (`rememberAnimatedVectorPainter`) are read as they are laid out and drawn; what
   goes away once it is out is composed again when it gets there. `ToggleFloatingActionButtonScope::checkedProgress()`
   reads the progress where it is called (in a `graphicsLayer`, only that is drawn again).
+- **Kompoz's GPU renderer is what everything is drawn with**: SDL_Renderer's drawing is gone. Without `KOMPOZ_GPU`
+  an app took it, so a phone or a desktop ran none of the GPU renderer's work unless asked for it by name; now
+  nothing (or `auto`) is the platform's best: Metal, WebGPU then WebGL 2, Vulkan then OpenGL ES 3. None starting ends
+  the app with a message. Without a window (`SDL_VIDEO_DRIVER=offscreen`) Vulkan and Metal draw only into the kept
+  frame, which screenshots are taken from. A Windows computer without a Vulkan driver (a virtual machine, Remote
+  Desktop, CI) draws through ANGLE shipped with the app.
 - **Scrolling doesn't walk what scrolls**: what is moved without being measured again (a list's content) leaves the
   places in it as they were written down, worked out when asked for and written down when drawn. Scrolling the
   showcase's Components screen spent 1% of the main thread on places instead of 16%.
