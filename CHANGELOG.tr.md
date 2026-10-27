@@ -270,6 +270,12 @@
   değeri tutar ve böyle iki dolgu aynı scaffold'u izliyorsa aynıdır. (`ButtonDefaults`'un dolguları artık
   `constexpr` değil, `const`.) Showcase'in Bileşenler ekranını daralan çubuğunun altında kaydırmak ekranı bir kez
   oluşturdu.
+- **`animate*AsState` bir durum verir, gerektiği yerde okunur**, Compose'taki `State<T>` gibi: bir `AnimatedState<T>`.
+  Bir composable'da değer olarak kullanılırsa, önceden olduğu gibi o scope hareket ettiği her karede yeniden
+  oluşturulur; çizim sırasında `.value()` ile okunursa (`drawBehind`, `graphicsLayer { }`) yalnızca o düğüm yeniden
+  çizilir, yerleşim sırasında okunursa yalnızca o yeniden yerleştirilir; hiçbir yerde okunmazsa kare istemez. Yoldayken
+  verilen yeni bir hedefe o anda bulunduğu yerden gider. (Sonucu `auto` ile tutup `float` ya da `Color` gibi, `std::max`
+  ile ya da bir üyesiyle kullanan kod `.value()` alır.)
 - **Kaydırmak kayanı dolaşmaz**: yeniden ölçülmeden taşınan bir şey (bir listenin içeriği) içindeki yerleri yazıldıkları
   gibi bırakır; istendiklerinde hesaplanır, çizildiklerinde yazılırlar. Showcase'in Bileşenler ekranını kaydırmak ana
   thread'in %16 yerine %1'ini yerlere harcadı.

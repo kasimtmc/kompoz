@@ -17,21 +17,22 @@ Kompoz has Compose's animation APIs: values that animate to a target, content th
 
 ## Animating a value
 
-`animate*AsState` returns a value that animates to its target whenever the target changes:
+`animate*AsState` returns a state (`AnimatedState<T>`, Compose's `State<T>`) whose value animates to its target whenever the target changes:
 
 ```cpp
 void LikeButton() {
     auto liked = remember([] { return mutableStateOf(false); });
-    float scale = animateFloatAsState(liked.get() ? 1.2f : 1.f, spring(Spring::DampingRatioMediumBouncy));
+    auto scale = animateFloatAsState(liked.get() ? 1.2f : 1.f, spring(Spring::DampingRatioMediumBouncy));
     Color tint = animateColorAsState(liked.get() ? Color::hex(0xE53935) : colorScheme().onSurfaceVariant, 300);
 
     IconButton([liked] { liked.set(!liked.get()); }, [&] {
-        Icon(liked.get() ? Icons::Filled::Favorite : Icons::Filled::FavoriteBorder, "Like", Modifier().scale(scale), tint);
+        Icon(liked.get() ? Icons::Filled::Favorite : Icons::Filled::FavoriteBorder, "Like",
+             Modifier().graphicsLayer([scale](GraphicsLayerScope& l) { l.scaleX = l.scaleY = scale.value(); }), tint);
     });
 }
 ```
 
-Only the scope that reads the value recomposes on each frame of the animation, not its parents. For something that changes every frame, read the value while drawing instead, so nothing recomposes (see [Phases](phases.md#deferring-state-reads)).
+Where the value is read decides what follows it, as in Compose. Used as a value in a composable (`Color tint = ...`, or `.value()` there), that scope recomposes on each frame of the animation, not its parents. Read with `.value()` while drawing (`drawBehind`, `graphicsLayer { }`, a `Canvas`), only that node is drawn again; while laying out (`offset { }`, a `layout`), only it is laid out again (see [Phases](phases.md#deferring-state-reads)). An animation read nowhere asks for no frames. `targetValue()` and `isRunning()` say where it is going and whether it is on its way.
 
 The second argument is an animation spec, or a duration in milliseconds for a tween.
 

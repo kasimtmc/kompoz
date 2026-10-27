@@ -17,21 +17,22 @@ Kompoz'da Compose'un animasyon API'leri var: bir hedefe doğru canlanan değerle
 
 ## Bir değeri canlandırmak
 
-`animate*AsState`, hedefi her değiştiğinde o hedefe doğru canlanan bir değer döndürür:
+`animate*AsState`, değeri hedefi her değiştiğinde o hedefe doğru canlanan bir durum döndürür (`AnimatedState<T>`, Compose'taki `State<T>`):
 
 ```cpp
 void LikeButton() {
     auto liked = remember([] { return mutableStateOf(false); });
-    float scale = animateFloatAsState(liked.get() ? 1.2f : 1.f, spring(Spring::DampingRatioMediumBouncy));
+    auto scale = animateFloatAsState(liked.get() ? 1.2f : 1.f, spring(Spring::DampingRatioMediumBouncy));
     Color tint = animateColorAsState(liked.get() ? Color::hex(0xE53935) : colorScheme().onSurfaceVariant, 300);
 
     IconButton([liked] { liked.set(!liked.get()); }, [&] {
-        Icon(liked.get() ? Icons::Filled::Favorite : Icons::Filled::FavoriteBorder, "Like", Modifier().scale(scale), tint);
+        Icon(liked.get() ? Icons::Filled::Favorite : Icons::Filled::FavoriteBorder, "Like",
+             Modifier().graphicsLayer([scale](GraphicsLayerScope& l) { l.scaleX = l.scaleY = scale.value(); }), tint);
     });
 }
 ```
 
-Animasyonun her karesinde yalnızca değeri okuyan scope yeniden kompoze edilir, ebeveynleri değil. Her karede değişen bir şey için değeri bunun yerine çizim sırasında okuyun; böylece hiçbir şey yeniden kompoze edilmez (bkz. [Aşamalar](phases.md#durum-okumalarını-ertelemek)).
+Compose'taki gibi, değerin nerede okunduğu onu neyin izleyeceğini belirler. Bir composable'da değer olarak kullanılırsa (`Color tint = ...` ya da orada `.value()`), animasyonun her karesinde o scope yeniden kompoze edilir, ebeveynleri değil. Çizim sırasında `.value()` ile okunursa (`drawBehind`, `graphicsLayer { }`, bir `Canvas`) yalnızca o düğüm yeniden çizilir; yerleşim sırasında okunursa (`offset { }`, bir `layout`) yalnızca o yeniden yerleştirilir (bkz. [Aşamalar](phases.md#durum-okumalarını-ertelemek)). Hiçbir yerde okunmayan bir animasyon kare istemez. `targetValue()` ve `isRunning()` nereye gittiğini ve yolda olup olmadığını söyler.
 
 İkinci argüman bir animasyon tanımıdır ya da bir tween için milisaniye cinsinden bir süre.
 

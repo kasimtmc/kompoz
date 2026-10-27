@@ -163,25 +163,101 @@ T animateValueFrom(const T& initial, const T& target, const AnimationSpec& spec,
 }
 } // namespace detail
 
-// Animates towards `target` whenever it changes. Only the calling scope recomposes on each
-// animation frame.
+namespace detail {
+// The time an animation read now goes by: the frame being composed, laid out or drawn (the last
+// one between frames).
+int64_t animationReadTime(ComposeHost* host);
+// Asks for the next frame of what is reading an animation that still moves: a composition is
+// composed again, a layout laid out again, a drawing drawn again.
+void animationNextFrame(ComposeHost* host);
+} // namespace detail
+
 template <class T>
-T animateValueAsState(const T& target, const AnimationSpec& spec, CallSite site) {
-    return detail::animateValueFrom(target, target, spec, site);
+class AnimatedState;
+template <class T>
+AnimatedState<T> animateValueAsState(const T& target, const AnimationSpec& spec, CallSite site);
+
+// What animate*AsState gives (Compose's State<T>): the value where it is now, read where it is
+// needed. Read in a composition (or used there as a T), the reader is composed again on every
+// frame it moves; read while drawing (drawBehind, graphicsLayer { }, a Canvas) it is only drawn
+// again, and while laying out (offset { }, a layout) only laid out again, as in Compose:
+//   auto alpha = animateFloatAsState(shown ? 1.f : 0.f);
+//   Box(Modifier().graphicsLayer([alpha](GraphicsLayerScope& l) { l.alpha = alpha.value(); }));
+template <class T>
+class AnimatedState {
+public:
+    T value() const {
+        Data& d = *d_;
+        detail::recordRead(d_.get());
+        return d.at(detail::animationReadTime(d.host), true);
+    }
+    T get() const { return value(); }
+    operator T() const { return value(); }
+    // Where it is going, and whether it is still on its way (neither subscribes).
+    T targetValue() const { return d_->to; }
+    bool isRunning() const { return d_->running; }
+    // The same state, not the same value: lets what holds one be skipped.
+    friend bool operator==(const AnimatedState& a, const AnimatedState& b) { return a.d_ == b.d_; }
+
+private:
+    friend AnimatedState animateValueAsState<T>(const T& target, const AnimationSpec& spec, CallSite site);
+    struct Data {
+        T from, to, value;
+        AnimationSpec spec;
+        int64_t start = 0;
+        bool running = false;
+        ComposeHost* host = nullptr;
+        // Where it is at `now`; still moving and `ask`: the reader's next frame is asked for.
+        const T& at(int64_t now, bool ask) {
+            if (!running) return value;
+            bool finished = false;
+            float elapsed = float(std::max<int64_t>(0, now - start)) / 1e6f;
+            if constexpr (std::is_same_v<T, float>) {
+                value = spec.valueAt(elapsed, from, to, finished);
+            } else {
+                float p = spec.progress(elapsed, finished);
+                value = finished && p == 1.f ? to : detail::animationLerp(from, to, p);
+            }
+            running = !finished;
+            if (running && ask) detail::animationNextFrame(host);
+            return value;
+        }
+    };
+    std::shared_ptr<Data> d_;
+};
+
+// Animates towards `target` whenever it changes (from where it is then, along `spec`).
+template <class T>
+AnimatedState<T> animateValueAsState(const T& target, const AnimationSpec& spec, CallSite site) {
+    using Data = typename AnimatedState<T>::Data;
+    auto& c = detail::Composer::require();
+    auto& d = remember([&] { return std::make_shared<Data>(Data{target, target, target, spec, 0, false, &c.host()}); }, site);
+    if (!(d->to == target)) {
+        int64_t now = c.frameTimeNanos();
+        d->from = d->at(now, false);
+        d->to = target;
+        d->spec = spec;
+        d->start = now;
+        d->running = true;
+        detail::notifyStateChanged(d.get());  // (read while laying out or drawing: that again)
+    }
+    AnimatedState<T> state;
+    state.d_ = d;
+    return state;
 }
 
-inline float animateFloatAsState(float target, const AnimationSpec& spec = spring(),
-                                 CallSite site = CallSite::current()) {
+inline AnimatedState<float> animateFloatAsState(float target, const AnimationSpec& spec = spring(),
+                                                CallSite site = CallSite::current()) {
     return animateValueAsState(target, spec, site);
 }
-inline float animateFloatAsState(float target, float durationMillis, CallSite site = CallSite::current()) {
+inline AnimatedState<float> animateFloatAsState(float target, float durationMillis, CallSite site = CallSite::current()) {
     return animateValueAsState(target, tween(durationMillis), site);
 }
-inline Color animateColorAsState(Color target, const AnimationSpec& spec = spring(),
-                                 CallSite site = CallSite::current()) {
+inline AnimatedState<Color> animateColorAsState(Color target, const AnimationSpec& spec = spring(),
+                                                CallSite site = CallSite::current()) {
     return animateValueAsState(target, spec, site);
 }
-inline Color animateColorAsState(Color target, float durationMillis, CallSite site = CallSite::current()) {
+inline AnimatedState<Color> animateColorAsState(Color target, float durationMillis, CallSite site = CallSite::current()) {
     return animateValueAsState(target, tween(durationMillis), site);
 }
 

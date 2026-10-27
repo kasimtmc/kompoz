@@ -266,6 +266,18 @@ float detail::DrawClock::progress(const LayoutNode& node, const AnimationSpec& s
     return spec.progress(millis(node), finished);
 }
 
+int64_t detail::animationReadTime(ComposeHost* host) {
+    if (Composer* composer = Composer::current(); composer && composer->recording()) return composer->frameTimeNanos();
+    return host ? host->frameTime() : 0;
+}
+
+void detail::animationNextFrame(ComposeHost* host) {
+    if (Composer* composer = Composer::current(); composer && composer->recording()) composer->requestFrame();
+    else if (!host) return;
+    else if (measuringNode()) host->requestLayoutFrame();
+    else host->requestRedraw();
+}
+
 float detail::infiniteProgress(const std::shared_ptr<int64_t>& start, const AnimationSpec& spec, ComposeHost* host) {
     Composer* composer = Composer::current();
     bool composing = composer && composer->recording();

@@ -256,6 +256,11 @@
   composed again when it changes); its fields keep what it was when the content was composed, and two such paddings
   are the same when they follow the same scaffold. (`ButtonDefaults`' paddings are `const`, no longer `constexpr`.)
   Scrolling the showcase's Components screen under its collapsing bar composed the screen once.
+- **`animate*AsState` gives a state, read where it is needed**, as Compose's `State<T>`: an `AnimatedState<T>`. Used
+  as a value in a composable, that scope is composed again on every frame it moves, as before; read with `.value()`
+  while drawing (`drawBehind`, `graphicsLayer { }`), only that node is drawn again, and while laying out only it is
+  laid out again; read nowhere, it asks for no frames. A new target on the way goes on from where it is then.
+  (Code that kept the result in `auto` and used it as a `float` or `Color`, `std::max` or a member, takes `.value()`.)
 - **Scrolling doesn't walk what scrolls**: what is moved without being measured again (a list's content) leaves the
   places in it as they were written down, worked out when asked for and written down when drawn. Scrolling the
   showcase's Components screen spent 1% of the main thread on places instead of 16%.

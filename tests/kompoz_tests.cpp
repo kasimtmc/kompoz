@@ -13580,6 +13580,95 @@ TEST(a_tooltip_following_the_mouse_tells_where_it_is) {
     CHECK(!told.empty() && near(told.back().x, 90));
 }
 
+TEST(animated_states_are_read_where_they_are_needed) {
+    // As Compose's State from animateFloatAsState: read while drawing, only drawn again; while
+    // laying out, only laid out again; in a composition, composed again. At rest, nothing is asked for.
+    auto on = mutableStateOf(false);
+    std::vector<float> drawn;
+    std::vector<Color> tints;
+    int composed = 0, labels = 0;
+    ComposeTestRule rule([&] {
+        ++composed;
+        auto move = animateFloatAsState(on.get() ? 100.f : 0.f, tween(320, 0, LinearEasing));
+        auto tint = animateColorAsState(on.get() ? colors::White : colors::Black, tween(320, 0, LinearEasing));
+        Column([&] {
+            Box(Modifier().size(40).graphicsLayer([move, &drawn](GraphicsLayerScope& l) { drawn.push_back(l.translationX = move.value()); }));
+            Box(Modifier().size(40).drawBehind([tint, &tints](DrawScope&) { tints.push_back(tint.value()); }));
+            Box(Modifier().offset([move] { return Offset{move.value(), 0}; }).size(10).testTag("kayan"));
+            composable(CallSite::current(), [&labels, move] {  // composed again as it changes
+                ++labels;
+                Text(std::to_string(int(move.value())), Modifier().testTag("değer"));
+            });
+        });
+    });
+    auto draw = [&] {
+        testing::RecordingCanvas canvas;
+        rule.host().draw(canvas);
+    };
+    draw();
+    CHECK(!rule.host().hasPendingWork() && drawn.back() == 0);  // at rest
+    on.set(true);
+    rule.advanceFrame();  // composed with the new target: on its way
+    int composedBefore = composed, labelsBefore = labels;
+    draw();
+    CHECK(rule.host().hasPendingWork());
+    rule.advanceTimeBy(160);
+    draw();
+    CHECK(composed == composedBefore);  // the section never composed again...
+    CHECK(labels > labelsBefore && !rule.onNodeWithText("0").exists());  // ...but the text reading it did
+    CHECK(drawn.back() > 20 && drawn.back() < 80 && tints.back() != colors::Black && tints.back() != colors::White);
+    CHECK(rule.onNodeWithTag("kayan").node()->contentBounds().x > 20);  // laid out again where it is now
+    rule.waitForIdle();
+    draw();
+    CHECK(drawn.back() == 100 && tints.back() == colors::White && rule.onNodeWithText("100").exists());
+    CHECK(near(rule.onNodeWithTag("kayan").node()->contentBounds().x, 100) && composed == composedBefore);
+    CHECK(!rule.host().hasPendingWork());  // arrived: nothing more asked for
+    // Read only while drawing: what is drawn again is asked for, nothing is composed.
+    auto shown = mutableStateOf(false);
+    int composedOnly = 0;
+    float lastAlpha = -1;
+    ComposeTestRule drawnOnly([&] {
+        ++composedOnly;
+        auto alpha = animateFloatAsState(shown.get() ? 1.f : 0.f, tween(160, 0, LinearEasing));
+        Box(Modifier().size(40).graphicsLayer([alpha, &lastAlpha](GraphicsLayerScope& l) { lastAlpha = l.alpha = alpha.value(); }));
+    });
+    shown.set(true);
+    drawnOnly.advanceFrame();
+    int before = composedOnly;
+    testing::RecordingCanvas canvas;
+    drawnOnly.host().draw(canvas);
+    CHECK(drawnOnly.host().hasPendingWork() && lastAlpha >= 0 && lastAlpha < 1);
+    for (int i = 0; i < 12; ++i) {
+        drawnOnly.advanceFrame();
+        testing::RecordingCanvas frame;
+        drawnOnly.host().draw(frame);
+    }
+    CHECK(lastAlpha == 1 && composedOnly == before && !drawnOnly.host().hasPendingWork());
+    // A new target on the way goes on from where it is now, read or not since, and asks no frames
+    // of the composition for it.
+    auto to = mutableStateOf(0.f);
+    int composedTurn = 0;
+    std::optional<AnimatedState<float>> x;  // read only here, by hand
+    ComposeTestRule turned([&] {
+        ++composedTurn;
+        x = animateFloatAsState(to.get(), tween(320, 0, LinearEasing));
+    });
+    to.set(100);
+    turned.advanceFrame();  // starts at this frame
+    CHECK(x->value() == 0);
+    turned.advanceTimeBy(80);
+    CHECK(near(x->value(), 25));
+    turned.advanceTimeBy(80);  // over half way, not read since a quarter of the way
+    to.set(0);
+    turned.advanceFrame();
+    int composedTurned = composedTurn;
+    float back = x->value();
+    CHECK(near(back, 55));  // back from where it is (not from a quarter, where it was last read)
+    turned.advanceFrame();
+    turned.advanceFrame();
+    CHECK(composedTurn == composedTurned && x->value() < back && x->targetValue() == 0 && x->isRunning());
+}
+
 TEST(infinite_transition_states_are_read_where_they_are_needed) {
     // As Compose's State from animateFloat: read while drawing, only drawn again; while laying
     // out, only laid out again; in a composition, composed again.

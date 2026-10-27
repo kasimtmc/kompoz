@@ -543,7 +543,7 @@ void detail::indicatorNavigationItem(bool selected, std::function<void()> onClic
     Color labelColor = animateColorAsState(selected ? cs.secondary : cs.onSurfaceVariant, motion.defaultEffectsSpec);
     if (!enabled) iconColor = labelColor = cs.onSurface.copy(0.38f);
     float alpha = animateFloatAsState(selected ? 1.f : 0.f, motion.defaultEffectsSpec);
-    float grown = std::max(0.f, animateFloatAsState(selected ? 1.f : 0.f, motion.fastSpatialSpec));
+    float grown = std::max(0.f, animateFloatAsState(selected ? 1.f : 0.f, motion.fastSpatialSpec).value());
     MutableInteractionSource source = interactionSource ? *interactionSource : remember([] { return MutableInteractionSource(); });
     auto shift = remember([] { return std::make_shared<Offset>(); });
     MutableInteractionSource pill = mappedInteractionSource(source, shift);
