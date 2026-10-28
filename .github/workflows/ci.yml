@@ -320,8 +320,9 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then
             icd="$(find "$PWD/mesa" -path '*x64*' -name 'lvp_icd*.json' | head -n 1)"
             [ -n "$icd" ] || { echo "no lavapipe in mesa-dist-win's archive:"; find mesa -maxdepth 2 | head -n 40; exit 1; }
-            export VK_DRIVER_FILES="$(cygpath -w "$icd")"
-            echo "VK_DRIVER_FILES=$VK_DRIVER_FILES"
+            export VK_DRIVER_FILES="$(cygpath -w "$icd")" VK_ICD_FILENAMES="$(cygpath -w "$icd")"  # (a loader before 1.3.207 knows only the second)
+            export VK_LOADER_DEBUG=error,warn,driver  # TEMP: why no driver is loaded
+            echo "VK_DRIVER_FILES=$VK_DRIVER_FILES"; ls -la "$(dirname "$icd")" | head -n 30; cat "$icd"
           fi
           if [ "$RUNNER_OS" = Linux ]; then
             extra=(-c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
