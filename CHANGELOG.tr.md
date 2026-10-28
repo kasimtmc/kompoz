@@ -322,6 +322,9 @@
   birinin kapatmasını bekleyen bir ileti kutusu açılmaz. Conan Center'ın SDL'inde Windows'ta OpenGL ES yoktur; bu yüzden
   Conan ile derlenen bir uygulama orada yalnızca Vulkan ile çizer (ANGLE, EGL'li bir SDL ister); Conan testi Windows
   için derlenmiş Mesa lavapipe'ında çizer.
+- **Bir katman ilk karesinden itibaren tutulur**: ilk kez görülen bir katman (başlayan bir solma) zaten bütünüyle
+  çizilir ve artık o andan itibaren tutulur; içeriği aynı kalan katman sonraki karede bu piksellerden birleştirilir,
+  eskiden ikinci kez bütünüyle çiziliyordu.
 - **Bir pikselin adımları her ilkel için bir kez hesaplanır**: bir cihaz pikselinin bir ilkelin kendi uzayında ne kadar
   yol aldığı (kenar yumuşatmanın ölçüsü), her pikselde türevlerden geliyordu; bu, bir Adreno GPU'ya bir dolgunun geri
   kalanı kadar pahalıya mal oluyordu. Perspektif yokken her yerde aynıdır ve köşe gölgelendiricisi onu ilkelin

@@ -1659,12 +1659,15 @@ void Renderer::pushLayer(const Rect& bounds, const CornerRadii& radii, float alp
             pushed_ = LayerContent::Kept;
             ++keptLayers;
         } else {
-            if (it != kept_.end()) {  // (what it holds is gone)
+            // One seen for the first time is drawn whole anyway (a layer that has just come, a
+            // fade starting): kept from now, it isn't drawn whole again in the next frame.
+            bool first = it == kept_.end();
+            if (!first) {  // (what it holds is gone)
                 giveToPool(std::move(it->second.texture));
                 giveToPool(std::move(it->second.effected));
                 kept_.erase(it);
             }
-            if (same && fits && !part) layer.key = key, pushed_ = LayerContent::DrawAll;
+            if ((same || first) && fits && !part) layer.key = key, pushed_ = LayerContent::DrawAll;
         }
     }
     if (fits && !layer.kept) layer.texture = acquire(layer.rect.width, layer.rect.height);

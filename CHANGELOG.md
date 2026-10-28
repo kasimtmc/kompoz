@@ -305,6 +305,9 @@
 - **An app run by a script that can't start says so in its log**: with `KOMPOZ_SCRIPT` set (as on CI) no message box
   waits for someone to close it. Conan Center's SDL has no OpenGL ES on Windows, so an app built with Conan draws with
   Vulkan only there (ANGLE needs an SDL with EGL); the Conan test draws on Mesa's lavapipe built for Windows.
+- **A layer is kept from its first frame**: a layer seen for the first time (a fade starting) is drawn whole anyway,
+  and is kept from then on; one whose content stays the same is composited from those pixels in the next frame, where
+  it used to be drawn whole a second time.
 - **A pixel's steps are worked out once for each primitive**: how far a device pixel goes in a primitive's own space
   (what its anti-aliasing measures with) came from derivatives at every pixel, which cost an Adreno GPU about as much
   as the rest of a fill. Without perspective it is the same everywhere, and the vertex shader works it out from the

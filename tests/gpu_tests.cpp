@@ -4056,6 +4056,40 @@ void keptLayersDrawAsDrawnAfresh(Gpu& g) {
     renderer.reset();
 }
 
+// A layer seen for the first time (a fade starting) is kept from that frame: in the next, with
+// nothing in it changed, it is composited from those pixels, not drawn whole again.
+void aLayerIsKeptFromItsFirstFrame(Gpu& g) {
+    std::unique_ptr<sdl::FontSystem> fonts = Gpu::loadFonts();
+    auto renderer = std::make_unique<gpu::Renderer>(*g.device, *fonts);
+    DisplayList list(*fonts);
+    int screen = 0, fading = 0;
+    auto record = [&](float alpha) {
+        list.begin({80, 60}, 1);
+        list.beginNode(&screen);
+        list.fillRoundRect({0, 0, 80, 60}, CornerRadii(), colors::White);
+        list.beginNode(&fading);
+        if (alpha < 1) list.pushLayer({10, 10, 50, 30}, CornerRadii(4), alpha);
+        list.fillRoundRect({10, 10, 50, 30}, CornerRadii(), Color{0.3f, 0.5f, 0.9f, 1});
+        if (alpha < 1) list.popLayer();
+        list.endNode();
+        list.endNode();
+        return list.end();
+    };
+    auto target = g.device->createTexture(80, 60, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
+    std::vector<int> kept;
+    for (float alpha : {1.f, 0.8f, 0.6f, 0.4f}) {
+        g.device->beginFrame();
+        renderer->keptLayers = 0;
+        if (record(alpha)) renderer->drawFrame(*target, list, true);
+        renderer->flush();
+        g.device->endFrame(false);
+        renderer->endFrame();
+        kept.push_back(renderer->keptLayers);
+    }
+    CHECK(kept == std::vector<int>({0, 0, 1, 1}));  // (none yet; the layer just come; kept since)
+    renderer.reset();
+}
+
 void scenesMatchTheirPictures(Gpu& g) {
     struct Scene {
         const char* name;
@@ -4210,6 +4244,7 @@ int main() {
             pathsShareTheirMasks(g);
             keptFramesMoveWhatScrolled(g);
             keptLayersDrawAsDrawnAfresh(g);
+            aLayerIsKeptFromItsFirstFrame(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
         }
