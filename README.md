@@ -412,8 +412,9 @@ cd examples/showcase/android && ./gradlew installDebug
 ```
 
 `scripts/fetch-deps.sh` downloads SDL3, FreeType and HarfBuzz into `third_party/` at pinned versions, checking their
-sha256, and applies the fixes in `scripts/patches/` (one at the moment: a deadlock on Android when the activity
-pauses while SDL creates its renderer, not fixed in SDL 3.4.18 either). Gradle builds the root `CMakeLists.txt` with
+sha256, and applies the fixes in `scripts/patches/` (two at the moment, both on Android and not fixed in SDL 3.4.18
+either: a deadlock when the activity pauses while SDL creates its renderer, and `SDL_WaitEvent` spinning instead of
+waiting, a CPU core busy whenever the app is idle). Gradle builds the root `CMakeLists.txt` with
 the NDK: `libSDL3.so` and the app's `libmain.so` (the showcase's sources). The Java side is SDL's own
 `SDLActivity`; the example's `android/` folder only has the manifest, a theme and a short `MainActivity`. The fonts
 come into the APK from `assets/`, the example's images from `examples/showcase/assets/`.

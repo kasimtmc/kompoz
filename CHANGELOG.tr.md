@@ -322,6 +322,11 @@
   birinin kapatmasını bekleyen bir ileti kutusu açılmaz. Conan Center'ın SDL'inde Windows'ta OpenGL ES yoktur; bu yüzden
   Conan ile derlenen bir uygulama orada yalnızca Vulkan ile çizer (ANGLE, EGL'li bir SDL ister); Conan testi Windows
   için derlenmiş Mesa lavapipe'ında çizer.
+- **Android'de boştaki uygulama işlemciyi rahat bırakır**: SDL'in `SDL_WaitEvent`'i Android'de beklemek yerine
+  dönüyordu (olayları pompalamak SDL'in yoklama sınır olayını kuyruğa ekler, bu da beklemeyi hemen uyandırır); bu
+  yüzden yapacak bir şey olmadığında uygulamanın ana iş parçacığı bir çekirdeği tamamen meşgul ediyordu: saniyede
+  yaklaşık bir milyon tur. `scripts/patches/` bunu SDL 3.4.18'de düzeltir (SDL'in ana dalında da düzeltilmemiş). Bir
+  Redmi Note 9 Pro'da ölçümün ana iş parçacığı 30 yerine 13 s işlemci zamanı aldı.
 - **Ekranın her vuruşuna bir kare**: bir öncekinden yarım tazelemeden kısa süre sonra başlayan bir kare (öncekinin
   beklemeden gösterildiği, takas zincirinde yer olduğu ya da önceki ekranda hiçbir şeyi değiştirmediği için) öncekinin
   zamanını alıyordu; kaydırma o karede yerinde sayıp sonrakinde iki tazeleme birden atlıyordu: 120 Hz'lik bir

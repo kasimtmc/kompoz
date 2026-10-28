@@ -305,6 +305,10 @@
 - **An app run by a script that can't start says so in its log**: with `KOMPOZ_SCRIPT` set (as on CI) no message box
   waits for someone to close it. Conan Center's SDL has no OpenGL ES on Windows, so an app built with Conan draws with
   Vulkan only there (ANGLE needs an SDL with EGL); the Conan test draws on Mesa's lavapipe built for Windows.
+- **An idle app on Android leaves the CPU alone**: SDL's `SDL_WaitEvent` spun on Android instead of waiting (pumping
+  events pushes SDL's poll sentinel, which wakes the wait at once), so whenever there was nothing to do, the app's main
+  thread kept a whole core busy: about a million passes a second. `scripts/patches/` fixes it in SDL 3.4.18 (also not
+  fixed in SDL's main branch). On a Redmi Note 9 Pro the bench's main thread took 13 s of CPU instead of 30.
 - **One frame for each beat of the display**: a frame started less than half a refresh after the last (the last one
   shown without waiting, the swap chain having room, or one that changed nothing on the screen) got the last one's
   time, so a scroll stood still in it and jumped two refreshes in the next: shown, still, still, shown, over and over

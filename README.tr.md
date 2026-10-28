@@ -409,8 +409,9 @@ cd examples/showcase/android && ./gradlew installDebug
 ```
 
 `scripts/fetch-deps.sh`, SDL3, FreeType ve HarfBuzz kaynaklarını sabit sürüm ve sha256 kontrolüyle `third_party/` altına
-indirir ve `scripts/patches/` altındaki düzeltmeleri uygular (şu an bir tane: Android'de etkinlik, SDL çiziciyi
-oluştururken duraklarsa yaşanan kilitlenme; SDL 3.4.18'de de düzeltilmemiş). Gradle, kök `CMakeLists.txt`'yi NDK ile
+indirir ve `scripts/patches/` altındaki düzeltmeleri uygular (şu an iki tane, ikisi de Android'de ve SDL 3.4.18'de de
+düzeltilmemiş: etkinlik, SDL çiziciyi oluştururken duraklarsa yaşanan kilitlenme ve `SDL_WaitEvent`'in beklemek yerine
+dönmesi; uygulama boştayken bir işlemci çekirdeği meşgul olur). Gradle, kök `CMakeLists.txt`'yi NDK ile
 derler: `libSDL3.so` ve uygulamanın `libmain.so`'su (vitrinin kaynakları) oluşur. Java tarafı SDL'in kendi
 `SDLActivity`'si; örneğin `android/` klasöründe yalnız manifest, tema ve kısa bir `MainActivity` var. Fontlar
 `assets/`'tan, örneğin resimleri `examples/showcase/assets/`'tan APK'ya girer.
