@@ -141,6 +141,11 @@ struct Varyings {
     // pixel (no perspective): worked out once here, not by derivatives at each pixel, which cost
     // an Adreno GPU as much as the rest of a fill. None (zero) in perspective (flag 32).
     nointerpolation float4 steps : STEPS;
+    // Where the pixel is well inside a solid fill or a layer (see vs): read first, and all such a
+    // pixel reads but its color. (What a fragment reads is most of what it costs an Adreno 618:
+    // a screen of a fill's interior took it 2.3 ms reading what the rest of fs does, 1.5 through
+    // this; its color alone, 0.5.)
+    float4 inside : INSIDE;
 };
 
 [shader("vertex")]
@@ -186,6 +191,34 @@ Varyings vs(Instance instance, uint vertex : VERTEX_ID) {
     float det = instance.xform.x * instance.xform.w - instance.xform.z * instance.xform.y;
     bool flat = instance.projection.x == 0 && instance.projection.y == 0 && abs(det) > 1e-20;
     out.steps = flat ? float4(instance.xform.w, -instance.xform.y, -instance.xform.z, instance.xform.x) / det : float4(0, 0, 0, 0);
+    // Well inside it, as roundRectCoverage's first test has it: the pixel's box half a pixel or
+    // more in from each edge, and every corner's radius on one axis. That is within either of
+    // two rects: the pixel's place from each one's middle over its half size (linear in the
+    // instance's space, so the rasterizer's interpolation is exact), within where |both| <= 1.
+    // Only where nothing else bears on such a pixel: a solid fill, or a layer's texels (not cut
+    // to a mask, its alpha not mixed into the coverage), with no clip, color filter or
+    // perspective; never (2) otherwise.
+    int flags = int(instance.extra.w + 0.5);
+    bool plain = flat && instance.filter.x == 0 && instance.filter.z == 0;
+    bool solid = kind == FILL && int(instance.paint.x + 0.5) == 0;
+    bool texels = kind == LAYER && (flags & (1 | 8)) == 0;
+    out.inside = float4(2, 2, 2, 2);
+    if (plain && (solid || texels)) {
+        float4 s = out.steps;
+        float2 reach = 0.5 * float2(abs(s.x) + abs(s.z), abs(s.y) + abs(s.w));
+        float4 r = instance.radii;
+        float rmax = max(max(r.x, r.y), max(r.z, r.w));
+        float4 rect = instance.shape;
+        float2 inA = float2(max(reach.x, rmax), reach.y), inB = float2(reach.x, max(reach.y, rmax));
+        float4 a = float4(rect.xy + inA, rect.zw - inA), b = float4(rect.xy + inB, rect.zw - inB);
+        if (texels) {  // (and where its texels are taken unclamped: see fs)
+            float4 within = float4(instance.params.xy + 0.5, instance.params.zw - 0.5);
+            a = float4(max(a.xy, within.xy), min(a.zw, within.zw)), b = float4(max(b.xy, within.xy), min(b.zw, within.zw));
+            out.texcoord = (local - instance.params.xy) * instance.uv.zw;
+        }
+        if (all(a.zw > a.xy)) out.inside.xy = (local - (a.xy + a.zw) * 0.5) / ((a.zw - a.xy) * 0.5);
+        if (all(b.zw > b.xy)) out.inside.zw = (local - (b.xy + b.zw) * 0.5) / ((b.zw - b.xy) * 0.5);
+    }
     return out;
 }
 
@@ -215,6 +248,7 @@ Varyings vsMesh(Instance instance, uint vertex : VERTEX_ID) {
     out.gradient = instance.gradient;
     out.filter = instance.filter;
     out.steps = float4(0, 0, 0, 0);
+    out.inside = float4(2, 2, 2, 2);
     return out;
 }
 
@@ -602,18 +636,30 @@ float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
 
 [shader("fragment")]
 float4 fs(Varyings v) : SV_Target {
-    int kind = int(v.kindFlags.x + 0.5);
-    int flags = int(v.kindFlags.y + 0.5) & FLAGS;
     // A device pixel's steps in the instance's space, exactly: the vertex shader's where they are
     // the same everywhere; with a primitive in perspective in the batch (flag 32, a variant of its
     // own: the others have no derivatives at all), the local point over w, and 1 over w, which go
-    // straight across the screen (their differences are exact), the local point doesn't.
-    float2 dx = v.steps.xy, dy = v.steps.zw;
+    // straight across the screen (their differences are exact), the local point doesn't. (Those
+    // worked out before any pixel is done below: a derivative needs its pixels' neighbours.)
+    float2 dx = 0, dy = 0;
     if ((FLAGS & 32) != 0) {
         float q = 1 / v.w;
         float2 lq = v.local * q;
         dx = (ddx(lq) - v.local * ddx(q)) / q, dy = (ddy(lq) - v.local * ddy(q)) / q;
     }
+    // Well inside a solid fill or a layer (see vs): its color, or the layer's texel at its alpha.
+    if (drawn(FILL) || drawn(LAYER)) {
+        float4 a = abs(v.inside);
+        if ((a.x <= 1 && a.y <= 1) || (a.z <= 1 && a.w <= 1)) {
+            bool layer = drawn(LAYER) && (!drawn(FILL) || int(v.kindFlags.x + 0.5) == LAYER);
+            // (At level 0, the only one a layer's texture has: no derivatives, which some pixels
+            // around this one, gone on below, would leave undefined.)
+            return finish(layer ? texture0.SampleLevel(v.texcoord, 0) * v.color.a : v.color, 1, v.position.xy);
+        }
+    }
+    int kind = int(v.kindFlags.x + 0.5);
+    int flags = int(v.kindFlags.y + 0.5) & FLAGS;
+    if ((FLAGS & 32) == 0) dx = v.steps.xy, dy = v.steps.zw;
     // Not anti-aliased (flags & 16): coverage at the pixel's middle alone (a pixel shrunk to a
     // point), all or nothing below.
     bool aliased = (flags & 16) != 0;
@@ -684,7 +730,7 @@ float4 fs(Varyings v) : SV_Target {
     } else if (drawn(LAYER) && kind == LAYER) {
         float2 texel = clamp(v.local, v.params.xy + 0.5, v.params.zw - 0.5);
         bool mixed = (flags & 8) != 0;
-        src = texture0.Sample((texel - v.params.xy) * v.uv.zw) * (mixed ? 1 : v.color.a);
+        src = texture0.SampleLevel((texel - v.params.xy) * v.uv.zw, 0) * (mixed ? 1 : v.color.a);  // (level 0: see the top)
         // (Filtered where it is: a turned or scaled layer's pixels fall between the mask's texels.)
         cover = (flags & 1) != 0 ? pathCoverage(texture1.SampleLevel((v.local - v.radii.xy) * uniforms.texels.xy, 0).r, false)
                                  : roundRectCoverage(v.local, v.shape, v.radii, dx, dy);
