@@ -4090,6 +4090,50 @@ void aLayerIsKeptFromItsFirstFrame(Gpu& g) {
     renderer.reset();
 }
 
+// A path drawn again whole pixels on (a scrolled list's) takes the coverage it had: the same
+// pixels, moved; drawn a fraction of a pixel on, its own (the pixels it covers change).
+void aPathKeepsItsCoverage(Gpu& g) {
+    Path s = star(20, 20, 16);
+    s.fillType = Path::FillType::EvenOdd;
+    auto draw = [&](Offset at) {
+        g.renderer->pathCount = g.renderer->keptPaths = 0;
+        Pixels out = g.render(60, 60, 1, [&](GraphicsContext& c) { c.drawPath(s, at, Brush::solid(Color{0.1f, 0.55f, 0.3f, 1}), {}, {}); });
+        return std::pair{out, g.renderer->keptPaths};
+    };
+    auto [first, kept0] = draw({3.3f, 2.6f});
+    auto [moved, kept1] = draw({10.3f, 7.6f});
+    auto [shifted, kept2] = draw({10.55f, 7.6f});
+    CHECK(kept0 == 0 && kept1 == 1 && kept2 == 0);
+    int worst = 0, differ = 0;
+    for (int y = 0; y < 50; ++y)
+        for (int x = 0; x < 50; ++x) {
+            worst = std::max(worst, maxDifference(first.at(x, y), moved.at(x + 7, y + 5)));
+            differ += maxDifference(moved.at(x + 7, y + 5), shifted.at(x + 7, y + 5)) > 8;
+        }
+    CHECK(worst == 0 && differ > 0);
+    // More than its mask holds (sixteen of these): those past it drawn as any path, the frame's
+    // paths kept as long as they fill most of it; started over (after a frame) for others.
+    std::vector<int> kept;
+    std::vector<Pixels> frames;
+    for (int frame = 0; frame < 6; ++frame) {
+        g.renderer->keptPaths = 0;
+        frames.push_back(g.render(510, 510, 1, [&](GraphicsContext& c) {
+            for (int i = 0; i < 20; ++i) {
+                Path p;
+                p.addOval({4, 4, 500 - float(i) - (frame >= 3 ? 0.5f : 0.f), 500});
+                c.drawPath(p, {}, Brush::solid(Color{0.1f, 0.55f, 0.3f, 0.05f}), {}, {});
+            }
+        }));
+        kept.push_back(g.renderer->keptPaths);
+    }
+    // (Of the first ones, as many as there was room for beside the earlier tests' paths.)
+    CHECK(kept[0] == 0 && kept[1] > 0 && kept[2] == kept[1] && kept[3] == 0 && kept[4] == 0 && kept[5] == 16);
+    worst = 0;
+    for (int y = 0; y < 510; y += 3)
+        for (int x = 0; x < 510; x += 3) worst = std::max({worst, maxDifference(frames[0].at(x, y), frames[2].at(x, y)), maxDifference(frames[3].at(x, y), frames[5].at(x, y))});
+    CHECK(worst <= 1);  // (those kept at a 64th of a pixel from where they were first)
+}
+
 // What each cluster adds to a run's width (FontSystem::clusterAdvances, which line breaking
 // measures with): the whole run's width in sum, and a word's about as wide as the word laid out
 // alone (kerning across its ends aside), in Latin, Turkish and Arabic, with letter spacing.
@@ -4274,6 +4318,7 @@ int main() {
             keptFramesMoveWhatScrolled(g);
             keptLayersDrawAsDrawnAfresh(g);
             aLayerIsKeptFromItsFirstFrame(g);
+            aPathKeepsItsCoverage(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
         }

@@ -48,6 +48,8 @@ public:
     float scale = 1;     // px per dp
     int layerCount = 0;  // layers pushed (KOMPOZ_PROFILE)
     int keptLayers = 0;  // of them, composited from the pixels they had in a frame before
+    int pathCount = 0;   // paths drawn (KOMPOZ_PROFILE)
+    int keptPaths = 0;   // of them, with the coverage they had in a frame before
 
     // Draws into `target` until endTarget(), cleared first to `clear` if given.
     void beginTarget(Texture& target, const std::optional<ClearColor>& clear = std::nullopt);
@@ -393,6 +395,26 @@ private:
     std::unique_ptr<Pipeline> coveragePipeline_;
     std::unique_ptr<Pipeline> effectPipeline_;
     MaskShelf shelf_;  // (started over once no pass is open: a clip's row lives no longer than its target)
+    // Paths' coverage kept from frame to frame (drawPath's): a path drawn again as it was, but
+    // whole pixels on (scrolled, its screen faded in and out), takes what it covered, laid out
+    // and rasterized once. In a mask of its own, filled shelf by shelf; started over (cleared)
+    // between frames once full. By the path, its stroke, its placement but for whole pixels.
+    struct KeptPath {
+        IRect at;      // in the mask
+        IRect bounds;  // the pixels it covers, from its placement's whole pixels
+        uint64_t drawn = 0;  // the frame it was last drawn in
+    };
+    std::unordered_map<uint64_t, KeptPath> keptPaths_;
+    std::unique_ptr<Texture> pathMask_;
+    MaskShelf pathShelf_;
+    std::vector<EdgeInstance> pathEdges_;  // the paths new to it, rasterized before the passes
+    bool pathMaskFull_ = false, pathMaskClear_ = true;  // (full: see endFrame)
+    uint64_t pathFrame_ = 1;
+    int64_t pathsDrawnArea_ = 0;  // of the mask, by this frame's paths
+    // drawPath through the kept paths: false where it isn't kept there (in perspective, or new to
+    // it with no room left), to be drawn as any path.
+    bool drawKeptPath(const Path& path, Offset origin, const PathStroke& stroke, bool evenOdd, const Prim& paint);
+    std::unique_ptr<Pipeline> coverage();  // (the coverage pipeline, shaders/path.slang)
     std::vector<std::unique_ptr<Texture>> masks_;  // a generation's coverage mask each, as big as it needed so far
     // Gradients' stops this frame, a row each (see shaders/primitives.slang), and their texture.
     static constexpr int kStopsWidth = 256;  // texels: 128 stops

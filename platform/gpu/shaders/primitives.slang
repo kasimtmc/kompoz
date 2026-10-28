@@ -22,7 +22,7 @@ static const int LAYER = 7;        // a layer's texture: texel (0, 0) at params.
                                    // with flags & 1 to the path whose coverage mask (texture1, linearly filtered) has
                                    // texel (0, 0) at radii.xy; with flags & 8 its alpha goes into the coverage (a
                                    // backdrop drawn in place of what is there: Src, mixed by it)
-static const int PATH = 8;         // a path: its coverage mask (texture0) has texel (0, 0) at params.xy; params.z: even-odd;
+static const int PATH = 8;         // a path: its coverage mask (texture0, of any size) has texel (0, 0) at params.xy; params.z: even-odd;
                                    // drawn in the target's pixels, with flags & 4 its paint where the pixel is in its
                                    // own space (radii, uv and shape: the rows of the map there)
 static const int ELEVATION = 9;    // an elevation shadow's ambient or spot part, as Skia's ShadowRRectOp: Gaussian falloff
@@ -696,7 +696,8 @@ float4 fs(Varyings v) : SV_Target {
         // geometry puts it, falls in the hole whatever a GPU rounds d to.)
         cover = d > 0 && (v.params.y <= 0 || d < v.params.y - 1.0 / 1024) ? max(exp(-4 * (1 - t) * (1 - t)) - 0.018, 0) : 0;
     } else if (drawn(PATH) && kind == PATH) {
-        cover = pathCoverage(texture0.SampleLevel(maskTexcoord(v.local - v.params.xy), 0).r, v.params.z > 0.5);
+        // (Fetched where it is, in the mask it is in: this frame's coverage mask, or the kept paths'.)
+        cover = pathCoverage(tableLoad(texture0, int2(floor(v.local - v.params.xy))).r, v.params.z > 0.5);
     } else if (drawn(MESH) && kind == MESH) {
         src = (v.params.z > 0.5 ? blendColors(paint, v.vertexColor, int(v.params.x + 0.5)) : paint) * v.params.y;
         cover = 1;

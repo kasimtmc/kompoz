@@ -41,6 +41,7 @@ const ShaderCode kEffectFragment{shaders::effects_fs_spirv, shaders::effects_fs_
                                  shaders::effects_fs_wgsl, "fs"};
 
 constexpr int kMaskSize = 2048;  // a generation's mask is at least this big each way (px), and at least its target's size
+constexpr int kKeptMask = 2048, kKeptMost = 512;  // the kept paths' mask each way, and the most a kept path is each way (px)
 
 void set(float (&out)[4], float a, float b, float c, float d) {
     out[0] = a, out[1] = b, out[2] = c, out[3] = d;
@@ -582,7 +583,41 @@ void Renderer::flush() {
     }
 }
 
+std::unique_ptr<Pipeline> Renderer::coverage() {
+    PipelineDesc desc;
+    desc.vertex = &kCoverageVertex;
+    desc.fragment = &kCoverageFragment;
+    desc.instanceAttributes = {{0, VertexFormat::Float4, 0}, {1, VertexFormat::Float4, 16}, {2, VertexFormat::Float4, 32}};
+    desc.instanceStride = sizeof(EdgeInstance);
+    desc.blend = {true, BlendFactor::One, BlendFactor::One, BlendFactor::One, BlendFactor::One};
+    desc.target = Format::R16F;
+    return device_.createPipeline(desc);
+}
+
 void Renderer::drawMasks() {
+    // The paths new to the kept ones, into their spots (clear: the mask is cleared only when it
+    // starts over).
+    if (!pathEdges_.empty() && pathMask_) {
+        if (!coveragePipeline_) coveragePipeline_ = coverage();
+        BufferRef buffer;
+        void* memory = device_.allocate(pathEdges_.size() * sizeof(EdgeInstance), 16, &buffer);
+        std::memcpy(memory, pathEdges_.data(), pathEdges_.size() * sizeof(EdgeInstance));
+        int x0 = INT_MAX, y0 = INT_MAX, x1 = 0, y1 = 0;
+        for (const EdgeInstance& e : pathEdges_)
+            x0 = std::min(x0, int(e.region[0])), y0 = std::min(y0, int(e.region[1])), x1 = std::max(x1, int(e.region[2])), y1 = std::max(y1, int(e.region[3]));
+        bool yDown = device_.clipYDown();
+        float mw = float(pathMask_->width()), mh = float(pathMask_->height());
+        float toMask[8] = {2 / mw, yDown ? 2 / mh : -2 / mh, -1, yDown ? -1.f : 1.f, 0, 0, 0, 0};
+        IRect area = pathMaskClear_ ? IRect{0, 0, pathMask_->width(), pathMask_->height()} : IRect{x0, y0, x1 - x0, y1 - y0};
+        device_.beginPass(*pathMask_, pathMaskClear_ ? std::optional<ClearColor>(ClearColor{}) : std::nullopt, {}, area);
+        device_.setPipeline(*coveragePipeline_);
+        device_.setUniforms(toMask, sizeof toMask);
+        device_.setScissor(area);
+        device_.draw(buffer, 6, uint32_t(pathEdges_.size()));
+        device_.endPass();
+        pathEdges_.clear();
+        pathMaskClear_ = false;
+    }
     for (uint32_t g = 0; g <= shelf_.generation; ++g) {
         // This generation's paths in the passes going now, cleared where they are first (and the
         // texel around each: sampled linearly, a layer's cut reads it).
@@ -604,16 +639,7 @@ void Renderer::drawMasks() {
         if (!mask || mask->width() < shelf_.width || mask->height() < shelf_.height)
             mask = device_.createTexture(std::max(shelf_.width, mask ? mask->width() : 0), std::max(shelf_.height, mask ? mask->height() : 0),
                                          Format::R16F, TextureUsage::Sampled | TextureUsage::RenderTarget);
-        if (!coveragePipeline_) {
-            PipelineDesc desc;
-            desc.vertex = &kCoverageVertex;
-            desc.fragment = &kCoverageFragment;
-            desc.instanceAttributes = {{0, VertexFormat::Float4, 0}, {1, VertexFormat::Float4, 16}, {2, VertexFormat::Float4, 32}};
-            desc.instanceStride = sizeof(EdgeInstance);
-            desc.blend = {true, BlendFactor::One, BlendFactor::One, BlendFactor::One, BlendFactor::One};
-            desc.target = Format::R16F;
-            coveragePipeline_ = device_.createPipeline(desc);
-        }
+        if (!coveragePipeline_) coveragePipeline_ = coverage();
         BufferRef buffer;
         void* memory = device_.allocate(edges.size() * sizeof(EdgeInstance), 16, &buffer);
         std::memcpy(memory, edges.data(), edges.size() * sizeof(EdgeInstance));
@@ -829,6 +855,17 @@ void Renderer::endFrame() {
         } else {
             ++it;
         }
+    // The kept paths started over once full, unless this frame's paths fill most of it themselves
+    // (then kept as they are: those in it are drawn from it, the rest as any path, rather than all
+    // of them rasterized again each frame).
+    if (pathMaskFull_ && pathsDrawnArea_ * 2 < int64_t(kKeptMask) * kKeptMask) {
+        keptPaths_.clear();
+        pathShelf_ = {};
+        pathMaskFull_ = false;
+        pathMaskClear_ = true;
+    }
+    ++pathFrame_;
+    pathsDrawnArea_ = 0;
 }
 
 void Renderer::keyLayer(uint64_t key, bool same) { nextLayer_ = std::pair{key, same}; }
@@ -1552,7 +1589,6 @@ void Renderer::drawPath(const Path& source, Offset origin, const Brush& brush, c
     const Path& path = detail::pathEffected(source, stroke, scale * detail::resScaleOf(transform_.m[0], transform_.m[3], transform_.m[1], transform_.m[4]),
                                             effected);
     if (path.isEmpty()) return;
-    std::vector<Contour> contours = polygonsOf(path, origin, stroke);
     bool evenOdd = !stroke.strokes() && path.fillType == Path::FillType::EvenOdd;
     Prim paint = painted(brush, area);
     if (!transform_.identity()) {
@@ -1564,7 +1600,80 @@ void Renderer::drawPath(const Path& source, Offset origin, const Brush& brush, c
             paint.extra[3] = 4;
         }
     }
-    fillContours(contours, evenOdd, paint);
+    ++pathCount;
+    if (drawKeptPath(path, origin, stroke, evenOdd, paint)) return;
+    fillContours(polygonsOf(path, origin, stroke), evenOdd, paint);
+}
+
+bool Renderer::drawKeptPath(const Path& path, Offset origin, const PathStroke& stroke, bool evenOdd, const Prim& paint) {
+    if (targets_.empty() || (paint.paint[0] == 0 && paint.color[3] <= 0)) return true;  // (as fillContours: nothing to draw)
+    const float* m = transform_.m;
+    if (m[6] != 0 || m[7] != 0 || m[8] != 1) return false;  // (in perspective: its coverage changes as it moves)
+    // Where its origin goes on the target, to a 64th of a pixel (it is drawn there: at most 1/128
+    // px off, the same coverage wherever it is): the whole pixels it moves by, and the rest, which
+    // with all else that shapes its coverage makes its key. (A float's fraction alone differs
+    // with the whole part: 3.3 and 10.3's.)
+    float cx = m[0] * (origin.x * scale - ox_) + m[1] * (origin.y * scale - oy_) + m[2];
+    float cy = m[3] * (origin.x * scale - ox_) + m[4] * (origin.y * scale - oy_) + m[5];
+    float nx = std::round(cx * 64) / 64, ny = std::round(cy * 64) / 64;
+    float wx = std::floor(nx), wy = std::floor(ny);
+    uint64_t key = 0xcbf29ce484222325ULL;
+    auto mixIn = [&](const void* data, size_t size) {
+        for (size_t i = 0; i < size; ++i) key = (key ^ static_cast<const uint8_t*>(data)[i]) * 0x100000001b3ULL;
+    };
+    const std::vector<PathCommand>& commands = path.commands();
+    mixIn(commands.data(), commands.size() * sizeof(PathCommand));
+    float shape[] = {scale, m[0], m[1], m[3], m[4], nx - wx, ny - wy, stroke.width, stroke.miter, float(stroke.cap), float(stroke.join),
+                     float(stroke.hairline), float(aliased())};
+    mixIn(shape, sizeof shape);
+    auto it = keptPaths_.find(key);
+    if (it != keptPaths_.end()) ++keptPaths;
+    if (it == keptPaths_.end()) {
+        if (pathMaskFull_) return false;
+        std::vector<Contour> contours = polygonsOf(path, origin, stroke);
+        float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f;
+        for (Contour& c : contours)
+            for (Offset& q : c.points) {
+                q.x += nx - cx, q.y += ny - cy;
+                x0 = std::min(x0, q.x), y0 = std::min(y0, q.y), x1 = std::max(x1, q.x), y1 = std::max(y1, q.y);
+            }
+        if (x0 > x1) return true;  // (nothing in it)
+        IRect bounds{int(std::floor(x0)), int(std::floor(y0)), int(std::ceil(x1)) - int(std::floor(x0)), int(std::ceil(y1)) - int(std::floor(y0))};
+        // A spot of its own (a texel apart), never used before: the mask is clear there. (Too big
+        // for one, or none left: drawn as any path, where it is.)
+        MaskShelf& shelf = pathShelf_;
+        shelf.width = shelf.height = kKeptMask;
+        if (shelf.x + bounds.width + 1 > shelf.width) shelf.x = 0, shelf.y += shelf.row, shelf.row = 0;
+        bool big = bounds.width > kKeptMost || bounds.height > kKeptMost;
+        if (big || shelf.y + bounds.height + 1 > shelf.height) {
+            if (!big) pathMaskFull_ = true;
+            for (Contour& c : contours)
+                for (Offset& q : c.points) q.x -= nx - cx, q.y -= ny - cy;
+            fillContours(contours, evenOdd, paint);
+            return true;
+        }
+        IRect at{shelf.x, shelf.y, bounds.width, bounds.height};
+        shelf.x += bounds.width + 1;
+        shelf.row = std::max(shelf.row, bounds.height + 1);
+        edgeScratch_.clear();
+        appendEdges(contours, edgeScratch_);
+        float dx = float(at.x - bounds.x), dy = float(at.y - bounds.y);
+        float r[4] = {float(at.x), float(at.y), float(at.x + at.width), float(at.y + at.height)};
+        for (const Edge& e : edgeScratch_)
+            pathEdges_.push_back({{e.x0 + dx, e.y0 + dy, e.x1 + dx, e.y1 + dy}, {r[0], r[1], r[2], r[3]}, {aliased() ? 1.f : 0.f, 0, 0, 0}});
+        it = keptPaths_.emplace(key, KeptPath{at, {bounds.x - int(wx), bounds.y - int(wy), bounds.width, bounds.height}}).first;
+    }
+    KeptPath& kept = it->second;
+    if (kept.drawn != pathFrame_) kept.drawn = pathFrame_, pathsDrawnArea_ += int64_t(kept.at.width + 1) * (kept.at.height + 1);
+    IRect bounds{kept.bounds.x + int(wx), kept.bounds.y + int(wy), kept.bounds.width, kept.bounds.height};
+    IRect region = intersect(bounds, scissor());
+    if (region.empty()) return true;
+    if (!pathMask_) pathMask_ = device_.createTexture(kKeptMask, kKeptMask, Format::R16F, TextureUsage::Sampled | TextureUsage::RenderTarget);
+    Prim p = paint;
+    set(p.bounds, float(region.x), float(region.y), float(region.x + region.width), float(region.y + region.height));
+    set(p.params, float(bounds.x - kept.at.x), float(bounds.y - kept.at.y), evenOdd ? 1.f : 0.f, 0);
+    add(PATH, p, pathMask_.get(), false, Mask::None, nullptr, false, Sampler{Filter::Nearest});
+    return true;
 }
 
 void Renderer::fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& brush, const Rect& area) {
