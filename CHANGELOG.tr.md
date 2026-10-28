@@ -342,7 +342,8 @@
   yerine çizerken karenin zamanından alır; geçişler arasında ve bir geçiş bittiğinde bir zamanlayıcıyla bekler. Görüş
   dışında kare istemez, yalnızca zamanlayıcıları kalır.
 - **Showcase kimsenin görmediğini durdurur**: dönen çarkı ve yaşam döngüsü bölümünün oynatıcısı (döngüdeki bir
-  `Animatable`, tıklayan bir eşyordam), bir uygulamanın yapacağı gibi görüş dışındayken durur (`onVisibilityChanged`).
+  `Animatable`, tıklayan bir eşyordam), bir uygulamanın yapacağı gibi görüş dışındayken durur (`onVisibilityChanged`);
+  sayfa kaydıkça her karede onu izleyen konum bölümü bölümün tamamını değil, yalnızca iki sayı satırını yeniden oluşturur.
   Görüş dışında çizilenin bir şey istememesiyle birlikte, masaüstünde kendi haline bırakılan showcase'in Bileşenler
   ekranı saniyede 60 kareden 2'ye indi (yaşam döngüsü bölümünün saati).
 - **Kaydırmak kayanı dolaşmaz**: yeniden ölçülmeden taşınan bir şey (bir listenin içeriği) içindeki yerleri yazıldıkları

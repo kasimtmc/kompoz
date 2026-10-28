@@ -324,7 +324,8 @@
   draws, instead of a coroutine writing it every frame; between passes and when a pass ends it waits on a timer. Out of
   view it asks for no frames, only its timers are left.
 - **The showcase stops what nobody sees**: its spinning gear and its lifecycle section's player (an `Animatable` in a
-  loop, a ticking coroutine) stop while out of view (`onVisibilityChanged`), as an app would. With the drawing out of
+  loop, a ticking coroutine) stop while out of view (`onVisibilityChanged`), as an app would; its position section,
+  which follows the page on every frame it scrolls, composes only its two lines of numbers again, not the section. With the drawing out of
   view asking for nothing, the showcase's Components screen left alone on a desktop went from 60 frames a second to 2
   (its lifecycle section's clock).
 - **Scrolling doesn't walk what scrolls**: what is moved without being measured again (a list's content) leaves the

@@ -190,17 +190,20 @@ void PositionSection(CallSite site) {
         auto placedTimes = remember([] { return std::make_shared<int>(0); });
         auto placed = remember([] { return mutableStateOf(0); });
         Section("onGloballyPositioned · onPlaced · LayoutCoordinates", [&] {
-            LayoutCoordinates c = where.get();
-            float shown = c.size().height > 0 ? c.boundsInRoot().height / c.size().height : 0.f;
             Column(Modifier().fillMaxWidth().background(cs.tertiaryContainer, 16).padding(16)
                        .onGloballyPositioned([where](const LayoutCoordinates& now) { where.set(now); })
                        .onPlaced([placedTimes, placed](const LayoutCoordinates&) { placed.set(++*placedTimes); }),
                    {.verticalArrangement = Arrangement::spacedBy(4)}, [&] {
-                       Text(std::format("Ekranda: x {:.0f}, y {:.0f} dp · {:.0f} × {:.0f}", c.positionInRoot().x, c.positionInRoot().y,
-                                        c.size().width, c.size().height),
-                            {.font = typography().titleSmall, .color = cs.onTertiaryContainer});
-                       Text(std::format("Görünen kısmı: %{:.0f} · onPlaced {} kez", shown * 100, placed.get()),
-                            {.font = typography().bodyMedium, .color = cs.onTertiaryContainer});
+                       // Read here, not around the section: as it moves, only these lines are composed again.
+                       composable(CallSite::current(), [where, placed, color = cs.onTertiaryContainer] {
+                           LayoutCoordinates c = where.get();
+                           float shown = c.size().height > 0 ? c.boundsInRoot().height / c.size().height : 0.f;
+                           Text(std::format("Ekranda: x {:.0f}, y {:.0f} dp · {:.0f} × {:.0f}", c.positionInRoot().x, c.positionInRoot().y,
+                                            c.size().width, c.size().height),
+                                {.font = typography().titleSmall, .color = color});
+                           Text(std::format("Görünen kısmı: %{:.0f} · onPlaced {} kez", shown * 100, placed.get()),
+                                {.font = typography().bodyMedium, .color = color});
+                       });
                        Text("Sayfayı kaydırın: konum her karede güncellenir; onPlaced yalnızca boyutu ya da ebeveynindeki yeri değişince çağrılır.",
                             {.font = typography().bodySmall, .color = cs.onTertiaryContainer});
                    });
