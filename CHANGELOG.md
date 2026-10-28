@@ -305,6 +305,10 @@
 - **An app run by a script that can't start says so in its log**: with `KOMPOZ_SCRIPT` set (as on CI) no message box
   waits for someone to close it. Conan Center's SDL has no OpenGL ES on Windows, so an app built with Conan draws with
   Vulkan only there (ANGLE needs an SDL with EGL); the Conan test draws on Mesa's lavapipe built for Windows.
+- **The inside of a rounded rect costs the GPU next to nothing**: a pixel's coverage of a rounded rect (fills, layers,
+  rounded clips) was worked out exactly at every pixel; one whose box lies inside every edge, past the corners' radii
+  on one axis, is wholly covered, as the exact sum says, and is now taken as such. Drawing all of the showcase's
+  Components screen took a Xiaomi 14 Ultra's GPU 5.3–5.6 ms instead of 6.1 (its rounded rects alone 4.2 instead of 6).
 - **An idle app on Android leaves the CPU alone**: SDL's `SDL_WaitEvent` spun on Android instead of waiting (pumping
   events pushes SDL's poll sentinel, which wakes the wait at once), so whenever there was nothing to do, the app's main
   thread kept a whole core busy: about a million passes a second. `scripts/patches/` fixes it in SDL 3.4.18 (also not

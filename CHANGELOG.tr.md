@@ -322,6 +322,11 @@
   birinin kapatmasını bekleyen bir ileti kutusu açılmaz. Conan Center'ın SDL'inde Windows'ta OpenGL ES yoktur; bu yüzden
   Conan ile derlenen bir uygulama orada yalnızca Vulkan ile çizer (ANGLE, EGL'li bir SDL ister); Conan testi Windows
   için derlenmiş Mesa lavapipe'ında çizer.
+- **Yuvarlak köşeli dikdörtgenin içi GPU'ya neredeyse bedava**: bir pikselin yuvarlak köşeli dikdörtgen tarafından ne
+  kadar kaplandığı (dolgular, katmanlar, yuvarlak kırpmalar) her pikselde kesin olarak hesaplanıyordu; kutusu bütün
+  kenarların içinde kalan ve bir eksende köşe yarıçaplarını aşan piksel, kesin toplamın da söylediği gibi tamamen
+  kaplıdır ve artık öyle alınır. Showcase'in Bileşenler ekranının tamamını çizmek bir Xiaomi 14 Ultra'nın GPU'sunda
+  6,1 yerine 5,3–5,6 ms sürdü (yalnızca yuvarlak dikdörtgenler 6 yerine 4,2).
 - **Android'de boştaki uygulama işlemciyi rahat bırakır**: SDL'in `SDL_WaitEvent`'i Android'de beklemek yerine
   dönüyordu (olayları pompalamak SDL'in yoklama sınır olayını kuyruğa ekler, bu da beklemeyi hemen uyandırır); bu
   yüzden yapacak bir şey olmadığında uygulamanın ana iş parçacığı bir çekirdeği tamamen meşgul ediyordu: saniyede

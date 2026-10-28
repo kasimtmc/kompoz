@@ -244,6 +244,13 @@ float edgeCoverage(float d, float2 g) {
 // exactly (a corner as the two edges' product, which is exact while it is square to the screen),
 // a rounded corner by the circle's edge where the pixel is.
 float roundRectCoverage(float2 p, float4 rect, float4 radii, float2 dx, float2 dy) {
+    // Well inside (most of a big rect's pixels): all of it, as below works out, without the work.
+    // The pixel's box reaches `half` from p; past every corner's radius on one axis, the box's
+    // reach on the other is all the edges there need.
+    float2 half = 0.5 * float2(abs(dx.x) + abs(dy.x), abs(dx.y) + abs(dy.y));
+    float2 inset = min(p - rect.xy, rect.zw - p);
+    float rmax = max(max(radii.x, radii.y), max(radii.z, radii.w));
+    if (all(inset >= half) && (inset.x >= rmax || inset.y >= rmax)) return 1;
     float2 gx = float2(dx.x, dy.x), gy = float2(dx.y, dy.y);  // how x and y change across and down
     float across = edgeCoverage(rect.x - p.x, -gx) + edgeCoverage(p.x - rect.z, gx) - 1;
     float down = edgeCoverage(rect.y - p.y, -gy) + edgeCoverage(p.y - rect.w, gy) - 1;
