@@ -344,6 +344,10 @@
   dolduruyorsa başlamaz: içindekiler tutulur, kalanlar eskisi gibi çizilir, her karede hepsi yeniden taranmaz. Bir
   Redmi Note 9 Pro'da Ana sayfa ile Bileşenler sekmeleri arasında beş kez gidip gelmek 36 yerine 20–22 tazeleme
   kaçırdı. `KOMPOZ_PROFILE` yavaş karelerinde çizilen ve tutulan yolları sayar.
+- **Bir Morph on kat hızlı yapılır**: bir Morph'un iki şeklinden de aldığı `polarRadii`, her yönü her kenarla denemek
+  yerine her kenarı yalnızca ortadan bakınca kapsadığı yönlerle (ve her yandan bir fazlasıyla; ortadan geçen ya da
+  ortaya değen bir kenarı hepsiyle) dener: aynı yarıçaplar, tam olarak, zamanın onda birinde (masaüstünde bir ana hat
+  için 0,106 yerine 0,011 ms). Showcase'in Bileşenler ekranını oluşturmanın üçte biriydi.
 - **Bir dolgunun ve bir katmanın içi GPU'ya az maliyetli**: tek renkli yuvarlak bir dikdörtgenin ya da bir katmanın
   iyice içindeki bir piksel (kenarlarından en az yarım piksel, bir eksende köşe yarıçaplarından da içeride), kırpma,
   renk süzgeci ya da perspektif yoksa rengini, ya da katmanın texelini onun alfasıyla, köşe gölgelendiricisinin

@@ -281,22 +281,32 @@ const std::array<Named, 35>& all() {
 } // namespace MaterialShapes
 
 std::vector<float> polarRadii(const ShapeOutline& outline, int n) {
-    std::vector<float> radii(size_t(n), 0.f);
+    std::vector<float> radii(size_t(n), 0.f), dxs(size_t(n), 0.f), dys(size_t(n), 0.f);
+    for (int i = 0; i < n; ++i) {
+        float a = 2 * kPi * float(i) / float(n);
+        dxs[size_t(i)] = std::cos(a), dys[size_t(i)] = std::sin(a);
+    }
     const auto& p = outline.points;
     size_t m = p.size();
-    for (int i = 0; i < n; ++i) {
-        float a = 2 * kPi * float(i) / float(n), dx = std::cos(a), dy = std::sin(a);
-        float best = 0;
-        for (size_t k = 0; k < m; ++k) {  // where the ray from the middle crosses each edge
-            Offset u{p[k].x - 0.5f, p[k].y - 0.5f}, v{p[(k + 1) % m].x - 0.5f, p[(k + 1) % m].y - 0.5f};
-            Offset e{v.x - u.x, v.y - u.y};
+    float step = 2 * kPi / float(n);
+    for (size_t k = 0; k < m; ++k) {  // where each edge crosses the rays from the middle it can
+        Offset u{p[k].x - 0.5f, p[k].y - 0.5f}, v{p[(k + 1) % m].x - 0.5f, p[(k + 1) % m].y - 0.5f};
+        Offset e{v.x - u.x, v.y - u.y};
+        // The directions it spans seen from the middle (the shorter way round), a ray more each
+        // way; all of them for an edge at or across the middle.
+        float a0 = std::atan2(u.y, u.x), span = std::remainder(std::atan2(v.y, v.x) - a0, 2 * kPi);
+        bool across = std::hypot(u.x, u.y) < 1e-3f || std::hypot(v.x, v.y) < 1e-3f || std::abs(span) > kPi - 1e-2f;
+        int first = across ? 0 : int(std::floor(std::min(a0, a0 + span) / step)) - 1;
+        int last = across ? n - 1 : int(std::ceil(std::max(a0, a0 + span) / step)) + 1;
+        for (int j = first; j <= last && j - first < n; ++j) {
+            size_t i = size_t((j % n + n) % n);
+            float dx = dxs[i], dy = dys[i];
             float denom = dx * e.y - dy * e.x;
             if (std::abs(denom) < 1e-9f) continue;
             float t = (u.x * e.y - u.y * e.x) / denom;  // along the ray
             float s = (u.x * dy - u.y * dx) / denom;    // along the edge
-            if (t >= 0 && s >= -1e-5f && s <= 1 + 1e-5f) best = std::max(best, t);
+            if (t >= 0 && s >= -1e-5f && s <= 1 + 1e-5f) radii[i] = std::max(radii[i], t);
         }
-        radii[size_t(i)] = best;
     }
     return radii;
 }

@@ -18669,6 +18669,28 @@ TEST(material_shapes_fill_the_unit_square_and_morph) {
     CHECK(wide.points.size() == 4 && near(wide.points[0].y, 0.25f) && near(wide.points[2].y, 0.75f) && near(wide.points[1].x, 1));
     ShapeOutline star = roundedStar(5, 0.5f, 0, 0);  // tips every 72 degrees, the first at the top
     CHECK(star.points.size() == 10 && near(star.points[0].x, 0.5f) && near(star.points[0].y, 0) && star.points[1].y > 0.2f);
+    // Each edge tried against the rays it can cross alone: what every ray against every edge finds.
+    auto everyRay = [](const ShapeOutline& o, int n) {
+        std::vector<float> radii(size_t(n), 0.f);
+        const auto& p = o.points;
+        for (int i = 0; i < n; ++i) {
+            float a = 2 * std::numbers::pi_v<float> * float(i) / float(n), dx = std::cos(a), dy = std::sin(a);
+            for (size_t k = 0; k < p.size(); ++k) {
+                Offset u{p[k].x - 0.5f, p[k].y - 0.5f}, v{p[(k + 1) % p.size()].x - 0.5f, p[(k + 1) % p.size()].y - 0.5f};
+                Offset e{v.x - u.x, v.y - u.y};
+                float denom = dx * e.y - dy * e.x;
+                if (std::abs(denom) < 1e-9f) continue;
+                float t = (u.x * e.y - u.y * e.x) / denom, s = (u.x * dy - u.y * dx) / denom;
+                if (t >= 0 && s >= -1e-5f && s <= 1 + 1e-5f) radii[size_t(i)] = std::max(radii[size_t(i)], t);
+            }
+        }
+        return radii;
+    };
+    ShapeOutline throughTheMiddle{{{0.5f, 0.5f}, {1, 0.2f}, {1, 0.8f}}}, crossing{{{0, 0.5f}, {1, 0.5f}, {1, 1}, {0, 1}}};
+    for (const ShapeOutline* o : {&throughTheMiddle, &crossing, &wide, &star})
+        for (int n : {4, 7, 180}) CHECK(polarRadii(*o, n) == everyRay(*o, n));
+    for (const auto& named : all())
+        for (int n : {36, 180, 720}) CHECK(polarRadii(named.outline(), n) == everyRay(named.outline(), n));
     // A morph: the start, the end, half way between; each step its own outline, made once.
     Morph morph(Circle(), Square());
     auto a = polarRadii(Circle(), 8), b = polarRadii(Square(), 8);

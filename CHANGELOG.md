@@ -325,6 +325,10 @@
   frame's paths fill most of it themselves: then those in it are kept and the rest drawn as before, rather than all
   rasterized again each frame. Going between the Home and Components tabs five times on a Redmi Note 9 Pro missed
   20–22 refreshes instead of 36. `KOMPOZ_PROFILE` counts paths drawn and kept in its slow frames.
+- **A Morph is made ten times faster**: `polarRadii`, which a Morph takes of both its shapes, tries each edge only
+  against the directions it spans seen from the middle (and one more each way; all of them for an edge at or across
+  the middle) instead of every direction against every edge: the same radii, exactly, for a tenth of the time (0.011
+  ms an outline on the desktop instead of 0.106). It was a third of composing the showcase's Components screen.
 - **A fill's and a layer's inside cost the GPU little**: a pixel well inside a solid rounded rect or a layer (half a
   pixel or more in from its edges, and its corners' radii on one axis), with no clip, color filter or perspective,
   takes its color, or the layer's texel at its alpha, from one value the vertex shader works out, not from the 14 the
