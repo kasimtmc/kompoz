@@ -322,6 +322,8 @@
   birinin kapatmasını bekleyen bir ileti kutusu açılmaz. Conan Center'ın SDL'inde Windows'ta OpenGL ES yoktur; bu yüzden
   Conan ile derlenen bir uygulama orada yalnızca Vulkan ile çizer (ANGLE, EGL'li bir SDL ister); Conan testi Windows
   için derlenmiş Mesa lavapipe'ında çizer.
+- Android'de **`kompoz-full-redraw`**, başka yerlerdeki `KOMPOZ_FULL_REDRAW` gibi: her kare sıfırdan çizilir; ekranın
+  tamamını çizmenin maliyeti için.
 - **Yuvarlak bir kırpmanın dışına taşmayan kırpılmaz**: yuvarlak bir kırpmanın kenarlarının içinde ve köşelerinden
   uzakta kalan bir ilkel (bir kartın içeriği), zaten her pikselini tamamen kaplayacak olan kırpma olmadan çizilir:
   onun için piksel başına kırpma yok. Bileşenler ekranının tamamını çizmek bir Xiaomi 14 Ultra'nın GPU'sunda 5,3–5,6

@@ -121,7 +121,7 @@ Android has no environment variables, so there the profiler looks for a file in 
 adb shell run-as dev.kompoz.showcase touch files/kompoz-profile
 ```
 
-Where `run-as` is refused (SELinux: a LineageOS build, for one), these files (`kompoz-profile`, `kompoz-damage-check`, `kompoz-keep-check`, `kompoz-script`, `kompoz-gpu`) can go in the app's external files instead: `adb shell touch /sdcard/Android/data/dev.kompoz.showcase/files/kompoz-profile`.
+Where `run-as` is refused (SELinux: a LineageOS build, for one), these files (`kompoz-profile`, `kompoz-damage-check`, `kompoz-keep-check`, `kompoz-full-redraw`, `kompoz-script`, `kompoz-gpu`) can go in the app's external files instead: `adb shell touch /sdcard/Android/data/dev.kompoz.showcase/files/kompoz-profile`.
 
 A script, too, comes from a file there (the same commands; a frame benchmark repeats on every device):
 
@@ -133,7 +133,7 @@ Kompoz records each frame first and draws again only what changed since the fram
 
 - `KOMPOZ_DAMAGE_SHOW=1` outlines what was drawn again in each frame (each of its areas).
 - `KOMPOZ_DAMAGE_CHECK=1` also draws each frame from scratch and logs any pixel that differs (on Android, a file named `kompoz-damage-check` in the app's files, as `kompoz-profile` above).
-- `KOMPOZ_FULL_REDRAW=1` draws every frame from scratch.
+- `KOMPOZ_FULL_REDRAW=1` draws every frame from scratch (on Android, a file named `kompoz-full-redraw`): with `KOMPOZ_PROFILE`, what drawing all of the screen costs the GPU.
 - `KOMPOZ_KEEP_CHECK=1` also records each frame drawing every node and logs where what the frame kept of the nodes that didn't change differs from it, with the number of such frames at exit (on Android, a file named `kompoz-keep-check`).
 
 ## Environment variables

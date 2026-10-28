@@ -305,6 +305,8 @@
 - **An app run by a script that can't start says so in its log**: with `KOMPOZ_SCRIPT` set (as on CI) no message box
   waits for someone to close it. Conan Center's SDL has no OpenGL ES on Windows, so an app built with Conan draws with
   Vulkan only there (ANGLE needs an SDL with EGL); the Conan test draws on Mesa's lavapipe built for Windows.
+- **`kompoz-full-redraw`** on Android, as `KOMPOZ_FULL_REDRAW` elsewhere: every frame drawn from scratch, for what
+  drawing all of the screen costs.
 - **What lies clear of a rounded clip isn't clipped**: a primitive inside a rounded clip's edges and clear of its
   corners (a card's content) is drawn without the clip, which would have covered all of each of its pixels anyway:
   no per-pixel clip for it. Drawing all of the Components screen took a Xiaomi 14 Ultra's GPU 4.9 ms instead of 5.3–5.6.

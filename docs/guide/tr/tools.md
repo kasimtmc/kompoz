@@ -121,7 +121,7 @@ Android'de ortam değişkeni yoktur; orada profil aracı uygulamanın depolamas�
 adb shell run-as dev.kompoz.showcase touch files/kompoz-profile
 ```
 
-`run-as`'in reddedildiği yerde (SELinux: örneğin bir LineageOS derlemesi) bu dosyalar (`kompoz-profile`, `kompoz-damage-check`, `kompoz-keep-check`, `kompoz-script`, `kompoz-gpu`) uygulamanın harici dosyalarına da konabilir: `adb shell touch /sdcard/Android/data/dev.kompoz.showcase/files/kompoz-profile`.
+`run-as`'in reddedildiği yerde (SELinux: örneğin bir LineageOS derlemesi) bu dosyalar (`kompoz-profile`, `kompoz-damage-check`, `kompoz-keep-check`, `kompoz-full-redraw`, `kompoz-script`, `kompoz-gpu`) uygulamanın harici dosyalarına da konabilir: `adb shell touch /sdcard/Android/data/dev.kompoz.showcase/files/kompoz-profile`.
 
 Bir betik de oradaki bir dosyadan gelir (aynı komutlar; bir kare ölçümü her cihazda aynı tekrarlanır):
 
@@ -133,7 +133,7 @@ Kompoz her kareyi önce kaydeder ve yalnızca bir önceki kareden beri değişen
 
 - `KOMPOZ_DAMAGE_SHOW=1` her karede yeniden çizilenin (her bir alanının) çevresini çizer.
 - `KOMPOZ_DAMAGE_CHECK=1` her kareyi ayrıca sıfırdan çizer ve farklı çıkan her pikseli günlüğe yazar (Android'de, yukarıdaki `kompoz-profile` gibi uygulamanın dosyalarında `kompoz-damage-check` adlı bir dosya).
-- `KOMPOZ_FULL_REDRAW=1` her kareyi sıfırdan çizer.
+- `KOMPOZ_FULL_REDRAW=1` her kareyi sıfırdan çizer (Android'de `kompoz-full-redraw` adlı bir dosya): `KOMPOZ_PROFILE` ile birlikte, ekranın tamamını çizmenin GPU'ya maliyetini gösterir.
 - `KOMPOZ_KEEP_CHECK=1` her kareyi ayrıca her düğümü çizerek kaydeder; karenin değişmeyen düğümlerden tuttuğu şeyin bundan farklı çıktığı yeri, çıkışta da böyle karelerin sayısını günlüğe yazar (Android'de `kompoz-keep-check` adlı bir dosya).
 
 ## Ortam değişkenleri

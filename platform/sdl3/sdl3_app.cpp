@@ -1337,12 +1337,14 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     //   adb shell run-as <package> touch files/kompoz-profile
     // or, where run-as is refused (SELinux), in its external storage, which the app creates:
     //   adb shell touch /sdcard/Android/data/<package>/files/kompoz-profile
-    // and kompoz-damage-check, KOMPOZ_DAMAGE_CHECK; kompoz-keep-check, KOMPOZ_KEEP_CHECK.
+    // and kompoz-damage-check, KOMPOZ_DAMAGE_CHECK; kompoz-keep-check, KOMPOZ_KEEP_CHECK;
+    // kompoz-full-redraw, KOMPOZ_FULL_REDRAW.
     for (const char* dir : {SDL_GetAndroidInternalStoragePath(), SDL_GetAndroidExternalStoragePath()}) {
         if (!dir) continue;
         app->profile = app->profile || SDL_GetPathInfo((std::string(dir) + "/kompoz-profile").c_str(), nullptr);
         app->damageCheck = app->damageCheck || SDL_GetPathInfo((std::string(dir) + "/kompoz-damage-check").c_str(), nullptr);
         app->keepCheck = app->keepCheck || SDL_GetPathInfo((std::string(dir) + "/kompoz-keep-check").c_str(), nullptr);
+        app->fullRedraw = app->fullRedraw || SDL_GetPathInfo((std::string(dir) + "/kompoz-full-redraw").c_str(), nullptr);
     }
 #endif
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
