@@ -1,5 +1,6 @@
 // Modifier::basicMarquee: content too wide for its room scrolling through it, as on a ticker.
 
+#include <kompoz/animation.hpp>
 #include <kompoz/coroutines.hpp>
 #include <kompoz/host.hpp>
 #include <kompoz/layout.hpp>
@@ -18,14 +19,19 @@ struct MarqueeWidths {
     friend bool operator==(const MarqueeWidths&, const MarqueeWidths&) = default;
 };
 
-// Kept in the composition: the widths (a change restarts the scrolling), the focus, and how far
-// it has scrolled, which only the drawing reads (a frame of scrolling lays nothing out).
+// Kept in the composition: the widths (a change restarts the scrolling), the focus, and when the
+// pass under way began, which only the drawing reads: it scrolls as it is drawn, by the frame's
+// time (a frame of scrolling composes and lays out nothing, and one out of view asks for none).
 struct MarqueeData {
     MutableState<MarqueeWidths> widths = mutableStateOf(MarqueeWidths{});
     MutableState<bool> focused = mutableStateOf(false);
-    MutableState<float> offset = mutableStateOf(0.f);  // dp, from 0 to `distance` (read while drawing: drawn again)
+    MutableState<int64_t> passStart = mutableStateOf(int64_t(-1));  // a frame's time (ns); none: at the start
     float distance = 0;  // the content and the gap after it: where its copy follows
+    float speed = 0;     // dp a second
 };
+
+// A pass's length: from the start to where the copy was, at `speed` dp a second.
+int64_t passNanos(float distance, float speed) { return int64_t(std::ceil(double(distance) / speed * 1e9)); }
 
 struct MarqueeElement final : ModifierElement {
     std::shared_ptr<MarqueeData> data;
@@ -41,7 +47,13 @@ struct MarqueeElement final : ModifierElement {
 
     void draw(GraphicsContext& g, const Rect& bounds, const LayoutNode& node, const std::function<void()>& drawContent) const override {
         const MarqueeData& d = *data;
-        float offset = d.offset.get();
+        // How far the pass has scrolled (dp, from 0 to `distance`); drawn on until it ends.
+        float offset = 0;
+        if (int64_t start = d.passStart.get(); start >= 0 && node.host()) {
+            int64_t now = node.host()->frameTime();
+            offset = std::min(d.distance, float(now - start) / 1e9f * d.speed);
+            if (int64_t end = start + passNanos(d.distance, d.speed); now < end) detail::animationNextFrame(node.host(), end);
+        }
         g.pushClip(bounds);
         if (offset <= 0) {
             drawContent();
@@ -79,24 +91,19 @@ struct MarqueeRun {
     bool operator==(const MarqueeRun&) const = default;
 };
 
-// The passes: each one from the start to where the copy was, at `speed` dp per second, then
-// back to the start (where the copy is now, so nothing jumps).
+// The passes: each one from the start to where the copy was (drawn as it goes), then back to the
+// start (where the copy is now, so nothing jumps).
 Task scroll(std::shared_ptr<MarqueeData> data, MarqueeRun run) {
     data->distance = run.distance;
-    data->offset.set(0);
+    data->speed = run.speed;
+    data->passStart.set(-1);
     if (!run.running) co_return;
-    float seconds = run.distance / run.speed;
     if (run.initialDelay > 0) co_await delay(std::chrono::milliseconds(run.initialDelay));
     for (int i = 0; run.iterations == MarqueeDefaults::Forever || i < run.iterations; ++i) {
         if (i > 0 && run.repeatDelay > 0) co_await delay(std::chrono::milliseconds(run.repeatDelay));
-        int64_t start = co_await awaitFrame();
-        float t = 0;
-        while (t < seconds) {
-            int64_t now = co_await awaitFrame();
-            t = float(now - start) / 1e9f;
-            data->offset.set(std::min(run.distance, t * run.speed));
-        }
-        data->offset.set(0);
+        data->passStart.set(co_await awaitFrame());
+        co_await delay(std::chrono::nanoseconds(passNanos(run.distance, run.speed)));
+        data->passStart.set(-1);
     }
 }
 

@@ -306,6 +306,9 @@
   its draws its clips leave nothing of: `GraphicsContext::endedNodeShows`). Scrolled out of view, an endless one asks for
   none and is drawn again in the first frame there is, which goes on where its time has taken it once it is back. An
   endless animation drawn once no longer keeps frames coming after it has gone.
+- **A marquee scrolls as it is drawn**: `basicMarquee` takes how far its pass has gone from the frame's time as it
+  draws, instead of a coroutine writing it every frame; between passes and when a pass ends it waits on a timer. Out of
+  view it asks for no frames, only its timers are left.
 - **Scrolling doesn't walk what scrolls**: what is moved without being measured again (a list's content) leaves the
   places in it as they were written down, worked out when asked for and written down when drawn. Scrolling the
   showcase's Components screen spent 1% of the main thread on places instead of 16%.

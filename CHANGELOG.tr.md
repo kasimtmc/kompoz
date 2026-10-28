@@ -322,6 +322,9 @@
   şey bırakmadığı çizimlerini bilir: `GraphicsContext::endedNodeShows`). Kaydırılıp görüş dışına çıkan hiç bitmeyen bir
   animasyon kare istemez ve olan ilk karede yeniden çizilir; geri geldiğinde zamanının getirdiği yerden sürer. Bir kez
   çizilen hiç bitmeyen bir animasyon, gittikten sonra artık kare getirmeyi sürdürmez.
+- **Kayan yazı çizilirken kayar**: `basicMarquee`, geçişinin ne kadar ilerlediğini her karede yazan bir eşyordam
+  yerine çizerken karenin zamanından alır; geçişler arasında ve bir geçiş bittiğinde bir zamanlayıcıyla bekler. Görüş
+  dışında kare istemez, yalnızca zamanlayıcıları kalır.
 - **Kaydırmak kayanı dolaşmaz**: yeniden ölçülmeden taşınan bir şey (bir listenin içeriği) içindeki yerleri yazıldıkları
   gibi bırakır; istendiklerinde hesaplanır, çizildiklerinde yazılırlar. Showcase'in Bileşenler ekranını kaydırmak ana
   thread'in %16 yerine %1'ini yerlere harcadı.

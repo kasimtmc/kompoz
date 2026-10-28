@@ -25227,6 +25227,36 @@ TEST(basic_marquee_scrolls_what_doesnt_fit_and_its_copy_follows) {
     CHECK(redRects(rule)[0].x == 10 && !rule.host().hasPendingWork() && !rule.host().hasTimers());
 }
 
+TEST(a_marquee_out_of_view_leaves_only_its_timers) {
+    // It scrolls as it is drawn (by the frame's time): out of view, only the timers of its
+    // passes are left; in view, its pass asks for frames.
+    ScrollState scroll;
+    auto on = mutableStateOf(false);
+    ComposeTestRule rule([&] {
+        Column(Modifier().height(200).verticalScroll(scroll), [&] {
+            Box(Modifier().size(100, 300));
+            Box(Modifier().width(100).basicMarquee({.iterations = on.get() ? MarqueeDefaults::Forever : 0, .initialDelayMillis = 0}),
+                [&] { Box(Modifier().size(200, 20).background(Color{1, 0, 0, 1})); });
+        });
+    }, {400, 800});
+    DisplayList list(rule.host().textMeasurer());
+    auto frame = [&] {
+        list.begin({400, 800}, 0.5f);
+        rule.host().draw(list);
+        return list.end();
+    };
+    on.set(true);
+    rule.advanceTimeBy(100);  // a pass under way
+    frame();
+    CHECK(!rule.host().hasPendingWork() && rule.host().hasTimers());
+    scroll.scrollTo(150);
+    rule.advanceFrame();  // (not waiting for idle: that is the pass's end)
+    frame();
+    CHECK(rule.host().hasPendingWork());
+    rule.advanceTimeBy(100);
+    CHECK(frame());  // moved on
+}
+
 TEST(basic_marquee_leaves_alone_what_fits_and_starts_again_when_it_grows) {
     auto width = mutableStateOf(80.f);
     auto rtl = mutableStateOf(false);
