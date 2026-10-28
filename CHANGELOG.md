@@ -305,6 +305,10 @@
 - **An app run by a script that can't start says so in its log**: with `KOMPOZ_SCRIPT` set (as on CI) no message box
   waits for someone to close it. Conan Center's SDL has no OpenGL ES on Windows, so an app built with Conan draws with
   Vulkan only there (ANGLE needs an SDL with EGL); the Conan test draws on Mesa's lavapipe built for Windows.
+- **The showcase's Components screen is a LazyColumn**: as a long list is in Compose, only the sections in view (and
+  a little past them) are composed, laid out and drawn. Going between the Home and Components tabs five times on a
+  Redmi Note 9 Pro took 1.6 s of the main thread instead of 4.5, its composition and layout 0.6 s instead of 3.2;
+  opening Components again took 19–35 ms of composition and layout instead of 150–220.
 - **Line breaking lays each run out once**: wrapping measured the line so far again at every word, each time laying out
   a new piece of text (and filling the font system's cache with them, which it then emptied); it now lays each run out
   once and sums what its clusters add (`TextMeasurer::clusterAdvances`, as Android's line breaker does with a

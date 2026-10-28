@@ -322,6 +322,10 @@
   birinin kapatmasını bekleyen bir ileti kutusu açılmaz. Conan Center'ın SDL'inde Windows'ta OpenGL ES yoktur; bu yüzden
   Conan ile derlenen bir uygulama orada yalnızca Vulkan ile çizer (ANGLE, EGL'li bir SDL ister); Conan testi Windows
   için derlenmiş Mesa lavapipe'ında çizer.
+- **Showcase'in Bileşenler ekranı bir LazyColumn**: Compose'da uzun bir listenin olduğu gibi yalnızca görünen
+  bölümler (ve biraz ötesi) oluşturulur, yerleştirilir ve çizilir. Bir Redmi Note 9 Pro'da Ana sayfa ile Bileşenler
+  sekmeleri arasında beş kez gidip gelmek ana iş parçacığında 4,5 yerine 1,6 s, bunun kompozisyonu ve yerleşimi 3,2
+  yerine 0,6 s sürdü; Bileşenler'i yeniden açmak 150–220 yerine 19–35 ms kompozisyon ve yerleşim aldı.
 - **Satır kırma her parçayı bir kez dizer**: satırlara bölme, her sözcükte satırın o ana kadarki kısmını yeniden ölçüyordu;
   her seferinde yeni bir metin parçasını diziyordu (ve yazı tipi sisteminin önbelleğini bunlarla doldurup sonra
   boşaltıyordu). Artık her parçayı bir kez dizer ve kümelerinin eklediklerini toplar (`TextMeasurer::clusterAdvances`;
