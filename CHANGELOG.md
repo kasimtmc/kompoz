@@ -305,6 +305,12 @@
 - **An app run by a script that can't start says so in its log**: with `KOMPOZ_SCRIPT` set (as on CI) no message box
   waits for someone to close it. Conan Center's SDL has no OpenGL ES on Windows, so an app built with Conan draws with
   Vulkan only there (ANGLE needs an SDL with EGL); the Conan test draws on Mesa's lavapipe built for Windows.
+- **A lazy list's first frame composes what fills its view**: with no item measured yet, it guessed items 48 dp tall
+  and composed a view and a half of those, which for tall items (the Components screen's sections) was nearly all of
+  them, composed and measured for nothing. It composes the first item now, then as many as the sizes say fill the view,
+  in the same frame, as Compose composes items as it measures them. Opening the Components tab the first time took the
+  desktop 18 ms of composition and layout instead of under 5. (What is focused or brought into view has to be
+  composed, as in Compose: an item half a view past the view no longer is just because the guess was short.)
 - **Pipelines are made ahead of the frames that need them**: the GPU renderer writes down each pipeline as it first
   needs it and, in the next runs, makes them again on a thread of its own in that order, where the device can (Vulkan).
   A Redmi Note 9 Pro's driver keeps none in its pipeline cache: each took 8–20 ms in the frame that first drew with it,

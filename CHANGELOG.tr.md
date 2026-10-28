@@ -322,6 +322,12 @@
   birinin kapatmasını bekleyen bir ileti kutusu açılmaz. Conan Center'ın SDL'inde Windows'ta OpenGL ES yoktur; bu yüzden
   Conan ile derlenen bir uygulama orada yalnızca Vulkan ile çizer (ANGLE, EGL'li bir SDL ister); Conan testi Windows
   için derlenmiş Mesa lavapipe'ında çizer.
+- **Tembel bir listenin ilk karesi görünümünü dolduracak kadarını oluşturur**: henüz hiçbir öğe ölçülmemişken
+  öğeleri 48 dp sayıp bir buçuk görünüm dolusunu oluşturuyordu; uzun öğelerde (Bileşenler ekranının bölümleri) bu,
+  neredeyse hepsini boşuna oluşturup ölçmek demekti. Artık ilk öğeyi oluşturur, sonra aynı karede boyların söylediği
+  kadarını; Compose'un öğeleri ölçerken oluşturması gibi. Bileşenler sekmesini ilk kez açmak masaüstünde 18 ms yerine
+  5 ms'nin altında kompozisyon ve yerleşim sürdü. (Odaklanan ya da görünüme getirilen şeyin oluşturulmuş olması
+  gerekir, Compose'daki gibi: görünümün yarım görünüm ötesindeki bir öğe artık tahmin kısa kaldı diye oluşturulmuş olmaz.)
 - **Boru hatları onlara ihtiyaç duyan karelerden önce yapılır**: GPU renderer'ı her boru hattını ilk gerektiğinde
   not eder ve sonraki çalıştırmalarda, aygıt izin veriyorsa (Vulkan) kendi iş parçacığında aynı sırayla yeniden yapar.
   Bir Redmi Note 9 Pro'nun sürücüsü boru hattı önbelleğinde hiçbirini tutmuyor: her biri, onunla ilk çizen karede 8–20

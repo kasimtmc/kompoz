@@ -1491,6 +1491,21 @@ TEST(lazy_column_composes_only_what_is_visible) {
     CHECK(list->children.size() < 80);   // plus half a screen of buffer, not 10,000
     CHECK(rule.onNodeWithText("row 0").exists());
     CHECK(!rule.onNodeWithText("row 500").exists());
+    // Items much taller than a guess: as many as fill the view and half a view more (composed as
+    // their sizes come in, in the first frame), not a view of 48 dp guesses.
+    int composed = 0;
+    ComposeTestRule tall(
+        [&] {
+            LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
+                list.items(100, [&](int i) {
+                    ++composed;
+                    Box(Modifier().fillMaxWidth().height(500).testTag("page " + std::to_string(i)));
+                });
+            });
+        },
+        {400, 800});
+    CHECK(tall.onNodeWithTag("page 1").exists() && tall.onNodeWithTag("page 2").exists() && !tall.onNodeWithTag("page 4").exists());
+    CHECK(composed <= 8);  // (the first alone, then the four it says: page 0 twice ... a few)
 }
 
 TEST(lazy_list_state_opens_at_an_item) {
@@ -10672,6 +10687,7 @@ TEST(animate_item_fades_a_removed_item_out_where_it_was) {
     auto drawn = [&](testing::RecordingCanvas& canvas, const std::string& text) {
         return std::find(canvas.texts.begin(), canvas.texts.end(), text) != canvas.texts.end();
     };
+    int composed1 = composed[1], composed2 = composed[2];  // (as the list was first composed and laid out)
     items.removeAt(0);
     tick.set(1);  // the list composes again; the leaving item doesn't (its data is gone)
     rule.advanceTimeBy(96);
@@ -10679,7 +10695,7 @@ TEST(animate_item_fades_a_removed_item_out_where_it_was) {
     rule.host().draw(mid);
     CHECK(drawn(mid, "öğe 1 · 0") && drawn(mid, "öğe 2 · 1"));  // shown as it last was
     CHECK(std::any_of(mid.layerAlphas.begin(), mid.layerAlphas.end(), [](float a) { return a > 0.3f && a < 0.7f; }));
-    CHECK(composed[1] == 1 && composed[2] >= 2);
+    CHECK(composed[1] == composed1 && composed[2] > composed2);
     CHECK(sameRect(rule.onNodeWithText("öğe 1 · 0").bounds(), {0, 0, 400, 50}));  // where it was
     rule.host().pointerDown({200, 5});  // on it: it takes no input
     rule.host().pointerUp({200, 5});
@@ -23216,9 +23232,9 @@ TEST(bring_into_view_spec_puts_the_focused_item_where_it_says) {
     items[12].requestFocus();
     rule.waitForIdle();
     CHECK(near(top("ö12"), 100));  // forwards: 100 dp in
-    items[3].requestFocus();
+    items[8].requestFocus();  // (composed: what is in view and half a view more)
     rule.waitForIdle();
-    CHECK(near(top("ö3"), 100));  // back: 100 dp in too
+    CHECK(near(top("ö8"), 100));  // back: 100 dp in too
     items[0].requestFocus();
     rule.waitForIdle();
     CHECK(near(top("ö0"), 0));  // as far as the list goes
@@ -23233,9 +23249,9 @@ TEST(bring_into_view_spec_puts_the_focused_item_where_it_says) {
     rule.waitForIdle();
     CHECK(near(top("büyük"), 0));
     // Along a row: from its start, the right one right to left.
-    row[10].requestFocus();
+    row[6].requestFocus();  // (composed: within half a view past the view)
     rule.waitForIdle();
-    CHECK(near(rule.onNodeWithTag("r10").bounds().x, 300 + 30));  // the row starts at x = 300
+    CHECK(near(rule.onNodeWithTag("r6").bounds().x, 300 + 30));  // the row starts at x = 300
     rtl.set(true);
     rule.waitForIdle();
     row[8].requestFocus();  // (composed: just out of view)

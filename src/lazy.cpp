@@ -89,10 +89,15 @@ struct LazyListState::Data {
         if (firstIndex.peek() != index) firstIndex.set(index);
     }
 
-    // Items that must be composed to fill the view (one extra on each side).
+    // Items that must be composed to fill the view (one extra on each side). None measured yet:
+    // the first alone, measured, then as many as its size says fill the view (composed in the
+    // same frame: the layout asks for them), as Compose composes items as it measures them; not
+    // a view of guessed 48 dp items, which for items much taller (a page of sections) composed
+    // and measured many more than fill it.
     std::pair<int, int> visibleRange() const {
         if (count == 0) return {0, 0};
         int start = first();
+        if (sizeCount == 0) return {start, start + 1};
         float view = viewport > 0 ? viewport : 1000.f;
         float covered = -firstOffset;
         int end = start;
@@ -104,6 +109,7 @@ struct LazyListState::Data {
     // scrolls don't need a recomposition.
     std::pair<int, int> composeRange() const {
         auto [start, end] = visibleRange();
+        if (sizeCount == 0) return {start, end};
         float extra = (viewport > 0 ? viewport : 1000.f) * 0.5f;
         for (float d = 0; start > 0 && d < extra;) d += sizeOf(--start) + spacing;
         for (float d = 0; end < count && d < extra;) d += sizeOf(end++) + spacing;
