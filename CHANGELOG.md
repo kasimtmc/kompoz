@@ -271,8 +271,8 @@
 - **Navigation items and top app bars animate without composing around them**: the navigation bar's, the short
   navigation bar's and the wide rail's items read their indicator as they lay it out and draw it, and give their icon
   and label their animated colors as states (only those are composed again); a top app bar's container color goes over
-  as it is drawn. An animation read while drawing keeps frames coming until it is done, drawn or not, and
-  `ComposeTestRule::waitForIdle` waits for it.
+  as it is drawn. An animation read while drawing keeps frames coming until it is done, drawn or not (one that never ends,
+  as long as it is drawn), and `ComposeTestRule::waitForIdle` waits for it.
 - **Transitions compose around them only as they start and end**: `AnimatedVisibility`, `AnimatedContent` (and so
   `NavHost` and `Crossfade`) and `animateEnterExit` read their progress as the content is laid out and drawn, as
   Compose's do, and compose their caller again when they get there (a frame asked for at that time), not on every frame
@@ -301,6 +301,11 @@
   the app with a message. Without a window (`SDL_VIDEO_DRIVER=offscreen`) Vulkan and Metal draw only into the kept
   frame, which screenshots are taken from. A Windows computer without a Vulkan driver (a virtual machine, Remote
   Desktop, CI) draws through ANGLE shipped with the app.
+- **What is drawn out of view asks for no frames**: the frames a node asks for as it draws (an animation drawn on, a
+  ripple, an indeterminate indicator) are asked for only if any of what it drew shows (a `DisplayList` tells which of
+  its draws its clips leave nothing of: `GraphicsContext::endedNodeShows`). Scrolled out of view, an endless one asks for
+  none and is drawn again in the first frame there is, which goes on where its time has taken it once it is back. An
+  endless animation drawn once no longer keeps frames coming after it has gone.
 - **Scrolling doesn't walk what scrolls**: what is moved without being measured again (a list's content) leaves the
   places in it as they were written down, worked out when asked for and written down when drawn. Scrolling the
   showcase's Components screen spent 1% of the main thread on places instead of 16%.

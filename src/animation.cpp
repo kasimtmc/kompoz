@@ -275,7 +275,10 @@ void detail::animationNextFrame(ComposeHost* host, int64_t end) {
     if (Composer* composer = Composer::current(); composer && composer->recording()) composer->requestFrame();
     else if (!host) return;
     else if (measuringNode()) host->requestLayoutFrame();
-    else host->requestRedraw(), host->animateDrawingUntil(end);
+    else {
+        host->requestRedraw();
+        if (end != INT64_MAX) host->animateDrawingUntil(end);  // (one that never ends: frames as long as it is drawn)
+    }
 }
 
 int64_t detail::animationEnd(const AnimationSpec& spec, int64_t start) {

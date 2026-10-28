@@ -1857,6 +1857,9 @@ public:
     // display_list.hpp); others ignore them.
     virtual void beginNode(const void* node) { (void)node; }
     virtual void endNode() {}
+    // Whether anything the node last ended (endNode) drew, with those in it, can show: false only
+    // where the canvas knows all of it was clipped away (a recording canvas: scrolled out of view).
+    virtual bool endedNodeShows() const { return true; }
     // Asked as a node is about to be drawn (before beginNode), where the canvas keeps what nodes
     // drew from one frame to the next (a DisplayList's frames, keepNodes): Kept, it drew again
     // what the node drew last frame, moved from where it was to `origin` (its top left),

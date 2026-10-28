@@ -2183,6 +2183,15 @@ LayoutNode* measuringNode();
 // The node being drawn, if any: a state read now is read by its drawing, and a redraw asked for
 // now is its (ComposeHost::requestRedraw).
 LayoutNode* drawingNode();
+// What the node being drawn asks of the frames to come (ComposeHost::requestRedraw and
+// animateDrawingUntil, as it draws): asked of its host once it has drawn, if any of what it drew
+// can show (GraphicsContext::endedNodeShows). One out of view asks for no frames: it is drawn
+// again (and asks again) in the first frame there is, which has it in view if it has come in.
+struct DrawAsk {
+    bool redraw = false;
+    int64_t until = 0;  // animateDrawingUntil's
+};
+DrawAsk* drawAsk();
 // Layout is in whole pixels, as Compose's (its sizes, constraints and places are Int px): the
 // px a dp of the host measuring now (1 with none), and a length in dp at the nearest whole px
 // there (a half up, as Kotlin's roundToInt; an infinite one as it is).

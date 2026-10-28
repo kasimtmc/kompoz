@@ -14052,6 +14052,79 @@ TEST(infinite_transition_states_are_read_where_they_are_needed) {
     CHECK(drawnOnly.host().hasPendingWork());
 }
 
+TEST(what_is_drawn_out_of_view_asks_for_no_frames) {
+    // The frames a node asks for as it draws (an animation drawn on) are asked for only if any of
+    // what it drew shows: scrolled out of view, an endless one asks for none, and goes on (where
+    // its time has taken it) in the first frame that brings it back.
+    ScrollState scroll;
+    std::vector<float> drawn;
+    ComposeTestRule rule([&] {
+        auto phase = rememberInfiniteTransition().animateFloatState(0, 1000, infiniteRepeatable(tween(1000, 0, LinearEasing)));
+        Column(Modifier().height(200).verticalScroll(scroll), [&] {
+            Box(Modifier().size(100, 300));
+            Canvas(Modifier().size(40), [phase, &drawn](DrawScope& d) {  // at 300: out of view
+                drawn.push_back(phase.get());
+                d.drawRect(Color{0, 1, 0, 1}, Offset{phase.get() / 100, 0}, Size{10, 10});
+            });
+        });
+    }, {400, 800});
+    DisplayList list(rule.host().textMeasurer());
+    list.keepNodes(true);  // (as an app's)
+    auto frame = [&] {
+        list.begin({400, 800}, 0.5f);
+        rule.host().draw(list);
+        return list.end();
+    };
+    frame();
+    CHECK(!drawn.empty() && !rule.host().hasPendingWork());
+    size_t draws = drawn.size();
+    rule.advanceTimeBy(100);
+    CHECK(!frame() && drawn.size() > draws && !rule.host().hasPendingWork());  // drawn again in a frame there is, still out of view
+    testing::RecordingCanvas canvas;  // a canvas that doesn't tell: as if it showed
+    rule.host().draw(canvas);
+    CHECK(rule.host().hasPendingWork());
+    rule.advanceFrame();
+    scroll.scrollTo(150);  // in view
+    rule.waitForIdle(0);
+    CHECK(frame() && rule.host().hasPendingWork());
+    float at = drawn.back();
+    rule.advanceTimeBy(100);
+    CHECK(frame() && rule.host().hasPendingWork() && drawn.back() != at);
+    scroll.scrollTo(0);
+    rule.waitForIdle(0);
+    frame();
+    CHECK(!rule.host().hasPendingWork());
+
+    // What it draws past its bounds counts: a node of no size out of view, drawing into it.
+    ComposeTestRule past([&] {
+        auto phase = rememberInfiniteTransition().animateFloatState(0, 10, infiniteRepeatable(tween(1000, 0, LinearEasing)));
+        Column(Modifier().height(200).verticalScroll(rememberScrollState()), [&] {
+            Box(Modifier().size(100, 300));
+            Canvas(Modifier().size(0), [phase](DrawScope& d) { d.drawCircle(Color{1, 0, 0, 1}, 10, Offset{20 + phase.get(), -150}); });
+        });
+    }, {400, 800});
+    DisplayList pastList(past.host().textMeasurer());
+    pastList.begin({400, 800}, 0.5f);
+    past.host().draw(pastList);
+    pastList.end();
+    CHECK(past.host().hasPendingWork());
+
+    // One that never ends asks for frames only as it is drawn: gone, it asks for none.
+    auto target = mutableStateOf(0.f);
+    auto shown = mutableStateOf(true);
+    ComposeTestRule endless([&] {
+        auto a = animateFloatAsState(target.get(), infiniteRepeatable(tween(500, 0, LinearEasing)));
+        if (shown.get()) Box(Modifier().size(40).drawBehind([a](DrawScope&) { (void)a.get(); }));
+    });
+    target.set(1);
+    endless.waitForIdle(0);
+    endless.host().draw(canvas);
+    CHECK(endless.host().hasPendingWork());
+    shown.set(false);
+    endless.waitForIdle(0);
+    CHECK(!endless.host().hasPendingWork());
+}
+
 TEST(a_size_probe_measures_afresh) {
     float full = 0, narrowest = 0;
     ComposeTestRule rule([&] {

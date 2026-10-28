@@ -83,6 +83,7 @@ public:
     NodeRecording recordNode(const void* node, Offset origin, bool unchanged) override;
     void beginNode(const void* node) override;
     void endNode() override;
+    bool endedNodeShows() const override { return endedShows_; }
     void fillRoundRect(const Rect& rect, const CornerRadii& radii, Color color) override;
     void strokeRoundRect(const Rect& rect, const CornerRadii& radii, float width, Color color) override;
     void drawLine(Offset from, Offset to, float width, Color color) override;
@@ -192,6 +193,7 @@ private:
     struct OpenNode {
         uint64_t key;
         uint64_t after = 0;  // the child the stretch being drawn follows (its key)
+        uint64_t shownBefore = 0;  // the draws that can show, recorded so far (by any list: a layer's too), as it began
     };
 
     Command& add(Kind kind);
@@ -290,6 +292,7 @@ private:
     bool allowMoves_ = false;
     bool keepNodes_ = false;
     int keptNodes_ = 0, drawnNodes_ = 0;
+    bool endedShows_ = true;  // whether the node last ended drew anything that can show
     mutable std::vector<Event> recordingEvents_;  // (quickReject and lightCenter tell them too)
     std::vector<Event> frameEvents_;
     std::vector<Range> recordingRanges_, frameRanges_;

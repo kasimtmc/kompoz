@@ -1715,10 +1715,12 @@ LayoutNode* detail::measuringNode() { return gMeasuring; }
 
 namespace {
 thread_local LayoutNode* gDrawing = nullptr;
+thread_local detail::DrawAsk* gAsk = nullptr;  // gDrawing's
 thread_local bool gKeptPass = false;  // drawing into a frame that keeps nodes (inside one drawn Fresh)
 } // namespace
 
 LayoutNode* detail::drawingNode() { return gDrawing; }
+detail::DrawAsk* detail::drawAsk() { return gAsk; }
 
 void LayoutNode::invalidateDraw() const {
     drawChanged_ = true;
@@ -1970,12 +1972,15 @@ void LayoutNode::draw(GraphicsContext& canvas) {
     if (kept) drawChanged_ = false;
     bool outerPass = std::exchange(gKeptPass, kept);
     LayoutNode* outer = std::exchange(gDrawing, this);
+    detail::DrawAsk ask, *outerAsk = std::exchange(gAsk, &ask);
     if (host_) host_->forgetDrawReads(*this);  // what it reads this time counts
     canvas.beginNode(this);
     drawLayer(canvas, 0);
     canvas.endNode();
     gDrawing = outer;
+    gAsk = outerAsk;
     gKeptPass = outerPass;
+    if (host_ && ask.redraw && canvas.endedNodeShows()) host_->redrawDrawn(ask.until);
 }
 
 void LayoutNode::drawAfter(GraphicsContext& canvas, const ModifierElement* element) {
@@ -1984,10 +1989,13 @@ void LayoutNode::drawAfter(GraphicsContext& canvas, const ModifierElement* eleme
         if (elements[i].get() == element) {
             settlePlace();  // (drawn on its own, out of the tree's order)
             LayoutNode* outer = std::exchange(gDrawing, this);
+            detail::DrawAsk ask, *outerAsk = std::exchange(gAsk, &ask);
             canvas.beginNode(this);
             drawLayer(canvas, i + 1);
             canvas.endNode();
             gDrawing = outer;
+            gAsk = outerAsk;
+            if (host_ && ask.redraw && canvas.endedNodeShows()) host_->redrawDrawn(ask.until);
             return;
         }
 }

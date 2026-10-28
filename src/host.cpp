@@ -1452,9 +1452,24 @@ ImageBitmap ComposeHost::loadImage(std::string_view path) {
 }
 
 void ComposeHost::requestRedraw() {
-    // Asked as a node is drawn (an animation drawn on): the next frame draws that node again.
-    if (LayoutNode* drawing = detail::drawingNode(); drawing && drawing->host() == this) drawing->invalidateDraw();
+    // Asked as a node is drawn (an animation drawn on): the next frame draws that node again, if
+    // any of it shows (asked once it has drawn).
+    if (LayoutNode* drawing = detail::drawingNode(); drawing && drawing->host() == this) {
+        drawing->invalidateDraw();
+        if (detail::DrawAsk* ask = detail::drawAsk()) return void(ask->redraw = true);
+    }
     redraw_ = true;
+}
+
+void ComposeHost::animateDrawingUntil(int64_t frameTime) {
+    if (LayoutNode* drawing = detail::drawingNode(); drawing && drawing->host() == this)
+        if (detail::DrawAsk* ask = detail::drawAsk()) return void(ask->until = std::max(ask->until, frameTime));
+    drawingAnimatedUntil_ = std::max(drawingAnimatedUntil_, frameTime);
+}
+
+void ComposeHost::redrawDrawn(int64_t until) {
+    redraw_ = true;
+    drawingAnimatedUntil_ = std::max(drawingAnimatedUntil_, until);
 }
 
 Rect ComposeHost::touchBoundsOf(const LayoutNode& node, const ModifierElement* element) const {

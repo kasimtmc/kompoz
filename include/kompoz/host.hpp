@@ -266,7 +266,10 @@ public:
     void requestRedraw();
     // An animation read while drawing goes on until `frameTime`: until then there is work to do
     // (frames to draw it in), drawn or not.
-    void animateDrawingUntil(int64_t frameTime) { drawingAnimatedUntil_ = std::max(drawingAnimatedUntil_, frameTime); }
+    void animateDrawingUntil(int64_t frameTime);
+    // What a node asked for as it drew, any of it showing (detail::DrawAsk): a redraw, and frames
+    // until `until`.
+    void redrawDrawn(int64_t until);
     // `draw` (dp, from 0, 0) as pixels, by the platform (Callbacks::renderImage); empty without one.
     ImageBitmap renderImage(Size size, const std::function<void(GraphicsContext&)>& draw) const;
     // The text magnifier (Android's, as Compose shows it while a selection handle or the cursor

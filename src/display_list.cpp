@@ -9,6 +9,11 @@ namespace kompoz {
 
 namespace {
 
+// The draw commands recorded that can show (not clipped away), by any list on this thread (a
+// layer's drawn inside a node too), and those copied with kept nodes: a node that adds none
+// drew nothing that shows (endedNodeShows).
+thread_local uint64_t gShown = 0;
+
 // What the images in a brush's shader hold (their ids and versions, summed up): one drawn into
 // since is a change.
 uint64_t imagesIn(const Brush& brush, const Rect& area) {
@@ -241,7 +246,7 @@ void DisplayList::beginNode(const void* node) {
     segmentOpen_ = false;
     // (A node drawn twice: a shared element's overlay, a magnifier's; once in a copied range too.)
     uint32_t occurrence = occurrences_[reinterpret_cast<uintptr_t>(node)]++ + keptBefore(node);
-    nodes_.push_back({nodeKey(node, occurrence)});
+    nodes_.push_back({nodeKey(node, occurrence), 0, gShown});
     if (!keepNodes_) return;
     openRanges_.push_back(uint32_t(recordingRanges_.size()));
     recordingRanges_.push_back({nodes_.back().key, uint32_t(recordingEvents_.size()), 0, uint32_t(recording_.size()), 0,
@@ -252,6 +257,7 @@ void DisplayList::beginNode(const void* node) {
 void DisplayList::endNode() {
     if (nodes_.size() <= 1) return;
     uint64_t child = nodes_.back().key;
+    endedShows_ = gShown != nodes_.back().shownBefore;
     nodes_.pop_back();
     nodes_.back().after = child;  // what the parent draws next follows this child: a child added before it leaves that alone
     segmentOpen_ = false;
@@ -294,6 +300,7 @@ DisplayList::Command* DisplayList::draw(Kind kind, const Rect& local, float pad)
     }
     Command& c = add(kind);
     c.bounds = area;
+    ++gShown;
     return &c;
 }
 
@@ -1162,6 +1169,7 @@ void DisplayList::copyKept(uint32_t index) {
     auto segments = int64_t(recordingSegments_.size()) - r.firstSegment, ranges = int64_t(recordingRanges_.size()) - index;
     uint32_t outer = states_.size() > 1 ? states_.back().push : kNone;  // what is around it now
     auto moved = [](uint32_t i, int64_t by) { return uint32_t(int64_t(i) + by); };
+    gShown += r.endCommand - r.firstCommand;  // (what it recorded last frame: taken as all showing)
     for (uint32_t i = r.firstCommand; i < r.endCommand; ++i) {
         Command& c = recording_.emplace_back(frame_[i]);
         c.parent = c.parent != kNone && c.parent >= r.firstCommand ? moved(c.parent, commands) : outer;
