@@ -612,15 +612,12 @@ float mitchell(float x) {
 
 // texture0 (premultiplied, `size` texels) at uv through that cubic: the sixteen nearest texels,
 // each read at its center, weighed; kept a color (its overshoot cut off).
-// A glyph's or an image's texels (texture0) at uv: from its first level, the only one its sampler
-// takes, unless it samples mipmaps (flag 64, a batch's: one sampler). Then at the level for a
-// device pixel: its texture coordinate goes evenly across its shape (see vs), so the vertex
-// shader's steps give how far it goes a pixel across and down, exactly, with no derivatives (fs
-// can be done with some pixels before others get here); in perspective, where there are none, as
-// the GPU works it out (that variant has no early way out in fs). (Sampled by gradients, a
-// Redmi Note 9 Pro's Adreno 618 took half as long again to scroll a screen of text.)
+// A glyph's or an image's texels (texture0) at uv, at the mipmap level for a device pixel: its
+// texture coordinate goes evenly across its shape (see vs), so the vertex shader's steps give
+// how far it goes a pixel across and down, exactly, with no derivatives (fs can be done with some
+// pixels before others get here). In perspective, where there are none, as the GPU works it out
+// (that variant has no early way out in fs).
 float4 sampleAt(float2 uv, Varyings v) {
-    if ((FLAGS & 64) == 0) return texture0.SampleLevel(uv, 0);
     if ((FLAGS & 32) != 0) return texture0.Sample(uv);
     float2 across = (v.uv.zw - v.uv.xy) / (v.shape.zw - v.shape.xy);
     return texture0.SampleGrad(uv, across * v.steps.xy, across * v.steps.zw);
