@@ -185,6 +185,26 @@ std::optional<Rect> Renderer::mapped(float x0, float y0, float x1, float y1) con
     return Rect{l, t, r - l, b - t};
 }
 
+bool Renderer::clearOfClips(const Prim& p, int chain) const {
+    if (p.projection[0] != 0 || p.projection[1] != 0 || p.projection[2] != 1) return false;
+    // Its quad on the target (the pixels whose middles it covers), and those pixels' boxes.
+    float l = INFINITY, t = INFINITY, r = -INFINITY, b = -INFINITY;
+    for (int c = 0; c < 4; ++c) {
+        float x = p.bounds[c & 1 ? 2 : 0], y = p.bounds[c & 2 ? 3 : 1];
+        float dx = p.xform[0] * x + p.xform[2] * y + p.extra[0], dy = p.xform[1] * x + p.xform[3] * y + p.extra[1];
+        l = std::min(l, dx), t = std::min(t, dy), r = std::max(r, dx), b = std::max(b, dy);
+    }
+    l -= 0.5f, t -= 0.5f, r += 0.5f, b += 0.5f;
+    for (const ClipElement& e : clipChains_[size_t(chain)].elements) {
+        if (e.outside || e.polygons || !e.toLocal.identity()) return false;
+        float corner = std::max(std::max(e.radii[0], e.radii[1]), std::max(e.radii[2], e.radii[3]));
+        bool across = l >= e.rect[0] && r <= e.rect[2] && t >= e.rect[1] + corner && b <= e.rect[3] - corner;
+        bool down = l >= e.rect[0] + corner && r <= e.rect[2] - corner && t >= e.rect[1] && b <= e.rect[3];
+        if (!across && !down) return false;
+    }
+    return true;
+}
+
 int Renderer::clipRow(int chain) {
     ClipChain& c = clipChains_[size_t(chain)];
     MaskShelf& shelf = shelf_;
@@ -287,7 +307,7 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Ma
             if (p.shape[1] > p.shape[3]) std::swap(p.shape[1], p.shape[3]);
         }
     }
-    if (!clips_.empty() && clips_.back().chain >= 0 && !opaque) {
+    if (!clips_.empty() && clips_.back().chain >= 0 && !opaque && (kind == MESH || !clearOfClips(p, clips_.back().chain))) {
         int chain = clips_.back().chain;
         p.filter[2] = float(std::min<size_t>(clipChains_[size_t(chain)].elements.size(), kStopsWidth / 6));
         p.filter[3] = float(clipRow(chain));

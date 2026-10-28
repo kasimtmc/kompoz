@@ -333,6 +333,11 @@ private:
     std::optional<Rect> mapped(float x0, float y0, float x1, float y1) const;
     // The current clip's chain, as a table row.
     int clipRow(int chain);
+    // Whether all of what `p` reaches lies where each clip of the chain covers every pixel whole
+    // (inside its edges and clear of its corners, as primitives.slang's roundRectCoverage takes
+    // a pixel): the chain changes nothing there, and isn't asked for (a card's content, clear of
+    // its rounded corners).
+    bool clearOfClips(const Prim& p, int chain) const;
     Texture* pageTexture(int page);
     Texture* imageTexture(const ImageBitmap& image, bool mipmapped = false);  // its pixels premultiplied
     Texture* acquire(int width, int height, Format format = Format::RGBA8);

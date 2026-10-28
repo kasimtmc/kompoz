@@ -1492,6 +1492,22 @@ void clipsCutAsTheirShapes(Gpu& g) {
         c.fillRoundRect(all, 0, red);
         c.popLayer();
     }, [&](GraphicsContext& c) { c.drawPath(cee, {}, Brush::solid(red), {}, {}); });
+    // Clear of a rounded clip's corners and inside its edges, a primitive is drawn as it is (the
+    // clip left out of it: Renderer::clearOfClips), to the last bit; reaching a corner, it is cut.
+    Rect roomy{8, 8, 56, 56}, inside{12, 20, 40, 30};
+    Pixels clear = g.render(72, 72, 1, [&](GraphicsContext& c) {
+        c.pushClipRoundRect(roomy, 10);
+        c.fillRoundRect(inside, 4, red);
+        c.popClip();
+    });
+    Pixels unclipped = g.render(72, 72, 1, [&](GraphicsContext& c) { c.fillRoundRect(inside, 4, red); });
+    CHECK(worstAgainst(clear, [&](int x, int y) { return unclipped.at(x, y); }) == 0);
+    Pixels cornered = g.render(72, 72, 1, [&](GraphicsContext& c) {
+        c.pushClipRoundRect(roomy, 10);
+        c.fillRoundRect({6, 6, 30, 30}, 0, red);
+        c.popClip();
+    });
+    CHECK(cornered.at(8, 8)[1] > 200 && cornered.at(20, 20)[1] < 60);  // (out past the corner's circle; in)
     // Inside each other: the coverages multiply.
     Pixels a = g.render(72, 72, 1, [&](GraphicsContext& c) { c.drawPath(star1, {}, Brush::solid(red), {}, {}); });
     Pixels b = g.render(72, 72, 1, [&](GraphicsContext& c) { c.fillRoundRect(box, radii, red); });
