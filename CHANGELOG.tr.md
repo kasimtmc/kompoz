@@ -322,6 +322,11 @@
   birinin kapatmasını bekleyen bir ileti kutusu açılmaz. Conan Center'ın SDL'inde Windows'ta OpenGL ES yoktur; bu yüzden
   Conan ile derlenen bir uygulama orada yalnızca Vulkan ile çizer (ANGLE, EGL'li bir SDL ister); Conan testi Windows
   için derlenmiş Mesa lavapipe'ında çizer.
+- **Bir pikselin adımları her ilkel için bir kez hesaplanır**: bir cihaz pikselinin bir ilkelin kendi uzayında ne kadar
+  yol aldığı (kenar yumuşatmanın ölçüsü), her pikselde türevlerden geliyordu; bu, bir Adreno GPU'ya bir dolgunun geri
+  kalanı kadar pahalıya mal oluyordu. Perspektif yokken her yerde aynıdır ve köşe gölgelendiricisi onu ilkelin
+  yerleşiminden hesaplar; perspektifteki bir ilkel, türevli bir gölgelendirici sürümünü alır. Bileşenler ekranının
+  tamamını çizmek bir Xiaomi 14 Ultra'nın GPU'sunda 4,9 yerine 4,1–4,2 ms sürdü.
 - Android'de **`kompoz-full-redraw`**, başka yerlerdeki `KOMPOZ_FULL_REDRAW` gibi: her kare sıfırdan çizilir; ekranın
   tamamını çizmenin maliyeti için.
 - **Yuvarlak bir kırpmanın dışına taşmayan kırpılmaz**: yuvarlak bir kırpmanın kenarlarının içinde ve köşelerinden

@@ -360,6 +360,8 @@ void Renderer::add(int kind, const Prim& prim, Texture* texture, bool opaque, Ma
     if (!texture) texture = white_.get();
     if (!texture1) texture1 = white_.get();
     uint32_t generation = shelf_.generation;
+    // In perspective: its pixels' steps are worked out where they are (flag 32, in primitives.slang).
+    if (kind != MESH && (p.projection[0] != 0 || p.projection[1] != 0)) p.extra[3] = float(int(p.extra[3]) | 32);
     // What it needs of the fragment shader (a composite paint: its two paints may be any). (A
     // mesh's extra is its vertex's color: its flags may be any.)
     ShaderVariant variant{uint16_t(1 << kind), uint8_t(paintKind == 5 ? 0x3f : 1 << paintKind), uint8_t(kind == MESH ? 0xff : int(p.extra[3])),

@@ -133,11 +133,14 @@ struct Varyings {
     nointerpolation float4 color : COLOR;
     nointerpolation float4 params : PARAMS;
     nointerpolation float4 uv : UV;
-    nointerpolation float kind : KIND;
-    nointerpolation float flags : FLAGS;
+    nointerpolation float2 kindFlags : KIND;  // its kind, its flags
     nointerpolation float4 paint : PAINT;
     nointerpolation float4 gradient : GRADIENT;
     nointerpolation float4 filter : FILTER;
+    // A device pixel's steps across and down in its own space, where those are the same at every
+    // pixel (no perspective): worked out once here, not by derivatives at each pixel, which cost
+    // an Adreno GPU as much as the rest of a fill. None (zero) in perspective (flag 32).
+    nointerpolation float4 steps : STEPS;
 };
 
 [shader("vertex")]
@@ -175,11 +178,14 @@ Varyings vs(Instance instance, uint vertex : VERTEX_ID) {
     out.color = instance.color;
     out.params = instance.params;
     out.uv = instance.uv;
-    out.kind = instance.extra.z;
-    out.flags = instance.extra.w;
+    out.kindFlags = instance.extra.zw;
     out.paint = instance.paint;
     out.gradient = instance.gradient;
     out.filter = instance.filter;
+    // The placement's inverse, its columns: where a step across and one down go back to.
+    float det = instance.xform.x * instance.xform.w - instance.xform.z * instance.xform.y;
+    bool flat = instance.projection.x == 0 && instance.projection.y == 0 && abs(det) > 1e-20;
+    out.steps = flat ? float4(instance.xform.w, -instance.xform.y, -instance.xform.z, instance.xform.x) / det : float4(0, 0, 0, 0);
     return out;
 }
 
@@ -204,11 +210,11 @@ Varyings vsMesh(Instance instance, uint vertex : VERTEX_ID) {
     out.color = instance.color;
     out.params = instance.params;
     out.uv = float4(0, 0, 0, 0);
-    out.kind = float(MESH);
-    out.flags = 0;
+    out.kindFlags = float2(MESH, 0);
     out.paint = instance.paint;
     out.gradient = instance.gradient;
     out.filter = instance.filter;
+    out.steps = float4(0, 0, 0, 0);
     return out;
 }
 
@@ -596,14 +602,18 @@ float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
 
 [shader("fragment")]
 float4 fs(Varyings v) : SV_Target {
-    int kind = int(v.kind + 0.5);
-    int flags = int(v.flags + 0.5) & FLAGS;
-    // A device pixel's steps in the instance's space, exactly: the local point over w, and 1 over
-    // w, go straight across the screen (their differences are exact), the local point doesn't
-    // in perspective.
-    float q = 1 / v.w;
-    float2 lq = v.local * q;
-    float2 dx = (ddx(lq) - v.local * ddx(q)) / q, dy = (ddy(lq) - v.local * ddy(q)) / q;
+    int kind = int(v.kindFlags.x + 0.5);
+    int flags = int(v.kindFlags.y + 0.5) & FLAGS;
+    // A device pixel's steps in the instance's space, exactly: the vertex shader's where they are
+    // the same everywhere; with a primitive in perspective in the batch (flag 32, a variant of its
+    // own: the others have no derivatives at all), the local point over w, and 1 over w, which go
+    // straight across the screen (their differences are exact), the local point doesn't.
+    float2 dx = v.steps.xy, dy = v.steps.zw;
+    if ((FLAGS & 32) != 0) {
+        float q = 1 / v.w;
+        float2 lq = v.local * q;
+        dx = (ddx(lq) - v.local * ddx(q)) / q, dy = (ddy(lq) - v.local * ddy(q)) / q;
+    }
     // Not anti-aliased (flags & 16): coverage at the pixel's middle alone (a pixel shrunk to a
     // point), all or nothing below.
     bool aliased = (flags & 16) != 0;

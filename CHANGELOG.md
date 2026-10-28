@@ -305,6 +305,11 @@
 - **An app run by a script that can't start says so in its log**: with `KOMPOZ_SCRIPT` set (as on CI) no message box
   waits for someone to close it. Conan Center's SDL has no OpenGL ES on Windows, so an app built with Conan draws with
   Vulkan only there (ANGLE needs an SDL with EGL); the Conan test draws on Mesa's lavapipe built for Windows.
+- **A pixel's steps are worked out once for each primitive**: how far a device pixel goes in a primitive's own space
+  (what its anti-aliasing measures with) came from derivatives at every pixel, which cost an Adreno GPU about as much
+  as the rest of a fill. Without perspective it is the same everywhere, and the vertex shader works it out from the
+  primitive's placement; a primitive in perspective takes a variant of the shader with the derivatives. Drawing all of
+  the Components screen took a Xiaomi 14 Ultra's GPU 4.1–4.2 ms instead of 4.9.
 - **`kompoz-full-redraw`** on Android, as `KOMPOZ_FULL_REDRAW` elsewhere: every frame drawn from scratch, for what
   drawing all of the screen costs.
 - **What lies clear of a rounded clip isn't clipped**: a primitive inside a rounded clip's edges and clear of its
