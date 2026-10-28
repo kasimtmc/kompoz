@@ -318,13 +318,13 @@
   in the same frame, as Compose composes items as it measures them. Opening the Components tab the first time took the
   desktop under 5 ms of composition and layout instead of 18. (What is focused or brought into view has to be
   composed, as in Compose: an item half a view past the view no longer is just because the guess was short.)
-- **A path's coverage is kept from frame to frame**: a path the GPU renderer draws again as it was, or whole pixels
-  on (a scrolled list's, a screen fading in or out), takes the coverage it rasterized before from a mask of its own
-  (2048 px each way, paths up to 512 px), placed to a 64th of a pixel; only new paths are rasterized, before the frame's
-  passes. Once that mask is full it starts over after the frame, unless that frame's paths fill most of it themselves:
-  then those in it are kept and the rest drawn as before, rather than all rasterized again each frame. Going between
-  the Home and Components tabs five times on a Redmi Note 9 Pro missed 20–22 refreshes instead of 36.
-  `KOMPOZ_PROFILE` counts paths drawn and kept in its slow frames.
+- **A path's coverage is kept from frame to frame**: a path the GPU renderer draws again as it was, or whole pixels on
+  (a scrolled list's, a screen fading in or out), takes the coverage it rasterized before from a mask of its own (2048
+  px each way, paths up to 512 × 512 px of it, and half of it each way), placed to a 64th of a pixel; only new paths
+  are rasterized, before the frame's passes. Once that mask is full it starts over after the frame, unless that
+  frame's paths fill most of it themselves: then those in it are kept and the rest drawn as before, rather than all
+  rasterized again each frame. Going between the Home and Components tabs five times on a Redmi Note 9 Pro missed
+  20–22 refreshes instead of 36. `KOMPOZ_PROFILE` counts paths drawn and kept in its slow frames.
 - **Pipelines are made ahead of the frames that need them**: the GPU renderer writes down each pipeline as it first
   needs it and, in the next runs, makes them again on a thread of its own in that order, where the device can (Vulkan).
   A Redmi Note 9 Pro's driver keeps none in its pipeline cache: each took 8–20 ms in the frame that first drew with it,

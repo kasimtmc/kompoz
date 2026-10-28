@@ -338,11 +338,12 @@
   gerekir, Compose'daki gibi: görünümün yarım görünüm ötesindeki bir öğe artık tahmin kısa kaldı diye oluşturulmuş olmaz.)
 - **Bir yolun kapsaması kareden kareye tutulur**: GPU renderer'ının olduğu gibi ya da tam piksellerle kaymış olarak
   yeniden çizdiği bir yol (kaydırılan bir listedeki, beliren ya da kaybolan bir ekrandaki), daha önce taradığı
-  kapsamayı kendine ait bir maskeden alır (her yönde 2048 piksel, 512 piksele kadar yollar); yol pikselin 64'te birine
-  yerleştirilir. Yalnızca yeni yollar taranır, karenin geçişlerinden önce. Bu maske dolunca kareden sonra baştan başlar;
-  o karenin yolları maskenin çoğunu kendileri dolduruyorsa başlamaz: içindekiler tutulur, kalanlar eskisi gibi çizilir,
-  her karede hepsi yeniden taranmaz. Bir Redmi Note 9 Pro'da Ana sayfa ile Bileşenler sekmeleri arasında beş kez gidip
-  gelmek 36 yerine 20–22 tazeleme kaçırdı. `KOMPOZ_PROFILE` yavaş karelerinde çizilen ve tutulan yolları sayar.
+  kapsamayı kendine ait bir maskeden alır (her yönde 2048 piksel; ondan 512 × 512 piksele kadar, her yönde yarısına
+  kadar yer kaplayan yollar); yol pikselin 64'te birine yerleştirilir. Yalnızca yeni yollar taranır, karenin
+  geçişlerinden önce. Bu maske dolunca kareden sonra baştan başlar; o karenin yolları maskenin çoğunu kendileri
+  dolduruyorsa başlamaz: içindekiler tutulur, kalanlar eskisi gibi çizilir, her karede hepsi yeniden taranmaz. Bir
+  Redmi Note 9 Pro'da Ana sayfa ile Bileşenler sekmeleri arasında beş kez gidip gelmek 36 yerine 20–22 tazeleme
+  kaçırdı. `KOMPOZ_PROFILE` yavaş karelerinde çizilen ve tutulan yolları sayar.
 - **Boru hatları onlara ihtiyaç duyan karelerden önce yapılır**: GPU renderer'ı her boru hattını ilk gerektiğinde
   not eder ve sonraki çalıştırmalarda, aygıt izin veriyorsa (Vulkan) kendi iş parçacığında aynı sırayla yeniden yapar.
   Bir Redmi Note 9 Pro'nun sürücüsü boru hattı önbelleğinde hiçbirini tutmuyor: her biri, onunla ilk çizen karede 8–20

@@ -41,7 +41,7 @@ const ShaderCode kEffectFragment{shaders::effects_fs_spirv, shaders::effects_fs_
                                  shaders::effects_fs_wgsl, "fs"};
 
 constexpr int kMaskSize = 2048;  // a generation's mask is at least this big each way (px), and at least its target's size
-constexpr int kKeptMask = 2048, kKeptMost = 512;  // the kept paths' mask each way, and the most a kept path is each way (px)
+constexpr int kKeptMask = 2048, kKeptMost = 512;  // the kept paths' mask each way (px); the most a kept path covers: 512 x 512 px, and half the mask each way
 
 void set(float (&out)[4], float a, float b, float c, float d) {
     out[0] = a, out[1] = b, out[2] = c, out[3] = d;
@@ -1644,7 +1644,7 @@ bool Renderer::drawKeptPath(const Path& path, Offset origin, const PathStroke& s
         MaskShelf& shelf = pathShelf_;
         shelf.width = shelf.height = kKeptMask;
         if (shelf.x + bounds.width + 1 > shelf.width) shelf.x = 0, shelf.y += shelf.row, shelf.row = 0;
-        bool big = bounds.width > kKeptMost || bounds.height > kKeptMost;
+        bool big = int64_t(bounds.width) * bounds.height > int64_t(kKeptMost) * kKeptMost || bounds.width > kKeptMask / 2 || bounds.height > kKeptMask / 2;
         if (big || shelf.y + bounds.height + 1 > shelf.height) {
             if (!big) pathMaskFull_ = true;
             for (Contour& c : contours)
