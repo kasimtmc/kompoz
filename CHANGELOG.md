@@ -308,8 +308,10 @@
 - **KOMPOZ_PROFILE counts only refreshes missed by frames that were due**: between two frames shown, it counted the
   refreshes that went by while the app was busy, and a running script (as in the benches) made it busy while it waited
   out its frames with nothing changing on the screen: a pause of half a second came out as some 60 refreshes missed.
-  It counts them now only while the app's own work asks for frames. (The benches' "missed" in the entries above count
-  those pauses too: the first second, the tab opening, had 60–70 of them.)
+  It counts them now only while what the app shows asks for frames (`ComposeHost::wantsFrame`: not a timer, work on
+  another thread or a script), and only from when it started asking. (The benches' "missed" in the entries above count
+  those pauses too: the first second, the tab opening, had 60–70 of them.) The Xiaomi 14 Ultra's bench, the tab opened
+  and the Components screen scrolled down and up ten times, missed 5 refreshes in all.
 - **A lazy list's first frame composes what fills its view**: with no item measured yet, it guessed items 48 dp tall
   and composed a view and a half of those, which for tall items (the Components screen's sections) was nearly all of
   them, composed and measured for nothing. It composes the first item now, then as many as the sizes say fill the view,

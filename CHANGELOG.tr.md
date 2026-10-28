@@ -325,8 +325,11 @@
 - **KOMPOZ_PROFILE yalnızca beklenen karelerin kaçırdığı tazelemeleri sayar**: gösterilen iki kare arasında
   uygulama meşgulken geçen tazelemeleri sayıyordu; çalışan bir betik de (ölçümlerdeki gibi) ekranda hiçbir şey
   değişmezken karelerini beklerken uygulamayı meşgul gösteriyordu: yarım saniyelik bir duraklama 60 kadar kaçan
-  tazeleme çıkıyordu. Artık yalnızca uygulamanın kendi işi kare isterken sayar. (Yukarıdaki girdilerdeki ölçümlerin
-  "kaçan" sayıları bu duraklamaları da sayar: ilk saniye, sekmenin açılışı, 60–70 tanesini içeriyordu.)
+  tazeleme çıkıyordu. Artık yalnızca uygulamanın gösterdiği şey kare isterken (`ComposeHost::wantsFrame`: bir
+  zamanlayıcı, başka bir iş parçacığındaki iş ya da bir betik değil) ve istemeye başladığı andan itibaren sayar.
+  (Yukarıdaki girdilerdeki ölçümlerin "kaçan" sayıları bu duraklamaları da sayar: ilk saniye, sekmenin açılışı, 60–70
+  tanesini içeriyordu.) Xiaomi 14 Ultra'nın ölçümü, sekme açılıp Bileşenler ekranı on kez aşağı ve yukarı kaydırılınca,
+  toplam 5 tazeleme kaçırdı.
 - **Tembel bir listenin ilk karesi görünümünü dolduracak kadarını oluşturur**: henüz hiçbir öğe ölçülmemişken
   öğeleri 48 dp sayıp bir buçuk görünüm dolusunu oluşturuyordu; uzun öğelerde (Bileşenler ekranının bölümleri) bu,
   neredeyse hepsini boşuna oluşturup ölçmek demekti. Artık ilk öğeyi oluşturur, sonra aynı karede boyların söylediği

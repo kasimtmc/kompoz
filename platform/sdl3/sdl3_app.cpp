@@ -169,6 +169,7 @@ struct App {
     struct Profile {
         uint64_t lastStart = 0, eventsNs = 0, summaryStart = 0;
         uint64_t lastShown = 0;  // when the last frame shown was handed to the display
+        uint64_t dueSince = 0;   // when frames started being due (busy since)
         bool busy = false;       // the last iteration's frame asked for the next (frames meant to follow each other)
         int frames = 0, slow = 0, unchanged = 0;  // unchanged: recorded, nothing on the screen differed
         int shown = 0, missed = 0;                // missed: display refreshes between frames shown back to back
@@ -656,7 +657,7 @@ void profileFrame(App& app, uint64_t start, uint64_t composed, uint64_t waited, 
     if (shown) {
         // Refreshes of the display that went by without a frame, between two shown back to back
         // (the app busy all along: not those it waited through for an event).
-        if (p.lastShown && p.busy) p.missed += std::max(0, int(std::lround(ms(presented - p.lastShown) / period)) - 1);
+        if (p.lastShown && p.busy) p.missed += std::max(0, int(std::lround(ms(presented - std::max(p.lastShown, p.dueSince)) / period)) - 1);
         p.lastShown = presented;
         ++p.shown;
     }
@@ -677,11 +678,11 @@ void profileFrame(App& app, uint64_t start, uint64_t composed, uint64_t waited, 
                 p.frames, ms(start - p.summaryStart), p.shown, p.missed, p.unchanged, p.drawnArea / p.frames * 100, p.workTotal / p.frames,
                 p.workMax, p.composeTotal / p.frames, p.drawTotal / p.frames, p.recordTotal / p.frames, p.waitTotal / p.frames, gpu,
                 p.intervalMax, p.slow);
-        uint64_t lastShown = p.lastShown;
+        uint64_t lastShown = p.lastShown, dueSince = p.dueSince;
         bool busy = p.busy;
         p = {};
         p.lastStart = p.summaryStart = start;
-        p.lastShown = lastShown, p.busy = busy;
+        p.lastShown = lastShown, p.busy = busy, p.dueSince = dueSince;
     }
 }
 
@@ -1746,10 +1747,12 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 #ifdef SDL_PLATFORM_EMSCRIPTEN
     busy = true;  // the browser's frames don't wait for events there: input would sit until the next timer
 #endif
-    // (Frames meant to follow each other: the app's own work asks for the next. Not a script
-    // waiting its frames out, nor a semantics publish: a pause in which nothing changes on the
-    // screen missed no refresh.)
-    app.prof.busy = app.host->hasPendingWork();
+    // (Frames meant to follow each other: what the app shows asks for the next. Not a script
+    // waiting its frames out, a semantics publish, a timer or work on another thread: a pause in
+    // which nothing changes on the screen missed no refresh.)
+    bool due = app.host->wantsFrame();
+    if (due && !app.prof.busy) app.prof.dueSince = SDL_GetTicksNS();  // (a pause before it missed nothing)
+    app.prof.busy = due;
     if (int64_t deadline = app.host->nextTimerDeadline(); !busy && deadline >= 0 && deadline != app.wakeDeadline) {
         if (app.wakeTimer) SDL_RemoveTimer(app.wakeTimer);
         app.wakeDeadline = deadline;

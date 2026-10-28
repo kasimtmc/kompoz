@@ -449,11 +449,16 @@ void ComposeHost::checkKept() {
     }
 }
 
-bool ComposeHost::hasPendingWork() const {
+bool ComposeHost::wantsFrame() const {
     if (rootInvalid_ || animating_ || layoutDirty_ || redraw_ || flingNode_ || layoutAnimating_ || lastFrameTime_ < drawingAnimatedUntil_ ||
-        composer_.hasInvalidScopes() ||
-        dispatcher_->hasFrameWaiters() || !unechoed_.empty())
+        composer_.hasInvalidScopes() || dispatcher_->hasFrameWaiters())
         return true;
+    std::lock_guard lock(gMutex);
+    return !pendingChanges_.empty();
+}
+
+bool ComposeHost::hasPendingWork() const {
+    if (wantsFrame() || !unechoed_.empty()) return true;
     for (const auto& [key, v] : visibility_)
         if (v.visibleSince >= 0) return true;  // a visibility to tell once it has lasted
     for (const auto& [key, r] : rects_)

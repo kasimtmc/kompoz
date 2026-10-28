@@ -137,6 +137,9 @@ public:
     void draw(GraphicsContext& canvas);
     // True while there is work for the next frame (invalidated state, running animation, ...).
     bool hasPendingWork() const;
+    // Of that, what the next frame has to show (an animation, a scroll, a change to compose or lay
+    // out): not a timer to wait for, work on another thread to come back or an edit to hear of.
+    bool wantsFrame() const;
 
     // Input, in dp. Times are on the frame clock (-1: the last frame's time); they drive
     // fling velocity. Each finger has its own pointer id: the first one down leads (clicks,
