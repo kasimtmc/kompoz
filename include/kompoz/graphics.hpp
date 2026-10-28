@@ -521,7 +521,7 @@ struct Shape {
     // A rounded rect's corners for a rect, or a polygon's or path's (not one: those of a shape
     // drawn as a path).
     bool pathed() const { return kind == Kind::Outline || kind == Kind::Cut || kind == Kind::Generic; }
-    constexpr float radiusFor(const Rect& r) const {  // one radius (corners of their own: the largest)
+    float radiusFor(const Rect& r) const {  // one radius (corners of their own: the largest)
         float shorter = std::min(r.width, r.height);
         return kind == Kind::Circle    ? shorter / 2
                : kind == Kind::Cut     ? 0
@@ -531,13 +531,13 @@ struct Shape {
     }
     // Each corner's radius in `r`. As in Compose, a side's two corners together fit in the
     // shorter side (both shrink if they wouldn't).
-    constexpr CornerRadii radiiFor(const Rect& r, bool rtl = false) const {
+    CornerRadii radiiFor(const Rect& r, bool rtl = false) const {
         if (!perCorner || kind != Kind::Rounded) return CornerRadii(radiusFor(r));
         return cornersFor(r, rtl && !absolute);
     }
     // Its own corners (`corners`) in `r`, a side's two fitting in the shorter side; right to left,
     // the start ones on the right.
-    constexpr CornerRadii cornersFor(const Rect& r, bool rtl) const {
+    CornerRadii cornersFor(const Rect& r, bool rtl) const {
         float shorter = std::min(r.width, r.height);
         auto px = [shorter](CornerSize c) { return std::max(0.f, c.dp + c.percent / 100 * shorter); };
         std::array<CornerSize, 4> at = animatedCorners ? (*animatedCorners)() : corners;

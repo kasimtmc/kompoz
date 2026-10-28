@@ -282,7 +282,8 @@
 - **Buttons, FABs and morphing shapes animate without composing around them**: a button's and a FAB's elevation, a
   toggle button's colors, an extended FAB's width and label and a button group's held button are read as they are
   laid out and drawn, and so are the corners of a morphing shape (a pressed or checked button's: a `Shape`'s
-  `animatedCorners`, read where its outline is made). A clickable's and an indication's ripple takes the content color
+  `animatedCorners`, read where its outline is made; so `radiusFor`, `radiiFor` and `cornersFor` are no longer
+  `constexpr`). A clickable's and an indication's ripple takes the content color
   as it is drawn (`CompositionLocal::currentLive`), so a color provided from a state doesn't compose them again.
 - **Selection controls animate without composing around them**: a checkbox's colors and tick, a switch's thumb, a radio
   button's ring and dot, a list item's container, a segmented button's check and label, a tab's indicator and color, a
