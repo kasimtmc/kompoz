@@ -299,14 +299,25 @@ jobs:
           path: ~/.conan2/p
           key: conan-${{ matrix.os }}-${{ hashFiles('packaging/conan/conanfile.py') }}
           restore-keys: conan-${{ matrix.os }}-
-      - uses: ./.github/actions/angle
+      # Conan Center's SDL has no OpenGL ES on Windows (so no ANGLE): the demo draws with Vulkan
+      # there too, on Mesa's lavapipe as built for Windows by mesa-dist-win.
+      - uses: actions/cache@v4
         if: runner.os == 'Windows'
+        id: mesa
+        with:
+          path: mesa
+          key: mesa-dist-win-26.2.4
+      - name: Mesa's lavapipe for Windows
+        if: runner.os == 'Windows' && steps.mesa.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o mesa.7z https://github.com/pal1000/mesa-dist-win/releases/download/26.2.4/mesa3d-26.2.4-release-msvc.7z
+          7z x -omesa mesa.7z > /dev/null
       - name: Create the package and test it (packaging/conan/test_package)
         run: |
           extra=()
-          # The test's demo draws with Vulkan on lavapipe (Linux) or OpenGL ES through ANGLE (Windows).
+          # The test's demo draws with Vulkan on lavapipe (Mesa's on Linux, mesa-dist-win's on Windows).
           if [ "$RUNNER_OS" = Linux ]; then export VK_DRIVER_FILES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"; fi
-          if [ "$RUNNER_OS" = Windows ]; then export KOMPOZ_ANGLE_BIN="$GITHUB_WORKSPACE/angle/x64-windows-release/bin"; fi
+          if [ "$RUNNER_OS" = Windows ]; then export VK_DRIVER_FILES="$(cygpath -w "$(find "$PWD/mesa" -path '*x64*' -name 'lvp_icd*.json' | head -n 1)")"; fi
           if [ "$RUNNER_OS" = Linux ]; then
             extra=(-c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
                    -c 'tools.build:compiler_executables={"c": "gcc-14", "cpp": "g++-14"}')

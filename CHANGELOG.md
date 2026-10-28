@@ -301,6 +301,9 @@
   the app with a message. Without a window (`SDL_VIDEO_DRIVER=offscreen`) Vulkan and Metal draw only into the kept
   frame, which screenshots are taken from. A Windows computer without a Vulkan driver (a virtual machine, Remote
   Desktop, CI) draws through ANGLE shipped with the app.
+- **An app run by a script that can't start says so in its log**: with `KOMPOZ_SCRIPT` set (as on CI) no message box
+  waits for someone to close it. Conan Center's SDL has no OpenGL ES on Windows, so an app built with Conan draws with
+  Vulkan only there (ANGLE needs an SDL with EGL); the Conan test draws on Mesa's lavapipe built for Windows.
 - **What is drawn out of view asks for no frames**: the frames a node asks for as it draws (an animation drawn on, a
   ripple, an indeterminate indicator) are asked for only if any of what it drew shows (a `DisplayList` tells which of
   its draws its clips leave nothing of: `GraphicsContext::endedNodeShows`). Scrolled out of view, an endless one asks for

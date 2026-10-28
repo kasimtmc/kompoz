@@ -134,7 +134,7 @@ cmake --build build-windows -j
 
 Ship the executable with the `fonts/` and `licenses/` folders next to it. The tests also run under Wine: `WINEPATH=/usr/x86_64-w64-mingw32/bin wine build-windows/kompoz_tests.exe`.
 
-Kompoz's GPU renderer on OpenGL ES (`KOMPOZ_GPU=gles`) uses ANGLE where the app has ANGLE's `libEGL.dll` and `libGLESv2.dll` next to it: OpenGL ES over Direct3D 11, the same on every Windows GPU. vcpkg builds them from Google's source (`vcpkg install angle:x64-windows-release`: ship the DLLs of its `bin/`, which add the `zlib1.dll` they use); without them, the GPU driver's own OpenGL ES is used. A Windows computer without a Vulkan driver (a virtual machine, Remote Desktop, a CI runner) has neither of those: ship ANGLE with the app, and it draws with Direct3D 11's WARP on the CPU there.
+Kompoz's GPU renderer on OpenGL ES (`KOMPOZ_GPU=gles`) uses ANGLE where the app has ANGLE's `libEGL.dll` and `libGLESv2.dll` next to it: OpenGL ES over Direct3D 11, the same on every Windows GPU. vcpkg builds them from Google's source (`vcpkg install angle:x64-windows-release`: ship the DLLs of its `bin/`, which add the `zlib1.dll` they use); without them, the GPU driver's own OpenGL ES is used. A Windows computer without a Vulkan driver (a virtual machine, Remote Desktop, a CI runner) has neither of those: ship ANGLE with the app, and it draws with Direct3D 11's WARP on the CPU there. ANGLE needs an SDL built with EGL, as vcpkg's and `third_party/`'s are; Conan Center's SDL has no OpenGL ES on Windows, so an app built with Conan draws with Vulkan only there.
 
 ### Android
 

@@ -1346,6 +1346,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     }
 #endif
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    bool scripted = SDL_getenv("KOMPOZ_SCRIPT") != nullptr;  // (an error is logged, not shown in a box to close)
     // KOMPOZ_GPU=vulkan, gles, metal, webgpu or auto: Kompoz's GPU renderer on Vulkan, OpenGL ES 3,
     // Metal, WebGPU (on the web: the page's canvas), or the platform's best (gpuOrder). On Android,
     // where an app has no environment, the first word of a file named kompoz-gpu in its files (as
@@ -1380,7 +1381,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     }
     if (!app->gpu) {
         SDL_Log("kompoz: no GPU renderer started (KOMPOZ_GPU=%s)", gpuChoice.empty() ? "auto" : gpuChoice.c_str());
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Kompoz", "No graphics device could be started (Vulkan, OpenGL ES, Metal or WebGPU).", nullptr);
+        if (!scripted)  // (driven by a script, as on CI: nobody to close a box, only the log)
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Kompoz", "No graphics device could be started (Vulkan, OpenGL ES, Metal or WebGPU).", nullptr);
         return SDL_APP_FAILURE;
     }
     // Window sizes are in points; make the initial size match the requested dp.
@@ -1393,7 +1395,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
 
     app->fonts = std::make_unique<kompoz::sdl::FontSystem>();
     if (!app->fonts->load(kompoz::FontWeight::Normal, app->config.fontPath)) {
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Kompoz", "No usable font found. Set KOMPOZ_FONT.", app->window);
+        SDL_Log("kompoz: no usable font found (KOMPOZ_FONT)");
+        if (!scripted) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Kompoz", "No usable font found. Set KOMPOZ_FONT.", app->window);
         return SDL_APP_FAILURE;
     }
     app->fonts->load(kompoz::FontWeight::Bold, app->config.boldFontPath);  // optional

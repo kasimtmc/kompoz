@@ -1,9 +1,6 @@
 # Builds tests/package (the README's first example) against the package and runs it: offscreen,
-# and on Windows (whose offscreen driver has no graphics API) in a window, with ANGLE's DLLs beside
-# it from KOMPOZ_ANGLE_BIN when that is set (a machine without Vulkan draws through them).
-import glob
+# and on Windows (whose offscreen driver has no graphics API) in a window.
 import os
-import shutil
 
 from conan import ConanFile
 from conan.tools.build import can_run
@@ -32,10 +29,7 @@ class KompozTestConan(ConanFile):
             # (Visual Studio) put its demo in a folder of the build type under it.
             demo = os.path.join("package", self.cpp.build.bindir, "demo")
             env = Environment()
-            if self.settings.os == "Windows":
-                for dll in glob.glob(os.path.join(os.environ.get("KOMPOZ_ANGLE_BIN", ""), "*.dll")):
-                    shutil.copy(dll, os.path.dirname(demo) or ".")
-            else:
+            if self.settings.os != "Windows":
                 env.define("SDL_VIDEO_DRIVER", "offscreen")
             env.define("KOMPOZ_SCRIPT", "wait 5;click 70 70;wait 5;quit")
             with env.vars(self, scope="run").apply():
