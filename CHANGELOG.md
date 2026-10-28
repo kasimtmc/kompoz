@@ -305,6 +305,11 @@
 - **An app run by a script that can't start says so in its log**: with `KOMPOZ_SCRIPT` set (as on CI) no message box
   waits for someone to close it. Conan Center's SDL has no OpenGL ES on Windows, so an app built with Conan draws with
   Vulkan only there (ANGLE needs an SDL with EGL); the Conan test draws on Mesa's lavapipe built for Windows.
+- **KOMPOZ_PROFILE counts only refreshes missed by frames that were due**: between two frames shown, it counted the
+  refreshes that went by while the app was busy, and a running script (as in the benches) made it busy while it waited
+  out its frames with nothing changing on the screen: a pause of half a second came out as some 60 refreshes missed.
+  It counts them now only while the app's own work asks for frames. (The benches' "missed" in the entries above count
+  those pauses too: the first second, the tab opening, had 60–70 of them.)
 - **A lazy list's first frame composes what fills its view**: with no item measured yet, it guessed items 48 dp tall
   and composed a view and a half of those, which for tall items (the Components screen's sections) was nearly all of
   them, composed and measured for nothing. It composes the first item now, then as many as the sizes say fill the view,

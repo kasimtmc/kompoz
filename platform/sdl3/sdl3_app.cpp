@@ -169,7 +169,7 @@ struct App {
     struct Profile {
         uint64_t lastStart = 0, eventsNs = 0, summaryStart = 0;
         uint64_t lastShown = 0;  // when the last frame shown was handed to the display
-        bool busy = false;       // the last iteration had more to do (frames meant to follow each other)
+        bool busy = false;       // the last iteration's frame asked for the next (frames meant to follow each other)
         int frames = 0, slow = 0, unchanged = 0;  // unchanged: recorded, nothing on the screen differed
         int shown = 0, missed = 0;                // missed: display refreshes between frames shown back to back
         double workTotal = 0, workMax = 0, waitTotal = 0, intervalMax = 0, drawnArea = 0;  // drawnArea: fractions of the screen, summed
@@ -1746,7 +1746,10 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 #ifdef SDL_PLATFORM_EMSCRIPTEN
     busy = true;  // the browser's frames don't wait for events there: input would sit until the next timer
 #endif
-    app.prof.busy = busy;
+    // (Frames meant to follow each other: the app's own work asks for the next. Not a script
+    // waiting its frames out, nor a semantics publish: a pause in which nothing changes on the
+    // screen missed no refresh.)
+    app.prof.busy = app.host->hasPendingWork();
     if (int64_t deadline = app.host->nextTimerDeadline(); !busy && deadline >= 0 && deadline != app.wakeDeadline) {
         if (app.wakeTimer) SDL_RemoveTimer(app.wakeTimer);
         app.wakeDeadline = deadline;

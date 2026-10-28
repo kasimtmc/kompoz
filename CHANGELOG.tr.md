@@ -322,6 +322,11 @@
   birinin kapatmasını bekleyen bir ileti kutusu açılmaz. Conan Center'ın SDL'inde Windows'ta OpenGL ES yoktur; bu yüzden
   Conan ile derlenen bir uygulama orada yalnızca Vulkan ile çizer (ANGLE, EGL'li bir SDL ister); Conan testi Windows
   için derlenmiş Mesa lavapipe'ında çizer.
+- **KOMPOZ_PROFILE yalnızca beklenen karelerin kaçırdığı tazelemeleri sayar**: gösterilen iki kare arasında
+  uygulama meşgulken geçen tazelemeleri sayıyordu; çalışan bir betik de (ölçümlerdeki gibi) ekranda hiçbir şey
+  değişmezken karelerini beklerken uygulamayı meşgul gösteriyordu: yarım saniyelik bir duraklama 60 kadar kaçan
+  tazeleme çıkıyordu. Artık yalnızca uygulamanın kendi işi kare isterken sayar. (Yukarıdaki girdilerdeki ölçümlerin
+  "kaçan" sayıları bu duraklamaları da sayar: ilk saniye, sekmenin açılışı, 60–70 tanesini içeriyordu.)
 - **Tembel bir listenin ilk karesi görünümünü dolduracak kadarını oluşturur**: henüz hiçbir öğe ölçülmemişken
   öğeleri 48 dp sayıp bir buçuk görünüm dolusunu oluşturuyordu; uzun öğelerde (Bileşenler ekranının bölümleri) bu,
   neredeyse hepsini boşuna oluşturup ölçmek demekti. Artık ilk öğeyi oluşturur, sonra aynı karede boyların söylediği
