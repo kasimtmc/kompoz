@@ -317,7 +317,12 @@ jobs:
           extra=()
           # The test's demo draws with Vulkan on lavapipe (Mesa's on Linux, mesa-dist-win's on Windows).
           if [ "$RUNNER_OS" = Linux ]; then export VK_DRIVER_FILES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"; fi
-          if [ "$RUNNER_OS" = Windows ]; then export VK_DRIVER_FILES="$(cygpath -w "$(find "$PWD/mesa" -path '*x64*' -name 'lvp_icd*.json' | head -n 1)")"; fi
+          if [ "$RUNNER_OS" = Windows ]; then
+            icd="$(find "$PWD/mesa" -path '*x64*' -name 'lvp_icd*.json' | head -n 1)"
+            [ -n "$icd" ] || { echo "no lavapipe in mesa-dist-win's archive:"; find mesa -maxdepth 2 | head -n 40; exit 1; }
+            export VK_DRIVER_FILES="$(cygpath -w "$icd")"
+            echo "VK_DRIVER_FILES=$VK_DRIVER_FILES"
+          fi
           if [ "$RUNNER_OS" = Linux ]; then
             extra=(-c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
                    -c 'tools.build:compiler_executables={"c": "gcc-14", "cpp": "g++-14"}')
