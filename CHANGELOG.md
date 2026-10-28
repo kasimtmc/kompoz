@@ -305,6 +305,12 @@
 - **An app run by a script that can't start says so in its log**: with `KOMPOZ_SCRIPT` set (as on CI) no message box
   waits for someone to close it. Conan Center's SDL has no OpenGL ES on Windows, so an app built with Conan draws with
   Vulkan only there (ANGLE needs an SDL with EGL); the Conan test draws on Mesa's lavapipe built for Windows.
+- **One frame for each beat of the display**: a frame started less than half a refresh after the last (the last one
+  shown without waiting, the swap chain having room, or one that changed nothing on the screen) got the last one's
+  time, so a scroll stood still in it and jumped two refreshes in the next: shown, still, still, shown, over and over
+  while scrolling on a 120 Hz phone. A frame now waits for the display's next beat instead (a frame not shown too, which
+  replaces its own wait). Scrolling the showcase's Components screen on a Redmi Note 9 Pro missed 2–6 refreshes a
+  second instead of 5–17.
 - **What is drawn out of view asks for no frames**: the frames a node asks for as it draws (an animation drawn on, a
   ripple, an indeterminate indicator) are asked for only if any of what it drew shows (a `DisplayList` tells which of
   its draws its clips leave nothing of: `GraphicsContext::endedNodeShows`). Scrolled out of view, an endless one asks for

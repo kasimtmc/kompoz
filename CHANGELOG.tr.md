@@ -322,6 +322,12 @@
   birinin kapatmasını bekleyen bir ileti kutusu açılmaz. Conan Center'ın SDL'inde Windows'ta OpenGL ES yoktur; bu yüzden
   Conan ile derlenen bir uygulama orada yalnızca Vulkan ile çizer (ANGLE, EGL'li bir SDL ister); Conan testi Windows
   için derlenmiş Mesa lavapipe'ında çizer.
+- **Ekranın her vuruşuna bir kare**: bir öncekinden yarım tazelemeden kısa süre sonra başlayan bir kare (öncekinin
+  beklemeden gösterildiği, takas zincirinde yer olduğu ya da önceki ekranda hiçbir şeyi değiştirmediği için) öncekinin
+  zamanını alıyordu; kaydırma o karede yerinde sayıp sonrakinde iki tazeleme birden atlıyordu: 120 Hz'lik bir
+  telefonda kaydırırken durmadan gösterilen, duran, duran, gösterilen. Artık kare ekranın bir sonraki vuruşunu bekler
+  (gösterilmeyen kare de; kendi beklemesinin yerini alır). Bir Redmi Note 9 Pro'da showcase'in Bileşenler ekranını
+  kaydırırken saniyede 5–17 yerine 2–6 tazeleme kaçtı.
 - **Görüş dışında çizilen kare istemez**: bir düğümün çizerken istediği kareler (çizilerek ilerleyen bir animasyon, bir
   dalga, belirsiz bir gösterge) yalnızca çizdiklerinden biri görünüyorsa istenir (bir `DisplayList`, kırpmalarının hiçbir
   şey bırakmadığı çizimlerini bilir: `GraphicsContext::endedNodeShows`). Kaydırılıp görüş dışına çıkan hiç bitmeyen bir

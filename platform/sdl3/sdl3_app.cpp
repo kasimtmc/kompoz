@@ -1605,6 +1605,18 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
     }
 #endif
     bool scripted = app.script.running();
+#ifndef SDL_PLATFORM_EMSCRIPTEN  // (the browser's frames come on its beat)
+    // A frame for the display's next beat, never a second one for the beat of the last: one
+    // started sooner (the last shown without waiting, the swap chain having room; or one that
+    // changed nothing on the screen) would get the last one's time, so a scroll or an animation
+    // would stand still in it and jump two beats in the next. (A frame not shown waits so too:
+    // an animation out of view doesn't spin as fast as it can.)
+    if (app.lastFrameTime >= 0 && !(scripted && !app.script.realtime))
+        if (int64_t due = app.lastFrameTime + int64_t(app.framePeriodNs) * 3 / 5, at = app.clock(); at < due) {
+            SDL_DelayNS(uint64_t(due - at));
+            iterationStart = SDL_GetTicksNS();  // (its work starts now)
+        }
+#endif
     std::string shot = app.script.enabled() ? kompoz::sdl::stepScript(app) : std::string{};
     int64_t now = scripted && !app.script.realtime
                       ? (app.script.clock += 16'666'667)
@@ -1726,11 +1738,6 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 #endif
 #ifdef SDL_PLATFORM_EMSCRIPTEN
     busy = true;  // the browser's frames don't wait for events there: input would sit until the next timer
-#else
-    // A frame not shown didn't wait for the display: an animation that changes nothing on the
-    // screen (scrolled out of view) would spin as fast as it can. Paced to the display instead.
-    if (busy && !drawn.shown && (!app.script.running() || app.script.realtime))
-        if (uint64_t spent = SDL_GetTicksNS() - iterationStart; spent < app.framePeriodNs) SDL_DelayNS(app.framePeriodNs - spent);
 #endif
     app.prof.busy = busy;
     if (int64_t deadline = app.host->nextTimerDeadline(); !busy && deadline >= 0 && deadline != app.wakeDeadline) {
