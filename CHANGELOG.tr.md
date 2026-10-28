@@ -351,7 +351,9 @@
 - **Bir dolgunun ve bir katmanın içi GPU'ya az maliyetli**: tek renkli yuvarlak bir dikdörtgenin ya da bir katmanın
   iyice içindeki bir piksel (kenarlarından en az yarım piksel, bir eksende köşe yarıçaplarından da içeride), kırpma,
   renk süzgeci ya da perspektif yoksa rengini, ya da katmanın texelini onun alfasıyla, köşe gölgelendiricisinin
-  hesapladığı tek bir değerden alır; parça gölgelendiricisinin geri kalanının okuduğu 14 değerden değil. Bir Redmi
+  hesapladığı tek bir değerden alır; parça gölgelendiricisinin geri kalanının okuduğu 14 değerden değil (perspektifte
+  bir ilkel ya da bir resim boyası olan bir toplu çizimde değil: onların pikselleri komşularınınkine ihtiyaç duyar;
+  glifler ve resimler mipmap düzeylerini artık komşularından değil, pikselin adımlarından tam olarak alır). Bir Redmi
   Note 9 Pro'nun Adreno 618'i bir dolgunun çoğunu bunları okumaya harcıyordu: bir ekran dolusu dolgu artık 2,3 yerine
   1,5 ms sürüyor. Ana sayfa ile Bileşenler sekmeleri arasında gidip gelirken GPU süresi karede ortalama 13,2–13,8
   ms'den 11,5–11,7 ms'ye, Bileşenler ekranını kaydırırken 9,5–9,7'den 8,5 ms'ye düştü.

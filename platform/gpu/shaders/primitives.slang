@@ -612,6 +612,20 @@ float mitchell(float x) {
 
 // texture0 (premultiplied, `size` texels) at uv through that cubic: the sixteen nearest texels,
 // each read at its center, weighed; kept a color (its overshoot cut off).
+// A glyph's or an image's texels (texture0) at uv: from its first level, the only one its sampler
+// takes, unless it samples mipmaps (flag 64, a batch's: one sampler). Then at the level for a
+// device pixel: its texture coordinate goes evenly across its shape (see vs), so the vertex
+// shader's steps give how far it goes a pixel across and down, exactly, with no derivatives (fs
+// can be done with some pixels before others get here); in perspective, where there are none, as
+// the GPU works it out (that variant has no early way out in fs). (Sampled by gradients, a
+// Redmi Note 9 Pro's Adreno 618 took half as long again to scroll a screen of text.)
+float4 sampleAt(float2 uv, Varyings v) {
+    if ((FLAGS & 64) == 0) return texture0.SampleLevel(uv, 0);
+    if ((FLAGS & 32) != 0) return texture0.Sample(uv);
+    float2 across = (v.uv.zw - v.uv.xy) / (v.shape.zw - v.shape.xy);
+    return texture0.SampleGrad(uv, across * v.steps.xy, across * v.steps.zw);
+}
+
 float4 cubicSample(float2 uv, float2 size) {
     float2 t = uv * size - 0.5, base = floor(t), f = t - base;
     float4 sum = 0;
@@ -636,19 +650,11 @@ float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
 
 [shader("fragment")]
 float4 fs(Varyings v) : SV_Target {
-    // A device pixel's steps in the instance's space, exactly: the vertex shader's where they are
-    // the same everywhere; with a primitive in perspective in the batch (flag 32, a variant of its
-    // own: the others have no derivatives at all), the local point over w, and 1 over w, which go
-    // straight across the screen (their differences are exact), the local point doesn't. (Those
-    // worked out before any pixel is done below: a derivative needs its pixels' neighbours.)
-    float2 dx = 0, dy = 0;
-    if ((FLAGS & 32) != 0) {
-        float q = 1 / v.w;
-        float2 lq = v.local * q;
-        dx = (ddx(lq) - v.local * ddx(q)) / q, dy = (ddy(lq) - v.local * ddy(q)) / q;
-    }
     // Well inside a solid fill or a layer (see vs): its color, or the layer's texel at its alpha.
-    if (drawn(FILL) || drawn(LAYER)) {
+    // Not in a variant whose pixels below take derivatives (in perspective, or an image paint's
+    // texels): some of their neighbours gone from here would leave those undefined, and a
+    // compiler may move what needs them past this. (Glyphs and images take theirs from the steps.)
+    if ((FLAGS & 32) == 0 && !paints(IMAGE_PAINT) && !paints(COMPOSITE_PAINT) && (drawn(FILL) || drawn(LAYER))) {
         float4 a = abs(v.inside);
         if ((a.x <= 1 && a.y <= 1) || (a.z <= 1 && a.w <= 1)) {
             bool layer = drawn(LAYER) && (!drawn(FILL) || int(v.kindFlags.x + 0.5) == LAYER);
@@ -659,7 +665,16 @@ float4 fs(Varyings v) : SV_Target {
     }
     int kind = int(v.kindFlags.x + 0.5);
     int flags = int(v.kindFlags.y + 0.5) & FLAGS;
-    if ((FLAGS & 32) == 0) dx = v.steps.xy, dy = v.steps.zw;
+    // A device pixel's steps in the instance's space, exactly: the vertex shader's where they are
+    // the same everywhere; with a primitive in perspective in the batch (flag 32, a variant of its
+    // own: the others have no derivatives at all), the local point over w, and 1 over w, which go
+    // straight across the screen (their differences are exact), the local point doesn't.
+    float2 dx = v.steps.xy, dy = v.steps.zw;
+    if ((FLAGS & 32) != 0) {
+        float q = 1 / v.w;
+        float2 lq = v.local * q;
+        dx = (ddx(lq) - v.local * ddx(q)) / q, dy = (ddy(lq) - v.local * ddy(q)) / q;
+    }
     // Not anti-aliased (flags & 16): coverage at the pixel's middle alone (a pixel shrunk to a
     // point), all or nothing below.
     bool aliased = (flags & 16) != 0;
@@ -718,13 +733,13 @@ float4 fs(Varyings v) : SV_Target {
         cover = v.params.y > 0.5 ? (1 - blurred) * roundRectCoverage(v.local, v.gradient, v.uv, dx, dy) : blurred;
     } else if (drawn(GLYPH) && kind == GLYPH) {
         // (A mask's texels: a cubic of the sixteen nearest, each at its center, as an image's.)
-        float4 texel = v.params.y > 0.5 ? cubicSample(texcoord, 0.5 / v.params.zw) : texture0.Sample(texcoord);
+        float4 texel = v.params.y > 0.5 ? cubicSample(texcoord, 0.5 / v.params.zw) : sampleAt(texcoord, v);
         bool colored = v.params.x > 0.5;  // an emoji: as it is, at the color's alpha
         src = colored ? float4(texel.rgb * texel.a, texel.a) * v.color.a : paint;
         cover = (colored ? 1 : texel.a) * edge;
     } else if (drawn(IMAGE) && kind == IMAGE) {
         // Premultiplied texels; a cubic of the sixteen nearest, each at its center (params.y).
-        float4 texel = v.params.y > 0.5 ? cubicSample(texcoord, 0.5 / v.params.zw) : texture0.Sample(texcoord);
+        float4 texel = v.params.y > 0.5 ? cubicSample(texcoord, 0.5 / v.params.zw) : sampleAt(texcoord, v);
         src = texel * v.params.x;
         cover = edge;
     } else if (drawn(LAYER) && kind == LAYER) {
