@@ -1693,6 +1693,11 @@ class TextMeasurer {
 public:
     virtual ~TextMeasurer() = default;
     virtual float measureWidth(std::string_view utf8, const Font& font) = 0;
+    // What each cluster of utf8, laid out as one run, adds to its width (dp), at the cluster's
+    // first byte (0 at the others): a stretch between clusters is as wide as its sum, shaped as a
+    // part of the whole (kerning, ligatures, letter spacing). Line breaking measures with it,
+    // laying the run out once. By default, measureWidth of each prefix.
+    virtual std::vector<float> clusterAdvances(std::string_view utf8, const Font& font);
     virtual FontMetrics metrics(const Font& font) = 0;
     // How much bigger sp are than dp here (the system font size): sizes in a Font get it.
     virtual float fontScale() const { return 1; }

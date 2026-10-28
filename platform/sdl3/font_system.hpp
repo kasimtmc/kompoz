@@ -32,6 +32,7 @@ public:
     int rasterized() const;  // glyphs rasterized so far (KOMPOZ_PROFILE)
 
     float measureWidth(std::string_view utf8, const Font& font) override;
+    std::vector<float> clusterAdvances(std::string_view utf8, const Font& font) override;
     FontMetrics metrics(const Font& font) override;
     float fontScale() const override;
 

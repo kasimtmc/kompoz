@@ -4090,6 +4090,35 @@ void aLayerIsKeptFromItsFirstFrame(Gpu& g) {
     renderer.reset();
 }
 
+// What each cluster adds to a run's width (FontSystem::clusterAdvances, which line breaking
+// measures with): the whole run's width in sum, and a word's about as wide as the word laid out
+// alone (kerning across its ends aside), in Latin, Turkish and Arabic, with letter spacing.
+void clusterAdvancesAddUpToTheWidth() {
+    std::unique_ptr<sdl::FontSystem> fonts = Gpu::loadFonts();
+    fonts->setScale(2);
+    int worst = 0;
+    for (const char* text : {"AVA Tower, WAVE fiction", "Kayan yazı şekillendirmesi çığ gibi", "مرحبا بالعالم الجميل"})
+        for (float spacing : {0.f, 0.5f}) {
+            Font font{14};
+            font.letterSpacing = spacing;
+            std::string_view s = text;
+            std::vector<float> adv = fonts->clusterAdvances(s, font);
+            float sum = 0;
+            for (float a : adv) sum += a;
+            CHECK(adv.size() == s.size() && std::abs(sum - fonts->measureWidth(s, font)) < 0.01f);
+            for (size_t a = 0; a < s.size();) {  // each word, its trailing space too
+                size_t space = s.find(' ', a), b = space == std::string_view::npos ? s.size() : space + 1;
+                float word = 0;
+                for (size_t i = a; i < b; ++i) word += adv[i];
+                float alone = fonts->measureWidth(s.substr(a, b - a), font);
+                if (std::abs(word - alone) > 1) worst = std::max(worst, int(std::abs(word - alone) * 100));
+                a = b;
+            }
+        }
+    CHECK(worst == 0);
+    if (worst) std::printf("  a word off by %.2f dp\n", worst / 100.f);
+}
+
 void scenesMatchTheirPictures(Gpu& g) {
     struct Scene {
         const char* name;
@@ -4251,6 +4280,7 @@ int main() {
     }
     if (started) {  // (devices of its own, one after another)
         pipelinesAreKeptBetweenRuns();
+        clusterAdvancesAddUpToTheWidth();
         std::printf("%d checks, %d failed\n", checks, failures);
         result = failures == 0 ? 0 : 1;
     }

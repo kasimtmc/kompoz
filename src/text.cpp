@@ -9,6 +9,19 @@
 
 namespace kompoz {
 
+std::vector<float> TextMeasurer::clusterAdvances(std::string_view utf8, const Font& font) {
+    std::vector<float> out(utf8.size(), 0.f);
+    float before = 0;
+    for (size_t i = 0; i < utf8.size();) {
+        size_t next = utf8::nextCluster(utf8, i);
+        float width = measureWidth(utf8.substr(0, next), font);
+        out[i] = width - before;
+        before = width;
+        i = next;
+    }
+    return out;
+}
+
 int AnnotatedStringBuilder::pushStyle(const SpanStyle& style) {
     pushed_.push_back({length(), style, std::nullopt});
     return int(pushed_.size()) - 1;
@@ -199,6 +212,9 @@ struct Measure {
     TextMeasurer& measurer;
     const std::string& text;
     const std::vector<TextRun>& runs;
+    // Each run's width before each of its bytes (one past its end too), from its clusters laid
+    // out once (TextMeasurer::clusterAdvances): made when width() first needs the run.
+    mutable std::vector<std::vector<float>> before;
 
     int runOf(int offset) const {
         for (size_t i = 0; i < runs.size(); ++i)
@@ -235,11 +251,28 @@ struct Measure {
             from = end;
         }
     }
+    // The width of text[from, to) (cluster boundaries), as each run laid out whole has it.
     float width(int from, int to) const {
-        std::vector<TextPiece> p;
-        pieces(p, from, to);
+        if (before.size() != runs.size()) before.assign(runs.size(), {});
         float w = 0;
-        for (const auto& piece : p) w += piece.width;
+        while (from < to) {
+            int run = runOf(from);
+            const TextRun& r = runs[size_t(run)];
+            int end = std::max(from + 1, std::min(to, r.end));
+            if (r.placeholder) {  // inline content (never broken): its room
+                w += placeholderWidth(r, measurer);
+            } else {
+                std::vector<float>& sums = before[size_t(run)];
+                if (sums.empty()) {
+                    std::vector<float> advances = measurer.clusterAdvances(std::string_view(text).substr(size_t(r.start), size_t(r.end - r.start)), r.font);
+                    sums.assign(advances.size() + 1, 0.f);
+                    for (size_t i = 0; i < advances.size(); ++i) sums[i + 1] = sums[i] + advances[i];
+                }
+                auto at = [&](int offset) { return sums[size_t(std::clamp(offset - r.start, 0, int(sums.size()) - 1))]; };
+                w += at(end) - at(from);
+            }
+            from = end;
+        }
         return w;
     }
     // Whole clusters, and inline content whole (its alternate text isn't broken).

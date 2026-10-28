@@ -322,6 +322,12 @@
   birinin kapatmasını bekleyen bir ileti kutusu açılmaz. Conan Center'ın SDL'inde Windows'ta OpenGL ES yoktur; bu yüzden
   Conan ile derlenen bir uygulama orada yalnızca Vulkan ile çizer (ANGLE, EGL'li bir SDL ister); Conan testi Windows
   için derlenmiş Mesa lavapipe'ında çizer.
+- **Satır kırma her parçayı bir kez dizer**: satırlara bölme, her sözcükte satırın o ana kadarki kısmını yeniden ölçüyordu;
+  her seferinde yeni bir metin parçasını diziyordu (ve yazı tipi sisteminin önbelleğini bunlarla doldurup sonra
+  boşaltıyordu). Artık her parçayı bir kez dizer ve kümelerinin eklediklerini toplar (`TextMeasurer::clusterAdvances`;
+  Android'in satır kırıcısının bir paragrafın ilerlemeleriyle yaptığı gibi). Çizilen ve satırların yerleri eskisi
+  gibi ölçülür. Bir Redmi Note 9 Pro'da Bileşenler ekranını kaydırmak kare başına 4,6–4,8 yerine 3,8–4,1 ms
+  kompozisyon ve yerleşim sürdü.
 - **Bir katman ilk karesinden itibaren tutulur**: ilk kez görülen bir katman (başlayan bir solma) zaten bütünüyle
   çizilir ve artık o andan itibaren tutulur; içeriği aynı kalan katman sonraki karede bu piksellerden birleştirilir,
   eskiden ikinci kez bütünüyle çiziliyordu.

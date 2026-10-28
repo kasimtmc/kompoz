@@ -305,6 +305,11 @@
 - **An app run by a script that can't start says so in its log**: with `KOMPOZ_SCRIPT` set (as on CI) no message box
   waits for someone to close it. Conan Center's SDL has no OpenGL ES on Windows, so an app built with Conan draws with
   Vulkan only there (ANGLE needs an SDL with EGL); the Conan test draws on Mesa's lavapipe built for Windows.
+- **Line breaking lays each run out once**: wrapping measured the line so far again at every word, each time laying out
+  a new piece of text (and filling the font system's cache with them, which it then emptied); it now lays each run out
+  once and sums what its clusters add (`TextMeasurer::clusterAdvances`, as Android's line breaker does with a
+  paragraph's advances). What is drawn and where lines go are measured as before. Scrolling the Components screen
+  on a Redmi Note 9 Pro took 3.8–4.1 ms of composition and layout a frame instead of 4.6–4.8.
 - **A layer is kept from its first frame**: a layer seen for the first time (a fade starting) is drawn whole anyway,
   and is kept from then on; one whose content stays the same is composited from those pixels in the next frame, where
   it used to be drawn whole a second time.

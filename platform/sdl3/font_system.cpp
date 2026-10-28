@@ -199,6 +199,12 @@ struct FontSystem::Impl {
     FT_Library library() const { return library_; }
 
     float measureWidth(std::string_view text, const Font& font) { return shaped(text, font, false)->advance / scale_; }
+    std::vector<float> clusterAdvances(std::string_view text, const Font& font) {
+        std::vector<float> out(text.size(), 0.f);
+        for (const ShapedGlyph& g : shaped(text, font, false)->glyphs)
+            if (g.cluster >= 0 && size_t(g.cluster) < out.size()) out[size_t(g.cluster)] += g.advance / scale_;
+        return out;
+    }
     float fontScale() const { return fontScale_; }
 
     FontMetrics metrics(const Font& font) {
@@ -393,6 +399,8 @@ struct FontSystem::Impl {
         bool synthBold = false, synthItalic = false;
         int start = 0, end = 0;
         bool rtl = false;  // a platform-drawn stretch going right to left
+        int cluster = 0;     // the byte its cluster starts at in the text
+        float advance = 0;   // px it moves the pen on by (its letter spacing too)
     };
     struct Shaped {
         std::string text;
@@ -455,9 +463,10 @@ struct FontSystem::Impl {
             if (run.rtl) std::reverse(parts.begin(), parts.end());
             for (const Item& part : parts) {
                 if (part.platform) {
-                    out->glyphs.push_back({nullptr, 0, pen, 0, false, false, part.start, part.end, run.rtl});
-                    pen += platformAdvance(text.substr(size_t(part.start), size_t(part.end - part.start)), px, font, run.rtl) * font.scaleX;
-                    for (size_t i = size_t(part.start); i < size_t(part.end); i = utf8::nextCluster(text, i)) pen += spacing;
+                    float advance = platformAdvance(text.substr(size_t(part.start), size_t(part.end - part.start)), px, font, run.rtl) * font.scaleX;
+                    for (size_t i = size_t(part.start); i < size_t(part.end); i = utf8::nextCluster(text, i)) advance += spacing;
+                    out->glyphs.push_back({nullptr, 0, pen, 0, false, false, part.start, part.end, run.rtl, part.start, advance});
+                    pen += advance;
                 } else {
                     pen = shapePart(*out, text, part.start, part.end, part.face, run.rtl, px, pen, spacing, font.features, font.scaleX);
                 }
@@ -574,26 +583,29 @@ struct FontSystem::Impl {
         hb_glyph_info_t* info = hb_buffer_get_glyph_infos(buffer_, &count);
         hb_glyph_position_t* pos = hb_buffer_get_glyph_positions(buffer_, &count);
         for (unsigned j = 0; j < count; ++j) {  // in visual order
-            out.glyphs.push_back({r.face, info[j].codepoint, pen + float(pos[j].x_offset) / 64.f * kx,
-                                  float(pos[j].y_offset) / 64.f * k, r.synthBold, r.synthItalic, 0, 0});
             float advance = float(pos[j].x_advance) / 64.f * kx;
-            pen += advance != 0 ? advance + boldExtra : 0;
-            if (j + 1 == count || info[j + 1].cluster != info[j].cluster) pen += spacing;  // a cluster's last glyph
+            advance = advance != 0 ? advance + boldExtra : 0;
+            if (j + 1 == count || info[j + 1].cluster != info[j].cluster) advance += spacing;  // a cluster's last glyph
+            out.glyphs.push_back({r.face, info[j].codepoint, pen + float(pos[j].x_offset) / 64.f * kx, float(pos[j].y_offset) / 64.f * k,
+                                  r.synthBold, r.synthItalic, 0, 0, false, int(info[j].cluster), advance});
+            pen += advance;
         }
 #else
         // Without HarfBuzz: one glyph per character, reversed for right-to-left (no joining, no features).
         (void)boldExtra;
         (void)features;
-        std::vector<char32_t> cps;
+        std::vector<std::pair<char32_t, int>> cps;  // and the byte each starts at
         for (size_t i = size_t(start); i < size_t(end);) {
+            int at = int(i);
             char32_t cp = utf8::next(text, i);
-            if (cp != 0xFE0F && cp != 0xFE0E && cp != 0x200D) cps.push_back(cp);  // selectors and joiners take no room
+            if (cp != 0xFE0F && cp != 0xFE0E && cp != 0x200D) cps.push_back({cp, at});  // selectors and joiners take no room
         }
         if (rtl) std::reverse(cps.begin(), cps.end());
-        for (char32_t cp : cps) {
+        for (auto [cp, at] : cps) {
             uint32_t index = FT_Get_Char_Index(ft, cp);
-            out.glyphs.push_back({r.face, index, pen, 0, r.synthBold, r.synthItalic, 0, 0});
-            pen += glyphAt(*r.face, index, px, r.synthBold, r.synthItalic).advance * scaleX + spacing;
+            float advance = glyphAt(*r.face, index, px, r.synthBold, r.synthItalic).advance * scaleX + spacing;
+            out.glyphs.push_back({r.face, index, pen, 0, r.synthBold, r.synthItalic, 0, 0, false, at, advance});
+            pen += advance;
         }
 #endif
         return pen;
@@ -938,6 +950,7 @@ void FontSystem::setFontScale(float fontScale) { impl_->setFontScale(fontScale);
 FT_Library FontSystem::library() const { return impl_->library(); }
 int FontSystem::rasterized() const { return impl_->rasterized; }
 float FontSystem::measureWidth(std::string_view utf8, const Font& font) { return impl_->measureWidth(utf8, font); }
+std::vector<float> FontSystem::clusterAdvances(std::string_view utf8, const Font& font) { return impl_->clusterAdvances(utf8, font); }
 FontMetrics FontSystem::metrics(const Font& font) { return impl_->metrics(font); }
 float FontSystem::fontScale() const { return impl_->fontScale(); }
 void FontSystem::layout(std::string_view text, float xPx, float baselinePx, const Font& font, bool rtl, std::vector<gpu::GlyphQuad>& out,
