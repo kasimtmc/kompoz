@@ -322,6 +322,11 @@
   birinin kapatmasını bekleyen bir ileti kutusu açılmaz. Conan Center'ın SDL'inde Windows'ta OpenGL ES yoktur; bu yüzden
   Conan ile derlenen bir uygulama orada yalnızca Vulkan ile çizer (ANGLE, EGL'li bir SDL ister); Conan testi Windows
   için derlenmiş Mesa lavapipe'ında çizer.
+- **Boru hatları onlara ihtiyaç duyan karelerden önce yapılır**: GPU renderer'ı her boru hattını ilk gerektiğinde
+  not eder ve sonraki çalıştırmalarda, aygıt izin veriyorsa (Vulkan) kendi iş parçacığında aynı sırayla yeniden yapar.
+  Bir Redmi Note 9 Pro'nun sürücüsü boru hattı önbelleğinde hiçbirini tutmuyor: her biri, onunla ilk çizen karede 8–20
+  ms sürüyordu; Bileşenler ekranı kaydırılırken 45 tanesi. Ölçümde artık 137–141 yerine 107–110 tazeleme kaçtı, en uzun
+  kare 95 yerine 46–54 ms.
 - **Showcase'in Bileşenler ekranı bir LazyColumn**: Compose'da uzun bir listenin olduğu gibi yalnızca görünen
   bölümler (ve biraz ötesi) oluşturulur, yerleştirilir ve çizilir. Bir Redmi Note 9 Pro'da Ana sayfa ile Bileşenler
   sekmeleri arasında beş kez gidip gelmek ana iş parçacığında 4,5 yerine 1,6 s, bunun kompozisyonu ve yerleşimi 3,2

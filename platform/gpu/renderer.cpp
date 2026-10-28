@@ -12,6 +12,9 @@
 #include <climits>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
+#include <format>
+#include <fstream>
 #include <numbers>
 
 namespace kompoz::gpu {
@@ -59,12 +62,85 @@ Renderer::Renderer(Device& device, TextSource& text) : device_(device), text_(te
     white_ = device_.createTexture(1, 1, Format::RGBA8, TextureUsage::Sampled);
 }
 
-Renderer::~Renderer() { device_.waitIdle(); }
+Renderer::~Renderer() {
+    {
+        std::lock_guard lock(pipelinesMutex_);
+        warming_.clear();
+    }
+    if (warmer_.joinable()) warmer_.join();
+    device_.waitIdle();
+}
+
+namespace {
+// A pipeline's key as a line of the list warmPipelines keeps.
+std::string pipelineLine(Format format, const BlendState& b, bool mesh, uint16_t kinds, uint8_t paints, uint8_t flags, bool clipped,
+                         bool filtered, int how) {
+    return std::format("{} {} {} {} {} {} {} {} {} {} {} {} {} {} {}\n", int(format), int(b.enabled), int(b.srcColor), int(b.dstColor),
+                       int(b.srcAlpha), int(b.dstAlpha), int(b.colorOp), int(b.alphaOp), int(mesh), kinds, paints, flags, int(clipped),
+                       int(filtered), how);
+}
+} // namespace
+
+void Renderer::warmPipelines(const std::string& listPath) {
+    pipelineList_ = listPath;
+    std::vector<PipelineKey> keys;
+    std::ifstream in(std::filesystem::path(std::u8string(listPath.begin(), listPath.end())));
+    for (int f, en, sc, dc, sa, da, co, ao, mesh, kinds, paints, flags, clipped, filtered, how;
+         in >> f >> en >> sc >> dc >> sa >> da >> co >> ao >> mesh >> kinds >> paints >> flags >> clipped >> filtered >> how;) {
+        BlendState b{en != 0, BlendFactor(sc), BlendFactor(dc), BlendFactor(sa), BlendFactor(da), BlendOp(co), BlendOp(ao)};
+        PipelineKey key{Format(f), b, mesh != 0, {uint16_t(kinds), uint8_t(paints), uint8_t(flags), clipped != 0, filtered != 0}, how};
+        if (std::ranges::find(keys, key) == keys.end()) keys.push_back(key);
+    }
+    std::lock_guard listing(pipelinesMutex_);
+    listed_ = keys;
+    if (keys.empty() || !device_.makesPipelinesOnAnyThread() || warmer_.joinable()) return;
+    warming_ = std::move(keys);
+    warmer_ = std::thread([this] {
+        for (;;) {
+            PipelineKey key;
+            {
+                std::lock_guard lock(pipelinesMutex_);
+                if (warming_.empty()) return;
+                key = warming_.front();
+                warming_.erase(warming_.begin());
+                warmingNow_ = key;
+            }
+            std::unique_ptr<Pipeline> made = makePipeline(key);
+            {
+                std::lock_guard lock(pipelinesMutex_);
+                pipelines_.emplace_back(key, std::move(made));
+                warmingNow_.reset();
+            }
+            pipelineMade_.notify_all();
+        }
+    });
+}
 
 Pipeline* Renderer::pipeline(Format target, const BlendState& blend, bool mesh, const ShaderVariant& variant, int how) {
     PipelineKey key{target, blend, mesh, variant, how};
-    for (auto& [k, p] : pipelines_)
-        if (k == key) return p.get();
+    {
+        std::unique_lock lock(pipelinesMutex_);
+        for (;;) {
+            for (auto& [k, p] : pipelines_)
+                if (k == key) return p.get();
+            if (warmingNow_ != key) break;
+            pipelineMade_.wait(lock);  // being made on warmPipelines' thread
+        }
+        std::erase(warming_, key);  // (still to make there: made here, now)
+    }
+    std::unique_ptr<Pipeline> made = makePipeline(key);
+    std::lock_guard lock(pipelinesMutex_);
+    if (!pipelineList_.empty() && std::ranges::find(listed_, key) == listed_.end()) {  // (kept for the next run's warmPipelines)
+        std::ofstream out(std::filesystem::path(std::u8string(pipelineList_.begin(), pipelineList_.end())), std::ios::app);
+        out << pipelineLine(target, blend, mesh, variant.kinds, variant.paints, variant.flags, variant.clipped, variant.filtered, how);
+        listed_.push_back(key);
+    }
+    pipelines_.emplace_back(key, std::move(made));
+    return pipelines_.back().second.get();
+}
+
+std::unique_ptr<Pipeline> Renderer::makePipeline(const PipelineKey& key) {
+    const auto& [target, blend, mesh, variant, how] = key;
     PipelineDesc desc;
     desc.vertex = mesh ? &kMeshVertex : &kVertex;
     desc.fragment = &kFragment;
@@ -80,8 +156,7 @@ Pipeline* Renderer::pipeline(Format target, const BlendState& blend, bool mesh, 
         desc.constants.clear();
         made = device_.createPipeline(desc);
     }
-    pipelines_.emplace_back(key, std::move(made));
-    return pipelines_.back().second.get();
+    return made;
 }
 
 namespace {

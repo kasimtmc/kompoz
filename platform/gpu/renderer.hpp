@@ -19,8 +19,12 @@
 
 #include <kompoz/graphics.hpp>
 
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -34,6 +38,12 @@ class Renderer final : public GraphicsContext {
 public:
     Renderer(Device& device, TextSource& text);
     ~Renderer() override;
+    // The pipelines this app's renderer made before, as `listPath` keeps them (made, then written
+    // there as each is first made): made again on a thread of their own, in the order they were
+    // first needed, where the device can (makesPipelinesOnAnyThread), so that a frame needing one
+    // takes it made. (A driver that keeps none in its pipeline cache, or a new shader after an
+    // update, made each in a frame: 8 to 20 ms on a Redmi Note 9 Pro, each.)
+    void warmPipelines(const std::string& listPath);
 
     float scale = 1;     // px per dp
     int layerCount = 0;  // layers pushed (KOMPOZ_PROFILE)
@@ -370,6 +380,15 @@ private:
         bool operator==(const PipelineKey&) const = default;
     };
     std::vector<std::pair<PipelineKey, std::unique_ptr<Pipeline>>> pipelines_;
+    // warmPipelines: the ones still to make on its thread, the one it is making, the file.
+    std::mutex pipelinesMutex_;
+    std::condition_variable pipelineMade_;
+    std::vector<PipelineKey> warming_;
+    std::optional<PipelineKey> warmingNow_;
+    std::thread warmer_;
+    std::string pipelineList_;
+    std::vector<PipelineKey> listed_;  // in it already
+    std::unique_ptr<Pipeline> makePipeline(const PipelineKey& key);
     std::unique_ptr<Texture> dstCopy_;  // a target's pixels under a draw whose blend mode reads them
     std::unique_ptr<Pipeline> coveragePipeline_;
     std::unique_ptr<Pipeline> effectPipeline_;

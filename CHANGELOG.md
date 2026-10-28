@@ -305,6 +305,11 @@
 - **An app run by a script that can't start says so in its log**: with `KOMPOZ_SCRIPT` set (as on CI) no message box
   waits for someone to close it. Conan Center's SDL has no OpenGL ES on Windows, so an app built with Conan draws with
   Vulkan only there (ANGLE needs an SDL with EGL); the Conan test draws on Mesa's lavapipe built for Windows.
+- **Pipelines are made ahead of the frames that need them**: the GPU renderer writes down each pipeline as it first
+  needs it and, in the next runs, makes them again on a thread of its own in that order, where the device can (Vulkan).
+  A Redmi Note 9 Pro's driver keeps none in its pipeline cache: each took 8–20 ms in the frame that first drew with it,
+  45 of them while scrolling the Components screen; it now missed 107–110 refreshes in the bench instead of 137–141, its
+  longest frame 46–54 ms instead of 95.
 - **The showcase's Components screen is a LazyColumn**: as a long list is in Compose, only the sections in view (and
   a little past them) are composed, laid out and drawn. Going between the Home and Components tabs five times on a
   Redmi Note 9 Pro took 1.6 s of the main thread instead of 4.5, its composition and layout 0.6 s instead of 3.2;

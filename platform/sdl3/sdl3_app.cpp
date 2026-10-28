@@ -1404,6 +1404,11 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     app->fonts->load(kompoz::FontWeight::Bold, app->config.boldFontPath);  // optional
     app->fonts->load(kompoz::FontWeight::Medium, app->config.mediumFontPath);  // optional
     app->gpuCanvas = std::make_unique<kompoz::gpu::Renderer>(*app->gpu, *app->fonts);
+    // The pipelines it made in earlier runs, made again ahead of the frames that need them.
+    if (std::filesystem::path dir = kompoz::sdl::appCacheDirectory(app->config.title); !dir.empty()) {
+        std::u8string file = (dir / (std::string("pipelines-") + kompoz::gpu::backendName(app->gpu->backend()) + ".list")).u8string();
+        app->gpuCanvas->warmPipelines(std::string(file.begin(), file.end()));
+    }
     app->display = std::make_unique<kompoz::DisplayList>(*app->fonts);
     app->display->allowMoves(true);  // (the kept frame moves its pixels)
     app->display->keepNodes(true);  // (nodes that didn't change aren't drawn again)

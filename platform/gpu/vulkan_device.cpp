@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <mutex>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
@@ -169,7 +170,8 @@ public:
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
     std::string cacheFile;       // where the pipeline cache is kept between runs (none: not kept)
     size_t cacheSize = 0;        // the cache's data's size when it was made (with the file's) or kept
-    bool pipelinesMade = false;  // since the cache was last kept (at a frame's end)
+    std::atomic<bool> pipelinesMade = false;  // since the cache was last kept (at a frame's end)
+    std::mutex renderPassMutex;  // (renderPass: pipelines are made on another thread too)
     VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     std::function<void(int*, int*)> drawableSize;
@@ -513,6 +515,7 @@ public:
             if (tex == &t) tex = nullptr;
     }
 
+    bool makesPipelinesOnAnyThread() const override { return true; }  // (the pipeline cache is synchronized by the driver)
     std::unique_ptr<Pipeline> createPipeline(const PipelineDesc& desc) override {
         auto module = [&](std::span<const unsigned char> code) {
             VkShaderModuleCreateInfo smci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
@@ -592,6 +595,7 @@ public:
     }
 
     VkRenderPass renderPass(VkFormat format, VkAttachmentLoadOp load) {
+        std::lock_guard lock(renderPassMutex);
         auto [it, added] = renderPasses.try_emplace({format, load}, VK_NULL_HANDLE);
         if (!added) return it->second;
         VkAttachmentDescription a{};

@@ -215,6 +215,9 @@ public:
 
     virtual std::unique_ptr<Texture> createTexture(int width, int height, Format format, uint8_t usage) = 0;
     virtual std::unique_ptr<Pipeline> createPipeline(const PipelineDesc& desc) = 0;
+    // Whether createPipeline may be called from another thread while this one goes on (Vulkan:
+    // Renderer::warmPipelines makes them there).
+    virtual bool makesPipelinesOnAnyThread() const { return false; }
     // The format the swapchain's images have (pipelines drawing into them are made for it).
     virtual Format swapchainFormat() const = 0;
 
