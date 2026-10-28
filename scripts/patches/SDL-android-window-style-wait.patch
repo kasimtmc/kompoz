@@ -1,0 +1,30 @@
+Don't wait half a second for a window style change that changes nothing on Android.
+
+SDL_CreateWindow() sets the window out of fullscreen mode (ApplyWindowFlags), and on Android
+Android_SetWindowFullscreen() calls setWindowStyle(false) with the activity lock held. Leaving
+fullscreen, SDLActivity waited up to 500 ms for surfaceChanged() whenever the surface was as big
+as the display, taking that for fullscreen mode. A window laid out edge to edge (under the
+status and navigation bars, as Android 15 lays out apps) is that big without fullscreen mode;
+it keeps its size, so no surfaceChanged() came. And the window gaining focus meanwhile called
+nativeFocusChanged() on the UI thread, which waits for the activity lock: so every start of an
+app spent the half second with both threads waiting (on a Redmi Note 9 Pro, from the window
+shown to its first frame).
+
+It waits now only when fullscreen mode is on, the one case leaving it changes the layout.
+
+Kompoz applies this to SDL 3.4.18 (scripts/fetch-deps.sh).
+
+--- a/android-project/app/src/main/java/org/libsdl/app/SDLActivity.java
++++ b/android-project/app/src/main/java/org/libsdl/app/SDLActivity.java
+@@ -1025,7 +1025,10 @@
+                     // If we're laid out fullscreen (even if the status bar and nav bar are present),
+                     // or are actively in fullscreen, we're going to change size and should wait for
+                     // surfaceChanged before we return, so the size is right back in native code.
+-                    bShouldWait = bFullscreenLayout;
++                    // Not when fullscreen mode isn't on: a window laid out edge to edge, under the
++                    // bars, keeps its size then, and the wait (the activity lock held, which
++                    // nativeFocusChanged() on this thread waits for) ran out its half second.
++                    bShouldWait = bFullscreenLayout && mFullscreenModeActive;
+                 }
+             }
+ 

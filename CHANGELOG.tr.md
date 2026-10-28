@@ -344,6 +344,12 @@
   dolduruyorsa başlamaz: içindekiler tutulur, kalanlar eskisi gibi çizilir, her karede hepsi yeniden taranmaz. Bir
   Redmi Note 9 Pro'da Ana sayfa ile Bileşenler sekmeleri arasında beş kez gidip gelmek 36 yerine 20–22 tazeleme
   kaçırdı. `KOMPOZ_PROFILE` yavaş karelerinde çizilen ve tutulan yolları sayar.
+- **Bir Android uygulamasının ilk karesi yarım saniye erken gelir**: penceresini yaparken SDL onu tam ekran kipinden
+  çıkarıyor ve yüzeyi ekran kadar büyükse boyutun değişmesini 500 ms'ye kadar bekliyordu; kenardan kenara (durum ve
+  gezinme çubuklarının altına) yerleşen bir pencere hep o kadar büyüktür. Hiçbir şey değişmiyordu, pencereye odak
+  gelmesi de bu arada aynı kilidi beklediği için her açılış o yarım saniyeyi sonuna kadar bekliyordu. Artık yalnızca
+  tam ekran kipi açıkken bekler (scripts/patches/SDL-android-window-style-wait.patch). Bir Redmi Note 9 Pro'da ilk
+  kare pencere gösterildikten 680–710 yerine 180–200 ms sonra geldi.
 - **Bir Morph on kat hızlı yapılır**: bir Morph'un iki şeklinden de aldığı `polarRadii`, her yönü her kenarla denemek
   yerine her kenarı yalnızca ortadan bakınca kapsadığı yönlerle (ve her yandan bir fazlasıyla; ortadan geçen ya da
   ortaya değen bir kenarı hepsiyle) dener: aynı yarıçaplar, tam olarak, zamanın onda birinde (masaüstünde bir ana hat

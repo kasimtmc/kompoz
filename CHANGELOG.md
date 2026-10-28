@@ -325,6 +325,12 @@
   frame's paths fill most of it themselves: then those in it are kept and the rest drawn as before, rather than all
   rasterized again each frame. Going between the Home and Components tabs five times on a Redmi Note 9 Pro missed
   20–22 refreshes instead of 36. `KOMPOZ_PROFILE` counts paths drawn and kept in its slow frames.
+- **An Android app's first frame comes half a second sooner**: making its window, SDL took it out of fullscreen mode
+  and waited up to 500 ms for the size to change whenever its surface was as big as the display, which a window laid
+  out edge to edge (under the status and navigation bars) always is; nothing changed, and the window gaining focus
+  meanwhile waited for the same lock, so every start ran the half second out. It waits now only when fullscreen mode
+  is on (scripts/patches/SDL-android-window-style-wait.patch). On a Redmi Note 9 Pro the first frame came 180–200 ms
+  after the window was shown instead of 680–710.
 - **A Morph is made ten times faster**: `polarRadii`, which a Morph takes of both its shapes, tries each edge only
   against the directions it spans seen from the middle (and one more each way; all of them for an edge at or across
   the middle) instead of every direction against every edge: the same radii, exactly, for a tenth of the time (0.011
