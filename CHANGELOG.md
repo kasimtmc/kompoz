@@ -309,7 +309,7 @@
   and composed a view and a half of those, which for tall items (the Components screen's sections) was nearly all of
   them, composed and measured for nothing. It composes the first item now, then as many as the sizes say fill the view,
   in the same frame, as Compose composes items as it measures them. Opening the Components tab the first time took the
-  desktop 18 ms of composition and layout instead of under 5. (What is focused or brought into view has to be
+  desktop under 5 ms of composition and layout instead of 18. (What is focused or brought into view has to be
   composed, as in Compose: an item half a view past the view no longer is just because the guess was short.)
 - **Pipelines are made ahead of the frames that need them**: the GPU renderer writes down each pipeline as it first
   needs it and, in the next runs, makes them again on a thread of its own in that order, where the device can (Vulkan).
