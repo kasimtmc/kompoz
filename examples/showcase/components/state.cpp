@@ -364,12 +364,13 @@ void LifecycleSection(CallSite site) {
         LifecycleState state = owner->lifecycle().currentStateAsState();
         auto playing = remember([] { return mutableStateOf(false); });
         auto position = remember([] { return mutableStateOf(0.f); });
+        auto inView = remember([] { return mutableStateOf(false); });  // (and only while it shows, as a player plays)
         LifecycleResumeEffect(0, [playing]() -> std::function<void()> {
             playing.set(true);
             return [playing] { playing.set(false); };  // paused, or left the composition
         });
-        LaunchedEffect(playing.get(), [playing, position]() -> Task {
-            while (playing.peek()) {
+        LaunchedEffect(playing.get() && inView.get(), [playing, inView, position]() -> Task {
+            while (playing.peek() && inView.peek()) {
                 co_await delay(std::chrono::milliseconds(50));
                 position.set(std::fmod(position.peek() + 0.004f, 1.f));
             }
@@ -385,7 +386,8 @@ void LifecycleSection(CallSite site) {
                  {.font = typography().bodyMedium, .color = colorScheme().onSurfaceVariant});
             Text(std::format("Bu ekran: {} · öne gelme: {}", names[int(state)], resumes),
                  Modifier().padding(0, 8, 0, 0), {.font = typography().titleSmall});
-            Row(Modifier().fillMaxWidth().padding(0, 8), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
+            Row(Modifier().fillMaxWidth().padding(0, 8).onVisibilityChanged([inView](bool visible) { inView.set(visible); }, {.minFractionVisible = 0}),
+                {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
                 [&] {
                     Icon(playing.get() ? Icons::Filled::PlayArrow : Icons::Filled::Pause, playing.get() ? "Oynatılıyor" : "Duraklatıldı");
                     LinearProgressIndicator(position.get(), Modifier().weight(1));

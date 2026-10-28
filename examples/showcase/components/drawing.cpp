@@ -9,9 +9,10 @@ void DrawingSection(CallSite site) {
         const ColorScheme& cs = colorScheme();
         auto spin = remember([] { return Animatable<float>(0.f); });
         auto spinning = remember([] { return mutableStateOf(true); });
-        LaunchedEffect(spinning.get(), [spin, on = spinning.peek()]() -> Task {
-            while (on) {
-                co_await spin.animateTo(360.f, tween(2400, 0, LinearEasing));
+        auto inView = remember([] { return mutableStateOf(false); });  // (out of view it stops: frames for nobody to see)
+        LaunchedEffect(spinning.get() && inView.get(), [spin, on = spinning.peek() && inView.peek()]() -> Task {
+            while (on) {  // a turn every 2.4 s, on from where it stopped
+                co_await spin.animateTo(360.f, tween(int(2400 * (1 - spin.value() / 360)), 0, LinearEasing));
                 spin.snapTo(0.f);
             }
         });
@@ -211,7 +212,10 @@ void DrawingSection(CallSite site) {
                 [&] {
                     // Rotated while drawing: the angle never recomposes this section.
                     Icon(Icons::Filled::Settings, "Dönen çark",
-                         Modifier().size(40).graphicsLayer([spin](GraphicsLayerScope& l) { l.rotationZ = spin.value(); }),
+                         Modifier()
+                             .size(40)
+                             .onVisibilityChanged([inView](bool visible) { inView.set(visible); }, {.minFractionVisible = 0})
+                             .graphicsLayer([spin](GraphicsLayerScope& l) { l.rotationZ = spin.value(); }),
                          cs.primary);
                     OutlinedButton([spinning] { spinning.set(!spinning.get()); }, Modifier(), {},
                                    [&] { Text(spinning.get() ? "Durdur" : "Döndür"); });
