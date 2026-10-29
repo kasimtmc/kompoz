@@ -1,7 +1,5 @@
 #include "uia_bridge.hpp"
 
-#include <SDL3/SDL.h>
-
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <ole2.h>
@@ -115,7 +113,8 @@ class Provider;
 struct UiaBridge::State : std::enable_shared_from_this<State> {
     HWND hwnd = nullptr;
     WNDPROC previous = nullptr;
-    uint32_t eventType = 0;
+    platform::Notifier notifier;
+    bool listening = false;
     std::atomic<bool> asked{false}, treeRequest{false};
     std::mutex mutex;  // what follows, for UI Automation's threads
     std::vector<SemanticsNode> nodes;
@@ -139,9 +138,7 @@ struct UiaBridge::State : std::enable_shared_from_this<State> {
     Provider* provider(int id);  // (under the mutex) a new reference
 
     void notify() const {
-        SDL_Event e{};
-        e.type = eventType;
-        SDL_PushEvent(&e);
+        if (notifier.notify) notifier.notify();
     }
     void request(int id, SemanticsAction action, float argument = 0, std::string text = {}) {
         requests.push_back({id, action, argument, std::move(text)});
@@ -511,12 +508,12 @@ Provider* State::provider(int id) {
     return it->second;
 }
 
-UiaBridge::UiaBridge(void* hwnd) : state_(std::make_shared<State>()) {
+UiaBridge::UiaBridge(void* hwnd, platform::Notifier notifier) : state_(std::make_shared<State>()) {
     State& s = *state_;
     s.hwnd = static_cast<HWND>(hwnd);
+    s.notifier = std::move(notifier);
     if (!s.hwnd) return;
-    s.eventType = SDL_RegisterEvents(1);
-    if (s.eventType == 0) return;
+    s.listening = true;
     SetPropW(s.hwnd, kProperty, &s);
     s.previous = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(s.hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&windowProc)));
 }
@@ -637,7 +634,7 @@ void UiaBridge::publish(std::vector<SemanticsNode> nodes, float dpToPixels) {
     }
 }
 
-uint32_t UiaBridge::eventType() const { return state_->eventType; }
+bool UiaBridge::listening() const { return state_->listening; }
 
 void* UiaBridge::rootProvider() {
     std::lock_guard lock(state_->mutex);

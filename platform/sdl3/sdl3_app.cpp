@@ -11,6 +11,7 @@
 #include <kompoz/host.hpp>
 
 #include "../app/app_core.hpp"
+#include "../common/system.hpp"
 #ifdef KOMPOZ_GPU_VULKAN
 #include <SDL3/SDL_vulkan.h>
 #endif
@@ -143,6 +144,7 @@ struct SdlPlatform final : platform::Platform {
     mutable float scale = 1, pointToDp = 1;  // as metrics() last said
     bool focused = true;             // (AT-SPI tells which window is active)
     Uint32 wakeEvent = 0;
+    Uint32 accentEvent = Uint32(-1), wallpaperEvent = Uint32(-1), a11yEvent = Uint32(-1);  // what the modules on threads of their own tell with
     std::atomic<bool> wakePending{false};
     bool waiting = false;
     SDL_Cursor* cursors[9] = {};  // by kompoz::Cursor
@@ -151,6 +153,20 @@ struct SdlPlatform final : platform::Platform {
     SDL_TimerID wakeTimer = 0;  // wakes the idle loop when a coroutine delay is due
     int64_t wakeDeadline = -1;
 
+    SdlPlatform() {
+        platform::setLogSink([](const char* message) { SDL_Log("%s", message); });
+#ifdef SDL_PLATFORM_ANDROID
+        // The APK's assets (what SDL's files read where a path is relative), the app's cache directory.
+        platform::setAssetReader([](const std::string& path) {
+            size_t size = 0;
+            void* data = SDL_LoadFile(path.c_str(), &size);
+            std::vector<uint8_t> bytes = data ? std::vector<uint8_t>(static_cast<uint8_t*>(data), static_cast<uint8_t*>(data) + size) : std::vector<uint8_t>();
+            SDL_free(data);
+            return bytes;
+        });
+        if (const char* cache = SDL_GetAndroidCachePath()) platform::setCacheDirectory(cache);
+#endif
+    }
     ~SdlPlatform() override {
         if (wakeTimer) SDL_RemoveTimer(wakeTimer);
 #ifdef SDL_PLATFORM_ANDROID
@@ -454,13 +470,13 @@ std::optional<platform::Event> fromSdl(SdlPlatform& app, const SDL_Event& e) {
         return std::optional(out);
     };
 #ifdef KOMPOZ_DESKTOP_ACCENT
-    if (app.accent && app.accent->eventType() != 0 && e.type == app.accent->eventType()) return with(EventType::AccentChanged);
+    if (e.type == app.accentEvent) return with(EventType::AccentChanged);
 #endif
 #ifdef KOMPOZ_WALLPAPER_COLORS
-    if (app.wallpaper && app.wallpaper->eventType() != 0 && e.type == app.wallpaper->eventType()) return with(EventType::WallpaperChanged);
+    if (e.type == app.wallpaperEvent) return with(EventType::WallpaperChanged);
 #endif
 #ifdef KOMPOZ_A11Y_BRIDGE
-    if (app.a11y && app.a11y->eventType() != 0 && e.type == app.a11y->eventType()) return with(EventType::AccessibilityRequest);
+    if (e.type == app.a11yEvent) return with(EventType::AccessibilityRequest);
 #endif
     if (e.type == app.wakeEvent) return with(EventType::Wake);
     switch (e.type) {
@@ -581,16 +597,29 @@ std::optional<platform::Event> fromSdl(SdlPlatform& app, const SDL_Event& e) {
 void SdlPlatform::attach(ComposeHost& h, ComposeHost::Callbacks& callbacks) {
     host = &h;
     SdlPlatform* raw = this;
+    // A module on a thread of its own tells with an event of a type of its own (SDL's thread-local
+    // state let go as its thread ends: SDL didn't start it).
+    auto notifier = [](Uint32& type) {
+        type = SDL_RegisterEvents(1);
+        return platform::Notifier{.notify =
+                                      [type] {
+                                          SDL_Event e{};
+                                          e.type = type;
+                                          SDL_PushEvent(&e);
+                                      },
+                                  .threadDone = [] { SDL_CleanupTLS(); }};
+    };
+    (void)notifier;
 #ifdef KOMPOZ_DESKTOP_ACCENT
-    accent = std::make_unique<DesktopAccent>();  // tells its color as an event, soon
+    accent = std::make_unique<DesktopAccent>(notifier(accentEvent));  // tells its color, soon
 #endif
 #ifdef KOMPOZ_WALLPAPER_COLORS
-    wallpaper = std::make_unique<WallpaperColors>(SDL_GetSystemTheme() == SDL_SYSTEM_THEME_DARK);
+    wallpaper = std::make_unique<WallpaperColors>(SDL_GetSystemTheme() == SDL_SYSTEM_THEME_DARK, notifier(wallpaperEvent));
 #endif
 #ifdef KOMPOZ_ATSPI
-    a11y = std::make_unique<AtspiBridge>(SDL_GetWindowTitle(window));  // connects on its thread, if wanted
+    a11y = std::make_unique<AtspiBridge>(SDL_GetWindowTitle(window), notifier(a11yEvent));  // connects on its thread, if wanted
 #elif defined(KOMPOZ_UIA)
-    a11y = std::make_unique<UiaBridge>(SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
+    a11y = std::make_unique<UiaBridge>(SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr), notifier(a11yEvent));
 #endif
     wakeEvent = SDL_RegisterEvents(1);
     const SDL_SystemCursor systemCursors[] = {SDL_SYSTEM_CURSOR_DEFAULT,   SDL_SYSTEM_CURSOR_POINTER,   SDL_SYSTEM_CURSOR_TEXT,

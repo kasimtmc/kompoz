@@ -5,12 +5,13 @@
 // loaded at run time) on a thread of its own, the app registered with the AT-SPI registry. It
 // starts when the desktop's accessibility is on (org.a11y.Status IsEnabled or ScreenReaderEnabled,
 // also once it is turned on later); KOMPOZ_ATSPI=1 starts it anyway, KOMPOZ_ATSPI=0 never. What an assistive technology asks the
-// app to do (click, focus, set a slider) comes to the main loop as an SDL event; what changes in the
-// tree (focus, states, names, children, live regions) is told to it as AT-SPI events.
+// app to do (click, focus, set a slider) is notified (Notifier); what changes in the tree (focus,
+// states, names, children, live regions) is told to it as AT-SPI events.
+
+#include "../common/system.hpp"
 
 #include <kompoz/layout.hpp>
 
-#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -19,7 +20,7 @@ namespace kompoz::sdl {
 
 class AtspiBridge {
 public:
-    explicit AtspiBridge(std::string appName);
+    AtspiBridge(std::string appName, platform::Notifier notifier);
     ~AtspiBridge();
     AtspiBridge(const AtspiBridge&) = delete;
     AtspiBridge& operator=(const AtspiBridge&) = delete;
@@ -40,14 +41,14 @@ public:
     // The tree as it is now (UI thread). What changed since the last one is told to listeners.
     void publish(std::vector<SemanticsNode> nodes, const Window& window);
 
-    // What assistive technologies asked for; each one also comes as an SDL event of eventType().
+    // What assistive technologies asked for; each one is also notified.
     struct Request {
         int id = 0;
         SemanticsAction action = SemanticsAction::Click;
         float argument = 0;
         std::string text;  // SetText's
     };
-    uint32_t eventType() const;  // 0: none will come
+    bool listening() const;  // started: it will notify
     std::vector<Request> takeRequests();
 
     struct State;

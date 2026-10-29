@@ -1,5 +1,7 @@
 #include "image_loader.hpp"
 
+#include "../common/system.hpp"
+
 #include <kompoz/disk_cache.hpp>
 
 #include <SDL3/SDL.h>
@@ -7,8 +9,10 @@
 #include <atomic>
 #include <cctype>
 #include <condition_variable>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -235,7 +239,7 @@ std::vector<uint8_t> httpGet(const std::string& url) {
     curl_easy_cleanup(curl);
 #else
     (void)url;
-    SDL_Log("kompoz: no HTTP client in this build (libcurl was not found): %s", url.c_str());
+    platform::log("kompoz: no HTTP client in this build (libcurl was not found): " + url);
 #endif
     return body;
 }
@@ -250,7 +254,7 @@ std::shared_ptr<DiskCache> diskCache() {
 }
 
 bool logging() {
-    static const bool on = SDL_getenv("KOMPOZ_IMAGE_LOG") != nullptr;  // where each one came from, how big
+    static const bool on = std::getenv("KOMPOZ_IMAGE_LOG") != nullptr;  // where each one came from, how big
     return on;
 }
 
@@ -267,22 +271,22 @@ ImageBitmap loadNow(const std::string& model, const ImageRequestSize& size) {
         bytes = httpGet(model);
         from = "network";
     } else if (!isUrl(model)) {
-        bytes = readFile(model);
+        bytes = platform::readFile(model);
     }
     if (bytes.empty()) {
-        SDL_Log("kompoz: can't load %s", model.c_str());
+        platform::log("kompoz: can't load " + model);
         return {};
     }
     ImageBitmap image = decodeImage(bytes, size);
     if (image.empty()) {
-        SDL_Log("kompoz: can't decode %s", model.c_str());
+        platform::log("kompoz: can't decode " + model);
         if (disk && from[0] == 'd') disk->remove(model);
     } else if (disk && from[0] == 'n') {
         disk->put(model, bytes);  // only what could be decoded
     }
     if (logging())
-        SDL_Log("kompoz: image %s from %s, %zu bytes, decoded %dx%d for %dx%d%s", model.c_str(), from, bytes.size(), image.width(),
-                image.height(), size.width, size.height, size.fill ? " (fill)" : "");
+        platform::log(std::format("kompoz: image {} from {}, {} bytes, decoded {}x{} for {}x{}{}", model, from, bytes.size(), image.width(),
+                                  image.height(), size.width, size.height, size.fill ? " (fill)" : ""));
     return image;
 }
 
@@ -379,15 +383,6 @@ Loader& loader() {
 
 } // namespace
 
-std::vector<uint8_t> readFile(const std::string& path) {
-    size_t size = 0;
-    void* data = SDL_LoadFile(path.c_str(), &size);
-    if (!data && SDL_GetBasePath()) data = SDL_LoadFile((SDL_GetBasePath() + path).c_str(), &size);
-    if (!data) return {};
-    std::vector<uint8_t> bytes(static_cast<uint8_t*>(data), static_cast<uint8_t*>(data) + size);
-    SDL_free(data);
-    return bytes;
-}
 
 ImageBitmap decodeImage(const std::vector<uint8_t>& bytes, const ImageRequestSize& size) {
     if (bytes.size() < 12) return {};
@@ -417,7 +412,7 @@ void loadImageAsync(const std::string& model, const ImageRequestSize& size, std:
     if (isUrl(model)) {
         kompoz_web_load_image(id, model.c_str(), nullptr, 0, size.width, size.height, size.fill);
     } else {
-        std::vector<uint8_t> bytes = readFile(model);  // from the preloaded files
+        std::vector<uint8_t> bytes = platform::readFile(model);  // from the preloaded files
         if (bytes.empty()) {
             auto it = webLoads().find(id);
             auto finish = std::move(it->second);
@@ -431,31 +426,6 @@ void loadImageAsync(const std::string& model, const ImageRequestSize& size, std:
 #endif
 }
 
-std::filesystem::path appCacheDirectory(const std::string& appName) {
-#ifdef SDL_PLATFORM_EMSCRIPTEN
-    (void)appName;
-    return {};
-#else
-    auto utf8Path = [](const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); };
-    // A name that makes a directory.
-    std::string name;
-    for (char c : appName) name += (std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_' || c == '.' || uint8_t(c) >= 0x80) ? c : '_';
-    if (name.empty() || name[0] == '.') name = "app" + name;
-#if defined(SDL_PLATFORM_ANDROID)
-    (void)utf8Path;
-    if (const char* cache = SDL_GetAndroidCachePath()) return std::filesystem::path(cache);
-#elif defined(SDL_PLATFORM_WINDOWS)
-    if (const char* local = SDL_getenv("LOCALAPPDATA")) return utf8Path(local) / "Kompoz" / utf8Path(name);
-#elif defined(SDL_PLATFORM_APPLE)
-    if (const char* home = SDL_getenv("HOME")) return std::filesystem::path(home) / "Library" / "Caches" / utf8Path(name);
-#else
-    (void)utf8Path;
-    if (const char* xdg = SDL_getenv("XDG_CACHE_HOME"); xdg && *xdg) return std::filesystem::path(xdg) / "kompoz" / name;
-    if (const char* home = SDL_getenv("HOME")) return std::filesystem::path(home) / ".cache" / "kompoz" / name;
-#endif
-    return {};
-#endif
-}
 
 void startImageDiskCache(const std::string& appName, uint64_t maxBytes) {
 #ifdef SDL_PLATFORM_EMSCRIPTEN
@@ -463,9 +433,9 @@ void startImageDiskCache(const std::string& appName, uint64_t maxBytes) {
     (void)maxBytes;
 #else
     std::filesystem::path dir;
-    if (const char* own = SDL_getenv("KOMPOZ_IMAGE_CACHE"))
+    if (const char* own = std::getenv("KOMPOZ_IMAGE_CACHE"))
         dir = std::filesystem::path(std::u8string(own, own + std::strlen(own)));
-    else if (std::filesystem::path base = appCacheDirectory(appName); !base.empty())
+    else if (std::filesystem::path base = platform::appCacheDirectory(appName); !base.empty())
         dir = base / "images";
     std::lock_guard lock(gDiskMutex);
     gDisk = dir.empty() || maxBytes == 0 ? nullptr : std::make_shared<DiskCache>(dir, maxBytes);
@@ -483,7 +453,7 @@ void stopImageLoader() {
 ImageBitmap loadImageFile(std::string_view path) {
     std::string p(path);
 #ifndef SDL_PLATFORM_EMSCRIPTEN
-    if (std::vector<uint8_t> bytes = readFile(p); !bytes.empty())
+    if (std::vector<uint8_t> bytes = platform::readFile(p); !bytes.empty())
         if (ImageBitmap image = decodeImage(bytes); !image.empty()) return image;
 #endif
     SDL_Surface* surface = SDL_LoadSurface(p.c_str());
@@ -522,7 +492,7 @@ void savePixels(const std::string& path, int w, int h, std::vector<uint8_t>& pix
 
 #ifdef SDL_PLATFORM_EMSCRIPTEN
 extern "C" {
-EMSCRIPTEN_KEEPALIVE void* kompoz_web_alloc(int size) { return SDL_malloc(size_t(size)); }
+EMSCRIPTEN_KEEPALIVE void* kompoz_web_alloc(int size) { return std::malloc(size_t(size)); }
 EMSCRIPTEN_KEEPALIVE int kompoz_web_sample_size(int width, int height, int wantWidth, int wantHeight, int fill) {
     return kompoz::imageSampleSize(width, height, {wantWidth, wantHeight, fill != 0});
 }
@@ -531,7 +501,7 @@ EMSCRIPTEN_KEEPALIVE void kompoz_web_image_loaded(int id, uint8_t* pixels, int w
     auto it = loads.find(id);
     kompoz::ImageBitmap image;
     if (pixels && width > 0 && height > 0) image = kompoz::sdl::fromRgba(width, height, pixels, size_t(width) * 4);
-    SDL_free(pixels);
+    std::free(pixels);
     if (it == loads.end()) return;
     auto done = std::move(it->second);
     loads.erase(it);

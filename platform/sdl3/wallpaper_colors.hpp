@@ -3,12 +3,13 @@
 // The wallpaper's own colors on desktops, the way Android 12 takes them from the wallpaper: the
 // wallpaper found (Linux: KDE Plasma's, GNOME's and the desktops' that keep its settings, Cinnamon's,
 // MATE's, Xfce's; Windows'), decoded small and its palette picked (TonalPalette::fromImage) on a
-// thread of its own, and again whenever it changes. Each palette comes to the main loop as an SDL
-// event. KOMPOZ_NO_WALLPAPER_COLORS=1 leaves it out (screenshots the same on every machine).
+// thread of its own, and again whenever it changes; it notifies (Notifier) as each palette
+// comes. KOMPOZ_NO_WALLPAPER_COLORS=1 leaves it out (screenshots the same on every machine).
+
+#include "../common/system.hpp"
 
 #include <kompoz/layout.hpp>
 
-#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -19,13 +20,13 @@ namespace kompoz::sdl {
 
 class WallpaperColors {
 public:
-    explicit WallpaperColors(bool darkTheme);  // starts looking (nothing comes where none is found)
+    WallpaperColors(bool darkTheme, platform::Notifier notifier);  // starts looking (nothing comes where none is found)
     ~WallpaperColors();
     WallpaperColors(const WallpaperColors&) = delete;
     WallpaperColors& operator=(const WallpaperColors&) = delete;
 
-    // The SDL event type sent when the palette is learned or changes (0: none will come).
-    uint32_t eventType() const;
+    // Whether it was started: it notifies when the palette is learned or changes.
+    bool listening() const;
     // The latest palette; none: no wallpaper found (or it couldn't be read).
     std::optional<TonalPalette> palette() const;
     // Some wallpapers have a variant for the dark theme (KDE's packages, GNOME's picture-uri-dark).

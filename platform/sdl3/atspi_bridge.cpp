@@ -2,8 +2,6 @@
 
 #include "libdbus.hpp"
 
-#include <SDL3/SDL.h>
-
 #include <poll.h>
 #include <sys/eventfd.h>
 #include <unistd.h>
@@ -190,7 +188,7 @@ std::string textOf(const SemanticsNode& n) {
 struct AtspiBridge::State {
     Lib d;
     std::string appName;
-    uint32_t eventType = 0;
+    platform::Notifier notifier;
     int wakeFd = -1;
     std::atomic<bool> running{true}, connected{false}, treeRequest{false};
     std::thread thread;
@@ -336,9 +334,7 @@ struct AtspiBridge::State {
     }
 
     void notify() const {  // the main loop woken
-        SDL_Event e{};
-        e.type = eventType;
-        SDL_PushEvent(&e);
+        if (notifier.notify) notifier.notify();
     }
     void request(int id, SemanticsAction action, float argument = 0, std::string text = {}) {
         requests.push_back({id, action, argument, std::move(text)});
@@ -903,17 +899,17 @@ struct AtspiBridge::State {
     }
 };
 
-AtspiBridge::AtspiBridge(std::string appName) : state_(std::make_shared<State>()) {
+AtspiBridge::AtspiBridge(std::string appName, platform::Notifier notifier) : state_(std::make_shared<State>()) {
     State& s = *state_;
     s.appName = std::move(appName);
+    s.notifier = std::move(notifier);
     const char* env = std::getenv("KOMPOZ_ATSPI");
     if ((env && std::string_view(env) == "0") || !s.d.load()) return;
-    s.eventType = SDL_RegisterEvents(1);
     s.wakeFd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-    if (s.eventType == 0 || s.wakeFd < 0) return;
+    if (s.wakeFd < 0) return;
     s.thread = std::thread([&s] {
         s.run();
-        SDL_CleanupTLS();  // what SDL keeps for a thread it didn't start
+        if (s.notifier.threadDone) s.notifier.threadDone();
     });
 }
 
@@ -954,7 +950,7 @@ void AtspiBridge::publish(std::vector<SemanticsNode> nodes, const Window& window
     s.wake();
 }
 
-uint32_t AtspiBridge::eventType() const { return state_->eventType; }
+bool AtspiBridge::listening() const { return state_->thread.joinable(); }
 
 std::vector<AtspiBridge::Request> AtspiBridge::takeRequests() {
     std::lock_guard lock(state_->mutex);

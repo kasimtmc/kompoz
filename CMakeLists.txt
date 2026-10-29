@@ -186,7 +186,8 @@ if(KOMPOZ_BUILD_SDL3)
 
     # An OBJECT library because the backend defines the entry point (main, or SDL_main on
     # Android/iOS), which must always end up in the final binary.
-    add_library(kompoz_sdl3 OBJECT platform/app/app_core.cpp platform/sdl3/sdl3_app.cpp platform/sdl3/font_system.cpp platform/sdl3/image_loader.cpp)
+    add_library(kompoz_sdl3 OBJECT platform/app/app_core.cpp platform/common/system.cpp platform/sdl3/sdl3_app.cpp platform/sdl3/font_system.cpp
+                                   platform/sdl3/image_loader.cpp)
     target_link_libraries(kompoz_sdl3 PUBLIC kompoz_core SDL3::SDL3 Freetype::Freetype)
     set_target_properties(kompoz_sdl3 PROPERTIES EXPORT_NAME sdl3)
     add_library(kompoz::sdl3 ALIAS kompoz_sdl3)
@@ -301,7 +302,7 @@ if(KOMPOZ_BUILD_SDL3)
     # Windows), tested on its own.
     if(KOMPOZ_BUILD_TESTS AND UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
         add_executable(kompoz_platform_tests tests/platform_tests.cpp platform/sdl3/wallpaper_colors.cpp
-                       platform/sdl3/image_loader.cpp platform/sdl3/atspi_bridge.cpp)
+                       platform/sdl3/image_loader.cpp platform/sdl3/atspi_bridge.cpp platform/common/system.cpp)
         target_include_directories(kompoz_platform_tests PRIVATE platform/sdl3)
         target_link_libraries(kompoz_platform_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,INTERFACE_LINK_LIBRARIES>)
         target_compile_definitions(kompoz_platform_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,COMPILE_DEFINITIONS>)
@@ -331,7 +332,7 @@ if(KOMPOZ_BUILD_SDL3)
     #   emrun --browser chrome build-web/kompoz_gpu_tests.html KOMPOZ_GPU_REQUIRED=1
     if(KOMPOZ_BUILD_TESTS AND (kompoz_gpu_vulkan OR EMSCRIPTEN OR APPLE))
         add_executable(kompoz_gpu_tests tests/gpu_tests.cpp platform/gpu/device.cpp platform/gpu/path_geometry.cpp platform/gpu/renderer.cpp
-                       platform/gpu/gles_device.cpp platform/sdl3/font_system.cpp)
+                       platform/gpu/gles_device.cpp platform/sdl3/font_system.cpp platform/common/system.cpp)
         if(kompoz_gpu_vulkan)
             target_sources(kompoz_gpu_tests PRIVATE platform/gpu/vulkan_device.cpp platform/gpu/vma.cpp)
             target_include_directories(kompoz_gpu_tests PRIVATE ${kompoz_vulkan_include} platform/gpu/external)

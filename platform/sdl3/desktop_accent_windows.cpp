@@ -1,18 +1,18 @@
 // The accent color of Windows 10 and 11 (Settings > Personalization > Colors), as DWM keeps it:
 // HKCU\Software\Microsoft\Windows\DWM\AccentColor, 0xAABBGGRR. Read, and followed as it changes
-// (RegNotifyChangeKeyValue), on a thread of its own; each value comes to the main loop as an SDL
-// event, as the Linux portal's does (desktop_accent.cpp).
+// (RegNotifyChangeKeyValue), on a thread of its own; it notifies (Notifier) as each value comes, as
+// the Linux portal's does (desktop_accent.cpp).
 
 #include "desktop_accent.hpp"
-
-#include <SDL3/SDL.h>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
 #include <atomic>
+#include <cstdlib>
 #include <mutex>
 #include <thread>
+#include <utility>
 
 namespace kompoz::sdl {
 
@@ -29,7 +29,7 @@ std::optional<Color> readAccent(HKEY key) {
 } // namespace
 
 struct DesktopAccent::State {
-    uint32_t eventType = 0;
+    platform::Notifier notifier;
     std::atomic<bool> running{true};
     mutable std::mutex mutex;
     std::optional<Color> accent;
@@ -42,9 +42,7 @@ struct DesktopAccent::State {
             std::lock_guard lock(mutex);
             accent = value;
         }
-        SDL_Event e{};
-        e.type = eventType;
-        SDL_PushEvent(&e);
+        if (notifier.notify) notifier.notify();
     }
 
     void run() {
@@ -58,18 +56,17 @@ struct DesktopAccent::State {
     }
 };
 
-DesktopAccent::DesktopAccent() : state_(std::make_shared<State>()) {
+DesktopAccent::DesktopAccent(platform::Notifier notifier) : state_(std::make_shared<State>()) {
     State& s = *state_;
-    if (SDL_getenv("KOMPOZ_NO_DESKTOP_ACCENT")) return;
+    s.notifier = std::move(notifier);
+    if (std::getenv("KOMPOZ_NO_DESKTOP_ACCENT")) return;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\DWM", 0, KEY_READ | KEY_NOTIFY, &s.key) != ERROR_SUCCESS) return;
     s.changed = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     s.stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!s.changed || !s.stop) return;
-    s.eventType = SDL_RegisterEvents(1);
-    if (s.eventType == 0) return;
     s.thread = std::thread([&s] {
         s.run();
-        SDL_CleanupTLS();  // what SDL keeps for a thread it didn't start
+        if (s.notifier.threadDone) s.notifier.threadDone();
     });
 }
 
@@ -83,7 +80,7 @@ DesktopAccent::~DesktopAccent() {
     if (s.key) RegCloseKey(s.key);
 }
 
-uint32_t DesktopAccent::eventType() const { return state_->eventType; }
+bool DesktopAccent::listening() const { return state_->thread.joinable(); }
 
 std::optional<Color> DesktopAccent::accent() const {
     std::lock_guard lock(state_->mutex);

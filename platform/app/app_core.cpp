@@ -7,6 +7,7 @@
 #include <kompoz/host.hpp>
 #include <kompoz/preview.hpp>
 
+#include "../common/system.hpp"
 #include "../gpu/renderer.hpp"
 #include "../sdl3/font_system.hpp"
 #include "../sdl3/image_loader.hpp"
@@ -924,7 +925,7 @@ bool startGpu(App& app, gpu::Backend backend) {
     // The compiled pipelines beside the downloaded images, a file for each backend and build of the
     // shaders; another's goes (a driver keeps what it was given: an older build's pipelines would
     // stay in it, read at every start, the file growing with each update).
-    if (std::filesystem::path dir = sdl::appCacheDirectory(app.config.title); !dir.empty()) {
+    if (std::filesystem::path dir = platform::appCacheDirectory(app.config.title); !dir.empty()) {
         std::string prefix = std::string("pipelines-") + gpu::backendName(backend);
         std::string name = std::format("{}-{:016x}", prefix, gpu::Renderer::shadersVersion());
         std::error_code ec;
@@ -1007,7 +1008,7 @@ bool AppCore::start(int argc, char** argv) {
     app.fonts->load(kompoz::FontWeight::Medium, app.config.mediumFontPath);  // optional
     app.gpuCanvas = std::make_unique<gpu::Renderer>(*app.gpu, *app.fonts);
     // The pipelines it made in earlier runs, made again ahead of the frames that need them.
-    if (std::filesystem::path dir = sdl::appCacheDirectory(app.config.title); !dir.empty()) {
+    if (std::filesystem::path dir = platform::appCacheDirectory(app.config.title); !dir.empty()) {
         std::u8string file = (dir / (std::string("pipelines-") + gpu::backendName(app.gpu->backend()) + ".list")).u8string();
         app.gpuCanvas->warmPipelines(std::string(file.begin(), file.end()));
     }
@@ -1025,7 +1026,7 @@ bool AppCore::start(int argc, char** argv) {
             sdl::loadImageAsync(model, size, std::move(done));
         },
         .renderImage = [raw](kompoz::Size size, const std::function<void(kompoz::GraphicsContext&)>& draw) { return renderImage(*raw, size, draw); },
-        .readAsset = [](std::string_view path) { return sdl::readFile(std::string(path)); },
+        .readAsset = [](std::string_view path) { return platform::readFile(std::string(path)); },
     };
     platform.attach(*app.host, callbacks);  // (its own: waking, text input, the clipboard, cursors...)
     app.host->setCallbacks(std::move(callbacks));
@@ -1034,7 +1035,7 @@ bool AppCore::start(int argc, char** argv) {
     for (int i = 1; i < argc; ++i)
         if (std::string_view(argv[i]).find("://") != std::string_view::npos) app.host->openDeepLink(argv[i]);
     if (auto path = platform.option("KOMPOZ_STATE_FILE"))
-        if (std::vector<uint8_t> state = sdl::readFile(*path); !state.empty()) app.host->restoreState(state);
+        if (std::vector<uint8_t> state = platform::readFile(*path); !state.empty()) app.host->restoreState(state);
     platform.started(*app.host);
 
     std::stringstream in(platform.option("KOMPOZ_SCRIPT").value_or(""));

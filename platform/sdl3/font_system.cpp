@@ -1,8 +1,8 @@
-// The SDL3 backend's text: fonts, shaping and glyph rasterization (see font_system.hpp).
+// Kompoz's text on every platform: fonts, shaping and glyph rasterization (see font_system.hpp).
 
 #include "font_system.hpp"
 
-#include <SDL3/SDL.h>
+#include "../common/system.hpp"
 
 #include FT_TRUETYPE_TABLES_H
 #include FT_SYNTHESIS_H
@@ -19,7 +19,7 @@
 
 #include "raster.hpp"
 
-#ifdef SDL_PLATFORM_ANDROID
+#ifdef __ANDROID__
 #include "android_ime.hpp"
 #endif
 
@@ -30,7 +30,7 @@
 #include <unordered_map>
 #include <utility>
 
-#ifdef SDL_PLATFORM_EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 // The web has no font files to fall back on: what the bundled font lacks (emoji, CJK, Arabic,
 // symbols) is drawn by the browser on a 2D canvas, with its own fonts and shaping.
@@ -173,17 +173,17 @@ struct FontSystem::Impl {
         std::vector<std::string> candidates;
         if (!preferredPath.empty()) candidates.push_back(preferredPath);
         const char* variable = weight == FontWeight::Bold ? "KOMPOZ_FONT_BOLD" : weight == FontWeight::Medium ? "KOMPOZ_FONT_MEDIUM" : "KOMPOZ_FONT";
-        if (const char* env = SDL_getenv(variable)) candidates.push_back(env);
-        const char* base = SDL_GetBasePath();
+        if (const char* env = std::getenv(variable)) candidates.push_back(env);
+        const std::string& base = platform::programDirectory();
         for (const auto& path : fontCandidates(weight)) {
-            if (base && path.front() != '/' && path.find(':') == std::string::npos) candidates.push_back(base + path);
+            if (!base.empty() && path.front() != '/' && path.find(':') == std::string::npos) candidates.push_back(base + path);
             candidates.push_back(path);
         }
         for (const auto& path : candidates) {
-            if (Face* f = loadFace(path, false)) {  // through SDL: also reads Android APK assets
+            if (Face* f = loadFace(path, false)) {  // (platform::readFile: Android's APK assets too)
                 setWeight(*f, weight);
                 defaults_.push_back(f);
-                SDL_Log("kompoz: %s font: %s", name, path.c_str());
+                platform::log(std::string("kompoz: ") + name + " font: " + path);
                 return true;
             }
         }
@@ -250,13 +250,10 @@ struct FontSystem::Impl {
         }
     }
 
-    struct SdlFree {
-        void operator()(unsigned char* p) const { SDL_free(p); }
-    };
     struct Face {
         int id = 0;  // its index in faces_
         FT_Face face = nullptr;
-        std::unique_ptr<unsigned char, SdlFree> data;  // in-memory fonts (assets)
+        std::vector<uint8_t> data;  // in-memory fonts (assets)
         FontWeight weight;
         bool bold = false, italic = false;  // bold: 600 and up
     };
@@ -280,8 +277,8 @@ struct FontSystem::Impl {
     };
 
     // Loads a font once by path (and a variable one's axis settings: a face for each instance):
-    // assets go through SDL (APK assets on Android), system fonts are opened by FreeType
-    // directly. Failures are remembered too.
+    // assets are read whole (platform::readFile: Android's APK assets too), system fonts are
+    // opened by FreeType directly. Failures are remembered too.
     Face* loadFace(const std::string& path, bool system, const std::vector<FontVariation::Setting>& variations = {}) {
         std::string key = path;
         for (const FontVariation::Setting& v : variations) key += "\x1f" + v.axis + "=" + std::to_string(v.value);
@@ -292,14 +289,8 @@ struct FontSystem::Impl {
         if (absolute && system) {
             ok = FT_New_Face(library_, path.c_str(), 0, &f->face) == 0;
         } else {
-            size_t size = 0;
-            void* data = SDL_LoadFile(path.c_str(), &size);
-            if (!data && !absolute)
-                if (const char* base = SDL_GetBasePath()) data = SDL_LoadFile((std::string(base) + path).c_str(), &size);
-            if (data) {
-                f->data.reset(static_cast<unsigned char*>(data));
-                ok = FT_New_Memory_Face(library_, f->data.get(), FT_Long(size), 0, &f->face) == 0;
-            }
+            f->data = platform::readFile(path);
+            if (!f->data.empty()) ok = FT_New_Memory_Face(library_, f->data.data(), FT_Long(f->data.size()), 0, &f->face) == 0;
         }
         Face* result = nullptr;
         if (ok && !variations.empty() && FT_HAS_MULTIPLE_MASTERS(f->face)) setVariations(f->face, variations);
@@ -509,7 +500,7 @@ struct FontSystem::Impl {
         return base;
     }
 
-#ifdef SDL_PLATFORM_EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
     static constexpr bool kPlatformFallback = true;  // the browser draws what no font has
 #else
     static constexpr bool kPlatformFallback = false;  // the font's missing-glyph box
@@ -518,7 +509,7 @@ struct FontSystem::Impl {
     // Android's emoji fonts: COLRv1, which only its own text stack draws, and PNG bitmaps
     // (the flags), which our FreeType there isn't built to decode.
     static bool drawnByPlatform(const Face& face) {
-#ifdef SDL_PLATFORM_ANDROID
+#ifdef __ANDROID__
         return FT_HAS_COLOR(face.face);
 #else
         (void)face;
@@ -778,7 +769,7 @@ struct FontSystem::Impl {
         return (weight >= 600 ? 1 : 0) | (font.style == FontStyle::Italic ? 2 : 0) | (rtl ? 4 : 0) | weight << 4;
     }
     float platformAdvance(std::string_view text, int px, const Font& font, bool rtl) {
-#ifdef SDL_PLATFORM_EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
         float m[5] = {};
         kompoz_web_text_size(std::string(text).c_str(), px, platformFlags(font, rtl), m);
         return m[0];
@@ -790,7 +781,7 @@ struct FontSystem::Impl {
         std::string key = std::to_string(px) + ':' + std::to_string(platformFlags(font, rtl)) + ':' + std::string(cluster);
         if (auto it = platformGlyphs_.find(key); it != platformGlyphs_.end() && fresh(it->second)) return it->second;
         Glyph g;
-#ifdef SDL_PLATFORM_EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
         float m[5] = {};
         kompoz_web_text_size(std::string(cluster).c_str(), px, platformFlags(font, rtl) | 8, m);
         g.advance = m[0];
@@ -800,7 +791,7 @@ struct FontSystem::Impl {
         for (size_t i = 0; i < rgba.size() && !g.color; i += 4)  // drawn in white: anything else is an emoji's color
             g.color = rgba[i + 3] > 32 && (rgba[i] < 200 || rgba[i + 1] < 200 || rgba[i + 2] < 200);
         uploadRgba(rgba.data(), g);
-#elif defined(SDL_PLATFORM_ANDROID)
+#elif defined(__ANDROID__)
         (void)font, (void)rtl;
         android_ime::PlatformGlyph p = android_ime::renderGlyph(std::string(cluster), px);
         g.advance = p.advance;

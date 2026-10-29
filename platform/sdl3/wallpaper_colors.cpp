@@ -2,8 +2,6 @@
 
 #include "image_loader.hpp"
 
-#include <SDL3/SDL.h>
-
 #include <algorithm>
 #include <atomic>
 #include <cctype>
@@ -221,7 +219,7 @@ std::string findWallpaper(bool dark) {
 }
 
 struct WallpaperColors::State {
-    uint32_t eventType = 0;
+    platform::Notifier notifier;
     std::atomic<bool> running{true}, dark{false};
     std::mutex mutex;
     std::condition_variable wake;
@@ -238,9 +236,7 @@ struct WallpaperColors::State {
             if (palette == value) return;
             palette = std::move(value);
         }
-        SDL_Event e{};
-        e.type = eventType;
-        SDL_PushEvent(&e);
+        if (notifier.notify) notifier.notify();
     }
 
     // The wallpaper's palette, if it is a picture that can be read.
@@ -312,12 +308,11 @@ struct WallpaperColors::State {
     }
 };
 
-WallpaperColors::WallpaperColors(bool darkTheme) : state_(std::make_shared<State>()) {
+WallpaperColors::WallpaperColors(bool darkTheme, platform::Notifier notifier) : state_(std::make_shared<State>()) {
     State& s = *state_;
-    if (SDL_getenv("KOMPOZ_NO_WALLPAPER_COLORS")) return;
+    s.notifier = std::move(notifier);
+    if (std::getenv("KOMPOZ_NO_WALLPAPER_COLORS")) return;
     s.dark = darkTheme;
-    s.eventType = SDL_RegisterEvents(1);
-    if (s.eventType == 0) return;
 #ifndef _WIN32
     s.inotify = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
     if (s.inotify >= 0) {
@@ -328,7 +323,7 @@ WallpaperColors::WallpaperColors(bool darkTheme) : state_(std::make_shared<State
 #endif
     s.thread = std::thread([&s] {
         s.run();
-        SDL_CleanupTLS();  // what SDL keeps for a thread it didn't start
+        if (s.notifier.threadDone) s.notifier.threadDone();
     });
 }
 
@@ -346,7 +341,7 @@ WallpaperColors::~WallpaperColors() {
 #endif
 }
 
-uint32_t WallpaperColors::eventType() const { return state_->eventType; }
+bool WallpaperColors::listening() const { return state_->thread.joinable(); }
 
 std::optional<TonalPalette> WallpaperColors::palette() const {
     std::lock_guard lock(state_->mutex);

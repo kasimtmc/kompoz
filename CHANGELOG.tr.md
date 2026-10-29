@@ -352,6 +352,10 @@
   platformdan ayrıldı; ihtiyaç duyduğunu ondan `platform::Platform` üzerinden istiyor (penceresi ve GPU yüzeyi,
   ölçüleri, ayarları, saat, günlük), karelerinin zamanını da o belirliyor; altındaki ilk platform SDL. Android'de artık
   yalnızca birkaçı değil, her `KOMPOZ_` ayarı uygulamanın dosyalarındaki adını taşıyan bir dosyayla verilebiliyor.
+  Metin, resimler, ekran okuyucu köprüleri ve masaüstünün renk okuyucuları artık SDL kullanmıyor: günlük, uygulamanın
+  dosyaları (Android'in APK varlıkları platformun verdiğiyle), programın klasörü ve önbellek klasörü
+  `platform/common/system`'in; kendi iş parçacıklarındaki modüller platforma SDL olayları yerine bir
+  `platform::Notifier` ile haber veriyor (yalnızca PNG ve BMP çözmek ve ekran görüntüsü kaydetmek hâlâ SDL'in).
 - **Bir yolun gölgesi önceden sahip olduğu maskeden çiziliyor** (Compose'un bir `dropShadow`'un ya da
   `innerShadow`'un bulanık bitmap'ini tutması gibi): GPU renderer'ı yuvarlak köşeli dikdörtgen olmayan bir şeklin
   (kalp, yıldız, kurabiye) gölgesini her seferinde baştan, her biri iki geçişli bir katman ve bir bulanıklıkla

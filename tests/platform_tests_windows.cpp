@@ -4,8 +4,6 @@
 
 #include "uia_bridge.hpp"
 
-#include <SDL3/SDL.h>
-
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <ole2.h>
@@ -170,8 +168,9 @@ void uiaBridgeServesTheTree() {
     RegisterClassW(&wc);
     HWND hwnd = CreateWindowExW(0, wc.lpszClassName, L"Main", WS_OVERLAPPEDWINDOW, 100, 50, 400, 300, nullptr, nullptr, wc.hInstance, nullptr);
     CHECK(hwnd != nullptr);
-    sdl::UiaBridge bridge(hwnd);
-    CHECK(bridge.eventType() != 0 && !bridge.active());
+    std::atomic<int> notified{0};
+    sdl::UiaBridge bridge(hwnd, {.notify = [&] { ++notified; }});
+    CHECK(bridge.listening() && !bridge.active());
 
     Ref<IUIAutomation> uia;
     CHECK(SUCCEEDED(CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER, IID_IUIAutomation,
@@ -182,9 +181,8 @@ void uiaBridgeServesTheTree() {
     CHECK(SUCCEEDED(uia->ElementFromHandle(hwnd, window.out())) && window);
     if (!window) return;
     CHECK(bridge.active() && bridge.takeTreeRequest() && !bridge.takeTreeRequest());  // asked for: the tree wanted
-    SDL_PumpEvents();
-    CHECK(SDL_PeepEvents(nullptr, 0, SDL_PEEKEVENT, bridge.eventType(), bridge.eventType()) > 0);  // the main loop woken to publish it
-    SDL_FlushEvent(bridge.eventType());
+    CHECK(notified > 0);  // the main loop woken to publish it
+    notified = 0;
     CHECK(narrow([&] { BSTR b = nullptr; window->get_CurrentName(&b); return b; }()) == "Main");  // the HWND's own
 
     Ref<IUIAutomationCondition> all;
@@ -396,8 +394,7 @@ void uiaBridgeServesTheTree() {
     setFocus("Item");
     CHECK(requests().empty());
     withProvider("Item", [&](IRawElementProviderSimple* p) { CHECK(numberOf(p, UIA_IsKeyboardFocusablePropertyId) == 0); });
-    SDL_PumpEvents();
-    CHECK(SDL_PeepEvents(nullptr, 0, SDL_PEEKEVENT, bridge.eventType(), bridge.eventType()) > 0);  // the main loop woken
+    CHECK(notified > 0);  // the main loop woken
     // A checkbox: toggled.
     withProvider("Agree", [&](IRawElementProviderSimple* p) {
         auto* toggle = static_cast<IToggleProvider*>(pattern(p, UIA_TogglePatternId, IID_IToggleProvider));
@@ -581,11 +578,9 @@ void uiaBridgeServesTheTree() {
 
 int main() {
     setvbuf(stdout, nullptr, _IOLBF, 0);  // what failed seen before a crash
-    SDL_Init(SDL_INIT_EVENTS);
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     uiaBridgeServesTheTree();
     CoUninitialize();
-    SDL_Quit();
     std::printf("%d checks, %d failed\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

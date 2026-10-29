@@ -2,9 +2,8 @@
 
 #include "libdbus.hpp"
 
-#include <SDL3/SDL.h>
-
 #include <atomic>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -54,7 +53,7 @@ std::optional<std::optional<Color>> accentIn(LibDBus& d, DBusMessageIter* it) {
 struct DesktopAccent::State {
     LibDBus dbus;
     Connection* connection = nullptr;
-    uint32_t eventType = 0;
+    platform::Notifier notifier;
     std::atomic<bool> running{true};
     mutable std::mutex mutex;
     std::optional<Color> accent;
@@ -65,9 +64,7 @@ struct DesktopAccent::State {
             std::lock_guard lock(mutex);
             accent = value;
         }
-        SDL_Event e{};
-        e.type = eventType;
-        SDL_PushEvent(&e);
+        if (notifier.notify) notifier.notify();
     }
 
     // The accent as it is now: ReadOne (portal version 2+), else Read.
@@ -119,9 +116,10 @@ struct DesktopAccent::State {
     }
 };
 
-DesktopAccent::DesktopAccent() : state_(std::make_shared<State>()) {
+DesktopAccent::DesktopAccent(platform::Notifier notifier) : state_(std::make_shared<State>()) {
     State& s = *state_;
-    if (SDL_getenv("KOMPOZ_NO_DESKTOP_ACCENT") || !s.dbus.load()) return;
+    s.notifier = std::move(notifier);
+    if (std::getenv("KOMPOZ_NO_DESKTOP_ACCENT") || !s.dbus.load()) return;
     DBusError error;
     s.dbus.error_init(&error);
     s.connection = s.dbus.bus_get_private(kSessionBus, &error);  // its own: SDL's shared one is SDL's
@@ -132,11 +130,9 @@ DesktopAccent::DesktopAccent() : state_(std::make_shared<State>()) {
     std::string rule = std::string("type='signal',interface='") + kSettings + "',member='SettingChanged',arg0='" + kNamespace + "'";
     s.dbus.bus_add_match(s.connection, rule.c_str(), &error);
     s.dbus.error_free(&error);
-    s.eventType = SDL_RegisterEvents(1);
-    if (s.eventType == 0) return;
     s.thread = std::thread([&s] {
         s.run();
-        SDL_CleanupTLS();  // what SDL keeps for a thread it didn't start
+        if (s.notifier.threadDone) s.notifier.threadDone();
     });
 }
 
@@ -150,7 +146,7 @@ DesktopAccent::~DesktopAccent() {
     }
 }
 
-uint32_t DesktopAccent::eventType() const { return state_->eventType; }
+bool DesktopAccent::listening() const { return state_->thread.joinable(); }
 
 std::optional<Color> DesktopAccent::accent() const {
     std::lock_guard lock(state_->mutex);

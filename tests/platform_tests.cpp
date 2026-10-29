@@ -8,8 +8,7 @@
 #include "libdbus.hpp"
 #include "wallpaper_colors.hpp"
 
-#include <SDL3/SDL.h>
-
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -141,8 +140,9 @@ void wallpaperChangesAreFollowed() {
         fs::rename(tmp, home / "plasma-org.kde.plasma.desktop-appletsrc");  // as KConfig writes: a rename
     };
     writeConfig(red.string());
-    sdl::WallpaperColors colors(false);
-    CHECK(colors.eventType() != 0);
+    std::atomic<int> notified{0};
+    sdl::WallpaperColors colors(false, {.notify = [&] { ++notified; }});
+    CHECK(colors.listening());
     auto waitFor = [&](const std::function<bool()>& done) {
         for (int i = 0; i < 100; ++i) {
             if (done()) return true;
@@ -163,14 +163,11 @@ void wallpaperChangesAreFollowed() {
     CHECK(waitFor(hueNear(0x1976D2)));
     long seen = long(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count());
     CHECK(seen >= 250 && seen < 3000);  // by inotify, after the change settled (not by polling)
-    // Another file with the same colors: no event, the palette being the same.
-    SDL_PumpEvents();
-    SDL_FlushEvent(colors.eventType());
+    // Another file with the same colors: not notified, the palette being the same.
+    notified = 0;
     writeConfig(blue2.string());
     std::this_thread::sleep_for(std::chrono::milliseconds(1200));
-    SDL_PumpEvents();
-    SDL_Event e;
-    CHECK(SDL_PeepEvents(&e, 1, SDL_PEEKEVENT, colors.eventType(), colors.eventType()) == 0);
+    CHECK(notified == 0);
     // A picture that isn't there: none.
     writeConfig((home / "no-such-picture.png").string());
     CHECK(waitFor([&] { return !colors.palette(); }));
@@ -520,8 +517,9 @@ void atspiBridgeServesTheTree() {
         return true;
     };
 
-    sdl::AtspiBridge bridge("Test app");
-    CHECK(bridge.eventType() != 0);
+    std::atomic<int> notified{0};
+    sdl::AtspiBridge bridge("Test app", {.notify = [&] { ++notified; }});
+    CHECK(bridge.listening());
     CHECK(peer.serve(3000, [&] { return bridge.active(); }));  // connected, and into the registry's desktop
     if (peer.bridge.empty()) return;
     CHECK(embedded == peer.bridge + " /org/a11y/atspi/accessible/root");
@@ -556,8 +554,7 @@ void atspiBridgeServesTheTree() {
     CHECK(peer.text(node(1), "org.a11y.atspi.Action", "GetName", [](dbus::Writer& w) { w.i32(0); }) == "click");
     CHECK(peer.boolean(node(1), "org.a11y.atspi.Action", "DoAction", [](dbus::Writer& w) { w.i32(0); }));
     CHECK(!peer.boolean(node(1), "org.a11y.atspi.Action", "DoAction", [](dbus::Writer& w) { w.i32(1); }));
-    SDL_PumpEvents();
-    CHECK(SDL_PeepEvents(nullptr, 0, SDL_PEEKEVENT, bridge.eventType(), bridge.eventType()) > 0);  // the main loop woken
+    CHECK(notified > 0);  // the main loop woken
     auto requests = bridge.takeRequests();
     CHECK(requests.size() == 1 && requests[0].id == 1 && requests[0].action == SemanticsAction::Click);
     CHECK(bridge.takeRequests().empty());
@@ -733,7 +730,8 @@ void atspiBridgeFollowsTheDesktop() {
         d.message_unref(reply);
         return true;
     };
-    sdl::AtspiBridge bridge("Test app");
+    std::atomic<int> notified{0};
+    sdl::AtspiBridge bridge("Test app", {.notify = [&] { ++notified; }});
     CHECK(launcher.serve(1000, [&] { return asked >= 2; }));  // IsEnabled, ScreenReaderEnabled: both off
     launcher.serve(200);
     CHECK(!bridge.active());
@@ -753,14 +751,13 @@ void atspiBridgeFollowsTheDesktop() {
     d.connection_send(launcher.c, changed, nullptr);
     d.message_unref(changed);
     CHECK(launcher.serve(3000, [&] { return bridge.active(); }));
-    SDL_PumpEvents();
-    CHECK(SDL_PeepEvents(nullptr, 0, SDL_PEEKEVENT, bridge.eventType(), bridge.eventType()) > 0);  // to publish the tree
+    CHECK(launcher.serve(1000, [&] { return notified > 0; }));  // to publish the tree
     CHECK(bridge.takeTreeRequest());
 
     // KOMPOZ_ATSPI=0: never.
     setenv("KOMPOZ_ATSPI", "0", 1);
-    sdl::AtspiBridge off("Test app");
-    CHECK(off.eventType() == 0 && !off.active());
+    sdl::AtspiBridge off("Test app", {});
+    CHECK(!off.listening() && !off.active());
     unsetenv("KOMPOZ_ATSPI");
 }
 
@@ -768,13 +765,11 @@ void atspiBridgeFollowsTheDesktop() {
 
 int main() {
     setvbuf(stdout, nullptr, _IOLBF, 0);  // what failed seen before a crash
-    SDL_Init(SDL_INIT_EVENTS);
     kdeConfigIsRead();
     imagesAreDecoded();
     wallpaperChangesAreFollowed();
     atspiBridgeServesTheTree();
     atspiBridgeFollowsTheDesktop();
-    SDL_Quit();
     std::printf("%d checks, %d failed\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

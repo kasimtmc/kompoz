@@ -1,6 +1,6 @@
 #pragma once
 
-// Text for the SDL3 backend: fonts loaded with FreeType (the bundled ones, the generic families'
+// Text on every platform: fonts loaded with FreeType (the bundled ones, the generic families'
 // system fonts, fallbacks for what they lack), text shaped by HarfBuzz into glyphs, and glyphs
 // rasterized into the glyph atlas (platform/gpu/glyph_atlas.hpp), which every renderer draws from.
 
