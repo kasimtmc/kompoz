@@ -82,6 +82,12 @@ std::string pipelineLine(Format format, const BlendState& b, bool mesh, uint16_t
 }
 } // namespace
 
+uint64_t Renderer::shadersVersion() {
+    uint64_t version = shaders::primitives_version;
+    for (uint64_t v : {shaders::path_version, shaders::effects_version}) version = (version ^ v) * 0x100000001b3;
+    return version;
+}
+
 void Renderer::warmPipelines(const std::string& listPath) {
     pipelineList_ = listPath;
     std::vector<PipelineKey> keys;

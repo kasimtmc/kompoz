@@ -344,6 +344,12 @@
   dolduruyorsa başlamaz: içindekiler tutulur, kalanlar eskisi gibi çizilir, her karede hepsi yeniden taranmaz. Bir
   Redmi Note 9 Pro'da Ana sayfa ile Bileşenler sekmeleri arasında beş kez gidip gelmek 36 yerine 20–22 tazeleme
   kaçırdı. `KOMPOZ_PROFILE` yavaş karelerinde çizilen ve tutulan yolları sayar.
+- **Boru hattı önbelleği yapıldığı gölgelendiriciler için tutulur**: dosyası onların adını taşır (scripts/shaders.py
+  her üretilen başlığın sürümünü yazar, `Renderer::shadersVersion()` bunları birleştirir) ve bir uygulama açılırken
+  arka ucun başka gölgelendiricilere ait dosyalarını siler. Bir sürücü kendisine verileni tutar, bu yüzden eski bir
+  derlemenin boru hatları önbellekte kalıcı olarak duruyordu: bir Redmi Note 9 Pro'nunki 6,5 MB'a ulaşmış ve her
+  açılışta okunuyordu; kullanılan gölgelendiricilerin boru hatları ise 0,2 MB tutuyordu (masaüstündeki: 12,7 MB ve
+  1,2).
 - **Boru hattı önbelleği tek seferde okunur**: GPU renderer'ının derlenmiş boru hatlarını tuttuğu dosya karakter
   karakter okunuyor ve bayt bayt denetleniyordu: bir Redmi Note 9 Pro'da 6,5 MB her açılışta, renderer yapılmadan önce
   70 ve 16 ms sürüyordu. Artık tek okumada okunur ve sekizer bayt denetlenir (eski biçimdeki bir dosya bir kez atılır

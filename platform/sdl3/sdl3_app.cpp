@@ -1249,9 +1249,18 @@ bool startGpu(App& app, gpu::Backend backend) {
     SDL_Window* window = app.window;
     gpu::Surface surface;
     surface.drawableSize = [window](int* w, int* h) { SDL_GetWindowSizeInPixels(window, w, h); };
-    // The compiled pipelines beside the downloaded images, a file for each backend.
+    // The compiled pipelines beside the downloaded images, a file for each backend and build of the
+    // shaders; another's goes (a driver keeps what it was given: an older build's pipelines would
+    // stay in it, read at every start, the file growing with each update).
     if (std::filesystem::path dir = appCacheDirectory(app.config.title); !dir.empty()) {
-        std::u8string file = (dir / (std::string("pipelines-") + gpu::backendName(backend))).u8string();
+        std::string prefix = std::string("pipelines-") + gpu::backendName(backend);
+        std::string name = std::format("{}-{:016x}", prefix, gpu::Renderer::shadersVersion());
+        std::error_code ec;
+        for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+            std::string other = entry.path().filename().string();
+            if (other == prefix || (other.starts_with(prefix + "-") && !other.starts_with(name))) std::filesystem::remove(entry.path(), ec);
+        }
+        std::u8string file = (dir / name).u8string();
         surface.pipelineCache.assign(file.begin(), file.end());
     }
     std::string error;

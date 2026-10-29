@@ -44,6 +44,9 @@ public:
     // takes it made. (A driver that keeps none in its pipeline cache, or a new shader after an
     // update, made each in a frame: 8 to 20 ms on a Redmi Note 9 Pro, each.)
     void warmPipelines(const std::string& listPath);
+    // Its shaders' code, in eight bytes (scripts/shaders.py's versions of them): a pipeline cache
+    // kept for other code holds nothing these can use (and grows with each).
+    static uint64_t shadersVersion();
 
     float scale = 1;     // px per dp
     int layerCount = 0;  // layers pushed (KOMPOZ_PROFILE)

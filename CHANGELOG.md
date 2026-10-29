@@ -325,6 +325,11 @@
   frame's paths fill most of it themselves: then those in it are kept and the rest drawn as before, rather than all
   rasterized again each frame. Going between the Home and Components tabs five times on a Redmi Note 9 Pro missed
   20–22 refreshes instead of 36. `KOMPOZ_PROFILE` counts paths drawn and kept in its slow frames.
+- **The pipeline cache is kept for the shaders it was made from**: its file is named after them (scripts/shaders.py
+  writes each generated header's version, `Renderer::shadersVersion()` puts them together), and an app removes the
+  backend's files of other shaders when it starts. A driver keeps what it is given, so an older build's pipelines
+  stayed in the cache for good: a Redmi Note 9 Pro's had grown to 6.5 MB, read at every start, where the pipelines of
+  the shaders in use took 0.2 MB (the desktop's: 12.7 MB and 1.2).
 - **The pipeline cache is read in one go**: the file the GPU renderer keeps its compiled pipelines in was read a
   character at a time and checked byte by byte: 6.5 MB took a Redmi Note 9 Pro 70 ms and 16 ms at every start, before
   the renderer was made. It is read in one read now and checked eight bytes at a time (a file of the old format is
