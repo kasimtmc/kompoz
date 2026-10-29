@@ -325,6 +325,13 @@
   frame's paths fill most of it themselves: then those in it are kept and the rest drawn as before, rather than all
   rasterized again each frame. Going between the Home and Components tabs five times on a Redmi Note 9 Pro missed
   20–22 refreshes instead of 36. `KOMPOZ_PROFILE` counts paths drawn and kept in its slow frames.
+- **The GPU's memory is taken in blocks of 4 MB at most** (as Skia takes it): the Vulkan backend's grew to 256 MB, and
+  a driver clears the memory it gives, so a block took as long as it was big: a 128 MB one 9–18 ms on a Xiaomi 14
+  Ultra and a Redmi Note 9 Pro, in the frame whose texture needed it, and again each time blocks had emptied and were
+  needed again (six times in one run on the 14 Ultra). A texture bigger than half a block has memory of its own.
+  Scrolling the showcase's Components screen with real swipes on the 14 Ultra, slow frames fell from 11–19 a run to 8
+  and missed refreshes from 54–64 to 45–47; the longest a memory allocation took fell from 12.5 ms to 2.1 there, and
+  from 18 ms to 5.6 on the Redmi.
 - **Lazy lists and grids compose ahead in the pauses between frames** (as Compose prefetches): while one scrolls, the
   item past those it has composed that way is composed in the time before the next frame is due
   (`ComposeHost::requestIdleWork` and `idle()`, which the app calls there), if what an item of its content type took

@@ -346,6 +346,10 @@ public:
         aci.device = device;
         aci.instance = instance;
         aci.pVulkanFunctions = &functions;
+        // Blocks of 4 MB at most, as Skia's: the driver clears what it gives, so a block takes as
+        // long as it is big (VMA's 256 MB ones: 128 MB took a frame and more on Adreno, again
+        // each time the blocks emptied and filled). A texture bigger than half of one has its own.
+        aci.preferredLargeHeapBlockSize = 4 << 20;
         if (vmaCreateAllocator(&aci, &allocator) != VK_SUCCESS) return fail("vmaCreateAllocator failed");
 
         // The pipelines compiled in earlier runs, if this GPU and driver made them: the data begins

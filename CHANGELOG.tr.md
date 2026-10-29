@@ -344,6 +344,13 @@
   dolduruyorsa başlamaz: içindekiler tutulur, kalanlar eskisi gibi çizilir, her karede hepsi yeniden taranmaz. Bir
   Redmi Note 9 Pro'da Ana sayfa ile Bileşenler sekmeleri arasında beş kez gidip gelmek 36 yerine 20–22 tazeleme
   kaçırdı. `KOMPOZ_PROFILE` yavaş karelerinde çizilen ve tutulan yolları sayar.
+- **GPU belleği en çok 4 MB'lık bloklarla alınıyor** (Skia'nın aldığı gibi): Vulkan arka ucununkiler 256 MB'a
+  kadar büyüyordu; sürücü verdiği belleği temizlediği için bir blok, büyüklüğü kadar sürüyordu: 128 MB'lık biri bir
+  Xiaomi 14 Ultra'da ve bir Redmi Note 9 Pro'da 9–18 ms, onu gerektiren dokunun karesinde; bloklar boşalıp yeniden
+  gerektikçe de yine (14 Ultra'da bir koşuda altı kez). Bir bloğun yarısından büyük bir doku kendi belleğini alıyor.
+  14 Ultra'da showcase'in Bileşenler ekranını gerçek kaydırmalarla kaydırırken yavaş kareler koşu başına 11–19'dan
+  8'e, kaçırılan tazelemeler 54–64'ten 45–47'ye indi; en uzun bellek ayırma orada 12,5 ms'den 2,1'e, Redmi'de
+  18 ms'den 5,6'ya indi.
 - **Tembel listeler ve ızgaralar kareler arasındaki duraklamalarda önceden kompoze eder** (Compose'un prefetch'i
   gibi): kaydırılırken, kompoze ettiklerinin o yöndeki ötesindeki öğe, bir sonraki karenin vaktine kadarki sürede
   kompoze edilir (`ComposeHost::requestIdleWork` ve uygulamanın orada çağırdığı `idle()`); aynı içerik türünden bir
