@@ -344,6 +344,17 @@
   dolduruyorsa başlamaz: içindekiler tutulur, kalanlar eskisi gibi çizilir, her karede hepsi yeniden taranmaz. Bir
   Redmi Note 9 Pro'da Ana sayfa ile Bileşenler sekmeleri arasında beş kez gidip gelmek 36 yerine 20–22 tazeleme
   kaçırdı. `KOMPOZ_PROFILE` yavaş karelerinde çizilen ve tutulan yolları sayar.
+- **Katman dokuları birkaç boyda ve kullanılmadan 10 s tutuluyor** (Android'in renderer'ının tuttuğu gibi): bir
+  katman ya da efekt için doku, Skia'nın yaklaşık boyutlarından birinde yapılıyor (1024 px'e kadar bir ikinin kuvvetine,
+  ötesinde onun yarısı kadar adımlarla) ve o boyu gereken her şey onu yeniden alıyor; önceden 32 px'e yuvarlanıyor ve
+  yalnızca en çok 64 px küçüğünü gerekenlere veriliyordu: ekrana kırpılan, kaydırıldıkça giren bir katman (ekran
+  genişliğinde, yüksekliği her karede değişen) her karede 6–9 MB'lık bir doku yapıyordu. Kullanılmayanlar 60 kare
+  yerine 10 s tutuluyor, 12 karelik RGBA'yı (Android'in renderer'ının bütçesi) aşınca en uzun süredir kullanılmayan
+  önce gidiyor; uygulama arka plana geçince ya da sistemin belleği daraldığında hemen gidiyor
+  (`Renderer::trimMemory`). Bir Redmi Note 9 Pro'da showcase'in Bileşenler ekranını gerçek kaydırmalarla kaydırırken
+  bir koşu 74 (142 MB) yerine 39–50 doku (80–93 MB) yaptı; ekranın daha azını yeniden çizen koşularda 156–166
+  (261–377 MB) yerine 109 (152 MB). Kaçırılan tazelemeler az değişti (26 yerine 22–26; 50–68 yerine 59).
+  `KOMPOZ_PROFILE` yavaş karelerinde yapılan dokuları sayıyor.
 - **GPU belleği en çok 4 MB'lık bloklarla alınıyor** (Skia'nın aldığı gibi): Vulkan arka ucununkiler 256 MB'a
   kadar büyüyordu; sürücü verdiği belleği temizlediği için bir blok, büyüklüğü kadar sürüyordu: 128 MB'lık biri bir
   Xiaomi 14 Ultra'da ve bir Redmi Note 9 Pro'da 9–18 ms, onu gerektiren dokunun karesinde; bloklar boşalıp yeniden

@@ -325,6 +325,16 @@
   frame's paths fill most of it themselves: then those in it are kept and the rest drawn as before, rather than all
   rasterized again each frame. Going between the Home and Components tabs five times on a Redmi Note 9 Pro missed
   20–22 refreshes instead of 36. `KOMPOZ_PROFILE` counts paths drawn and kept in its slow frames.
+- **Layer textures come in a few sizes and are kept unused for 10 s** (as Android's renderer keeps them): a texture
+  for a layer or an effect is made in one of the sizes Skia's approximate fit gives (a power of two up to 1024 px, by
+  half of one past it) and taken again by whatever needs that size, where it was made to 32 px and taken only by what
+  needed at most 64 px less: a layer clipped to the screen as it scrolls in (a full-width one, its height changing each
+  frame) made one of 6–9 MB each frame. Those unused are kept 10 s instead of 60 frames, the least lately used going
+  first past 12 frames' worth of RGBA (the budget of Android's renderer), and go at once when the app goes to the
+  background or the system is short of memory (`Renderer::trimMemory`). Scrolling the showcase's Components screen
+  with real swipes on a Redmi Note 9 Pro, a run made 39–50 textures (80–93 MB) instead of 74 (142 MB), and 109 (152
+  MB) instead of 156–166 (261–377 MB) in the runs that draw less of the screen again; the missed refreshes changed
+  little (22–26 instead of 26; 59 instead of 50–68). `KOMPOZ_PROFILE` counts the textures made in its slow frames.
 - **The GPU's memory is taken in blocks of 4 MB at most** (as Skia takes it): the Vulkan backend's grew to 256 MB, and
   a driver clears the memory it gives, so a block took as long as it was big: a 128 MB one 9–18 ms on a Xiaomi 14
   Ultra and a Redmi Note 9 Pro, in the frame whose texture needed it, and again each time blocks had emptied and were

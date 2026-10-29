@@ -4092,6 +4092,29 @@ void aLayerIsKeptFromItsFirstFrame(Gpu& g) {
 
 // A path drawn again whole pixels on (a scrolled list's) takes the coverage it had: the same
 // pixels, moved; drawn a fraction of a pixel on, its own (the pixels it covers change).
+// A layer's texture is one of a few sizes (as Skia's approximate fit), so a layer whose size
+// changes from frame to frame (clipped to the screen as it scrolls in) takes one kept unused
+// rather than a new one each frame; those kept unused go when memory is trimmed.
+void layerTexturesComeInFewSizes(Gpu& g) {
+    auto frame = [&](float height) {
+        g.renderer->texturesMade = 0;
+        Pixels out = g.render(64, 1100, 1, [&](GraphicsContext& c) {
+            c.pushLayer({0, 0, 60, height}, CornerRadii(), 0.5f);
+            c.fillRoundRect({0, 0, 60, height}, CornerRadii(), Color{0.1f, 0.55f, 0.3f, 1});
+            c.popLayer();
+        });
+        return std::pair{out, g.renderer->texturesMade};
+    };
+    g.renderer->trimMemory();  // (none left by the tests before)
+    int made = 0;
+    for (float height = 600; height <= 1000; height += 40) made += frame(height).second;
+    CHECK(made == 1);  // (64 x 1024 for all)
+    auto [out, again] = frame(1000);
+    CHECK(again == 0 && near(out.at(30, 999), 140, 198, 166) && near(out.at(30, 1001), 255, 255, 255));
+    g.renderer->trimMemory();
+    CHECK(frame(1000).second == 1);
+}
+
 void aPathKeepsItsCoverage(Gpu& g) {
     Path s = star(20, 20, 16);
     s.fillType = Path::FillType::EvenOdd;
@@ -4319,6 +4342,7 @@ int main() {
             keptLayersDrawAsDrawnAfresh(g);
             aLayerIsKeptFromItsFirstFrame(g);
             aPathKeepsItsCoverage(g);
+            layerTexturesComeInFewSizes(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
         }

@@ -9,6 +9,7 @@
 #include "shaders/generated/primitives.h"
 
 #include <algorithm>
+#include <bit>
 #include <climits>
 #include <cmath>
 #include <cstring>
@@ -202,6 +203,7 @@ BlendPlan planFor(BlendMode mode, bool opaque) {
 // --- Targets -------------------------------------------------------------------------------------
 
 void Renderer::beginTarget(Texture& target, const std::optional<ClearColor>& clear) {
+    if (targets_.empty()) surfaceArea_ = std::max(surfaceArea_, int64_t(target.width()) * target.height());
     targets_.push_back({passes_.size(), ox_, oy_, transform_, windowFromTarget_, std::move(clips_), std::move(placements_), std::move(blends_),
                         std::move(filters_), std::move(antiAlias_)});
     passes_.push_back({&target, clear, {}, {}});
@@ -847,11 +849,31 @@ void Renderer::endFrame() {
     stopsUploaded_ = 0;
     for (auto it = images_.begin(); it != images_.end();)
         it = it->second.token.expired() ? images_.erase(it) : std::next(it);
-    std::erase_if(pool_, [](PooledTexture& p) {  // kept for a second unused: layers scroll back in
-        p.idleFrames = p.inUse ? 0 : p.idleFrames + 1;
+    // Layer targets unused for 10 s go (layers scroll back in), as Android's renderer keeps its
+    // unused ones (MemoryPolicy's minimumResourceRetention); and the least lately used first while
+    // they take more than 12 RGBA frames (its budget for all it keeps).
+    auto now = std::chrono::steady_clock::now();
+    auto bytes = [](const PooledTexture& p) { return int64_t(p.texture->width()) * p.texture->height() * int64_t(bytesPerTexel(p.texture->format())); };
+    int64_t kept = 0;
+    for (PooledTexture& p : pool_) {
+        if (p.inUse) p.used = now;
         p.inUse = false;
-        return p.idleFrames > 60;
+        kept += bytes(p);
+    }
+    std::erase_if(pool_, [&](const PooledTexture& p) {
+        bool old = now - p.used > std::chrono::seconds(10);
+        if (old) kept -= bytes(p);
+        return old;
     });
+    if (int64_t budget = surfaceArea_ * 12 * 4; kept > budget) {
+        std::ranges::stable_sort(pool_, {}, &PooledTexture::used);
+        auto end = std::ranges::find_if(pool_, [&](const PooledTexture& p) {
+            if (kept <= budget || p.used == now) return true;  // (drawn this frame: may be read yet)
+            kept -= bytes(p);
+            return false;
+        });
+        pool_.erase(pool_.begin(), end);
+    }
     // Kept layers' pixels unused for a second go back (the layer may not be on the screen any more).
     for (auto it = kept_.begin(); it != kept_.end();)
         if (++it->second.idleFrames > 60) {
@@ -888,26 +910,32 @@ void Renderer::giveToPool(std::unique_ptr<Texture> texture) {
     if (texture) pool_.push_back({std::move(texture), true});  // (in use: what was drawn this frame may read it)
 }
 
+void Renderer::trimMemory() {
+    std::erase_if(pool_, [](const PooledTexture& p) { return !p.inUse; });
+}
+
 // A layer target (or a target's copy, in its format) at least w x h, not used yet this frame (one that is would still be read by the
-// pass that composites it, which runs later). Sizes go up in 32 px steps, and a free texture up
-// to 64 px bigger is reused, so a layer moving by fractions doesn't make a texture each frame.
+// pass that composites it, which runs later). Of a few sizes, as Skia's approximate fit
+// (GetApproxSize) gives: up to a power of two to 1024 px, by half of one past it (to kMaxLayer;
+// what is bigger as big as it is), so that a layer that changes size from frame to frame (clipped
+// to the screen as it scrolls in) takes one kept unused, as does a layer moving by fractions.
 Texture* Renderer::acquire(int width, int height, Format format) {
-    PooledTexture* best = nullptr;
-    for (auto& p : pool_) {
-        int w = p.texture->width(), h = p.texture->height();
-        if (!p.inUse && p.texture->format() == format && w >= width && h >= height && w <= width + 64 && h <= height + 64 &&
-            (!best || w * h < best->texture->width() * best->texture->height()))
-            best = &p;
-    }
-    if (!best) {
-        auto t = device_.createTexture((width + 31) / 32 * 32, (height + 31) / 32 * 32, format,
-                                       TextureUsage::Sampled | TextureUsage::RenderTarget);
-        if (!t) return nullptr;
-        pool_.push_back({std::move(t)});
-        best = &pool_.back();
-    }
-    best->inUse = true;
-    return best->texture.get();
+    auto approx = [](int v) {
+        if (v > kMaxLayer) return v;
+        int up = int(std::bit_ceil(unsigned(std::max(v, 16))));
+        return v <= 1024 || v > up / 4 * 3 ? up : up / 4 * 3;
+    };
+    int w = approx(width), h = approx(height);
+    for (PooledTexture& p : pool_)
+        if (!p.inUse && p.texture->format() == format && p.texture->width() == w && p.texture->height() == h) {
+            p.inUse = true;
+            return p.texture.get();
+        }
+    std::unique_ptr<Texture> t = device_.createTexture(w, h, format, TextureUsage::Sampled | TextureUsage::RenderTarget);
+    if (!t) return nullptr;
+    ++texturesMade;
+    pool_.push_back({std::move(t), true});
+    return pool_.back().texture.get();
 }
 
 // Premultiplied, so that what filtering mixes is weighed by how much of it there is (as Skia

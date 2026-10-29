@@ -19,6 +19,7 @@
 
 #include <kompoz/graphics.hpp>
 
+#include <chrono>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -53,6 +54,7 @@ public:
     int keptLayers = 0;  // of them, composited from the pixels they had in a frame before
     int pathCount = 0;   // paths drawn (KOMPOZ_PROFILE)
     int keptPaths = 0;   // of them, with the coverage they had in a frame before
+    int texturesMade = 0;  // textures made for layers and effects (KOMPOZ_PROFILE): none kept unused fitted
 
     // Draws into `target` until endTarget(), cleared first to `clear` if given.
     void beginTarget(Texture& target, const std::optional<ClearColor>& clear = std::nullopt);
@@ -74,6 +76,9 @@ public:
     void flush();
     // After each frame: textures of images that are gone, and layer targets unused for a while, go.
     void endFrame();
+    // The layer targets kept unused go now (the app gone to the background, the system short of
+    // memory), as Android's renderer purges its unused scratch textures then.
+    void trimMemory();
     // A bitmap drawn into (graphics::Canvas(ImageBitmap)): `draws` over what it holds, a unit a
     // pixel, into a new texture of its own (draws recorded before still read the old one). Kept
     // here where the bitmap keeps 8 or 16 bits a channel with alpha (Argb8888, Gpu, F16: the bitmap
@@ -286,7 +291,7 @@ private:
     struct PooledTexture {
         std::unique_ptr<Texture> texture;  // (its format: a target's copy has the target's)
         bool inUse = false;
-        int idleFrames = 0;
+        std::chrono::steady_clock::time_point used;  // last
     };
     // A layer's pixels kept from frame to frame (by its key): its texture as it was made, where
     // its exact bounds were in it (a fraction of a pixel), at what resolution and px per dp; what
@@ -370,6 +375,7 @@ private:
     std::unordered_map<uint64_t, ImageTexture> images_;
     std::vector<std::unique_ptr<Texture>> retired_;  // bitmaps' textures drawn again: gone after the frame (its draws read them)
     std::vector<PooledTexture> pool_;  // layer targets
+    int64_t surfaceArea_ = 0;           // px of the biggest frame's target (the pool's budget)
     std::unordered_map<uint64_t, KeptLayer> kept_;
     std::optional<std::pair<uint64_t, bool>> nextLayer_;  // keyLayer's, for the next pushLayer
     LayerContent pushed_ = LayerContent::Draw;
