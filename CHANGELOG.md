@@ -325,6 +325,10 @@
   frame's paths fill most of it themselves: then those in it are kept and the rest drawn as before, rather than all
   rasterized again each frame. Going between the Home and Components tabs five times on a Redmi Note 9 Pro missed
   20–22 refreshes instead of 36. `KOMPOZ_PROFILE` counts paths drawn and kept in its slow frames.
+- **The window's settings are read once for all that changed them**: a change of the window's size, scale, insets,
+  theme or language marks them to read again, once before the next frame or input, instead of at each event that says
+  so. Each read asks Android for its settings, palettes and view configuration (4 ms on a Redmi Note 9 Pro), and a
+  window starts with three such events: the first frame's input took 4 ms instead of 11–16.
 - **An Android app's first frame comes half a second sooner**: making its window, SDL took it out of fullscreen mode
   and waited up to 500 ms for the size to change whenever its surface was as big as the display, which a window laid
   out edge to edge (under the status and navigation bars) always is; nothing changed, and the window gaining focus

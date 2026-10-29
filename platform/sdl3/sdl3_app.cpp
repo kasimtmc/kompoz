@@ -191,6 +191,11 @@ struct App {
     // meanwhile goes into buffers of the old size, which it would keep stretched over the new
     // one until something changed.
     int resizeFrames = 0;
+    // The window's size, scale, insets, theme or language changed (updateMetrics to do): read once
+    // before the next frame or input, however many events said so. (Each update asks Android for
+    // its settings, palettes and view configuration: 4 ms on a Redmi Note 9 Pro, and a window
+    // starts with three such events.)
+    bool metricsChanged = false;
     bool focused = true, minimized = false, hidden = false;  // desktops' and browsers' lifecycle
     uint64_t framePeriodNs = 16'666'667;  // the display's refresh interval: frames not shown are paced to it
     int64_t lastFrameTime = -1;           // the last frame's time, on the display's beat (frameTimeOnBeat)
@@ -907,6 +912,12 @@ std::optional<PointerButton> otherButton(Uint8 button) {
 
 void handleEvent(App& app, const SDL_Event& e) {
     ComposeHost& host = *app.host;
+    bool metrics = (e.type >= SDL_EVENT_WINDOW_FIRST && e.type <= SDL_EVENT_WINDOW_LAST) || e.type == SDL_EVENT_SYSTEM_THEME_CHANGED ||
+                   e.type == SDL_EVENT_LOCALE_CHANGED;
+    if (app.metricsChanged && !metrics) {  // (input meets the window as it is now)
+        app.metricsChanged = false;
+        updateMetrics(app);
+    }
 #ifdef KOMPOZ_DESKTOP_ACCENT
     if (app.accent && app.accent->eventType() != 0 && e.type == app.accent->eventType()) {  // learned or changed
         std::optional<Color> accent = app.accent->accent();
@@ -982,7 +993,7 @@ void handleEvent(App& app, const SDL_Event& e) {
     case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
     case SDL_EVENT_SYSTEM_THEME_CHANGED:
     case SDL_EVENT_LOCALE_CHANGED:
-        updateMetrics(app);
+        app.metricsChanged = true;
         break;
     case SDL_EVENT_DID_ENTER_FOREGROUND:
         updateMetrics(app);  // the wallpaper (and so the dynamic colors) may have changed meanwhile
@@ -1633,6 +1644,10 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
     if (scripted && !app.script.running())  // its last frame: real time from here, never back
         app.clockOffset = std::max<int64_t>(0, now - int64_t(SDL_GetTicksNS()));
 
+    if (app.metricsChanged) {
+        app.metricsChanged = false;
+        kompoz::sdl::updateMetrics(app);
+    }
     uint64_t t0 = app.profile ? SDL_GetTicksNS() : 0;
     int glyphsBefore = app.profile ? app.fonts->rasterized() : 0;
     bool redraw = app.host->frame(now);

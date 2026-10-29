@@ -344,6 +344,11 @@
   dolduruyorsa başlamaz: içindekiler tutulur, kalanlar eskisi gibi çizilir, her karede hepsi yeniden taranmaz. Bir
   Redmi Note 9 Pro'da Ana sayfa ile Bileşenler sekmeleri arasında beş kez gidip gelmek 36 yerine 20–22 tazeleme
   kaçırdı. `KOMPOZ_PROFILE` yavaş karelerinde çizilen ve tutulan yolları sayar.
+- **Pencerenin ayarları, onları değiştiren her şey için bir kez okunur**: pencerenin boyutu, ölçeği, kenar boşlukları,
+  teması ya da dili değişince ayarlar yeniden okunmak üzere işaretlenir ve bunu söyleyen her olayda değil, bir sonraki
+  kareden ya da girdiden önce bir kez okunur. Her okuma Android'den ayarlarını, paletlerini ve görünüm
+  yapılandırmasını ister (bir Redmi Note 9 Pro'da 4 ms) ve bir pencere bu olaylardan üçüyle başlar: ilk karenin
+  girdisi 11–16 yerine 4 ms sürdü.
 - **Bir Android uygulamasının ilk karesi yarım saniye erken gelir**: penceresini yaparken SDL onu tam ekran kipinden
   çıkarıyor ve yüzeyi ekran kadar büyükse boyutun değişmesini 500 ms'ye kadar bekliyordu; kenardan kenara (durum ve
   gezinme çubuklarının altına) yerleşen bir pencere hep o kadar büyüktür. Hiçbir şey değişmiyordu, pencereye odak
