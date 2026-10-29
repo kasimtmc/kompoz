@@ -148,6 +148,9 @@ struct App {
     bool vulkanLoaded = false;          // headless Vulkan: the library loaded here (no Vulkan window loads it)
     std::unique_ptr<gpu::Renderer> gpuCanvas;
     std::unique_ptr<gpu::Texture> gpuFrame;
+    // What changed in it (px) in each frame shown, the last first (none: all of it), for a
+    // swapchain image holding an earlier frame (Device::swapchainAge): only that copied over.
+    std::deque<std::optional<std::vector<gpu::IRect>>> shownChanges;
     bool gpuInFrame = false;
     std::unique_ptr<kompoz::detail::BitmapRenderer> bitmaps;  // draws into bitmaps (AppBitmaps)
     GraphicsContext& graphics() { return *gpuCanvas; }
@@ -589,7 +592,8 @@ Drawn drawFrame(App& app, const std::string& shot) {
     std::optional<Rect> damage = app.display->end();
     app.prof.recordNs = SDL_GetTicksNS() - recording;
     if (app.keepCheck) checkKept(app, screen, 1 / scale);
-    if (damage) r.drawFrame(*app.gpuFrame, *app.display, true);
+    bool keptChanges = true;  // (drawn only where they changed, into the frame before)
+    if (damage) keptChanges = r.drawFrame(*app.gpuFrame, *app.display, true);
     if (damage && app.damageCheck) {
         auto full = device.createTexture(pw, ph, gpu::Format::RGBA8, gpu::TextureUsage::Sampled | gpu::TextureUsage::RenderTarget);
         r.drawFrame(*full, *app.display, false);
@@ -606,12 +610,59 @@ Drawn drawFrame(App& app, const std::string& shot) {
     gpu::Texture* swapchain = device.swapchainTexture();
     app.prof.acquireNs = SDL_GetTicksNS() - acquiring;
     if (swapchain) {
+        // What this frame changed in the kept pixels: its areas and where its moves went, out to
+        // whole pixels (all of it when the window needs it all, or the outlines of what was drawn
+        // again are shown, which stay in the image).
+        std::optional<std::vector<gpu::IRect>> changed = std::vector<gpu::IRect>{};
+        if (app.showFrame || app.damageShow || !keptChanges) changed.reset();
+        else if (damage) {
+            for (const Rect& a : app.display->areas())
+                changed->push_back({int(std::floor(a.x * scale)), int(std::floor(a.y * scale)), int(std::ceil(a.right() * scale)) - int(std::floor(a.x * scale)),
+                                    int(std::ceil(a.bottom() * scale)) - int(std::floor(a.y * scale))});
+            for (const DisplayList::Move& m : app.display->moves())  // (as Renderer::drawFrame moves them)
+                changed->push_back({int(std::lround(m.from.x * scale)) + int(std::lround(m.by.x * scale)), int(std::lround(m.from.y * scale)) + int(std::lround(m.by.y * scale)),
+                                    int(std::lround(m.from.width * scale)), int(std::lround(m.from.height * scale))});
+        }
+        app.shownChanges.push_front(changed);
+        if (app.shownChanges.size() > 8) app.shownChanges.pop_back();
+        // A swapchain image holding the frame `age` frames ago: what changed since copied over.
+        std::optional<std::vector<gpu::IRect>> copied;
+        if (int age = device.swapchainAge(); age > 0 && size_t(age) <= app.shownChanges.size()) {
+            copied.emplace();
+            for (int i = 0; i < age && copied; ++i)
+                if (!app.shownChanges[size_t(i)]) copied.reset();
+                else copied->insert(copied->end(), app.shownChanges[size_t(i)]->begin(), app.shownChanges[size_t(i)]->end());
+        }
+        // Each in the frame, those overlapping as one (each pixel copied once); all of it once they
+        // take half of it (an image's pixels kept cost loading, on a tiling GPU, as all copied don't).
+        if (copied) {
+            std::vector<gpu::IRect>& c = *copied;
+            for (gpu::IRect& r : c) {
+                int x0 = std::max(r.x, 0), y0 = std::max(r.y, 0), x1 = std::min(r.x + r.width, pw), y1 = std::min(r.y + r.height, ph);
+                r = {x0, y0, std::max(0, x1 - x0), std::max(0, y1 - y0)};
+            }
+            std::erase_if(c, [](const gpu::IRect& r) { return r.width == 0 || r.height == 0; });
+            for (bool merged = true; merged;) {
+                merged = false;
+                for (size_t i = 0; i < c.size() && !merged; ++i)
+                    for (size_t j = i + 1; j < c.size() && !merged; ++j)
+                        if (c[i].x < c[j].x + c[j].width && c[j].x < c[i].x + c[i].width && c[i].y < c[j].y + c[j].height && c[j].y < c[i].y + c[i].height) {
+                            int x0 = std::min(c[i].x, c[j].x), y0 = std::min(c[i].y, c[j].y);
+                            c[i] = {x0, y0, std::max(c[i].x + c[i].width, c[j].x + c[j].width) - x0, std::max(c[i].y + c[i].height, c[j].y + c[j].height) - y0};
+                            c.erase(c.begin() + std::ptrdiff_t(j));
+                            merged = true;
+                        }
+            }
+            int64_t area = 0;
+            for (const gpu::IRect& r : c) area += int64_t(r.width) * r.height;
+            if (area * 2 > int64_t(pw) * ph) copied.reset();
+        }
         app.showFrame = false;
-        device.discard(*swapchain);  // (all of it copied over: what it held isn't loaded, on a tiling GPU)
+        if (!copied) device.discard(*swapchain);  // (all of it copied over: what it held isn't loaded, on a tiling GPU)
         r.beginTarget(*swapchain);
         int turns = device.swapchainTurns();
         bool flipped = device.swapchainFlipped();
-        r.blit(*app.gpuFrame, turns, flipped);
+        r.blit(*app.gpuFrame, turns, flipped, copied ? &*copied : nullptr);
         if (damage && app.damageShow) {  // what was drawn again, outlined (only in the window, not the kept pixels)
             Matrix turned;  // (as the frame is: a point's x and y from these, then moved)
             float c[4][2] = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}};  // (cos, sin) of the turns

@@ -3435,6 +3435,26 @@ void blitCopiesTexturesAsTheyAre(Gpu& g) {
         CHECK(worst == 0);
         if (worst != 0) std::printf("  blit turned %d times: off by %d at (%g, %g)\n", turns, worst, worstAt.x, worstAt.y);
     }
+    // Only some regions of it (what changed since a swapchain image was last presented), turned
+    // and flipped as all of it is: those texels where they go, the rest of the target as it was.
+    std::vector<gpu::IRect> regions{{2, 3, 10, 6}, {25, 10, 8, 9}};
+    auto inside = [&](int x, int y) {
+        return std::ranges::any_of(regions, [&](const gpu::IRect& r) { return x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height; });
+    };
+    for (int turns = 0; turns < 4; ++turns)
+        for (bool flipped : {false, true}) {
+            int tw = turns & 1 ? h : w, th = turns & 1 ? w : h;
+            Pixels part = g.render(tw, th, 1, [&](GraphicsContext&) { g.renderer->blit(*frame, turns, flipped, &regions); });
+            const uint8_t white[4] = {255, 255, 255, 255};
+            worst = worstAgainst(part, [&](int x, int y) {
+                if (flipped) y = th - 1 - y;
+                int sx = turns == 0 ? x : turns == 1 ? y : turns == 2 ? w - 1 - x : w - 1 - y;
+                int sy = turns == 0 ? y : turns == 1 ? h - 1 - x : turns == 2 ? h - 1 - y : x;
+                return inside(sx, sy) ? kept.at(sx, sy) : white;
+            });
+            CHECK(worst == 0);
+            if (worst != 0) std::printf("  blit of regions turned %d times%s: off by %d at (%g, %g)\n", turns, flipped ? ", flipped" : "", worst, worstAt.x, worstAt.y);
+        }
 }
 
 // Texels uploaded read back as they were, in every format: a part uploaded from a wider picture

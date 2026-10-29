@@ -344,6 +344,14 @@
   dolduruyorsa başlamaz: içindekiler tutulur, kalanlar eskisi gibi çizilir, her karede hepsi yeniden taranmaz. Bir
   Redmi Note 9 Pro'da Ana sayfa ile Bileşenler sekmeleri arasında beş kez gidip gelmek 36 yerine 20–22 tazeleme
   kaçırdı. `KOMPOZ_PROFILE` yavaş karelerinde çizilen ve tutulan yolları sayar.
+- **Pencereye yalnızca değişen kopyalanıyor**: saklanan kare her karede takas zincirinin her görüntüsüne bütün
+  olarak kopyalanıyordu; artık bir görüntü sunulduğu içeriği tutuyor (Vulkan'ın tuttuğu gibi; takas zinciri artık
+  kırpılmıyor) ve birkaç kare önceki bir kareyi gösteren bir görüntüye (`Device::swapchainAge`) yalnızca o zamandan
+  beri karelerin değiştirdiği kopyalanıyor (alanları ve taşımalarının gittiği yerler, üst üste binenler bir olarak),
+  her parça kendi geçiş alanında (`Renderer::blit`'in bölgeleri), Android'in renderer'ının bir tamponun yalnız
+  hasarını çizmesi gibi; bu yarısı ya da daha fazlasıysa ya da görüntü yeniyse hepsi. Bir Redmi Note 9 Pro'da
+  showcase'in hareketli çizimlerinde (Bileşenler) dururken GPU kare başına 5,8–7,9 ms yerine 2,9–4,0 ms aldı;
+  ekranın çoğunu değiştiren bir liste kaydırması önceki kadar tutuyor.
 - **Vulkan'daki bir Android uygulaması arka plandan dönünce penceresini yeniden gösteriyor**: Android o zaman
   pencereye yeni bir yerel pencere veriyor; eskisi için yapılan Vulkan yüzeyine artık sunulamıyordu (her karede
   "dequeueBuffer failed: No such device"): ekran siyah kalıyordu. Yüzey ve takas zinciri yeni bir yerel pencere için

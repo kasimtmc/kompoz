@@ -325,6 +325,13 @@
   frame's paths fill most of it themselves: then those in it are kept and the rest drawn as before, rather than all
   rasterized again each frame. Going between the Home and Components tabs five times on a Redmi Note 9 Pro missed
   20–22 refreshes instead of 36. `KOMPOZ_PROFILE` counts paths drawn and kept in its slow frames.
+- **Only what changed is copied onto the window**: the kept frame was copied onto each swapchain image whole, at
+  each frame; an image now holds what it was presented with (as Vulkan keeps it, the swapchain no longer clipped),
+  and one showing a frame from a few frames ago (`Device::swapchainAge`) has only what the frames since changed copied
+  into it (their areas and where their moves went, overlapping ones as one), each part in a pass area of its own
+  (`Renderer::blit`'s regions), as Android's renderer draws only a buffer's damage; all of it when that is half of it
+  or more, or the image is new. On a Redmi Note 9 Pro at rest on the showcase's moving drawings (Components), the GPU
+  took 2.9–4.0 ms a frame instead of 5.8–7.9; a list scrolled, which changes most of the screen, costs as before.
 - **An Android app on Vulkan shows its window again when it comes back from the background**: Android gives the
   window a new native window then, and the Vulkan surface made for the old one could no longer be presented to
   ("dequeueBuffer failed: No such device" at each frame): the screen stayed black. The surface and its swapchain are

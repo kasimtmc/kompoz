@@ -239,6 +239,11 @@ public:
     // Its rows go from the bottom of the window up (OpenGL's default framebuffer): what is drawn
     // into it is drawn upside down, to show the right way up.
     virtual bool swapchainFlipped() const { return false; }
+    // How many frames ago the swapchain image swapchainTexture() gave was last presented, holding
+    // what was drawn into it then (1: the frame before; drawn over where things have changed
+    // since, as Android's renderer does with a buffer's age); 0 if what it holds isn't known (a
+    // new one, or a platform that doesn't keep it): all of it drawn over.
+    virtual int swapchainAge() const { return 0; }
     // `size` bytes of this frame's memory (aligned to `alignment`), to write now.
     virtual void* allocate(size_t size, size_t alignment, BufferRef* ref) = 0;
     // Texels (in the texture's format, `rowBytes` apart) into part of a texture; outside passes.

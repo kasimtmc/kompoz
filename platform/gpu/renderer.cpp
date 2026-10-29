@@ -499,7 +499,7 @@ bool Renderer::move(const IRect& from, int dx, int dy) {
     return true;
 }
 
-void Renderer::drawFrame(Texture& target, const DisplayList& list, bool changes) {
+bool Renderer::drawFrame(Texture& target, const DisplayList& list, bool changes) {
     beginTarget(target);
     std::vector<std::optional<Rect>> areas;
     for (size_t i = 0; changes && i < list.moves().size(); ++i) {
@@ -519,9 +519,10 @@ void Renderer::drawFrame(Texture& target, const DisplayList& list, bool changes)
         if (area) popClip();
     }
     endTarget();
+    return changes;
 }
 
-void Renderer::blit(Texture& texture, int quarterTurns, bool flipped) {
+void Renderer::blit(Texture& texture, int quarterTurns, bool flipped, const std::vector<IRect>* regions) {
     float w = float(texture.width()), h = float(texture.height());
     Prim p;
     set(p.bounds, 0, 0, w, h);
@@ -538,7 +539,14 @@ void Renderer::blit(Texture& texture, int quarterTurns, bool flipped) {
         p.xform[1] = -p.xform[1], p.xform[3] = -p.xform[3];
         p.extra[1] = ((quarterTurns & 1) ? w : h) - p.extra[1];
     }
-    add(IMAGE, p, &texture, true, Mask::None, nullptr, false, Sampler{Filter::Nearest});  // (texel for pixel, on any GPU)
+    if (!regions) return add(IMAGE, p, &texture, true, Mask::None, nullptr, false, Sampler{Filter::Nearest});  // (texel for pixel, on any GPU)
+    for (const IRect& r : *regions) {  // (each where it goes in the target: its corners turned)
+        auto to = [&](float x, float y) { return Offset{p.xform[0] * x + p.xform[2] * y + p.extra[0], p.xform[1] * x + p.xform[3] * y + p.extra[1]}; };
+        Offset a = to(float(r.x), float(r.y)), b = to(float(r.x + r.width), float(r.y + r.height));
+        pushClip({std::min(a.x, b.x) / scale, std::min(a.y, b.y) / scale, std::abs(b.x - a.x) / scale, std::abs(b.y - a.y) / scale});
+        add(IMAGE, p, &texture, true, Mask::None, nullptr, false, Sampler{Filter::Nearest});
+        popClip();
+    }
 }
 
 // --- Submitting ----------------------------------------------------------------------------------

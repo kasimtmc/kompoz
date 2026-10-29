@@ -190,6 +190,9 @@ public:
     int turns = 0;
     std::vector<std::unique_ptr<VulkanTexture>> swapImages;
     std::vector<VkSemaphore> renderFinished;  // per swapchain image
+    std::vector<uint64_t> presentedAt;        // per swapchain image: `presents` when it was last presented (0: not since it was made)
+    uint64_t presents = 0;
+    int swapAge = 0;  // the acquired image's (swapchainAge)
     uint32_t swapIndex = 0;
     bool acquired = false;
 
@@ -732,7 +735,7 @@ public:
                 break;
             }
         sci.presentMode = VK_PRESENT_MODE_FIFO_KHR;  // vsync, always there
-        sci.clipped = VK_TRUE;
+        sci.clipped = VK_FALSE;  // (what is kept in an image: all of it, a part hidden by another window too)
         sci.oldSwapchain = old;
         VkSwapchainKHR made = VK_NULL_HANDLE;
         VkResult r = vk.vkCreateSwapchainKHR(device, &sci, nullptr, &made);
@@ -748,6 +751,7 @@ public:
         vk.vkGetSwapchainImagesKHR(device, swapchain, &count, nullptr);
         std::vector<VkImage> images(count);
         vk.vkGetSwapchainImagesKHR(device, swapchain, &count, images.data());
+        presentedAt.assign(images.size(), 0);
         for (VkImage image : images) {
             swapImages.push_back(std::make_unique<VulkanTexture>(*this, int(imageExtent.width), int(imageExtent.height), swapFormatKompoz, image,
                                                                  makeView(image, chosen.format), VK_NULL_HANDLE));
@@ -875,6 +879,8 @@ public:
         return presents;
     }
 
+    int swapchainAge() const override { return acquired ? swapAge : 0; }
+
     Texture* swapchainTexture() override {
         if (!surface && !nativeWindow) return nullptr;
         if (!acquired) {
@@ -898,7 +904,10 @@ public:
             surfaceLost = r == VK_ERROR_SURFACE_LOST_KHR;
             acquired = r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR;
             waitImage = acquired;
-            if (acquired) swapImages[swapIndex]->layout = VK_IMAGE_LAYOUT_UNDEFINED;  // presented before: its pixels don't matter
+            // Presented before: it holds what it was presented with (presenting only reads it, and
+            // taken out of the present layout it is as it was), unless it is new.
+            swapAge = acquired && presentedAt[swapIndex] ? int(std::min<uint64_t>(presents - presentedAt[swapIndex] + 1, 1000)) : 0;
+            if (acquired) swapImages[swapIndex]->layout = swapAge ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_UNDEFINED;
         }
         return acquired ? swapImages[swapIndex].get() : nullptr;
     }
@@ -1221,9 +1230,13 @@ public:
         vk.vkResetFences(device, 1, &f.fence);
         if (acquired && !present) {
             // An image was acquired but isn't shown: it must still be given back, so it is
-            // presented as drawn (the window gets it only if something was).
+            // presented as drawn (the window gets it only if something was), holding what isn't
+            // known any more.
             transition(*swapImages[swapIndex], VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
             present = true;
+            presentedAt[swapIndex] = 0;
+        } else if (present) {
+            presentedAt[swapIndex] = ++presents;
         }
         submit(f.fence, present);
         if (present) {
