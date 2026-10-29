@@ -32,7 +32,7 @@ if(PROJECT_IS_TOP_LEVEL AND NOT DEFINED CMAKE_LINKER_TYPE AND NOT kompoz_mobile 
 endif()
 option(KOMPOZ_BUILD_SDL3 "Build the SDL3 platform backend" ON)
 # cmake --install: the headers, the libraries, the assets and a package for find_package(kompoz),
-# with SDL3, FreeType and HarfBuzz when they are built here (see the end).
+# with SDL3, FreeType, HarfBuzz, zlib and libpng when they are built here (see the end).
 if(PROJECT_IS_TOP_LEVEL AND NOT kompoz_mobile)
     set(kompoz_install_default ON)
 else()
@@ -40,7 +40,7 @@ else()
 endif()
 option(KOMPOZ_INSTALL "Install rules and a CMake package for find_package(kompoz)" ${kompoz_install_default})
 option(KOMPOZ_BUILD_EXAMPLES "Build the example apps (needs the SDL3 backend)" ON)
-option(KOMPOZ_VENDORED_DEPS "Build SDL3, FreeType and HarfBuzz from third_party/ (run scripts/fetch-deps.sh)" ${kompoz_vendored})
+option(KOMPOZ_VENDORED_DEPS "Build SDL3, FreeType, HarfBuzz, zlib and libpng from third_party/ (run scripts/fetch-deps.sh)" ${kompoz_vendored})
 if(kompoz_mobile)
     option(KOMPOZ_BUILD_TESTS "Build the headless tests" OFF)
 else()
@@ -139,7 +139,7 @@ endif()
 
 if(KOMPOZ_BUILD_SDL3)
     if(KOMPOZ_VENDORED_DEPS)
-        foreach(dep SDL freetype)
+        foreach(dep SDL freetype zlib libpng)
             if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/${dep}/CMakeLists.txt)
                 message(FATAL_ERROR "third_party/${dep} is missing. Run scripts/fetch-deps.sh first.")
             endif()
@@ -178,17 +178,39 @@ if(KOMPOZ_BUILD_SDL3)
             target_link_libraries(kompoz_harfbuzz PUBLIC Freetype::Freetype)
             add_library(harfbuzz::harfbuzz ALIAS kompoz_harfbuzz)
         endif()
+        # zlib and libpng (PNG read and written), static libraries of their sources: zlib's deflate
+        # and inflate, libpng without its SIMD code (the plain C, the same everywhere).
+        set(kompoz_zlib_dir ${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib)
+        add_library(kompoz_zlib STATIC)
+        foreach(src adler32 crc32 deflate inffast inflate inftrees trees zutil)
+            target_sources(kompoz_zlib PRIVATE ${kompoz_zlib_dir}/${src}.c)
+        endforeach()
+        target_include_directories(kompoz_zlib PUBLIC $<BUILD_INTERFACE:${kompoz_zlib_dir}>)
+        set_target_properties(kompoz_zlib PROPERTIES EXPORT_NAME zlib)  # (in Kompoz's package)
+        set(kompoz_png_dir ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libpng)
+        configure_file(${kompoz_png_dir}/scripts/pnglibconf.h.prebuilt ${CMAKE_CURRENT_BINARY_DIR}/libpng/pnglibconf.h COPYONLY)
+        add_library(kompoz_png STATIC)
+        foreach(src png pngerror pngget pngmem pngpread pngread pngrio pngrtran pngrutil pngset pngtrans pngwio pngwrite pngwtran pngwutil)
+            target_sources(kompoz_png PRIVATE ${kompoz_png_dir}/${src}.c)
+        endforeach()
+        target_include_directories(kompoz_png PUBLIC $<BUILD_INTERFACE:${kompoz_png_dir}> $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/libpng>)
+        target_compile_definitions(kompoz_png PRIVATE PNG_ARM_NEON_OPT=0 PNG_INTEL_SSE_OPT=0 PNG_MIPS_MSA_OPT=0 PNG_MIPS_MMI_OPT=0
+                                   PNG_POWERPC_VSX_OPT=0 PNG_LOONGARCH_LSX_OPT=0 PNG_RISCV_RVV_OPT=0)
+        set_target_properties(kompoz_png PROPERTIES EXPORT_NAME png)
+        target_link_libraries(kompoz_png PUBLIC kompoz_zlib)
+        add_library(PNG::PNG ALIAS kompoz_png)
     else()
         find_package(SDL3 REQUIRED CONFIG)
         find_package(Freetype REQUIRED)
         find_package(harfbuzz CONFIG QUIET)
+        find_package(PNG REQUIRED)
     endif()
 
     # An OBJECT library because the backend defines the entry point (main, or SDL_main on
     # Android/iOS), which must always end up in the final binary.
     add_library(kompoz_sdl3 OBJECT platform/app/app_core.cpp platform/common/system.cpp platform/sdl3/sdl3_app.cpp platform/common/font_system.cpp
-                                   platform/common/image_loader.cpp)
-    target_link_libraries(kompoz_sdl3 PUBLIC kompoz_core SDL3::SDL3 Freetype::Freetype)
+                                   platform/common/image_loader.cpp platform/common/image_codec.cpp)
+    target_link_libraries(kompoz_sdl3 PUBLIC kompoz_core SDL3::SDL3 Freetype::Freetype PNG::PNG)
     set_target_properties(kompoz_sdl3 PROPERTIES EXPORT_NAME sdl3)
     add_library(kompoz::sdl3 ALIAS kompoz_sdl3)
     # Images (AsyncImage): Android, Windows and the web decode and download with the platform's
@@ -302,7 +324,8 @@ if(KOMPOZ_BUILD_SDL3)
     # Windows), tested on its own.
     if(KOMPOZ_BUILD_TESTS AND UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
         add_executable(kompoz_platform_tests tests/platform_tests.cpp platform/common/wallpaper_colors.cpp
-                       platform/common/image_loader.cpp platform/linux/atspi_bridge.cpp platform/common/system.cpp)
+                       platform/common/image_loader.cpp platform/common/image_codec.cpp platform/linux/atspi_bridge.cpp
+                       platform/common/system.cpp)
         target_link_libraries(kompoz_platform_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,INTERFACE_LINK_LIBRARIES>)
         target_compile_definitions(kompoz_platform_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,COMPILE_DEFINITIONS>)
         add_test(NAME kompoz_platform_tests COMMAND kompoz_platform_tests)
@@ -330,7 +353,7 @@ if(KOMPOZ_BUILD_SDL3)
     #   emrun --browser chrome build-web/kompoz_gpu_tests.html KOMPOZ_GPU_REQUIRED=1
     if(KOMPOZ_BUILD_TESTS AND (kompoz_gpu_vulkan OR EMSCRIPTEN OR APPLE))
         add_executable(kompoz_gpu_tests tests/gpu_tests.cpp platform/gpu/device.cpp platform/gpu/path_geometry.cpp platform/gpu/renderer.cpp
-                       platform/gpu/gles_device.cpp platform/common/font_system.cpp platform/common/system.cpp)
+                       platform/gpu/gles_device.cpp platform/common/font_system.cpp platform/common/image_codec.cpp platform/common/system.cpp)
         if(kompoz_gpu_vulkan)
             target_sources(kompoz_gpu_tests PRIVATE platform/gpu/vulkan_device.cpp platform/gpu/vma.cpp)
             target_include_directories(kompoz_gpu_tests PRIVATE ${kompoz_vulkan_include} platform/gpu/external)
@@ -372,7 +395,7 @@ endif()
 # cmake --install: Kompoz's headers, kompoz_core, the SDL3 backend's objects (the entry point) and the
 # assets, and a CMake package: find_package(kompoz) gives kompoz::core, kompoz::sdl3 and
 # kompoz_copy_assets. SDL3 and FreeType built here are installed beside it with their own packages,
-# HarfBuzz built here in Kompoz's; the system's are found again where they were.
+# HarfBuzz, zlib and libpng built here in Kompoz's; the system's are found again where they were.
 if(KOMPOZ_INSTALL)
     include(CMakePackageConfigHelpers)
     set(kompoz_cmake_dir ${CMAKE_INSTALL_LIBDIR}/cmake/kompoz)
@@ -384,6 +407,9 @@ if(KOMPOZ_INSTALL)
         install(TARGETS kompoz_sdl3 EXPORT kompozTargets OBJECTS DESTINATION ${CMAKE_INSTALL_LIBDIR}/kompoz)
         if(TARGET kompoz_harfbuzz)
             install(TARGETS kompoz_harfbuzz EXPORT kompozTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        endif()
+        if(TARGET kompoz_png)
+            install(TARGETS kompoz_png kompoz_zlib EXPORT kompozTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
         endif()
         install(DIRECTORY assets/ DESTINATION ${CMAKE_INSTALL_DATADIR}/kompoz/assets)
     endif()

@@ -344,11 +344,14 @@
   text, the images, the screen readers' bridges and the desktop's color readers no longer use SDL: the log, the
   app's files (Android's APK assets through what the platform gives), the program's directory and the cache
   directory are `platform/common/system`'s, and the modules on threads of their own tell the platform with a
-  `platform::Notifier` instead of SDL events (only decoding PNG and BMP and saving screenshots are still SDL's); the
-  platform tests free what libdbus keeps at their end, as `SDL_Quit` did. Each platform module is now where it
-  belongs, in `kompoz::platform`: what every platform shares in `platform/common/` (fonts, images, the wallpaper's
-  colors), the desktops' own in `platform/linux/` and `platform/windows/`, Android's in `platform/android/`;
-  `platform/sdl3/` holds only the SDL platform.
+  `platform::Notifier` instead of SDL events; the platform tests free what libdbus keeps at their end, as `SDL_Quit`
+  did. Each platform module is now where it belongs, in `kompoz::platform`: what every platform shares in
+  `platform/common/` (fonts, images, the wallpaper's colors), the desktops' own in `platform/linux/` and
+  `platform/windows/`, Android's in `platform/android/`; `platform/sdl3/` holds only the SDL platform. PNG is read,
+  and screenshots and the GPU tests' pictures are written, with libpng (the system's, vcpkg's or Conan's, else built
+  from `third_party/` with zlib: `scripts/fetch-deps.sh`), a file's gamma and color space honored as Android and the
+  browsers do, a 16-bit one that says nothing of its gamma read as sRGB; BMP is read by Kompoz itself (1 to 32 bits a
+  pixel, uncompressed or with bit fields).
 - **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
   blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
   scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and

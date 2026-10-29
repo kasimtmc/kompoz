@@ -48,6 +48,8 @@ PlatformGlyph renderGlyph(const std::string& utf8, int px);
 // BitmapFactory, and an http(s) GET's body (empty if it failed).
 ImageBitmap decodeImage(const std::vector<uint8_t>& bytes, const ImageRequestSize& size);
 std::vector<uint8_t> httpGet(const std::string& url);
+// A worker thread that called these ends: it lets go of the VM.
+void threadDone();
 
 // Saved instance state: the host's saved state, kept in the activity's Bundle; and what the
 // activity was created again with (empty for a fresh start).

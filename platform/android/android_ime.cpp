@@ -50,7 +50,7 @@ std::vector<jfloat> gRanges;  // per node: has one (0/1), current, start, end
 std::unordered_map<int, std::string> gLiveText;  // what live region nodes said when last published
 jmethodID gSemanticsChanged = nullptr;
 
-JNIEnv* env() { return static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv()); }
+JNIEnv* env() { return static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv()); }  // (attached to the VM by SDL, until SDL_CleanupTLS)
 
 jbyteArray toBytes(JNIEnv* e, const std::string& s) {
     jbyteArray array = e->NewByteArray(jsize(s.size()));
@@ -503,6 +503,8 @@ std::vector<uint8_t> httpGet(const std::string& url) {
     e->PopLocalFrame(nullptr);
     return body;
 }
+
+void threadDone() { SDL_CleanupTLS(); }
 
 void hide() {
     if (!gClass) return;

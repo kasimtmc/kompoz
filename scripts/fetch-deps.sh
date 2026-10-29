@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Downloads the sources Kompoz builds itself on platforms without system packages
-# (Android, iOS, Windows without vcpkg): SDL3, FreeType, HarfBuzz and the Vulkan headers, at pinned
-# versions, and applies the fixes in scripts/patches/<name>-*.patch.
+# (Android, iOS, Windows without vcpkg): SDL3, FreeType, HarfBuzz, zlib, libpng and the Vulkan
+# headers, at pinned versions, and applies the fixes in scripts/patches/<name>-*.patch.
 # Usage: scripts/fetch-deps.sh
 set -euo pipefail
 
@@ -51,6 +51,15 @@ fetch freetype 2.14.3 \
 fetch harfbuzz 14.5.0 \
     https://github.com/harfbuzz/harfbuzz/releases/download/14.5.0/harfbuzz-14.5.0.tar.xz \
     b7132e148358a45185c9feafd049dbaf243649d3c44414b3534d9c95d18592b9
+
+# PNG: images read and screenshots written (libpng, over zlib's deflate).
+fetch zlib 1.3.2 \
+    https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.xz \
+    d7a0654783a4da529d1bb793b7ad9c3318020af77667bcae35f95d0e42a792f3
+
+fetch libpng 1.6.59 \
+    https://download.sourceforge.net/libpng/libpng-1.6.59.tar.xz \
+    d80dd2a38a37f803cb9b6ac7b14bd6e74ddc3b654780a8380bdf93523fdb4389
 
 # The GPU renderer's Vulkan backend: the API's headers, for where the system has none.
 fetch Vulkan-Headers 1.4.363.0 \

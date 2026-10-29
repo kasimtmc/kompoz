@@ -257,7 +257,8 @@ atlası, vektör ve path rasterleştirme, gradyan mesh'leri, dönüşümlü offs
 ## Derleme
 
 Gerekenler: C++20 derleyici (GCC 13+, Clang 17+; GCC 16 ve Clang 22 ile test edildi; GCC 13 bazı coroutine
-lambda'larında dahili derleyici hatasıyla çöküyor, GCC 14'te bu yok), CMake 3.24+, SDL3 ve FreeType.
+lambda'larında dahili derleyici hatasıyla çöküyor, GCC 14'te bu yok), CMake 3.24+, SDL3, FreeType ve
+libpng.
 İsteğe bağlı: HarfBuzz (metin şekillendirme: Arapça harf birleşmesi, Hint yazıları, ligatürler, emoji dizileri; yoksa
 metin karakter karakter çizilir) ve Linux'ta `AsyncImage` için libcurl, libwebp ve libturbojpeg 3.0+ (HTTP, WebP, JPEG).
 Linux'ta masaüstünün vurgu rengi için libdbus, varsa çalışırken yüklenir.
@@ -291,9 +292,9 @@ target_link_libraries(myapp PRIVATE kompoz::sdl3)
 kompoz_copy_assets(myapp)       # fontlar ve lisanslar ikilinin yanına
 ```
 
-Ya da Kompoz'u bir kez kurup paket olarak bulun; Linux'ta, macOS'ta ya da Windows'ta. Sistemin SDL3, FreeType ve
-HarfBuzz'ıyla derlendiyse onları yine orada bulur; kendi derlediğiyle derlendiyse (`scripts/fetch-deps.sh`: Windows ya
-da `-DKOMPOZ_VENDORED_DEPS=ON`) onları yanına kurar:
+Ya da Kompoz'u bir kez kurup paket olarak bulun; Linux'ta, macOS'ta ya da Windows'ta. Sistemin SDL3, FreeType,
+HarfBuzz ve libpng'siyle derlendiyse onları yine orada bulur; kendi derlediğiyle derlendiyse
+(`scripts/fetch-deps.sh`: Windows ya da `-DKOMPOZ_VENDORED_DEPS=ON`) onları yanına kurar:
 
 ```bash
 cmake -S kompoz -B kompoz/build -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_BUILD_EXAMPLES=OFF -DKOMPOZ_BUILD_TESTS=OFF
@@ -308,8 +309,8 @@ target_link_libraries(myapp PRIVATE kompoz::sdl3)
 kompoz_copy_assets(myapp)
 ```
 
-vcpkg ya da Conan ile, deponun bir klonundan (overlay port'u ve reçetesi o klonu, paket yöneticisinin SDL3, FreeType ve
-HarfBuzz'ıyla derler), ardından yukarıdaki gibi `find_package(kompoz)`:
+vcpkg ya da Conan ile, deponun bir klonundan (overlay port'u ve reçetesi o klonu, paket yöneticisinin SDL3, FreeType,
+HarfBuzz ve libpng'siyle derler), ardından yukarıdaki gibi `find_package(kompoz)`:
 
 ```bash
 vcpkg install kompoz --overlay-ports=kompoz/packaging/vcpkg/ports
@@ -412,8 +413,8 @@ scripts/fetch-deps.sh
 cd examples/showcase/android && ./gradlew installDebug
 ```
 
-`scripts/fetch-deps.sh`, SDL3, FreeType ve HarfBuzz kaynaklarını sabit sürüm ve sha256 kontrolüyle `third_party/` altına
-indirir ve `scripts/patches/` altındaki düzeltmeleri uygular (şu an iki tane, ikisi de Android'de ve SDL 3.4.18'de de
+`scripts/fetch-deps.sh`, SDL3, FreeType, HarfBuzz, zlib ve libpng kaynaklarını sabit sürüm ve sha256 kontrolüyle
+`third_party/` altına indirir ve `scripts/patches/` altındaki düzeltmeleri uygular (şu an iki tane, ikisi de Android'de ve SDL 3.4.18'de de
 düzeltilmemiş: etkinlik, SDL çiziciyi oluştururken duraklarsa yaşanan kilitlenme ve `SDL_WaitEvent`'in beklemek yerine
 dönmesi; uygulama boştayken bir işlemci çekirdeği meşgul olur). Gradle, kök `CMakeLists.txt`'yi NDK ile
 derler: `libSDL3.so` ve uygulamanın `libmain.so`'su (vitrinin kaynakları) oluşur. Java tarafı SDL'in kendi
@@ -454,7 +455,7 @@ uygulama öne gelince yenilenir), TalkBack, sistem fontlarından Serif/Monospace
 ### Web (Emscripten)
 
 Gerekenler: Emscripten (Arch: `pacman -S emscripten`, komutlar `/usr/lib/emscripten` altında) ve `scripts/fetch-deps.sh`.
-SDL3, FreeType ve HarfBuzz kaynaktan derlenir; fontlar ve resimler `showcase.data` içine paketlenir, sayfa
+SDL3, FreeType, HarfBuzz, zlib ve libpng kaynaktan derlenir; fontlar ve resimler `showcase.data` içine paketlenir, sayfa
 ([platform/web/shell.html](platform/web/shell.html)) yalnız bir canvas'tır ve uygulama onu kaplar.
 
 ```bash
@@ -534,7 +535,7 @@ bir de baştan çizip pikselleri karşılaştırır (fark varsa loglar), `KOMPOZ
 | Android | Derlendi; gerçek cihazda (Xiaomi 24030PN60G, Android 16, arm64) ve emülatörde (API 36, x86_64, GLES) çalıştırıldı. APK'da `arm64-v8a` ve `x86_64` var |
 | Windows | Linux'tan MinGW-w64 (GCC 16) ile çapraz derleniyor; testler Wine'da geçiyor, vitrin orada çiziliyor |
 | Web | Emscripten (WebGL, SDL3 main callback'leri) ile derlendi, tarayıcılarda çalıştırıldı (tıklama, yazma, kaydırma) |
-| macOS | CI, Homebrew'un SDL3, FreeType ve HarfBuzz'ıyla derliyor ve test ediyor; bir uygulama gerçek pencerede (Metal) çalışıyor; henüz elle kullanılmadı |
+| macOS | CI, Homebrew'un SDL3, FreeType, HarfBuzz ve libpng'siyle derliyor ve test ediyor; bir uygulama gerçek pencerede (Metal) çalışıyor; henüz elle kullanılmadı |
 | iOS | Kaynaktan derlenen bağımlılıklar hazır (`KOMPOZ_VENDORED_DEPS`); Xcode projesi gerekiyor (macOS'ta) |
 
 ## Bilinen sınırlar

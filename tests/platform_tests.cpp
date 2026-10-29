@@ -4,6 +4,7 @@
 // registry, the accessibility bus's launcher and a screen reader.
 
 #include "../platform/linux/atspi_bridge.hpp"
+#include "../platform/common/image_codec.hpp"
 #include "../platform/common/image_loader.hpp"
 #include "../platform/linux/libdbus.hpp"
 #include "../platform/common/wallpaper_colors.hpp"
@@ -25,6 +26,7 @@
 #include <thread>
 #include <unistd.h>
 #include <vector>
+#include <zlib.h>
 
 extern char** environ;
 
@@ -258,6 +260,95 @@ void imagesAreDecoded() {
     std::printf("  (no libwebp: WebP decoding isn't tested)\n");
 #endif
     CHECK(platform::decodeImage({0xFF, 0xD8, 0xFF, 0, 1, 2, 3, 4, 5, 6, 7, 8}).empty());  // not a picture after all
+}
+
+// A BMP of its parts: a 40-byte header, what follows it (masks, palette) and the rows as they are
+// in the file (padded to 4 bytes; the bottom one first when the height is positive).
+std::vector<uint8_t> bmp(int w, int h, int bpp, uint32_t compression, const std::vector<uint8_t>& extra, const std::vector<uint8_t>& rows, int colors = 0) {
+    std::vector<uint8_t> out;
+    auto u16 = [&](uint32_t v) { out.insert(out.end(), {uint8_t(v), uint8_t(v >> 8)}); };
+    auto u32 = [&](uint32_t v) { u16(v & 0xFFFF), u16(v >> 16); };
+    uint32_t offset = 14 + 40 + uint32_t(extra.size());
+    out.insert(out.end(), {'B', 'M'}), u32(offset + uint32_t(rows.size())), u32(0), u32(offset);
+    u32(40), u32(uint32_t(w)), u32(uint32_t(h)), u16(1), u16(uint32_t(bpp)), u32(compression), u32(uint32_t(rows.size())), u32(2835), u32(2835),
+        u32(uint32_t(colors)), u32(0);
+    out.insert(out.end(), extra.begin(), extra.end());
+    out.insert(out.end(), rows.begin(), rows.end());
+    return out;
+}
+
+// A PNG of 16 bits a channel without a gAMA or sRGB chunk (libpng writes those), its pixels RGB.
+std::vector<uint8_t> png16(int w, int h, const std::vector<uint16_t>& rgb) {
+    std::vector<uint8_t> out = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
+    auto be32 = [](std::vector<uint8_t>& v, uint32_t x) { v.insert(v.end(), {uint8_t(x >> 24), uint8_t(x >> 16), uint8_t(x >> 8), uint8_t(x)}); };
+    auto chunk = [&](const char* type, const std::vector<uint8_t>& data) {
+        std::vector<uint8_t> body(type, type + 4);
+        body.insert(body.end(), data.begin(), data.end());
+        be32(out, uint32_t(data.size()));
+        out.insert(out.end(), body.begin(), body.end());
+        be32(out, uint32_t(crc32(0, body.data(), uInt(body.size()))));
+    };
+    std::vector<uint8_t> ihdr;
+    be32(ihdr, uint32_t(w)), be32(ihdr, uint32_t(h));
+    ihdr.insert(ihdr.end(), {16, 2, 0, 0, 0});  // 16 bits, RGB
+    chunk("IHDR", ihdr);
+    std::vector<uint8_t> raw;  // each row: no filter, then its samples big-endian
+    for (int y = 0; y < h; ++y) {
+        raw.push_back(0);
+        for (int i = 0; i < w * 3; ++i) raw.insert(raw.end(), {uint8_t(rgb[size_t(y * w * 3 + i)] >> 8), uint8_t(rgb[size_t(y * w * 3 + i)])});
+    }
+    std::vector<uint8_t> z = {0x78, 0x01, 0x01, uint8_t(raw.size()), uint8_t(raw.size() >> 8), uint8_t(~raw.size()), uint8_t(~raw.size() >> 8)};  // one stored block
+    z.insert(z.end(), raw.begin(), raw.end());
+    be32(z, uint32_t(adler32(1, raw.data(), uInt(raw.size()))));
+    chunk("IDAT", z);
+    chunk("IEND", {});
+    return out;
+}
+
+// PNG written and read back as it was; BMP read in each of its kinds; what isn't either, or is cut
+// short, not read.
+void pngAndBmpAreRead() {
+    const std::vector<uint8_t> rgba = {255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 255, 0, 10, 20, 30, 40, 200, 100, 50, 255, 1, 2, 3, 4};  // 3 x 2
+    std::vector<uint8_t> png = platform::encodePng(3, 2, rgba.data());
+    platform::RgbaImage back = platform::decodePngOrBmp(png.data(), png.size());
+    CHECK(back.width == 3 && back.height == 2 && back.rgba == rgba);
+    ImageBitmap image = platform::decodeImage(png);  // (through the image loader too)
+    CHECK(image.width() == 3 && image.height() == 2 && std::vector<uint8_t>(image.pixels(), image.pixels() + 24) == rgba);
+    std::string path = (fs::temp_directory_path() / "kompoz-platform-tests.png").string();
+    CHECK(platform::savePng(path, 3, 2, rgba.data()));
+    std::ifstream file(path, std::ios::binary);
+    CHECK(std::vector<uint8_t>(std::istreambuf_iterator<char>(file), {}) == png);
+    fs::remove(path);
+    // 16 bits saying nothing of their gamma: sRGB, as written (libpng alone would take them as linear).
+    std::vector<uint8_t> deep = png16(2, 1, {0x8080, 0x4040, 0xFFFF, 0, 0x1010, 0xC0C0});
+    CHECK(platform::decodePng(deep.data(), deep.size()).rgba == (std::vector<uint8_t>{0x80, 0x40, 0xFF, 255, 0, 0x10, 0xC0, 255}));
+
+    auto read = [](const std::vector<uint8_t>& bytes) { return platform::decodePngOrBmp(bytes.data(), bytes.size()); };
+    // 24 bits, the bottom row first, each row padded to 4 bytes.
+    platform::RgbaImage b24 = read(bmp(2, 2, 24, 0, {}, {3, 2, 1, 6, 5, 4, 0, 0, 30, 20, 10, 60, 50, 40, 0, 0}));
+    CHECK(b24.width == 2 && b24.height == 2 && b24.rgba == (std::vector<uint8_t>{10, 20, 30, 255, 40, 50, 60, 255, 1, 2, 3, 255, 4, 5, 6, 255}));
+    // 32 bits, the top row first (a negative height): the fourth byte is alpha, unless it is 0 everywhere.
+    CHECK(read(bmp(2, -1, 32, 0, {}, {3, 2, 1, 128, 6, 5, 4, 0})).rgba == (std::vector<uint8_t>{1, 2, 3, 128, 4, 5, 6, 0}));
+    CHECK(read(bmp(2, -1, 32, 0, {}, {3, 2, 1, 0, 6, 5, 4, 0})).rgba == (std::vector<uint8_t>{1, 2, 3, 255, 4, 5, 6, 255}));
+    // A palette: 8, 4 and 1 bits an index.
+    const std::vector<uint8_t> palette = {0, 0, 255, 0, 0, 255, 0, 0, 255, 0, 0, 0};  // red, green, blue (BGRx)
+    const std::vector<uint8_t> want = {255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255};
+    CHECK(read(bmp(3, 1, 8, 0, palette, {0, 1, 2, 0}, 3)).rgba == want);
+    CHECK(read(bmp(3, 1, 4, 0, palette, {0x01, 0x20, 0, 0}, 3)).rgba == want);
+    CHECK(read(bmp(2, 1, 1, 0, std::vector<uint8_t>(palette.begin(), palette.begin() + 8), {0x40, 0, 0, 0}, 2)).rgba ==
+          (std::vector<uint8_t>{255, 0, 0, 255, 0, 255, 0, 255}));
+    // 16 bits by bit fields (5-6-5), and by default 5-5-5.
+    const std::vector<uint8_t> masks565 = {0x00, 0xF8, 0, 0, 0xE0, 0x07, 0, 0, 0x1F, 0, 0, 0};
+    CHECK(read(bmp(2, 1, 16, 3, masks565, {0x00, 0xF8, 0x1F, 0x00})).rgba == (std::vector<uint8_t>{255, 0, 0, 255, 0, 0, 255, 255}));
+    CHECK(read(bmp(1, 1, 16, 0, {}, {0xE0, 0x03, 0, 0})).rgba == (std::vector<uint8_t>{0, 255, 0, 255}));
+    // Not read: run-length encoded, cut short, neither.
+    CHECK(read(bmp(2, 1, 8, 1, palette, {0, 1, 2, 0}, 3)).empty());
+    std::vector<uint8_t> cut = bmp(2, 2, 24, 0, {}, std::vector<uint8_t>(16, 7));
+    cut.resize(cut.size() - 1);
+    CHECK(read(cut).empty());
+    png.resize(png.size() / 2);
+    CHECK(read(png).empty());
+    CHECK(read({'G', 'I', 'F', '8', '9', 'a', 0, 0}).empty());
 }
 
 // ---- AT-SPI ----
@@ -771,6 +862,7 @@ int main() {
     void* dbus = dlopen("libdbus-1.so.3", RTLD_NOW | RTLD_LOCAL);
     kdeConfigIsRead();
     imagesAreDecoded();
+    pngAndBmpAreRead();
     wallpaperChangesAreFollowed();
     atspiBridgeServesTheTree();
     atspiBridgeFollowsTheDesktop();

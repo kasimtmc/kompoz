@@ -58,7 +58,7 @@ jobs:
         with:
           path: third_party/.downloads
           key: deps-${{ hashFiles('scripts/fetch-deps.sh') }}
-      - name: "Dependencies (SDL3, FreeType, HarfBuzz from source: no SDL3 package here)"
+      - name: "Dependencies (SDL3, FreeType, HarfBuzz, zlib, libpng from source: no SDL3 package here)"
         run: scripts/fetch-deps.sh
       - name: Configure
         run: |
@@ -163,7 +163,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Packages
-        run: brew install ninja sdl3 freetype harfbuzz jpeg-turbo webp
+        run: brew install ninja sdl3 freetype harfbuzz libpng jpeg-turbo webp
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_WITH_JPEG=ON -DKOMPOZ_WITH_WEBP=ON -DKOMPOZ_WITH_CURL=ON
       - name: Build

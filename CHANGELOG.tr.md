@@ -364,11 +364,16 @@
   Metin, resimler, ekran okuyucu köprüleri ve masaüstünün renk okuyucuları artık SDL kullanmıyor: günlük, uygulamanın
   dosyaları (Android'in APK varlıkları platformun verdiğiyle), programın klasörü ve önbellek klasörü
   `platform/common/system`'in; kendi iş parçacıklarındaki modüller platforma SDL olayları yerine bir
-  `platform::Notifier` ile haber veriyor (yalnızca PNG ve BMP çözmek ve ekran görüntüsü kaydetmek hâlâ SDL'in);
-  platform testleri sonlarında libdbus'un tuttuğunu `SDL_Quit`'in yaptığı gibi serbest bırakıyor. Her platform modülü
-  artık `kompoz::platform` içinde, ait olduğu yerde: her platformun paylaştıkları `platform/common/`'da (fontlar,
-  resimler, duvar kâğıdının renkleri), masaüstlerinin kendilerine özgü olanları `platform/linux/` ve
-  `platform/windows/`'da, Android'inkiler `platform/android/`'da; `platform/sdl3/`'te yalnızca SDL platformu kaldı.
+  `platform::Notifier` ile haber veriyor; platform testleri sonlarında libdbus'un tuttuğunu `SDL_Quit`'in yaptığı gibi
+  serbest bırakıyor. Her platform modülü artık `kompoz::platform` içinde, ait olduğu yerde: her platformun
+  paylaştıkları `platform/common/`'da (fontlar, resimler, duvar kâğıdının renkleri), masaüstlerinin kendilerine özgü
+  olanları `platform/linux/` ve `platform/windows/`'da, Android'inkiler `platform/android/`'da; `platform/sdl3/`'te
+  yalnızca SDL platformu kaldı.
+  PNG libpng ile okunuyor, ekran görüntüleri ve GPU testlerinin resimleri de onunla yazılıyor (sistemin, vcpkg'nin ya da
+  Conan'ın libpng'si, yoksa zlib'le birlikte `third_party/`'den derlenen: `scripts/fetch-deps.sh`); dosyanın gaması ve
+  renk alanı Android'in ve tarayıcıların yaptığı gibi hesaba katılıyor, gaması hakkında bir şey söylemeyen 16 bitlik
+  bir dosya sRGB olarak okunuyor. BMP'yi Kompoz kendisi okuyor (piksel başına 1'den 32 bite, sıkıştırmasız ya da bit
+  alanlarıyla).
 - **Bir yolun gölgesi önceden sahip olduğu maskeden çiziliyor** (Compose'un bir `dropShadow`'un ya da
   `innerShadow`'un bulanık bitmap'ini tutması gibi): GPU renderer'ı yuvarlak köşeli dikdörtgen olmayan bir şeklin
   (kalp, yıldız, kurabiye) gölgesini her seferinde baştan, her biri iki geçişli bir katman ve bir bulanıklıkla

@@ -1,10 +1,9 @@
 #include "image_loader.hpp"
 
+#include "image_codec.hpp"
 #include "system.hpp"
 
 #include <kompoz/disk_cache.hpp>
-
-#include <SDL3/SDL.h>
 
 #include <atomic>
 #include <cctype>
@@ -19,13 +18,13 @@
 #include <thread>
 #include <unordered_map>
 
-#ifdef SDL_PLATFORM_ANDROID
+#ifdef __ANDROID__
 #include "../android/android_ime.hpp"
 #endif
-#ifdef SDL_PLATFORM_EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
-#ifdef SDL_PLATFORM_WINDOWS
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <wincodec.h>
@@ -56,19 +55,14 @@ ImageBitmap fromRgba(int width, int height, const uint8_t* rgba, size_t pitch) {
     return ImageBitmap::fromPixels(width, height, std::move(pixels));
 }
 
-// PNG and BMP, by SDL (also what the other decoders don't take); scaled down afterwards.
-ImageBitmap decodeWithSdl(const std::vector<uint8_t>& bytes, const ImageRequestSize& size) {
-    SDL_Surface* surface = SDL_LoadSurface_IO(SDL_IOFromConstMem(bytes.data(), bytes.size()), true);
-    if (!surface) return {};
-    SDL_Surface* rgba = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
-    SDL_DestroySurface(surface);
-    if (!rgba) return {};
-    ImageBitmap image = fromRgba(rgba->w, rgba->h, static_cast<const uint8_t*>(rgba->pixels), size_t(rgba->pitch));
-    SDL_DestroySurface(rgba);
-    return scaleDown(image, imageSampleSize(image.width(), image.height(), size));
+// PNG and BMP (image_codec); scaled down afterwards.
+ImageBitmap decodePngOrBmp(const std::vector<uint8_t>& bytes, const ImageRequestSize& size) {
+    RgbaImage decoded = platform::decodePngOrBmp(bytes.data(), bytes.size());
+    ImageBitmap image = fromRgba(decoded.width, decoded.height, decoded.rgba.data(), size_t(decoded.width) * 4);
+    return image.empty() ? image : scaleDown(image, imageSampleSize(image.width(), image.height(), size));
 }
 
-#ifdef SDL_PLATFORM_WINDOWS
+#ifdef _WIN32
 // Windows Imaging Component: JPEG, PNG, GIF, BMP, TIFF, and WebP/HEIF where their codecs are.
 ImageBitmap decodeWithWic(const std::vector<uint8_t>& bytes, const ImageRequestSize& size) {
     thread_local bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
@@ -191,7 +185,7 @@ size_t curlWrite(char* data, size_t size, size_t count, void* out) {
 int curlProgress(void*, curl_off_t, curl_off_t, curl_off_t, curl_off_t) { return gStopping ? 1 : 0; }  // the app is quitting
 #endif
 
-#ifdef SDL_PLATFORM_WINDOWS
+#ifdef _WIN32
 std::wstring wide(const std::string& s) {
     std::wstring out(size_t(MultiByteToWideChar(CP_UTF8, 0, s.c_str(), int(s.size()), nullptr, 0)), L'\0');
     MultiByteToWideChar(CP_UTF8, 0, s.c_str(), int(s.size()), out.data(), int(out.size()));
@@ -202,9 +196,9 @@ std::wstring wide(const std::string& s) {
 // The body of an http(s) GET; empty if it failed.
 std::vector<uint8_t> httpGet(const std::string& url) {
     std::vector<uint8_t> body;
-#if defined(SDL_PLATFORM_ANDROID)
+#if defined(__ANDROID__)
     body = android_ime::httpGet(url);
-#elif defined(SDL_PLATFORM_WINDOWS)
+#elif defined(_WIN32)
     HINTERNET net = InternetOpenW(L"Kompoz", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
     if (!net) return {};
     DWORD timeout = 20000;
@@ -290,7 +284,7 @@ ImageBitmap loadNow(const std::string& model, const ImageRequestSize& size) {
     return image;
 }
 
-#ifdef SDL_PLATFORM_EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
 // The browser fetches and decodes (and caches what it fetched); the pixels come back through
 // kompoz_web_image_loaded, drawn smaller as imageSampleSize says.
 EM_JS(void, kompoz_web_load_image, (int id, const char* url, const uint8_t* bytes, int size, int wantW, int wantH, int fill), {
@@ -333,7 +327,9 @@ public:
             for (int i = 0; i < 3; ++i)
                 threads_.emplace_back([this] {
                     work();
-                    SDL_CleanupTLS();  // what SDL keeps for a thread it didn't start
+#ifdef __ANDROID__
+                    android_ime::threadDone();  // (attached to the VM to decode and download)
+#endif
                 });
         queue_.push_back({std::move(model), size, std::move(done)});
         wake_.notify_one();
@@ -386,11 +382,11 @@ Loader& loader() {
 
 ImageBitmap decodeImage(const std::vector<uint8_t>& bytes, const ImageRequestSize& size) {
     if (bytes.size() < 12) return {};
-#if defined(SDL_PLATFORM_ANDROID)
+#if defined(__ANDROID__)
     return android_ime::decodeImage(bytes, size);
-#elif defined(SDL_PLATFORM_WINDOWS)
+#elif defined(_WIN32)
     if (ImageBitmap image = decodeWithWic(bytes, size); !image.empty()) return image;
-    return decodeWithSdl(bytes, size);
+    return decodePngOrBmp(bytes, size);
 #else
     const uint8_t* b = bytes.data();
 #ifdef KOMPOZ_TURBOJPEG
@@ -400,12 +396,12 @@ ImageBitmap decodeImage(const std::vector<uint8_t>& bytes, const ImageRequestSiz
     if (std::memcmp(b, "RIFF", 4) == 0 && std::memcmp(b + 8, "WEBP", 4) == 0) return decodeWebp(bytes, size);
 #endif
     (void)b;
-    return decodeWithSdl(bytes, size);
+    return decodePngOrBmp(bytes, size);
 #endif
 }
 
 void loadImageAsync(const std::string& model, const ImageRequestSize& size, std::function<void(ImageBitmap)> done) {
-#ifdef SDL_PLATFORM_EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
     static int next = 0;
     int id = ++next;
     webLoads()[id] = std::move(done);
@@ -428,7 +424,7 @@ void loadImageAsync(const std::string& model, const ImageRequestSize& size, std:
 
 
 void startImageDiskCache(const std::string& appName, uint64_t maxBytes) {
-#ifdef SDL_PLATFORM_EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
     (void)appName;
     (void)maxBytes;
 #else
@@ -443,7 +439,7 @@ void startImageDiskCache(const std::string& appName, uint64_t maxBytes) {
 }
 
 void stopImageLoader() {
-#ifndef SDL_PLATFORM_EMSCRIPTEN
+#ifndef __EMSCRIPTEN__
     loader().stop();
 #endif
 }
@@ -452,45 +448,21 @@ void stopImageLoader() {
 // web, where the browser decodes asynchronously, PNG and BMP; AsyncImage takes the others).
 ImageBitmap loadImageFile(std::string_view path) {
     std::string p(path);
-#ifndef SDL_PLATFORM_EMSCRIPTEN
     if (std::vector<uint8_t> bytes = platform::readFile(p); !bytes.empty())
         if (ImageBitmap image = decodeImage(bytes); !image.empty()) return image;
-#endif
-    SDL_Surface* surface = SDL_LoadSurface(p.c_str());
-    if (!surface && SDL_GetBasePath()) surface = SDL_LoadSurface((SDL_GetBasePath() + p).c_str());
-    if (!surface) {
-        SDL_Log("kompoz: can't load image %s: %s", p.c_str(), SDL_GetError());
-        return {};
-    }
-    SDL_Surface* rgba = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
-    SDL_DestroySurface(surface);
-    if (!rgba) return {};
-    std::vector<uint8_t> pixels(size_t(rgba->w) * size_t(rgba->h) * 4);
-    for (int y = 0; y < rgba->h; ++y)
-        std::memcpy(pixels.data() + size_t(y) * size_t(rgba->w) * 4,
-                    static_cast<const uint8_t*>(rgba->pixels) + size_t(y) * size_t(rgba->pitch), size_t(rgba->w) * 4);
-    ImageBitmap image = ImageBitmap::fromPixels(rgba->w, rgba->h, std::move(pixels));
-    SDL_DestroySurface(rgba);
-    return image;
+    platform::log("kompoz: can't load image " + p);
+    return {};
 }
 
 // A screenshot from pixels read back (RGBA, top row first).
-void savePixels(const std::string& path, int w, int h, std::vector<uint8_t>& pixels) {
-    SDL_Surface* surface = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_RGBA32, pixels.data(), w * 4);
-    if (!surface) return;
-    bool ok;
-#if SDL_VERSION_ATLEAST(3, 4, 0)
-    ok = path.ends_with(".png") ? SDL_SavePNG(surface, path.c_str()) : SDL_SaveBMP(surface, path.c_str());
-#else
-    ok = SDL_SaveBMP(surface, path.c_str());
-#endif
-    SDL_Log("kompoz: screenshot %s %s", path.c_str(), ok ? "saved" : SDL_GetError());
-    SDL_DestroySurface(surface);
+void savePixels(const std::string& path, int w, int h, const std::vector<uint8_t>& pixels) {
+    bool ok = savePng(path, w, h, pixels.data());
+    platform::log("kompoz: screenshot " + path + (ok ? " saved" : " not saved"));
 }
 
 } // namespace kompoz::platform
 
-#ifdef SDL_PLATFORM_EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
 extern "C" {
 EMSCRIPTEN_KEEPALIVE void* kompoz_web_alloc(int size) { return std::malloc(size_t(size)); }
 EMSCRIPTEN_KEEPALIVE int kompoz_web_sample_size(int width, int height, int wantWidth, int wantHeight, int fill) {

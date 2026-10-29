@@ -12,6 +12,7 @@
         "freetype"
       ]
     },
+    "libpng",
     "sdl3",
     {
       "name": "vulkan-headers",

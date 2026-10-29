@@ -1,4 +1,4 @@
-# A Conan recipe that builds Kompoz from the repository it is in, with SDL3, FreeType and HarfBuzz
+# A Conan recipe that builds Kompoz from the repository it is in, with SDL3, FreeType, HarfBuzz and libpng
 # from ConanCenter:
 #   conan create packaging/conan --build=missing -s compiler.cppstd=20
 # The package is found with find_package(kompoz), its own CMake package (kompoz::core, kompoz::sdl3,
@@ -38,6 +38,7 @@ class KompozConan(ConanFile):
         self.requires("sdl/[>=3.2 <4]")
         self.requires("freetype/[>=2.13]")
         self.requires("harfbuzz/[>=8]")
+        self.requires("libpng/[>=1.6]")
         if self.settings.os not in ("Macos", "iOS", "Emscripten"):  # the GPU renderer's Vulkan backend
             self.requires("vulkan-headers/[>=1.3]")
         if self.settings.os != "Windows":

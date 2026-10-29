@@ -6,11 +6,11 @@ Build Kompoz, add it to your own CMake project, and run your app on Linux, Windo
 
 - A C++20 compiler: GCC 13 or newer, or Clang 17 or newer (Kompoz is tested with GCC 16 and Clang 22). GCC 13 crashes on some coroutine lambdas, with an internal compiler error that GCC 14 doesn't have.
 - CMake 3.24 or newer.
-- SDL3 and FreeType.
+- SDL3, FreeType and libpng.
 - Optional: HarfBuzz for text shaping (Arabic joining, Indic scripts, ligatures, emoji sequences). Without it, text is drawn character by character.
 - Optional on Linux: libcurl, libwebp and libturbojpeg (3.0 or later), which `AsyncImage` uses to download images and decode WebP and JPEG. libdbus is loaded at run time, if present, to read the desktop's accent color.
 
-On Linux, install these from your distribution's packages. For Android, the web and Windows, Kompoz builds SDL3, FreeType and HarfBuzz from source; `scripts/fetch-deps.sh` downloads them (see below).
+On Linux, install these from your distribution's packages. For Android, the web and Windows, Kompoz builds SDL3, FreeType, HarfBuzz, zlib and libpng from source; `scripts/fetch-deps.sh` downloads them (see below).
 
 ## Build the library and the showcase
 
@@ -29,7 +29,7 @@ Useful options:
 | `KOMPOZ_BUILD_SDL3` | `ON` | Build the SDL3 backend. `OFF` builds only the core and the tests, with no window system. |
 | `KOMPOZ_BUILD_EXAMPLES` | `ON` | Build the showcase. |
 | `KOMPOZ_BUILD_TESTS` | `ON` (`OFF` on Android, iOS and the web) | Build the headless tests. |
-| `KOMPOZ_VENDORED_DEPS` | `ON` on Android, iOS, the web and Windows | Build SDL3, FreeType and HarfBuzz from `third_party/` instead of using the system's. |
+| `KOMPOZ_VENDORED_DEPS` | `ON` on Android, iOS, the web and Windows | Build SDL3, FreeType, HarfBuzz, zlib and libpng from `third_party/` instead of using the system's. |
 
 On desktops that have lld, Kompoz links with it unless you chose another linker: about one second instead of GNU ld's twenty-five for the showcase.
 
@@ -53,8 +53,8 @@ kompoz_copy_assets(myapp)       # the fonts and the licenses next to the binary
 
 `kompoz_copy_assets` copies what every app ships, the bundled Noto Sans fonts and the licenses, next to your binary each time it is built.
 
-Or install Kompoz once and find it as a package, on Linux, macOS or Windows. Built with the system's SDL3, FreeType
-and HarfBuzz, it finds them there again; built with its own (`scripts/fetch-deps.sh`: Windows, or
+Or install Kompoz once and find it as a package, on Linux, macOS or Windows. Built with the system's SDL3, FreeType,
+HarfBuzz and libpng, it finds them there again; built with its own (`scripts/fetch-deps.sh`: Windows, or
 `-DKOMPOZ_VENDORED_DEPS=ON`), it installs them beside it:
 
 ```bash
@@ -71,7 +71,7 @@ kompoz_copy_assets(myapp)
 ```
 
 With vcpkg or Conan, from a clone of the repository (its overlay port and its recipe build that clone, with the
-package manager's SDL3, FreeType and HarfBuzz), then `find_package(kompoz)` as above:
+package manager's SDL3, FreeType, HarfBuzz and libpng), then `find_package(kompoz)` as above:
 
 ```bash
 vcpkg install kompoz --overlay-ports=kompoz/packaging/vcpkg/ports
@@ -145,13 +145,13 @@ scripts/fetch-deps.sh
 cd examples/showcase/android && ./gradlew installDebug
 ```
 
-`fetch-deps.sh` downloads SDL3, FreeType and HarfBuzz into `third_party/` at pinned versions, checks their SHA-256 sums and applies the patches in `scripts/patches/`. Gradle builds Kompoz's CMake project with the NDK into `libSDL3.so` and your app's `libmain.so`.
+`fetch-deps.sh` downloads SDL3, FreeType, HarfBuzz, zlib and libpng into `third_party/` at pinned versions, checks their SHA-256 sums and applies the patches in `scripts/patches/`. Gradle builds Kompoz's CMake project with the NDK into `libSDL3.so` and your app's `libmain.so`.
 
 To make your own app, start from the showcase's `android/` folder: it has only the manifest, a theme and a short `MainActivity` built on SDL's `SDLActivity`. The fonts go into the APK from Kompoz's `assets/` folder. On Android, Kompoz supports the soft keyboard with suggestions, edge-to-edge insets, the back gesture and predictive back, the system's dark mode and font size, dynamic color on Android 12+ and TalkBack.
 
 ### Web
 
-Kompoz builds for the browser with Emscripten (on Arch: `pacman -S emscripten`). SDL3, FreeType and HarfBuzz are built from source; the fonts and images are packed into a `.data` file next to the page.
+Kompoz builds for the browser with Emscripten (on Arch: `pacman -S emscripten`). SDL3, FreeType, HarfBuzz, zlib and libpng are built from source; the fonts and images are packed into a `.data` file next to the page.
 
 ```bash
 scripts/fetch-deps.sh
@@ -166,7 +166,7 @@ For the web build of your own app, copy the Emscripten options from `examples/sh
 
 ### macOS and iOS
 
-On macOS Kompoz builds with Homebrew's SDL3, FreeType and HarfBuzz (`brew install sdl3 freetype harfbuzz`) as on Linux, and runs: CI builds it there, runs the tests and an app in a real window (Cocoa, Metal). It hasn't been used by hand on a Mac yet, and screen readers there (NSAccessibility) aren't connected. iOS hasn't been built: it needs an Xcode project or CMake setup like the Android one.
+On macOS Kompoz builds with Homebrew's SDL3, FreeType, HarfBuzz and libpng (`brew install sdl3 freetype harfbuzz libpng`) as on Linux, and runs: CI builds it there, runs the tests and an app in a real window (Cocoa, Metal). It hasn't been used by hand on a Mac yet, and screen readers there (NSAccessibility) aren't connected. iOS hasn't been built: it needs an Xcode project or CMake setup like the Android one.
 
 ## Packaging
 

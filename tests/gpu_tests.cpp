@@ -28,6 +28,8 @@
 #include "../platform/gpu/path_geometry.hpp"
 #include "../platform/gpu/renderer.hpp"
 #include "../platform/common/font_system.hpp"
+#include "../platform/common/image_codec.hpp"
+#include "../platform/common/system.hpp"
 
 #include <kompoz/display_list.hpp>
 #include <kompoz/draw.hpp>
@@ -302,26 +304,13 @@ std::string goldenPath(const std::string& name) {
     return path;
 }
 
-bool savePng(const std::string& path, Pixels& p) {
-    SDL_Surface* s = SDL_CreateSurfaceFrom(p.width, p.height, SDL_PIXELFORMAT_RGBA32, p.rgba.data(), p.width * 4);
-    bool ok = s && SDL_SavePNG(s, path.c_str());
-    SDL_DestroySurface(s);
-    return ok;
-}
+bool savePng(const std::string& path, Pixels& p) { return platform::savePng(path, p.width, p.height, p.rgba.data()); }
 
 Pixels loadPng(const std::string& path) {
+    std::vector<uint8_t> bytes = platform::readFile(path);
+    platform::RgbaImage image = platform::decodePng(bytes.data(), bytes.size());
     Pixels out;
-    SDL_Surface* loaded = SDL_LoadPNG(path.c_str());
-    if (!loaded) return out;
-    SDL_Surface* rgba = SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_RGBA32);
-    SDL_DestroySurface(loaded);
-    if (!rgba) return out;
-    out.width = rgba->w, out.height = rgba->h;
-    out.rgba.resize(size_t(out.width) * size_t(out.height) * 4);
-    for (int y = 0; y < out.height; ++y)
-        std::memcpy(out.rgba.data() + size_t(y) * size_t(out.width) * 4, static_cast<const uint8_t*>(rgba->pixels) + size_t(y) * size_t(rgba->pitch),
-                    size_t(out.width) * 4);
-    SDL_DestroySurface(rgba);
+    out.width = image.width, out.height = image.height, out.rgba = std::move(image.rgba);
     return out;
 }
 

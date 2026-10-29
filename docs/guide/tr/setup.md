@@ -6,11 +6,11 @@ Kompoz'u derleyin, kendi CMake projenize ekleyin ve uygulamanızı Linux, Window
 
 - Bir C++20 derleyicisi: GCC 13 ya da daha yenisi, veya Clang 17 ya da daha yenisi (Kompoz GCC 16 ve Clang 22 ile test ediliyor). GCC 13 bazı coroutine lambda'larında dahili derleyici hatasıyla çöküyor; GCC 14'te bu yok.
 - CMake 3.24 ya da daha yenisi.
-- SDL3 ve FreeType.
+- SDL3, FreeType ve libpng.
 - İsteğe bağlı: metin şekillendirme için HarfBuzz (Arapça harf bağlama, Hint yazıları, bitişik harfler, emoji dizileri). Olmadan metin karakter karakter çizilir.
 - Linux'ta isteğe bağlı: `AsyncImage`'ın resim indirmek ve WebP ile JPEG çözmek için kullandığı libcurl, libwebp ve libturbojpeg (3.0 ya da sonrası). libdbus, varsa, masaüstünün vurgu rengini okumak için çalışma anında yüklenir.
 
-Linux'ta bunları dağıtımınızın paketlerinden kurun. Android, web ve Windows için Kompoz SDL3, FreeType ve HarfBuzz'ı kaynaktan derler; `scripts/fetch-deps.sh` onları indirir (aşağıya bakın).
+Linux'ta bunları dağıtımınızın paketlerinden kurun. Android, web ve Windows için Kompoz SDL3, FreeType, HarfBuzz, zlib ve libpng'yi kaynaktan derler; `scripts/fetch-deps.sh` onları indirir (aşağıya bakın).
 
 ## Kütüphaneyi ve vitrini derlemek
 
@@ -29,7 +29,7 @@ Bu; çekirdek kütüphaneyi (`kompoz_core`), SDL3 arka ucunu (`kompoz_sdl3`), vi
 | `KOMPOZ_BUILD_SDL3` | `ON` | SDL3 arka ucunu derler. `OFF` yalnızca çekirdeği ve testleri, pencere sistemi olmadan derler. |
 | `KOMPOZ_BUILD_EXAMPLES` | `ON` | Vitrini derler. |
 | `KOMPOZ_BUILD_TESTS` | `ON` (Android, iOS ve web'de `OFF`) | Pencere açmadan çalışan testleri derler. |
-| `KOMPOZ_VENDORED_DEPS` | Android, iOS, web ve Windows'ta `ON` | SDL3, FreeType ve HarfBuzz'ı sistemdekileri kullanmak yerine `third_party/`'den derler. |
+| `KOMPOZ_VENDORED_DEPS` | Android, iOS, web ve Windows'ta `ON` | SDL3, FreeType, HarfBuzz, zlib ve libpng'yi sistemdekileri kullanmak yerine `third_party/`'den derler. |
 
 lld bulunan masaüstlerinde, siz başka bir bağlayıcı seçmediyseniz Kompoz onunla bağlar: vitrin için GNU ld'nin yirmi beş saniyesi yerine yaklaşık bir saniye.
 
@@ -53,8 +53,8 @@ kompoz_copy_assets(myapp)       # the fonts and the licenses next to the binary
 
 `kompoz_copy_assets`, her uygulamanın birlikte dağıttığı şeyleri, yani gömülü Noto Sans fontlarını ve lisansları, her derlemede programınızın yanına kopyalar.
 
-Ya da Kompoz'u bir kez kurup paket olarak bulun; Linux'ta, macOS'ta ya da Windows'ta. Sistemin SDL3, FreeType ve
-HarfBuzz'ıyla derlendiyse onları yine orada bulur; kendi derlediğiyle derlendiyse (`scripts/fetch-deps.sh`: Windows ya
+Ya da Kompoz'u bir kez kurup paket olarak bulun; Linux'ta, macOS'ta ya da Windows'ta. Sistemin SDL3, FreeType,
+HarfBuzz ve libpng'siyle derlendiyse onları yine orada bulur; kendi derlediğiyle derlendiyse (`scripts/fetch-deps.sh`: Windows ya
 da `-DKOMPOZ_VENDORED_DEPS=ON`) onları yanına kurar:
 
 ```bash
@@ -70,8 +70,8 @@ target_link_libraries(myapp PRIVATE kompoz::sdl3)
 kompoz_copy_assets(myapp)
 ```
 
-vcpkg ya da Conan ile, deponun bir klonundan (overlay port'u ve reçetesi o klonu, paket yöneticisinin SDL3, FreeType ve
-HarfBuzz'ıyla derler), ardından yukarıdaki gibi `find_package(kompoz)`:
+vcpkg ya da Conan ile, deponun bir klonundan (overlay port'u ve reçetesi o klonu, paket yöneticisinin SDL3, FreeType,
+HarfBuzz ve libpng'siyle derler), ardından yukarıdaki gibi `find_package(kompoz)`:
 
 ```bash
 vcpkg install kompoz --overlay-ports=kompoz/packaging/vcpkg/ports
@@ -145,13 +145,13 @@ scripts/fetch-deps.sh
 cd examples/showcase/android && ./gradlew installDebug
 ```
 
-`fetch-deps.sh`, SDL3, FreeType ve HarfBuzz'ı sabitlenmiş sürümlerde `third_party/`'ye indirir, SHA-256 özetlerini doğrular ve `scripts/patches/` içindeki yamaları uygular. Gradle, Kompoz'un CMake projesini NDK ile `libSDL3.so`'ya ve uygulamanızın `libmain.so`'suna derler.
+`fetch-deps.sh`, SDL3, FreeType, HarfBuzz, zlib ve libpng'yi sabitlenmiş sürümlerde `third_party/`'ye indirir, SHA-256 özetlerini doğrular ve `scripts/patches/` içindeki yamaları uygular. Gradle, Kompoz'un CMake projesini NDK ile `libSDL3.so`'ya ve uygulamanızın `libmain.so`'suna derler.
 
 Kendi uygulamanızı yapmak için vitrinin `android/` klasöründen başlayın: içinde yalnızca manifest, bir tema ve SDL'in `SDLActivity`'si üzerine kurulu kısa bir `MainActivity` var. Fontlar APK'ya Kompoz'un `assets/` klasöründen girer. Android'de Kompoz; önerili yazılım klavyesini, kenardan kenara (edge-to-edge) kenar boşluklarını, geri hareketini ve tahmine dayalı geriyi, sistemin koyu modunu ve yazı boyutunu, Android 12+'da dinamik rengi ve TalkBack'i destekler.
 
 ### Web
 
-Kompoz tarayıcı için Emscripten ile derlenir (Arch'ta: `pacman -S emscripten`). SDL3, FreeType ve HarfBuzz kaynaktan derlenir; fontlar ve resimler sayfanın yanındaki bir `.data` dosyasına paketlenir.
+Kompoz tarayıcı için Emscripten ile derlenir (Arch'ta: `pacman -S emscripten`). SDL3, FreeType, HarfBuzz, zlib ve libpng kaynaktan derlenir; fontlar ve resimler sayfanın yanındaki bir `.data` dosyasına paketlenir.
 
 ```bash
 scripts/fetch-deps.sh
@@ -166,7 +166,7 @@ Kendi uygulamanızın web derlemesi için Emscripten seçeneklerini `examples/sh
 
 ### macOS ve iOS
 
-macOS'ta Kompoz, Linux'taki gibi Homebrew'un SDL3, FreeType ve HarfBuzz'ıyla derlenir (`brew install sdl3 freetype harfbuzz`) ve çalışır: CI onu orada derliyor, testleri ve bir uygulamayı gerçek bir pencerede (Cocoa, Metal) çalıştırıyor. Henüz bir Mac'te elle kullanılmadı, oradaki ekran okuyuculara da (NSAccessibility) bağlı değil. iOS derlenmedi: Android'inki gibi bir Xcode projesi ya da CMake kurulumu gerekiyor.
+macOS'ta Kompoz, Linux'taki gibi Homebrew'un SDL3, FreeType, HarfBuzz ve libpng'siyle derlenir (`brew install sdl3 freetype harfbuzz libpng`) ve çalışır: CI onu orada derliyor, testleri ve bir uygulamayı gerçek bir pencerede (Cocoa, Metal) çalıştırıyor. Henüz bir Mac'te elle kullanılmadı, oradaki ekran okuyuculara da (NSAccessibility) bağlı değil. iOS derlenmedi: Android'inki gibi bir Xcode projesi ya da CMake kurulumu gerekiyor.
 
 ## Paketleme
 

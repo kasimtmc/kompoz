@@ -258,10 +258,10 @@ fonts and color emoji, vector and path rasterization, gradient meshes, transform
 ## Building
 
 Requirements: a C++20 compiler (GCC 13+, Clang 17+; tested with GCC 16 and Clang 22; GCC 13 crashes on some coroutine
-lambdas, an internal compiler error that GCC 14 doesn't have), CMake 3.24+, SDL3 and
-FreeType. Optional: HarfBuzz (text shaping: Arabic joining, Indic scripts, ligatures, emoji sequences; without it
-text is drawn character by character), and on Linux libcurl, libwebp and libturbojpeg 3.0+ for `AsyncImage` (HTTP,
-WebP, JPEG). On Linux, libdbus is loaded at run time, when present, for the desktop's accent color.
+lambdas, an internal compiler error that GCC 14 doesn't have), CMake 3.24+, SDL3,
+FreeType and libpng. Optional: HarfBuzz (text shaping: Arabic joining, Indic scripts, ligatures, emoji sequences;
+without it text is drawn character by character), and on Linux libcurl, libwebp and libturbojpeg 3.0+ for
+`AsyncImage` (HTTP, WebP, JPEG). On Linux, libdbus is loaded at run time, when present, for the desktop's accent color.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -292,8 +292,8 @@ target_link_libraries(myapp PRIVATE kompoz::sdl3)
 kompoz_copy_assets(myapp)       # the fonts and the licenses next to the binary
 ```
 
-Or install Kompoz once and find it as a package, on Linux, macOS or Windows. Built with the system's SDL3, FreeType
-and HarfBuzz, it finds them there again; built with its own (`scripts/fetch-deps.sh`: Windows, or
+Or install Kompoz once and find it as a package, on Linux, macOS or Windows. Built with the system's SDL3, FreeType,
+HarfBuzz and libpng, it finds them there again; built with its own (`scripts/fetch-deps.sh`: Windows, or
 `-DKOMPOZ_VENDORED_DEPS=ON`), it installs them beside it:
 
 ```bash
@@ -310,7 +310,7 @@ kompoz_copy_assets(myapp)
 ```
 
 With vcpkg or Conan, from a clone of the repository (its overlay port and its recipe build that clone, with the
-package manager's SDL3, FreeType and HarfBuzz), then `find_package(kompoz)` as above:
+package manager's SDL3, FreeType, HarfBuzz and libpng), then `find_package(kompoz)` as above:
 
 ```bash
 vcpkg install kompoz --overlay-ports=kompoz/packaging/vcpkg/ports
@@ -415,10 +415,10 @@ scripts/fetch-deps.sh
 cd examples/showcase/android && ./gradlew installDebug
 ```
 
-`scripts/fetch-deps.sh` downloads SDL3, FreeType and HarfBuzz into `third_party/` at pinned versions, checking their
-sha256, and applies the fixes in `scripts/patches/` (two at the moment, both on Android and not fixed in SDL 3.4.18
-either: a deadlock when the activity pauses while SDL creates its renderer, and `SDL_WaitEvent` spinning instead of
-waiting, a CPU core busy whenever the app is idle). Gradle builds the root `CMakeLists.txt` with
+`scripts/fetch-deps.sh` downloads SDL3, FreeType, HarfBuzz, zlib and libpng into `third_party/` at pinned versions,
+checking their sha256, and applies the fixes in `scripts/patches/` (two at the moment, both on Android and not fixed
+in SDL 3.4.18 either: a deadlock when the activity pauses while SDL creates its renderer, and `SDL_WaitEvent` spinning
+instead of waiting, a CPU core busy whenever the app is idle). Gradle builds the root `CMakeLists.txt` with
 the NDK: `libSDL3.so` and the app's `libmain.so` (the showcase's sources). The Java side is SDL's own
 `SDLActivity`; the example's `android/` folder only has the manifest, a theme and a short `MainActivity`. The fonts
 come into the APK from `assets/`, the example's images from `examples/showcase/assets/`.
@@ -458,8 +458,9 @@ is drawn with the platform's text stack), the glyph atlas rebuilt when the GPU c
 ### Web (Emscripten)
 
 Requirements: Emscripten (Arch: `pacman -S emscripten`; its commands are under `/usr/lib/emscripten`) and
-`scripts/fetch-deps.sh`. SDL3, FreeType and HarfBuzz are built from source; the fonts and images are packed into
-`showcase.data`; the page ([platform/web/shell.html](platform/web/shell.html)) is just a canvas and the app fills it.
+`scripts/fetch-deps.sh`. SDL3, FreeType, HarfBuzz, zlib and libpng are built from source; the fonts and images are
+packed into `showcase.data`; the page ([platform/web/shell.html](platform/web/shell.html)) is just a canvas and the
+app fills it.
 
 ```bash
 emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_BUILD_TESTS=OFF
@@ -538,7 +539,7 @@ that looks the same) is neither drawn nor shown. `KOMPOZ_DAMAGE_SHOW=1` outlines
 | Android | Built; run on a phone (Xiaomi 24030PN60G, Android 16, arm64) and in the emulator (API 36, x86_64, GLES). The APK has `arm64-v8a` and `x86_64` |
 | Windows | Cross-built from Linux with MinGW-w64 (GCC 16); the tests pass under Wine and the showcase draws there |
 | Web | Built with Emscripten (WebGL, SDL3's main callbacks) and run in browsers (clicks, typing, scrolling) |
-| macOS | Built and tested by CI with Homebrew's SDL3, FreeType and HarfBuzz; an app runs in a real window (Metal); not yet used by hand |
+| macOS | Built and tested by CI with Homebrew's SDL3, FreeType, HarfBuzz and libpng; an app runs in a real window (Metal); not yet used by hand |
 | iOS | The vendored dependencies are ready (`KOMPOZ_VENDORED_DEPS`); it needs an Xcode project (on macOS) |
 
 ## Known limitations
