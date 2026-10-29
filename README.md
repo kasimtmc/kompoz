@@ -331,8 +331,12 @@ Layout of the repository:
 | Path | What |
 |---|---|
 | `include/kompoz/`, `src/` | the platform-independent core (`#include <kompoz/kompoz.hpp>`) |
-| `platform/sdl3/` | the SDL3 backend (desktop, Android's native side, the web) |
-| `platform/android/java/` | the Android Java side (keyboard, accessibility, insets, intents) |
+| `platform/app/` | the app core (frames, drawing, scripts, screenshots) and the platform interface it runs on |
+| `platform/gpu/` | the GPU renderer and its Vulkan, OpenGL ES, Metal and WebGPU backends |
+| `platform/common/` | what every platform shares: fonts, images, files and logging, the wallpaper's colors |
+| `platform/linux/`, `platform/windows/` | the desktops' own: screen readers (AT-SPI, UI Automation), the accent color |
+| `platform/android/` | Android's native side (keyboard, performance hints) and its Java side in `java/` (keyboard, accessibility, insets, intents) |
+| `platform/sdl3/` | the SDL3 platform: windows, input and the event loop on the desktops, Android and the web |
 | `platform/web/` | the web page the app is drawn in |
 | `assets/` | what every app ships: the bundled fonts (`fonts/`) and the licenses (`licenses/`) |
 | `tests/` | the headless tests |

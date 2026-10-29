@@ -3,7 +3,7 @@
 // (RegNotifyChangeKeyValue), on a thread of its own; it notifies (Notifier) as each value comes, as
 // the Linux portal's does (desktop_accent.cpp).
 
-#include "desktop_accent.hpp"
+#include "../common/desktop_accent.hpp"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -14,7 +14,7 @@
 #include <thread>
 #include <utility>
 
-namespace kompoz::sdl {
+namespace kompoz::platform {
 
 namespace {
 
@@ -87,4 +87,4 @@ std::optional<Color> DesktopAccent::accent() const {
     return state_->accent;
 }
 
-} // namespace kompoz::sdl
+} // namespace kompoz::platform

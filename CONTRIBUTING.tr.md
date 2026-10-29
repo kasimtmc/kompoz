@@ -53,7 +53,7 @@ CI, Kompoz'u macOS'ta derliyor, testlerini çalıştırıyor ve orada bir uygula
 - Showcase'i bir Mac'te kullanıp çalışmayanları düzeltmek (girdi, metin girişi, fontlar, Retina ölçeği, koyu mod).
 - Bir iOS derlemesi: `examples/showcase/android`'deki Android kurulumu gibi bir Xcode projesi ya da CMake kurulumu.
 - Ekran okuyucular: semantik ağaçtan (`ComposeHost::semanticsTree`) NSAccessibility'ye (macOS) ve UIAccessibility'ye
-  (iOS) bir köprü; `platform/sdl3/atspi_bridge.cpp` (Linux) ve `uia_bridge.cpp` (Windows) gibi, onlarınki gibi
+  (iOS) bir köprü; `platform/linux/atspi_bridge.cpp` ve `platform/windows/uia_bridge.cpp` gibi, onlarınki gibi
   `tests/platform_tests*.cpp` testleriyle.
 
 ## Lisans

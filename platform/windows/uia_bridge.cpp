@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace kompoz::sdl {
+namespace kompoz::platform {
 
 namespace {
 
@@ -646,4 +646,4 @@ std::vector<UiaBridge::Request> UiaBridge::takeRequests() {
     return std::exchange(state_->requests, {});
 }
 
-} // namespace kompoz::sdl
+} // namespace kompoz::platform

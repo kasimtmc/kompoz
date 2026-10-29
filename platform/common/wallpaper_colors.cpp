@@ -25,7 +25,7 @@
 #include <unistd.h>
 #endif
 
-namespace kompoz::sdl {
+namespace kompoz::platform {
 
 namespace {
 
@@ -358,4 +358,4 @@ void WallpaperColors::setDarkTheme(bool dark) {
     s.wake.notify_all();
 }
 
-} // namespace kompoz::sdl
+} // namespace kompoz::platform

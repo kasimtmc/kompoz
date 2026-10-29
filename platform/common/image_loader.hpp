@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace kompoz::sdl {
+namespace kompoz::platform {
 
 // An image file's bytes decoded (RGBA, straight alpha), scaled down for `size` as
 // imageSampleSize says (as they are decoded where the decoder can); empty if they can't be.
@@ -31,4 +31,4 @@ ImageBitmap loadImageFile(std::string_view path);
 // A screenshot from pixels read back (RGBA, top row first): PNG where the path says so, else BMP.
 void savePixels(const std::string& path, int w, int h, std::vector<uint8_t>& pixels);
 
-} // namespace kompoz::sdl
+} // namespace kompoz::platform

@@ -1,6 +1,6 @@
 #pragma once
 
-// FreeType helpers the SDL3 backend's rasterizers share: a path's fill as a FreeType outline, a
+// FreeType helpers the font system rasterizes with: a path's fill as a FreeType outline, a
 // Gaussian blur of coverage, and a coverage canvas to render outlines into.
 
 #include <ft2build.h>
@@ -13,7 +13,7 @@
 #include <cmath>
 #include <vector>
 
-namespace kompoz::sdl {
+namespace kompoz::platform {
 
 // A path's (or a vector's) fill as a FreeType outline over `points`, `tags` and `contours` (which
 // must outlive it), each point at pt(x, y); false if it has none (or too many).
@@ -126,4 +126,4 @@ inline FT_Bitmap grayCanvas(std::vector<unsigned char>& gray, int width, int hei
     return bitmap;
 }
 
-} // namespace kompoz::sdl
+} // namespace kompoz::platform

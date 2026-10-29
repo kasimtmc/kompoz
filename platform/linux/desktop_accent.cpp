@@ -1,4 +1,4 @@
-#include "desktop_accent.hpp"
+#include "../common/desktop_accent.hpp"
 
 #include "libdbus.hpp"
 
@@ -11,7 +11,7 @@
 #include <thread>
 #include <utility>
 
-namespace kompoz::sdl {
+namespace kompoz::platform {
 
 namespace {
 
@@ -153,4 +153,4 @@ std::optional<Color> DesktopAccent::accent() const {
     return state_->accent;
 }
 
-} // namespace kompoz::sdl
+} // namespace kompoz::platform

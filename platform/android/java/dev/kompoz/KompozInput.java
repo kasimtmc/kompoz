@@ -1264,7 +1264,7 @@ public final class KompozInput {
         }
     }
 
-    // ---- Implemented in platform/sdl3/android_ime.cpp ----------------------------------------
+    // ---- Implemented in platform/android/android_ime.cpp -------------------------------------
 
     static native void nativeOnEdit(int session, byte[] text, int selStart, int selEnd, int compStart, int compEnd);
     static native void nativeOnAction(int action);

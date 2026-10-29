@@ -50,7 +50,7 @@ it by hand on a Mac yet, and it hasn't been built for iOS. What is needed:
 - Using the showcase on a Mac and fixing what doesn't work (input, text input, fonts, the Retina scale, dark mode).
 - An iOS build: an Xcode project or CMake setup, like the Android one in `examples/showcase/android`.
 - Screen readers: a bridge from the semantics tree (`ComposeHost::semanticsTree`) to NSAccessibility (macOS) and
-  UIAccessibility (iOS), as `platform/sdl3/atspi_bridge.cpp` (Linux) and `uia_bridge.cpp` (Windows) do, with tests
+  UIAccessibility (iOS), as `platform/linux/atspi_bridge.cpp` and `platform/windows/uia_bridge.cpp` do, with tests
   like theirs in `tests/platform_tests*.cpp`.
 
 ## License

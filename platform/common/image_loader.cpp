@@ -1,6 +1,6 @@
 #include "image_loader.hpp"
 
-#include "../common/system.hpp"
+#include "system.hpp"
 
 #include <kompoz/disk_cache.hpp>
 
@@ -20,7 +20,7 @@
 #include <unordered_map>
 
 #ifdef SDL_PLATFORM_ANDROID
-#include "android_ime.hpp"
+#include "../android/android_ime.hpp"
 #endif
 #ifdef SDL_PLATFORM_EMSCRIPTEN
 #include <emscripten.h>
@@ -41,7 +41,7 @@
 #include <curl/curl.h>
 #endif
 
-namespace kompoz::sdl {
+namespace kompoz::platform {
 
 namespace {
 
@@ -488,7 +488,7 @@ void savePixels(const std::string& path, int w, int h, std::vector<uint8_t>& pix
     SDL_DestroySurface(surface);
 }
 
-} // namespace kompoz::sdl
+} // namespace kompoz::platform
 
 #ifdef SDL_PLATFORM_EMSCRIPTEN
 extern "C" {
@@ -497,10 +497,10 @@ EMSCRIPTEN_KEEPALIVE int kompoz_web_sample_size(int width, int height, int wantW
     return kompoz::imageSampleSize(width, height, {wantWidth, wantHeight, fill != 0});
 }
 EMSCRIPTEN_KEEPALIVE void kompoz_web_image_loaded(int id, uint8_t* pixels, int width, int height) {
-    auto& loads = kompoz::sdl::webLoads();
+    auto& loads = kompoz::platform::webLoads();
     auto it = loads.find(id);
     kompoz::ImageBitmap image;
-    if (pixels && width > 0 && height > 0) image = kompoz::sdl::fromRgba(width, height, pixels, size_t(width) * 4);
+    if (pixels && width > 0 && height > 0) image = kompoz::platform::fromRgba(width, height, pixels, size_t(width) * 4);
     std::free(pixels);
     if (it == loads.end()) return;
     auto done = std::move(it->second);

@@ -27,7 +27,7 @@
 #include "../platform/gpu/device.hpp"
 #include "../platform/gpu/path_geometry.hpp"
 #include "../platform/gpu/renderer.hpp"
-#include "../platform/sdl3/font_system.hpp"
+#include "../platform/common/font_system.hpp"
 
 #include <kompoz/display_list.hpp>
 #include <kompoz/draw.hpp>
@@ -85,7 +85,7 @@ struct Gpu {
     SDL_Window* window = nullptr;
     SDL_GLContext context = nullptr;
     std::unique_ptr<gpu::Device> device;
-    std::unique_ptr<sdl::FontSystem> fonts;
+    std::unique_ptr<platform::FontSystem> fonts;
     std::unique_ptr<gpu::Renderer> renderer;
     std::string pipelineCache;                    // the device's (none: compiled anew)
     void* (*glProcAddress)(const char*) = nullptr;  // OpenGL ES's functions, on its backend
@@ -241,8 +241,8 @@ struct Gpu {
     }
 
     // The bundled fonts beside the test; none if they aren't there.
-    static std::unique_ptr<sdl::FontSystem> loadFonts() {
-        auto fonts = std::make_unique<sdl::FontSystem>();
+    static std::unique_ptr<platform::FontSystem> loadFonts() {
+        auto fonts = std::make_unique<platform::FontSystem>();
         std::string dir = "fonts/";
 #ifdef __ANDROID__  // (a relative path is an app's asset there: the program's own directory's, absolute)
         char cwd[4096];
@@ -3655,7 +3655,7 @@ private:
 
 // `draw` into a new w x h target, cleared white, by `renderer` on `device`, in a frame of its own;
 // read back.
-Pixels renderBy(gpu::Device& device, gpu::Renderer& renderer, sdl::FontSystem& fonts, int w, int h,
+Pixels renderBy(gpu::Device& device, gpu::Renderer& renderer, platform::FontSystem& fonts, int w, int h,
                 const std::function<void(GraphicsContext&)>& draw) {
     fonts.setScale(1);
     renderer.scale = 1;
@@ -3676,7 +3676,7 @@ Pixels renderBy(gpu::Device& device, gpu::Renderer& renderer, sdl::FontSystem& f
 // the same pictures.
 void variantsFallBackToTheWholeShader(Gpu& g) {
     WatchedDevice device(*g.device, true);
-    std::unique_ptr<sdl::FontSystem> fonts = Gpu::loadFonts();  // (an atlas of its own: a renderer takes what changed on its atlas)
+    std::unique_ptr<platform::FontSystem> fonts = Gpu::loadFonts();  // (an atlas of its own: a renderer takes what changed on its atlas)
     auto renderer = std::make_unique<gpu::Renderer>(device, *fonts);
     for (auto draw : {rects, text, blendModes, effects}) {
         Pixels expected = g.render(192, 192, 1, draw);
@@ -3842,7 +3842,7 @@ void pathsShareTheirMasks(Gpu& g) {
         for (int i = from; i < to; ++i) c.drawPath(triangle(i), {}, Brush::solid(color(i)), {}, {});
     };
     WatchedDevice device(*g.device, false);
-    std::unique_ptr<sdl::FontSystem> fonts = Gpu::loadFonts();
+    std::unique_ptr<platform::FontSystem> fonts = Gpu::loadFonts();
     auto renderer = std::make_unique<gpu::Renderer>(device, *fonts);
     Pixels all = renderBy(device, *renderer, *fonts, size, size, [&](GraphicsContext& c) { paint(c, 0, count); });
     CHECK(device.masks >= 3);
@@ -3881,7 +3881,7 @@ void pathsShareTheirMasks(Gpu& g) {
         c.drawPath(all, {}, Brush::solid(colors::Black), {}, {});
     });
     Pixels after = renderBy(device, *renderer, *fonts, 64, 64, cut);
-    std::unique_ptr<sdl::FontSystem> freshFonts = Gpu::loadFonts();
+    std::unique_ptr<platform::FontSystem> freshFonts = Gpu::loadFonts();
     auto fresh = std::make_unique<gpu::Renderer>(*g.device, *freshFonts);
     Pixels first = renderBy(*g.device, *fresh, *freshFonts, 64, 64, cut);
     CHECK(after.rgba == first.rgba);
@@ -3898,7 +3898,7 @@ void keptFramesMoveWhatScrolled(Gpu& g) {
     const int w = 240, h = 320;
     const float scale = 2;  // (120 x 160 dp)
     WatchedDevice device(*g.device, true);  // (the whole shader: what is drawn again shaded as all of it is)
-    std::unique_ptr<sdl::FontSystem> fonts = Gpu::loadFonts();
+    std::unique_ptr<platform::FontSystem> fonts = Gpu::loadFonts();
     auto renderer = std::make_unique<gpu::Renderer>(device, *fonts);
     fonts->setScale(scale);
     renderer->scale = scale;
@@ -3976,7 +3976,7 @@ void keptLayersDrawAsDrawnAfresh(Gpu& g) {
     const int w = 240, h = 200;
     const float scale = 2;  // (120 x 100 dp)
     WatchedDevice device(*g.device, true);  // (the whole shader: what is drawn again shaded as all of it is)
-    std::unique_ptr<sdl::FontSystem> fonts = Gpu::loadFonts();
+    std::unique_ptr<platform::FontSystem> fonts = Gpu::loadFonts();
     auto renderer = std::make_unique<gpu::Renderer>(device, *fonts);
     fonts->setScale(scale);
     renderer->scale = scale;
@@ -4079,7 +4079,7 @@ void keptLayersDrawAsDrawnAfresh(Gpu& g) {
 // A layer seen for the first time (a fade starting) is kept from that frame: in the next, with
 // nothing in it changed, it is composited from those pixels, not drawn whole again.
 void aLayerIsKeptFromItsFirstFrame(Gpu& g) {
-    std::unique_ptr<sdl::FontSystem> fonts = Gpu::loadFonts();
+    std::unique_ptr<platform::FontSystem> fonts = Gpu::loadFonts();
     auto renderer = std::make_unique<gpu::Renderer>(*g.device, *fonts);
     DisplayList list(*fonts);
     int screen = 0, fading = 0;
@@ -4215,7 +4215,7 @@ void aPathKeepsItsCoverage(Gpu& g) {
 // measures with): the whole run's width in sum, and a word's about as wide as the word laid out
 // alone (kerning across its ends aside), in Latin, Turkish and Arabic, with letter spacing.
 void clusterAdvancesAddUpToTheWidth() {
-    std::unique_ptr<sdl::FontSystem> fonts = Gpu::loadFonts();
+    std::unique_ptr<platform::FontSystem> fonts = Gpu::loadFonts();
     fonts->setScale(2);
     int worst = 0;
     for (const char* text : {"AVA Tower, WAVE fiction", "Kayan yazı şekillendirmesi çığ gibi", "مرحبا بالعالم الجميل"})

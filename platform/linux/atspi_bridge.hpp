@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-namespace kompoz::sdl {
+namespace kompoz::platform {
 
 class AtspiBridge {
 public:
@@ -57,4 +57,4 @@ private:
     std::shared_ptr<State> state_;
 };
 
-} // namespace kompoz::sdl
+} // namespace kompoz::platform

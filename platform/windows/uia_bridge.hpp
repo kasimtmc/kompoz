@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-namespace kompoz::sdl {
+namespace kompoz::platform {
 
 class UiaBridge {
 public:
@@ -53,4 +53,4 @@ private:
     std::shared_ptr<State> state_;
 };
 
-} // namespace kompoz::sdl
+} // namespace kompoz::platform

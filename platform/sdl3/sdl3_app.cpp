@@ -16,24 +16,24 @@
 #include <SDL3/SDL_vulkan.h>
 #endif
 #ifdef KOMPOZ_DESKTOP_ACCENT
-#include "desktop_accent.hpp"
+#include "../common/desktop_accent.hpp"
 #endif
 #ifdef KOMPOZ_WALLPAPER_COLORS
-#include "wallpaper_colors.hpp"
+#include "../common/wallpaper_colors.hpp"
 #endif
 #ifdef KOMPOZ_ATSPI
-#include "atspi_bridge.hpp"
+#include "../linux/atspi_bridge.hpp"
 #endif
 #ifdef KOMPOZ_UIA
-#include "uia_bridge.hpp"
+#include "../windows/uia_bridge.hpp"
 #endif
 #if defined(KOMPOZ_ATSPI) || defined(KOMPOZ_UIA)
 #define KOMPOZ_A11Y_BRIDGE 1  // the desktop's screen readers read the semantics tree
 #endif
 
 #ifdef SDL_PLATFORM_ANDROID
-#include "android_ime.hpp"
-#include "android_performance.hpp"
+#include "../android/android_ime.hpp"
+#include "../android/android_performance.hpp"
 #endif
 
 #include <algorithm>
@@ -121,15 +121,15 @@ struct SdlPlatform final : platform::Platform {
     SDL_MetalView metalView = nullptr;  // KOMPOZ_GPU=metal: the view whose layer it draws into
     bool vulkanLoaded = false;          // headless Vulkan: the library loaded here (no Vulkan window loads it)
 #ifdef KOMPOZ_DESKTOP_ACCENT
-    std::unique_ptr<DesktopAccent> accent;  // the desktop's accent color: dynamic color (Linux)
+    std::unique_ptr<platform::DesktopAccent> accent;  // the desktop's accent color: dynamic color (Linux)
 #endif
 #ifdef KOMPOZ_WALLPAPER_COLORS
-    std::unique_ptr<WallpaperColors> wallpaper;  // the wallpaper's own colors (desktops)
+    std::unique_ptr<platform::WallpaperColors> wallpaper;  // the wallpaper's own colors (desktops)
 #endif
 #ifdef KOMPOZ_ATSPI
-    std::unique_ptr<AtspiBridge> a11y;  // screen readers (Linux: AT-SPI)
+    std::unique_ptr<platform::AtspiBridge> a11y;  // screen readers (Linux: AT-SPI)
 #elif defined(KOMPOZ_UIA)
-    std::unique_ptr<UiaBridge> a11y;  // screen readers (Windows: UI Automation)
+    std::unique_ptr<platform::UiaBridge> a11y;  // screen readers (Windows: UI Automation)
 #endif
     ComposeHost* host = nullptr;
     int64_t lastSemantics = 0;   // Android accessibility, AT-SPI
@@ -611,15 +611,15 @@ void SdlPlatform::attach(ComposeHost& h, ComposeHost::Callbacks& callbacks) {
     };
     (void)notifier;
 #ifdef KOMPOZ_DESKTOP_ACCENT
-    accent = std::make_unique<DesktopAccent>(notifier(accentEvent));  // tells its color, soon
+    accent = std::make_unique<platform::DesktopAccent>(notifier(accentEvent));  // tells its color, soon
 #endif
 #ifdef KOMPOZ_WALLPAPER_COLORS
-    wallpaper = std::make_unique<WallpaperColors>(SDL_GetSystemTheme() == SDL_SYSTEM_THEME_DARK, notifier(wallpaperEvent));
+    wallpaper = std::make_unique<platform::WallpaperColors>(SDL_GetSystemTheme() == SDL_SYSTEM_THEME_DARK, notifier(wallpaperEvent));
 #endif
 #ifdef KOMPOZ_ATSPI
-    a11y = std::make_unique<AtspiBridge>(SDL_GetWindowTitle(window), notifier(a11yEvent));  // connects on its thread, if wanted
+    a11y = std::make_unique<platform::AtspiBridge>(SDL_GetWindowTitle(window), notifier(a11yEvent));  // connects on its thread, if wanted
 #elif defined(KOMPOZ_UIA)
-    a11y = std::make_unique<UiaBridge>(SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr), notifier(a11yEvent));
+    a11y = std::make_unique<platform::UiaBridge>(SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr), notifier(a11yEvent));
 #endif
     wakeEvent = SDL_RegisterEvents(1);
     const SDL_SystemCursor systemCursors[] = {SDL_SYSTEM_CURSOR_DEFAULT,   SDL_SYSTEM_CURSOR_POINTER,   SDL_SYSTEM_CURSOR_TEXT,

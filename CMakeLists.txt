@@ -186,8 +186,8 @@ if(KOMPOZ_BUILD_SDL3)
 
     # An OBJECT library because the backend defines the entry point (main, or SDL_main on
     # Android/iOS), which must always end up in the final binary.
-    add_library(kompoz_sdl3 OBJECT platform/app/app_core.cpp platform/common/system.cpp platform/sdl3/sdl3_app.cpp platform/sdl3/font_system.cpp
-                                   platform/sdl3/image_loader.cpp)
+    add_library(kompoz_sdl3 OBJECT platform/app/app_core.cpp platform/common/system.cpp platform/sdl3/sdl3_app.cpp platform/common/font_system.cpp
+                                   platform/common/image_loader.cpp)
     target_link_libraries(kompoz_sdl3 PUBLIC kompoz_core SDL3::SDL3 Freetype::Freetype)
     set_target_properties(kompoz_sdl3 PROPERTIES EXPORT_NAME sdl3)
     add_library(kompoz::sdl3 ALIAS kompoz_sdl3)
@@ -278,38 +278,36 @@ if(KOMPOZ_BUILD_SDL3)
         message(STATUS "Kompoz: HarfBuzz not found; text is drawn character by character (no ligatures, joining or emoji sequences)")
     endif()
     if(ANDROID)
-        target_sources(kompoz_sdl3 PRIVATE platform/sdl3/android_ime.cpp  # + platform/android/java
-                                           platform/sdl3/android_performance.cpp)
+        target_sources(kompoz_sdl3 PRIVATE platform/android/android_ime.cpp  # + platform/android/java
+                                           platform/android/android_performance.cpp)
     elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
         # The desktop's accent color from the XDG portal (libdbus loaded at run time): dynamic color.
         # Screen readers read the semantics tree through AT-SPI (the same libdbus).
-        target_sources(kompoz_sdl3 PRIVATE platform/sdl3/desktop_accent.cpp platform/sdl3/atspi_bridge.cpp)
+        target_sources(kompoz_sdl3 PRIVATE platform/linux/desktop_accent.cpp platform/linux/atspi_bridge.cpp)
         target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_DESKTOP_ACCENT=1 KOMPOZ_ATSPI=1)
         target_link_libraries(kompoz_sdl3 PUBLIC ${CMAKE_DL_LIBS})
     elseif(WIN32)
         # Windows' accent color (DWM's, in the registry): dynamic color. Screen readers read the
         # semantics tree through UI Automation.
-        target_sources(kompoz_sdl3 PRIVATE platform/sdl3/desktop_accent_windows.cpp platform/sdl3/uia_bridge.cpp)
+        target_sources(kompoz_sdl3 PRIVATE platform/windows/desktop_accent.cpp platform/windows/uia_bridge.cpp)
         target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_DESKTOP_ACCENT=1 KOMPOZ_UIA=1)
         target_link_libraries(kompoz_sdl3 PUBLIC uiautomationcore oleaut32)
     endif()
     if(WIN32 OR (UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN))
         # The wallpaper's own colors, found and picked on a thread (Android's come from the system).
-        target_sources(kompoz_sdl3 PRIVATE platform/sdl3/wallpaper_colors.cpp)
+        target_sources(kompoz_sdl3 PRIVATE platform/common/wallpaper_colors.cpp)
         target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_WALLPAPER_COLORS=1)
     endif()
     # The platform code that runs without a window (the wallpaper's colors, AT-SPI; UI Automation on
     # Windows), tested on its own.
     if(KOMPOZ_BUILD_TESTS AND UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
-        add_executable(kompoz_platform_tests tests/platform_tests.cpp platform/sdl3/wallpaper_colors.cpp
-                       platform/sdl3/image_loader.cpp platform/sdl3/atspi_bridge.cpp platform/common/system.cpp)
-        target_include_directories(kompoz_platform_tests PRIVATE platform/sdl3)
+        add_executable(kompoz_platform_tests tests/platform_tests.cpp platform/common/wallpaper_colors.cpp
+                       platform/common/image_loader.cpp platform/linux/atspi_bridge.cpp platform/common/system.cpp)
         target_link_libraries(kompoz_platform_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,INTERFACE_LINK_LIBRARIES>)
         target_compile_definitions(kompoz_platform_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,COMPILE_DEFINITIONS>)
         add_test(NAME kompoz_platform_tests COMMAND kompoz_platform_tests)
     elseif(KOMPOZ_BUILD_TESTS AND WIN32)
-        add_executable(kompoz_platform_tests tests/platform_tests_windows.cpp platform/sdl3/uia_bridge.cpp)
-        target_include_directories(kompoz_platform_tests PRIVATE platform/sdl3)
+        add_executable(kompoz_platform_tests tests/platform_tests_windows.cpp platform/windows/uia_bridge.cpp)
         target_compile_definitions(kompoz_platform_tests PRIVATE NOMINMAX)
         target_link_libraries(kompoz_platform_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,INTERFACE_LINK_LIBRARIES>)
         add_test(NAME kompoz_platform_tests COMMAND kompoz_platform_tests)
@@ -332,7 +330,7 @@ if(KOMPOZ_BUILD_SDL3)
     #   emrun --browser chrome build-web/kompoz_gpu_tests.html KOMPOZ_GPU_REQUIRED=1
     if(KOMPOZ_BUILD_TESTS AND (kompoz_gpu_vulkan OR EMSCRIPTEN OR APPLE))
         add_executable(kompoz_gpu_tests tests/gpu_tests.cpp platform/gpu/device.cpp platform/gpu/path_geometry.cpp platform/gpu/renderer.cpp
-                       platform/gpu/gles_device.cpp platform/sdl3/font_system.cpp platform/common/system.cpp)
+                       platform/gpu/gles_device.cpp platform/common/font_system.cpp platform/common/system.cpp)
         if(kompoz_gpu_vulkan)
             target_sources(kompoz_gpu_tests PRIVATE platform/gpu/vulkan_device.cpp platform/gpu/vma.cpp)
             target_include_directories(kompoz_gpu_tests PRIVATE ${kompoz_vulkan_include} platform/gpu/external)
@@ -346,7 +344,7 @@ if(KOMPOZ_BUILD_SDL3)
             target_sources(kompoz_gpu_tests PRIVATE platform/gpu/webgpu_device.cpp)
         endif()
         if(ANDROID)
-            target_sources(kompoz_gpu_tests PRIVATE platform/sdl3/android_ime.cpp)  # (the font system's glyphs Android draws)
+            target_sources(kompoz_gpu_tests PRIVATE platform/android/android_ime.cpp)  # (the font system's glyphs Android draws)
         endif()
         target_link_libraries(kompoz_gpu_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,INTERFACE_LINK_LIBRARIES>)
         target_link_options(kompoz_gpu_tests PRIVATE $<TARGET_PROPERTY:kompoz_sdl3,INTERFACE_LINK_OPTIONS>)

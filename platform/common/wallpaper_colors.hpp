@@ -6,7 +6,7 @@
 // thread of its own, and again whenever it changes; it notifies (Notifier) as each palette
 // comes. KOMPOZ_NO_WALLPAPER_COLORS=1 leaves it out (screenshots the same on every machine).
 
-#include "../common/system.hpp"
+#include "system.hpp"
 
 #include <kompoz/layout.hpp>
 
@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-namespace kompoz::sdl {
+namespace kompoz::platform {
 
 class WallpaperColors {
 public:
@@ -45,4 +45,4 @@ std::string kdeWallpaperFromConfig(const std::string& config, const std::string&
                                    const std::function<std::vector<std::string>(const std::string&)>& readDir);
 std::string findWallpaper(bool dark);
 
-} // namespace kompoz::sdl
+} // namespace kompoz::platform

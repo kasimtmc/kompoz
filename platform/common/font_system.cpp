@@ -2,7 +2,7 @@
 
 #include "font_system.hpp"
 
-#include "../common/system.hpp"
+#include "system.hpp"
 
 #include FT_TRUETYPE_TABLES_H
 #include FT_SYNTHESIS_H
@@ -20,7 +20,7 @@
 #include "raster.hpp"
 
 #ifdef __ANDROID__
-#include "android_ime.hpp"
+#include "../android/android_ime.hpp"
 #endif
 
 #include <algorithm>
@@ -63,7 +63,7 @@ EM_JS(void, kompoz_web_text_pixels, (unsigned char* out), { HEAPU8.set(Module.ko
 EM_JS_DEPS(kompoz_web_text, "$UTF8ToString");
 #endif
 
-namespace kompoz::sdl {
+namespace kompoz::platform {
 namespace {
 
 std::vector<std::string> fontCandidates(FontWeight weight) {
@@ -951,4 +951,4 @@ void FontSystem::layout(std::string_view text, float xPx, float baselinePx, cons
 gpu::GlyphAtlas& FontSystem::atlas() { return impl_->atlas; }
 void FontSystem::endFrame() { impl_->atlas.endFrame(); }
 
-} // namespace kompoz::sdl
+} // namespace kompoz::platform

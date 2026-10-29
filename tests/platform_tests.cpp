@@ -3,10 +3,10 @@
 // bridge, on a D-Bus of their own (a dbus-daemon started for them), where they play the AT-SPI
 // registry, the accessibility bus's launcher and a screen reader.
 
-#include "atspi_bridge.hpp"
-#include "image_loader.hpp"
-#include "libdbus.hpp"
-#include "wallpaper_colors.hpp"
+#include "../platform/linux/atspi_bridge.hpp"
+#include "../platform/common/image_loader.hpp"
+#include "../platform/linux/libdbus.hpp"
+#include "../platform/common/wallpaper_colors.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -104,22 +104,22 @@ Image=file:///usr/share/wallpapers/Next/
 PreviewImage=/ignored.png
 )";
     // The first screen's desktop in the current activity; a package: its biggest picture, images_dark when dark.
-    CHECK(sdl::kdeWallpaperFromConfig(config, "current", false, dirs) == "/usr/share/wallpapers/Next/contents/images/5120x2880.png");
-    CHECK(sdl::kdeWallpaperFromConfig(config, "current", true, dirs) == "/usr/share/wallpapers/Next/contents/images_dark/3840x2160.png");
+    CHECK(platform::kdeWallpaperFromConfig(config, "current", false, dirs) == "/usr/share/wallpapers/Next/contents/images/5120x2880.png");
+    CHECK(platform::kdeWallpaperFromConfig(config, "current", true, dirs) == "/usr/share/wallpapers/Next/contents/images_dark/3840x2160.png");
     // Another activity's own (a file:// URI, %20 decoded); panels never.
-    CHECK(sdl::kdeWallpaperFromConfig(config, "other", false, dirs) == "/home/me/Other Pics/a.jpg");
+    CHECK(platform::kdeWallpaperFromConfig(config, "other", false, dirs) == "/home/me/Other Pics/a.jpg");
     std::string noFolder = config.substr(0, config.find("[Containments][4]"));
-    CHECK(sdl::kdeWallpaperFromConfig(noFolder, "current", false, dirs) == "/home/me/Other Pics/a.jpg");  // screen 0 beats activity
-    CHECK(sdl::kdeWallpaperFromConfig("[Containments][6]\nactivityId=current\nlastScreen=1\nwallpaperplugin=org.kde.image\n"
+    CHECK(platform::kdeWallpaperFromConfig(noFolder, "current", false, dirs) == "/home/me/Other Pics/a.jpg");  // screen 0 beats activity
+    CHECK(platform::kdeWallpaperFromConfig("[Containments][6]\nactivityId=current\nlastScreen=1\nwallpaperplugin=org.kde.image\n"
                                       "[Containments][6][Wallpaper][org.kde.image][General]\nImage=/one.jpg\n"
                                       "[Containments][7]\nactivityId=other\nlastScreen=0\nwallpaperplugin=org.kde.image\n"
                                       "[Containments][7][Wallpaper][org.kde.image][General]\nImage=/zero.jpg\n",
                                       "current", false, dirs) == "/zero.jpg");  // whatever the order they come in
-    CHECK(sdl::kdeWallpaperFromConfig("[Containments][1]\nlocation=4\nwallpaperplugin=org.kde.image\n"
+    CHECK(platform::kdeWallpaperFromConfig("[Containments][1]\nlocation=4\nwallpaperplugin=org.kde.image\n"
                                       "[Containments][1][Wallpaper][org.kde.image][General]\nImage=/p.png\n", "", false, dirs).empty());
-    CHECK(sdl::kdeWallpaperFromConfig("", "", false, dirs).empty());
+    CHECK(platform::kdeWallpaperFromConfig("", "", false, dirs).empty());
     // A slideshow (another plugin) isn't read.
-    CHECK(sdl::kdeWallpaperFromConfig("[Containments][5]\nlastScreen=0\nwallpaperplugin=org.kde.slideshow\n"
+    CHECK(platform::kdeWallpaperFromConfig("[Containments][5]\nlastScreen=0\nwallpaperplugin=org.kde.slideshow\n"
                                       "[Containments][5][Wallpaper][org.kde.image][General]\nImage=/x.png\n", "", false, dirs).empty());
 }
 
@@ -142,7 +142,7 @@ void wallpaperChangesAreFollowed() {
     };
     writeConfig(red.string());
     std::atomic<int> notified{0};
-    sdl::WallpaperColors colors(false, {.notify = [&] { ++notified; }});
+    platform::WallpaperColors colors(false, {.notify = [&] { ++notified; }});
     CHECK(colors.listening());
     auto waitFor = [&](const std::function<bool()>& done) {
         for (int i = 0; i < 100; ++i) {
@@ -228,7 +228,7 @@ constexpr unsigned char kWebp[] = {
 // libwebp to any size).
 void imagesAreDecoded() {
     auto check = [](const std::vector<uint8_t>& bytes, const ImageRequestSize& size, int w, int h, int tolerance) {
-        ImageBitmap image = sdl::decodeImage(bytes, size);
+        ImageBitmap image = platform::decodeImage(bytes, size);
         CHECK(image.width() == w && image.height() == h);
         if (image.width() != w || image.height() != h) {
             std::printf("    decoded %dx%d, not %dx%d\n", image.width(), image.height(), w, h);
@@ -257,12 +257,12 @@ void imagesAreDecoded() {
 #else
     std::printf("  (no libwebp: WebP decoding isn't tested)\n");
 #endif
-    CHECK(sdl::decodeImage({0xFF, 0xD8, 0xFF, 0, 1, 2, 3, 4, 5, 6, 7, 8}).empty());  // not a picture after all
+    CHECK(platform::decodeImage({0xFF, 0xD8, 0xFF, 0, 1, 2, 3, 4, 5, 6, 7, 8}).empty());  // not a picture after all
 }
 
 // ---- AT-SPI ----
 
-namespace dbus = sdl::dbus;
+namespace dbus = platform::dbus;
 
 constexpr const char* kA11y = "/org/a11y/atspi/accessible/";
 
@@ -519,7 +519,7 @@ void atspiBridgeServesTheTree() {
     };
 
     std::atomic<int> notified{0};
-    sdl::AtspiBridge bridge("Test app", {.notify = [&] { ++notified; }});
+    platform::AtspiBridge bridge("Test app", {.notify = [&] { ++notified; }});
     CHECK(bridge.listening());
     CHECK(peer.serve(3000, [&] { return bridge.active(); }));  // connected, and into the registry's desktop
     if (peer.bridge.empty()) return;
@@ -732,7 +732,7 @@ void atspiBridgeFollowsTheDesktop() {
         return true;
     };
     std::atomic<int> notified{0};
-    sdl::AtspiBridge bridge("Test app", {.notify = [&] { ++notified; }});
+    platform::AtspiBridge bridge("Test app", {.notify = [&] { ++notified; }});
     CHECK(launcher.serve(1000, [&] { return asked >= 2; }));  // IsEnabled, ScreenReaderEnabled: both off
     launcher.serve(200);
     CHECK(!bridge.active());
@@ -757,7 +757,7 @@ void atspiBridgeFollowsTheDesktop() {
 
     // KOMPOZ_ATSPI=0: never.
     setenv("KOMPOZ_ATSPI", "0", 1);
-    sdl::AtspiBridge off("Test app", {});
+    platform::AtspiBridge off("Test app", {});
     CHECK(!off.listening() && !off.active());
     unsetenv("KOMPOZ_ATSPI");
 }

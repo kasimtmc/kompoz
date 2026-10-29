@@ -16,7 +16,7 @@
 #include <string_view>
 #include <vector>
 
-namespace kompoz::sdl {
+namespace kompoz::platform {
 
 class FontSystem final : public TextMeasurer, public gpu::TextSource {
 public:
@@ -51,4 +51,4 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-} // namespace kompoz::sdl
+} // namespace kompoz::platform

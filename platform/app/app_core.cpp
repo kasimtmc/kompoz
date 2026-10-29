@@ -9,8 +9,8 @@
 
 #include "../common/system.hpp"
 #include "../gpu/renderer.hpp"
-#include "../sdl3/font_system.hpp"
-#include "../sdl3/image_loader.hpp"
+#include "../common/font_system.hpp"
+#include "../common/image_loader.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -35,8 +35,6 @@
 #endif
 
 namespace kompoz::platform {
-
-using sdl::FontSystem;
 
 // KOMPOZ_SCRIPT="click 100 200; type hello; key enter; wait 30; shot out.png; quit"
 // drives the app without a user, for UI tests and screenshots. Time is virtual while a
@@ -131,7 +129,7 @@ struct AppState {
     kompoz::detail::RecompositionStats traced;
 
     ~AppState() {
-        sdl::stopImageLoader();  // its threads end before the rest goes
+        stopImageLoader();  // its threads end before the rest goes
         if (damageCheck) logf("kompoz: damage check: %d of %d frames differed", damageWrong, damageFrames);
         if (keepCheck) logf("kompoz: keep check: %d of %d frames recorded otherwise", keepWrong, keepFrames);
         host.reset();  // runs effect cleanups while the window still exists
@@ -455,7 +453,7 @@ Drawn drawFrame(App& app, const std::string& shot) {
     r.flush();
     if (!shot.empty()) {
         std::vector<uint8_t> pixels = device.readPixels(*app.gpuFrame, {0, 0, pw, ph});
-        sdl::savePixels(shot, pw, ph, pixels);
+        savePixels(shot, pw, ph, pixels);
     }
     return {swapchain != nullptr, area};
 }
@@ -965,7 +963,7 @@ bool AppCore::start(int argc, char** argv) {
     gpu::setLogger([](const char* message) { logged->platform.log(message); });
     app.config = kompoz::createApplication(argc, argv);
     if (auto preview = platform.option("KOMPOZ_PREVIEW")) kompoz::detail::showPreview(app.config, preview->c_str());  // a preview instead of the app
-    sdl::startImageDiskCache(app.config.title, app.config.imageDiskCacheBytes);
+    startImageDiskCache(app.config.title, app.config.imageDiskCacheBytes);
     // On Android, where an app has no environment, each a file in its files (Platform::option):
     //   adb shell run-as <package> touch files/kompoz-profile
     // or, where run-as is refused (SELinux), in its external storage, which the app creates:
@@ -1021,9 +1019,9 @@ bool AppCore::start(int argc, char** argv) {
 
     App* raw = &app;
     ComposeHost::Callbacks callbacks{
-        .loadImage = [](std::string_view path) { return sdl::loadImageFile(path); },
+        .loadImage = [](std::string_view path) { return loadImageFile(path); },
         .loadImageAsync = [](const std::string& model, kompoz::ImageRequestSize size, std::function<void(kompoz::ImageBitmap)> done) {
-            sdl::loadImageAsync(model, size, std::move(done));
+            loadImageAsync(model, size, std::move(done));
         },
         .renderImage = [raw](kompoz::Size size, const std::function<void(kompoz::GraphicsContext&)>& draw) { return renderImage(*raw, size, draw); },
         .readAsset = [](std::string_view path) { return platform::readFile(std::string(path)); },

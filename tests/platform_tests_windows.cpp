@@ -2,7 +2,7 @@
 // on a window of the tests' own, asked through UI Automation's own client (IUIAutomation), as
 // Narrator asks.
 
-#include "uia_bridge.hpp"
+#include "../platform/windows/uia_bridge.hpp"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -169,7 +169,7 @@ void uiaBridgeServesTheTree() {
     HWND hwnd = CreateWindowExW(0, wc.lpszClassName, L"Main", WS_OVERLAPPEDWINDOW, 100, 50, 400, 300, nullptr, nullptr, wc.hInstance, nullptr);
     CHECK(hwnd != nullptr);
     std::atomic<int> notified{0};
-    sdl::UiaBridge bridge(hwnd, {.notify = [&] { ++notified; }});
+    platform::UiaBridge bridge(hwnd, {.notify = [&] { ++notified; }});
     CHECK(bridge.listening() && !bridge.active());
 
     Ref<IUIAutomation> uia;

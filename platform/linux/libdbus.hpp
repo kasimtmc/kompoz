@@ -10,7 +10,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace kompoz::sdl::dbus {
+namespace kompoz::platform::dbus {
 
 struct Error {
     const char* name;
@@ -203,4 +203,4 @@ struct Reader {
     }
 };
 
-} // namespace kompoz::sdl::dbus
+} // namespace kompoz::platform::dbus

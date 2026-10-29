@@ -365,7 +365,10 @@
   dosyaları (Android'in APK varlıkları platformun verdiğiyle), programın klasörü ve önbellek klasörü
   `platform/common/system`'in; kendi iş parçacıklarındaki modüller platforma SDL olayları yerine bir
   `platform::Notifier` ile haber veriyor (yalnızca PNG ve BMP çözmek ve ekran görüntüsü kaydetmek hâlâ SDL'in);
-  platform testleri sonlarında libdbus'un tuttuğunu `SDL_Quit`'in yaptığı gibi serbest bırakıyor.
+  platform testleri sonlarında libdbus'un tuttuğunu `SDL_Quit`'in yaptığı gibi serbest bırakıyor. Her platform modülü
+  artık `kompoz::platform` içinde, ait olduğu yerde: her platformun paylaştıkları `platform/common/`'da (fontlar,
+  resimler, duvar kâğıdının renkleri), masaüstlerinin kendilerine özgü olanları `platform/linux/` ve
+  `platform/windows/`'da, Android'inkiler `platform/android/`'da; `platform/sdl3/`'te yalnızca SDL platformu kaldı.
 - **Bir yolun gölgesi önceden sahip olduğu maskeden çiziliyor** (Compose'un bir `dropShadow`'un ya da
   `innerShadow`'un bulanık bitmap'ini tutması gibi): GPU renderer'ı yuvarlak köşeli dikdörtgen olmayan bir şeklin
   (kalp, yıldız, kurabiye) gölgesini her seferinde baştan, her biri iki geçişli bir katman ve bir bulanıklıkla
