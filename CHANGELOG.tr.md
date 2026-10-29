@@ -347,10 +347,10 @@
 - **Tembel listeler ve ızgaralar kareler arasındaki duraklamalarda önceden kompoze eder** (Compose'un prefetch'i
   gibi): kaydırılırken, kompoze ettiklerinin o yöndeki ötesindeki öğe, bir sonraki karenin vaktine kadarki sürede
   kompoze edilir (`ComposeHost::requestIdleWork` ve uygulamanın orada çağırdığı `idle()`); aynı içerik türünden bir
-  öğenin daha önce aldığı süre buna sığıyorsa. Böylece onun kaydırılıp girdiği kare onu kompoze etmez. LazyColumn,
-  LazyRow ve bunlarla yapılan ızgaralar, bir de kademeli ızgaralar. Bir Redmi Note 9 Pro'da showcase'in Bileşenler
-  ekranını gerçek kaydırmalarla kaydırırken kompozisyonu 16 ms'yi aşan kareler koşu başına 11–22'den 1–5'e, en uzunu
-  72–109 ms'den 41–61'e indi.
+  öğenin daha önce aldığı süre buna sığıyorsa. Böylece onun kaydırılıp girdiği kare onu kompoze etmez. Görünümün
+  çevresindekilerin bir öğe ötesi. LazyColumn, LazyRow ve bunlarla yapılan ızgaralar, bir de kademeli ızgaralar. Bir
+  Redmi Note 9 Pro'da showcase'in Bileşenler ekranını gerçek kaydırmalarla kaydırırken kompozisyonu 16 ms'yi aşan
+  kareler koşu başına 11–22'den 1–5'e, en uzunu 72–109 ms'den 41–61'e indi.
 - **Boru hattı önbelleği yapıldığı gölgelendiriciler için tutulur**: dosyası onların adını taşır (scripts/shaders.py
   her üretilen başlığın sürümünü yazar, `Renderer::shadersVersion()` bunları birleştirir) ve bir uygulama açılırken
   arka ucun başka gölgelendiricilere ait dosyalarını siler. Bir sürücü kendisine verileni tutar, bu yüzden eski bir

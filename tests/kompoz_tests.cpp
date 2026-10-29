@@ -1540,9 +1540,10 @@ TEST(lazy_list_composes_the_next_item_in_a_pause) {
     made.clear();
     rule.host().idle(1'000'000'000);
     CHECK(has(past) && made == std::vector<int>{past});  // that one alone, composed now
-    // The next one asked for; the frames that scroll down to it don't compose it anew.
+    // One ahead only (nothing more while the list hasn't moved on); the frames that scroll down
+    // to it don't compose it anew.
     rule.waitForIdle();
-    CHECK(rule.host().hasIdleWork());
+    CHECK(!rule.host().hasIdleWork());
     made.clear();
     state->scrollBy(500);
     rule.waitForIdle();
@@ -1556,11 +1557,14 @@ TEST(lazy_list_composes_the_next_item_in_a_pause) {
     while (has(before - 1)) --before;
     made.clear();
     rule.host().idle(1'000'000'000);
-    CHECK(has(before - 1) && made == std::vector<int>{before - 1});
+    // (With it, any of those around the view the last frame left out since it scrolled.)
+    CHECK(has(before - 1) && std::ranges::find(made, before - 1) != made.end());
+    CHECK(std::ranges::all_of(made, [&](int i) { return i < before && i >= state->firstVisibleItemIndex() - 3; }));
     // A pause shorter than what composing a page took: not started then.
-    state->scrollBy(-10);
-    rule.waitForIdle();
-    CHECK(rule.host().hasIdleWork());
+    while (!rule.host().hasIdleWork()) {
+        state->scrollBy(-25);
+        rule.waitForIdle();
+    }
     made.clear();
     rule.host().idle(1);
     CHECK(made.empty() && rule.host().hasIdleWork());

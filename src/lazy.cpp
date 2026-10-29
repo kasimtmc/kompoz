@@ -112,22 +112,32 @@ struct LazyListState::Data {
     }
 
     // What to compose: the visible items plus half a view before and after, so that small
-    // scrolls don't need a recomposition.
-    std::pair<int, int> composeRange() const {
+    // scrolls don't need a recomposition...
+    std::pair<int, int> naturalRange() const {
         auto [start, end] = visibleRange();
         if (sizeCount == 0) return {start, end};
         float extra = (viewport > 0 ? viewport : 1000.f) * 0.5f;
         for (float d = 0; start > 0 && d < extra;) d += sizeOf(--start) + spacing;
         for (float d = 0; end < count && d < extra;) d += sizeOf(end++) + spacing;
-        if (prefetched == end && end < count) ++end;  // (composed ahead, next to them)
+        return {start, end};
+    }
+    // ...and the one composed ahead next to them.
+    std::pair<int, int> composeRange() const {
+        auto [start, end] = naturalRange();
+        if (prefetched == end && end < count) ++end;
         else if (prefetched == start - 1 && start > 0) --start;
         return {start, end};
     }
 
-    // The item past the composed ones the way it scrolls, to compose in a pause between frames
-    // (ComposeHost::requestIdleWork), before it scrolls in.
+    // The item past those it composes the way it scrolls (one: not ever more ahead while it
+    // scrolls slowly), to compose in a pause between frames (ComposeHost::requestIdleWork),
+    // before it scrolls in.
+    int nextAhead() const {
+        auto [start, end] = naturalRange();
+        return direction > 0 ? end : direction < 0 ? start - 1 : -1;
+    }
     void requestPrefetch(ComposeHost& host, const std::shared_ptr<Data>& self) {
-        int next = direction > 0 ? composedEnd : direction < 0 ? composedStart - 1 : -1;
+        int next = nextAhead();
         if (next < 0 || next >= count || next == prefetched) return;
         size_t type = size_t(next) < contentTypes.size() ? contentTypes[size_t(next)] : 0;
         auto timed = composeNanos.find(type);
@@ -136,7 +146,7 @@ struct LazyListState::Data {
             this, timed == composeNanos.end() ? 0 : timed->second,
             [weak, next] {
                 auto d = weak.lock();
-                if (!d || next != (d->direction > 0 ? d->composedEnd : d->composedStart - 1)) return false;  // (scrolled since)
+                if (!d || next != d->nextAhead()) return false;  // (scrolled since)
                 d->prefetched = next;
                 d->window.set(d->window.peek() + 1);
                 return true;
@@ -1092,7 +1102,8 @@ namespace {
 
 struct StaggeredData {
     MutableState<int> window{0};  // bumped when the composed items no longer cover the view
-    std::pair<int, int> composed{0, 0};  // the items composed, [start, end)
+    std::pair<int, int> composed{0, 0};  // the items composed, [start, end): those around the view...
+    std::pair<int, int> natural{0, 0};   // ...without the one composed ahead
     bool laidOut = false;
     // Compose's prefetch, as a lazy list's (LazyListState::Data): the way it scrolled from where
     // it was, the item composed ahead that way (-1: none), what composing one took by type.
@@ -1222,13 +1233,13 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
                 if (int way = top > d->lastTop ? 1 : -1; way != d->direction) d->direction = way, d->prefetched = -1;
             d->lastTop = top;
             if (!d->laidOut || !covered) {
-                d->composed = range(top - view / 2, top + view * 1.5f);
+                d->composed = d->natural = range(top - view / 2, top + view * 1.5f);
                 if (d->prefetched == d->composed.second && d->prefetched < n) ++d->composed.second;  // (composed ahead, next to them)
                 else if (d->prefetched == d->composed.first - 1 && d->prefetched >= 0) --d->composed.first;
                 d->window.set(d->window.peek() + 1);
             }
-            // The item past the composed ones the way it scrolls: composed in a pause between frames.
-            int next = d->direction > 0 ? d->composed.second : d->direction < 0 ? d->composed.first - 1 : -1;
+            // The item past those around the view the way it scrolls (one): composed in a pause.
+            int next = d->direction > 0 ? d->natural.second : d->direction < 0 ? d->natural.first - 1 : -1;
             if (next >= 0 && next < n && next != d->prefetched && node.host()) {
                 size_t type = size_t(next) < d->contentTypes.size() ? d->contentTypes[size_t(next)] : 0;
                 auto timed = d->composeNanos.find(type);
@@ -1237,8 +1248,9 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
                     d.get(), timed == d->composeNanos.end() ? 0 : timed->second,
                     [weak, next] {
                         auto s = weak.lock();
-                        if (!s || next != (s->direction > 0 ? s->composed.second : s->composed.first - 1)) return false;  // (scrolled since)
+                        if (!s || next != (s->direction > 0 ? s->natural.second : s->natural.first - 1)) return false;  // (scrolled since)
                         s->prefetched = next;
+                        s->composed = s->natural;
                         (s->direction > 0 ? s->composed.second : s->composed.first) += s->direction > 0 ? 1 : -1;
                         s->window.set(s->window.peek() + 1);
                         return true;
