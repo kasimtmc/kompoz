@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <filesystem>
 #include <fstream>
@@ -765,11 +766,18 @@ void atspiBridgeFollowsTheDesktop() {
 
 int main() {
     setvbuf(stdout, nullptr, _IOLBF, 0);  // what failed seen before a crash
+    // libdbus kept loaded throughout, and what it keeps for the process freed at the end, its users
+    // all done (as SDL_Quit does): else it goes unloaded with that still held (LeakSanitizer).
+    void* dbus = dlopen("libdbus-1.so.3", RTLD_NOW | RTLD_LOCAL);
     kdeConfigIsRead();
     imagesAreDecoded();
     wallpaperChangesAreFollowed();
     atspiBridgeServesTheTree();
     atspiBridgeFollowsTheDesktop();
+    if (dbus) {
+        if (auto shutdown = reinterpret_cast<void (*)()>(dlsym(dbus, "dbus_shutdown"))) shutdown();
+        dlclose(dbus);
+    }
     std::printf("%d checks, %d failed\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }
