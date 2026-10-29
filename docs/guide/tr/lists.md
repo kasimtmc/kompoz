@@ -16,7 +16,7 @@ Bu, ekranda olsun olmasın her çocuğu kompoze eder ve yerleştirir. Uzun liste
 
 ## Tembel listeler
 
-`LazyColumn` ve `LazyRow` öğeleri görünür alana girdikçe (artı küçük bir pay) kompoze eder, çıkanları da bırakır. İçerik yerine, öğeleri bir `LazyListScope` üzerinden *tarif eden* bir lambda alırlar:
+`LazyColumn` ve `LazyRow` öğeleri görünür alana girdikçe (artı küçük bir pay) kompoze eder, çıkanları da bırakır. Kaydırılırken bunların ötesindeki sıradaki öğe, Compose'un önceden getirmesi (prefetch) gibi, kareler arasındaki duraklamalarda önceden kompoze edilir: aynı içerik türünden bir öğenin daha önce aldığı süre duraklamaya sığdığında. İçerik yerine, öğeleri bir `LazyListScope` üzerinden *tarif eden* bir lambda alırlar:
 
 ```cpp
 struct Message {
@@ -41,7 +41,7 @@ void Conversation(const std::vector<Message>& messages) {
 | `items(count, content)` | `count` öğe; `content` indeksi alır. |
 | `items(list, content)` | Her eleman için bir öğe; `content` elemanı alır. |
 | `items(list, key, content)` | Aynısı, her eleman için bir anahtarla. |
-| `items(list, key, contentType, content)` | Aynısı, bir içerik türüyle (`layoutInfo()`'da bildirilir). |
+| `items(list, key, contentType, content)` | Aynısı, bir içerik türüyle (`layoutInfo()`'da bildirilir; bir türün öğeleri önceden kompoze etmek için birlikte zamanlanır). |
 | `itemsIndexed(list, content)` | Her eleman için bir öğe; `content` indeksi ve elemanı alır. |
 | `stickyHeader(content)` | Arkasından gelen öğeler altından kayarken üstte kalan bir başlık. |
 

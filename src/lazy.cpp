@@ -24,6 +24,12 @@ struct LazyListState::Data {
     int count = 0;
     std::vector<size_t> keys;
     int composedStart = 0, composedEnd = 0;  // the items around the view, in order...
+    // Compose's prefetch: the way it was last scrolled (1 on, -1 back), the item past the composed
+    // ones that way, composed ahead in a pause between frames (-1: none), and what composing one
+    // of each content type took then (one is started only where that fits).
+    int direction = 0;
+    int prefetched = -1;
+    std::unordered_map<size_t, int64_t> composeNanos;
     std::vector<int> composed;  // ...and the item each child node shows (a pinned header comes last, on top)
     std::vector<int> sticky;    // sticky header indices, ascending
     int pinned = -1;            // the sticky header composed for the top of the view
@@ -113,7 +119,34 @@ struct LazyListState::Data {
         float extra = (viewport > 0 ? viewport : 1000.f) * 0.5f;
         for (float d = 0; start > 0 && d < extra;) d += sizeOf(--start) + spacing;
         for (float d = 0; end < count && d < extra;) d += sizeOf(end++) + spacing;
+        if (prefetched == end && end < count) ++end;  // (composed ahead, next to them)
+        else if (prefetched == start - 1 && start > 0) --start;
         return {start, end};
+    }
+
+    // The item past the composed ones the way it scrolls, to compose in a pause between frames
+    // (ComposeHost::requestIdleWork), before it scrolls in.
+    void requestPrefetch(ComposeHost& host, const std::shared_ptr<Data>& self) {
+        int next = direction > 0 ? composedEnd : direction < 0 ? composedStart - 1 : -1;
+        if (next < 0 || next >= count || next == prefetched) return;
+        size_t type = size_t(next) < contentTypes.size() ? contentTypes[size_t(next)] : 0;
+        auto timed = composeNanos.find(type);
+        std::weak_ptr<Data> weak = self;
+        host.requestIdleWork(
+            this, timed == composeNanos.end() ? 0 : timed->second,
+            [weak, next] {
+                auto d = weak.lock();
+                if (!d || next != (d->direction > 0 ? d->composedEnd : d->composedStart - 1)) return false;  // (scrolled since)
+                d->prefetched = next;
+                d->window.set(d->window.peek() + 1);
+                return true;
+            },
+            [weak, type](int64_t took) {
+                if (auto d = weak.lock()) {
+                    int64_t& average = d->composeNanos[type];
+                    average = average ? (average * 3 + took) / 4 : took;
+                }
+            });
     }
 
     void requestWindowIfNeeded() {
@@ -156,6 +189,7 @@ struct LazyListState::Data {
     // Moves the scroll position; returns the part of `delta` that was used.
     float move(float delta) {
         if (count == 0 || delta == 0) return 0;
+        if (int way = delta > 0 ? 1 : -1; way != direction) direction = way, prefetched = -1;  // (the other way: that one isn't needed)
         int index = first();
         float offset = firstOffset + delta, used = delta;
         // A hair short of the next item counts as there (float error: 109.99998 of 110 would keep
@@ -631,6 +665,7 @@ MeasurePolicy listPolicy(LazyListState state, bool vertical, LazyListOptions opt
         if (d.animatesItems && !detail::isProbeMeasure())  // forget items that left the view
             std::erase_if(d.itemAnimations, [&](const auto& entry) { return !animated.count(entry.first); });
         d.requestWindowIfNeeded();
+        if (!detail::isProbeMeasure() && node.host()) d.requestPrefetch(*node.host(), state.data_);
         return own;
     };
 }
@@ -1059,7 +1094,14 @@ struct StaggeredData {
     MutableState<int> window{0};  // bumped when the composed items no longer cover the view
     std::pair<int, int> composed{0, 0};  // the items composed, [start, end)
     bool laidOut = false;
+    // Compose's prefetch, as a lazy list's (LazyListState::Data): the way it scrolled from where
+    // it was, the item composed ahead that way (-1: none), what composing one took by type.
+    float lastTop = -1;
+    int direction = 0;
+    int prefetched = -1;
+    std::unordered_map<size_t, int64_t> composeNanos;
     std::vector<size_t> keys;
+    std::vector<size_t> contentTypes;
     std::vector<bool> fullLine;
     std::vector<int> nodes;  // the item each child node shows
     float viewport = 0;
@@ -1101,9 +1143,11 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
     content(grid);
     int count = grid.size();
     d->keys.resize(size_t(count));
+    d->contentTypes.resize(size_t(count));
     d->fullLine.resize(size_t(count));
     for (int i = 0; i < count; ++i) {
         d->keys[size_t(i)] = grid.keyAt(i);
+        d->contentTypes[size_t(i)] = grid.contentTypeAt(i);
         d->fullLine[size_t(i)] = grid.spanAt(i, LazyGridScope::FullLine) > 1;
     }
     d->window.get();  // recompose when scrolling needs items that aren't composed
@@ -1174,9 +1218,37 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
             };
             auto visible = range(top, top + view);
             bool covered = visible.first >= d->composed.first && visible.second <= d->composed.second;
+            if (d->lastTop >= 0 && top != d->lastTop)
+                if (int way = top > d->lastTop ? 1 : -1; way != d->direction) d->direction = way, d->prefetched = -1;
+            d->lastTop = top;
             if (!d->laidOut || !covered) {
                 d->composed = range(top - view / 2, top + view * 1.5f);
+                if (d->prefetched == d->composed.second && d->prefetched < n) ++d->composed.second;  // (composed ahead, next to them)
+                else if (d->prefetched == d->composed.first - 1 && d->prefetched >= 0) --d->composed.first;
                 d->window.set(d->window.peek() + 1);
+            }
+            // The item past the composed ones the way it scrolls: composed in a pause between frames.
+            int next = d->direction > 0 ? d->composed.second : d->direction < 0 ? d->composed.first - 1 : -1;
+            if (next >= 0 && next < n && next != d->prefetched && node.host()) {
+                size_t type = size_t(next) < d->contentTypes.size() ? d->contentTypes[size_t(next)] : 0;
+                auto timed = d->composeNanos.find(type);
+                std::weak_ptr<StaggeredData> weak = d;
+                node.host()->requestIdleWork(
+                    d.get(), timed == d->composeNanos.end() ? 0 : timed->second,
+                    [weak, next] {
+                        auto s = weak.lock();
+                        if (!s || next != (s->direction > 0 ? s->composed.second : s->composed.first - 1)) return false;  // (scrolled since)
+                        s->prefetched = next;
+                        (s->direction > 0 ? s->composed.second : s->composed.first) += s->direction > 0 ? 1 : -1;
+                        s->window.set(s->window.peek() + 1);
+                        return true;
+                    },
+                    [weak, type](int64_t took) {
+                        if (auto s = weak.lock()) {
+                            int64_t& average = s->composeNanos[type];
+                            average = average ? (average * 3 + took) / 4 : took;
+                        }
+                    });
             }
             d->laidOut = true;
             // The state: every place, the first visible item and what is in view.

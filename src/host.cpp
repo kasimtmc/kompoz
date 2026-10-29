@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -446,6 +447,39 @@ void ComposeHost::checkKept() {
     if (!keepCheck_->first.sameFrame(keepCheck_->second, &why)) {
         ++gKeepMismatches;
         std::fprintf(stderr, "kompoz: keep check: %s\n", why.c_str());
+    }
+}
+
+void ComposeHost::requestIdleWork(const void* owner, int64_t estimateNanos, std::function<bool()> start, std::function<void(int64_t)> took) {
+    IdleWork work{owner, estimateNanos, std::move(start), std::move(took)};
+    for (IdleWork& w : idleWork_)
+        if (w.owner == owner) return void(w = std::move(work));
+    idleWork_.push_back(std::move(work));
+}
+
+void ComposeHost::idle(int64_t budgetNanos) {
+    using Clock = std::chrono::steady_clock;
+    auto deadline = Clock::now() + std::chrono::nanoseconds(budgetNanos);
+    while (!idleWork_.empty()) {
+        int64_t left = std::chrono::duration_cast<std::chrono::nanoseconds>(deadline - Clock::now()).count();
+        if (left <= 0 || idleWork_.front().estimateNanos > left) break;  // (the next pause)
+        IdleWork work = std::move(idleWork_.front());
+        idleWork_.erase(idleWork_.begin());
+        auto started = Clock::now();
+        if (!work.start()) continue;
+        // What it changed composed now, as a frame would (not laid out: the next frame does that).
+        std::vector<const void*> changed;
+        {
+            std::lock_guard lock(gMutex);
+            changed.swap(pendingChanges_);
+        }
+        for (const void* key : changed) composer_.invalidateReaders(key);
+        if (!changed.empty()) layoutDirty_ = true;
+        if (composer_.recompose(lastFrameTime_)) {
+            layoutDirty_ = true;
+            syncTextInput();
+        }
+        work.took(std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - started).count());
     }
 }
 

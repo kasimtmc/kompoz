@@ -16,7 +16,7 @@ It composes and lays out every child, whether it is on the screen or not. For lo
 
 ## Lazy lists
 
-`LazyColumn` and `LazyRow` compose items as they come into view, plus a small margin, and drop the ones that leave it. Instead of content, they take a lambda that *describes* the items through a `LazyListScope`:
+`LazyColumn` and `LazyRow` compose items as they come into view, plus a small margin, and drop the ones that leave it. While they scroll, the next item past those is composed ahead in the pauses between frames, as Compose prefetches: when what an item of its content type took before fits in the pause. Instead of content, they take a lambda that *describes* the items through a `LazyListScope`:
 
 ```cpp
 struct Message {
@@ -41,7 +41,7 @@ void Conversation(const std::vector<Message>& messages) {
 | `items(count, content)` | `count` items; `content` gets the index. |
 | `items(list, content)` | One item per element; `content` gets the element. |
 | `items(list, key, content)` | The same, with a key per element. |
-| `items(list, key, contentType, content)` | The same, with a content type (reported in `layoutInfo()`). |
+| `items(list, key, contentType, content)` | The same, with a content type (reported in `layoutInfo()`; items of a type are timed together for composing ahead). |
 | `itemsIndexed(list, content)` | One item per element; `content` gets the index and the element. |
 | `stickyHeader(content)` | A header that stays at the top while the items after it scroll under it. |
 

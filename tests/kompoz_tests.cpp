@@ -1508,6 +1508,64 @@ TEST(lazy_column_composes_only_what_is_visible) {
     CHECK(composed <= 8);  // (the first alone, then the four it says: page 0 twice ... a few)
 }
 
+// As Compose prefetches: scrolled, the item past the composed ones that way is composed in a
+// pause between frames (ComposeHost::idle), before the frame that shows it; one whose kind took
+// longer than the pause before waits for a longer one. (`made`: items composed for the first
+// time, as remember() runs then; a list composed again runs its items' lambdas again.)
+TEST(lazy_list_composes_the_next_item_in_a_pause) {
+    std::optional<LazyListState> state;
+    std::vector<int> made;
+    ComposeTestRule rule(
+        [&] {
+            auto s = rememberLazyListState();
+            state = s;
+            LazyColumn(Modifier().fillMaxSize(), {.state = s}, [&](LazyListScope& list) {
+                list.items(100, [&](int i) {
+                    remember([&] {
+                        made.push_back(i);
+                        return 0;
+                    });
+                    Box(Modifier().fillMaxWidth().height(500).testTag("page " + std::to_string(i)));
+                });
+            });
+        },
+        {400, 800});
+    auto has = [&](int i) { return rule.onNodeWithTag("page " + std::to_string(i)).exists(); };
+    int past = 0;
+    while (has(past)) ++past;
+    CHECK(past > 1 && !rule.host().hasIdleWork());  // (not scrolled: nothing to compose ahead)
+    state->scrollBy(10);
+    rule.waitForIdle();
+    CHECK(has(past - 1) && !has(past) && rule.host().hasIdleWork());
+    made.clear();
+    rule.host().idle(1'000'000'000);
+    CHECK(has(past) && made == std::vector<int>{past});  // that one alone, composed now
+    // The next one asked for; the frames that scroll down to it don't compose it anew.
+    rule.waitForIdle();
+    CHECK(rule.host().hasIdleWork());
+    made.clear();
+    state->scrollBy(500);
+    rule.waitForIdle();
+    CHECK(std::ranges::find(made, past) == made.end());
+    // Back the other way: the one before the composed ones.
+    state->scrollToItem(50);
+    rule.waitForIdle();
+    state->scrollBy(-10);
+    rule.waitForIdle();
+    int before = 50;
+    while (has(before - 1)) --before;
+    made.clear();
+    rule.host().idle(1'000'000'000);
+    CHECK(has(before - 1) && made == std::vector<int>{before - 1});
+    // A pause shorter than what composing a page took: not started then.
+    state->scrollBy(-10);
+    rule.waitForIdle();
+    CHECK(rule.host().hasIdleWork());
+    made.clear();
+    rule.host().idle(1);
+    CHECK(made.empty() && rule.host().hasIdleWork());
+}
+
 TEST(lazy_list_state_opens_at_an_item) {
     std::optional<LazyListState> state;
     ComposeTestRule rule(
@@ -8729,6 +8787,34 @@ TEST(lazy_horizontal_grid_lays_out_columns) {
     rule.waitForIdle();
     CHECK(rule.onNodeWithTag("cell0").bounds().x < 0 || !rule.onNodeWithTag("cell0").exists());
     CHECK(rule.onNodeWithTag("cell20").exists());
+}
+
+// A staggered grid composes ahead as a list does (lazy_list_composes_the_next_item_in_a_pause).
+TEST(staggered_grid_composes_the_next_item_in_a_pause) {
+    LazyStaggeredGridState gridState;
+    ScrollState scroll = gridState.scrollState();
+    std::vector<int> made;
+    ComposeTestRule rule([&] {
+        LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxSize(), {.state = gridState}, [&](LazyGridScope& grid) {
+            grid.items(200, [&](int i) {
+                remember([&] {
+                    made.push_back(i);
+                    return 0;
+                });
+                Box(Modifier().fillMaxWidth().height(300).testTag("cell " + std::to_string(i)));
+            });
+        });
+    }, {400, 800});
+    auto has = [&](int i) { return rule.onNodeWithTag("cell " + std::to_string(i)).exists(); };
+    int past = 0;
+    while (has(past)) ++past;
+    CHECK(past > 2 && !rule.host().hasIdleWork());
+    scroll.scrollBy(10);
+    rule.waitForIdle();
+    CHECK(!has(past) && rule.host().hasIdleWork());
+    made.clear();
+    rule.host().idle(1'000'000'000);
+    CHECK(has(past) && made == std::vector<int>{past});
 }
 
 TEST(staggered_grid_puts_items_under_the_shortest_lane) {

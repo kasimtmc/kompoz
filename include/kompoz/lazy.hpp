@@ -274,6 +274,7 @@ public:
 
     int size() const { return items_.size(); }
     size_t keyAt(int index) const { return items_.keyAt(index); }
+    size_t contentTypeAt(int index) const { return items_.contentTypeAt(index); }
     void composeAt(int index) const { items_.composeAt(index); }
     int spanAt(int index, int columns) const;
 

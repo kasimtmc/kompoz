@@ -140,6 +140,15 @@ public:
     // Of that, what the next frame has to show (an animation, a scroll, a change to compose or lay
     // out): not a timer to wait for, work on another thread to come back or an edit to hear of.
     bool wantsFrame() const;
+    // Work for the time between frames (as Compose's prefetch: a lazy list's next item, composed
+    // before it scrolls in). One request for each `owner` (a later one replaces it). idle() does
+    // what fits in `budgetNanos` (the platform's, until the next frame is due), in order: a request
+    // whose `estimateNanos` (what such work took before; 0: never timed) is more than the time
+    // left waits for the next pause. `start` makes its change (false: nothing to do any more);
+    // what it invalidated is composed then, not laid out or drawn; `took` hears how long that took.
+    void requestIdleWork(const void* owner, int64_t estimateNanos, std::function<bool()> start, std::function<void(int64_t)> took);
+    bool hasIdleWork() const { return !idleWork_.empty(); }
+    void idle(int64_t budgetNanos);
 
     // Input, in dp. Times are on the frame clock (-1: the last frame's time); they drive
     // fling velocity. Each finger has its own pointer id: the first one down leads (clicks,
@@ -547,6 +556,13 @@ private:
         bool moved = true;  // it moved last frame: this one draws where it stopped
     };
     std::vector<Ripple> ripples_;
+    struct IdleWork {
+        const void* owner;
+        int64_t estimateNanos;
+        std::function<bool()> start;
+        std::function<void(int64_t)> took;
+    };
+    std::vector<IdleWork> idleWork_;
     // onGloballyPositioned / onPlaced: what each was last told, by node and element.
     std::map<std::pair<const LayoutNode*, size_t>, LayoutCoordinates> positioned_;
     // onVisibilityChanged / onFirstVisible: what each was last found, told and waits to tell.

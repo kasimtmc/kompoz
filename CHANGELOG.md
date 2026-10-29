@@ -325,6 +325,12 @@
   frame's paths fill most of it themselves: then those in it are kept and the rest drawn as before, rather than all
   rasterized again each frame. Going between the Home and Components tabs five times on a Redmi Note 9 Pro missed
   20–22 refreshes instead of 36. `KOMPOZ_PROFILE` counts paths drawn and kept in its slow frames.
+- **Lazy lists and grids compose ahead in the pauses between frames** (as Compose prefetches): while one scrolls, the
+  item past those it has composed that way is composed in the time before the next frame is due
+  (`ComposeHost::requestIdleWork` and `idle()`, which the app calls there), if what an item of its content type took
+  before fits in it, so the frame it scrolls in doesn't compose it. LazyColumn, LazyRow and the grids built on them,
+  and the staggered grids. Scrolling the showcase's Components screen with real swipes on a Redmi Note 9 Pro, frames
+  whose composition took more than 16 ms fell from 11–22 a run to 1–5, the longest from 72–109 ms to 41–61.
 - **The pipeline cache is kept for the shaders it was made from**: its file is named after them (scripts/shaders.py
   writes each generated header's version, `Renderer::shadersVersion()` puts them together), and an app removes the
   backend's files of other shaders when it starts. A driver keeps what it is given, so an older build's pipelines

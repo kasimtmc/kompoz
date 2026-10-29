@@ -1639,9 +1639,11 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
     // changed nothing on the screen) would get the last one's time, so a scroll or an animation
     // would stand still in it and jump two beats in the next. (A frame not shown waits so too:
     // an animation out of view doesn't spin as fast as it can.)
+    // The pause until then is the host's for work between frames (a lazy list's next item).
     if (app.lastFrameTime >= 0 && !(scripted && !app.script.realtime))
         if (int64_t due = app.lastFrameTime + int64_t(app.framePeriodNs) * 3 / 5, at = app.clock(); at < due) {
-            SDL_DelayNS(uint64_t(due - at));
+            if (app.host->hasIdleWork()) app.host->idle(due - at), at = app.clock();
+            if (at < due) SDL_DelayNS(uint64_t(due - at));
             iterationStart = SDL_GetTicksNS();  // (its work starts now)
         }
 #endif
