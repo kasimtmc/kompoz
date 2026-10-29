@@ -344,6 +344,10 @@
   dolduruyorsa başlamaz: içindekiler tutulur, kalanlar eskisi gibi çizilir, her karede hepsi yeniden taranmaz. Bir
   Redmi Note 9 Pro'da Ana sayfa ile Bileşenler sekmeleri arasında beş kez gidip gelmek 36 yerine 20–22 tazeleme
   kaçırdı. `KOMPOZ_PROFILE` yavaş karelerinde çizilen ve tutulan yolları sayar.
+- **Kompoz'un kendi platform katmanı**, SDL3'ün yerine kuruluyor (pencere, girdi, kare döngüsü ve uygulamanın
+  yaşam döngüsü, her platformda kendisininki; kareler Compose'unkiler gibi ekranın kendi vuruşunda): uygulama
+  çekirdeği artık Kompoz'un kendi olaylarını alıyor (`platform/app/platform_event.hpp`), SDL'inkiler geldikleri yerde
+  bunlara çevriliyor; `KOMPOZ_SCRIPT` de SDL'in kuyruğuna SDL olayı koymak yerine çekirdeğe kendi olaylarını veriyor.
 - **Bir yolun gölgesi önceden sahip olduğu maskeden çiziliyor** (Compose'un bir `dropShadow`'un ya da
   `innerShadow`'un bulanık bitmap'ini tutması gibi): GPU renderer'ı yuvarlak köşeli dikdörtgen olmayan bir şeklin
   (kalp, yıldız, kurabiye) gölgesini her seferinde baştan, her biri iki geçişli bir katman ve bir bulanıklıkla

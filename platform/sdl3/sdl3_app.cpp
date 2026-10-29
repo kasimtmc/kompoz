@@ -15,6 +15,7 @@
 #include <kompoz/preview.hpp>
 
 #include "../gpu/renderer.hpp"
+#include "../app/platform_event.hpp"
 #include "font_system.hpp"
 #include "image_loader.hpp"
 #ifdef KOMPOZ_GPU_VULKAN
@@ -108,7 +109,6 @@ struct Script {
     // A swipe in progress: one pointer move per frame, so it has a real velocity.
     Offset swipeFrom, swipeTo;
     int swipeFrames = 0, swipeStep = 0;
-    std::deque<std::string> dropped;  // what dropfile/droptext pushed to SDL, alive until handled
     bool realtime = false;  // `realtime`: from there on the clock is real and frames are paced as without a script
 
     bool enabled() const { return !commands.empty(); }
@@ -762,6 +762,8 @@ void profileGpu(App& app) {
     }
 }
 
+void handleEvent(App& app, const platform::Event& e);
+
 std::string stepScript(App& app) {
     Script& s = app.script;
     ComposeHost& host = *app.host;
@@ -850,33 +852,22 @@ std::string stepScript(App& app) {
             std::string what;
             in >> x >> y;
             std::getline(in >> std::ws, what);
-            s.dropped.push_back(what);
             float k = 1 / app.pointToDp;  // dp -> window points
-            auto push = [&](SDL_EventType type, const char* data) {
-                SDL_Event e{};
-                e.drop.type = type;
-                e.drop.x = x * k;
-                e.drop.y = y * k;
-                e.drop.data = data;
-                SDL_PushEvent(&e);
-            };
-            push(SDL_EVENT_DROP_BEGIN, nullptr);
-            push(SDL_EVENT_DROP_POSITION, nullptr);
-            push(command == "dropfile" ? SDL_EVENT_DROP_FILE : SDL_EVENT_DROP_TEXT, s.dropped.back().c_str());
-            push(SDL_EVENT_DROP_COMPLETE, nullptr);
+            for (platform::EventType type : {platform::EventType::DropBegin, platform::EventType::DropMove,
+                                             command == "dropfile" ? platform::EventType::DropFile : platform::EventType::DropText,
+                                             platform::EventType::DropComplete}) {
+                platform::Event e{.type = type, .x = x * k, .y = y * k};
+                if (type == platform::EventType::DropFile || type == platform::EventType::DropText) e.text = what;
+                handleEvent(app, e);
+            }
         } else if (command == "window") {  // window focuslost|focusgained|minimized|restored: as the window manager would
             std::string what;
             in >> what;
-            static const std::pair<std::string_view, SDL_EventType> names[] = {
-                {"focuslost", SDL_EVENT_WINDOW_FOCUS_LOST}, {"focusgained", SDL_EVENT_WINDOW_FOCUS_GAINED},
-                {"minimized", SDL_EVENT_WINDOW_MINIMIZED}, {"restored", SDL_EVENT_WINDOW_RESTORED}};
+            static const std::pair<std::string_view, platform::EventType> names[] = {
+                {"focuslost", platform::EventType::FocusLost}, {"focusgained", platform::EventType::FocusGained},
+                {"minimized", platform::EventType::Minimized}, {"restored", platform::EventType::Restored}};
             for (const auto& [n, type] : names)
-                if (what == n) {
-                    SDL_Event e{};
-                    e.window.type = type;
-                    e.window.windowID = SDL_GetWindowID(app.window);
-                    SDL_PushEvent(&e);
-                }
+                if (what == n) handleEvent(app, {.type = type});
         } else if (command == "zoom") {  // zoom x y factor: Ctrl+wheel or a touchpad pinch
             float factor = 1;
             in >> x >> y >> factor;
@@ -950,113 +941,240 @@ void updateLifecycle(App& app) {
 #endif
 }
 
-// The mouse's buttons other than the left one, as onPointerEvent knows them.
-std::optional<PointerButton> otherButton(Uint8 button) {
-    switch (button) {
-    case SDL_BUTTON_RIGHT: return PointerButton::Secondary;
-    case SDL_BUTTON_MIDDLE: return PointerButton::Tertiary;
-    case SDL_BUTTON_X1: return PointerButton::Back;
-    case SDL_BUTTON_X2: return PointerButton::Forward;
-    default: return std::nullopt;
-    }
-}
 
-void handleEvent(App& app, const SDL_Event& e) {
-    ComposeHost& host = *app.host;
-    bool metrics = (e.type >= SDL_EVENT_WINDOW_FIRST && e.type <= SDL_EVENT_WINDOW_LAST) || e.type == SDL_EVENT_SYSTEM_THEME_CHANGED ||
-                   e.type == SDL_EVENT_LOCALE_CHANGED;
-    if (app.metricsChanged && !metrics) {  // (input meets the window as it is now)
-        app.metricsChanged = false;
-        updateMetrics(app);
-    }
+// SDL's event as the app core takes it (platform::Event), or none for one it doesn't use. What
+// is SDL's own is dealt with here: the mouse events it makes up from fingers left out, a finger's
+// position as a fraction of the window, a touchpad pinch's scale as Wayland gives it.
+std::optional<platform::Event> fromSdl(App& app, const SDL_Event& e) {
+    using platform::EventType;
+    platform::Event out;
+    auto held = [](SDL_Keymod m) { return KeyModifiers{(m & SDL_KMOD_SHIFT) != 0, (m & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) != 0, (m & SDL_KMOD_ALT) != 0}; };
+    auto with = [&](EventType type) {
+        out.type = type;
+        return std::optional(out);
+    };
 #ifdef KOMPOZ_DESKTOP_ACCENT
-    if (app.accent && app.accent->eventType() != 0 && e.type == app.accent->eventType()) {  // learned or changed
-        std::optional<Color> accent = app.accent->accent();
-        host.setDynamicTonalPalette(accent ? std::optional(TonalPalette::fromSeed(*accent)) : std::nullopt);
-        return;
-    }
+    if (app.accent && app.accent->eventType() != 0 && e.type == app.accent->eventType()) return with(EventType::AccentChanged);
 #endif
 #ifdef KOMPOZ_WALLPAPER_COLORS
-    if (app.wallpaper && app.wallpaper->eventType() != 0 && e.type == app.wallpaper->eventType()) {  // read or changed
-        host.setWallpaperTonalPalette(app.wallpaper->palette());
-        return;
-    }
+    if (app.wallpaper && app.wallpaper->eventType() != 0 && e.type == app.wallpaper->eventType()) return with(EventType::WallpaperChanged);
 #endif
 #ifdef KOMPOZ_A11Y_BRIDGE
-    if (app.a11y && app.a11y->eventType() != 0 && e.type == app.a11y->eventType()) {  // asked for, or connected
-        for (const auto& r : app.a11y->takeRequests()) {
-            if (r.action == kompoz::SemanticsAction::SetText) host.performSemanticsAction(r.id, r.action, r.text);
-            else host.performSemanticsAction(r.id, r.action, r.argument);
-        }
-        return;
-    }
+    if (app.a11y && app.a11y->eventType() != 0 && e.type == app.a11y->eventType()) return with(EventType::AccessibilityRequest);
 #endif
-    switch (e.type) {  // pointer events carry the keys held down
-    case SDL_EVENT_MOUSE_BUTTON_DOWN:
-    case SDL_EVENT_MOUSE_BUTTON_UP:
-    case SDL_EVENT_MOUSE_MOTION:
-    case SDL_EVENT_MOUSE_WHEEL:
-    case SDL_EVENT_KEY_DOWN:
-    case SDL_EVENT_KEY_UP: {
-        SDL_Keymod m = SDL_GetModState();
-        host.setKeyboardModifiers({(m & SDL_KMOD_SHIFT) != 0, (m & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) != 0, (m & SDL_KMOD_ALT) != 0});
-        break;
-    }
-    default: break;
-    }
+    if (e.type == app.wakeEvent) return with(EventType::Wake);
     switch (e.type) {
-    case SDL_EVENT_WINDOW_FOCUS_GAINED:
-    case SDL_EVENT_WINDOW_FOCUS_LOST:
-        app.focused = e.type == SDL_EVENT_WINDOW_FOCUS_GAINED;
-        app.semanticsDirty = true;  // (AT-SPI tells which window is active)
-        host.setWindowFocused(app.focused);
-        updateLifecycle(app);
-        break;
-    case SDL_EVENT_WINDOW_MINIMIZED:
-    case SDL_EVENT_WINDOW_MAXIMIZED:
-        app.minimized = e.type == SDL_EVENT_WINDOW_MINIMIZED;
-        updateLifecycle(app);
-        break;
-    case SDL_EVENT_WINDOW_HIDDEN:
-        app.hidden = true;
-        updateLifecycle(app);
-        break;
-#if defined(SDL_PLATFORM_ANDROID) || defined(SDL_PLATFORM_IOS)
-    case SDL_EVENT_DID_ENTER_BACKGROUND:
-        host.setLifecycleState(LifecycleState::Created);
-        if (app.gpuCanvas) app.gpuCanvas->trimMemory();  // (as Android's renderer when the UI is hidden)
-        break;
-    case SDL_EVENT_WILL_ENTER_FOREGROUND:
-        host.setLifecycleState(LifecycleState::Started);
-        break;
-#endif
-    case SDL_EVENT_MOUSE_ADDED:  // what mediaQuery tells of the pointer and the keyboard
-    case SDL_EVENT_MOUSE_REMOVED:
-    case SDL_EVENT_KEYBOARD_ADDED:
-    case SDL_EVENT_KEYBOARD_REMOVED:
-        refreshMedia(app);
-        break;
+    case SDL_EVENT_QUIT: return with(EventType::Quit);
+    case SDL_EVENT_WINDOW_FOCUS_GAINED: return with(EventType::FocusGained);
+    case SDL_EVENT_WINDOW_FOCUS_LOST: return with(EventType::FocusLost);
+    case SDL_EVENT_WINDOW_SHOWN: return with(EventType::Shown);
+    case SDL_EVENT_WINDOW_HIDDEN: return with(EventType::Hidden);
+    case SDL_EVENT_WINDOW_MINIMIZED: return with(EventType::Minimized);
+    case SDL_EVENT_WINDOW_MAXIMIZED: return with(EventType::Maximized);
+    case SDL_EVENT_WINDOW_RESTORED: return with(EventType::Restored);
+    case SDL_EVENT_WINDOW_EXPOSED: return with(EventType::Exposed);
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-    case SDL_EVENT_WINDOW_RESIZED:
-        app.resizeFrames = 4;
-        [[fallthrough]];
+    case SDL_EVENT_WINDOW_RESIZED: return with(EventType::Resized);
     case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
     case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
     case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
     case SDL_EVENT_SYSTEM_THEME_CHANGED:
-    case SDL_EVENT_LOCALE_CHANGED:
+    case SDL_EVENT_LOCALE_CHANGED: return with(EventType::MetricsChanged);
+    case SDL_EVENT_MOUSE_ADDED:
+    case SDL_EVENT_MOUSE_REMOVED:
+    case SDL_EVENT_KEYBOARD_ADDED:
+    case SDL_EVENT_KEYBOARD_REMOVED: return with(EventType::DevicesChanged);
+    case SDL_EVENT_RENDER_TARGETS_RESET: return with(EventType::SurfaceLost);
+    case SDL_EVENT_WILL_ENTER_BACKGROUND: return with(EventType::WillEnterBackground);
+    case SDL_EVENT_DID_ENTER_BACKGROUND: return with(EventType::DidEnterBackground);
+    case SDL_EVENT_WILL_ENTER_FOREGROUND: return with(EventType::WillEnterForeground);
+    case SDL_EVENT_DID_ENTER_FOREGROUND: return with(EventType::DidEnterForeground);
+    case SDL_EVENT_LOW_MEMORY: return with(EventType::LowMemory);
+    case SDL_EVENT_WINDOW_MOUSE_LEAVE: return with(EventType::PointerLeft);
+    // Touch screens send fingers (each with its own id, for pinch and twist) and SDL also makes up
+    // mouse events from them: those are left out.
+    case SDL_EVENT_MOUSE_MOTION:
+        if (e.motion.which == SDL_TOUCH_MOUSEID) return std::nullopt;
+        out.x = e.motion.x, out.y = e.motion.y, out.time = int64_t(e.motion.timestamp), out.modifiers = held(SDL_GetModState());
+        return with(EventType::MouseMove);
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+        if (e.button.which == SDL_TOUCH_MOUSEID) return std::nullopt;
+        switch (e.button.button) {
+        case SDL_BUTTON_LEFT: out.button = platform::MouseButton::Left; break;
+        case SDL_BUTTON_RIGHT: out.button = platform::MouseButton::Right; break;
+        case SDL_BUTTON_MIDDLE: out.button = platform::MouseButton::Middle; break;
+        case SDL_BUTTON_X1: out.button = platform::MouseButton::Back; break;
+        case SDL_BUTTON_X2: out.button = platform::MouseButton::Forward; break;
+        default: return std::nullopt;
+        }
+        out.x = e.button.x, out.y = e.button.y, out.time = int64_t(e.button.timestamp), out.modifiers = held(SDL_GetModState());
+        return with(e.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? EventType::MouseDown : EventType::MouseUp);
+    case SDL_EVENT_FINGER_DOWN:
+    case SDL_EVENT_FINGER_MOTION:
+    case SDL_EVENT_FINGER_UP:
+    case SDL_EVENT_FINGER_CANCELED: {
+        if (SDL_GetTouchDeviceType(e.tfinger.touchID) != SDL_TOUCH_DEVICE_DIRECT) return std::nullopt;  // touchpads move the mouse
+        int w = 0, h = 0;  // finger positions are fractions of the window
+        SDL_GetWindowSize(app.window, &w, &h);
+        out.x = e.tfinger.x * float(w), out.y = e.tfinger.y * float(h);
+        out.pointer = int64_t(e.tfinger.fingerID), out.time = int64_t(e.tfinger.timestamp);
+        return with(e.type == SDL_EVENT_FINGER_DOWN ? EventType::TouchDown : e.type == SDL_EVENT_FINGER_MOTION ? EventType::TouchMove : EventType::TouchUp);
+    }
+    case SDL_EVENT_MOUSE_WHEEL: {
+        float flip = e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.f : 1.f;
+        out.x = e.wheel.mouse_x, out.y = e.wheel.mouse_y, out.dx = e.wheel.x * flip, out.dy = e.wheel.y * flip;
+        out.modifiers = held(SDL_GetModState());
+#ifdef SDL_PLATFORM_EMSCRIPTEN
+        out.modifiers.ctrl = out.modifiers.ctrl || kompoz_web_wheel_ctrl();  // (a touchpad pinch, as the browser sends it)
+#endif
+        return with(EventType::Wheel);
+    }
+    case SDL_EVENT_PINCH_BEGIN:
+        app.pinchScale = 1;
+        return with(EventType::PinchBegin);
+    case SDL_EVENT_PINCH_UPDATE: {  // a touchpad pinch (Wayland, macOS): around the mouse pointer
+        out.scale = e.pinch.scale;
+        // Wayland gives the scale since the pinch began, which SDL passes on as the change since
+        // the last update: multiplied up, the smallest finger movement zoomed a lot.
+        if (app.pinchSinceStart) {
+            out.scale = e.pinch.scale / std::max(app.pinchScale, 1e-3f);
+            app.pinchScale = e.pinch.scale;
+        }
+        SDL_GetMouseState(&out.x, &out.y);
+        return with(EventType::Pinch);
+    }
+    case SDL_EVENT_TEXT_INPUT:
+        out.text = e.text.text;
+        return with(EventType::Text);
+    case SDL_EVENT_KEY_DOWN:
+    case SDL_EVENT_KEY_UP:
+        out.modifiers = held(e.key.mod);
+        if (e.key.key == SDLK_AC_BACK) {  // Android's back button
+            if (e.type == SDL_EVENT_KEY_UP) return std::nullopt;
+#ifdef SDL_PLATFORM_ANDROID
+            // From Android 13 back comes as the app's OnBackInvokedCallback while it takes back
+            // (KompozInput.setBackEnabled), and the system goes back itself otherwise. Taken here
+            // too, the key would do it twice: a drawer closed by it, its callback gone by the
+            // time the key is let go, and the system then leaving the app.
+            if (SDL_GetAndroidSDKVersion() >= 33) return std::nullopt;
+#endif
+            return with(EventType::Back);
+        }
+        out.key = keyOf(e.key.key);  // (Unknown too: the keys it holds down, a Shift, still count)
+        return with(e.type == SDL_EVENT_KEY_DOWN ? EventType::KeyDown : EventType::KeyUp);
+    case SDL_EVENT_DROP_BEGIN: return with(EventType::DropBegin);
+    case SDL_EVENT_DROP_POSITION:
+        out.x = e.drop.x, out.y = e.drop.y;
+        return with(EventType::DropMove);
+    case SDL_EVENT_DROP_FILE:
+    case SDL_EVENT_DROP_TEXT:
+        out.x = e.drop.x, out.y = e.drop.y;
+        if (e.drop.data) out.text = e.drop.data;
+        return with(e.type == SDL_EVENT_DROP_FILE ? EventType::DropFile : EventType::DropText);
+    case SDL_EVENT_DROP_COMPLETE: return with(EventType::DropComplete);
+    default: return std::nullopt;
+    }
+}
+
+// The mouse's buttons other than the left one, as onPointerEvent knows them.
+PointerButton otherButton(platform::MouseButton button) {
+    switch (button) {
+    case platform::MouseButton::Right: return PointerButton::Secondary;
+    case platform::MouseButton::Middle: return PointerButton::Tertiary;
+    case platform::MouseButton::Back: return PointerButton::Back;
+    default: return PointerButton::Forward;
+    }
+}
+
+void handleEvent(App& app, const platform::Event& e) {
+    using platform::EventType;
+    ComposeHost& host = *app.host;
+    bool window = e.type == EventType::FocusGained || e.type == EventType::FocusLost || e.type == EventType::Shown || e.type == EventType::Hidden ||
+                  e.type == EventType::Minimized || e.type == EventType::Maximized || e.type == EventType::Restored || e.type == EventType::Exposed ||
+                  e.type == EventType::Resized || e.type == EventType::MetricsChanged || e.type == EventType::PointerLeft;
+    if (app.metricsChanged && !window) {  // (input meets the window as it is now)
+        app.metricsChanged = false;
+        updateMetrics(app);
+    }
+    switch (e.type) {  // pointer events carry the keys held down
+    case EventType::MouseDown:
+    case EventType::MouseUp:
+    case EventType::MouseMove:
+    case EventType::Wheel:
+    case EventType::KeyDown:
+    case EventType::KeyUp: host.setKeyboardModifiers(e.modifiers); break;
+    default: break;
+    }
+    Offset at = app.toDp(e.x, e.y);
+    switch (e.type) {
+#ifdef KOMPOZ_DESKTOP_ACCENT
+    case EventType::AccentChanged:  // learned or changed
+        if (app.accent) {
+            std::optional<Color> accent = app.accent->accent();
+            host.setDynamicTonalPalette(accent ? std::optional(TonalPalette::fromSeed(*accent)) : std::nullopt);
+        }
+        break;
+#endif
+#ifdef KOMPOZ_WALLPAPER_COLORS
+    case EventType::WallpaperChanged:  // read or changed
+        if (app.wallpaper) host.setWallpaperTonalPalette(app.wallpaper->palette());
+        break;
+#endif
+#ifdef KOMPOZ_A11Y_BRIDGE
+    case EventType::AccessibilityRequest:  // asked for, or connected
+        if (app.a11y)
+            for (const auto& r : app.a11y->takeRequests()) {
+                if (r.action == kompoz::SemanticsAction::SetText) host.performSemanticsAction(r.id, r.action, r.text);
+                else host.performSemanticsAction(r.id, r.action, r.argument);
+            }
+        break;
+#endif
+    case EventType::Quit: app.quit = true; break;
+    case EventType::FocusGained:
+    case EventType::FocusLost:
+        app.focused = e.type == EventType::FocusGained;
+        app.semanticsDirty = true;  // (AT-SPI tells which window is active)
+        host.setWindowFocused(app.focused);
+        updateLifecycle(app);
+        break;
+    case EventType::Minimized:
+    case EventType::Maximized:
+        app.minimized = e.type == EventType::Minimized;
+        updateLifecycle(app);
+        break;
+    case EventType::Hidden:
+        app.hidden = true;
+        updateLifecycle(app);
+        break;
+#if defined(SDL_PLATFORM_ANDROID) || defined(SDL_PLATFORM_IOS)
+    case EventType::DidEnterBackground:
+        host.setLifecycleState(LifecycleState::Created);
+        if (app.gpuCanvas) app.gpuCanvas->trimMemory();  // (as Android's renderer when the UI is hidden)
+        break;
+    case EventType::WillEnterForeground:
+        host.setLifecycleState(LifecycleState::Started);
+        break;
+#endif
+    case EventType::DevicesChanged:  // what mediaQuery tells of the pointer and the keyboard
+        refreshMedia(app);
+        break;
+    case EventType::Resized:
+        app.resizeFrames = 4;
+        [[fallthrough]];
+    case EventType::MetricsChanged:
         app.metricsChanged = true;
         break;
-    case SDL_EVENT_DID_ENTER_FOREGROUND:
+    case EventType::DidEnterForeground:
         updateMetrics(app);  // the wallpaper (and so the dynamic colors) may have changed meanwhile
 #if defined(SDL_PLATFORM_ANDROID) || defined(SDL_PLATFORM_IOS)
         host.setLifecycleState(LifecycleState::Resumed);
 #endif
         [[fallthrough]];
-    case SDL_EVENT_WINDOW_SHOWN:
-    case SDL_EVENT_WINDOW_RESTORED:
-        if (e.type == SDL_EVENT_WINDOW_SHOWN) app.hidden = false;
-        if (e.type == SDL_EVENT_WINDOW_RESTORED) app.minimized = false;
+    case EventType::Shown:
+    case EventType::Restored:
+        if (e.type == EventType::Shown) app.hidden = false;
+        if (e.type == EventType::Restored) app.minimized = false;
         updateLifecycle(app);
         // Back on the screen: Android gives the window a new, empty surface, which shows nothing
         // until a frame is put in it, and with nothing changed none would be (black until a tap).
@@ -1066,55 +1184,48 @@ void handleEvent(App& app, const SDL_Event& e) {
         host.requestRedraw();
         break;
 #ifdef SDL_PLATFORM_ANDROID
-    case SDL_EVENT_WILL_ENTER_BACKGROUND:  // on the SDL thread, between frames: Android may end the app from now on
+    case EventType::WillEnterBackground:  // on the SDL thread, between frames: Android may end the app from now on
         host.setLifecycleState(LifecycleState::Started);  // paused: what that saves goes in the saved state
         android_ime::setSavedState(host.saveState());
         break;
 #endif
-    case SDL_EVENT_WINDOW_EXPOSED:
+    case EventType::Exposed:
         app.showFrame = true;
         host.requestRedraw();
         break;
-    case SDL_EVENT_LOW_MEMORY:
+    case EventType::LowMemory:
         if (app.gpuCanvas) app.gpuCanvas->trimMemory();
         break;
-    case SDL_EVENT_RENDER_TARGETS_RESET:  // the kept pixels are gone
+    case EventType::SurfaceLost:  // the kept pixels are gone
         if (app.display) app.display->invalidate();
         app.showFrame = true;
         host.requestRedraw();
         break;
-    case SDL_EVENT_WINDOW_MOUSE_LEAVE:
-        host.pointerExit();
-        break;
-    // Touch screens send fingers (each with its own id, for pinch and twist) and SDL also
-    // makes up mouse events from them: those are left out.
-    case SDL_EVENT_MOUSE_MOTION:
-        if (e.motion.which == SDL_TOUCH_MOUSEID) break;
-        host.pointerMove(app.toDp(e.motion.x, e.motion.y), app.eventTime(e.motion.timestamp));
-        break;
+    case EventType::PointerLeft: host.pointerExit(); break;
+    case EventType::MouseMove: host.pointerMove(at, app.eventTime(e.time)); break;
     // Files from a file manager, text from a browser: the dragAndDropTargets take them.
-    case SDL_EVENT_DROP_BEGIN:
+    case EventType::DropBegin:
         app.dropping = true;
         app.dropFiles.clear();
         app.dropText.clear();
         host.externalDragEntered({"text/uri-list", "text/plain"});  // which one isn't told until the drop
         break;
-    case SDL_EVENT_DROP_POSITION:
+    case EventType::DropMove:
         if (!app.dropping) {
             app.dropping = true;
             host.externalDragEntered({"text/uri-list", "text/plain"});
         }
-        host.externalDragMoved(app.toDp(e.drop.x, e.drop.y));
+        host.externalDragMoved(at);
         break;
-    case SDL_EVENT_DROP_FILE:
-        if (e.drop.data) app.dropFiles.emplace_back(e.drop.data);
-        app.dropAt = app.toDp(e.drop.x, e.drop.y);
+    case EventType::DropFile:
+        if (!e.text.empty()) app.dropFiles.push_back(e.text);
+        app.dropAt = at;
         break;
-    case SDL_EVENT_DROP_TEXT:
-        if (e.drop.data) app.dropText += e.drop.data;
-        app.dropAt = app.toDp(e.drop.x, e.drop.y);
+    case EventType::DropText:
+        app.dropText += e.text;
+        app.dropAt = at;
         break;
-    case SDL_EVENT_DROP_COMPLETE: {
+    case EventType::DropComplete: {
         app.dropping = false;
         kompoz::DragAndDropTransferData data;
         if (!app.dropFiles.empty()) {
@@ -1133,102 +1244,47 @@ void handleEvent(App& app, const SDL_Event& e) {
         app.dropText.clear();
         break;
     }
-    case SDL_EVENT_MOUSE_BUTTON_DOWN:
-        if (e.button.button == SDL_BUTTON_LEFT && e.button.which != SDL_TOUCH_MOUSEID)
-            host.pointerDown(app.toDp(e.button.x, e.button.y), app.eventTime(e.button.timestamp), 0, kompoz::ComposeHost::PointerType::Mouse);
-        else if (auto button = otherButton(e.button.button); button && e.button.which != SDL_TOUCH_MOUSEID) {
-            host.mouseButton(app.toDp(e.button.x, e.button.y), *button, true);
-            if (*button == PointerButton::Secondary) host.secondaryClick(app.toDp(e.button.x, e.button.y));  // context menus
-        }
-        break;
-    case SDL_EVENT_MOUSE_BUTTON_UP:
-        if (e.button.button == SDL_BUTTON_LEFT && e.button.which != SDL_TOUCH_MOUSEID)
-            host.pointerUp(app.toDp(e.button.x, e.button.y), app.eventTime(e.button.timestamp));
-        else if (auto button = otherButton(e.button.button); button && e.button.which != SDL_TOUCH_MOUSEID)
-            host.mouseButton(app.toDp(e.button.x, e.button.y), *button, false);
-        break;
-    case SDL_EVENT_FINGER_DOWN:
-    case SDL_EVENT_FINGER_MOTION:
-    case SDL_EVENT_FINGER_UP:
-    case SDL_EVENT_FINGER_CANCELED: {
-        if (SDL_GetTouchDeviceType(e.tfinger.touchID) != SDL_TOUCH_DEVICE_DIRECT) break;  // touchpads move the mouse
-        int w = 0, h = 0;  // finger positions are fractions of the window
-        SDL_GetWindowSize(app.window, &w, &h);
-        Offset p = app.toDp(e.tfinger.x * float(w), e.tfinger.y * float(h));
-        auto id = int64_t(e.tfinger.fingerID);
-        auto time = app.eventTime(e.tfinger.timestamp);
-        if (e.type == SDL_EVENT_FINGER_DOWN) {
-            host.pointerDown(p, time, id);
-        } else if (e.type == SDL_EVENT_FINGER_MOTION) {
-            host.pointerMove(p, time, id);
+    case EventType::MouseDown:
+        if (e.button == platform::MouseButton::Left) {
+            host.pointerDown(at, app.eventTime(e.time), 0, kompoz::ComposeHost::PointerType::Mouse);
         } else {
-            host.pointerUp(p, time, id);
-            host.pointerExit();  // a lifted finger doesn't hover
+            host.mouseButton(at, otherButton(e.button), true);
+            if (e.button == platform::MouseButton::Right) host.secondaryClick(at);  // context menus
         }
         break;
-    }
-    case SDL_EVENT_MOUSE_WHEEL: {
-        float flip = e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.f : 1.f;
-        Offset p = app.toDp(e.wheel.mouse_x, e.wheel.mouse_y);
+    case EventType::MouseUp:
+        if (e.button == platform::MouseButton::Left) host.pointerUp(at, app.eventTime(e.time));
+        else host.mouseButton(at, otherButton(e.button), false);
+        break;
+    case EventType::TouchDown: host.pointerDown(at, app.eventTime(e.time), e.pointer); break;
+    case EventType::TouchMove: host.pointerMove(at, app.eventTime(e.time), e.pointer); break;
+    case EventType::TouchUp:
+        host.pointerUp(at, app.eventTime(e.time), e.pointer);
+        host.pointerExit();  // a lifted finger doesn't hover
+        break;
+    case EventType::Wheel:
         // Ctrl+wheel zooms (a transformable), as touchpad pinches do on Windows and the web.
-        bool ctrl = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
-#ifdef SDL_PLATFORM_EMSCRIPTEN
-        ctrl = ctrl || kompoz_web_wheel_ctrl();
-#endif
-        bool shift = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
-        if (ctrl && shift && host.zoom(p, 1, -15 * e.wheel.y * flip)) break;  // Ctrl+Shift turns it, 15 degrees a notch
-        if (ctrl && host.zoom(p, std::pow(1.1f, e.wheel.y * flip))) break;
-        host.scroll(p, e.wheel.y * flip, e.wheel.x * flip);
+        if (e.modifiers.ctrl && e.modifiers.shift && host.zoom(at, 1, -15 * e.dy)) break;  // Ctrl+Shift turns it, 15 degrees a notch
+        if (e.modifiers.ctrl && host.zoom(at, std::pow(1.1f, e.dy))) break;
+        host.scroll(at, e.dy, e.dx);
         break;
-    }
-    case SDL_EVENT_PINCH_BEGIN:
-        app.pinchScale = 1;
-        break;
-    case SDL_EVENT_PINCH_UPDATE: {  // a touchpad pinch (Wayland, macOS): around the mouse pointer
-        float factor = e.pinch.scale;
-        // Wayland gives the scale since the pinch began, which SDL passes on as the change since
-        // the last update: multiplied up, the smallest finger movement zoomed a lot.
-        if (app.pinchSinceStart) {
-            factor = e.pinch.scale / std::max(app.pinchScale, 1e-3f);
-            app.pinchScale = e.pinch.scale;
-        }
-        float x = 0, y = 0;
-        SDL_GetMouseState(&x, &y);
-        host.zoom(app.toDp(x, y), factor);
-        break;
-    }
-    case SDL_EVENT_TEXT_INPUT:
-        host.textInput(e.text.text);
-        break;
-    case SDL_EVENT_KEY_DOWN:
-    case SDL_EVENT_KEY_UP: {
-        KeyModifiers mods{(e.key.mod & SDL_KMOD_SHIFT) != 0, (e.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) != 0,
-                          (e.key.mod & SDL_KMOD_ALT) != 0};
-        if (e.key.key == SDLK_AC_BACK) {  // Android's back button
-            if (e.type == SDL_EVENT_KEY_UP) break;
+    case EventType::Pinch: host.zoom(at, e.scale); break;
+    case EventType::Text: host.textInput(e.text); break;
+    case EventType::Back:
 #ifdef SDL_PLATFORM_ANDROID
-            // From Android 13 back comes as the app's OnBackInvokedCallback while it takes back
-            // (KompozInput.setBackEnabled), and the system goes back itself otherwise. Taken here
-            // too, the key would do it twice: a drawer closed by it, its callback gone by the
-            // time the key is let go, and the system then leaving the app.
-            if (SDL_GetAndroidSDKVersion() >= 33) break;
-            if (!host.keyDown(Key::Escape)) SDL_SendAndroidBackButton();  // leave the app as usual
+        if (!host.keyDown(Key::Escape)) SDL_SendAndroidBackButton();  // leave the app as usual
 #else
-            host.keyDown(Key::Escape);
+        host.keyDown(Key::Escape);
 #endif
-            break;
-        }
-        Key key = keyOf(e.key.key);
-        if (key == Key::Unknown) break;
-        if (e.type == SDL_EVENT_KEY_DOWN)
-            host.keyDown(key, mods);
-        else
-            host.keyUp(key, mods);
         break;
-    }
-    default:
-        if (e.type == app.wakeEvent) app.wakePending = false;
+    case EventType::KeyDown:
+    case EventType::KeyUp:
+        if (e.key == Key::Unknown) break;
+        if (e.type == EventType::KeyDown) host.keyDown(e.key, e.modifiers);
+        else host.keyUp(e.key, e.modifiers);
         break;
+    case EventType::Wake: app.wakePending = false; break;
+    default: break;
     }
 }
 
@@ -1862,7 +1918,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
     App& app = *static_cast<App*>(appstate);
     if (event->type == SDL_EVENT_QUIT) return SDL_APP_SUCCESS;
     uint64_t start = app.profile ? SDL_GetTicksNS() : 0;
-    kompoz::sdl::handleEvent(app, *event);
+    if (std::optional<kompoz::platform::Event> e = kompoz::sdl::fromSdl(app, *event)) kompoz::sdl::handleEvent(app, *e);
     if (app.profile) app.prof.eventsNs += SDL_GetTicksNS() - start;
     return SDL_APP_CONTINUE;
 }

@@ -325,6 +325,10 @@
   frame's paths fill most of it themselves: then those in it are kept and the rest drawn as before, rather than all
   rasterized again each frame. Going between the Home and Components tabs five times on a Redmi Note 9 Pro missed
   20–22 refreshes instead of 36. `KOMPOZ_PROFILE` counts paths drawn and kept in its slow frames.
+- **Kompoz's own platform layer**, being built in place of SDL3 (the window, input, the frame loop and the app's
+  lifecycle, on each platform its own, frames on the display's own beat as Compose's are): the app core takes
+  Kompoz's own events now (`platform/app/platform_event.hpp`), SDL's turned into them where they come in, and
+  `KOMPOZ_SCRIPT` gives the core its own instead of putting SDL events in SDL's queue.
 - **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
   blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
   scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and
