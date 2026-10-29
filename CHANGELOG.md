@@ -338,11 +338,11 @@
 - **A fill's and a layer's inside cost the GPU little**: a pixel well inside a solid rounded rect or a layer (half a
   pixel or more in from its edges, and its corners' radii on one axis), with no clip, color filter or perspective,
   takes its color, or the layer's texel at its alpha, from one value the vertex shader works out, not from the 14 the
-  rest of the fragment shader reads (not in a batch with a primitive in perspective or an image paint, whose pixels
-  need their neighbours'; glyphs and images take their mipmap level from the pixel's steps, exactly, no longer from
-  their neighbours). A Redmi Note 9 Pro's Adreno 618 spent most of a fill on reading those: a screen of a fill now
-  takes it 1.5 ms instead of 2.3. Going between the Home and Components tabs, its GPU time fell from 13.2–13.8 ms a
-  frame on average to 11.5–11.7 ms, scrolling the Components screen from 9.5–9.7 to 8.5.
+  rest of the fragment shader reads (what needs a pixel's neighbours, the steps in perspective and a texture's, worked
+  out before; after it, every mipmap level comes from those: images, glyphs and image paints through their maps). A
+  Redmi Note 9 Pro's Adreno 618 spent most of a fill on reading those: a screen of a fill now takes it 1.5 ms instead
+  of 2.3. Going between the Home and Components tabs, its GPU time fell from 13.2–13.8 ms a frame on average to
+  11.5–11.7 ms, scrolling the Components screen from 9.5–9.7 to 8.5.
 - **Pipelines are made ahead of the frames that need them**: the GPU renderer writes down each pipeline as it first
   needs it and, in the next runs, makes them again on a thread of its own in that order, where the device can (Vulkan).
   A Redmi Note 9 Pro's driver keeps none in its pipeline cache: each took 8–20 ms in the frame that first drew with it,

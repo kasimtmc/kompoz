@@ -323,7 +323,8 @@ float2 maskTexcoord(float2 texel) {
 // stops' straight colors mixed, then premultiplied) at the color's alpha; an image from texture1,
 // or texture5 (`second`: a composite's source). (Written without a return in a branch after the
 // first: llvmpipe on LLVM 20 crashes compiling the tile modes' branches with one.)
-float4 paintOne(float2 p, float4 color, float4 paint, float4 g, bool second) {
+// (gx, gy: how far p goes a device pixel across and down, for an image's mipmap level.)
+float4 paintOne(float2 p, float2 gx, float2 gy, float4 color, float4 paint, float4 g, bool second) {
     int kind = int(paint.x + 0.5);
     if (kind == 0 || (PAINTS & ~1) == 0) return color;
     int bits = int(paint.y + 0.5);
@@ -334,9 +335,11 @@ float4 paintOne(float2 p, float4 color, float4 paint, float4 g, bool second) {
         float3 r0 = tableTexel(last - 2, row).xyz, r1 = tableTexel(last - 1, row).xyz, r2 = tableTexel(last, row).xyz;
         float3 q = float3(dot(r0, h), dot(r1, h), dot(r2, h));
         p = q.xy / q.z;
+        float2 jx = (r0.xy - p.x * r2.xy) / q.z, jy = (r1.xy - p.y * r2.xy) / q.z;  // (the map's derivative there)
+        gx = float2(dot(jx, gx), dot(jy, gx)), gy = float2(dot(jx, gy), dot(jy, gy));
     }
     if (paints(IMAGE_PAINT) && kind == IMAGE_PAINT) {
-        float4 texel = second ? texture5.Sample(p) : texture1.Sample(p);
+        float4 texel = second ? texture5.SampleGrad(p, gx, gy) : texture1.SampleGrad(p, gx, gy);
         if ((bits & 48) != 0) {  // decal: as a transparent border filtered in (its edge texels fading out over a texel)
             float2 size;
             if (second) texture5.GetDimensions(size.x, size.y);
@@ -613,14 +616,15 @@ float mitchell(float x) {
 // texture0 (premultiplied, `size` texels) at uv through that cubic: the sixteen nearest texels,
 // each read at its center, weighed; kept a color (its overshoot cut off).
 // A glyph's or an image's texels (texture0) at uv, at the mipmap level for a device pixel: its
-// texture coordinate goes evenly across its shape (see vs), so the vertex shader's steps give
-// how far it goes a pixel across and down, exactly, with no derivatives (fs can be done with some
-// pixels before others get here). In perspective, where there are none, as the GPU works it out
-// (that variant has no early way out in fs).
-float4 sampleAt(float2 uv, Varyings v) {
-    if ((FLAGS & 32) != 0) return texture0.Sample(uv);
-    float2 across = (v.uv.zw - v.uv.xy) / (v.shape.zw - v.shape.xy);
-    return texture0.SampleGrad(uv, across * v.steps.xy, across * v.steps.zw);
+// texture coordinate goes evenly across its shape (see vs), so the vertex shader's steps give how
+// far it goes a pixel across and down, exactly; in perspective, where there are none, fs works
+// that out first (tx, ty).
+float4 sampleAt(float2 uv, Varyings v, float2 tx, float2 ty) {
+    if ((FLAGS & 32) == 0) {
+        float2 across = (v.uv.zw - v.uv.xy) / (v.shape.zw - v.shape.xy);
+        tx = across * v.steps.xy, ty = across * v.steps.zw;
+    }
+    return texture0.SampleGrad(uv, tx, ty);
 }
 
 float4 cubicSample(float2 uv, float2 size) {
@@ -636,53 +640,37 @@ float4 cubicSample(float2 uv, float2 size) {
 
 // The paint at p (see paintOne): a composite's two worked out there and blended, the source onto
 // the destination, as Skia's SkShaders::Blend does, at the color's alpha.
-float4 paintAt(float2 p, float4 color, float4 paint, float4 g) {
-    if (!paints(COMPOSITE_PAINT) || int(paint.x + 0.5) != COMPOSITE_PAINT) return paintOne(p, color, paint, g, false);
+float4 paintAt(float2 p, float2 gx, float2 gy, float4 color, float4 paint, float4 g) {
+    if (!paints(COMPOSITE_PAINT) || int(paint.x + 0.5) != COMPOSITE_PAINT) return paintOne(p, gx, gy, color, paint, g, false);
     float4 texel[5];
     for (int i = 0; i < 5; ++i) texel[i] = tableTexel(float(i), paint.w);
     float4 one = float4(1, 1, 1, 1);
-    float4 d = paintOne(p, one, texel[0], texel[1], false), s = paintOne(p, one, texel[2], texel[3], true);
+    float4 d = paintOne(p, gx, gy, one, texel[0], texel[1], false), s = paintOne(p, gx, gy, one, texel[2], texel[3], true);
     return blendColors(s, d, int(texel[4].x + 0.5)) * color.a;
 }
 
-[shader("fragment")]
-float4 fs(Varyings v) : SV_Target {
-    // Well inside a solid fill or a layer (see vs): its color, or the layer's texel at its alpha.
-    // Not in a variant whose pixels below take derivatives (in perspective, or an image paint's
-    // texels): some of their neighbours gone from here would leave those undefined, and a
-    // compiler may move what needs them past this. (Glyphs and images take theirs from the steps.)
-    if ((FLAGS & 32) == 0 && !paints(IMAGE_PAINT) && !paints(COMPOSITE_PAINT) && (drawn(FILL) || drawn(LAYER))) {
-        float4 a = abs(v.inside);
-        if ((a.x <= 1 && a.y <= 1) || (a.z <= 1 && a.w <= 1)) {
-            bool layer = drawn(LAYER) && (!drawn(FILL) || int(v.kindFlags.x + 0.5) == LAYER);
-            // (At level 0, the only one a layer's texture has: no derivatives, which some pixels
-            // around this one, gone on below, would leave undefined.)
-            return finish(layer ? texture0.SampleLevel(v.texcoord, 0) * v.color.a : v.color, 1, v.position.xy);
-        }
-    }
+// What fs works out for a pixel not well inside a solid fill or a layer: all the rest (dx, dy,
+// tx, ty: see fs).
+float4 shade(Varyings v, float2 dx, float2 dy, float2 tx, float2 ty) {
     int kind = int(v.kindFlags.x + 0.5);
     int flags = int(v.kindFlags.y + 0.5) & FLAGS;
-    // A device pixel's steps in the instance's space, exactly: the vertex shader's where they are
-    // the same everywhere; with a primitive in perspective in the batch (flag 32, a variant of its
-    // own: the others have no derivatives at all), the local point over w, and 1 over w, which go
-    // straight across the screen (their differences are exact), the local point doesn't.
-    float2 dx = v.steps.xy, dy = v.steps.zw;
-    if ((FLAGS & 32) != 0) {
-        float q = 1 / v.w;
-        float2 lq = v.local * q;
-        dx = (ddx(lq) - v.local * ddx(q)) / q, dy = (ddy(lq) - v.local * ddy(q)) / q;
+    if ((FLAGS & 32) == 0) dx = v.steps.xy, dy = v.steps.zw;
+    // Where the paint is taken, and how far that goes a pixel across and down (an image paint's
+    // mipmap level: the steps, through the paint's own map where it has one).
+    float2 painted = kind == MESH ? v.texcoord : v.local;
+    float2 gx = kind == MESH ? tx : dx, gy = kind == MESH ? ty : dy;
+    if ((flags & 4) != 0) {
+        float3 h = float3(v.local, 1);
+        float3 q = float3(dot(v.radii.xyz, h), dot(v.uv.xyz, h), dot(v.shape.xyz, h));
+        painted = q.xy / q.z;
+        float2 jx = (v.radii.xy - painted.x * v.shape.xy) / q.z, jy = (v.uv.xy - painted.y * v.shape.xy) / q.z;
+        gx = float2(dot(jx, gx), dot(jy, gx)), gy = float2(dot(jx, gy), dot(jy, gy));
     }
     // Not anti-aliased (flags & 16): coverage at the pixel's middle alone (a pixel shrunk to a
     // point), all or nothing below.
     bool aliased = (flags & 16) != 0;
     if (aliased) dx *= 1e-4, dy *= 1e-4;
-    float2 painted = kind == MESH ? v.texcoord : v.local;
-    if ((flags & 4) != 0) {
-        float3 h = float3(v.local, 1);
-        float3 q = float3(dot(v.radii.xyz, h), dot(v.uv.xyz, h), dot(v.shape.xyz, h));
-        painted = q.xy / q.z;
-    }
-    float4 paint = paintAt(painted, v.color, v.paint, v.gradient);
+    float4 paint = paintAt(painted, gx, gy, v.color, v.paint, v.gradient);
     float4 src = paint;  // premultiplied, before the coverage
     float cover = 0;
     // Glyphs and images whose quad reaches past them (turned): sampled no further than their
@@ -730,13 +718,13 @@ float4 fs(Varyings v) : SV_Target {
         cover = v.params.y > 0.5 ? (1 - blurred) * roundRectCoverage(v.local, v.gradient, v.uv, dx, dy) : blurred;
     } else if (drawn(GLYPH) && kind == GLYPH) {
         // (A mask's texels: a cubic of the sixteen nearest, each at its center, as an image's.)
-        float4 texel = v.params.y > 0.5 ? cubicSample(texcoord, 0.5 / v.params.zw) : sampleAt(texcoord, v);
+        float4 texel = v.params.y > 0.5 ? cubicSample(texcoord, 0.5 / v.params.zw) : sampleAt(texcoord, v, tx, ty);
         bool colored = v.params.x > 0.5;  // an emoji: as it is, at the color's alpha
         src = colored ? float4(texel.rgb * texel.a, texel.a) * v.color.a : paint;
         cover = (colored ? 1 : texel.a) * edge;
     } else if (drawn(IMAGE) && kind == IMAGE) {
         // Premultiplied texels; a cubic of the sixteen nearest, each at its center (params.y).
-        float4 texel = v.params.y > 0.5 ? cubicSample(texcoord, 0.5 / v.params.zw) : sampleAt(texcoord, v);
+        float4 texel = v.params.y > 0.5 ? cubicSample(texcoord, 0.5 / v.params.zw) : sampleAt(texcoord, v, tx, ty);
         src = texel * v.params.x;
         cover = edge;
     } else if (drawn(LAYER) && kind == LAYER) {
@@ -763,4 +751,41 @@ float4 fs(Varyings v) : SV_Target {
     if (aliased) cover = cover > 0.5 ? 1 : 0;  // (a rect square to the pixels comes with its edges on them: see Renderer::add)
     if (CLIPPED != 0) cover *= clipCoverage(v.position.xy, int(v.filter.z + 0.5), v.filter.w);
     return finish(FILTERED != 0 ? applyFilters(src, v.filter) : src, cover, v.position.xy);
+}
+
+[shader("fragment")]
+float4 fs(Varyings v) : SV_Target {
+    // A device pixel's steps in the instance's space, exactly: the vertex shader's where they are
+    // the same everywhere; with a primitive in perspective in the batch (flag 32, a variant of its
+    // own: the others have no derivatives at all), the local point over w, and 1 over w, which go
+    // straight across the screen (their differences are exact), the local point doesn't; and how
+    // far the texture coordinate goes (a glyph's, an image's, a mesh's paint's). Those worked out
+    // here, before any pixel is done below: a derivative needs its pixels' neighbours, and on ANGLE
+    // over Direct3D 11 one after a way out of fs went wrong even where no pixel took it. Nothing
+    // below takes a derivative: what samples a mipmap takes its gradients from these.
+    float2 dx = 0, dy = 0, tx = 0, ty = 0;
+    if ((FLAGS & 32) != 0) {
+        float q = 1 / v.w;
+        float2 lq = v.local * q;
+        dx = (ddx(lq) - v.local * ddx(q)) / q, dy = (ddy(lq) - v.local * ddy(q)) / q;
+        tx = ddx(v.texcoord), ty = ddy(v.texcoord);
+    }
+    // Well inside a solid fill or a layer (see vs): its color, or the layer's texel at its alpha,
+    // and nothing more worked out; the rest of the pixels take all of it (shade). (Chosen so, with
+    // one way out of fs: on ANGLE over Direct3D 11's WARP, a way out before the rest, even one no
+    // pixel took, left the derivatives in perspective wrong.)
+    bool quick = false;
+    if (drawn(FILL) || drawn(LAYER)) {
+        float4 a = abs(v.inside);
+        quick = (a.x <= 1 && a.y <= 1) || (a.z <= 1 && a.w <= 1);
+    }
+    float4 result;
+    if (quick) {
+        bool layer = drawn(LAYER) && (!drawn(FILL) || int(v.kindFlags.x + 0.5) == LAYER);
+        // (At level 0, the only one a layer's texture has.)
+        result = finish(layer ? texture0.SampleLevel(v.texcoord, 0) * v.color.a : v.color, 1, v.position.xy);
+    } else {
+        result = shade(v, dx, dy, tx, ty);
+    }
+    return result;
 }
