@@ -1616,6 +1616,13 @@ struct Shadow {
 // Where elevation shadows' light is, as Android's theme has it: above the window's top middle
 // (`center`, the window's dp), `z` up, `radius` across, the ambient and spot shadows at those
 // alphas; `density` px a dp (Android works shadows out in px). The platform sets the window's.
+namespace detail {
+// What a path's shadow (GraphicsContext::drawShadowPath) can draw on, the path's bounds at
+// `bounds` (where it is drawn): a drop shadow's blur around the path spread and moved, an inner
+// one's within the path.
+Rect shadowPathReach(const Rect& bounds, const Shadow& shadow, bool inner);
+} // namespace detail
+
 struct ShadowLight {
     Offset center;
     float z = 500, radius = 800;  // dp

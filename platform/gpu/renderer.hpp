@@ -55,6 +55,8 @@ public:
     int pathCount = 0;   // paths drawn (KOMPOZ_PROFILE)
     int keptPaths = 0;   // of them, with the coverage they had in a frame before
     int texturesMade = 0;  // textures made for layers and effects (KOMPOZ_PROFILE): none kept unused fitted
+    int pathShadows = 0;   // paths' shadows drawn (KOMPOZ_PROFILE)
+    int keptShadows = 0;   // of them, from the mask they had in a frame before
 
     // Draws into `target` until endTarget(), cleared first to `clear` if given.
     void beginTarget(Texture& target, const std::optional<ClearColor>& clear = std::nullopt);
@@ -118,6 +120,7 @@ public:
     void drawVertices(const Vertices& vertices, Offset origin, BlendMode blendMode, const Brush& brush, const Rect& brushArea,
                       float alpha) override;
     void drawShadow(const Rect& rect, const CornerRadii& radii, const Shadow& shadow, bool inner) override;
+    void drawShadowPath(const Path& outline, Offset origin, const Shadow& shadow, bool inner) override;
     void fillGradient(const Rect& rect, const CornerRadii& radii, const Brush& brush, const Rect& brushArea) override;
     void pushBlendMode(BlendMode mode) override;
     void pushAntiAlias(bool on) override;
@@ -376,6 +379,16 @@ private:
     std::vector<std::unique_ptr<Texture>> pages_;  // the glyph atlas's pages
     std::unordered_map<uint64_t, ImageTexture> images_;
     std::vector<std::unique_ptr<Texture>> retired_;  // bitmaps' textures drawn again: gone after the frame (its draws read them)
+    // A path's shadow's mask (as Compose's DropShadowRenderer and InnerShadowRenderer keep their
+    // blurred bitmaps), by what it is drawn from (drawShadowPath): white where the shadow is, its
+    // texture's top left `width` x `height`.
+    struct KeptShadow {
+        std::unique_ptr<Texture> texture;
+        int width = 0, height = 0;
+        uint64_t frame = 0;  // pathFrame_ when it was last drawn
+        std::chrono::steady_clock::time_point used;
+    };
+    std::unordered_map<uint64_t, KeptShadow> shadows_;
     std::vector<PooledTexture> pool_;  // layer targets
     int64_t surfaceArea_ = 0;           // px of the biggest frame's target (the pool's budget)
     std::unordered_map<uint64_t, KeptLayer> kept_;

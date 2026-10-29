@@ -325,6 +325,16 @@
   frame's paths fill most of it themselves: then those in it are kept and the rest drawn as before, rather than all
   rasterized again each frame. Going between the Home and Components tabs five times on a Redmi Note 9 Pro missed
   20–22 refreshes instead of 36. `KOMPOZ_PROFILE` counts paths drawn and kept in its slow frames.
+- **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
+  blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
+  scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and
+  then draws that, tinted with the shadow's color, for as long as it is drawn from the same path at the same scale,
+  with the same blur and spread (and an inner one's offset), as far into a pixel (to a 64th): moved by whole pixels
+  or in another color, it isn't drawn again. Masks undrawn for 10 s go, and all of them when memory is trimmed.
+  Overscrolling the showcase's Components screen on a Redmi Note 9 Pro (its top has such shadows, drawn again when
+  the list starts and stops stretching), a run had 11–12 frames that took the GPU longer than a refresh instead of
+  20–21, 270–298 ms of them instead of 484–496. `KOMPOZ_PROFILE` counts paths' shadows drawn and kept in its slow
+  frames.
 - **Only what changed is copied onto the window**: the kept frame was copied onto each swapchain image whole, at
   each frame; an image now holds what it was presented with (as Vulkan keeps it, the swapchain no longer clipped),
   and one showing a frame from a few frames ago (`Device::swapchainAge`) has only what the frames since changed copied

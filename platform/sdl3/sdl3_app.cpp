@@ -582,7 +582,7 @@ Drawn drawFrame(App& app, const std::string& shot) {
         app.display->invalidate();
         app.showFrame = true;
     }
-    r.layerCount = r.keptLayers = r.pathCount = r.keptPaths = r.texturesMade = 0;
+    r.layerCount = r.keptLayers = r.pathCount = r.keptPaths = r.texturesMade = r.pathShadows = r.keptShadows = 0;
     float scale = r.scale;
     Size screen{float(pw) / scale, float(ph) / scale};
     uint64_t recording = SDL_GetTicksNS();
@@ -720,9 +720,9 @@ void profileFrame(App& app, uint64_t start, uint64_t composed, uint64_t waited, 
     if (work > period || interval > 2 * period + 1) {
         ++p.slow;
         SDL_Log("kompoz: frame %.1f ms after the last: input %.1f, compose+layout %.1f, wait %.1f, draw %.1f, present %.1f ms; %d nodes "
-                "drawn (%d kept), %d layers (%d kept), %d paths (%d kept), %d textures made, %d glyphs, %.0f%% drawn again",
+                "drawn (%d kept), %d layers (%d kept), %d paths (%d kept), %d path shadows (%d kept), %d textures made, %d glyphs, %.0f%% drawn again",
                 interval, events, compose, wait, draw, present, app.display->drawnNodes(), app.display->keptNodes(),
-                app.gpuCanvas->layerCount, app.gpuCanvas->keptLayers, app.gpuCanvas->pathCount, app.gpuCanvas->keptPaths, app.gpuCanvas->texturesMade, glyphs,
+                app.gpuCanvas->layerCount, app.gpuCanvas->keptLayers, app.gpuCanvas->pathCount, app.gpuCanvas->keptPaths, app.gpuCanvas->pathShadows, app.gpuCanvas->keptShadows, app.gpuCanvas->texturesMade, glyphs,
                 (area < 0 ? 1 : area) * 100);
     }
     if (start - p.summaryStart >= 1'000'000'000) {

@@ -344,6 +344,16 @@
   dolduruyorsa başlamaz: içindekiler tutulur, kalanlar eskisi gibi çizilir, her karede hepsi yeniden taranmaz. Bir
   Redmi Note 9 Pro'da Ana sayfa ile Bileşenler sekmeleri arasında beş kez gidip gelmek 36 yerine 20–22 tazeleme
   kaçırdı. `KOMPOZ_PROFILE` yavaş karelerinde çizilen ve tutulan yolları sayar.
+- **Bir yolun gölgesi önceden sahip olduğu maskeden çiziliyor** (Compose'un bir `dropShadow`'un ya da
+  `innerShadow`'un bulanık bitmap'ini tutması gibi): GPU renderer'ı yuvarlak köşeli dikdörtgen olmayan bir şeklin
+  (kalp, yıldız, kurabiye) gölgesini her seferinde baştan, her biri iki geçişli bir katman ve bir bulanıklıkla
+  çiziyordu; artık onu bir kez kendi dokusuna beyaz çiziyor, sonra aynı yoldan, aynı ölçekte, aynı bulanıklık ve
+  yayılmayla (iç gölgenin kaydırmasıyla da), bir pikselin aynı kesrinde (64'te birine kadar) çizildikçe o dokuyu
+  gölgenin rengine boyayarak çiziyor: tam piksellerle kaydırılınca ya da başka renkte yeniden çizilmiyor. 10 s
+  çizilmeyen maskeler gidiyor, bellek kısılınca hepsi. Bir Redmi Note 9 Pro'da showcase'in Bileşenler ekranının
+  üstünde esneyince (üstünde böyle gölgeler var; liste esnemeye başlarken ve bitirirken yeniden çiziliyor) bir koşuda
+  GPU'nun bir tazelemeden uzun sürdüğü kareler 20–21 yerine 11–12, toplamları 484–496 ms yerine 270–298 ms oldu.
+  `KOMPOZ_PROFILE` yavaş karelerinde çizilen ve tutulan yol gölgelerini sayıyor.
 - **Pencereye yalnızca değişen kopyalanıyor**: saklanan kare her karede takas zincirinin her görüntüsüne bütün
   olarak kopyalanıyordu; artık bir görüntü sunulduğu içeriği tutuyor (Vulkan'ın tuttuğu gibi; takas zinciri artık
   kırpılmıyor) ve birkaç kare önceki bir kareyi gösteren bir görüntüye (`Device::swapchainAge`) yalnızca o zamandan

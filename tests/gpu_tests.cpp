@@ -4112,6 +4112,40 @@ void aLayerIsKeptFromItsFirstFrame(Gpu& g) {
 
 // A path drawn again whole pixels on (a scrolled list's) takes the coverage it had: the same
 // pixels, moved; drawn a fraction of a pixel on, its own (the pixels it covers change).
+// A path's shadow is drawn from the mask it had in a frame before (as Compose keeps a dropShadow's
+// blurred bitmap) when only where it is by whole pixels or its color changed: as drawn without one
+// (GraphicsContext's), outer and inner; made again for another fraction of a pixel.
+void pathShadowsAreKept(Gpu& g) {
+    Path s = star(20, 20, 16);
+    auto draw = [&](Offset at, Color color, bool inner, bool plain) {
+        g.renderer->pathShadows = g.renderer->keptShadows = 0;
+        Shadow shadow{color, {2, 3}, 6, 2};
+        Pixels out = g.render(70, 70, 1, [&](GraphicsContext& c) {
+            if (plain) c.GraphicsContext::drawShadowPath(s, at, shadow, inner);
+            else c.drawShadowPath(s, at, shadow, inner);
+        });
+        return std::pair{out, g.renderer->keptShadows};
+    };
+    Color violet{0.4f, 0.1f, 0.7f, 0.8f}, teal{0.1f, 0.6f, 0.5f, 0.6f};
+    for (bool inner : {false, true}) {
+        auto [first, kept0] = draw({3.3f, 2.6f}, violet, inner, false);
+        auto [plain, unused0] = draw({3.3f, 2.6f}, violet, inner, true);
+        auto [moved, kept1] = draw({10.3f, 7.6f}, violet, inner, false);
+        auto [tinted, kept2] = draw({10.3f, 7.6f}, teal, inner, false);
+        auto [plainTinted, unused1] = draw({10.3f, 7.6f}, teal, inner, true);
+        auto [shifted, kept3] = draw({10.55f, 7.6f}, violet, inner, false);
+        CHECK(kept0 == 0 && kept1 == 1 && kept2 == 1 && kept3 == 0);
+        int worst = worstAgainst(first, [&](int x, int y) { return plain.at(x, y); });
+        worst = std::max(worst, worstAgainst(tinted, [&](int x, int y) { return plainTinted.at(x, y); }));
+        int moves = 0;
+        for (int y = 0; y < 60; ++y)
+            for (int x = 0; x < 60; ++x) moves = std::max(moves, maxDifference(first.at(x, y), moved.at(x + 7, y + 5)));
+        CHECK(worst <= 2 && moves == 0);  // (a 255th or two: the color rounded once with its coverage, not in a layer first)
+        if (worst > 2 || moves) std::printf("  %s path shadow: off by %d from one drawn without a mask, %d moved\n", inner ? "inner" : "drop", worst, moves);
+        (void)unused0, (void)unused1, (void)shifted;
+    }
+}
+
 // A layer's texture is one of a few sizes (as Skia's approximate fit), so a layer whose size
 // changes from frame to frame (clipped to the screen as it scrolls in) takes one kept unused
 // rather than a new one each frame; those kept unused go when memory is trimmed.
@@ -4363,6 +4397,7 @@ int main() {
             aLayerIsKeptFromItsFirstFrame(g);
             aPathKeepsItsCoverage(g);
             layerTexturesComeInFewSizes(g);
+            pathShadowsAreKept(g);
             scenesMatchTheirPictures(g);
             CHECK(g.device->validationErrors() == 0);  // (counted with KOMPOZ_GPU_VALIDATION=1)
         }

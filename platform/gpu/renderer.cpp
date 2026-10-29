@@ -882,6 +882,16 @@ void Renderer::endFrame() {
         });
         pool_.erase(pool_.begin(), end);
     }
+    // Paths' shadows' masks undrawn for 10 s go back too.
+    for (auto it = shadows_.begin(); it != shadows_.end();) {
+        if (it->second.frame == pathFrame_) it->second.used = now;
+        if (now - it->second.used > std::chrono::seconds(10)) {
+            giveToPool(std::move(it->second.texture));
+            it = shadows_.erase(it);
+        } else {
+            ++it;
+        }
+    }
     // Kept layers' pixels unused for a second go back (the layer may not be on the screen any more).
     for (auto it = kept_.begin(); it != kept_.end();)
         if (++it->second.idleFrames > 60) {
@@ -919,6 +929,7 @@ void Renderer::giveToPool(std::unique_ptr<Texture> texture) {
 }
 
 void Renderer::trimMemory() {
+    shadows_.clear();
     std::erase_if(pool_, [](const PooledTexture& p) { return !p.inUse; });
 }
 
@@ -1508,6 +1519,59 @@ void Renderer::drawShadow(const Rect& rect, const CornerRadii& radii, const Shad
         set(p.bounds, sx - pad, sy - pad, sx + sw + pad, sy + sh + pad);
     }
     add(SHADOW, p);
+}
+
+// As Compose keeps a dropShadow's or innerShadow's blurred bitmap (DropShadowRenderer,
+// InnerShadowRenderer) while its shape, size and shadow stay the same: a path's shadow drawn white
+// once into a texture of its own, then that texture where it goes, tinted with the shadow's color,
+// for as long as it is drawn from the same path, at the same scale, with the same blur and spread
+// (and an inner one's offset), as far into a pixel (to a 64th: it moves by whole pixels). Turned
+// or scaled, it is drawn as it is.
+void Renderer::drawShadowPath(const Path& outline, Offset origin, const Shadow& shadow, bool inner) {
+    if (shadow.color.alpha() <= 0 || outline.isEmpty() || targets_.empty()) return;
+    if (!transform_.identity()) return GraphicsContext::drawShadowPath(outline, origin, shadow, inner);
+    Rect b = outline.bounds();
+    b.x += origin.x, b.y += origin.y;
+    Rect reach = detail::shadowPathReach(b, shadow, inner);
+    if (quickReject(reach)) return;
+    float x0 = reach.x * scale - ox_, y0 = reach.y * scale - oy_;
+    int px = int(std::floor(x0)), py = int(std::floor(y0));
+    int w = int(std::ceil(reach.right() * scale - ox_)) - px, h = int(std::ceil(reach.bottom() * scale - oy_)) - py;
+    if (w <= 0 || h <= 0 || w > kMaxLayer || h > kMaxLayer) return GraphicsContext::drawShadowPath(outline, origin, shadow, inner);
+    ++pathShadows;
+    const std::vector<PathCommand>& commands = outline.commands();
+    uint64_t key = fnv1a(commands.data(), commands.size() * sizeof(PathCommand));
+    struct {
+        float scale, blur, spread, offsetX, offsetY;
+        int32_t inner, fill, fractionX, fractionY;
+    } what{scale, shadow.blurRadius, shadow.spread, inner ? shadow.offset.x : 0, inner ? shadow.offset.y : 0, inner, int32_t(outline.fillType),
+           int32_t(std::lround((x0 - float(px)) * 64)), int32_t(std::lround((y0 - float(py)) * 64))};
+    key = fnv1a(&what, sizeof what, key);
+    auto it = shadows_.find(key);
+    if (it == shadows_.end() || it->second.width != w || it->second.height != h) {
+        // Made: drawn white, the target's px from its corner (as a layer is), into a texture kept out of the pool.
+        Texture* t = acquire(w, h);
+        if (!t) return GraphicsContext::drawShadowPath(outline, origin, shadow, inner);
+        std::unique_ptr<Texture> texture = takeFromPool(t);
+        beginTarget(*t, ClearColor{});
+        ox_ = targets_.back().ox + float(px), oy_ = targets_.back().oy + float(py);
+        Shadow white = shadow;
+        white.color = colors::White;
+        GraphicsContext::drawShadowPath(outline, origin, white, inner);
+        endTarget();
+        it = shadows_.insert_or_assign(key, KeptShadow{std::move(texture), w, h}).first;
+    } else {
+        ++keptShadows;
+    }
+    KeptShadow& kept = it->second;
+    kept.frame = pathFrame_;
+    float tw = float(kept.texture->width()), th = float(kept.texture->height());
+    Prim p = painted(Brush::solid(shadow.color), reach, 1);
+    set(p.bounds, float(px), float(py), float(px + w), float(py + h));
+    std::copy(std::begin(p.bounds), std::end(p.bounds), p.shape);
+    set(p.uv, 0, 0, float(w) / tw, float(h) / th);
+    set(p.params, 0, 0, 0.5f / tw, 0.5f / th);
+    add(GLYPH, p, kept.texture.get(), false, Mask::None, nullptr, false, Sampler{Filter::Nearest});  // (texel for pixel)
 }
 
 std::optional<Offset> Renderer::rasterize(const std::vector<Contour>& contours, IRect region, bool aliased) {

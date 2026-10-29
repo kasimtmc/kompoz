@@ -2000,6 +2000,13 @@ Path strokedPath(const Rect& rect, const Shape& shape, bool rtl, float width) {
 // As Compose's DropShadowPainter and InnerShadowPainter draw a path's shadow (blurred masks:
 // Android's BlurMaskFilter, Android's sigma for the radius): the masks drawn opaque in layers that
 // blur them (Decal), in one faded by the color's alpha.
+Rect detail::shadowPathReach(const Rect& b, const Shadow& shadow, bool inner) {
+    if (inner) return {b.x - 2, b.y - 2, b.width + 4, b.height + 4};
+    float blur = std::max(0.f, shadow.blurRadius), grow = std::max(0.f, shadow.spread) * PathStroke{}.miter;
+    Rect at{b.x + shadow.offset.x - grow, b.y + shadow.offset.y - grow, b.width + 2 * grow, b.height + 2 * grow};
+    return BlurEffect(blur, blur, TileMode::Decal).outputBounds(at);
+}
+
 void GraphicsContext::drawShadowPath(const Path& outline, Offset origin, const Shadow& shadow, bool inner) {
     if (shadow.color.alpha() <= 0 || outline.isEmpty()) return;
     Rect b = outline.bounds();
@@ -2012,7 +2019,7 @@ void GraphicsContext::drawShadowPath(const Path& outline, Offset origin, const S
     if (!inner) {
         float grow = spread * band.miter;  // (a miter reaches out that far at most)
         Rect at{b.x + shadow.offset.x - grow, b.y + shadow.offset.y - grow, b.width + 2 * grow, b.height + 2 * grow};
-        Rect reach = blur.outputBounds(at);
+        Rect reach = detail::shadowPathReach(b, shadow, false);
         if (quickReject(reach)) return;
         pushLayer(reach, CornerRadii(), shadow.color.alpha());
         pushEffectLayer(at, blur, 1);
@@ -2029,7 +2036,7 @@ void GraphicsContext::drawShadowPath(const Path& outline, Offset origin, const S
     if (quickReject(b)) return;
     // The color 2 dp past the bounds (a pixel and a half at the least): what cuts the edge's pixels
     // is the outline (the clip), not the fill's own edge.
-    Rect at{b.x - 2, b.y - 2, b.width + 4, b.height + 4};
+    Rect at = detail::shadowPathReach(b, shadow, true);
     pushClipPath(outline, origin);
     pushLayer(at, CornerRadii(), shadow.color.alpha());
     fillRoundRect(at, CornerRadii(), opaque);
