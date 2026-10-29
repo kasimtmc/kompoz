@@ -5029,7 +5029,7 @@ TEST(display_list_damage_comes_in_separate_areas) {
 // again instead.
 TEST(display_list_moves_what_scrolled_by_whole_pixels) {
     ScrollState scroll;
-    auto fab = mutableStateOf(false), gradient = mutableStateOf(false), rounded = mutableStateOf(false);
+    auto fab = mutableStateOf(false), gradient = mutableStateOf(false), rounded = mutableStateOf(false), raised = mutableStateOf(false);
     Color red{1, 0, 0, 1};
     ComposeTestRule rule([&] {
         Box(Modifier().fillMaxSize().background(colors::White), [&] {
@@ -5037,7 +5037,11 @@ TEST(display_list_moves_what_scrolled_by_whole_pixels) {
             if (rounded.get()) list = list.clip(RoundedCornerShape(16));
             if (gradient.get()) list = list.background(Brush::verticalGradient({red, Color{0, 0, 1, 1}}));
             Column(list.verticalScroll(scroll), [&] {
-                for (int i = 0; i < 30; ++i) Box(Modifier().fillMaxWidth().height(50).padding(4).background(Color{0, 0.5f, float(i) / 30, 1}, 8));
+                for (int i = 0; i < 30; ++i) {
+                    Modifier item = Modifier().fillMaxWidth().height(50).padding(4);
+                    if (raised.get()) item = item.shadow(4, 8);
+                    Box(item.background(Color{0, 0.5f, float(i) / 30, 1}, 8));
+                }
             });
             if (fab.get()) Box(Modifier().align(Alignment::BottomEnd).padding(16).size(56).background(red, 16));
         });
@@ -5093,6 +5097,14 @@ TEST(display_list_moves_what_scrolled_by_whole_pixels) {
     d = scrollBy(20);
     CHECK(d && list.moves().empty() && d->y <= 0 && d->bottom() >= 800);
     rounded.set(false);
+    // Each item raised: its elevation shadow falls from the light, which doesn't scroll with it
+    // (moved, it would look as it did where it was); drawn again where it was and is.
+    raised.set(true);
+    rule.waitForIdle();
+    frame();
+    d = scrollBy(20);
+    CHECK(d && list.moves().empty() && d->y <= 0 && d->bottom() >= 800);
+    raised.set(false);
     rule.waitForIdle();
     frame();
     list.allowMoves(false);
@@ -29521,6 +29533,51 @@ TEST(elevation_shadows_blur_as_skia_where_nothing_does_better) {
     d = list.end();
     Rect higher = ElevationShadow{{0, 0, 12}}.reach({50, 60, 40, 40}, list.light, list.light.center);
     CHECK(d && d->x <= higher.x && d->y <= higher.y && d->right() >= higher.right() && d->bottom() >= higher.bottom());
+}
+
+// What changed is drawn again as far as drawing it reaches: a path's stamps (a path effect) past
+// the path, and a drop shadow's spread out to its miter at a star's points.
+TEST(display_list_damage_reaches_what_effects_and_spreads_draw) {
+    auto covers = [](const std::optional<Rect>& d, const Rect& r) { return d && d->x <= r.x && d->y <= r.y && d->right() >= r.right() && d->bottom() >= r.bottom(); };
+    testing::FakeTextMeasurer measurer;
+    DisplayList list(measurer);
+    Path line;
+    line.moveTo(20, 100);
+    line.lineTo(380, 100);
+    Path box;  // across the line, 30 up and down
+    box.addRect({-2, -30, 4, 60});
+    auto stamped = [&](float phase) {
+        PathStroke s{1};
+        s.pathEffect = PathEffect::stampedPathEffect(box, 40, phase, StampedPathEffectStyle::Rotate);
+        return s;
+    };
+    auto drawn = [&](float phase) {  // where the stamps are at `phase`
+        PathStroke s = stamped(phase);
+        Path effected;
+        return detail::pathEffected(line, s, 1, effected).bounds();
+    };
+    list.begin({400, 400}, 1);
+    list.drawPath(line, {}, Brush::solid(Color{0, 0, 0, 1}), {}, stamped(0));
+    list.end();
+    CHECK(PathEffect::stampedPathEffect(box, 40, 0, StampedPathEffectStyle::Rotate).reach() >= 30 && PathEffect::dashPathEffect({4, 4}).reach() == 0);
+    list.begin({400, 400}, 1);
+    list.drawPath(line, {}, Brush::solid(Color{0, 0, 0, 1}), {}, stamped(15));
+    std::optional<Rect> d = list.end();
+    CHECK(covers(d, drawn(0)) && covers(d, drawn(15)) && drawn(15).y < 75);
+    // A drop shadow spread round a star: its points' miters reach past the spread.
+    Path star;
+    for (int i = 0; i < 10; ++i) {
+        float a = float(i) * std::numbers::pi_v<float> / 5, r = i % 2 ? 12.f : 40.f;
+        i ? star.lineTo(200 + r * std::sin(a), 250 - r * std::cos(a)) : star.moveTo(200 + r * std::sin(a), 250 - r * std::cos(a));
+    }
+    star.close();
+    Shadow spread{Color{0, 0, 0, 0.5f}, {0, 0}, 0, 6};
+    list.begin({400, 400}, 1);
+    list.end();
+    list.begin({400, 400}, 1);
+    list.drawShadowPath(star, {}, spread, false);
+    d = list.end();
+    CHECK(covers(d, detail::shadowPathReach(star.bounds(), spread, false)) && covers(d, {200 - 40 * 0.96f - 6, 210 - 6, 80, 10}));
 }
 
 TEST(drop_shadows_take_brushes_alphas_and_blend_modes) {

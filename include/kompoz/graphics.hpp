@@ -1207,6 +1207,10 @@ public:
     // filterPath): into `dst`, `stroke` changed if it draws the result otherwise (a stamp's, a
     // dashed line's, filled); false if it leaves the path as it is.
     bool filterPath(Path& dst, const Path& src, PathStroke& stroke, float resScale = 1) const;
+    // How far past the bounds of a path what it makes of it can reach (as Skia's computeFastBounds
+    // outsets them for an effect): a stamp's corner farthest from where it is put (turned along
+    // the path or bent round it, no farther); a dash or a corner, not past them.
+    float reach() const;
 
     friend bool operator==(const PathEffect& a, const PathEffect& b);
 

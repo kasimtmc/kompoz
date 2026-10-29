@@ -344,6 +344,15 @@
   dolduruyorsa başlamaz: içindekiler tutulur, kalanlar eskisi gibi çizilir, her karede hepsi yeniden taranmaz. Bir
   Redmi Note 9 Pro'da Ana sayfa ile Bileşenler sekmeleri arasında beş kez gidip gelmek 36 yerine 20–22 tazeleme
   kaçırdı. `KOMPOZ_PROFILE` yavaş karelerinde çizilen ve tutulan yolları sayar.
+- **Kaydırmanın ve yol efektlerinin bıraktığı eskimiş pikseller giderildi**: değişen, çiziminin ulaştığı yere
+  kadar yeniden çiziliyor; `KOMPOZ_DAMAGE_CHECK` artık showcase'in Bileşenler ekranında 255'te birden fazla sapan
+  piksel bulmuyor, oysa karelerin üçte ikisinde 150'ye kadar sapanlar buluyordu. Bir yol efektinden geçerek çizilen
+  yol, efektin söylediği kadar yolun ötesine ulaşıyor (`PathEffect::reach`: bir damganın konduğu yere en uzak köşesi,
+  Skia'nın computeFastBounds'unun bir efektin sınırlarını genişletmesi gibi): bir dalga boyunca damgalanan oklar
+  kayarken uçlarını geride bırakıyordu. Bir yolun çevresindeki gölge, çiziminin ulaştığı yere ulaşıyor
+  (`detail::shadowPathReach`, sivri yayılmanın uçlarıyla). Yükselti gölgesi olan bir öğe de artık kaydırılan bir
+  listenin pikselleriyle taşınmıyor: gölgesi yerinde kalan ışıktan düşüyor, taşınınca eski yerindeki gibi
+  görünüyordu; yeniden çiziliyor.
 - **Kompoz'un kendi platform katmanı**, SDL3'ün yerine kuruluyor (pencere, girdi, kare döngüsü ve uygulamanın
   yaşam döngüsü, her platformda kendisininki; kareler Compose'unkiler gibi ekranın kendi vuruşunda): uygulama
   çekirdeği artık Kompoz'un kendi olaylarını alıyor (`platform/app/platform_event.hpp`), SDL'inkiler geldikleri yerde

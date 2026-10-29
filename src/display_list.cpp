@@ -162,6 +162,8 @@ std::optional<Offset> DisplayList::Command::place() const {
 // path shadow's origin). The rest (an image's source, a shadow's offset) stays as it was.
 bool DisplayList::Command::sameMoved(const Command& o, Offset by, bool withTransform) const {
     if (kind != o.kind || kind == Kind::Backdrop || (withTransform && !(m == o.m))) return false;  // (what a backdrop reads moved too: not the same)
+    // An elevation shadow is cast from the light, which stays where it is: moved, it falls otherwise.
+    if (kind == Kind::ElevationShadow && (by.x != 0 || by.y != 0)) return false;
     if (kind == Kind::PushLayer && !(path.isEmpty() && o.path.isEmpty())) return false;  // (an outline's place isn't told)
     bool rectMoves = false, brushMoves = false, p1Moves = false, p2Moves = false;
     switch (kind) {
@@ -385,15 +387,10 @@ void DisplayList::drawShadowPath(const Path& outline, Offset origin, const Shado
     Rect rect = outline.bounds();
     rect.x += origin.x;
     rect.y += origin.y;
-    Rect area = rect;  // as a rounded rect's (drawShadow)
-    float pad = 0;
-    if (!inner) {
-        float grow = std::max(0.f, shadow.spread);
-        area = {rect.x - grow + std::min(0.f, shadow.offset.x), rect.y - grow + std::min(0.f, shadow.offset.y),
-                rect.width + 2 * grow + std::abs(shadow.offset.x), rect.height + 2 * grow + std::abs(shadow.offset.y)};
-        pad = 3 * std::max(0.f, shadow.blurRadius);
-    }
-    if (Command* c = draw(Kind::ShadowPath, area, pad)) {
+    // As far as drawing it can reach: an inner one within the path, a drop shadow its blur around
+    // the path moved and spread (a mitered spread's corners out to the miter limit).
+    Rect area = inner ? rect : detail::shadowPathReach(rect, shadow, false);
+    if (Command* c = draw(Kind::ShadowPath, area, 0)) {
         c->path = outline;
         c->p2 = origin;
         c->color = shadow.color;
@@ -471,6 +468,7 @@ void DisplayList::drawPath(const Path& path, Offset origin, const Brush& brush, 
         if (stroke.cap == StrokeCap::Square) reach = std::max(reach, std::numbers::sqrt2_v<float>);
         pad = stroke.width / 2 * reach;
     }
+    if (stroke.pathEffect) pad += stroke.pathEffect->reach();  // (stamps reach past the path)
     if (Command* c = draw(Kind::Path, b, pad)) {
         c->path = path;
         c->p1 = origin;

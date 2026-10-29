@@ -325,6 +325,14 @@
   frame's paths fill most of it themselves: then those in it are kept and the rest drawn as before, rather than all
   rasterized again each frame. Going between the Home and Components tabs five times on a Redmi Note 9 Pro missed
   20–22 refreshes instead of 36. `KOMPOZ_PROFILE` counts paths drawn and kept in its slow frames.
+- **Stale pixels left by scrolling and by path effects, gone**: what changed is drawn again as far as drawing it
+  reaches, and `KOMPOZ_DAMAGE_CHECK` now finds no pixel off by more than a 255th on the showcase's Components screen,
+  where it found some off by up to 150 in two thirds of the frames. A path drawn through a path effect reaches past
+  the path as far as the effect says (`PathEffect::reach`: a stamp's corner farthest from where it is put, as Skia's
+  computeFastBounds outsets an effect's bounds): the arrows stamped along a wave left their tips behind as they slid.
+  A drop shadow round a path reaches as its drawing does (`detail::shadowPathReach`, a mitered spread's points
+  included). And an item with an elevation shadow isn't moved with a scrolled list's pixels any more: its shadow
+  falls from the light, which stays where it is, so moved it looked as it had where it was; it is drawn again.
 - **Kompoz's own platform layer**, being built in place of SDL3 (the window, input, the frame loop and the app's
   lifecycle, on each platform its own, frames on the display's own beat as Compose's are): the app core takes
   Kompoz's own events now (`platform/app/platform_event.hpp`), SDL's turned into them where they come in, and

@@ -921,6 +921,24 @@ bool PathEffect::Node::filter(Path& dst, const Path& src, PathStroke& stroke, fl
     return false;
 }
 
+float PathEffect::reach() const {
+    auto of = [](auto& self, const Node* n) -> float {
+        if (!n) return 0;
+        switch (n->kind) {
+        case Node::Kind::Stamp: {
+            Rect b = n->shape.bounds();
+            float far = 0;
+            for (float x : {b.x, b.right()})
+                for (float y : {b.y, b.bottom()}) far = std::max(far, std::hypot(x, y));
+            return far;
+        }
+        case Node::Kind::Chain: return self(self, n->outer.get()) + self(self, n->inner.get());
+        default: return 0;
+        }
+    };
+    return of(of, node_.get());
+}
+
 bool PathEffect::filterPath(Path& dst, const Path& src, PathStroke& stroke, float resScale) const {
     // (What it makes winds non-zero, as a Skia path builder's does.)
     return node_ && node_->filter(dst, src, stroke, resScale);
