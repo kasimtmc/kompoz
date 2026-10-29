@@ -1318,6 +1318,9 @@ bool startGpu(App& app, gpu::Backend backend) {
             std::memcpy(out, &made, sizeof made);
             return true;
         };
+#ifdef SDL_PLATFORM_ANDROID
+        surface.vulkanNativeWindow = [window] { return SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr); };
+#endif
 #endif
         app.gpu = gpu::Device::create(backend, surface, &error);
         break;

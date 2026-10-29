@@ -149,6 +149,10 @@ struct Surface {
     std::vector<const char*> vulkanInstanceExtensions;
     void* (*vulkanGetInstanceProcAddr)(void* instance, const char* name) = nullptr;
     std::function<bool(void* instance, uint64_t* surface)> createVulkanSurface;
+    // The native window that surface is made for, where the system can give the window another
+    // (Android's ANativeWindow, a new one each time the app comes back from the background; none
+    // while it is away): the surface made again for a new one. Unset: the same for good.
+    std::function<void*()> vulkanNativeWindow;
     // OpenGL ES: a function of the context (made current on this thread) by name, and showing
     // what was drawn into the default framebuffer.
     void* (*glGetProcAddress)(const char* name) = nullptr;

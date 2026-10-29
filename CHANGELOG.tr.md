@@ -344,6 +344,11 @@
   dolduruyorsa başlamaz: içindekiler tutulur, kalanlar eskisi gibi çizilir, her karede hepsi yeniden taranmaz. Bir
   Redmi Note 9 Pro'da Ana sayfa ile Bileşenler sekmeleri arasında beş kez gidip gelmek 36 yerine 20–22 tazeleme
   kaçırdı. `KOMPOZ_PROFILE` yavaş karelerinde çizilen ve tutulan yolları sayar.
+- **Vulkan'daki bir Android uygulaması arka plandan dönünce penceresini yeniden gösteriyor**: Android o zaman
+  pencereye yeni bir yerel pencere veriyor; eskisi için yapılan Vulkan yüzeyine artık sunulamıyordu (her karede
+  "dequeueBuffer failed: No such device"): ekran siyah kalıyordu. Yüzey ve takas zinciri yeni bir yerel pencere için
+  (`Surface::vulkanNativeWindow`, SDL'in pencere işaretçisi özelliği) ve Vulkan yüzeyin kaybolduğunu söylediğinde
+  yeniden yapılıyor; yerel pencere yokken hiçbirine sunulmuyor.
 - **Katman dokuları birkaç boyda ve kullanılmadan 10 s tutuluyor** (Android'in renderer'ının tuttuğu gibi): bir
   katman ya da efekt için doku, Skia'nın yaklaşık boyutlarından birinde yapılıyor (1024 px'e kadar bir ikinin kuvvetine,
   ötesinde onun yarısı kadar adımlarla) ve o boyu gereken her şey onu yeniden alıyor; önceden 32 px'e yuvarlanıyor ve

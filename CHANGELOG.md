@@ -325,6 +325,11 @@
   frame's paths fill most of it themselves: then those in it are kept and the rest drawn as before, rather than all
   rasterized again each frame. Going between the Home and Components tabs five times on a Redmi Note 9 Pro missed
   20–22 refreshes instead of 36. `KOMPOZ_PROFILE` counts paths drawn and kept in its slow frames.
+- **An Android app on Vulkan shows its window again when it comes back from the background**: Android gives the
+  window a new native window then, and the Vulkan surface made for the old one could no longer be presented to
+  ("dequeueBuffer failed: No such device" at each frame): the screen stayed black. The surface and its swapchain are
+  made again for a new native window (`Surface::vulkanNativeWindow`, SDL's window pointer property), and when Vulkan
+  says the surface is lost; none is presented to while there is no native window.
 - **Layer textures come in a few sizes and are kept unused for 10 s** (as Android's renderer keeps them): a texture
   for a layer or an effect is made in one of the sizes Skia's approximate fit gives (a power of two up to 1024 px, by
   half of one past it) and taken again by whatever needs that size, where it was made to 32 px and taken only by what

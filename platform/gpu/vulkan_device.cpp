@@ -158,6 +158,10 @@ public:
     VkInstance instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT messenger = VK_NULL_HANDLE;
     VkSurfaceKHR surface = VK_NULL_HANDLE;
+    std::function<bool(void* instance, uint64_t* surface)> createSurface;
+    std::function<void*()> nativeWindow;  // Surface::vulkanNativeWindow
+    void* surfaceWindow = nullptr;        // what `surface` was made for
+    bool surfaceLost = false;             // said so by an acquire or a present (a new native window at the old one's address)
     VkPhysicalDevice physical = VK_NULL_HANDLE;
     VkPhysicalDeviceProperties properties{};
     VkDevice device = VK_NULL_HANDLE;
@@ -313,8 +317,11 @@ public:
             vk.vkCreateDebugUtilsMessengerEXT(instance, &mci, nullptr, &messenger);
         }
         if (s.createVulkanSurface) {  // (else it draws only into textures)
+            createSurface = s.createVulkanSurface;
+            nativeWindow = s.vulkanNativeWindow;
+            surfaceWindow = nativeWindow ? nativeWindow() : nullptr;
             uint64_t rawSurface = 0;
-            if (!s.createVulkanSurface(instance, &rawSurface)) return fail("no Vulkan surface for the window");
+            if (!createSurface(instance, &rawSurface)) return fail("no Vulkan surface for the window");
             surface = VkSurfaceKHR(rawSurface);
         }
 
@@ -845,9 +852,33 @@ public:
         texturesDirty = true;
     }
 
+    // The window's native window is another (Android's, the app back from the background: the
+    // old one is gone, and presenting to it fails for good): the swapchain and the surface made
+    // again for it. False while there is none.
+    bool surfaceCurrent() {
+        if (!nativeWindow) return true;
+        void* now = nativeWindow();
+        if (now == surfaceWindow && !std::exchange(surfaceLost, false)) return now != nullptr;
+        vk.vkDeviceWaitIdle(device);
+        for (int i = 0; i < kFramesInFlight; ++i)
+            if (i != frameIndex) runDeletions(frames[size_t(i)]);
+        destroySwapchain();
+        vk.vkDestroySurfaceKHR(instance, surface, nullptr);
+        surface = VK_NULL_HANDLE;
+        surfaceWindow = now;
+        uint64_t rawSurface = 0;
+        if (!now || !createSurface(instance, &rawSurface)) return false;
+        surface = VkSurfaceKHR(rawSurface);
+        VkBool32 presents = VK_FALSE;  // (the queue picked for the first: any of Android's present to all)
+        vk.vkGetPhysicalDeviceSurfaceSupportKHR(physical, queueFamily, surface, &presents);
+        if (!presents) log("kompoz: the window's new surface can't be presented to from the queue picked");
+        return presents;
+    }
+
     Texture* swapchainTexture() override {
-        if (!surface) return nullptr;
+        if (!surface && !nativeWindow) return nullptr;
         if (!acquired) {
+            if (!surfaceCurrent() || !surface) return nullptr;
             int w = 0, h = 0;
             if (drawableSize) drawableSize(&w, &h);
             if (w <= 0 || h <= 0) return nullptr;  // minimized
@@ -864,6 +895,7 @@ public:
             if (r == VK_ERROR_OUT_OF_DATE_KHR) {  // resized meanwhile: made again at the next frame
                 vk.vkDestroySwapchainKHR(device, std::exchange(swapchain, VK_NULL_HANDLE), nullptr);
             }
+            surfaceLost = r == VK_ERROR_SURFACE_LOST_KHR;
             acquired = r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR;
             waitImage = acquired;
             if (acquired) swapImages[swapIndex]->layout = VK_IMAGE_LAYOUT_UNDEFINED;  // presented before: its pixels don't matter
@@ -1208,6 +1240,7 @@ public:
                 if (caps.currentTransform != swapTransform) swapExtent = {};
             }
             if (r == VK_ERROR_OUT_OF_DATE_KHR) swapExtent = {};  // made again next frame
+            if (r == VK_ERROR_SURFACE_LOST_KHR) surfaceLost = true;
         }
         inFrame = false;
         acquired = false;
