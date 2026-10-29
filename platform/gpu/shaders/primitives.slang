@@ -730,7 +730,7 @@ float4 shade(Varyings v, float2 dx, float2 dy, float2 tx, float2 ty) {
     } else if (drawn(LAYER) && kind == LAYER) {
         float2 texel = clamp(v.local, v.params.xy + 0.5, v.params.zw - 0.5);
         bool mixed = (flags & 8) != 0;
-        src = texture0.SampleLevel((texel - v.params.xy) * v.uv.zw, 0) * (mixed ? 1 : v.color.a);  // (level 0: see the top)
+        src = texture0.SampleLevel((texel - v.params.xy) * v.uv.zw, 0) * (mixed ? 1 : v.color.a);  // (level 0, the only one a layer's texture has)
         // (Filtered where it is: a turned or scaled layer's pixels fall between the mask's texels.)
         cover = (flags & 1) != 0 ? pathCoverage(texture1.SampleLevel((v.local - v.radii.xy) * uniforms.texels.xy, 0).r, false)
                                  : roundRectCoverage(v.local, v.shape, v.radii, dx, dy);
