@@ -138,7 +138,7 @@ Kompoz her kareyi önce kaydeder ve yalnızca bir önceki kareden beri değişen
 
 ## Ortam değişkenleri
 
-Web'de onları sayfanın sorgusu belirler: `showcase.html?KOMPOZ_GPU=gles&KOMPOZ_PROFILE=1`.
+Web'de onları sayfanın sorgusu belirler: `showcase.html?KOMPOZ_GPU=gles&KOMPOZ_PROFILE=1`. Bir uygulamanın ortamı olmayan Android'de her biri, uygulamanın dosyalarında onun küçük harfle ve tirelerle yazılmış adını taşıyan, değerini içeren bir dosyayla verilir (`kompoz-profile`, içinde `gles` yazan `kompoz-gpu`), yukarıdaki gibi.
 
 | Değişken | Ne yapar |
 |---|---|

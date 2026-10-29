@@ -328,7 +328,11 @@
 - **Kompoz's own platform layer**, being built in place of SDL3 (the window, input, the frame loop and the app's
   lifecycle, on each platform its own, frames on the display's own beat as Compose's are): the app core takes
   Kompoz's own events now (`platform/app/platform_event.hpp`), SDL's turned into them where they come in, and
-  `KOMPOZ_SCRIPT` gives the core its own instead of putting SDL events in SDL's queue.
+  `KOMPOZ_SCRIPT` gives the core its own instead of putting SDL events in SDL's queue. The app core
+  (`platform/app/app_core.cpp`: the frame, the drawing, the profile, the script, the checks) is apart from the
+  platform it runs on, which it asks for what it needs through `platform::Platform` (its window and GPU surface, its
+  measures, its settings, the clock, the log) and which paces its frames; SDL is the first platform under it. On
+  Android every `KOMPOZ_` setting can now be given by a file of its name in the app's files, not only a few.
 - **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
   blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
   scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and

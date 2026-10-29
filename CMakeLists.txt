@@ -186,7 +186,7 @@ if(KOMPOZ_BUILD_SDL3)
 
     # An OBJECT library because the backend defines the entry point (main, or SDL_main on
     # Android/iOS), which must always end up in the final binary.
-    add_library(kompoz_sdl3 OBJECT platform/sdl3/sdl3_app.cpp platform/sdl3/font_system.cpp platform/sdl3/image_loader.cpp)
+    add_library(kompoz_sdl3 OBJECT platform/app/app_core.cpp platform/sdl3/sdl3_app.cpp platform/sdl3/font_system.cpp platform/sdl3/image_loader.cpp)
     target_link_libraries(kompoz_sdl3 PUBLIC kompoz_core SDL3::SDL3 Freetype::Freetype)
     set_target_properties(kompoz_sdl3 PROPERTIES EXPORT_NAME sdl3)
     add_library(kompoz::sdl3 ALIAS kompoz_sdl3)

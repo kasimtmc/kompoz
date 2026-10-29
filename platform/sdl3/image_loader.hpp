@@ -31,5 +31,9 @@ std::filesystem::path appCacheDirectory(const std::string& appName);
 void startImageDiskCache(const std::string& appName, uint64_t maxBytes);
 // At exit: loads waiting are dropped, the running ones stop soon; the worker threads end.
 void stopImageLoader();
+// An image asset (the APK's on Android) or a file next to the binary, decoded; empty if it can't be.
+ImageBitmap loadImageFile(std::string_view path);
+// A screenshot from pixels read back (RGBA, top row first): PNG where the path says so, else BMP.
+void savePixels(const std::string& path, int w, int h, std::vector<uint8_t>& pixels);
 
 } // namespace kompoz::sdl

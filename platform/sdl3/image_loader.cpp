@@ -478,6 +478,46 @@ void stopImageLoader() {
 #endif
 }
 
+// An image asset (APK on Android) or a file next to the binary: JPEG, PNG, WebP, BMP (on the
+// web, where the browser decodes asynchronously, PNG and BMP; AsyncImage takes the others).
+ImageBitmap loadImageFile(std::string_view path) {
+    std::string p(path);
+#ifndef SDL_PLATFORM_EMSCRIPTEN
+    if (std::vector<uint8_t> bytes = readFile(p); !bytes.empty())
+        if (ImageBitmap image = decodeImage(bytes); !image.empty()) return image;
+#endif
+    SDL_Surface* surface = SDL_LoadSurface(p.c_str());
+    if (!surface && SDL_GetBasePath()) surface = SDL_LoadSurface((SDL_GetBasePath() + p).c_str());
+    if (!surface) {
+        SDL_Log("kompoz: can't load image %s: %s", p.c_str(), SDL_GetError());
+        return {};
+    }
+    SDL_Surface* rgba = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
+    SDL_DestroySurface(surface);
+    if (!rgba) return {};
+    std::vector<uint8_t> pixels(size_t(rgba->w) * size_t(rgba->h) * 4);
+    for (int y = 0; y < rgba->h; ++y)
+        std::memcpy(pixels.data() + size_t(y) * size_t(rgba->w) * 4,
+                    static_cast<const uint8_t*>(rgba->pixels) + size_t(y) * size_t(rgba->pitch), size_t(rgba->w) * 4);
+    ImageBitmap image = ImageBitmap::fromPixels(rgba->w, rgba->h, std::move(pixels));
+    SDL_DestroySurface(rgba);
+    return image;
+}
+
+// A screenshot from pixels read back (RGBA, top row first).
+void savePixels(const std::string& path, int w, int h, std::vector<uint8_t>& pixels) {
+    SDL_Surface* surface = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_RGBA32, pixels.data(), w * 4);
+    if (!surface) return;
+    bool ok;
+#if SDL_VERSION_ATLEAST(3, 4, 0)
+    ok = path.ends_with(".png") ? SDL_SavePNG(surface, path.c_str()) : SDL_SaveBMP(surface, path.c_str());
+#else
+    ok = SDL_SaveBMP(surface, path.c_str());
+#endif
+    SDL_Log("kompoz: screenshot %s %s", path.c_str(), ok ? "saved" : SDL_GetError());
+    SDL_DestroySurface(surface);
+}
+
 } // namespace kompoz::sdl
 
 #ifdef SDL_PLATFORM_EMSCRIPTEN

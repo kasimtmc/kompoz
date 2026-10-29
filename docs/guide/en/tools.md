@@ -138,7 +138,7 @@ Kompoz records each frame first and draws again only what changed since the fram
 
 ## Environment variables
 
-On the web, the page's query sets them: `showcase.html?KOMPOZ_GPU=gles&KOMPOZ_PROFILE=1`.
+On the web, the page's query sets them: `showcase.html?KOMPOZ_GPU=gles&KOMPOZ_PROFILE=1`. On Android, where an app has no environment, any of them is set by a file in the app's files named as it in lower case with dashes, holding its value (`kompoz-profile`, `kompoz-gpu` holding `gles`), as above.
 
 | Variable | What it does |
 |---|---|
