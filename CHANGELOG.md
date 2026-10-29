@@ -325,6 +325,11 @@
   frame's paths fill most of it themselves: then those in it are kept and the rest drawn as before, rather than all
   rasterized again each frame. Going between the Home and Components tabs five times on a Redmi Note 9 Pro missed
   20–22 refreshes instead of 36. `KOMPOZ_PROFILE` counts paths drawn and kept in its slow frames.
+- **The pipeline cache is read in one go**: the file the GPU renderer keeps its compiled pipelines in was read a
+  character at a time and checked byte by byte: 6.5 MB took a Redmi Note 9 Pro 70 ms and 16 ms at every start, before
+  the renderer was made. It is read in one read now and checked eight bytes at a time (a file of the old format is
+  dropped once, and made again). The first frame came 102–127 ms after the window was shown instead of 191–212 (the
+  cache made anew there was 0.2 MB: the old one held mostly older shaders' pipelines).
 - **The window's settings are read once for all that changed them**: a change of the window's size, scale, insets,
   theme or language marks them to read again, once before the next frame or input, instead of at each event that says
   so. Each read asks Android for its settings, palettes and view configuration (4 ms on a Redmi Note 9 Pro), and a

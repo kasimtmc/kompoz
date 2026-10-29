@@ -29,8 +29,8 @@ void log(const std::string& message) {
 }
 
 namespace {
-// A cache file: this, the data's size and FNV-1a hash (8 bytes each, little-endian), the data.
-constexpr char kCacheMagic[8] = {'K', 'P', 'Z', 'P', 'I', 'P', 'E', '1'};
+// A cache file: this, the data's size and hash (cacheHash; 8 bytes each, little-endian), the data.
+constexpr char kCacheMagic[8] = {'K', 'P', 'Z', 'P', 'I', 'P', 'E', '2'};
 
 void putU64(std::vector<uint8_t>& out, uint64_t value) {
     for (int i = 0; i < 8; ++i) out.push_back(uint8_t(value >> (8 * i)));
@@ -43,6 +43,15 @@ uint64_t getU64(const uint8_t* in) {
 }
 
 std::filesystem::path utf8Path(const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); }
+
+// FNV-1a over the data's 8-byte words (little-endian), then its last bytes: a cache file is
+// megabytes, which byte by byte took a Redmi Note 9 Pro 16 ms to check at every start.
+uint64_t cacheHash(const uint8_t* data, size_t size) {
+    uint64_t hash = 0xcbf29ce484222325;
+    size_t words = size / 8;
+    for (size_t i = 0; i < words; ++i) hash = (hash ^ getU64(data + i * 8)) * 0x100000001b3;
+    return fnv1a(data + words * 8, size - words * 8, hash);
+}
 } // namespace
 
 uint64_t fnv1a(const void* data, size_t size, uint64_t hash) {
@@ -52,19 +61,24 @@ uint64_t fnv1a(const void* data, size_t size, uint64_t hash) {
 }
 
 std::vector<uint8_t> readPipelineCache(const std::string& path) {
-    std::ifstream in(utf8Path(path), std::ios::binary);
-    std::vector<uint8_t> file((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    // In one read (a character at a time, 6.5 MB took a Redmi Note 9 Pro 70 ms at every start).
+    std::ifstream in(utf8Path(path), std::ios::binary | std::ios::ate);
+    std::streamoff length = in ? std::streamoff(in.tellg()) : 0;
     constexpr size_t header = sizeof kCacheMagic + 16;
-    if (file.size() < header || std::memcmp(file.data(), kCacheMagic, sizeof kCacheMagic) != 0) return {};
+    if (length < std::streamoff(header)) return {};
+    std::vector<uint8_t> file(static_cast<size_t>(length));
+    in.seekg(0);
+    if (!in.read(reinterpret_cast<char*>(file.data()), std::streamsize(file.size()))) return {};
+    if (std::memcmp(file.data(), kCacheMagic, sizeof kCacheMagic) != 0) return {};
     uint64_t size = getU64(file.data() + sizeof kCacheMagic);
-    if (size != file.size() - header || getU64(file.data() + sizeof kCacheMagic + 8) != fnv1a(file.data() + header, size)) return {};
+    if (size != file.size() - header || getU64(file.data() + sizeof kCacheMagic + 8) != cacheHash(file.data() + header, size)) return {};
     return {file.begin() + header, file.end()};
 }
 
 void writePipelineCache(const std::string& path, const std::vector<uint8_t>& data) {
     std::vector<uint8_t> file(kCacheMagic, kCacheMagic + sizeof kCacheMagic);
     putU64(file, data.size());
-    putU64(file, fnv1a(data.data(), data.size()));
+    putU64(file, cacheHash(data.data(), data.size()));
     file.insert(file.end(), data.begin(), data.end());
     // (Another run of the app writing it too writes a file of its own.)
     auto stamp = uint64_t(std::chrono::steady_clock::now().time_since_epoch().count());

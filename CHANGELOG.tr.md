@@ -344,6 +344,11 @@
   dolduruyorsa başlamaz: içindekiler tutulur, kalanlar eskisi gibi çizilir, her karede hepsi yeniden taranmaz. Bir
   Redmi Note 9 Pro'da Ana sayfa ile Bileşenler sekmeleri arasında beş kez gidip gelmek 36 yerine 20–22 tazeleme
   kaçırdı. `KOMPOZ_PROFILE` yavaş karelerinde çizilen ve tutulan yolları sayar.
+- **Boru hattı önbelleği tek seferde okunur**: GPU renderer'ının derlenmiş boru hatlarını tuttuğu dosya karakter
+  karakter okunuyor ve bayt bayt denetleniyordu: bir Redmi Note 9 Pro'da 6,5 MB her açılışta, renderer yapılmadan önce
+  70 ve 16 ms sürüyordu. Artık tek okumada okunur ve sekizer bayt denetlenir (eski biçimdeki bir dosya bir kez atılır
+  ve yeniden yapılır). İlk kare pencere gösterildikten 191–212 yerine 102–127 ms sonra geldi (orada yeniden yapılan
+  önbellek 0,2 MB'tı: eskisi çoğunlukla eski gölgelendiricilerin boru hatlarını tutuyordu).
 - **Pencerenin ayarları, onları değiştiren her şey için bir kez okunur**: pencerenin boyutu, ölçeği, kenar boşlukları,
   teması ya da dili değişince ayarlar yeniden okunmak üzere işaretlenir ve bunu söyleyen her olayda değil, bir sonraki
   kareden ya da girdiden önce bir kez okunur. Her okuma Android'den ayarlarını, paletlerini ve görünüm
