@@ -1,7 +1,8 @@
 // Kompoz's platform on SDL3 (app/platform.hpp): the window, input, the soft keyboard and the
 // frame loop, on Windows, macOS, Linux and the web, for the app core (app/app_core.hpp).
 // SDL's main callbacks (SDL_AppInit / SDL_AppIterate / SDL_AppEvent) drive it on all of them; on
-// the desktops KOMPOZ_HEADLESS=1 runs the app on Kompoz's headless platform instead.
+// the desktops KOMPOZ_HEADLESS=1 runs the app on Kompoz's headless platform instead, and a Wayland
+// session on Kompoz's Wayland platform where it can.
 // (Each platform is getting a layer of its own in its place.)
 
 #include <SDL3/SDL.h>
@@ -14,6 +15,9 @@
 #include "../common/system.hpp"
 #ifdef KOMPOZ_HEADLESS
 #include "../headless/headless.hpp"
+#endif
+#ifdef KOMPOZ_WAYLAND
+#include "../linux/wayland/wayland_platform.hpp"
 #endif
 #ifdef KOMPOZ_GPU_VULKAN
 #include <SDL3/SDL_vulkan.h>
@@ -734,6 +738,9 @@ void SDL_AppQuit(void* appstate, SDL_AppResult) {
 int main(int argc, char* argv[]) {
 #ifdef KOMPOZ_HEADLESS
     if (kompoz::platform::headlessRequested()) return kompoz::platform::runHeadless(argc, argv);
+#endif
+#ifdef KOMPOZ_WAYLAND
+    if (int result = kompoz::platform::runWayland(argc, argv); result >= 0) return result;  // (else SDL's)
 #endif
     return SDL_EnterAppMainCallbacks(argc, argv, SDL_AppInit, SDL_AppIterate, SDL_AppEvent, SDL_AppQuit);
 }

@@ -8,7 +8,8 @@ Build Kompoz, add it to your own CMake project, and run your app on Linux, Windo
 - CMake 3.24 or newer.
 - SDL3, FreeType and libpng.
 - Optional: HarfBuzz for text shaping (Arabic joining, Indic scripts, ligatures, emoji sequences). Without it, text is drawn character by character.
-- Optional on Linux: libcurl, libwebp and libturbojpeg (3.0 or later), which `AsyncImage` uses to download images and decode WebP and JPEG. libdbus is loaded at run time, if present, to read the desktop's accent color.
+- Optional on Linux: libcurl, libwebp and libturbojpeg (3.0 or later), which `AsyncImage` uses to download images and decode WebP and JPEG. libdbus is loaded at run time, if present, to read the desktop's accent color and its light or dark preference.
+- On Linux, Wayland's, xkbcommon's and EGL's headers (`libwayland-dev`, `libxkbcommon-dev`, `libegl-dev`; on Arch they come with `wayland`, `libxkbcommon` and `libglvnd`) for Kompoz's own Wayland platform, which a Wayland session runs on; their libraries are loaded at run time. Without them, or on a compositor that doesn't decorate windows (GNOME, until Kompoz draws its own title bar), apps run on SDL's platform; `KOMPOZ_PLATFORM=sdl` picks it always.
 
 On Linux, install these from your distribution's packages. For Android, the web and Windows, Kompoz builds FreeType, HarfBuzz, zlib and libpng from source, and SDL3 but on Android; `scripts/fetch-deps.sh` downloads them (see below).
 

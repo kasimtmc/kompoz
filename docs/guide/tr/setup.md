@@ -8,7 +8,8 @@ Kompoz'u derleyin, kendi CMake projenize ekleyin ve uygulamanızı Linux, Window
 - CMake 3.24 ya da daha yenisi.
 - SDL3, FreeType ve libpng.
 - İsteğe bağlı: metin şekillendirme için HarfBuzz (Arapça harf bağlama, Hint yazıları, bitişik harfler, emoji dizileri). Olmadan metin karakter karakter çizilir.
-- Linux'ta isteğe bağlı: `AsyncImage`'ın resim indirmek ve WebP ile JPEG çözmek için kullandığı libcurl, libwebp ve libturbojpeg (3.0 ya da sonrası). libdbus, varsa, masaüstünün vurgu rengini okumak için çalışma anında yüklenir.
+- Linux'ta isteğe bağlı: `AsyncImage`'ın resim indirmek ve WebP ile JPEG çözmek için kullandığı libcurl, libwebp ve libturbojpeg (3.0 ya da sonrası). libdbus, varsa, masaüstünün vurgu rengini ve açık ya da koyu tercihini okumak için çalışma anında yüklenir.
+- Linux'ta, bir Wayland oturumunun üzerinde çalıştığı Kompoz'un kendi Wayland platformu için Wayland'in, xkbcommon'ın ve EGL'in başlıkları (`libwayland-dev`, `libxkbcommon-dev`, `libegl-dev`; Arch'ta `wayland`, `libxkbcommon` ve `libglvnd` ile gelir); kitaplıkları çalışma anında yüklenir. Bunlar yoksa ya da pencere çerçevesi çizmeyen bir bileşikleyicide (GNOME; Kompoz kendi başlık çubuğunu çizene kadar) uygulamalar SDL'in platformunda çalışır; `KOMPOZ_PLATFORM=sdl` onu her zaman seçer.
 
 Linux'ta bunları dağıtımınızın paketlerinden kurun. Android, web ve Windows için Kompoz FreeType, HarfBuzz, zlib ve libpng'yi, Android dışında SDL3'ü de kaynaktan derler; `scripts/fetch-deps.sh` onları indirir (aşağıya bakın).
 

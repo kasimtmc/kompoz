@@ -392,6 +392,17 @@
   başlatıyor, SDL'inkinin yaptığı gibi. Bir Xiaomi 14 Ultra'da (120 Hz) ve bir Redmi Note 9 Pro'da (60 Hz) SDL'li
   yapıyla karşılaştırıldığında elle kaydırırken ve fırlatmalarda aynı sayıda yenileme kaçırılıyor; SDL'in Android
   tarafı için tuttuğumuz üç yama da onunla birlikte gitti, vitrinin alt satırı da artık SDL3 demiyor.
+  **Bir Wayland oturumu Kompoz'un kendi Wayland platformunda çalışıyor** (`platform/linux/wayland`): bileşikleyicinin
+  çerçevesini çizdiği bir `xdg_toplevel` (`xdg-decoration`); bileşikleyicinin ölçeğinde (kesirli ölçek ve viewporter,
+  yoksa yüzeyin tam sayı ölçeği) Vulkan (`VK_KHR_wayland_surface`) ya da OpenGL ES (bir `wl_egl_window`) ile
+  çiziliyor, kareleri bileşikleyicinin kare geri çağrılarında. İşaretçi, tekerlek (bir çentik 1), dokunma ve klavye
+  (xkbcommon; tuşlar bileşikleyicinin hızında yineleniyor), `text-input-v3` üzerinden yazma da; data device üzerinden
+  pano, imlecin şekli (`cursor-shape`), ekranı açık tutma (`idle-inhibit`), bağlantılar için `xdg-open`, açık ya da
+  koyu tercih portalın `color-scheme`'inden. `libwayland-client`, `libwayland-egl`, `libxkbcommon` ve EGL çalışma
+  anında yükleniyor, protokollerin kodu önceden üretiliyor (`scripts/wayland-protocols.sh`); derlemek için yalnızca
+  başlıkları gerekiyor. Bunlar ya da bileşikleyicinin çerçeveleri yoksa, ya da `KOMPOZ_PLATFORM=sdl` ile, uygulamalar
+  SDL'in platformunda çalışıyor. Sırada bırakmalar ve touchpad sıkıştırmaları, sonra çerçeve çizmeyen bileşikleyiciler
+  için Kompoz'un kendi başlık çubuğu ve X11 var.
 - **Bir yolun gölgesi önceden sahip olduğu maskeden çiziliyor** (Compose'un bir `dropShadow`'un ya da
   `innerShadow`'un bulanık bitmap'ini tutması gibi): GPU renderer'ı yuvarlak köşeli dikdörtgen olmayan bir şeklin
   (kalp, yıldız, kurabiye) gölgesini her seferinde baştan, her biri iki geçişli bir katman ve bir bulanıklıkla

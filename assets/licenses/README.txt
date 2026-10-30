@@ -8,5 +8,6 @@ other assets (into the APK on Android, into the page's data on the web): keep th
   libpng.txt, zlib.txt, SDL.txt   Windows, the web; SDL not on Android)
   VulkanMemoryAllocator.txt       the GPU renderer's Vulkan backend's allocator (Linux, Android,
                                   Windows)
+  Wayland-protocols.txt           the Wayland protocols Linux's Wayland platform is built with
 
 Kompoz.txt and NOTICE.txt are copies of LICENSE and NOTICE at the repository's root.

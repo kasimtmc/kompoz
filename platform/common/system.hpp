@@ -37,4 +37,8 @@ struct Notifier {
     std::function<void()> threadDone;
 };
 
+// The language the environment asks for (LANGUAGE, LC_ALL, LC_MESSAGES, LANG: "tr_TR.UTF-8" is
+// "tr"); on Windows, where those are seldom set, the user's locale. Empty: it doesn't say.
+std::string preferredLanguage();
+
 } // namespace kompoz::platform

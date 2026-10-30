@@ -145,6 +145,7 @@ On the web, the page's query sets them: `showcase.html?KOMPOZ_GPU=gles&KOMPOZ_PR
 | `KOMPOZ_PREVIEW=name` | Shows one preview, or all of them with `*`. |
 | `KOMPOZ_SCRIPT="…"` | Drives the app with the commands above. |
 | `KOMPOZ_HEADLESS=1` | Runs the app without a window, on the desktops (see above). |
+| `KOMPOZ_PLATFORM=sdl` | Runs the app on SDL's platform in a Wayland session, instead of Kompoz's own Wayland platform. |
 | `KOMPOZ_STATE_FILE=file` | Writes the saved state (`rememberSaveable`, the navigation back stack) at exit and reads it at start. |
 | `KOMPOZ_FONT_SCALE=1.3` | Stands in for the system's font scale on the desktop. |
 | `KOMPOZ_SCALE=2.625` | Stands in for a screen's density, to see a phone's layout on the desktop. |

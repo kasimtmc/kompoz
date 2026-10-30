@@ -15,36 +15,9 @@
 #include <utility>
 #include <vector>
 
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#endif
-
 namespace kompoz::platform {
 
 namespace {
-
-// The language the environment asks for (LANGUAGE, LC_ALL, LC_MESSAGES, LANG: "tr_TR.UTF-8" is
-// "tr"); on Windows, where those are seldom set, the user's locale.
-std::string preferredLanguage() {
-    for (const char* name : {"LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"}) {
-        const char* value = std::getenv(name);
-        if (!value) continue;
-        std::string v(value);
-        v = v.substr(0, v.find(':'));  // (LANGUAGE is a list)
-        v = v.substr(0, v.find_first_of("_.@-"));
-        if (!v.empty() && v != "C" && v != "POSIX") return v;
-    }
-#ifdef _WIN32
-    wchar_t name[LOCALE_NAME_MAX_LENGTH];
-    if (GetUserDefaultLocaleName(name, LOCALE_NAME_MAX_LENGTH) > 0) {
-        std::string v;
-        for (const wchar_t* c = name; *c && *c != L'-' && *c < 0x80; ++c) v += char(*c);
-        return v;
-    }
-#endif
-    return {};
-}
 
 class HeadlessPlatform final : public Platform {
 public:

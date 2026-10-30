@@ -25,15 +25,20 @@ constexpr const char* kPath = "/org/freedesktop/portal/desktop";
 constexpr const char* kSettings = "org.freedesktop.portal.Settings";
 constexpr const char* kNamespace = "org.freedesktop.appearance";
 constexpr const char* kKey = "accent-color";
+constexpr const char* kSchemeKey = "color-scheme";  // 0 no preference, 1 dark, 2 light
 
-// An accent color from a value: (ddd), red, green and blue in 0..1, maybe inside variants (Read
-// wraps it in one more than ReadOne). Out of range: the desktop has none.
-std::optional<std::optional<Color>> accentIn(LibDBus& d, DBusMessageIter* it) {
+void unwrap(LibDBus& d, DBusMessageIter* it) {
     while (d.message_iter_get_arg_type(it) == kTypeVariant) {
         DBusMessageIter inner;
         d.message_iter_recurse(it, &inner);
         *it = inner;
     }
+}
+
+// An accent color from a value: (ddd), red, green and blue in 0..1, maybe inside variants (Read
+// wraps it in one more than ReadOne). Out of range: the desktop has none.
+std::optional<std::optional<Color>> accentIn(LibDBus& d, DBusMessageIter* it) {
+    unwrap(d, it);
     if (d.message_iter_get_arg_type(it) != kTypeStruct) return std::nullopt;
     DBusMessageIter field;
     d.message_iter_recurse(it, &field);
@@ -48,6 +53,15 @@ std::optional<std::optional<Color>> accentIn(LibDBus& d, DBusMessageIter* it) {
     return std::optional<Color>{Color{float(rgb[0]), float(rgb[1]), float(rgb[2]), 1}};
 }
 
+// Whether the desktop prefers dark from a color-scheme value (u); none: no preference.
+std::optional<std::optional<bool>> schemeIn(LibDBus& d, DBusMessageIter* it) {
+    unwrap(d, it);
+    if (d.message_iter_get_arg_type(it) != kTypeUint32) return std::nullopt;
+    uint32_t scheme = 0;
+    d.message_iter_get_basic(it, &scheme);
+    return scheme == 1 ? std::optional(true) : scheme == 2 ? std::optional(false) : std::optional<bool>{};
+}
+
 } // namespace
 
 struct DesktopAccent::State {
@@ -57,23 +71,38 @@ struct DesktopAccent::State {
     std::atomic<bool> running{true};
     mutable std::mutex mutex;
     std::optional<Color> accent;
+    std::optional<bool> dark;
+    bool accentWanted = true;  // (KOMPOZ_NO_DESKTOP_ACCENT: the scheme only)
     std::thread thread;
 
-    void tell(std::optional<Color> value) {
-        {
-            std::lock_guard lock(mutex);
-            accent = value;
+    // A key's value, as it is now or as it changed.
+    void take(std::string_view key, DBusMessageIter* it) {
+        if (key == kKey && accentWanted) {
+            if (auto value = accentIn(dbus, it)) {
+                std::lock_guard lock(mutex);
+                accent = *value;
+            } else {
+                return;
+            }
+        } else if (key == kSchemeKey) {
+            if (auto value = schemeIn(dbus, it)) {
+                std::lock_guard lock(mutex);
+                dark = *value;
+            } else {
+                return;
+            }
+        } else {
+            return;
         }
         if (notifier.notify) notifier.notify();
     }
 
-    // The accent as it is now: ReadOne (portal version 2+), else Read.
-    void readNow() {
+    // A key's value as it is now: ReadOne (portal version 2+), else Read.
+    void readNow(const char* key) {
         for (const char* method : {"ReadOne", "Read"}) {
             Message* call = dbus.message_new_method_call(kPortal, kPath, kSettings, method);
             if (!call) return;
             const char* ns = kNamespace;
-            const char* key = kKey;
             dbus.message_append_args(call, kTypeString, &ns, kTypeString, &key, kTypeInvalid);
             DBusError error;
             dbus.error_init(&error);
@@ -86,15 +115,15 @@ struct DesktopAccent::State {
                 return;
             }
             DBusMessageIter it;
-            if (dbus.message_iter_init(reply, &it))
-                if (auto value = accentIn(dbus, &it)) tell(*value);
+            if (dbus.message_iter_init(reply, &it)) take(key, &it);
             dbus.message_unref(reply);
             return;
         }
     }
 
     void run() {
-        readNow();
+        if (accentWanted) readNow(kKey);
+        readNow(kSchemeKey);
         while (running.load()) {
             if (!dbus.connection_read_write(connection, 200)) break;  // the bus went away
             while (Message* m = dbus.connection_pop_message(connection)) {
@@ -105,8 +134,7 @@ struct DesktopAccent::State {
                         dbus.message_iter_get_basic(&it, &ns);
                         if (dbus.message_iter_next(&it) && dbus.message_iter_get_arg_type(&it) == kTypeString) {
                             dbus.message_iter_get_basic(&it, &key);
-                            if (std::string_view(ns) == kNamespace && std::string_view(key) == kKey && dbus.message_iter_next(&it))
-                                if (auto value = accentIn(dbus, &it)) tell(*value);
+                            if (std::string_view(ns) == kNamespace && dbus.message_iter_next(&it)) take(key, &it);
                         }
                     }
                 }
@@ -119,7 +147,8 @@ struct DesktopAccent::State {
 DesktopAccent::DesktopAccent(platform::Notifier notifier) : state_(std::make_shared<State>()) {
     State& s = *state_;
     s.notifier = std::move(notifier);
-    if (std::getenv("KOMPOZ_NO_DESKTOP_ACCENT") || !s.dbus.load()) return;
+    s.accentWanted = !std::getenv("KOMPOZ_NO_DESKTOP_ACCENT");
+    if (!s.dbus.load()) return;
     DBusError error;
     s.dbus.error_init(&error);
     s.connection = s.dbus.bus_get_private(kSessionBus, &error);  // its own: SDL's shared one is SDL's
@@ -151,6 +180,11 @@ bool DesktopAccent::listening() const { return state_->thread.joinable(); }
 std::optional<Color> DesktopAccent::accent() const {
     std::lock_guard lock(state_->mutex);
     return state_->accent;
+}
+
+std::optional<bool> DesktopAccent::darkScheme() const {
+    std::lock_guard lock(state_->mutex);
+    return state_->dark;
 }
 
 } // namespace kompoz::platform

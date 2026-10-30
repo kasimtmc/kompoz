@@ -4,9 +4,9 @@
 // org.freedesktop.appearance accent-color, which GNOME and KDE fill in. It is read, and followed
 // as it changes, on a thread of its own over D-Bus (libdbus, loaded when it is there, as SDL
 // does); it notifies (Notifier) as each value comes (linux/desktop_accent.cpp). On Windows, the
-// one in Settings > Personalization > Colors, from the registry (windows/desktop_accent.cpp). The
-// light/dark preference needs none of this: SDL follows the portal's color-scheme itself
-// (SDL_EVENT_SYSTEM_THEME_CHANGED).
+// one in Settings > Personalization > Colors, from the registry (windows/desktop_accent.cpp). On
+// Linux the light/dark preference too, the portal's color-scheme (for Kompoz's own platforms: SDL
+// follows it itself, SDL_EVENT_SYSTEM_THEME_CHANGED).
 
 #include "system.hpp"
 
@@ -28,6 +28,9 @@ public:
     bool listening() const;
     // The latest accent; none: the desktop has none (or doesn't say).
     std::optional<Color> accent() const;
+    // Whether the desktop prefers dark (the portal's color-scheme, read even with
+    // KOMPOZ_NO_DESKTOP_ACCENT); none: it doesn't say (nor on Windows, where the platform asks).
+    std::optional<bool> darkScheme() const;
 
     struct State;
 

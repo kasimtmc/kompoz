@@ -333,7 +333,7 @@ Deponun düzeni:
 | `platform/app/` | uygulama çekirdeği (kareler, çizim, betikler, ekran görüntüleri) ve üzerinde çalıştığı platform arayüzü |
 | `platform/gpu/` | GPU çizicisi ve Vulkan, OpenGL ES, Metal ve WebGPU arka uçları |
 | `platform/common/` | her platformun paylaştıkları: fontlar, resimler, dosyalar ve günlük, duvar kâğıdının renkleri |
-| `platform/linux/`, `platform/windows/` | masaüstlerinin kendilerine özgü olanlar: ekran okuyucular (AT-SPI, UI Automation), vurgu rengi |
+| `platform/linux/`, `platform/windows/` | masaüstlerinin kendilerine özgü olanlar: Linux'un Wayland platformu (`wayland/`), ekran okuyucular (AT-SPI, UI Automation), vurgu rengi |
 | `platform/android/` | Android platformu: yerel tarafı (kareler, girdi ve yüzeyler, klavye, performans ipuçları) ve `java/`'da Java tarafı (etkinlik ve görünümü, klavye, erişilebilirlik, kenar boşlukları, intent'ler) |
 | `platform/headless/` | ekransız platform (`KOMPOZ_HEADLESS=1`): testler, betikli çalıştırmalar, CI |
 | `platform/sdl3/` | SDL3 platformu: masaüstlerinde ve web'de pencereler, girdi ve olay döngüsü |
