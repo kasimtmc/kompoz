@@ -11,8 +11,7 @@
 namespace kompoz::platform {
 
 // The app on X11 until it quits (what main returns), or -1 where it can't run there: no X
-// display, its libraries or XInput 2.2 missing, the window not made. KOMPOZ_PLATFORM=sdl keeps to
-// SDL's platform.
+// display, its libraries or XInput 2.2 missing, the window not made.
 int runX11(int argc, char* argv[]);
 
 } // namespace kompoz::platform

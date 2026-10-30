@@ -213,9 +213,8 @@ public:
     // As Compose's: each in a color or a brush (a gradient spread over the whole area, as in
     // Compose), faded by `alpha`, filled or outlined (`style`: Fill, Stroke(...)), its colors
     // through `colorFilter`, onto what is drawn already by `blendMode` (inside a graphicsLayer
-    // with CompositingStrategy::Offscreen: the layer's content; SDL draws SrcOver, DstIn, DstOut,
-    // Clear, Src, Dst and Plus, the others as SrcOver). An unset size reaches from topLeft to the
-    // area's bottom right; an unset center is its middle. Stroke widths of 0 are hairlines.
+    // with CompositingStrategy::Offscreen: the layer's content). An unset size reaches from topLeft
+    // to the area's bottom right; an unset center is its middle. Stroke widths of 0 are hairlines.
     void drawLine(const Brush& brush, Offset start, Offset end, float strokeWidth = 0, StrokeCap cap = StrokeCap::Butt,
                   std::optional<PathEffect> pathEffect = {}, float alpha = 1, std::optional<ColorFilter> colorFilter = {},
                   BlendMode blendMode = BlendMode::SrcOver);

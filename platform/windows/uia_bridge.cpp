@@ -470,7 +470,7 @@ private:
     std::atomic<ULONG> refs_{1};
 };
 
-// The window's own messages: the root when UI Automation asks for it, the rest to SDL's.
+// The window's own messages: the root when UI Automation asks for it, the rest to its own handler.
 LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     auto* s = static_cast<State*>(GetPropW(hwnd, kProperty));
     if (!s) return DefWindowProcW(hwnd, message, wParam, lParam);

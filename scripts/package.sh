@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Packages the showcase for every platform it builds on, into dist/:
 #
-#   kompoz-showcase-<version>-linux-x86_64.tar.gz   Release; the system's SDL3, FreeType, HarfBuzz,
+#   kompoz-showcase-<version>-linux-x86_64.tar.gz   Release; the system's FreeType, HarfBuzz, libpng,
 #                                                    libcurl, libwebp and libturbojpeg (as built here)
 #   kompoz-showcase-<version>-windows-x86_64.zip    MinGW cross build, static: Windows 10 and later
 #   kompoz-showcase-<version>-android.apk           debug-signed: adb install, or open it on the phone
@@ -52,7 +52,8 @@ linux() {
     stage $build showcase strip "$dist/$name"
     cat > "$dist/$name/README.txt" <<EOF
 Kompoz showcase ($version) for Linux x86_64.
-Run ./showcase. It uses the system's SDL3, FreeType, HarfBuzz, libcurl, libwebp and libturbojpeg.
+Run ./showcase (in a Wayland session or on an X11 display). It uses the system's FreeType, HarfBuzz,
+libpng, libcurl, libwebp and libturbojpeg.
 A deep link opens a screen: ./showcase kompoz://components
 EOF
     tar -C "$dist" -czf "$dist/$name.tar.gz" "$name" && rm -rf "$dist/${name:?}"

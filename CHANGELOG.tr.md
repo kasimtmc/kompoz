@@ -10,9 +10,9 @@
 - **Windows'ta ekran okuyucular**: semantik ağaç UI Automation üzerinden Ekran Okuyucusu'na ve NVDA'ya sunuluyor:
   denetim türleri, adlar, durumlar, konumlar, düğümleri kullanmak için desenler ve değişenler için olaylar.
 - **Kurulum ve paketler**: Linux'ta, macOS'ta ve Windows'ta `cmake --install` ve `find_package(kompoz)`
-  (`kompoz::core`, `kompoz::sdl3`, `kompoz_copy_assets`); sistemin SDL3, FreeType ve HarfBuzz'ıyla ya da
-  `third_party/`'den derlenip yanına kurulanlarla. vcpkg overlay port'u ve Conan reçetesi; AsyncImage'ın kütüphaneleri
-  özellik ve seçenek olarak.
+  (`kompoz::core`, `kompoz::app`, `kompoz_copy_assets`); sistemin FreeType ve HarfBuzz'ıyla ya da `third_party/`'den
+  derlenip yanına kurulanlarla. vcpkg overlay port'u ve Conan reçetesi; AsyncImage'ın kütüphaneleri özellik ve seçenek
+  olarak.
 - **libjpeg-turbo 2.x ile de JPEG** (3.x'in yanında); AsyncImage'ın kütüphaneleri CMake paketlerinden ya da
   pkg-config'ten bulunuyor, `KOMPOZ_WITH_JPEG` / `WEBP` / `CURL` her birini otomatik, zorunlu ya da kapalı yapıyor.
 - **Her platformda CI**: testler, platform testleri ve Kompoz'un her kurulum yoluyla derlenip çalıştırılan, tıklanan
@@ -321,9 +321,7 @@
   Metal yalnızca saklanan kareye çizer, ekran görüntüleri ondan alınır. Vulkan sürücüsü olmayan bir Windows bilgisayarı
   (sanal makine, Uzak Masaüstü, CI) uygulamayla gelen ANGLE üzerinden çizer.
 - **Bir betikle çalışan ve başlayamayan uygulama bunu günlüğünde söyler**: `KOMPOZ_SCRIPT` verildiğinde (CI'daki gibi)
-  birinin kapatmasını bekleyen bir ileti kutusu açılmaz. Conan Center'ın SDL'inde Windows'ta OpenGL ES yoktur; bu yüzden
-  Conan ile derlenen bir uygulama orada yalnızca Vulkan ile çizer (ANGLE, EGL'li bir SDL ister); Conan testi Windows
-  için derlenmiş Mesa lavapipe'ında çizer.
+  birinin kapatmasını bekleyen bir ileti kutusu açılmaz. Conan testi Windows için derlenmiş Mesa lavapipe'ında çizer.
 - **KOMPOZ_PROFILE yalnızca beklenen karelerin kaçırdığı tazelemeleri sayar**: gösterilen iki kare arasında
   uygulama meşgulken geçen tazelemeleri sayıyordu; çalışan bir betik de (ölçümlerdeki gibi) ekranda hiçbir şey
   değişmezken karelerini beklerken uygulamayı meşgul gösteriyordu: yarım saniyelik bir duraklama 60 kadar kaçan
@@ -405,14 +403,14 @@
   ekranı açık tutma (`idle-inhibit`), bağlantılar için `xdg-open`, açık ya da koyu tercih portalın
   `color-scheme`'inden. `libwayland-client`, `libwayland-egl`, `libxkbcommon` ve EGL çalışma anında yükleniyor,
   protokollerin kodu önceden üretiliyor (`scripts/wayland-protocols.sh`); derlemek için yalnızca başlıkları gerekiyor.
-  Bunlar yoksa, ya da `KOMPOZ_PLATFORM=sdl` ile, uygulamalar SDL'in platformunda çalışıyor. **Bir X11 oturumu
-  Kompoz'un kendi X11 platformunda çalışıyor** (`platform/linux/x11`): pencere yöneticisinin çerçevesini çizdiği bir
-  pencere; masaüstünün ölçeğinde (`Xft.dpi`, değiştikçe izleniyor) Vulkan (`VK_KHR_xlib_surface`) ya da OpenGL ES
-  (EGL'in X11 platformu) ile çiziliyor, kareleri ekranın vuruşunda. İşaretçi, tekerleği (XInput 2'nin söylediği gibi
-  yumuşak), dokunma ve touchpad sıkıştırmaları XInput 2 üzerinden; klavye bir giriş yöntemiyle (XIM, söylenebildiği
-  yerde alanın yeri de söyleniyor); pano (büyükse parça parça) ve dosya ya da metin bırakmalar seçimler olarak (XDND);
-  masaüstü temasının imleçleri (libXcursor), XRandR'dan yenileme hızı, `org.freedesktop.ScreenSaver` üzerinden ekranı
-  açık tutma. libX11, libXi, libXcursor ve libXrandr çalışma anında yükleniyor; `KOMPOZ_PLATFORM=x11` onu bir Wayland
+  Bunlar yoksa bir Wayland oturumunun uygulamaları X11 platformunda (XWayland) çalışıyor. **Bir X11 oturumu Kompoz'un
+  kendi X11 platformunda çalışıyor** (`platform/linux/x11`): pencere yöneticisinin çerçevesini çizdiği bir pencere;
+  masaüstünün ölçeğinde (`Xft.dpi`, değiştikçe izleniyor) Vulkan (`VK_KHR_xlib_surface`) ya da OpenGL ES (EGL'in X11
+  platformu) ile çiziliyor, kareleri ekranın vuruşunda. İşaretçi, tekerleği (XInput 2'nin söylediği gibi yumuşak),
+  dokunma ve touchpad sıkıştırmaları XInput 2 üzerinden; klavye bir giriş yöntemiyle (XIM, söylenebildiği yerde alanın
+  yeri de söyleniyor); pano (büyükse parça parça) ve dosya ya da metin bırakmalar seçimler olarak (XDND); masaüstü
+  temasının imleçleri (libXcursor), XRandR'dan yenileme hızı, `org.freedesktop.ScreenSaver` üzerinden ekranı açık
+  tutma. libX11, libXi, libXcursor ve libXrandr çalışma anında yükleniyor; `KOMPOZ_PLATFORM=x11` onu bir Wayland
   oturumunda da XWayland üzerinden çalıştırıyor. İkisinin ortak kullandıkları (tuşlar, bağlantılar, masaüstünün
   hizmetleri) `platform/linux/desktop_services`'ta, EGL üzerinden OpenGL ES `platform/common/egl_window`'da (derlemek
   için EGL başlığı gerekmiyor; Windows'ta ANGLE'ınkiyle de). **Windows, Kompoz'un kendi Win32 platformunda çalışıyor**
@@ -438,7 +436,13 @@
   yeri söyleniyor), pano, dosya ve metin bırakmalar, sistemin imleçleri, açık ya da koyu görünüm, IOKit güç beyanı
   olarak `keepScreenOn`, uygulamanın menüsü (Gizle, Çık, pencereninkiler), `NSWorkspace` ile açılan bağlantılar.
   Hepsinde terminaldeki (Windows'ta konsoldaki) Ctrl+C ve SIGTERM, SDL'in platformunun yaptığı gibi uygulamadan
-  çıkıyor, durumu çıkarken yazılıyor; böylece `scripts/dev.sh`'nin yeniden başlatmaları ekranı yine koruyor.
+  çıkıyor, durumu çıkarken yazılıyor; böylece `scripts/dev.sh`'nin yeniden başlatmaları ekranı yine koruyor. **SDL3
+  tamamen kalktı**: her yerde Kompoz'un kendi platformu olduğundan `platform/main.cpp` hangisinde çalışılacağını
+  seçiyor (başsız, Wayland, X11, Windows, macOS, sayfa); SDL koddan, derlemeden, paketlerden ve CI'dan çıktı. Platform
+  katmanının hedefi `kompoz::app`, seçeneği `KOMPOZ_BUILD_APP` (`kompoz::sdl3` ve `KOMPOZ_BUILD_SDL3` kalktı:
+  `kompoz::app`'e bağlayın); `KOMPOZ_PLATFORM=sdl` kalktı; ne `scripts/fetch-deps.sh`, ne vcpkg port'u, ne Conan
+  reçetesi, ne de Homebrew SDL3 istiyor, lisansı da artık bir uygulamanın lisansları arasında değil. Linux'ta derlemek
+  için Wayland ile xkbcommon'ın ya da X11'in başlıkları gerekiyor.
 - **Bir yolun gölgesi önceden sahip olduğu maskeden çiziliyor** (Compose'un bir `dropShadow`'un ya da
   `innerShadow`'un bulanık bitmap'ini tutması gibi): GPU renderer'ı yuvarlak köşeli dikdörtgen olmayan bir şeklin
   (kalp, yıldız, kurabiye) gölgesini her seferinde baştan, her biri iki geçişli bir katman ve bir bulanıklıkla

@@ -11,7 +11,7 @@
 namespace kompoz::platform {
 
 // The app on Windows until it quits (what main returns), or -1 where it can't run there: the
-// window class or the window not made. KOMPOZ_PLATFORM=sdl keeps to SDL's platform.
+// window class or the window not made.
 int runWin32(int argc, char* argv[]);
 
 } // namespace kompoz::platform

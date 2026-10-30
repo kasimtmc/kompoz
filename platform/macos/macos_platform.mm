@@ -701,7 +701,6 @@ using kompoz::platform::MouseButton;
 namespace kompoz::platform {
 
 int runMacOS(int argc, char* argv[]) {
-    if (const char* forced = std::getenv("KOMPOZ_PLATFORM"); forced && std::string_view(forced) == "sdl") return -1;
     @autoreleasepool {
         auto platform = std::make_unique<MacPlatform>();
         return platform->connect() ? platform->run(argc, argv) : -1;

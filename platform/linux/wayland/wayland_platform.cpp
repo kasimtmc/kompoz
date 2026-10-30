@@ -1419,8 +1419,7 @@ const wl_registry_listener WaylandPlatform::kRegistry = {
 } // namespace
 
 int runWayland(int argc, char* argv[]) {
-    if (const char* forced = std::getenv("KOMPOZ_PLATFORM"); forced && (std::string_view(forced) == "sdl" || std::string_view(forced) == "x11"))
-        return -1;
+    if (const char* forced = std::getenv("KOMPOZ_PLATFORM"); forced && std::string_view(forced) == "x11") return -1;
     return withDbus([&] {
         auto platform = std::make_unique<WaylandPlatform>();
         return platform->connect() ? platform->run(argc, argv) : -1;

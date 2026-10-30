@@ -975,7 +975,6 @@ private:
 } // namespace
 
 int runX11(int argc, char* argv[]) {
-    if (const char* forced = std::getenv("KOMPOZ_PLATFORM"); forced && std::string_view(forced) == "sdl") return -1;
     return withDbus([&] {
         auto platform = std::make_unique<X11Platform>();
         return platform->connect() ? platform->run(argc, argv) : -1;

@@ -910,7 +910,6 @@ HRESULT DropTarget::Drop(IDataObject* data, DWORD, POINTL at, DWORD* effect) {
 } // namespace
 
 int runWin32(int argc, char* argv[]) {
-    if (const char* forced = std::getenv("KOMPOZ_PLATFORM"); forced && std::string_view(forced) == "sdl") return -1;
     auto platform = std::make_unique<Win32Platform>();
     return platform->connect() ? platform->run(argc, argv) : -1;
 }

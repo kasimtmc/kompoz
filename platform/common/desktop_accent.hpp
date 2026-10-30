@@ -1,13 +1,13 @@
 #pragma once
 
 // The desktop's accent color on Linux (and other free desktops): the XDG settings portal's
-// org.freedesktop.appearance accent-color, which GNOME and KDE fill in. It is read, and followed
-// as it changes, on a thread of its own over D-Bus (libdbus, loaded when it is there, as SDL
-// does); it notifies (Notifier) as each value comes (linux/desktop_accent.cpp). On Windows, the
-// one in Settings > Personalization > Colors, from the registry (windows/desktop_accent.cpp). On
-// Linux the light/dark preference too, the portal's color-scheme (for Kompoz's own platforms: SDL
-// follows it itself, SDL_EVENT_SYSTEM_THEME_CHANGED), and GNOME's layout of a window's buttons
-// (org.gnome.desktop.wm.preferences button-layout), for the title bar Kompoz draws.
+// org.freedesktop.appearance accent-color, which GNOME and KDE fill in. It is read, and
+// followed as it changes, on a thread of its own over D-Bus (libdbus, loaded when it is there,
+// as SDL does); it notifies (Notifier) as each value comes (linux/desktop_accent.cpp). On
+// Windows, the one in Settings > Personalization > Colors, from the registry
+// (windows/desktop_accent.cpp). On Linux the light/dark preference too, the portal's
+// color-scheme, and GNOME's layout of a window's buttons (org.gnome.desktop.wm.preferences
+// button-layout), for the title bar Kompoz draws.
 
 #include "system.hpp"
 

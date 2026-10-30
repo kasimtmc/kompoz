@@ -12,7 +12,7 @@
 namespace kompoz::platform {
 
 // The app started on the page (it goes on in the browser's event loop after main returns), or -1
-// where it can't run there. KOMPOZ_PLATFORM=sdl (in the page's query) keeps to SDL's platform.
+// where it can't run there.
 int runWeb(int argc, char* argv[]);
 
 } // namespace kompoz::platform

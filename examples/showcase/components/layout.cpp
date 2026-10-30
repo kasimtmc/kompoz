@@ -494,7 +494,7 @@ void FlexBoxSection(CallSite site) {
                 tag("Kotlin", 14);
                 tag("C++20", 22);
                 tag("Compose", 14, {.order = -1});  // first, by its order
-                tag("SDL3", 18);
+                tag("Vulkan", 18);
                 tag("Büyür (grow 1)", 14, {.grow = 1});
                 tag("HarfBuzz", 12);
             });
@@ -619,7 +619,7 @@ void LayoutSection(CallSite site) {
                     });
             });
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
-                for (const char* tag : {"C++20", "Compose", "SDL3", "FreeType", "coroutine", "slot table", "Android", "Linux"})
+                for (const char* tag : {"C++20", "Compose", "Vulkan", "FreeType", "coroutine", "slot table", "Android", "Linux"})
                     SuggestionChip([] {}, [tag] { Text(tag); });
             });
             // animateBounds in a LookaheadScope: the box glides to the next corner and grows or

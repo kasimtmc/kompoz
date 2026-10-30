@@ -29611,7 +29611,7 @@ TEST(drop_shadows_take_brushes_alphas_and_blend_modes) {
     // A solid brush is its color.
     auto solid = look([&] { Box(Modifier().size(40).dropShadow(RectangleShape, Shadow{.blurRadius = 6, .brush = Brush::solid(blue)})); });
     CHECK(solid->layers == 0 && solid->shadows.size() == 1 && solid->shadows[0].shadow.color == blue);
-    // A display list keeps a brushed one whole, for a canvas to draw its own way (SDL's), replayed
+    // A display list keeps a brushed one whole, for a canvas to draw its own way, replayed
     // onto one without as above; a new brush damages as far as its bitmap.
     CHECK(painted->brushedShadows.size() == 1 && solid->brushedShadows.empty());
     auto tint = mutableStateOf(red);

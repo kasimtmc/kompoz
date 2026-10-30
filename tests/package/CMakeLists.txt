@@ -6,5 +6,5 @@ set(CMAKE_CXX_STANDARD 20)
 
 find_package(kompoz 0.1 REQUIRED)
 add_executable(demo main.cpp)
-target_link_libraries(demo PRIVATE kompoz::sdl3)
+target_link_libraries(demo PRIVATE kompoz::app)
 kompoz_copy_assets(demo)

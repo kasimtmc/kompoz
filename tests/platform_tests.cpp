@@ -45,7 +45,7 @@ int checks = 0, failures = 0;
         }                                                              \
     } while (0)
 
-// A 24-bit BMP of one color, which SDL decodes.
+// A 24-bit BMP of one color, which image_codec's reader decodes.
 void writeBmp(const fs::path& path, uint32_t rgb, int w = 64, int h = 48) {
     int row = (w * 3 + 3) / 4 * 4;
     uint32_t size = 54 + uint32_t(row * h);

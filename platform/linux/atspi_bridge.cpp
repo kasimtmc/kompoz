@@ -849,7 +849,7 @@ struct AtspiBridge::State {
         const char* forced = std::getenv("KOMPOZ_ATSPI");
         bool always = forced && std::string_view(forced) == "1";
         Error error;
-        // The session bus as it is now set (libdbus keeps the address it first saw: SDL's).
+        // The session bus as it is now set (libdbus keeps the address it first saw).
         if (const char* address = std::getenv("DBUS_SESSION_BUS_ADDRESS"); address && *address) session = open(address);
         else {
             d.error_init(&error);

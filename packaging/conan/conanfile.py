@@ -1,7 +1,8 @@
-# A Conan recipe that builds Kompoz from the repository it is in, with SDL3, FreeType, HarfBuzz and libpng
-# from ConanCenter:
+# A Conan recipe that builds Kompoz from the repository it is in, with FreeType, HarfBuzz and libpng
+# from ConanCenter (on Linux the X11, Wayland and xkbcommon headers its platforms are built with
+# from the system's packages):
 #   conan create packaging/conan --build=missing -s compiler.cppstd=20
-# The package is found with find_package(kompoz), its own CMake package (kompoz::core, kompoz::sdl3,
+# The package is found with find_package(kompoz), its own CMake package (kompoz::core, kompoz::app,
 # kompoz_copy_assets). Its options with_jpeg, with_webp and with_curl (on by default) are AsyncImage's
 # libraries on Linux and macOS, from ConanCenter too; Windows decodes and downloads with its own.
 import os
@@ -10,6 +11,7 @@ import re
 from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
 from conan.tools.files import copy, load
+from conan.tools.system.package_manager import Apt
 
 ROOT = os.path.join("..", "..")
 
@@ -20,7 +22,7 @@ class KompozConan(ConanFile):
     url = "https://github.com/kasimtmc/kompoz"
     homepage = "https://github.com/kasimtmc/kompoz"
     description = "Jetpack Compose's model and API in C++20: a declarative UI library."
-    topics = ("ui", "gui", "compose", "declarative", "sdl3")
+    topics = ("ui", "gui", "compose", "declarative")
     package_type = "static-library"
     settings = "os", "arch", "compiler", "build_type"
     options = {"with_jpeg": [True, False], "with_webp": [True, False], "with_curl": [True, False]}
@@ -35,7 +37,6 @@ class KompozConan(ConanFile):
             copy(self, pattern, os.path.join(self.recipe_folder, ROOT), self.export_sources_folder)
 
     def requirements(self):
-        self.requires("sdl/[>=3.2 <4]")
         self.requires("freetype/[>=2.13]")
         self.requires("harfbuzz/[>=8]")
         self.requires("libpng/[>=1.6]")
@@ -48,6 +49,11 @@ class KompozConan(ConanFile):
                 self.requires("libwebp/[>=1.3]")
             if self.options.with_curl:
                 self.requires("libcurl/[>=8]")
+
+    def system_requirements(self):
+        # Linux: the headers Kompoz's Wayland and X11 platforms are built with (their libraries
+        # are loaded at run time).
+        Apt(self).install(["libwayland-dev", "libxkbcommon-dev", "libx11-dev", "libxi-dev", "libxcursor-dev", "libxrandr-dev"])
 
     def configure(self):
         if self.settings.os == "Windows":  # (not used there)

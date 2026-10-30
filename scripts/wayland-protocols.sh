@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Generates platform/linux/wayland/generated/ from the Wayland protocols in
-# platform/linux/wayland/protocols/ (the core's and the extensions Kompoz uses, as SDL's sources have
+# platform/linux/wayland/protocols/ (the core's and the extensions Kompoz uses, as SDL's sources had
 # them) with wayland-scanner: each one's client header (on wayland-client-core.h alone, so that the
 # system's wayland-client-protocol.h never comes in beside ours) and its interfaces (private code:
 # hidden in Kompoz, the core's included, so that libwayland-client, loaded at run time, needn't

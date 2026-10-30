@@ -38,7 +38,7 @@ target_link_libraries(myapp_tests PRIVATE kompoz_core)
 add_test(NAME myapp_tests COMMAND myapp_tests)
 ```
 
-Keep your composables in source files the app and the tests share. Build Kompoz with `-DKOMPOZ_BUILD_SDL3=OFF` on a build server that has no display or SDL.
+Keep your composables in source files the app and the tests share. Build Kompoz with `-DKOMPOZ_BUILD_APP=OFF` on a build server that has no window system's headers.
 
 ## Finding nodes
 

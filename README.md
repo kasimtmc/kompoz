@@ -252,14 +252,14 @@ changed while it was measured, is measured again.
 
 A new platform backend implements `GraphicsContext` and `TextMeasurer` (two functions, plus two optional calls for
 gradients and paths), gives input events to `ComposeHost`, and calls `frame()` and `draw()`; redrawing only what
-changed through a `DisplayList` is optional. The SDL3 backend is about 3,600 lines (glyph atlas with fallback
-fonts and color emoji, vector and path rasterization, gradient meshes, transformed offscreen layers, shadows).
+changed through a `DisplayList` is optional. Kompoz's own platforms (`platform/`) are only the window system's side:
+the app core and the GPU renderer are the same on all of them.
 
 ## Building
 
 Requirements: a C++20 compiler (GCC 13+, Clang 17+; tested with GCC 16 and Clang 22; GCC 13 crashes on some coroutine
-lambdas, an internal compiler error that GCC 14 doesn't have), CMake 3.24+, SDL3,
-FreeType and libpng. Optional: HarfBuzz (text shaping: Arabic joining, Indic scripts, ligatures, emoji sequences;
+lambdas, an internal compiler error that GCC 14 doesn't have), CMake 3.24+,
+FreeType and libpng, and on Linux the headers of Wayland and xkbcommon or of X11 (see the setup guide). Optional: HarfBuzz (text shaping: Arabic joining, Indic scripts, ligatures, emoji sequences;
 without it text is drawn character by character), and on Linux libcurl, libwebp and libturbojpeg 3.0+ for
 `AsyncImage` (HTTP, WebP, JPEG). On Linux, libdbus is loaded at run time, when present, for the desktop's accent color.
 
@@ -270,13 +270,13 @@ cmake --build build -j
 ./build/kompoz_tests
 ```
 
-The core and the tests alone (no SDL): `-DKOMPOZ_BUILD_SDL3=OFF`; without the examples: `-DKOMPOZ_BUILD_EXAMPLES=OFF`.
+The core and the tests alone (no platform): `-DKOMPOZ_BUILD_APP=OFF`; without the examples: `-DKOMPOZ_BUILD_EXAMPLES=OFF`.
 On desktops that have lld (and when no other linker was chosen) the build links with it: about 1 second instead of
 GNU ld's 25 for the showcase.
 
 ### Using Kompoz in your project
 
-Add it as a subdirectory (a clone or a git submodule) and link the SDL3 backend, which brings the entry point:
+Add it as a subdirectory (a clone or a git submodule) and link its platform layer, `kompoz::app`, which brings the entry point:
 
 ```cmake
 cmake_minimum_required(VERSION 3.24)
@@ -288,11 +288,11 @@ set(KOMPOZ_BUILD_TESTS OFF)
 add_subdirectory(kompoz)        # a clone or a git submodule
 
 add_executable(myapp main.cpp)  # the example at the top
-target_link_libraries(myapp PRIVATE kompoz::sdl3)
+target_link_libraries(myapp PRIVATE kompoz::app)
 kompoz_copy_assets(myapp)       # the fonts and the licenses next to the binary
 ```
 
-Or install Kompoz once and find it as a package, on Linux, macOS or Windows. Built with the system's SDL3, FreeType,
+Or install Kompoz once and find it as a package, on Linux, macOS or Windows. Built with the system's FreeType,
 HarfBuzz and libpng, it finds them there again; built with its own (`scripts/fetch-deps.sh`: Windows, or
 `-DKOMPOZ_VENDORED_DEPS=ON`), it installs them beside it:
 
@@ -305,12 +305,12 @@ cmake --install kompoz/build --prefix ~/.local
 ```cmake
 find_package(kompoz 0.1 REQUIRED)  # -DCMAKE_PREFIX_PATH=~/.local, if that isn't searched already
 add_executable(myapp main.cpp)
-target_link_libraries(myapp PRIVATE kompoz::sdl3)
+target_link_libraries(myapp PRIVATE kompoz::app)
 kompoz_copy_assets(myapp)
 ```
 
 With vcpkg or Conan, from a clone of the repository (its overlay port and its recipe build that clone, with the
-package manager's SDL3, FreeType, HarfBuzz and libpng), then `find_package(kompoz)` as above:
+package manager's FreeType, HarfBuzz and libpng), then `find_package(kompoz)` as above:
 
 ```bash
 vcpkg install kompoz --overlay-ports=kompoz/packaging/vcpkg/ports
@@ -334,11 +334,11 @@ Layout of the repository:
 | `platform/app/` | the app core (frames, drawing, scripts, screenshots) and the platform interface it runs on |
 | `platform/gpu/` | the GPU renderer and its Vulkan, OpenGL ES, Metal and WebGPU backends |
 | `platform/common/` | what every platform shares: fonts, images, files and logging, the wallpaper's colors |
-| `platform/linux/`, `platform/windows/` | the desktops' own: Linux's Wayland and X11 platforms (`wayland/`, `x11/`), screen readers (AT-SPI, UI Automation), the accent color |
+| `platform/linux/`, `platform/windows/` | the desktops' own: Linux's Wayland and X11 platforms (`wayland/`, `x11/`), Windows' Win32 platform, screen readers (AT-SPI, UI Automation), the accent color |
 | `platform/android/` | Android's platform: its native side (the frames, input and surfaces, the keyboard, performance hints) and its Java side in `java/` (the activity and its view, keyboard, accessibility, insets, intents) |
 | `platform/headless/` | the platform without a screen (`KOMPOZ_HEADLESS=1`): tests, scripted runs, CI |
-| `platform/sdl3/` | the SDL3 platform: windows, input and the event loop on the desktops and the web |
-| `platform/web/` | the web page the app is drawn in |
+| `platform/macos/` | macOS's platform (AppKit, Metal) |
+| `platform/web/` | the web's platform and the page the app is drawn in |
 | `assets/` | what every app ships: the bundled fonts (`fonts/`) and the licenses (`licenses/`) |
 | `tests/` | the headless tests |
 | `examples/showcase/` | the showcase app: a folder per screen (`home/`, `list/`, `components/`, `material/`, `places/`), each screen's sections in files of their own, `showcase.hpp` for what they share; `android/` is the same app for Android, `assets/` its images |
@@ -394,7 +394,7 @@ scripts/package.sh
 ```
 
 Packages the showcase for every platform it builds on, into `dist/`: Linux (`.tar.gz`, Release; it uses the
-system's SDL3, FreeType, HarfBuzz...), Windows (`.zip`, built statically with MinGW; Windows 10+), Android (`.apk`,
+system's FreeType, HarfBuzz...), Windows (`.zip`, built statically with MinGW; Windows 10+), Android (`.apk`,
 signed with the debug key, installable as it is) and the web (`.zip`; serve the folder over HTTP:
 `python3 -m http.server 8765`). Only some of them: `scripts/package.sh linux web`. A platform whose toolchain is
 missing is skipped, with a note.
@@ -416,8 +416,8 @@ scripts/fetch-deps.sh
 cd examples/showcase/android && ./gradlew installDebug
 ```
 
-`scripts/fetch-deps.sh` downloads SDL3, FreeType, HarfBuzz, zlib and libpng into `third_party/` at pinned versions,
-checking their sha256 (SDL isn't used on Android). Gradle builds the root `CMakeLists.txt` with the NDK into the
+`scripts/fetch-deps.sh` downloads FreeType, HarfBuzz, zlib and libpng into `third_party/` at pinned versions,
+checking their sha256. Gradle builds the root `CMakeLists.txt` with the NDK into the
 app's `libmain.so` (Kompoz and the showcase's sources). The Java side is Kompoz's own
 ([platform/android/java](platform/android/java/dev/kompoz)): `KompozActivity`, which the example's `MainActivity`
 extends, and its `KompozView`, whose frames come from the display's Choreographer (the vsync's time as the frame's, as
@@ -457,7 +457,7 @@ is drawn with the platform's text stack), the glyph atlas rebuilt when the GPU c
 ### Web (Emscripten)
 
 Requirements: Emscripten (Arch: `pacman -S emscripten`; its commands are under `/usr/lib/emscripten`) and
-`scripts/fetch-deps.sh`. SDL3, FreeType, HarfBuzz, zlib and libpng are built from source; the fonts and images are
+`scripts/fetch-deps.sh`. FreeType, HarfBuzz, zlib and libpng are built from source; the fonts and images are
 packed into `showcase.data`; the page ([platform/web/shell.html](platform/web/shell.html)) is just a canvas and the
 app fills it.
 
@@ -535,11 +535,11 @@ that looks the same) is neither drawn nor shown. `KOMPOZ_DAMAGE_SHOW=1` outlines
 
 | Platform | Status |
 |---|---|
-| Linux | Built and tested (GCC 16 with ASan/UBSan, Clang 22). Dark mode and the accent color (Material You) come from the XDG desktop portal as they change: SDL follows the mode, Kompoz the accent color (libdbus, loaded at run time) |
+| Linux | Built and tested (GCC 16 with ASan/UBSan, Clang 22). Dark mode and the accent color (Material You) come from the XDG desktop portal as they change (libdbus, loaded at run time); Kompoz's own Wayland and X11 platforms |
 | Android | Built; run on a phone (Xiaomi 24030PN60G, Android 16, arm64) and in the emulator (API 36, x86_64, GLES). The APK has `arm64-v8a` and `x86_64` |
 | Windows | Cross-built from Linux with MinGW-w64 (GCC 16); the tests pass under Wine and the showcase draws there |
-| Web | Built with Emscripten (WebGL, SDL3's main callbacks) and run in browsers (clicks, typing, scrolling) |
-| macOS | Built and tested by CI with Homebrew's SDL3, FreeType, HarfBuzz and libpng; an app runs in a real window (Metal); not yet used by hand |
+| Web | Built with Emscripten (WebGPU, WebGL 2; Kompoz's own web platform) and run in browsers (clicks, typing, the clipboard, scrolling) |
+| macOS | Built and tested by CI with Homebrew's FreeType, HarfBuzz and libpng; an app runs in a real window (Kompoz's own AppKit platform, Metal); not yet used by hand |
 | iOS | The vendored dependencies are ready (`KOMPOZ_VENDORED_DEPS`); it needs an Xcode project (on macOS) |
 
 ## Known limitations
@@ -571,6 +571,6 @@ and API of Jetpack Compose and Material Color Utilities (both Apache 2.0) withou
 
 Apps built with Kompoz ship the bundled Noto Sans fonts (SIL Open Font License 1.1) and, in the vendored builds
 (Android, iOS, Windows, the web), FreeType (FreeType License), HarfBuzz (MIT), libpng (PNG Reference Library License
-version 2) and zlib (zlib License), and SDL (zlib License) but on Android. Their license texts are in
+version 2) and zlib (zlib License). Their license texts are in
 [assets/licenses](assets/licenses), which is copied next to every app with its other assets; keep it when you ship
 one.

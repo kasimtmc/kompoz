@@ -553,7 +553,6 @@ EMSCRIPTEN_KEEPALIVE void kompoz_web_changed(int what) { gPlatform->changed(what
 }
 
 int runWeb(int argc, char* argv[]) {
-    if (const char* forced = std::getenv("KOMPOZ_PLATFORM"); forced && std::string_view(forced) == "sdl") return -1;
     auto* platform = new WebPlatform();  // (the page's for as long as it is open)
     return platform->start(argc, argv) ? 0 : 1;
 }

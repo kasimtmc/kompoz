@@ -1,6 +1,6 @@
 # Cross-compiling for Windows (x86-64) with MinGW-w64 from Linux:
 #   cmake -S . -B build-windows -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake
-# SDL3, FreeType and HarfBuzz are built from third_party/ (scripts/fetch-deps.sh).
+# FreeType, HarfBuzz, zlib and libpng are built from third_party/ (scripts/fetch-deps.sh).
 set(CMAKE_SYSTEM_NAME Windows)
 set(CMAKE_SYSTEM_PROCESSOR x86_64)
 set(CMAKE_C_COMPILER x86_64-w64-mingw32-gcc)

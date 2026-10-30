@@ -189,9 +189,9 @@ void ShowcaseApp() {
                          .text = [] {
                              Text("C++20 ile Jetpack Compose tarzı, çok platformlu bir arayüz kütüphanesi: Linux, Windows, Android "
                                   "ve web. Apache 2.0 lisanslı.\n\n"
-                                  "İçindekiler: Noto Sans fontları (SIL OFL 1.1), SDL (zlib), FreeType (portions of this software are "
-                                  "copyright © 2026 The FreeType Project, www.freetype.org) ve HarfBuzz (MIT). Lisans metinleri "
-                                  "uygulamanın licenses klasöründe.");
+                                  "İçindekiler: Noto Sans fontları (SIL OFL 1.1), FreeType (portions of this software are "
+                                  "copyright © 2026 The FreeType Project, www.freetype.org), HarfBuzz (MIT), libpng ve zlib. "
+                                  "Lisans metinleri uygulamanın licenses klasöründe.");
                          }});
     };
 

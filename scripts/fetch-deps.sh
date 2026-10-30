@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Downloads the sources Kompoz builds itself on platforms without system packages
-# (Android, iOS, Windows without vcpkg): SDL3, FreeType, HarfBuzz, zlib, libpng and the Vulkan
+# (Android, iOS, Windows without vcpkg): FreeType, HarfBuzz, zlib, libpng and the Vulkan
 # headers, at pinned versions, and applies the fixes in scripts/patches/<name>-*.patch.
 # Usage: scripts/fetch-deps.sh
 set -euo pipefail
@@ -39,10 +39,6 @@ fetch() {  # name version url sha256
     echo "$stamp" > "$dest/$name/.version"
     echo "$name $stamp: ready"
 }
-
-fetch SDL 3.4.18 \
-    https://github.com/libsdl-org/SDL/releases/download/release-3.4.18/SDL3-3.4.18.tar.gz \
-    9c75cf16330322c217dedd2e0609f1124f1b54b8633e763467b4684d0f4334a3
 
 fetch freetype 2.14.3 \
     https://download.savannah.gnu.org/releases/freetype/freetype-2.14.3.tar.xz \

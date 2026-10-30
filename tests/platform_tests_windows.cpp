@@ -1,4 +1,4 @@
-// Tests of the Windows platform code that runs without an SDL window: the UI Automation bridge,
+// Tests of the Windows platform code that runs without the app's window: the UI Automation bridge,
 // on a window of the tests' own, asked through UI Automation's own client (IUIAutomation), as
 // Narrator asks.
 

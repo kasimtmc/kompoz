@@ -159,7 +159,7 @@ struct Surface {
     std::function<void()> glSwap;
     // Metal: the layer the window shows (a CAMetalLayer); none to draw only into textures.
     void* metalLayer = nullptr;
-    // WebGPU on the web: the canvas it draws into (a CSS selector: SDL's "#canvas"); none to draw
+    // WebGPU on the web: the canvas it draws into (a CSS selector: "#canvas"); none to draw
     // only into textures.
     std::string webgpuCanvas;
     // The drawable's size in pixels.

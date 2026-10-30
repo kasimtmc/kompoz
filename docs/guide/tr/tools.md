@@ -146,7 +146,6 @@ Web'de onları sayfanın sorgusu belirler: `showcase.html?KOMPOZ_GPU=gles&KOMPOZ
 | `KOMPOZ_SCRIPT="…"` | Uygulamayı yukarıdaki komutlarla sürer. |
 | `KOMPOZ_HEADLESS=1` | Uygulamayı masaüstlerinde pencere olmadan çalıştırır (yukarıya bakın). |
 | `KOMPOZ_DECORATIONS=kompoz` | Bir Wayland oturumunda pencerenin başlık çubuğunu ve kenarlarından boyutlandırıldığı gölgeleri bileşikleyicinin yerine Kompoz çizer, bileşikleyicinin hiç çizmediği yerde (GNOME) yaptığı gibi. |
-| `KOMPOZ_PLATFORM=sdl` | Linux'ta, Windows'ta, macOS'ta ve web'de (sayfanın sorgusunda: `?KOMPOZ_PLATFORM=sdl`) uygulamayı Kompoz'un kendi platformu yerine SDL'in platformunda çalıştırır. |
 | `KOMPOZ_PLATFORM=x11` | Uygulamayı bir Wayland oturumunda da (XWayland üzerinden) Kompoz'un Wayland platformu yerine X11 platformunda çalıştırır. |
 | `KOMPOZ_STATE_FILE=file` | Kaydedilen durumu (`rememberSaveable`, gezinmenin geri yığını) çıkışta yazar, açılışta okur. |
 | `KOMPOZ_FONT_SCALE=1.3` | Masaüstünde sistemin yazı ölçeğinin yerini tutar. |

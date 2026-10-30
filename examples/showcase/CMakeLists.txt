@@ -10,11 +10,11 @@ set(showcase_sources main.cpp common.cpp home/home.cpp list/list.cpp places/plac
 if(ANDROID)
     add_library(main SHARED ${showcase_sources})
     target_include_directories(main PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(main PRIVATE kompoz_sdl3)
+    target_link_libraries(main PRIVATE kompoz_app)
 else()
     add_executable(showcase ${showcase_sources})
     target_include_directories(showcase PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(showcase PRIVATE kompoz_sdl3)
+    target_link_libraries(showcase PRIVATE kompoz_app)
     set_target_properties(showcase PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})  # ./build/showcase
     file(GLOB_RECURSE showcase_assets CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/assets/* ${CMAKE_CURRENT_SOURCE_DIR}/assets/*)
     if(EMSCRIPTEN)

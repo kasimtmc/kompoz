@@ -16,7 +16,7 @@ namespace kompoz::platform {
 
 // The app on Wayland until it quits (what main returns), or -1 where it can't run there: no
 // Wayland display, its libraries or a global it needs missing, the window not made.
-// KOMPOZ_PLATFORM=sdl keeps to SDL's platform, KOMPOZ_PLATFORM=x11 to X11's (XWayland's).
+// KOMPOZ_PLATFORM=x11 keeps to X11's (XWayland's).
 int runWayland(int argc, char* argv[]);
 
 } // namespace kompoz::platform

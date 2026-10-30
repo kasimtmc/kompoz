@@ -9,9 +9,9 @@
   the desktop's accessibility is; `KOMPOZ_ATSPI=1` / `0` to force it on or off.
 - **Screen readers on Windows**: the semantics tree is served through UI Automation, for Narrator and NVDA: control
   types, names, states, positions, the patterns to use the nodes, and events for what changes.
-- **Installing and packages**: `cmake --install` and `find_package(kompoz)` (`kompoz::core`, `kompoz::sdl3`,
-  `kompoz_copy_assets`) on Linux, macOS and Windows, with the system's SDL3, FreeType and HarfBuzz or with those built
-  from `third_party/`, installed beside it; a vcpkg overlay port and a Conan recipe, with AsyncImage's libraries as
+- **Installing and packages**: `cmake --install` and `find_package(kompoz)` (`kompoz::core`, `kompoz::app`,
+  `kompoz_copy_assets`) on Linux, macOS and Windows, with the system's FreeType and HarfBuzz or with those built from
+  `third_party/`, installed beside it; a vcpkg overlay port and a Conan recipe, with AsyncImage's libraries as
   features and options.
 - **JPEG with libjpeg-turbo 2.x** as well as 3.x; AsyncImage's libraries are found from their CMake packages or
   pkg-config, and `KOMPOZ_WITH_JPEG` / `WEBP` / `CURL` make each automatic, required or off.
@@ -304,8 +304,7 @@
   frame, which screenshots are taken from. A Windows computer without a Vulkan driver (a virtual machine, Remote
   Desktop, CI) draws through ANGLE shipped with the app.
 - **An app run by a script that can't start says so in its log**: with `KOMPOZ_SCRIPT` set (as on CI) no message box
-  waits for someone to close it. Conan Center's SDL has no OpenGL ES on Windows, so an app built with Conan draws with
-  Vulkan only there (ANGLE needs an SDL with EGL); the Conan test draws on Mesa's lavapipe built for Windows.
+  waits for someone to close it. The Conan test draws on Mesa's lavapipe built for Windows.
 - **KOMPOZ_PROFILE counts only refreshes missed by frames that were due**: between two frames shown, it counted the
   refreshes that went by while the app was busy, and a running script (as in the benches) made it busy while it waited
   out its frames with nothing changing on the screen: a pause of half a second came out as some 60 refreshes missed.
@@ -381,8 +380,8 @@
   screen kept on (`idle-inhibit`), `xdg-open` for links, the light or dark preference from the portal's
   `color-scheme`. `libwayland-client`, `libwayland-egl`, `libxkbcommon` and EGL are loaded at run time and the
   protocols' code is generated ahead (`scripts/wayland-protocols.sh`), so building needs only their headers; where
-  they aren't there, or with `KOMPOZ_PLATFORM=sdl`, apps run on SDL's platform. **An X11 session runs on Kompoz's own
-  X11 platform** (`platform/linux/x11`): a window the window manager decorates, drawn into with Vulkan
+  they aren't there, a Wayland session's apps run on the X11 platform (XWayland). **An X11 session runs on Kompoz's
+  own X11 platform** (`platform/linux/x11`): a window the window manager decorates, drawn into with Vulkan
   (`VK_KHR_xlib_surface`) or OpenGL ES (EGL's X11 platform) at the desktop's scale (`Xft.dpi`, followed as it
   changes), frames on the display's beat; the pointer, its wheel (smooth, as XInput 2 tells it), touch and touchpad
   pinches through XInput 2, the keyboard through an input method (XIM, told where the field is where it can be), the
@@ -414,7 +413,12 @@
   text, the system's cursors, the light or dark appearance, `keepScreenOn` as an IOKit power assertion, the app's menu
   (Hide, Quit, the window's), links opened by `NSWorkspace`. On all of them Ctrl+C in the terminal (the console on
   Windows) and SIGTERM quit the app as SDL's platform made them, its state written on the way out, so
-  `scripts/dev.sh`'s restarts keep the screen again.
+  `scripts/dev.sh`'s restarts keep the screen again. **SDL3 is gone**: with a platform of Kompoz's own everywhere,
+  `platform/main.cpp` picks the one to run on (headless, Wayland, X11, Windows, macOS, the page) and SDL is out of the
+  code, the build, the packages and CI. The platform layer's target is `kompoz::app` and its option `KOMPOZ_BUILD_APP`
+  (`kompoz::sdl3` and `KOMPOZ_BUILD_SDL3` are gone: link `kompoz::app`); `KOMPOZ_PLATFORM=sdl` is gone; neither
+  `scripts/fetch-deps.sh`, the vcpkg port, the Conan recipe nor Homebrew needs SDL3, and its license is no longer
+  among an app's. On Linux the build needs Wayland's and xkbcommon's headers or X11's.
 - **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
   blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
   scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and

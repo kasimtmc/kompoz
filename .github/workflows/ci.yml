@@ -50,16 +50,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ninja-build g++-14 clang-19 lld-19 dbus \
             libturbojpeg0-dev libwebp-dev libcurl4-openssl-dev libvulkan-dev mesa-vulkan-drivers vulkan-validationlayers
-          # What SDL's own README lists for Linux
-          sudo apt-get install -y --no-install-recommends libasound2-dev libpulse-dev libpipewire-0.3-dev \
-            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
-            libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
-            libdbus-1-dev libibus-1.0-dev libudev-dev libwayland-dev wayland-protocols libdecor-0-dev liburing-dev
+          # The headers Kompoz's Wayland and X11 platforms are built with; Mesa's EGL and OpenGL ES (llvmpipe) for
+          # the OpenGL ES tests.
+          sudo apt-get install -y --no-install-recommends libwayland-dev libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev \
+            libxrandr-dev libegl1-mesa-dev libgles2-mesa-dev
       - uses: actions/cache@v4
         with:
           path: third_party/.downloads
           key: deps-${{ hashFiles('scripts/fetch-deps.sh') }}
-      - name: "Dependencies (SDL3, FreeType, HarfBuzz, zlib, libpng from source: no SDL3 package here)"
+      - name: Dependencies (FreeType, HarfBuzz, zlib, libpng from source)
         run: scripts/fetch-deps.sh
       - name: Configure
         run: |
@@ -92,7 +91,7 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
           ASAN_OPTIONS: detect_leaks=0
         run: ./kompoz_gpu_tests
-      - name: Install (with the SDL3, FreeType and HarfBuzz built here), and build an app against it
+      - name: Install (with the FreeType and HarfBuzz built here), and build an app against it
         run: |
           cmake --install build --prefix "$PWD/install"
           cmake -S tests/package -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/install" \
@@ -149,7 +148,7 @@ jobs:
           KOMPOZ_GPU_REQUIRED: 1
           KOMPOZ_GPU_VALIDATION: 1
         run: ./kompoz_gpu_tests.exe
-      - name: Install (with the SDL3, FreeType and HarfBuzz built here), and build an app against it
+      - name: Install (with the FreeType and HarfBuzz built here), and build an app against it
         run: |
           cmake --install build --prefix "$PWD/install"
           cmake -S tests/package -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/install"
@@ -164,7 +163,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Packages
-        run: brew install ninja sdl3 freetype harfbuzz libpng jpeg-turbo webp
+        run: brew install ninja freetype harfbuzz libpng jpeg-turbo webp
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_WITH_JPEG=ON -DKOMPOZ_WITH_WEBP=ON -DKOMPOZ_WITH_CURL=ON
       - name: Build
@@ -220,15 +219,13 @@ jobs:
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-cache
     steps:
       - uses: actions/checkout@v4
-      - name: Packages (what vcpkg's SDL3 and its dependencies need from the system)
+      - name: Packages (what vcpkg's ports need from the system, and the headers of Kompoz's Wayland and X11 platforms)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ninja-build g++-14 \
-            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
-            libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
-            libwayland-dev wayland-protocols libdecor-0-dev libdbus-1-dev libibus-1.0-dev libudev-dev \
-            libasound2-dev libpulse-dev autoconf autoconf-archive automake libtool libltdl-dev pkg-config \
+            libwayland-dev libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev \
+            autoconf autoconf-archive automake libtool libltdl-dev pkg-config \
             bison flex gettext python3-jinja2 linux-libc-dev libvulkan1 mesa-vulkan-drivers
           echo "CC=gcc-14" >> "$GITHUB_ENV"
           echo "CXX=g++-14" >> "$GITHUB_ENV"
@@ -303,8 +300,8 @@ jobs:
           path: ~/.conan2/p
           key: conan-${{ matrix.os }}-${{ hashFiles('packaging/conan/conanfile.py') }}
           restore-keys: conan-${{ matrix.os }}-
-      # Conan Center's SDL has no OpenGL ES on Windows (so no ANGLE): the demo draws with Vulkan
-      # there too, on Mesa's lavapipe as built for Windows by mesa-dist-win.
+      # The test's demo draws with Vulkan on Windows too (no ANGLE beside it), on Mesa's lavapipe
+      # as built for Windows by mesa-dist-win.
       - uses: actions/cache@v4
         if: runner.os == 'Windows'
         id: mesa

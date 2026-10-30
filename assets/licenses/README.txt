@@ -5,7 +5,7 @@ other assets (into the APK on Android, into the page's data on the web): keep th
                                   to go along with it)
   OFL.txt                         the Noto Sans fonts (assets/fonts)
   FreeType-FTL.txt, HarfBuzz.txt, the vendored libraries, in builds that contain them (Android, iOS,
-  libpng.txt, zlib.txt, SDL.txt   Windows, the web; SDL not on Android)
+  libpng.txt, zlib.txt            Windows, the web)
   VulkanMemoryAllocator.txt       the GPU renderer's Vulkan backend's allocator (Linux, Android,
                                   Windows)
   Wayland-protocols.txt           the Wayland protocols Linux's Wayland platform is built with

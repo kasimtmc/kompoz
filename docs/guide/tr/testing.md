@@ -38,7 +38,7 @@ target_link_libraries(myapp_tests PRIVATE kompoz_core)
 add_test(NAME myapp_tests COMMAND myapp_tests)
 ```
 
-Composable'larınızı uygulamanın ve testlerin paylaştığı kaynak dosyalarda tutun. Ekranı ya da SDL'i olmayan bir derleme sunucusunda Kompoz'u `-DKOMPOZ_BUILD_SDL3=OFF` ile derleyin.
+Composable'larınızı uygulamanın ve testlerin paylaştığı kaynak dosyalarda tutun. Pencere sistemlerinin başlıkları olmayan bir derleme sunucusunda Kompoz'u `-DKOMPOZ_BUILD_APP=OFF` ile derleyin.
 
 ## Düğümleri bulmak
 

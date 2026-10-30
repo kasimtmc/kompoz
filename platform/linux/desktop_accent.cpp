@@ -168,7 +168,7 @@ DesktopAccent::DesktopAccent(platform::Notifier notifier) : state_(std::make_sha
     if (!s.dbus.load()) return;
     DBusError error;
     s.dbus.error_init(&error);
-    s.connection = s.dbus.bus_get_private(kSessionBus, &error);  // its own: SDL's shared one is SDL's
+    s.connection = s.dbus.bus_get_private(kSessionBus, &error);  // its own, not libdbus's shared one
     s.dbus.error_free(&error);
     if (!s.connection) return;
     s.dbus.connection_set_exit_on_disconnect(s.connection, 0);

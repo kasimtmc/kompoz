@@ -11,7 +11,6 @@
 namespace kompoz::platform {
 
 // The app on macOS until it quits (what main returns), or -1 where it can't run there.
-// KOMPOZ_PLATFORM=sdl keeps to SDL's platform.
 int runMacOS(int argc, char* argv[]);
 
 } // namespace kompoz::platform

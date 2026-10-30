@@ -19,7 +19,7 @@ struct Application {
 };
 
 // Implemented by the application. The platform backend owns the real entry point
-// (main, SDL_main on Android/iOS, the browser loop on the web) and calls this once.
+// (main on the desktops and the web, the activity's native methods on Android) and calls this once.
 Application createApplication(int argc, char** argv);
 
 } // namespace kompoz

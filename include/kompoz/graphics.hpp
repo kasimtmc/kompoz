@@ -1742,8 +1742,7 @@ public:
     // Strokes part of the circle inscribed in `oval`. Angles in degrees, 0 = 3 o'clock, clockwise.
     virtual void drawArc(const Rect& oval, float startDegrees, float sweepDegrees, float strokeWidth, Color color,
                          bool roundCap) = 0;
-    // Draws the `src` pixel rect of `image` into `dst`, sampled as `quality` says (where the
-    // backend can: SDL's renderer samples Medium and High as Low).
+    // Draws the `src` pixel rect of `image` into `dst`, sampled as `quality` says.
     virtual void drawImage(const ImageBitmap& image, const Rect& src, const Rect& dst, float alpha,
                            FilterQuality quality = DefaultFilterQuality) = 0;
     // An image as a mask (an Alpha8 bitmap, as Android draws one): `brush` (spread over

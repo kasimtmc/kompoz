@@ -251,14 +251,14 @@ yeniden ölçülür.
 
 Yeni bir platform arka ucu `GraphicsContext` ve `TextMeasurer`'ı (iki fonksiyon, gradyan ve path için iki isteğe bağlı
 çağrı daha) uygular, girdi olaylarını `ComposeHost`'a verir, `frame()` ve `draw()`'ı çağırır; `DisplayList` ile yalnız
-değişen bölgeyi yeniden çizmek isteğe bağlıdır. SDL3 arka ucu yaklaşık 3.600 satır (yedek fontlu ve renkli emojili glif
-atlası, vektör ve path rasterleştirme, gradyan mesh'leri, dönüşümlü offscreen katmanlar, gölgeler dahil).
+değişen bölgeyi yeniden çizmek isteğe bağlıdır. Kompoz'un kendi platformları (`platform/`) yalnızca pencere sisteminin
+tarafıdır: uygulama çekirdeği ve GPU renderer'ı hepsinde aynıdır.
 
 ## Derleme
 
 Gerekenler: C++20 derleyici (GCC 13+, Clang 17+; GCC 16 ve Clang 22 ile test edildi; GCC 13 bazı coroutine
-lambda'larında dahili derleyici hatasıyla çöküyor, GCC 14'te bu yok), CMake 3.24+, SDL3, FreeType ve
-libpng.
+lambda'larında dahili derleyici hatasıyla çöküyor, GCC 14'te bu yok), CMake 3.24+, FreeType ve
+libpng; Linux'ta da Wayland ile xkbcommon'ın ya da X11'in başlıkları (kurulum kılavuzuna bakın).
 İsteğe bağlı: HarfBuzz (metin şekillendirme: Arapça harf birleşmesi, Hint yazıları, ligatürler, emoji dizileri; yoksa
 metin karakter karakter çizilir) ve Linux'ta `AsyncImage` için libcurl, libwebp ve libturbojpeg 3.0+ (HTTP, WebP, JPEG).
 Linux'ta masaüstünün vurgu rengi için libdbus, varsa çalışırken yüklenir.
@@ -270,13 +270,13 @@ cmake --build build -j
 ./build/kompoz_tests
 ```
 
-Yalnız çekirdek ve testler (SDL olmadan): `-DKOMPOZ_BUILD_SDL3=OFF`; örnekler olmadan: `-DKOMPOZ_BUILD_EXAMPLES=OFF`.
+Yalnız çekirdek ve testler (platform olmadan): `-DKOMPOZ_BUILD_APP=OFF`; örnekler olmadan: `-DKOMPOZ_BUILD_EXAMPLES=OFF`.
 lld kurulu masaüstlerinde (başka bir bağlayıcı seçilmediyse) bağlama onunla yapılır: vitrin için GNU ld'nin 25
 saniyesi yerine yaklaşık 1 saniye.
 
 ### Kendi projende kullanma
 
-Alt dizin olarak ekleyin (bir klon ya da git submodule) ve giriş noktasını getiren SDL3 arka ucuna bağlayın:
+Alt dizin olarak ekleyin (bir klon ya da git submodule) ve giriş noktasını getiren platform katmanına, `kompoz::app`'e bağlayın:
 
 ```cmake
 cmake_minimum_required(VERSION 3.24)
@@ -288,11 +288,11 @@ set(KOMPOZ_BUILD_TESTS OFF)
 add_subdirectory(kompoz)        # bir klon ya da git submodule
 
 add_executable(myapp main.cpp)  # en baştaki örnek
-target_link_libraries(myapp PRIVATE kompoz::sdl3)
+target_link_libraries(myapp PRIVATE kompoz::app)
 kompoz_copy_assets(myapp)       # fontlar ve lisanslar ikilinin yanına
 ```
 
-Ya da Kompoz'u bir kez kurup paket olarak bulun; Linux'ta, macOS'ta ya da Windows'ta. Sistemin SDL3, FreeType,
+Ya da Kompoz'u bir kez kurup paket olarak bulun; Linux'ta, macOS'ta ya da Windows'ta. Sistemin FreeType,
 HarfBuzz ve libpng'siyle derlendiyse onları yine orada bulur; kendi derlediğiyle derlendiyse
 (`scripts/fetch-deps.sh`: Windows ya da `-DKOMPOZ_VENDORED_DEPS=ON`) onları yanına kurar:
 
@@ -305,11 +305,11 @@ cmake --install kompoz/build --prefix ~/.local
 ```cmake
 find_package(kompoz 0.1 REQUIRED)  # -DCMAKE_PREFIX_PATH=~/.local, orası zaten aranmıyorsa
 add_executable(myapp main.cpp)
-target_link_libraries(myapp PRIVATE kompoz::sdl3)
+target_link_libraries(myapp PRIVATE kompoz::app)
 kompoz_copy_assets(myapp)
 ```
 
-vcpkg ya da Conan ile, deponun bir klonundan (overlay port'u ve reçetesi o klonu, paket yöneticisinin SDL3, FreeType,
+vcpkg ya da Conan ile, deponun bir klonundan (overlay port'u ve reçetesi o klonu, paket yöneticisinin FreeType,
 HarfBuzz ve libpng'siyle derler), ardından yukarıdaki gibi `find_package(kompoz)`:
 
 ```bash
@@ -333,10 +333,10 @@ Deponun düzeni:
 | `platform/app/` | uygulama çekirdeği (kareler, çizim, betikler, ekran görüntüleri) ve üzerinde çalıştığı platform arayüzü |
 | `platform/gpu/` | GPU çizicisi ve Vulkan, OpenGL ES, Metal ve WebGPU arka uçları |
 | `platform/common/` | her platformun paylaştıkları: fontlar, resimler, dosyalar ve günlük, duvar kâğıdının renkleri |
-| `platform/linux/`, `platform/windows/` | masaüstlerinin kendilerine özgü olanlar: Linux'un Wayland ve X11 platformları (`wayland/`, `x11/`), ekran okuyucular (AT-SPI, UI Automation), vurgu rengi |
+| `platform/linux/`, `platform/windows/` | masaüstlerinin kendilerine özgü olanlar: Linux'un Wayland ve X11 platformları (`wayland/`, `x11/`), Windows'un Win32 platformu, ekran okuyucular (AT-SPI, UI Automation), vurgu rengi |
 | `platform/android/` | Android platformu: yerel tarafı (kareler, girdi ve yüzeyler, klavye, performans ipuçları) ve `java/`'da Java tarafı (etkinlik ve görünümü, klavye, erişilebilirlik, kenar boşlukları, intent'ler) |
 | `platform/headless/` | ekransız platform (`KOMPOZ_HEADLESS=1`): testler, betikli çalıştırmalar, CI |
-| `platform/sdl3/` | SDL3 platformu: masaüstlerinde ve web'de pencereler, girdi ve olay döngüsü |
+| `platform/macos/` | macOS'un platformu (AppKit, Metal) |
 | `platform/web/` | uygulamanın çizildiği web sayfası |
 | `assets/` | her uygulamanın taşıdıkları: paketlenen fontlar (`fonts/`) ve lisanslar (`licenses/`) |
 | `tests/` | pencere açmadan çalışan testler |
@@ -392,7 +392,7 @@ semantiği ve çizileni denetleyin. `./build/kompoz_tests` hepsini çalıştır�
 scripts/package.sh
 ```
 
-Vitrini derlenebildiği her platform için `dist/` altına paketler: Linux (`.tar.gz`, Release; sistemin SDL3, FreeType,
+Vitrini derlenebildiği her platform için `dist/` altına paketler: Linux (`.tar.gz`, Release; sistemin FreeType,
 HarfBuzz… kütüphanelerini kullanır), Windows (`.zip`, MinGW ile statik; Windows 10+), Android (`.apk`, hata ayıklama
 anahtarıyla imzalı, doğrudan kurulur) ve web (`.zip`; klasörü bir HTTP sunucusuyla açın: `python3 -m http.server 8765`).
 Yalnız bazıları için: `scripts/package.sh linux web`. Araç zinciri olmayan platform atlanır ve söylenir.
@@ -414,8 +414,8 @@ scripts/fetch-deps.sh
 cd examples/showcase/android && ./gradlew installDebug
 ```
 
-`scripts/fetch-deps.sh`, SDL3, FreeType, HarfBuzz, zlib ve libpng kaynaklarını sabit sürüm ve sha256 kontrolüyle
-`third_party/` altına indirir (Android'de SDL kullanılmaz). Gradle, kök `CMakeLists.txt`'yi NDK ile uygulamanın
+`scripts/fetch-deps.sh`, FreeType, HarfBuzz, zlib ve libpng kaynaklarını sabit sürüm ve sha256 kontrolüyle
+`third_party/` altına indirir. Gradle, kök `CMakeLists.txt`'yi NDK ile uygulamanın
 `libmain.so`'suna derler (Kompoz ve vitrinin kaynakları). Java tarafı Kompoz'un kendisinin
 ([platform/android/java](platform/android/java/dev/kompoz)): örnekteki `MainActivity`'nin genişlettiği `KompozActivity`
 ve onun `KompozView`'u; kareleri ekranın Choreographer'ından gelir (Compose'daki gibi vsync zamanı karenin zamanıdır),
@@ -454,7 +454,7 @@ uygulama öne gelince yenilenir), TalkBack, sistem fontlarından Serif/Monospace
 ### Web (Emscripten)
 
 Gerekenler: Emscripten (Arch: `pacman -S emscripten`, komutlar `/usr/lib/emscripten` altında) ve `scripts/fetch-deps.sh`.
-SDL3, FreeType, HarfBuzz, zlib ve libpng kaynaktan derlenir; fontlar ve resimler `showcase.data` içine paketlenir, sayfa
+FreeType, HarfBuzz, zlib ve libpng kaynaktan derlenir; fontlar ve resimler `showcase.data` içine paketlenir, sayfa
 ([platform/web/shell.html](platform/web/shell.html)) yalnız bir canvas'tır ve uygulama onu kaplar.
 
 ```bash
@@ -531,11 +531,11 @@ bir de baştan çizip pikselleri karşılaştırır (fark varsa loglar), `KOMPOZ
 
 | Platform | Durum |
 |---|---|
-| Linux | Derlendi ve test edildi (ASan/UBSan'lı GCC 16, Clang 22). Koyu/açık mod ve vurgu rengi (Material You) XDG masaüstü portalından, değiştikçe: modu SDL izliyor, vurgu rengini Kompoz (libdbus, çalışırken yüklenir) |
+| Linux | Derlendi ve test edildi (ASan/UBSan'lı GCC 16, Clang 22). Koyu/açık mod ve vurgu rengi (Material You) XDG masaüstü portalından, değiştikçe (libdbus, çalışırken yüklenir); Kompoz'un kendi Wayland ve X11 platformları |
 | Android | Derlendi; gerçek cihazda (Xiaomi 24030PN60G, Android 16, arm64) ve emülatörde (API 36, x86_64, GLES) çalıştırıldı. APK'da `arm64-v8a` ve `x86_64` var |
 | Windows | Linux'tan MinGW-w64 (GCC 16) ile çapraz derleniyor; testler Wine'da geçiyor, vitrin orada çiziliyor |
-| Web | Emscripten (WebGL, SDL3 main callback'leri) ile derlendi, tarayıcılarda çalıştırıldı (tıklama, yazma, kaydırma) |
-| macOS | CI, Homebrew'un SDL3, FreeType, HarfBuzz ve libpng'siyle derliyor ve test ediyor; bir uygulama gerçek pencerede (Metal) çalışıyor; henüz elle kullanılmadı |
+| Web | Emscripten (WebGPU, WebGL 2; Kompoz'un kendi web platformu) ile derlendi, tarayıcılarda çalıştırıldı (tıklama, yazma, pano, kaydırma) |
+| macOS | CI, Homebrew'un FreeType, HarfBuzz ve libpng'siyle derliyor ve test ediyor; bir uygulama gerçek pencerede (Kompoz'un kendi AppKit platformu, Metal) çalışıyor; henüz elle kullanılmadı |
 | iOS | Kaynaktan derlenen bağımlılıklar hazır (`KOMPOZ_VENDORED_DEPS`); Xcode projesi gerekiyor (macOS'ta) |
 
 ## Bilinen sınırlar
@@ -567,6 +567,6 @@ Utilities'in (ikisi de Apache 2.0) davranışını ve API'sini, kaynaklarını i
 
 Kompoz'la yapılan uygulamalar paketlenen Noto Sans fontlarını (SIL Open Font License 1.1) ve kaynaktan derlenen
 sürümlerde (Android, iOS, Windows, web) FreeType'ı (FreeType Lisansı), HarfBuzz'ı (MIT), libpng'yi (PNG Reference
-Library License sürüm 2) ve zlib'i (zlib Lisansı), Android dışında SDL'i de (zlib Lisansı) taşır. Lisans metinleri
+Library License sürüm 2) ve zlib'i (zlib Lisansı) taşır. Lisans metinleri
 [assets/licenses](assets/licenses) içinde; bu klasör her uygulamanın yanına öteki varlıklarıyla kopyalanır, uygulamayı
 dağıtırken onu da koruyun.

@@ -6,12 +6,12 @@ Build Kompoz, add it to your own CMake project, and run your app on Linux, Windo
 
 - A C++20 compiler: GCC 13 or newer, or Clang 17 or newer (Kompoz is tested with GCC 16 and Clang 22). GCC 13 crashes on some coroutine lambdas, with an internal compiler error that GCC 14 doesn't have.
 - CMake 3.24 or newer.
-- SDL3, FreeType and libpng.
+- FreeType and libpng.
 - Optional: HarfBuzz for text shaping (Arabic joining, Indic scripts, ligatures, emoji sequences). Without it, text is drawn character by character.
 - Optional on Linux: libcurl, libwebp and libturbojpeg (3.0 or later), which `AsyncImage` uses to download images and decode WebP and JPEG. libdbus is loaded at run time, if present, to read the desktop's accent color and its light or dark preference.
-- On Linux, xkbcommon's headers (`libxkbcommon-dev`; on Arch they come with `libxkbcommon`) with Wayland's (`libwayland-dev`; `wayland`) for Kompoz's own Wayland platform, which a Wayland session runs on, and X11's, XInput 2's, Xcursor's and XRandR's (`libx11-dev`, `libxi-dev`, `libxcursor-dev`, `libxrandr-dev`; `libx11`, `libxi`, `libxcursor`, `libxrandr`) for its X11 platform, which an X11 session runs on; their libraries are loaded at run time. Without them apps run on SDL's platform; `KOMPOZ_PLATFORM=sdl` picks it always.
+- On Linux, xkbcommon's headers (`libxkbcommon-dev`; on Arch they come with `libxkbcommon`) with Wayland's (`libwayland-dev`; `wayland`) for Kompoz's own Wayland platform, which a Wayland session runs on, and X11's, XInput 2's, Xcursor's and XRandR's (`libx11-dev`, `libxi-dev`, `libxcursor-dev`, `libxrandr-dev`; `libx11`, `libxi`, `libxcursor`, `libxrandr`) for its X11 platform, which an X11 session runs on; their libraries are loaded at run time. At least one of the two is needed.
 
-On Linux, install these from your distribution's packages. For Android, the web and Windows, Kompoz builds FreeType, HarfBuzz, zlib and libpng from source, and SDL3 but on Android; `scripts/fetch-deps.sh` downloads them (see below).
+On Linux, install these from your distribution's packages. For Android, the web and Windows, Kompoz builds FreeType, HarfBuzz, zlib and libpng from source; `scripts/fetch-deps.sh` downloads them (see below).
 
 ## Build the library and the showcase
 
@@ -21,22 +21,22 @@ cmake --build build -j
 ./build/showcase
 ```
 
-This builds the core library (`kompoz_core`), the SDL3 backend (`kompoz_sdl3`), the showcase app, and the headless tests (`./build/kompoz_tests`).
+This builds the core library (`kompoz_core`), the platform layer apps run on (`kompoz_app`), the showcase app, and the headless tests (`./build/kompoz_tests`).
 
 Useful options:
 
 | Option | Default | What it does |
 |---|---|---|
-| `KOMPOZ_BUILD_SDL3` | `ON` | Build the SDL3 backend. `OFF` builds only the core and the tests, with no window system. |
+| `KOMPOZ_BUILD_APP` | `ON` | Build the platform layer apps run on (`kompoz::app`). `OFF` builds only the core and the tests, with no window system. |
 | `KOMPOZ_BUILD_EXAMPLES` | `ON` | Build the showcase. |
 | `KOMPOZ_BUILD_TESTS` | `ON` (`OFF` on Android, iOS and the web) | Build the headless tests. |
-| `KOMPOZ_VENDORED_DEPS` | `ON` on Android, iOS, the web and Windows | Build SDL3 (not on Android), FreeType, HarfBuzz, zlib and libpng from `third_party/` instead of using the system's. |
+| `KOMPOZ_VENDORED_DEPS` | `ON` on Android, iOS, the web and Windows | Build FreeType, HarfBuzz, zlib and libpng from `third_party/` instead of using the system's. |
 
 On desktops that have lld, Kompoz links with it unless you chose another linker: about one second instead of GNU ld's twenty-five for the showcase.
 
 ## Use Kompoz in your project
 
-Add Kompoz as a subdirectory, a clone or a git submodule, and link the SDL3 backend. The backend brings the program's entry point.
+Add Kompoz as a subdirectory, a clone or a git submodule, and link its platform layer, `kompoz::app`, which brings the program's entry point.
 
 ```cmake
 cmake_minimum_required(VERSION 3.24)
@@ -48,13 +48,13 @@ set(KOMPOZ_BUILD_TESTS OFF)
 add_subdirectory(kompoz)        # a clone or a git submodule
 
 add_executable(myapp main.cpp)
-target_link_libraries(myapp PRIVATE kompoz::sdl3)
+target_link_libraries(myapp PRIVATE kompoz::app)
 kompoz_copy_assets(myapp)       # the fonts and the licenses next to the binary
 ```
 
 `kompoz_copy_assets` copies what every app ships, the bundled Noto Sans fonts and the licenses, next to your binary each time it is built.
 
-Or install Kompoz once and find it as a package, on Linux, macOS or Windows. Built with the system's SDL3, FreeType,
+Or install Kompoz once and find it as a package, on Linux, macOS or Windows. Built with the system's FreeType,
 HarfBuzz and libpng, it finds them there again; built with its own (`scripts/fetch-deps.sh`: Windows, or
 `-DKOMPOZ_VENDORED_DEPS=ON`), it installs them beside it:
 
@@ -67,12 +67,12 @@ cmake --install kompoz/build --prefix ~/.local
 ```cmake
 find_package(kompoz 0.1 REQUIRED)  # -DCMAKE_PREFIX_PATH=~/.local, if that isn't searched already
 add_executable(myapp main.cpp)
-target_link_libraries(myapp PRIVATE kompoz::sdl3)
+target_link_libraries(myapp PRIVATE kompoz::app)
 kompoz_copy_assets(myapp)
 ```
 
 With vcpkg or Conan, from a clone of the repository (its overlay port and its recipe build that clone, with the
-package manager's SDL3, FreeType, HarfBuzz and libpng), then `find_package(kompoz)` as above:
+package manager's FreeType, HarfBuzz and libpng), then `find_package(kompoz)` as above:
 
 ```bash
 vcpkg install kompoz --overlay-ports=kompoz/packaging/vcpkg/ports
@@ -135,7 +135,7 @@ cmake --build build-windows -j
 
 Ship the executable with the `fonts/` and `licenses/` folders next to it. The tests also run under Wine: `WINEPATH=/usr/x86_64-w64-mingw32/bin wine build-windows/kompoz_tests.exe`.
 
-Kompoz's GPU renderer on OpenGL ES (`KOMPOZ_GPU=gles`) uses ANGLE where the app has ANGLE's `libEGL.dll` and `libGLESv2.dll` next to it: OpenGL ES over Direct3D 11, the same on every Windows GPU. vcpkg builds them from Google's source (`vcpkg install angle:x64-windows-release`: ship the DLLs of its `bin/`, which add the `zlib1.dll` they use); without them, the GPU driver's own OpenGL ES is used. A Windows computer without a Vulkan driver (a virtual machine, Remote Desktop, a CI runner) has neither of those: ship ANGLE with the app, and it draws with Direct3D 11's WARP on the CPU there. ANGLE needs an SDL built with EGL, as vcpkg's and `third_party/`'s are; Conan Center's SDL has no OpenGL ES on Windows, so an app built with Conan draws with Vulkan only there.
+Kompoz's GPU renderer on OpenGL ES (`KOMPOZ_GPU=gles`) uses ANGLE where the app has ANGLE's `libEGL.dll` and `libGLESv2.dll` next to it: OpenGL ES over Direct3D 11, the same on every Windows GPU. vcpkg builds them from Google's source (`vcpkg install angle:x64-windows-release`: ship the DLLs of its `bin/`, which add the `zlib1.dll` they use); without them, the GPU driver's own OpenGL ES is used. A Windows computer without a Vulkan driver (a virtual machine, Remote Desktop, a CI runner) has neither of those: ship ANGLE with the app, and it draws with Direct3D 11's WARP on the CPU there.
 
 ### Android
 
@@ -146,13 +146,13 @@ scripts/fetch-deps.sh
 cd examples/showcase/android && ./gradlew installDebug
 ```
 
-`fetch-deps.sh` downloads SDL3, FreeType, HarfBuzz, zlib and libpng into `third_party/` at pinned versions and checks their SHA-256 sums (SDL isn't used on Android). Gradle builds Kompoz's CMake project with the NDK into your app's `libmain.so`.
+`fetch-deps.sh` downloads FreeType, HarfBuzz, zlib and libpng into `third_party/` at pinned versions and checks their SHA-256 sums. Gradle builds Kompoz's CMake project with the NDK into your app's `libmain.so`.
 
 To make your own app, start from the showcase's `android/` folder: it has only the manifest, a theme and a `MainActivity` that extends Kompoz's `KompozActivity` (which loads `libmain.so`, runs your app on its UI thread and draws each frame on the display's beat). The fonts go into the APK from Kompoz's `assets/` folder. On Android, Kompoz supports the soft keyboard with suggestions, edge-to-edge insets, the back gesture and predictive back, the system's dark mode and font size, dynamic color on Android 12+ and TalkBack.
 
 ### Web
 
-Kompoz builds for the browser with Emscripten (on Arch: `pacman -S emscripten`). SDL3, FreeType, HarfBuzz, zlib and libpng are built from source; the fonts and images are packed into a `.data` file next to the page. The app runs on Kompoz's own web platform: typing and input methods (and a phone's keyboard) go through a hidden textarea, the clipboard is the system's (copied with Ctrl+C, pasted with Ctrl+V), files and text can be dropped on the page, and `keepScreenOn` holds a screen wake lock.
+Kompoz builds for the browser with Emscripten (on Arch: `pacman -S emscripten`). FreeType, HarfBuzz, zlib and libpng are built from source; the fonts and images are packed into a `.data` file next to the page. The app runs on Kompoz's own web platform: typing and input methods (and a phone's keyboard) go through a hidden textarea, the clipboard is the system's (copied with Ctrl+C, pasted with Ctrl+V), files and text can be dropped on the page, and `keepScreenOn` holds a screen wake lock.
 
 ```bash
 scripts/fetch-deps.sh
@@ -167,7 +167,7 @@ For the web build of your own app, copy the Emscripten options from `examples/sh
 
 ### macOS and iOS
 
-On macOS Kompoz builds with Homebrew's SDL3, FreeType, HarfBuzz and libpng (`brew install sdl3 freetype harfbuzz libpng`) as on Linux, and runs: CI builds it there, runs the tests and an app in a real window, on Kompoz's own macOS platform (AppKit, Metal). It hasn't been used by hand on a Mac yet, and screen readers there (NSAccessibility) aren't connected. iOS hasn't been built: it needs an Xcode project or CMake setup like the Android one.
+On macOS Kompoz builds with Homebrew's FreeType, HarfBuzz and libpng (`brew install freetype harfbuzz libpng`) as on Linux, and runs: CI builds it there, runs the tests and an app in a real window, on Kompoz's own macOS platform (AppKit, Metal). It hasn't been used by hand on a Mac yet, and screen readers there (NSAccessibility) aren't connected. iOS hasn't been built: it needs an Xcode project or CMake setup like the Android one.
 
 ## Packaging
 
