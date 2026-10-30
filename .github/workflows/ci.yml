@@ -156,6 +156,21 @@ jobs:
       - name: Run it in a window (OpenGL ES through ANGLE beside it), click its button, take a screenshot
         working-directory: build-package
         run: cp ../angle/x64-windows-release/bin/*.dll . && KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo.exe && test -s shot.png
+      # The showcase, ready to run on any Windows 10+ (one without a GPU driver too: ANGLE beside it
+      # draws through Direct3D 11's WARP there), to download from the run: its files, ANGLE's DLLs
+      # and ANGLE's license among the others.
+      - name: The showcase as a package with ANGLE beside it
+        run: |
+          out=kompoz-showcase-windows-x86_64
+          mkdir -p $out
+          cp build/showcase.exe $out/
+          for dir in fonts licenses images vectors; do [ -d build/$dir ] && cp -r build/$dir $out/; done
+          cp angle/x64-windows-release/bin/*.dll $out/
+          cp angle/x64-windows-release/share/angle/copyright $out/licenses/ANGLE.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kompoz-showcase-windows-x86_64
+          path: kompoz-showcase-windows-x86_64
 
   macos:
     name: macOS
