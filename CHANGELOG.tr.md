@@ -437,6 +437,8 @@
   tam, SDL gibi) ve sıkıştırması, tuşlar (Command Kompoz'un Ctrl'ü) ve giriş yöntemleri (`NSTextInputClient`, alanın
   yeri söyleniyor), pano, dosya ve metin bırakmalar, sistemin imleçleri, açık ya da koyu görünüm, IOKit güç beyanı
   olarak `keepScreenOn`, uygulamanın menüsü (Gizle, Çık, pencereninkiler), `NSWorkspace` ile açılan bağlantılar.
+  Hepsinde terminaldeki (Windows'ta konsoldaki) Ctrl+C ve SIGTERM, SDL'in platformunun yaptığı gibi uygulamadan
+  çıkıyor, durumu çıkarken yazılıyor; böylece `scripts/dev.sh`'nin yeniden başlatmaları ekranı yine koruyor.
 - **Bir yolun gölgesi önceden sahip olduğu maskeden çiziliyor** (Compose'un bir `dropShadow`'un ya da
   `innerShadow`'un bulanık bitmap'ini tutması gibi): GPU renderer'ı yuvarlak köşeli dikdörtgen olmayan bir şeklin
   (kalp, yıldız, kurabiye) gölgesini her seferinde baştan, her biri iki geçişli bir katman ve bir bulanıklıkla

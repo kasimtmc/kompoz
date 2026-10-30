@@ -34,6 +34,10 @@ std::vector<std::string> filesInUriList(const std::string& list);
 // `run` (a platform's app, what main returns, -1: it couldn't run) with libdbus kept loaded
 // until what it keeps for the process is freed after it, its users all done, as SDL_Quit does.
 int withDbus(const std::function<int()>& run);
+// SIGINT and SIGTERM (Ctrl+C in a terminal, scripts/dev.sh's restart) as a quit, as SDL made them,
+// so that the app writes its state on the way out: told by DesktopServices::takeNotifications,
+// `wakeFd` (the loop's eventfd) written from the handler.
+void quitOnSignals(int wakeFd);
 
 class DesktopServices {
 public:
@@ -44,8 +48,9 @@ public:
 
     // Started as the host is made (Platform::attach); `wake` wakes the platform's loop.
     void start(const std::string& title, std::function<void()> wake);
-    // What they told since, as events: AccentChanged, WallpaperChanged, AccessibilityRequest, and
-    // MetricsChanged when the light or dark preference or the window buttons changed.
+    // What they told since, as events: AccentChanged, WallpaperChanged, AccessibilityRequest,
+    // MetricsChanged when the light or dark preference or the window buttons changed, and Quit
+    // when a signal asked (quitOnSignals).
     void takeNotifications(std::deque<Event>& events);
     bool darkTheme() const;
     std::optional<std::string> buttonLayout() const;  // GNOME's (DesktopAccent::buttonLayout)

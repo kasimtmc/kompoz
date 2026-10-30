@@ -35,7 +35,7 @@ stamp() {
 stop() {
     [ -n "$pid" ] || return
     if kill -0 "$pid" 2>/dev/null; then
-        kill -TERM "$pid"  # SDL turns it into a quit: the app writes its state on the way out
+        kill -TERM "$pid"  # a quit: the app writes its state on the way out
         wait "$pid" 2>/dev/null
     fi
     pid=

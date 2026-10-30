@@ -412,7 +412,9 @@
   trackpad's scrolling (a tenth of its points, a wheel's notches whole, as SDL) and pinch, the keys (Command as
   Kompoz's Ctrl) and input methods (`NSTextInputClient`, told where the field is), the pasteboard, drops of files and
   text, the system's cursors, the light or dark appearance, `keepScreenOn` as an IOKit power assertion, the app's menu
-  (Hide, Quit, the window's), links opened by `NSWorkspace`.
+  (Hide, Quit, the window's), links opened by `NSWorkspace`. On all of them Ctrl+C in the terminal (the console on
+  Windows) and SIGTERM quit the app as SDL's platform made them, its state written on the way out, so
+  `scripts/dev.sh`'s restarts keep the screen again.
 - **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
   blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
   scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and

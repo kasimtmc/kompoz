@@ -200,6 +200,11 @@ private:
     PROC(WINAPI* getProcAddress_)(LPCSTR) = nullptr;
 };
 
+// Ctrl+C or Ctrl+Break in the console the app was started from: a quit, as SDL made it (the app
+// writes its state on the way out).
+std::atomic<bool> gQuitAsked{false};
+HANDLE gQuitWake = nullptr;
+
 constexpr UINT_PTR kModalTimer = 1;  // frames while Windows resizes or moves the window in a loop of its own
 constexpr wchar_t kClassName[] = L"KompozWindow";
 // KSCATEGORY_VIDEO_CAMERA: the cameras' device interfaces.
@@ -232,6 +237,15 @@ public:
         else
             SetProcessDPIAware();
         oleStarted_ = SUCCEEDED(OleInitialize(nullptr));
+        gQuitWake = wakeEvent_;
+        SetConsoleCtrlHandler(
+            [](DWORD type) -> BOOL {
+                if (type != CTRL_C_EVENT && type != CTRL_BREAK_EVENT) return FALSE;
+                gQuitAsked = true;
+                SetEvent(gQuitWake);
+                return TRUE;
+            },
+            TRUE);
         WNDCLASSEXW c{};
         c.cbSize = sizeof c, c.style = CS_HREDRAW | CS_VREDRAW, c.lpfnWndProc = &windowProc, c.hInstance = GetModuleHandleW(nullptr);
         c.hCursor = LoadCursorW(nullptr, IDC_ARROW), c.lpszClassName = kClassName;
@@ -545,6 +559,7 @@ private:
         if (accentChanged_.exchange(false)) events_.push_back({.type = EventType::AccentChanged});
         if (wallpaperChanged_.exchange(false)) events_.push_back({.type = EventType::WallpaperChanged});
         if (a11yRequested_.exchange(false)) events_.push_back({.type = EventType::AccessibilityRequest});
+        if (gQuitAsked.exchange(false)) events_.push_back({.type = EventType::Quit});
         for (const Event& e : std::exchange(events_, {})) {
             if (e.type == EventType::Quit) quit_ = true;
             core_->handle(e);

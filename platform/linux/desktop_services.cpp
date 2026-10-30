@@ -11,6 +11,8 @@
 #include <xkbcommon/xkbcommon-keysyms.h>
 
 #include <dlfcn.h>
+#include <csignal>
+#include <unistd.h>
 #include <spawn.h>
 #include <sys/wait.h>
 
@@ -21,6 +23,11 @@
 extern char** environ;
 
 namespace kompoz::platform {
+
+namespace {
+volatile std::sig_atomic_t gQuitSignalled = 0;
+int gSignalWakeFd = -1;
+} // namespace
 
 Key keyOf(uint32_t sym) {
     if (sym >= 'a' && sym <= 'z') return Key(int(Key::A) + int(sym - 'a'));
@@ -89,6 +96,20 @@ std::vector<std::string> filesInUriList(const std::string& list) {
     return files;
 }
 
+void quitOnSignals(int wakeFd) {
+    gSignalWakeFd = wakeFd;
+    struct sigaction quit{};
+    quit.sa_handler = [](int) {
+        gQuitSignalled = 1;
+        uint64_t one = 1;
+        if (gSignalWakeFd >= 0) (void)!write(gSignalWakeFd, &one, sizeof one);
+    };
+    sigemptyset(&quit.sa_mask);
+    quit.sa_flags = SA_RESTART;
+    sigaction(SIGINT, &quit, nullptr);
+    sigaction(SIGTERM, &quit, nullptr);
+}
+
 int withDbus(const std::function<int()>& run) {
     void* dbus = dlopen("libdbus-1.so.3", RTLD_NOW | RTLD_LOCAL);
     int result = run();
@@ -127,6 +148,10 @@ void DesktopServices::takeNotifications(std::deque<Event>& events) {
     }
     if (wallpaperChanged_.exchange(false)) events.push_back({.type = EventType::WallpaperChanged});
     if (a11yRequested_.exchange(false)) events.push_back({.type = EventType::AccessibilityRequest});
+    if (gQuitSignalled) {
+        gQuitSignalled = 0;
+        events.push_back({.type = EventType::Quit});
+    }
 }
 
 bool DesktopServices::darkTheme() const { return accent_ && accent_->darkScheme().value_or(false); }

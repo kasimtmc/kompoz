@@ -109,6 +109,7 @@ public:
         dpiScale_ = desktopScale();
         wakeFd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
         timerFd_ = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+        if (wakeFd_ >= 0) quitOnSignals(wakeFd_);
         return wakeFd_ >= 0 && timerFd_ >= 0;
     }
 

@@ -95,6 +95,7 @@ public:
         wakeFd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
         timerFd_ = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
         repeatFd_ = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+        if (wakeFd_ >= 0) quitOnSignals(wakeFd_);
         return xkb_ && wakeFd_ >= 0 && timerFd_ >= 0 && repeatFd_ >= 0;
     }
 

@@ -8,6 +8,8 @@
 #import <QuartzCore/CAMetalLayer.h>
 #include <IOKit/pwr_mgt/IOPMLib.h>
 
+#include <csignal>
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -116,6 +118,19 @@ public:
         NSApp.delegate = delegate_;
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         [NSApp finishLaunching];
+        // SIGINT and SIGTERM (Ctrl+C in a terminal, scripts/dev.sh's restart) as a quit, as SDL
+        // made them: the app writes its state on the way out.
+        for (int s : {SIGINT, SIGTERM}) {
+            signal(s, SIG_IGN);
+            dispatch_source_t source = dispatch_source_create(DISPATCH_SOURCE_TYPE_SIGNAL, uintptr_t(s), 0, dispatch_get_main_queue());
+            MacPlatform* self = this;
+            dispatch_source_set_event_handler(source, ^{
+                self->quitRequested();
+                self->wake();
+            });
+            dispatch_resume(source);
+            signalSources_.push_back(source);
+        }
         return true;
     }
 
@@ -359,6 +374,7 @@ private:
     Cursor cursor_ = Cursor::Default;
     bool keptOn_ = false, probed_ = false, hasMicrophone_ = false, hasCamera_ = false;
     IOPMAssertionID assertion_ = 0;
+    std::vector<dispatch_source_t> signalSources_;
 
     // An event to AppKit (and so to the view), or the loop's own wake.
     void dispatch(NSEvent* e) {
