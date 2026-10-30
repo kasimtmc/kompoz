@@ -405,7 +405,8 @@
   ekranı açık tutma (`idle-inhibit`), bağlantılar için `xdg-open`, açık ya da koyu tercih portalın
   `color-scheme`'inden. `libwayland-client`, `libwayland-egl`, `libxkbcommon` ve EGL çalışma anında yükleniyor,
   protokollerin kodu önceden üretiliyor (`scripts/wayland-protocols.sh`); derlemek için yalnızca başlıkları gerekiyor.
-  Bunlar yoksa, ya da `KOMPOZ_PLATFORM=sdl` ile, uygulamalar SDL'in platformunda çalışıyor. Sırada X11 var.
+  Bunlar yoksa, ya da `KOMPOZ_PLATFORM=sdl` ile, uygulamalar SDL'in platformunda çalışıyor. Sırada X11 var: ikisinin
+  ortak kullandıkları (tuşlar, bağlantılar, masaüstünün hizmetleri) `platform/linux/desktop_services`'ta.
 - **Bir yolun gölgesi önceden sahip olduğu maskeden çiziliyor** (Compose'un bir `dropShadow`'un ya da
   `innerShadow`'un bulanık bitmap'ini tutması gibi): GPU renderer'ı yuvarlak köşeli dikdörtgen olmayan bir şeklin
   (kalp, yıldız, kurabiye) gölgesini her seferinde baştan, her biri iki geçişli bir katman ve bir bulanıklıkla

@@ -2,6 +2,7 @@
 
 #include "../../app/app_core.hpp"
 #include "../../common/system.hpp"
+#include "../desktop_services.hpp"
 #include "../media_devices.hpp"
 #include "wayland_dynamic.hpp"
 // (after wayland_dynamic.hpp: their inline functions call through its pointers)
@@ -15,15 +16,6 @@
 #include "generated/xdg-decoration-unstable-v1-client-protocol.h"
 #include "generated/xdg-shell-client-protocol.h"
 
-#ifdef KOMPOZ_DESKTOP_ACCENT
-#include "../../common/desktop_accent.hpp"
-#endif
-#ifdef KOMPOZ_WALLPAPER_COLORS
-#include "../../common/wallpaper_colors.hpp"
-#endif
-#ifdef KOMPOZ_ATSPI
-#include "../atspi_bridge.hpp"
-#endif
 #ifdef KOMPOZ_GPU_VULKAN
 #define VK_USE_PLATFORM_WAYLAND_KHR 1
 #include <vulkan/vulkan.h>
@@ -35,11 +27,9 @@
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <poll.h>
-#include <spawn.h>
 #include <sys/eventfd.h>
 #include <sys/mman.h>
 #include <sys/timerfd.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -57,46 +47,10 @@
 #include <memory>
 #include <set>
 #include <string>
-#include <thread>
 #include <vector>
-
-extern char** environ;
 
 namespace kompoz::platform {
 namespace {
-
-// xkbcommon's keysyms as Kompoz's keys.
-Key keyOf(xkb_keysym_t sym) {
-    if (sym >= 'a' && sym <= 'z') return Key(int(Key::A) + int(sym - 'a'));
-    if (sym >= 'A' && sym <= 'Z') return Key(int(Key::A) + int(sym - 'A'));
-    if (sym >= '0' && sym <= '9') return Key(int(Key::Zero) + int(sym - '0'));
-    if (sym >= XKB_KEY_F1 && sym <= XKB_KEY_F12) return Key(int(Key::F1) + int(sym - XKB_KEY_F1));
-    switch (sym) {
-    case XKB_KEY_Return:
-    case XKB_KEY_KP_Enter: return Key::Enter;
-    case XKB_KEY_Escape: return Key::Escape;
-    case XKB_KEY_Tab:
-    case XKB_KEY_ISO_Left_Tab: return Key::Tab;
-    case XKB_KEY_BackSpace: return Key::Backspace;
-    case XKB_KEY_Delete: return Key::Delete;
-    case XKB_KEY_space: return Key::Space;
-    case XKB_KEY_Left: return Key::Left;
-    case XKB_KEY_Right: return Key::Right;
-    case XKB_KEY_Up: return Key::Up;
-    case XKB_KEY_Down: return Key::Down;
-    case XKB_KEY_Home: return Key::Home;
-    case XKB_KEY_End: return Key::End;
-    case XKB_KEY_Page_Up: return Key::PageUp;
-    case XKB_KEY_Page_Down: return Key::PageDown;
-    default: return Key::Unknown;
-    }
-}
-
-int64_t monotonicNow() {
-    timespec t{};
-    clock_gettime(CLOCK_MONOTONIC, &t);
-    return int64_t(t.tv_sec) * 1'000'000'000 + t.tv_nsec;
-}
 
 // EGL, loaded at run time as libwayland is (its functions by their declarations' types).
 struct Egl {
@@ -144,9 +98,7 @@ struct Output {
 class WaylandPlatform final : public Platform {
 public:
     ~WaylandPlatform() override {
-#ifdef KOMPOZ_ATSPI
-        a11y_.reset();
-#endif
+        desktop_.stop();
         closeWindow();
         auto destroy = [](auto* proxy) {
             if (proxy) wl_proxy_destroy(reinterpret_cast<wl_proxy*>(proxy));
@@ -190,7 +142,7 @@ public:
         bool needFrame = true;
         for (;;) {
             wl_display_dispatch_pending(display_);
-            takeNotifications();
+            desktop_.takeNotifications(events_);
             for (const Event& e : std::exchange(events_, {})) {
                 if (e.type == EventType::Quit) quit_ = true;
                 core.handle(e);
@@ -332,18 +284,12 @@ public:
         if (auto v = option("KOMPOZ_FONT_SCALE")) m.fontScale = std::max(0.5f, float(std::atof(v->c_str())));
         m.refreshRate = refreshRate();
         m.safeArea = Rect{0, 0, float(width_), float(height_)};
-#ifdef KOMPOZ_DESKTOP_ACCENT
-        m.darkTheme = accent_ && accent_->darkScheme().value_or(false);
-#endif
+        m.darkTheme = desktop_.darkTheme();
         m.language = preferredLanguage();
         if (ownDecorations_ && !state_.fullscreen) m.titleBar = titleBar();
         return m;
     }
-    void metricsUpdated(ComposeHost&) override {
-#ifdef KOMPOZ_WALLPAPER_COLORS
-        if (wallpaper_ && accent_) wallpaper_->setDarkTheme(accent_->darkScheme().value_or(false));
-#endif
-    }
+    void metricsUpdated(ComposeHost&) override { desktop_.metricsUpdated(); }
     void pixelSize(int* width, int* height) const override { *width = pixelWidth(), *height = pixelHeight(); }
     void setWindowSize(int width, int height) override {
         width_ = width, height_ = height;
@@ -389,22 +335,7 @@ public:
     void attach(ComposeHost& h, ComposeHost::Callbacks& callbacks) override {
         host_ = &h;
         WaylandPlatform* self = this;
-        auto notifier = [self](std::atomic<bool>& flag) {
-            return Notifier{.notify = [self, &flag] {
-                flag = true;
-                self->wake();
-            }};
-        };
-        (void)notifier;
-#ifdef KOMPOZ_DESKTOP_ACCENT
-        accent_ = std::make_unique<DesktopAccent>(notifier(accentChanged_));
-#endif
-#ifdef KOMPOZ_WALLPAPER_COLORS
-        wallpaper_ = std::make_unique<WallpaperColors>(false, notifier(wallpaperChanged_));
-#endif
-#ifdef KOMPOZ_ATSPI
-        a11y_ = std::make_unique<AtspiBridge>(title_, notifier(a11yRequested_));
-#endif
+        desktop_.start(title_, [self] { self->wake(); });
         callbacks.wake = [self] { self->wake(); };
         callbacks.textInput = [self](bool active, Rect area, const TextEditState&, const ImeOptions& options) {
             self->textActive_ = active;
@@ -419,42 +350,10 @@ public:
         };
         callbacks.getClipboard = [self] { return self->readClipboard(); };
         callbacks.setClipboard = [self](const std::string& text) { self->writeClipboard(text); };
-        callbacks.openUri = [self](const std::string& uri) { self->open(uri); };
+        callbacks.openUri = [](const std::string& uri) { openUri(uri); };
     }
 
-    void handled(ComposeHost& h, const Event& e) override {
-        switch (e.type) {
-#ifdef KOMPOZ_DESKTOP_ACCENT
-        case EventType::AccentChanged:
-            if (accent_) {
-                std::optional<Color> color = accent_->accent();
-                h.setDynamicTonalPalette(color ? std::optional(TonalPalette::fromSeed(*color)) : std::nullopt);
-            }
-            break;
-#endif
-#ifdef KOMPOZ_WALLPAPER_COLORS
-        case EventType::WallpaperChanged:
-            if (wallpaper_) h.setWallpaperTonalPalette(wallpaper_->palette());
-            break;
-#endif
-#ifdef KOMPOZ_ATSPI
-        case EventType::AccessibilityRequest:
-            if (a11y_)
-                for (const auto& r : a11y_->takeRequests()) {
-                    if (r.action == SemanticsAction::SetText) h.performSemanticsAction(r.id, r.action, r.text);
-                    else h.performSemanticsAction(r.id, r.action, r.argument);
-                }
-            break;
-#endif
-        case EventType::FocusGained:
-        case EventType::FocusLost:
-            focused_ = e.type == EventType::FocusGained;
-            semanticsDirty_ = true;
-            break;
-        default: break;
-        }
-        (void)h;
-    }
+    void handled(ComposeHost& h, const Event& e) override { desktop_.handled(h, e); }
 
     void composed(ComposeHost& h, bool redraw, int64_t frameTime) override {
         // keepScreenOn: an idle inhibitor on the window while it is laid out.
@@ -462,30 +361,11 @@ public:
             if (on) inhibitor_ = zwp_idle_inhibit_manager_v1_create_inhibitor(idleInhibits_, surface_);
             else zwp_idle_inhibitor_v1_destroy(std::exchange(inhibitor_, nullptr));
         }
-#ifdef KOMPOZ_ATSPI
-        // Screen readers (AT-SPI) answer from the tree last published: once asked for, after frames
-        // that changed the screen. Wayland doesn't tell a window where it is: at 0, 0.
-        bool treeRequested = a11y_ && a11y_->takeTreeRequest();
-        semanticsDirty_ = semanticsDirty_ || redraw || treeRequested;
-        if (a11y_ && a11y_->active() && semanticsDirty_ &&
-            (treeRequested || frameTime - lastSemantics_ > (h.hasPendingWork() ? 500'000'000 : 50'000'000))) {
-            lastSemantics_ = frameTime;
-            semanticsDirty_ = false;
-            a11y_->publish(h.semanticsTree(), {.x = 0, .y = 0, .width = float(width_), .height = float(height_),
-                                               .dpToPoints = 1 / pointToDp(), .focused = focused_, .title = title_});
-        }
-#else
-        (void)redraw, (void)frameTime;
-#endif
+        // (Wayland doesn't tell a window where it is: at 0, 0.)
+        desktop_.composed(h, redraw, frameTime, {0, 0, float(width_), float(height_)}, 1 / pointToDp(), title_);
     }
 
-    bool wantsFrames() const override {
-#ifdef KOMPOZ_ATSPI
-        return a11y_ && a11y_->active() && semanticsDirty_;  // one more frame publishes it
-#else
-        return false;
-#endif
-    }
+    bool wantsFrames() const override { return desktop_.wantsFrames(); }
 
 private:
     wl_display* display_ = nullptr;
@@ -601,20 +481,8 @@ private:
     bool quit_ = false, busy_ = false, awaitingCallback_ = false, callbackDone_ = false;
     AppCore* core_ = nullptr;
     ComposeHost* host_ = nullptr;
-    bool probed_ = false, hasMicrophone_ = false, hasCamera_ = false, focused_ = false, semanticsDirty_ = true;
-    int64_t lastSemantics_ = 0;
-    std::atomic<bool> accentChanged_{false}, wallpaperChanged_{false}, a11yRequested_{false};
-#ifdef KOMPOZ_DESKTOP_ACCENT
-    std::unique_ptr<DesktopAccent> accent_;
-    std::optional<bool> dark_;
-    std::optional<std::string> buttonLayout_;
-#endif
-#ifdef KOMPOZ_WALLPAPER_COLORS
-    std::unique_ptr<WallpaperColors> wallpaper_;
-#endif
-#ifdef KOMPOZ_ATSPI
-    std::unique_ptr<AtspiBridge> a11y_;
-#endif
+    bool probed_ = false, hasMicrophone_ = false, hasCamera_ = false;
+    DesktopServices desktop_;
 
     // ---- Sizes and scale -------------------------------------------------------------------
 
@@ -669,21 +537,6 @@ private:
             spec.it_value = {time_t(at / 1'000'000'000), long(at % 1'000'000'000)};
         }
         timerfd_settime(timerFd_, TFD_TIMER_ABSTIME, &spec, nullptr);
-    }
-
-    void takeNotifications() {
-        if (accentChanged_.exchange(false)) {
-            events_.push_back({.type = EventType::AccentChanged});
-#ifdef KOMPOZ_DESKTOP_ACCENT
-            // (The same reader tells the light/dark preference and the title bar's buttons.)
-            if (accent_ && (accent_->darkScheme() != dark_ || accent_->buttonLayout() != buttonLayout_)) {
-                dark_ = accent_->darkScheme(), buttonLayout_ = accent_->buttonLayout();
-                events_.push_back({.type = EventType::MetricsChanged});
-            }
-#endif
-        }
-        if (wallpaperChanged_.exchange(false)) events_.push_back({.type = EventType::WallpaperChanged});
-        if (a11yRequested_.exchange(false)) events_.push_back({.type = EventType::AccessibilityRequest});
     }
 
     // The display's events read and dispatched as they come, a wake, a timer or a key's repeat; up
@@ -805,10 +658,7 @@ private:
     // Minimize, Maximize and Close on the right), those the window manager does.
     TitleBar titleBar() const {
         std::string layout = "appmenu:minimize,maximize,close";
-#ifdef KOMPOZ_DESKTOP_ACCENT
-        if (accent_)
-            if (std::optional<std::string> desktop = accent_->buttonLayout()) layout = *desktop;
-#endif
+        if (std::optional<std::string> desktop = desktop_.buttonLayout()) layout = *desktop;
         TitleBar bar{.maximized = state_.maximized};
         auto side = [this](std::string_view names, std::vector<WindowButton>& out) {
             while (!names.empty()) {
@@ -1001,17 +851,6 @@ private:
         wl_data_source_add_listener(source_, &kSource, this);
         for (const char* type : {"text/plain;charset=utf-8", "text/plain", "UTF8_STRING"}) wl_data_source_offer(source_, type);
         wl_data_device_set_selection(dataDevice_, source_, lastSerial_);
-    }
-
-    // The browser, or the app for the scheme (xdg-open), its process waited for on a thread.
-    void open(const std::string& uri) {
-        pid_t pid = 0;
-        const char* argv[] = {"xdg-open", uri.c_str(), nullptr};
-        if (posix_spawnp(&pid, "xdg-open", nullptr, nullptr, const_cast<char* const*>(argv), environ) != 0) {
-            log("kompoz: can't open " + uri);
-            return;
-        }
-        std::thread([pid] { waitpid(pid, nullptr, 0); }).detach();
     }
 
     // ---- OpenGL ES -------------------------------------------------------------------------
@@ -1680,19 +1519,10 @@ const wl_registry_listener WaylandPlatform::kRegistry = {
 
 int runWayland(int argc, char* argv[]) {
     if (const char* forced = std::getenv("KOMPOZ_PLATFORM"); forced && std::string_view(forced) == "sdl") return -1;
-    // libdbus (the accent color, the screen readers) kept loaded until what it keeps for the
-    // process is freed at the end, its users all done, as SDL_Quit does.
-    void* dbus = dlopen("libdbus-1.so.3", RTLD_NOW | RTLD_LOCAL);
-    int result = -1;
-    {
+    return withDbus([&] {
         auto platform = std::make_unique<WaylandPlatform>();
-        if (platform->connect()) result = platform->run(argc, argv);
-    }
-    if (dbus) {
-        if (auto shutdown = reinterpret_cast<void (*)()>(dlsym(dbus, "dbus_shutdown")); shutdown && result >= 0) shutdown();
-        dlclose(dbus);
-    }
-    return result;
+        return platform->connect() ? platform->run(argc, argv) : -1;
+    });
 }
 
 } // namespace kompoz::platform
