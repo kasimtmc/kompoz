@@ -310,20 +310,19 @@ if(KOMPOZ_BUILD_SDL3)
         set_source_files_properties(platform/gpu/vma.cpp PROPERTIES COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang>:-w>")  # (its warnings)
     endif()
     # Kompoz's own platforms on Linux, picked over SDL's: Wayland's (platform/linux/wayland) in a
-    # Wayland session, built where Wayland's, xkbcommon's and EGL's headers are (the protocols' code
-    # is generated ahead, scripts/wayland-protocols.sh), and X11's (platform/linux/x11), built where
-    # X11's, XInput 2's, Xcursor's, XRandR's, xkbcommon's and EGL's headers are. They are linked to
-    # none of those libraries: they are loaded at run time.
+    # Wayland session, built where Wayland's and xkbcommon's headers are (the protocols' code is
+    # generated ahead, scripts/wayland-protocols.sh), and X11's (platform/linux/x11), built where
+    # X11's, XInput 2's, Xcursor's, XRandR's and xkbcommon's headers are. They are linked to none of
+    # those libraries, nor to EGL: they are loaded at run time.
     if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
         find_path(KOMPOZ_WAYLAND_INCLUDE_DIR wayland-client-core.h PATH_SUFFIXES wayland)
         find_path(KOMPOZ_XKBCOMMON_INCLUDE_DIR xkbcommon/xkbcommon.h)
-        find_path(KOMPOZ_EGL_INCLUDE_DIR EGL/egl.h)
         find_path(KOMPOZ_X11_INCLUDE_DIR X11/Xlib.h)
         find_path(KOMPOZ_XI_INCLUDE_DIR X11/extensions/XInput2.h)
         find_path(KOMPOZ_XCURSOR_INCLUDE_DIR X11/Xcursor/Xcursor.h)
         find_path(KOMPOZ_XRANDR_INCLUDE_DIR X11/extensions/Xrandr.h)
         set(kompoz_linux_platform OFF)
-        if(KOMPOZ_WAYLAND_INCLUDE_DIR AND KOMPOZ_XKBCOMMON_INCLUDE_DIR AND KOMPOZ_EGL_INCLUDE_DIR)
+        if(KOMPOZ_WAYLAND_INCLUDE_DIR AND KOMPOZ_XKBCOMMON_INCLUDE_DIR)
             file(GLOB kompoz_wayland_protocols CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/platform/linux/wayland/generated/*.c)
             target_sources(kompoz_sdl3 PRIVATE platform/linux/wayland/wayland_platform.cpp platform/linux/wayland/wayland_dynamic.cpp
                            ${kompoz_wayland_protocols})
@@ -331,21 +330,21 @@ if(KOMPOZ_BUILD_SDL3)
             target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_WAYLAND=1)
             set(kompoz_linux_platform ON)
         else()
-            message(STATUS "Kompoz: Wayland's, xkbcommon's or EGL's headers not found; Wayland sessions run on SDL's platform")
+            message(STATUS "Kompoz: Wayland's or xkbcommon's headers not found; Wayland sessions run on SDL's platform")
         endif()
         if(KOMPOZ_X11_INCLUDE_DIR AND KOMPOZ_XI_INCLUDE_DIR AND KOMPOZ_XCURSOR_INCLUDE_DIR AND KOMPOZ_XRANDR_INCLUDE_DIR
-           AND KOMPOZ_XKBCOMMON_INCLUDE_DIR AND KOMPOZ_EGL_INCLUDE_DIR)
+           AND KOMPOZ_XKBCOMMON_INCLUDE_DIR)
             target_sources(kompoz_sdl3 PRIVATE platform/linux/x11/x11_platform.cpp platform/linux/x11/x11_dynamic.cpp)
             target_include_directories(kompoz_sdl3 PRIVATE ${KOMPOZ_X11_INCLUDE_DIR} ${KOMPOZ_XI_INCLUDE_DIR} ${KOMPOZ_XCURSOR_INCLUDE_DIR}
                                        ${KOMPOZ_XRANDR_INCLUDE_DIR})
             target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_X11=1)
             set(kompoz_linux_platform ON)
         else()
-            message(STATUS "Kompoz: X11's, XInput 2's, Xcursor's, XRandR's, xkbcommon's or EGL's headers not found; X11 sessions run on SDL's platform")
+            message(STATUS "Kompoz: X11's, XInput 2's, Xcursor's, XRandR's or xkbcommon's headers not found; X11 sessions run on SDL's platform")
         endif()
         if(kompoz_linux_platform)
-            target_sources(kompoz_sdl3 PRIVATE platform/linux/desktop_services.cpp platform/linux/egl_window.cpp platform/linux/media_devices.cpp)
-            target_include_directories(kompoz_sdl3 PRIVATE ${KOMPOZ_XKBCOMMON_INCLUDE_DIR} ${KOMPOZ_EGL_INCLUDE_DIR})
+            target_sources(kompoz_sdl3 PRIVATE platform/linux/desktop_services.cpp platform/common/egl_window.cpp platform/linux/media_devices.cpp)
+            target_include_directories(kompoz_sdl3 PRIVATE ${KOMPOZ_XKBCOMMON_INCLUDE_DIR})
         endif()
     endif()
     # Text is shaped with HarfBuzz when it is there: ligatures, kerning, Arabic joining, Indic

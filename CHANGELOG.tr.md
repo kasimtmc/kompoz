@@ -414,7 +414,8 @@
   masaüstü temasının imleçleri (libXcursor), XRandR'dan yenileme hızı, `org.freedesktop.ScreenSaver` üzerinden ekranı
   açık tutma. libX11, libXi, libXcursor ve libXrandr çalışma anında yükleniyor; `KOMPOZ_PLATFORM=x11` onu bir Wayland
   oturumunda da XWayland üzerinden çalıştırıyor. İkisinin ortak kullandıkları (tuşlar, bağlantılar, masaüstünün
-  hizmetleri) `platform/linux/desktop_services`'ta, EGL üzerinden OpenGL ES `egl_window`'da.
+  hizmetleri) `platform/linux/desktop_services`'ta, EGL üzerinden OpenGL ES `platform/common/egl_window`'da (derlemek
+  için EGL başlığı gerekmiyor; Windows'ta ANGLE'ınkiyle de).
 - **Bir yolun gölgesi önceden sahip olduğu maskeden çiziliyor** (Compose'un bir `dropShadow`'un ya da
   `innerShadow`'un bulanık bitmap'ini tutması gibi): GPU renderer'ı yuvarlak köşeli dikdörtgen olmayan bir şeklin
   (kalp, yıldız, kurabiye) gölgesini her seferinde baştan, her biri iki geçişli bir katman ve bir bulanıklıkla

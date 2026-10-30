@@ -3,7 +3,7 @@
 #include "../../app/app_core.hpp"
 #include "../../common/system.hpp"
 #include "../desktop_services.hpp"
-#include "../egl_window.hpp"
+#include "../../common/egl_window.hpp"
 #include "../media_devices.hpp"
 #include "wayland_dynamic.hpp"
 // (after wayland_dynamic.hpp: their inline functions call through its pointers)
@@ -21,9 +21,6 @@
 #define VK_USE_PLATFORM_WAYLAND_KHR 1
 #include <vulkan/vulkan.h>
 #endif
-#define EGL_NO_X11 1
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
 
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -820,7 +817,7 @@ private:
         }
         eglWindow_ = wl_egl_window_create(surface_, pixelWidth(), pixelHeight());
         // (Swap interval 0: the frames are paced by the compositor's frame callbacks.)
-        return egl_.open({.platform = EGL_PLATFORM_WAYLAND_KHR, .display = display_, .window = eglWindow_, .swapInterval = 0,
+        return egl_.open({.platform = EglWindow::kWayland, .display = display_, .window = eglWindow_, .swapInterval = 0,
                           .debug = option("KOMPOZ_GPU_VALIDATION") == "1"},
                          surface, error);
     }

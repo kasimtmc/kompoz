@@ -3,7 +3,7 @@
 #include "../../app/app_core.hpp"
 #include "../../common/system.hpp"
 #include "../desktop_services.hpp"
-#include "../egl_window.hpp"
+#include "../../common/egl_window.hpp"
 #include "../media_devices.hpp"
 
 namespace kompoz::platform {
@@ -17,8 +17,6 @@ constexpr PointerPrecision kNoPointer = PointerPrecision::None;  // (named befor
 #define VK_USE_PLATFORM_XLIB_KHR 1
 #include <vulkan/vulkan.h>
 #endif
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
 
 #include <dlfcn.h>
 #include <poll.h>
@@ -234,7 +232,7 @@ public:
 #endif
         case gpu::Backend::GLES:
             // (Swap interval 1: the swap waits for the display's beat.)
-            return egl_.open({.platform = EGL_PLATFORM_X11_KHR, .display = display_, .window = &window_,
+            return egl_.open({.platform = EglWindow::kX11, .display = display_, .window = &window_,
                               .visual = int(DefaultVisual(display_, screen_)->visualid), .alpha = false, .swapInterval = 1,
                               .debug = option("KOMPOZ_GPU_VALIDATION") == "1"},
                              surface, error) ||

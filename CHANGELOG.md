@@ -390,7 +390,7 @@
   (libXcursor), the refresh rate from XRandR, the screen kept on through `org.freedesktop.ScreenSaver`. libX11, libXi,
   libXcursor and libXrandr are loaded at run time; `KOMPOZ_PLATFORM=x11` runs it in a Wayland session too, through
   XWayland. What the two share (keys, links, the desktop's services) is in `platform/linux/desktop_services`, OpenGL
-  ES through EGL in `egl_window`.
+  ES through EGL in `platform/common/egl_window` (no EGL header needed to build it; ANGLE's on Windows too).
 - **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
   blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
   scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and
