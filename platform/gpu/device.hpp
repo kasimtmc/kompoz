@@ -244,6 +244,10 @@ public:
     // since, as Android's renderer does with a buffer's age); 0 if what it holds isn't known (a
     // new one, or a platform that doesn't keep it): all of it drawn over.
     virtual int swapchainAge() const { return 0; }
+    // The window's native window went away or is another (Surface::vulkanNativeWindow tells
+    // which), between frames: what was made for the old one is let go of now, as the platform
+    // must before the system takes it (Android's surfaceDestroyed), not at the next frame.
+    virtual void surfaceChanged() {}
     // `size` bytes of this frame's memory (aligned to `alignment`), to write now.
     virtual void* allocate(size_t size, size_t alignment, BufferRef* ref) = 0;
     // Texels (in the texture's format, `rowBytes` apart) into part of a texture; outside passes.

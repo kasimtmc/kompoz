@@ -197,4 +197,4 @@ README'deki daha uzun tablo gezinmeyi, animasyonu, hareketleri, metin alanların
 - **Compiler plugin yok.** Kimlik çağrı noktalarından gelir; bu yüzden aynı satırdaki iki çağrı sıralarıyla ayırt edilir. Öğeleri yer değiştiren döngülerde `key` kullanın ([Yaşam döngüsü](lifecycle.md) sayfasına bakın).
 - **`by` delegasyonu yok.** Durumlar `get()` ile okunur, `set()` ile yazılır.
 - **Atlamak `==` gerektirir.** Bir composable ancak argümanları eşit çıkarsa atlanır. `std::function` karşılaştırılamaz; bu yüzden onu alan bir composable yeniden başlatılabilir ama hiç atlanmaz.
-- **Platformlar.** Kompoz Linux, Windows, Android ve web'de SDL3 üzerinden çizer; birlikte çalışılacak Android View'ları yoktur.
+- **Platformlar.** Kompoz her şeyi kendisi çizer: Android'de kendi etkinliğinin bir görünümünde, Linux, Windows ve web'de SDL3 üzerinden; birlikte çalışılacak Android View'ları yoktur.

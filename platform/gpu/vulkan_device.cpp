@@ -881,6 +881,10 @@ public:
 
     int swapchainAge() const override { return acquired ? swapAge : 0; }
 
+    void surfaceChanged() override {
+        if (nativeWindow && !acquired) surfaceCurrent();
+    }
+
     Texture* swapchainTexture() override {
         if (!surface && !nativeWindow) return nullptr;
         if (!acquired) {

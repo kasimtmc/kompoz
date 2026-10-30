@@ -335,8 +335,9 @@ Layout of the repository:
 | `platform/gpu/` | the GPU renderer and its Vulkan, OpenGL ES, Metal and WebGPU backends |
 | `platform/common/` | what every platform shares: fonts, images, files and logging, the wallpaper's colors |
 | `platform/linux/`, `platform/windows/` | the desktops' own: screen readers (AT-SPI, UI Automation), the accent color |
-| `platform/android/` | Android's native side (keyboard, performance hints) and its Java side in `java/` (keyboard, accessibility, insets, intents) |
-| `platform/sdl3/` | the SDL3 platform: windows, input and the event loop on the desktops, Android and the web |
+| `platform/android/` | Android's platform: its native side (the frames, input and surfaces, the keyboard, performance hints) and its Java side in `java/` (the activity and its view, keyboard, accessibility, insets, intents) |
+| `platform/headless/` | the platform without a screen (`KOMPOZ_HEADLESS=1`): tests, scripted runs, CI |
+| `platform/sdl3/` | the SDL3 platform: windows, input and the event loop on the desktops and the web |
 | `platform/web/` | the web page the app is drawn in |
 | `assets/` | what every app ships: the bundled fonts (`fonts/`) and the licenses (`licenses/`) |
 | `tests/` | the headless tests |
@@ -416,35 +417,33 @@ cd examples/showcase/android && ./gradlew installDebug
 ```
 
 `scripts/fetch-deps.sh` downloads SDL3, FreeType, HarfBuzz, zlib and libpng into `third_party/` at pinned versions,
-checking their sha256, and applies the fixes in `scripts/patches/` (two at the moment, both on Android and not fixed
-in SDL 3.4.18 either: a deadlock when the activity pauses while SDL creates its renderer, and `SDL_WaitEvent` spinning
-instead of waiting, a CPU core busy whenever the app is idle). Gradle builds the root `CMakeLists.txt` with
-the NDK: `libSDL3.so` and the app's `libmain.so` (the showcase's sources). The Java side is SDL's own
-`SDLActivity`; the example's `android/` folder only has the manifest, a theme and a short `MainActivity`. The fonts
-come into the APK from `assets/`, the example's images from `examples/showcase/assets/`.
+checking their sha256 (SDL isn't used on Android). Gradle builds the root `CMakeLists.txt` with the NDK into the
+app's `libmain.so` (Kompoz and the showcase's sources). The Java side is Kompoz's own
+([platform/android/java](platform/android/java/dev/kompoz)): `KompozActivity`, which the example's `MainActivity`
+extends, and its `KompozView`, whose frames come from the display's Choreographer (the vsync's time as the frame's, as
+Compose takes it) and whose touches, keys and lifecycle go to the app on the UI thread, where it runs; the example's
+`android/` folder only has the manifest, a theme and that `MainActivity`. The fonts come into the APK from `assets/`,
+the example's images from `examples/showcase/assets/`.
 
 Deep links (`navDeepLink`): when the app is opened with a link, the NavHost goes to that screen, with the start
 screen and the screens of the graphs in between under it, so back goes up. On the desktop it is the command line
 (`./build/showcase kompoz://item/42`), on the web the address's `#` part (`showcase.html#item/42`; the screen shown
 is written there too, so reloading opens the same one), on Android a `VIEW` intent: an `intent-filter` for its
-scheme in the manifest, and `KompozInput.onNewIntent(intent)` from `MainActivity.onNewIntent` for links that come
-while the app is open (as in the example). For `rememberSaveable` values to come back after the process was ended,
-`MainActivity` calls `KompozInput`'s methods of the same names from `onCreate` (before super), `onPause` (before
-super) and `onSaveInstanceState` (after super); on the desktop `KOMPOZ_STATE_FILE=state.bin` writes the state at
-exit and reads it at start (to try the process being ended). To try a deep link:
+scheme in the manifest (`KompozActivity` passes on the links that come while the app is open too). `rememberSaveable`
+values come back after Android ended the process (`KompozActivity` keeps them in its saved instance state); on the
+desktop `KOMPOZ_STATE_FILE=state.bin` writes the state at exit and reads it at start (to try the process being
+ended). To try a deep link:
 
 ```bash
 adb shell am start -a android.intent.action.VIEW -d "kompoz://item/42"
 ```
 
-The keyboard goes through an `InputConnection` of our own rather than SDL's
-([KompozInput.java](platform/android/java/dev/kompoz/KompozInput.java)). SDL's keeps a separate copy of the text and
-sends only differences, so suggestions and autocorrect garbled the text. Ours has a single `Editable`; every change
-sends the whole text, the selection and the word being composed to the native side. When the app changes the text
-itself (clearing it after "Ekle", say), `restartInput` brings the keyboard back in step. Compose's
-`TextInputServiceAndroid` works the same way. `MainActivity` replaces `createSDLSurface` with
-`KompozInput.createSurface(context)`, so that SDL's surface doesn't take the keyboard for its own and bring its input
-view forward when the window's size changes (when the keyboard opens).
+The keyboard goes through an `InputConnection` of Kompoz's own
+([KompozInput.java](platform/android/java/dev/kompoz/KompozInput.java)). One that keeps a separate copy of the text and
+sends only differences (as SDL's did) lets suggestions and autocorrect garble the text. Ours has a single `Editable`;
+every change sends the whole text, the selection and the word being composed to the native side. When the app changes
+the text itself (clearing it after "Ekle", say), `restartInput` brings the keyboard back in step. Compose's
+`TextInputServiceAndroid` works the same way.
 
 What works on Android: touch, scrolling and flings, the keyboard with suggestions and autocorrect, the keyboard's
 type and action key from `KeyboardOptions` (email, number, password; Next/Done/Search...), back (popup → focus →
@@ -520,7 +519,7 @@ wallpaper's colors (screenshots the same on every machine); `KOMPOZ_LANGUAGE=tr|
 
 `KOMPOZ_PROFILE=1` logs frame times: for each slow frame the input, compose + layout, drawing and present times, the
 offscreen layers and the glyphs rasterized, and a summary every second. Android has no environment variables, so it
-looks for a file in the app's own storage (the output is in `adb logcat -s SDL/APP`):
+looks for a file in the app's own storage (the output is in `adb logcat -s kompoz`):
 
 ```bash
 adb shell run-as dev.kompoz.showcase touch files/kompoz-profile

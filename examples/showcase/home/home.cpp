@@ -150,7 +150,7 @@ void HomeScreen(Modifier modifier, CallSite site) {
                    });
                    CounterCard();
                    TodoCard();
-                   Text("Kompoz · C++20 · SDL3", Modifier().fillMaxWidth(),
+                   Text("Kompoz · C++20", Modifier().fillMaxWidth(),
                         {.fontSize = 12, .color = colorScheme().onSurfaceVariant, .textAlign = TextAlign::Center});
                });
     });

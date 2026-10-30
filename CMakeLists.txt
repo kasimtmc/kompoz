@@ -138,12 +138,20 @@ if(KOMPOZ_BUILD_TESTS)
 endif()
 
 if(KOMPOZ_BUILD_SDL3)
+    # Android's platform is Kompoz's own (platform/android): no SDL there.
+    if(ANDROID)
+        set(kompoz_sdl OFF)
+    else()
+        set(kompoz_sdl ON)
+    endif()
     if(KOMPOZ_VENDORED_DEPS)
         foreach(dep SDL freetype zlib libpng)
-            if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/${dep}/CMakeLists.txt)
+            if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/${dep}/CMakeLists.txt AND (kompoz_sdl OR NOT dep STREQUAL "SDL"))
                 message(FATAL_ERROR "third_party/${dep} is missing. Run scripts/fetch-deps.sh first.")
             endif()
         endforeach()
+    endif()
+    if(KOMPOZ_VENDORED_DEPS AND kompoz_sdl)
         if(EMSCRIPTEN OR WIN32)  # one program to ship, without SDL3.dll beside it
             set(SDL_SHARED OFF CACHE BOOL "" FORCE)
             set(SDL_STATIC ON CACHE BOOL "" FORCE)
@@ -157,6 +165,8 @@ if(KOMPOZ_BUILD_SDL3)
         set(SDL_INSTALL_CPACK OFF CACHE BOOL "" FORCE)
         set(SDL_UNINSTALL OFF CACHE BOOL "" FORCE)
         add_subdirectory(third_party/SDL)
+    endif()
+    if(KOMPOZ_VENDORED_DEPS)
         foreach(feature ZLIB BZIP2 PNG HARFBUZZ BROTLI)
             set(FT_DISABLE_${feature} ON CACHE BOOL "" FORCE)
         endforeach()
@@ -206,11 +216,19 @@ if(KOMPOZ_BUILD_SDL3)
         find_package(PNG REQUIRED)
     endif()
 
-    # An OBJECT library because the backend defines the entry point (main, or SDL_main on
-    # Android/iOS), which must always end up in the final binary.
-    add_library(kompoz_sdl3 OBJECT platform/app/app_core.cpp platform/common/system.cpp platform/sdl3/sdl3_app.cpp platform/common/font_system.cpp
+    # An OBJECT library because the platform defines the entry point (main, SDL_main on iOS, the
+    # activity's native methods on Android), which must always end up in the final binary.
+    if(kompoz_sdl)
+        set(kompoz_platform_source platform/sdl3/sdl3_app.cpp)
+    else()
+        set(kompoz_platform_source platform/android/android_platform.cpp)
+    endif()
+    add_library(kompoz_sdl3 OBJECT platform/app/app_core.cpp platform/common/system.cpp ${kompoz_platform_source} platform/common/font_system.cpp
                                    platform/common/image_loader.cpp platform/common/image_codec.cpp)
-    target_link_libraries(kompoz_sdl3 PUBLIC kompoz_core SDL3::SDL3 Freetype::Freetype PNG::PNG)
+    target_link_libraries(kompoz_sdl3 PUBLIC kompoz_core Freetype::Freetype PNG::PNG)
+    if(kompoz_sdl)
+        target_link_libraries(kompoz_sdl3 PUBLIC SDL3::SDL3)
+    endif()
     set_target_properties(kompoz_sdl3 PROPERTIES EXPORT_NAME sdl3)
     add_library(kompoz::sdl3 ALIAS kompoz_sdl3)
     # Images (AsyncImage): Android, Windows and the web decode and download with the platform's
@@ -302,6 +320,7 @@ if(KOMPOZ_BUILD_SDL3)
     if(ANDROID)
         target_sources(kompoz_sdl3 PRIVATE platform/android/android_ime.cpp  # + platform/android/java
                                            platform/android/android_performance.cpp)
+        target_link_libraries(kompoz_sdl3 PUBLIC android log EGL ${CMAKE_DL_LIBS})
     elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
         # The desktop's accent color from the XDG portal (libdbus loaded at run time): dynamic color.
         # Screen readers read the semantics tree through AT-SPI (the same libdbus).

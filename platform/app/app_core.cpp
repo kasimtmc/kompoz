@@ -1135,6 +1135,10 @@ Next AppCore::frame(int64_t displayTime) {
     return next;
 }
 
+void AppCore::surfaceChanged() {
+    if (app_->gpu) app_->gpu->surfaceChanged();
+}
+
 void AppCore::quit() {
     App& app = *app_;
     // KOMPOZ_STATE_FILE: the saved state written out at exit and read at start, as Android does

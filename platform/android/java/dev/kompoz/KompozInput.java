@@ -12,7 +12,6 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.SystemClock;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.Selection;
@@ -46,15 +45,13 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
-import org.libsdl.app.SDLActivity;
-import org.libsdl.app.SDLSurface;
-
 /**
- * Keyboard / IME input for Kompoz on Android, used instead of SDL's bridge.
+ * Keyboard / IME input for Kompoz on Android, and the rest of what native code asks of the
+ * system (insets, accessibility, autofill, back, images, glyphs).
  *
- * SDL's SDLInputConnection keeps a private copy of the text and forwards only differences.
- * That copy drifts as soon as the keyboard deletes with key events, applies a suggestion
- * with replaceText(), or the app changes the text, and then autocomplete garbles the text.
+ * An input connection that keeps a private copy of the text and forwards only differences
+ * drifts as soon as the keyboard deletes with key events, applies a suggestion with
+ * replaceText(), or the app changes the text, and then autocomplete garbles the text.
  * Here a single Editable is the source of truth: after every change the complete state
  * (text, selection, composing region) goes to native code, and when the app changes the
  * text the input method is restarted so it never works on stale text. This is the same
@@ -69,16 +66,16 @@ public final class KompozInput {
 
     private KompozInput() {}
 
-    // ---- Called from native code on the SDL thread -----------------------------------------
+    // ---- Called from native code (on the UI thread, or the image loader's) -----------------
 
     // Adds the (invisible, 1x1) input view at startup. It also reports the window insets by kind
     // (status bars, navigation bars, keyboard, display cutout, gesture edges), like Compose's
-    // WindowInsets types. SDL's single safe area mixes the gesture edges in, which would inset
-    // content on both sides.
+    // WindowInsets types (one safe area would mix the gesture edges in, insetting content on
+    // both sides).
     static void attach() {
         ui.post(() -> {
             ensureView();
-            Activity activity = SDLActivity.getContext();
+            Activity activity = KompozActivity.current;
             if (activity != null) deliverLink(activity.getIntent());  // the link the app was opened with
             if (activity != null) watchMedia(activity);
         });
@@ -89,7 +86,7 @@ public final class KompozInput {
     // (0 near, 1 medium, 2 far). The window's posture needs androidx.window: not told (flat).
     private static boolean docked;
     static int[] mediaInfo() {
-        Activity activity = SDLActivity.getContext();
+        Activity activity = KompozActivity.current;
         if (activity == null) return null;
         android.hardware.input.InputManager input = (android.hardware.input.InputManager) activity.getSystemService(Context.INPUT_SERVICE);
         int pointer = 0, fallback = 0;
@@ -266,7 +263,7 @@ public final class KompozInput {
     private static float imeControlPending;  // px moved before it was ready
     private static Float imeEndPending;      // the velocity of a let go before it was ready
 
-    static void imeControlBy(float px) {  // SDL thread
+    static void imeControlBy(float px) {  // native code
         ui.post(() -> {
             if (Build.VERSION.SDK_INT < 30 || view == null) return;
             if (imeControl != null) moveIme(px);
@@ -277,7 +274,7 @@ public final class KompozInput {
         });
     }
 
-    static void imeControlEnd(float velocity) {  // SDL thread
+    static void imeControlEnd(float velocity) {  // native code
         ui.post(() -> {
             if (Build.VERSION.SDK_INT < 30) return;
             if (imeControl != null) finishIme(velocity);
@@ -344,45 +341,22 @@ public final class KompozInput {
 
     // ---- Called by the app's activity ------------------------------------------------------
 
-    // From SDLActivity.createSDLSurface: SDL's surface, but deaf to the keyboard. Told that one is
-    // up, SDL takes it for its own and shows it again — its own input view taking the focus from
-    // ours — whenever the window is resized, which a keyboard showing does: typed text went to SDL.
-    // Kompoz gets the insets (keyboard included) from its own view.
-    public static SDLSurface createSurface(Context context) {
-        Surface s = new Surface(context);
-        drawSurface = s;
-        return s;
+    static SurfaceView drawSurface;  // the one Kompoz draws on (setFrameRate): KompozView
+
+    // For KompozView: autofill's view of the Kompoz text fields, and its values for them.
+    @android.annotation.TargetApi(26)
+    static void provideAutofill(View host, ViewStructure structure) {
+        Autofill.provide(host, structure);
     }
-    private static SurfaceView drawSurface;  // the one it draws on (setFrameRate)
 
-    private static final class Surface extends SDLSurface {
-        Surface(Context context) {
-            super(context);
-            if (Build.VERSION.SDK_INT >= 26) setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_YES);
-        }
+    @android.annotation.TargetApi(26)
+    static void autofill(SparseArray<AutofillValue> values) {
+        Autofill.fill(values);
+    }
 
-        @Override
-        public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
-            return insets;
-        }
-
-        // Autofill sees the Kompoz text fields as virtual views of the surface, and fills them.
-        @Override
-        public void onProvideAutofillVirtualStructure(ViewStructure structure, int flags) {
-            if (Build.VERSION.SDK_INT >= 26) Autofill.provide(this, structure);
-        }
-
-        @Override
-        public void autofill(SparseArray<AutofillValue> values) {
-            if (Build.VERSION.SDK_INT >= 26) Autofill.fill(values);
-        }
-
-        // TalkBack's touch exploration: the finger hovers over the Kompoz node under it.
-        @Override
-        public boolean dispatchHoverEvent(android.view.MotionEvent event) {
-            if (semantics != null && semantics.hover(event)) return true;
-            return super.dispatchHoverEvent(event);
-        }
+    // TalkBack's touch exploration: the finger over a Kompoz node.
+    static boolean hover(android.view.MotionEvent event) {
+        return semantics != null && semantics.hover(event);
     }
 
     // From Activity.onNewIntent: a link sent to the running app goes to its NavHost (deep links).
@@ -391,48 +365,24 @@ public final class KompozInput {
     }
 
     // Saved instance state: Kompoz's rememberSaveable values, written out by native code as the
-    // app goes to the background, kept in the Bundle while Android may end the process, and
-    // given back to native code when the activity is created again from it. The activity calls
-    // these from onCreate (before super.onCreate), onPause (before super.onPause) and
+    // app goes to the background (KompozActivity.onPause, on the same thread), kept in the Bundle
+    // while Android may end the process, and given back to native code when the activity is
+    // created again from it. The activity calls these from onCreate (before super.onCreate) and
     // onSaveInstanceState (after super).
     private static final String STATE_KEY = "dev.kompoz.state";
-    private static final Object stateLock = new Object();
     private static byte[] savedState, restoredState;
-    private static boolean saving;  // paused, the native side's state not in yet
 
     public static void onCreate(android.os.Bundle saved) {
         restoredState = saved != null ? saved.getByteArray(STATE_KEY) : null;
     }
 
-    public static void onPause() {
-        synchronized (stateLock) {
-            saving = true;
-        }
-    }
-
     public static void onSaveInstanceState(android.os.Bundle out) {
-        synchronized (stateLock) {
-            long until = SystemClock.uptimeMillis() + 500;  // the native side saves as it pauses
-            while (saving) {
-                long left = until - SystemClock.uptimeMillis();
-                if (left <= 0) break;
-                try {
-                    stateLock.wait(left);
-                } catch (InterruptedException e) {
-                    break;
-                }
-            }
-            if (savedState != null) out.putByteArray(STATE_KEY, savedState);
-        }
+        if (savedState != null) out.putByteArray(STATE_KEY, savedState);
     }
 
-    // From native code (the SDL thread).
+    // From native code, as the activity pauses.
     static void stateSaved(byte[] state) {
-        synchronized (stateLock) {
-            savedState = state;
-            saving = false;
-            stateLock.notifyAll();
-        }
+        savedState = state;
     }
 
     static byte[] takeRestoredState() {
@@ -455,7 +405,7 @@ public final class KompozInput {
         final int start = charIndex(text, selStart), end = charIndex(text, selEnd);
         ui.post(() -> {
             if (!ensureView()) return;
-            // At the field, so the IME places its popups there; touches still reach SDL's surface.
+            // At the field, so the IME places its popups there; touches still reach Kompoz's view.
             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(1, 1);
             params.leftMargin = x;
             params.topMargin = y + h;
@@ -474,7 +424,7 @@ public final class KompozInput {
 
     private static boolean ensureView() {
         if (view != null && view.getParent() != null) return true;
-        Activity activity = SDLActivity.getContext();
+        Activity activity = KompozActivity.current;
         if (activity == null) return false;
         if (view == null) {
             view = new InputView(activity);
@@ -487,7 +437,7 @@ public final class KompozInput {
         activity.addContentView(view, new FrameLayout.LayoutParams(1, 1));
         view.requestApplyInsets();
         attachAccessibility(activity);
-        // When a field gives focus back to SDL's surface after a hardware key (Enter), Android
+        // When a field gives focus back to Kompoz's view after a hardware key (Enter), Android
         // would draw its keyboard-navigation highlight over the whole surface.
         if (Build.VERSION.SDK_INT >= 26) disableFocusHighlight(activity.getWindow().getDecorView());
         return true;
@@ -505,14 +455,14 @@ public final class KompozInput {
     // The system font size setting at startup; changes arrive through onConfigurationChanged
     // (the manifest handles fontScale without recreating the activity).
     static float fontScale() {
-        Activity activity = SDLActivity.getContext();
+        Activity activity = KompozActivity.current;
         return activity != null ? activity.getResources().getConfiguration().fontScale : 1f;
     }
 
     // Dark icons over light system bars (lightStatus / lightNavigation) or light ones over dark.
     static void setSystemBarsAppearance(boolean lightStatus, boolean lightNavigation) {
         ui.post(() -> {
-            Activity activity = SDLActivity.getContext();
+            Activity activity = KompozActivity.current;
             if (activity == null) return;
             android.view.Window window = activity.getWindow();
             if (Build.VERSION.SDK_INT >= 30) {
@@ -536,7 +486,7 @@ public final class KompozInput {
     // The wallpaper palette of Android 12+ (Material You): accent1, accent2, accent3, neutral1 and
     // neutral2, each in 13 tones (0 = white ... 1000 = black) as ARGB; null before Android 12.
     static int[] dynamicPalette() {
-        Activity activity = SDLActivity.getContext();
+        Activity activity = KompozActivity.current;
         if (activity == null || Build.VERSION.SDK_INT < 31) return null;
         final int[] ids = {
             android.R.color.system_accent1_0, android.R.color.system_accent1_10, android.R.color.system_accent1_50,
@@ -574,7 +524,7 @@ public final class KompozInput {
     // Android 8.1+): primary, secondary and tertiary as ARGB, 0 for one it doesn't have; null when
     // there are none.
     static int[] wallpaperColors() {
-        Activity activity = SDLActivity.getContext();
+        Activity activity = KompozActivity.current;
         if (activity == null || Build.VERSION.SDK_INT < 27) return null;
         try {
             android.app.WallpaperColors colors =
@@ -675,7 +625,7 @@ public final class KompozInput {
             if (view == null || view.getParent() == null) return;
             imm(view.getContext()).hideSoftInputFromWindow(view.getWindowToken(), 0);
             view.clearFocus();
-            view.setFocusable(false);  // give focus back to SDL's surface (hardware keys)
+            view.setFocusable(false);  // give focus back to Kompoz's view (hardware keys)
         });
     }
 
@@ -710,18 +660,14 @@ public final class KompozInput {
 
     // ---- Accessibility -------------------------------------------------------------------------
 
-    // TalkBack and UI Automator see the Kompoz semantics tree as virtual views of SDL's surface.
+    // TalkBack and UI Automator see the Kompoz semantics tree as virtual views of Kompoz's view.
     private static View surface;
     private static SemanticsProvider semantics;  // also what autofill reads
     private static long lastContentChange;
 
     private static void attachAccessibility(Activity activity) {
         if (surface != null) return;
-        View content = SDLActivity.getContentView();
-        if (!(content instanceof ViewGroup)) return;
-        ViewGroup group = (ViewGroup) content;
-        for (int i = 0; i < group.getChildCount(); i++)
-            if (group.getChildAt(i) instanceof SurfaceView) surface = group.getChildAt(i);
+        surface = drawSurface;
         if (surface == null) return;
         final SemanticsProvider provider = new SemanticsProvider(surface);
         semantics = provider;
@@ -1034,7 +980,7 @@ public final class KompozInput {
     // From native code: android.view.ViewConfiguration's long press and double tap timeouts (ms),
     // touch slop (px) and maximum fling velocity (px/s); null without the activity.
     static float[] viewConfiguration() {
-        Activity activity = SDLActivity.getContext();
+        Activity activity = KompozActivity.current;
         if (activity == null) return null;
         android.view.ViewConfiguration c = android.view.ViewConfiguration.get(activity);
         return new float[] {android.view.ViewConfiguration.getLongPressTimeout(), android.view.ViewConfiguration.getDoubleTapTimeout(),
@@ -1046,7 +992,7 @@ public final class KompozInput {
     static void setSystemGestureExclusion(int[] rects) {
         if (Build.VERSION.SDK_INT < 29) return;
         ui.post(() -> {
-            View content = SDLActivity.getContentView();
+            View content = drawSurface;
             if (content == null) return;
             java.util.List<Rect> list = new java.util.ArrayList<>();
             for (int i = 0; i + 3 < rects.length; i += 4) list.add(new Rect(rects[i], rects[i + 1], rects[i + 2], rects[i + 3]));
@@ -1078,7 +1024,7 @@ public final class KompozInput {
     static void setContentSensitive(boolean sensitive) {
         if (Build.VERSION.SDK_INT < 35) return;
         ui.post(() -> {
-            View content = SDLActivity.getContentView();
+            View content = drawSurface;
             if (content != null)
                 content.setContentSensitivity(sensitive ? View.CONTENT_SENSITIVITY_SENSITIVE : View.CONTENT_SENSITIVITY_AUTO);
         });
@@ -1194,14 +1140,14 @@ public final class KompozInput {
     // The app's back callback is registered only while Kompoz takes back (a popup, the focus, a
     // BackHandler): otherwise the system goes back itself, leaving the app with its animation.
     // From Android 14 the gesture's steps come too (PredictiveBackHandler). Before 13 the back
-    // key comes through SDL.
+    // key comes to KompozActivity.onBackPressed.
     private static Object backCallback;  // UI thread
 
-    // From native code (the SDL thread).
+    // From native code.
     static void setBackEnabled(boolean enabled) {
         if (Build.VERSION.SDK_INT < 33) return;
         ui.post(() -> {
-            Activity activity = SDLActivity.getContext();
+            Activity activity = KompozActivity.current;
             if (activity == null || enabled == (backCallback != null)) return;
             if (enabled) {
                 backCallback = Back.register(activity);
@@ -1351,17 +1297,17 @@ public final class KompozInput {
         }
 
         // Hardware keys: text editing here, everything else (back without a keyboard on screen,
-        // arrows, Tab, Escape) to SDL as key events, as if this view weren't focused.
+        // arrows, Tab, Escape) to Kompoz as key events, as if this view weren't focused.
         @Override
         public boolean onKeyDown(int keyCode, KeyEvent event) {
             if (connection != null && connection.handleKey(event)) return true;
-            return SDLActivity.handleKeyEvent(this, keyCode, event, null) || super.onKeyDown(keyCode, event);
+            return KompozView.keyEvent(event) || super.onKeyDown(keyCode, event);
         }
 
         @Override
         public boolean onKeyUp(int keyCode, KeyEvent event) {
             if (connection != null && connection.handleKey(event)) return true;
-            return SDLActivity.handleKeyEvent(this, keyCode, event, null) || super.onKeyUp(keyCode, event);
+            return KompozView.keyEvent(event) || super.onKeyUp(keyCode, event);
         }
     }
 

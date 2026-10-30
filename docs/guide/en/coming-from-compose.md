@@ -197,4 +197,4 @@ The README's longer table covers navigation, animation, gestures, text fields an
 - **No compiler plugin.** Identity comes from call sites, so two calls on the same line are told apart by their order. In loops whose items move, use `key` (see [Lifecycle](lifecycle.md)).
 - **No `by` delegation.** States are read with `get()` and written with `set()`.
 - **Skipping needs `==`.** A composable is skipped only if its arguments compare equal. `std::function` can't be compared, so a composable taking one is restartable but never skipped.
-- **Platforms.** Kompoz draws through SDL3 on Linux, Windows, Android and the web; there are no Android Views to interoperate with.
+- **Platforms.** Kompoz draws everything itself: on Android in a view of its own activity, through SDL3 on Linux, Windows and the web; there are no Android Views to interoperate with.

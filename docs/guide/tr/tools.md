@@ -115,7 +115,7 @@ kompoz: GPU frame 12.2 ms: 1080x2400 10.5, window 1.6, 2048x2402 R16F 0.1
 
 GPU süresi Vulkan'ın ve WebGPU'nun zaman damgalarıyla (WebGPU'da adaptörde `timestamp-query` varsa) ve OpenGL ES'in zamanlayıcı sorgularıyla (`EXT_disjoint_timer_query`, WebGL 2'de `_webgl2` olanı) ölçülür; Metal'de yalnızca karenin tamamınınki, komut tamponlarından. Hiçbirinin olmadığı yerde profil bunu söyler.
 
-Android'de ortam değişkeni yoktur; orada profil aracı uygulamanın depolamasında bir dosya arar ve çıktısı `adb logcat -s SDL/APP`'a gider:
+Android'de ortam değişkeni yoktur; orada profil aracı uygulamanın depolamasında bir dosya arar ve çıktısı `adb logcat -s kompoz`'a gider:
 
 ```bash
 adb shell run-as dev.kompoz.showcase touch files/kompoz-profile

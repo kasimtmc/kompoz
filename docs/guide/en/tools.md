@@ -115,7 +115,7 @@ kompoz: GPU frame 12.2 ms: 1080x2400 10.5, window 1.6, 2048x2402 R16F 0.1
 
 The GPU's time is measured with Vulkan's and WebGPU's timestamps (WebGPU where the adapter has `timestamp-query`) and OpenGL ES's timer queries (`EXT_disjoint_timer_query`, on WebGL 2 its `_webgl2` one); Metal's is a frame's alone, from its command buffers. Where none of them is, the profile says so.
 
-Android has no environment variables, so there the profiler looks for a file in the app's storage, and its output goes to `adb logcat -s SDL/APP`:
+Android has no environment variables, so there the profiler looks for a file in the app's storage, and its output goes to `adb logcat -s kompoz`:
 
 ```bash
 adb shell run-as dev.kompoz.showcase touch files/kompoz-profile

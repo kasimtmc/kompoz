@@ -3,8 +3,9 @@ plugins {
 }
 
 // The showcase on Android. The native code (the library and the showcase's sources, built by the root
-// CMakeLists.txt as libmain.so), SDL's Java glue and the bundled fonts come from the
-// repository root, shared with the desktop build. Run scripts/fetch-deps.sh once before building.
+// CMakeLists.txt as libmain.so), Kompoz's Java side (platform/android/java) and the bundled fonts
+// come from the repository root, shared with the desktop build. Run scripts/fetch-deps.sh once before
+// building.
 val kompozRoot: File = rootProject.file("../../..")
 val exampleDir: File = rootProject.file("..")
 
@@ -40,7 +41,6 @@ android {
         }
     }
 
-    sourceSets["main"].java.srcDir(File(kompozRoot, "third_party/SDL/android-project/app/src/main/java"))
     sourceSets["main"].java.srcDir(File(kompozRoot, "platform/android/java"))
     sourceSets["main"].assets.srcDir(File(kompozRoot, "assets"))  // the library's fonts
     sourceSets["main"].assets.srcDir(File(exampleDir, "assets"))  // the showcase's images

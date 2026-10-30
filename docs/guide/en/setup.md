@@ -10,7 +10,7 @@ Build Kompoz, add it to your own CMake project, and run your app on Linux, Windo
 - Optional: HarfBuzz for text shaping (Arabic joining, Indic scripts, ligatures, emoji sequences). Without it, text is drawn character by character.
 - Optional on Linux: libcurl, libwebp and libturbojpeg (3.0 or later), which `AsyncImage` uses to download images and decode WebP and JPEG. libdbus is loaded at run time, if present, to read the desktop's accent color.
 
-On Linux, install these from your distribution's packages. For Android, the web and Windows, Kompoz builds SDL3, FreeType, HarfBuzz, zlib and libpng from source; `scripts/fetch-deps.sh` downloads them (see below).
+On Linux, install these from your distribution's packages. For Android, the web and Windows, Kompoz builds FreeType, HarfBuzz, zlib and libpng from source, and SDL3 but on Android; `scripts/fetch-deps.sh` downloads them (see below).
 
 ## Build the library and the showcase
 
@@ -29,7 +29,7 @@ Useful options:
 | `KOMPOZ_BUILD_SDL3` | `ON` | Build the SDL3 backend. `OFF` builds only the core and the tests, with no window system. |
 | `KOMPOZ_BUILD_EXAMPLES` | `ON` | Build the showcase. |
 | `KOMPOZ_BUILD_TESTS` | `ON` (`OFF` on Android, iOS and the web) | Build the headless tests. |
-| `KOMPOZ_VENDORED_DEPS` | `ON` on Android, iOS, the web and Windows | Build SDL3, FreeType, HarfBuzz, zlib and libpng from `third_party/` instead of using the system's. |
+| `KOMPOZ_VENDORED_DEPS` | `ON` on Android, iOS, the web and Windows | Build SDL3 (not on Android), FreeType, HarfBuzz, zlib and libpng from `third_party/` instead of using the system's. |
 
 On desktops that have lld, Kompoz links with it unless you chose another linker: about one second instead of GNU ld's twenty-five for the showcase.
 
@@ -145,9 +145,9 @@ scripts/fetch-deps.sh
 cd examples/showcase/android && ./gradlew installDebug
 ```
 
-`fetch-deps.sh` downloads SDL3, FreeType, HarfBuzz, zlib and libpng into `third_party/` at pinned versions, checks their SHA-256 sums and applies the patches in `scripts/patches/`. Gradle builds Kompoz's CMake project with the NDK into `libSDL3.so` and your app's `libmain.so`.
+`fetch-deps.sh` downloads SDL3, FreeType, HarfBuzz, zlib and libpng into `third_party/` at pinned versions and checks their SHA-256 sums (SDL isn't used on Android). Gradle builds Kompoz's CMake project with the NDK into your app's `libmain.so`.
 
-To make your own app, start from the showcase's `android/` folder: it has only the manifest, a theme and a short `MainActivity` built on SDL's `SDLActivity`. The fonts go into the APK from Kompoz's `assets/` folder. On Android, Kompoz supports the soft keyboard with suggestions, edge-to-edge insets, the back gesture and predictive back, the system's dark mode and font size, dynamic color on Android 12+ and TalkBack.
+To make your own app, start from the showcase's `android/` folder: it has only the manifest, a theme and a `MainActivity` that extends Kompoz's `KompozActivity` (which loads `libmain.so`, runs your app on its UI thread and draws each frame on the display's beat). The fonts go into the APK from Kompoz's `assets/` folder. On Android, Kompoz supports the soft keyboard with suggestions, edge-to-edge insets, the back gesture and predictive back, the system's dark mode and font size, dynamic color on Android 12+ and TalkBack.
 
 ### Web
 

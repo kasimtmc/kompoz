@@ -15,8 +15,8 @@
 //
 // On Android it is a program run from adb shell, on OpenGL ES 3 through EGL, or on Vulkan
 // (KOMPOZ_GPU=vulkan):
-//   adb push kompoz_gpu_tests libSDL3.so assets/fonts tests/golden /data/local/tmp/kgt/
-//   adb shell 'cd /data/local/tmp/kgt && LD_LIBRARY_PATH=. KOMPOZ_GOLDEN_DIR=golden ./kompoz_gpu_tests'
+//   adb push kompoz_gpu_tests assets/fonts tests/golden /data/local/tmp/kgt/
+//   adb shell 'cd /data/local/tmp/kgt && KOMPOZ_GOLDEN_DIR=golden ./kompoz_gpu_tests'
 // On the web it is a page on the browser's WebGL 2 (or WebGPU), the variables its query, which
 // emrun opens and reports on (in CI on Chrome's SwiftShader):
 //   emrun --browser chrome build-web/kompoz_gpu_tests.html KOMPOZ_GPU_REQUIRED=1

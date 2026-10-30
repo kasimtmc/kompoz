@@ -4,11 +4,13 @@
 
 #include "android_ime.hpp"
 
+#include "../common/system.hpp"
+
 #include <algorithm>
 #include <kompoz/runtime.hpp>
 
-#include <SDL3/SDL.h>
 #include <jni.h>
+#include <pthread.h>
 
 #include <atomic>
 #include <cmath>
@@ -18,6 +20,8 @@
 namespace kompoz::android_ime {
 namespace {
 
+JavaVM* gVm = nullptr;
+pthread_key_t gAttached;  // set on the threads attached to the VM here: let go of as they end
 jclass gClass = nullptr;
 jmethodID gMediaInfo = nullptr;
 jmethodID gShow = nullptr, gUpdate = nullptr, gHide = nullptr, gAttach = nullptr, gFontScale = nullptr,
@@ -28,7 +32,7 @@ jmethodID gShow = nullptr, gUpdate = nullptr, gHide = nullptr, gAttach = nullptr
 
 std::mutex gMutex;
 std::function<void(const TextEditState&)> gOnEdit;
-// The keyboard's showings, counted on the SDL thread: an edit made for one before the last
+// The keyboard's showings, counted on the UI thread: an edit made for one before the last
 // (reported after the focus moved to another field) is dropped.
 int gSession = 0;
 std::function<void(ImeAction)> gOnAction;
@@ -50,7 +54,7 @@ std::vector<jfloat> gRanges;  // per node: has one (0/1), current, start, end
 std::unordered_map<int, std::string> gLiveText;  // what live region nodes said when last published
 jmethodID gSemanticsChanged = nullptr;
 
-JNIEnv* env() { return static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv()); }  // (attached to the VM by SDL, until SDL_CleanupTLS)
+JNIEnv* env() { return static_cast<JNIEnv*>(jniEnv()); }
 
 jbyteArray toBytes(JNIEnv* e, const std::string& s) {
     jbyteArray array = e->NewByteArray(jsize(s.size()));
@@ -504,7 +508,21 @@ std::vector<uint8_t> httpGet(const std::string& url) {
     return body;
 }
 
-void threadDone() { SDL_CleanupTLS(); }
+void* jniEnv() {
+    JNIEnv* e = nullptr;
+    if (!gVm) return nullptr;
+    if (gVm->GetEnv(reinterpret_cast<void**>(&e), JNI_VERSION_1_6) == JNI_OK) return e;
+    if (gVm->AttachCurrentThread(&e, nullptr) != JNI_OK) return nullptr;
+    pthread_setspecific(gAttached, e);  // (its destructor detaches it, should threadDone not come)
+    return e;
+}
+
+void threadDone() {
+    if (gVm && pthread_getspecific(gAttached)) {
+        pthread_setspecific(gAttached, nullptr);
+        gVm->DetachCurrentThread();
+    }
+}
 
 void hide() {
     if (!gClass) return;
@@ -540,15 +558,17 @@ using namespace kompoz;
 
 extern "C" {
 
-// Runs when SDLActivity loads libmain.so, on a Java thread that can see the app's classes
-// (FindClass on SDL's native thread could not).
+// Runs when the activity loads libmain.so, on its UI thread, which can see the app's classes
+// (FindClass on a thread attached here could not).
 JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     JNIEnv* e = nullptr;
     if (vm->GetEnv(reinterpret_cast<void**>(&e), JNI_VERSION_1_6) != JNI_OK) return JNI_ERR;
+    android_ime::gVm = vm;
+    pthread_key_create(&android_ime::gAttached, [](void*) { android_ime::gVm->DetachCurrentThread(); });
     jclass local = e->FindClass("dev/kompoz/KompozInput");
     if (!local) {
         e->ExceptionClear();
-        SDL_Log("kompoz: dev.kompoz.KompozInput not found, no keyboard input");
+        platform::log("kompoz: dev.kompoz.KompozInput not found, no keyboard input");
         return JNI_VERSION_1_6;
     }
     android_ime::gClass = static_cast<jclass>(e->NewGlobalRef(local));

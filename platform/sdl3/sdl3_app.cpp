@@ -1,5 +1,5 @@
 // Kompoz's platform on SDL3 (app/platform.hpp): the window, input, the soft keyboard and the
-// frame loop, on Windows, macOS, Linux, Android and the web, for the app core (app/app_core.hpp).
+// frame loop, on Windows, macOS, Linux and the web, for the app core (app/app_core.hpp).
 // SDL's main callbacks (SDL_AppInit / SDL_AppIterate / SDL_AppEvent) drive it on all of them; on
 // the desktops KOMPOZ_HEADLESS=1 runs the app on Kompoz's headless platform instead.
 // (Each platform is getting a layer of its own in its place.)
@@ -34,10 +34,6 @@
 #define KOMPOZ_A11Y_BRIDGE 1  // the desktop's screen readers read the semantics tree
 #endif
 
-#ifdef SDL_PLATFORM_ANDROID
-#include "../android/android_ime.hpp"
-#include "../android/android_performance.hpp"
-#endif
 
 #include <algorithm>
 #include <atomic>
@@ -134,14 +130,9 @@ struct SdlPlatform final : platform::Platform {
     std::unique_ptr<platform::UiaBridge> a11y;  // screen readers (Windows: UI Automation)
 #endif
     ComposeHost* host = nullptr;
-    int64_t lastSemantics = 0;   // Android accessibility, AT-SPI
+    int64_t lastSemantics = 0;   // AT-SPI, UI Automation
     bool semanticsDirty = true;  // the screen changed since the tree was last published
-    bool wantsBack = false;      // as Android was last told (the app's back callback registered)
     bool keepScreenOn = false;   // as SDL was last told
-    bool sensitiveContent = false;  // as Android was last told
-    float frameRate = 0;            // the same
-    kompoz::FrameRateCategory frameRateCategory = kompoz::FrameRateCategory::Default;
-    std::vector<kompoz::Rect> gestureExclusion;  // as Android was last told (systemGestureExclusion)
     bool hasMicrophone = false, hasCamera = false, probed = false;
     mutable float scale = 1, pointToDp = 1;  // as metrics() last said
     bool focused = true;             // (AT-SPI tells which window is active)
@@ -157,27 +148,9 @@ struct SdlPlatform final : platform::Platform {
 
     SdlPlatform() {
         platform::setLogSink([](const char* message) { SDL_Log("%s", message); });
-#ifdef SDL_PLATFORM_ANDROID
-        // The APK's assets (what SDL's files read where a path is relative), the app's cache directory.
-        platform::setAssetReader([](const std::string& path) {
-            size_t size = 0;
-            void* data = SDL_LoadFile(path.c_str(), &size);
-            std::vector<uint8_t> bytes = data ? std::vector<uint8_t>(static_cast<uint8_t*>(data), static_cast<uint8_t*>(data) + size) : std::vector<uint8_t>();
-            SDL_free(data);
-            return bytes;
-        });
-        if (const char* cache = SDL_GetAndroidCachePath()) platform::setCacheDirectory(cache);
-#endif
     }
     ~SdlPlatform() override {
         if (wakeTimer) SDL_RemoveTimer(wakeTimer);
-#ifdef SDL_PLATFORM_ANDROID
-        android_ime::setHandlers(nullptr, nullptr, nullptr, nullptr);
-        kompoz::android_performance::stop();
-        android_ime::setMediaHandler(nullptr);
-        android_ime::setDeepLinkHandler(nullptr);
-        android_ime::setBackHandler(nullptr);
-#endif
 #ifdef KOMPOZ_A11Y_BRIDGE
         a11y.reset();  // (UI Automation's hooked into the window)
 #endif
@@ -189,39 +162,19 @@ struct SdlPlatform final : platform::Platform {
     std::optional<std::string> option(std::string_view name) const override {
         std::string key(name);
         if (const char* v = SDL_getenv(key.c_str())) return std::string(v);
-#ifdef SDL_PLATFORM_ANDROID
-        // No environment there: a file in the app's own storage, or where run-as is refused
-        // (SELinux) in its external storage, which the app creates.
-        std::string file = key;
-        std::transform(file.begin(), file.end(), file.begin(), [](unsigned char c) { return c == '_' ? '-' : char(std::tolower(c)); });
-        for (const char* dir : {SDL_GetAndroidInternalStoragePath(), SDL_GetAndroidExternalStoragePath()}) {
-            if (!dir) continue;
-            std::string path = std::string(dir) + "/" + file;
-            if (!SDL_GetPathInfo(path.c_str(), nullptr)) continue;
-            size_t size = 0;
-            void* data = SDL_LoadFile(path.c_str(), &size);
-            std::string text = data ? std::string(static_cast<const char*>(data), size) : std::string();
-            SDL_free(data);
-            return text;
-        }
-#endif
         return std::nullopt;
     }
     void log(const std::string& message) const override { SDL_Log("%s", message.c_str()); }
     int64_t now() const override { return int64_t(SDL_GetTicksNS()); }
 
     // The platform's own first, then OpenGL ES: Metal on Apple's systems; on the web WebGPU, then
-    // WebGL 2; elsewhere Vulkan (on Android from Android 10, before which its drivers were often
-    // wrong), then OpenGL ES 3.
+    // WebGL 2; elsewhere Vulkan, then OpenGL ES 3.
     std::vector<gpu::Backend> backends() const override {
         using gpu::Backend;
 #if defined(SDL_PLATFORM_APPLE)
         return {Backend::Metal};
 #elif defined(SDL_PLATFORM_EMSCRIPTEN)
         return {Backend::WebGPU, Backend::GLES};
-#elif defined(SDL_PLATFORM_ANDROID)
-        if (SDL_GetAndroidSDKVersion() < 29) return {Backend::GLES};
-        return {Backend::Vulkan, Backend::GLES};
 #else
         return {Backend::Vulkan, Backend::GLES};
 #endif
@@ -299,9 +252,6 @@ struct SdlPlatform final : platform::Platform {
                 std::memcpy(out, &made, sizeof made);
                 return true;
             };
-#ifdef SDL_PLATFORM_ANDROID
-            surface.vulkanNativeWindow = [w] { return SDL_GetPointerProperty(SDL_GetWindowProperties(w), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr); };
-#endif
 #endif
             break;
         }
@@ -328,29 +278,17 @@ struct SdlPlatform final : platform::Platform {
         SDL_GetWindowSize(window, &m.pointWidth, &m.pointHeight);
         float s = SDL_GetWindowDisplayScale(window);
         float density = SDL_GetWindowPixelDensity(window);
-#ifndef SDL_PLATFORM_ANDROID
         if (const char* env = SDL_getenv("KOMPOZ_SCALE")) s = density = float(std::atof(env));  // a phone's density, say 2.625
-#endif
         if (s <= 0) s = 1;
         if (density <= 0) density = 1;
         m.scale = s;
         m.pointToDp = density / s;
         scale = m.scale, pointToDp = m.pointToDp;
-#ifdef SDL_PLATFORM_ANDROID
-        m.fontScale = kompoz::android_ime::fontScale();  // Settings > Display > Font size
-#else
         if (const char* env = SDL_getenv("KOMPOZ_FONT_SCALE")) m.fontScale = std::max(0.5f, float(std::atof(env)));
-#endif
         const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(window));
         m.refreshRate = mode && mode->refresh_rate > 0 ? mode->refresh_rate : 60.f;
-#ifdef SDL_PLATFORM_ANDROID
-        kompoz::android_performance::start(int64_t(1e9 / m.refreshRate));  // (the first time: a frame's work told to ADPF)
-        kompoz::android_performance::setTarget(int64_t(1e9 / m.refreshRate));
-#else
-        // System bars and display cutouts (iOS notch, desktop). Android reports its own insets
-        // through KompozInput, without SDL's gesture-navigation edges.
+        // System bars and display cutouts (iOS notch, desktop).
         if (SDL_Rect safe; SDL_GetWindowSafeArea(window, &safe)) m.safeArea = Rect{float(safe.x), float(safe.y), float(safe.w), float(safe.h)};
-#endif
         m.darkTheme = SDL_GetSystemTheme() == SDL_SYSTEM_THEME_DARK;
         int count = 0;
         if (SDL_Locale** locales = SDL_GetPreferredLocales(&count)) {
@@ -364,26 +302,16 @@ struct SdlPlatform final : platform::Platform {
 #ifdef KOMPOZ_WALLPAPER_COLORS
         if (wallpaper) wallpaper->setDarkTheme(SDL_GetSystemTheme() == SDL_SYSTEM_THEME_DARK);  // a dark variant
 #endif
-#ifdef SDL_PLATFORM_ANDROID
-        h.setDynamicTonalPalette(kompoz::android_ime::dynamicPalette());
-        h.setWallpaperTonalPalette(kompoz::android_ime::wallpaperPalette());
-        if (auto config = kompoz::android_ime::viewConfiguration(scale)) h.setViewConfiguration(*config);
-#else
         (void)h;
-#endif
     }
 
     void setWindowSize(int width, int height) override { SDL_SetWindowSize(window, width, height); }
 
-    // The device for mediaQuery: Android's own account of it; elsewhere a mouse is a fine pointer, a
-    // touch screen a coarse one, a keyboard SDL knows of a physical one, the microphone and camera
-    // as probed (not on the web, where it would ask).
+    // The device for mediaQuery: a mouse is a fine pointer, a touch screen a coarse one, a keyboard
+    // SDL knows of a physical one, the microphone and camera as probed (not on the web, where it
+    // would ask).
     MediaInfo media(bool probe) override {
         kompoz::MediaInfo info;
-#ifdef SDL_PLATFORM_ANDROID
-        (void)probe;
-        if (auto told = kompoz::android_ime::mediaInfo()) info = *told;
-#else
 #ifndef SDL_PLATFORM_EMSCRIPTEN
         if (probe && !probed) {
             probed = true;
@@ -411,7 +339,6 @@ struct SdlPlatform final : platform::Platform {
         info.physicalKeyboard = keyboards > 0;
         info.hasMicrophone = hasMicrophone;
         info.hasCamera = hasCamera;
-#endif
         return info;
     }
 
@@ -422,9 +349,6 @@ struct SdlPlatform final : platform::Platform {
     void composed(ComposeHost& h, bool redraw, int64_t frameTime) override;
     bool wantsFrames() const override {
         bool more = false;
-#ifdef SDL_PLATFORM_ANDROID
-        more = more || (kompoz::android_ime::accessibilityEnabled() && semanticsDirty);  // one more frame publishes it
-#endif
 #ifdef KOMPOZ_A11Y_BRIDGE
         more = more || (a11y && a11y->active() && semanticsDirty);  // the same
 #endif
@@ -433,10 +357,6 @@ struct SdlPlatform final : platform::Platform {
 #endif
         return more;
     }
-#ifdef SDL_PLATFORM_ANDROID
-    void frameWork(int64_t ns) override { kompoz::android_performance::report(ns); }
-    void leaveApp() override { SDL_SendAndroidBackButton(); }
-#endif
 };
 
 // SDL's event as the app core takes it (platform::Event), or none for one it doesn't use. What
@@ -547,15 +467,8 @@ std::optional<platform::Event> fromSdl(SdlPlatform& app, const SDL_Event& e) {
     case SDL_EVENT_KEY_DOWN:
     case SDL_EVENT_KEY_UP:
         out.modifiers = held(e.key.mod);
-        if (e.key.key == SDLK_AC_BACK) {  // Android's back button
+        if (e.key.key == SDLK_AC_BACK) {  // a keyboard's Back key
             if (e.type == SDL_EVENT_KEY_UP) return std::nullopt;
-#ifdef SDL_PLATFORM_ANDROID
-            // From Android 13 back comes as the app's OnBackInvokedCallback while it takes back
-            // (KompozInput.setBackEnabled), and the system goes back itself otherwise. Taken here
-            // too, the key would do it twice: a drawer closed by it, its callback gone by the
-            // time the key is let go, and the system then leaving the app.
-            if (SDL_GetAndroidSDKVersion() >= 33) return std::nullopt;
-#endif
             return with(EventType::Back);
         }
         out.key = keyOf(e.key.key);  // (Unknown too: the keys it holds down, a Shift, still count)
@@ -614,18 +527,6 @@ void SdlPlatform::attach(ComposeHost& h, ComposeHost::Callbacks& callbacks) {
         e.type = raw->wakeEvent;
         SDL_PushEvent(&e);
     };
-#ifdef SDL_PLATFORM_ANDROID
-    // Android uses our own IME bridge; SDL's loses sync with autocomplete keyboards.
-    callbacks.textInput = [raw](bool active, kompoz::Rect area, const kompoz::TextEditState& state, const kompoz::ImeOptions& options) {
-        if (!active) {
-            kompoz::android_ime::hide();
-            return;
-        }
-        float k = raw->scale;  // dp -> window pixels
-        kompoz::android_ime::show(state, {area.x * k, area.y * k, area.width * k, area.height * k}, options);
-    };
-    callbacks.textInputChanged = [](const kompoz::TextEditState& state) { kompoz::android_ime::update(state); };
-#else
     callbacks.textInput = [raw](bool active, kompoz::Rect area, const kompoz::TextEditState&, const kompoz::ImeOptions& options) {
         if (!active) {
             SDL_StopTextInput(raw->window);
@@ -639,7 +540,6 @@ void SdlPlatform::attach(ComposeHost& h, ComposeHost::Callbacks& callbacks) {
         SDL_StartTextInputWithProperties(raw->window, props);
         SDL_DestroyProperties(props);
     };
-#endif
     callbacks.cursor = [raw](kompoz::Cursor cursor) {
         SDL_Cursor* c = raw->cursors[int(cursor)];
         SDL_SetCursor(c ? c : raw->cursors[0]);  // a look the system doesn't have: the arrow
@@ -652,23 +552,17 @@ void SdlPlatform::attach(ComposeHost& h, ComposeHost::Callbacks& callbacks) {
     };
     callbacks.setClipboard = [](const std::string& text) { SDL_SetClipboardText(text.c_str()); };
     callbacks.systemBarsAppearance = [](bool lightStatusBars, bool lightNavigationBars) {
-#ifdef SDL_PLATFORM_ANDROID
-        kompoz::android_ime::setSystemBarsAppearance(lightStatusBars, lightNavigationBars);
-#else
         (void)lightStatusBars, (void)lightNavigationBars;  // desktop windows have no system bars
-#endif
     };
 #ifdef SDL_PLATFORM_EMSCRIPTEN
     callbacks.locationChanged = [](const std::string& path) { kompoz_web_set_hash(path.c_str()); };
 #endif
-    // The browser, the app for the scheme (Android intents, xdg-open, ShellExecute, window.open).
+    // The browser, the app for the scheme (xdg-open, ShellExecute, window.open).
     callbacks.openUri = [](const std::string& uri) {
         if (!SDL_OpenURL(uri.c_str())) SDL_Log("kompoz: can't open %s: %s", uri.c_str(), SDL_GetError());
     };
     callbacks.hapticFeedback = [](kompoz::HapticFeedbackType type) {
-#if defined(SDL_PLATFORM_ANDROID)
-        kompoz::android_ime::performHapticFeedback(int(type));
-#elif defined(SDL_PLATFORM_EMSCRIPTEN)
+#if defined(SDL_PLATFORM_EMSCRIPTEN)
         using T = kompoz::HapticFeedbackType;  // a press is felt longer than a tick
         bool strong = type == T::LongPress || type == T::Confirm || type == T::Reject || type == T::GestureThresholdActivate;
         kompoz_web_vibrate(strong ? 25 : 8);
@@ -676,59 +570,11 @@ void SdlPlatform::attach(ComposeHost& h, ComposeHost::Callbacks& callbacks) {
         (void)type;  // nothing to vibrate
 #endif
     };
-#ifdef SDL_PLATFORM_ANDROID
-    callbacks.hideSoftwareKeyboard = [] { kompoz::android_ime::hide(); };
-    callbacks.imeControlBy = [raw](float dp) { kompoz::android_ime::imeControlBy(dp * raw->scale); };  // dp -> window pixels
-    callbacks.imeControlEnd = [raw](float velocity) { kompoz::android_ime::imeControlEnd(velocity * raw->scale); };
-    callbacks.autofillFocus = [raw](int id, kompoz::Rect bounds, bool entered) { kompoz::android_ime::autofillFocus(id, bounds, entered, raw->scale); };
-    callbacks.autofillValue = [](int id, const std::string& text) { kompoz::android_ime::autofillValue(id, text); };
-    callbacks.autofillVisibility = [](int id, bool visible) { kompoz::android_ime::autofillVisibility(id, visible); };
-    callbacks.autofillDone = [](bool commit) { kompoz::android_ime::autofillDone(commit); };
-
-#endif
 }
 
 void SdlPlatform::started(ComposeHost& h) {
     SdlPlatform* raw = this;
     (void)raw;
-#ifdef SDL_PLATFORM_ANDROID
-    // Created again after Android ended the process: rememberSaveable values come back.
-    if (std::vector<uint8_t> state = kompoz::android_ime::takeRestoredState(); !state.empty()) h.restoreState(state);
-    kompoz::android_ime::setDeepLinkHandler([raw](std::string link) { raw->host->openDeepLink(std::move(link)); });
-    kompoz::android_ime::setHandlers(
-        [raw](const kompoz::TextEditState& s) { raw->host->textEdit(s); },
-        [raw](kompoz::ImeAction action) { raw->host->imeAction(action); },
-        [raw](const std::array<float, 46>& v) {
-            float k = 1 / raw->scale;  // window pixels -> dp
-            auto kind = [&](size_t i) { return kompoz::PaddingValues{v[i] * k, v[i + 1] * k, v[i + 2] * k, v[i + 3] * k}; };
-            raw->host->setSystemInsets({.statusBars = kind(0), .navigationBars = kind(4), .ime = kind(8),
-                                        .displayCutout = kind(12), .systemGestures = kind(16), .captionBar = kind(30),
-                                        .mandatorySystemGestures = kind(34), .tappableElement = kind(38), .waterfall = kind(42),
-                                        .imeAnimating = v[29] != 0,
-                                        .imeVisible = v[28] != 0, .imeAnimationSource = kind(20), .imeAnimationTarget = kind(24)});
-        },
-        [raw](float) { raw->deliver({.type = platform::EventType::MetricsChanged}); });  // Settings > Display > Font size changed while running
-    kompoz::android_ime::setMediaHandler([raw] { raw->host->setMediaInfo(raw->media(false)); });  // a mouse or keyboard attached, docking
-    kompoz::android_ime::setSemanticsActionHandler([raw](int id, kompoz::SemanticsAction action, float argument) {
-        raw->host->performSemanticsAction(id, action, argument);
-    });
-    kompoz::android_ime::setTextActionHandler([raw](int id, std::string text) {
-        raw->host->performSemanticsAction(id, kompoz::SemanticsAction::SetText, text);
-    });
-    kompoz::android_ime::setBackHandler([raw](kompoz::android_ime::BackPhase phase, kompoz::BackEventCompat event) {
-        using Phase = kompoz::android_ime::BackPhase;
-        event.touchX /= raw->scale, event.touchY /= raw->scale;  // window pixels -> dp
-        switch (phase) {
-        case Phase::Started: raw->host->backStarted(event); break;
-        case Phase::Progressed: raw->host->backProgressed(event); break;
-        case Phase::Cancelled: raw->host->backCancelled(); break;
-        case Phase::Invoked:
-            if (!raw->host->backInvoked()) SDL_SendAndroidBackButton();  // nothing took it after all: leave the app
-            break;
-        }
-    });
-    kompoz::android_ime::attach();
-#endif
 #ifdef SDL_PLATFORM_EMSCRIPTEN
     kompoz_web_watch_wheel();
     if (char* hash = kompoz_web_take_hash()) {  // the web address's #fragment: a deep link
@@ -769,18 +615,13 @@ void SdlPlatform::handled(ComposeHost& h, const platform::Event& e) {
         focused = e.type == EventType::FocusGained;
         semanticsDirty = true;  // (AT-SPI tells which window is active)
         break;
-#ifdef SDL_PLATFORM_ANDROID
-    case EventType::WillEnterBackground:  // on the SDL thread, between frames: Android may end the app from now on
-        android_ime::setSavedState(h.saveState());
-        break;
-#endif
     case EventType::Wake: wakePending = false; break;
     default: break;
     }
 }
 
 void SdlPlatform::composed(ComposeHost& h, bool redraw, int64_t now) {
-    if (bool on = h.keepScreenOn(); on != keepScreenOn) {  // keepScreenOn: the screen saver (Android's KEEP_SCREEN_ON) off while it is laid out
+    if (bool on = h.keepScreenOn(); on != keepScreenOn) {  // keepScreenOn: the screen saver off while it is laid out
         keepScreenOn = on;
         if (on) SDL_DisableScreenSaver();
         else SDL_EnableScreenSaver();
@@ -806,41 +647,6 @@ void SdlPlatform::composed(ComposeHost& h, bool redraw, int64_t now) {
 #endif
     }
 #endif
-#ifdef SDL_PLATFORM_ANDROID
-    // Accessibility services read the semantics tree from the UI thread: publish it after
-    // frames that changed the screen, at most every 50 ms, and only every half second while it
-    // keeps changing (a scroll, an animation): building the tree takes a frame's time.
-    semanticsDirty = semanticsDirty || redraw || kompoz::android_ime::takePublishRequest();
-    if (kompoz::android_ime::accessibilityEnabled() && semanticsDirty && now - lastSemantics > (h.hasPendingWork() ? 500'000'000 : 50'000'000)) {
-        lastSemantics = now;
-        semanticsDirty = false;
-        kompoz::android_ime::publishSemantics(h.semanticsTree(), scale);
-    }
-    // Android 13+ goes back itself (leaving the app, with its animation) unless the app's
-    // callback is there: it is while something here takes back.
-    if (bool wants = h.wantsBack(); wants != wantsBack) {
-        wantsBack = wants;
-        kompoz::android_ime::setBackEnabled(wants);
-    }
-    // Something sensitive laid out: the window kept out of screen shares (Android 15+).
-    if (bool sensitive = h.sensitiveContent(); sensitive != sensitiveContent) {
-        sensitiveContent = sensitive;
-        kompoz::android_ime::setContentSensitive(sensitive);
-    }
-    // The refresh rate it would like (preferredFrameRate), when that changes.
-    if (float rate = h.preferredFrameRate(); rate != frameRate || h.preferredFrameRateCategory() != frameRateCategory) {
-        frameRate = rate;
-        frameRateCategory = h.preferredFrameRateCategory();
-        kompoz::android_ime::setFrameRate(rate, int(frameRateCategory));
-    }
-    // Where the system's edge swipes are kept off, when that changes.
-    const std::vector<kompoz::Rect>& exclusion = h.systemGestureExclusion();
-    auto same = [](const kompoz::Rect& a, const kompoz::Rect& b) { return a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height; };
-    if (!std::ranges::equal(exclusion, gestureExclusion, same)) {
-        gestureExclusion = exclusion;
-        kompoz::android_ime::setSystemGestureExclusion(exclusion, scale);
-    }
-#endif
     (void)redraw, (void)now;
 }
 
@@ -860,8 +666,6 @@ using kompoz::sdl::SdlApp;
 
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     auto app = std::make_unique<SdlApp>();
-    // Back comes to the app first (popups, BackHandler); unused presses go back to Android.
-    SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
     // The screen may go dark as usual (SDL keeps it on by default); Modifier::keepScreenOn
     // keeps it on while it is laid out.
     SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");

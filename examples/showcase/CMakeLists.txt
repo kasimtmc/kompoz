@@ -1,5 +1,5 @@
 # The showcase: a desktop executable, or libmain.so for the Android app in android/
-# (SDLActivity loads libSDL3.so and then libmain.so, which provides SDL_main).
+# (dev.kompoz.KompozActivity loads it).
 # A folder per screen, each screen's sections in files of their own (showcase.hpp declares what
 # they share), so that an edit rebuilds only its file.
 set(showcase_sources main.cpp common.cpp home/home.cpp list/list.cpp places/places.cpp

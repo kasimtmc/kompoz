@@ -1,6 +1,7 @@
 #pragma once
 
-// Android keyboard/IME bridge used instead of SDL's (see dev.kompoz.KompozInput).
+// Android's keyboard/IME bridge and the rest of what native code asks of the Java side
+// (dev.kompoz.KompozInput), over JNI.
 
 #include <kompoz/layout.hpp>
 #include <kompoz/media_query.hpp>
@@ -48,7 +49,9 @@ PlatformGlyph renderGlyph(const std::string& utf8, int px);
 // BitmapFactory, and an http(s) GET's body (empty if it failed).
 ImageBitmap decodeImage(const std::vector<uint8_t>& bytes, const ImageRequestSize& size);
 std::vector<uint8_t> httpGet(const std::string& url);
-// A worker thread that called these ends: it lets go of the VM.
+// The calling thread's JNIEnv (a JNIEnv*), the thread attached to the VM if it wasn't; and, as a
+// thread that was ends, the VM let go of.
+void* jniEnv();
 void threadDone();
 
 // Saved instance state: the host's saved state, kept in the activity's Bundle; and what the

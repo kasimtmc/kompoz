@@ -10,7 +10,7 @@ Kompoz'u derleyin, kendi CMake projenize ekleyin ve uygulamanızı Linux, Window
 - İsteğe bağlı: metin şekillendirme için HarfBuzz (Arapça harf bağlama, Hint yazıları, bitişik harfler, emoji dizileri). Olmadan metin karakter karakter çizilir.
 - Linux'ta isteğe bağlı: `AsyncImage`'ın resim indirmek ve WebP ile JPEG çözmek için kullandığı libcurl, libwebp ve libturbojpeg (3.0 ya da sonrası). libdbus, varsa, masaüstünün vurgu rengini okumak için çalışma anında yüklenir.
 
-Linux'ta bunları dağıtımınızın paketlerinden kurun. Android, web ve Windows için Kompoz SDL3, FreeType, HarfBuzz, zlib ve libpng'yi kaynaktan derler; `scripts/fetch-deps.sh` onları indirir (aşağıya bakın).
+Linux'ta bunları dağıtımınızın paketlerinden kurun. Android, web ve Windows için Kompoz FreeType, HarfBuzz, zlib ve libpng'yi, Android dışında SDL3'ü de kaynaktan derler; `scripts/fetch-deps.sh` onları indirir (aşağıya bakın).
 
 ## Kütüphaneyi ve vitrini derlemek
 
@@ -29,7 +29,7 @@ Bu; çekirdek kütüphaneyi (`kompoz_core`), SDL3 arka ucunu (`kompoz_sdl3`), vi
 | `KOMPOZ_BUILD_SDL3` | `ON` | SDL3 arka ucunu derler. `OFF` yalnızca çekirdeği ve testleri, pencere sistemi olmadan derler. |
 | `KOMPOZ_BUILD_EXAMPLES` | `ON` | Vitrini derler. |
 | `KOMPOZ_BUILD_TESTS` | `ON` (Android, iOS ve web'de `OFF`) | Pencere açmadan çalışan testleri derler. |
-| `KOMPOZ_VENDORED_DEPS` | Android, iOS, web ve Windows'ta `ON` | SDL3, FreeType, HarfBuzz, zlib ve libpng'yi sistemdekileri kullanmak yerine `third_party/`'den derler. |
+| `KOMPOZ_VENDORED_DEPS` | Android, iOS, web ve Windows'ta `ON` | SDL3'ü (Android'de değil), FreeType, HarfBuzz, zlib ve libpng'yi sistemdekileri kullanmak yerine `third_party/`'den derler. |
 
 lld bulunan masaüstlerinde, siz başka bir bağlayıcı seçmediyseniz Kompoz onunla bağlar: vitrin için GNU ld'nin yirmi beş saniyesi yerine yaklaşık bir saniye.
 
@@ -145,9 +145,9 @@ scripts/fetch-deps.sh
 cd examples/showcase/android && ./gradlew installDebug
 ```
 
-`fetch-deps.sh`, SDL3, FreeType, HarfBuzz, zlib ve libpng'yi sabitlenmiş sürümlerde `third_party/`'ye indirir, SHA-256 özetlerini doğrular ve `scripts/patches/` içindeki yamaları uygular. Gradle, Kompoz'un CMake projesini NDK ile `libSDL3.so`'ya ve uygulamanızın `libmain.so`'suna derler.
+`fetch-deps.sh`, SDL3, FreeType, HarfBuzz, zlib ve libpng'yi sabitlenmiş sürümlerde `third_party/`'ye indirir ve SHA-256 özetlerini doğrular (Android'de SDL kullanılmaz). Gradle, Kompoz'un CMake projesini NDK ile uygulamanızın `libmain.so`'suna derler.
 
-Kendi uygulamanızı yapmak için vitrinin `android/` klasöründen başlayın: içinde yalnızca manifest, bir tema ve SDL'in `SDLActivity`'si üzerine kurulu kısa bir `MainActivity` var. Fontlar APK'ya Kompoz'un `assets/` klasöründen girer. Android'de Kompoz; önerili yazılım klavyesini, kenardan kenara (edge-to-edge) kenar boşluklarını, geri hareketini ve tahmine dayalı geriyi, sistemin koyu modunu ve yazı boyutunu, Android 12+'da dinamik rengi ve TalkBack'i destekler.
+Kendi uygulamanızı yapmak için vitrinin `android/` klasöründen başlayın: içinde yalnızca manifest, bir tema ve Kompoz'un `KompozActivity`'sini genişleten bir `MainActivity` var (`KompozActivity` `libmain.so`'yu yükler, uygulamanızı kendi UI iş parçacığında çalıştırır ve her kareyi ekranın ritminde çizer). Fontlar APK'ya Kompoz'un `assets/` klasöründen girer. Android'de Kompoz; önerili yazılım klavyesini, kenardan kenara (edge-to-edge) kenar boşluklarını, geri hareketini ve tahmine dayalı geriyi, sistemin koyu modunu ve yazı boyutunu, Android 12+'da dinamik rengi ve TalkBack'i destekler.
 
 ### Web
 

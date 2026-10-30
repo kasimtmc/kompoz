@@ -15,8 +15,8 @@
         android:hardwareAccelerated="true"
         android:enableOnBackInvokedCallback="true">
 
-        <!-- Attributes follow SDL's android-project template. configChanges keeps SDL's
-             native thread alive across rotation and dark-mode switches. -->
+        <!-- configChanges keeps the activity (and the app in it) across rotation, dark mode, the
+             language and the font size: Kompoz lays out again. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

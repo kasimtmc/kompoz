@@ -334,8 +334,9 @@ Deponun düzeni:
 | `platform/gpu/` | GPU çizicisi ve Vulkan, OpenGL ES, Metal ve WebGPU arka uçları |
 | `platform/common/` | her platformun paylaştıkları: fontlar, resimler, dosyalar ve günlük, duvar kâğıdının renkleri |
 | `platform/linux/`, `platform/windows/` | masaüstlerinin kendilerine özgü olanlar: ekran okuyucular (AT-SPI, UI Automation), vurgu rengi |
-| `platform/android/` | Android'in yerel tarafı (klavye, performans ipuçları) ve `java/`'da Java tarafı (klavye, erişilebilirlik, kenar boşlukları, intent'ler) |
-| `platform/sdl3/` | SDL3 platformu: masaüstlerinde, Android'de ve web'de pencereler, girdi ve olay döngüsü |
+| `platform/android/` | Android platformu: yerel tarafı (kareler, girdi ve yüzeyler, klavye, performans ipuçları) ve `java/`'da Java tarafı (etkinlik ve görünümü, klavye, erişilebilirlik, kenar boşlukları, intent'ler) |
+| `platform/headless/` | ekransız platform (`KOMPOZ_HEADLESS=1`): testler, betikli çalıştırmalar, CI |
+| `platform/sdl3/` | SDL3 platformu: masaüstlerinde ve web'de pencereler, girdi ve olay döngüsü |
 | `platform/web/` | uygulamanın çizildiği web sayfası |
 | `assets/` | her uygulamanın taşıdıkları: paketlenen fontlar (`fonts/`) ve lisanslar (`licenses/`) |
 | `tests/` | pencere açmadan çalışan testler |
@@ -414,35 +415,33 @@ cd examples/showcase/android && ./gradlew installDebug
 ```
 
 `scripts/fetch-deps.sh`, SDL3, FreeType, HarfBuzz, zlib ve libpng kaynaklarını sabit sürüm ve sha256 kontrolüyle
-`third_party/` altına indirir ve `scripts/patches/` altındaki düzeltmeleri uygular (şu an iki tane, ikisi de Android'de ve SDL 3.4.18'de de
-düzeltilmemiş: etkinlik, SDL çiziciyi oluştururken duraklarsa yaşanan kilitlenme ve `SDL_WaitEvent`'in beklemek yerine
-dönmesi; uygulama boştayken bir işlemci çekirdeği meşgul olur). Gradle, kök `CMakeLists.txt`'yi NDK ile
-derler: `libSDL3.so` ve uygulamanın `libmain.so`'su (vitrinin kaynakları) oluşur. Java tarafı SDL'in kendi
-`SDLActivity`'si; örneğin `android/` klasöründe yalnız manifest, tema ve kısa bir `MainActivity` var. Fontlar
-`assets/`'tan, örneğin resimleri `examples/showcase/assets/`'tan APK'ya girer.
+`third_party/` altına indirir (Android'de SDL kullanılmaz). Gradle, kök `CMakeLists.txt`'yi NDK ile uygulamanın
+`libmain.so`'suna derler (Kompoz ve vitrinin kaynakları). Java tarafı Kompoz'un kendisinin
+([platform/android/java](platform/android/java/dev/kompoz)): örnekteki `MainActivity`'nin genişlettiği `KompozActivity`
+ve onun `KompozView`'u; kareleri ekranın Choreographer'ından gelir (Compose'daki gibi vsync zamanı karenin zamanıdır),
+dokunmaları, tuşları ve yaşam döngüsü uygulamaya, onun çalıştığı UI iş parçacığında gider. Örneğin `android/`
+klasöründe yalnız manifest, tema ve o `MainActivity` var. Fontlar `assets/`'tan, örneğin resimleri
+`examples/showcase/assets/`'tan APK'ya girer.
 
 Derin bağlantılar (`navDeepLink`): uygulama bir bağlantıyla açılınca NavHost o ekrana gider; altında başlangıç ekranı ve
 aradaki grafiklerin ekranları olur, geri tuşu yukarı götürür. Masaüstünde komut satırı (`./build/showcase kompoz://item/42`),
 web'de adresin `#` kısmı (`showcase.html#item/42`; gösterilen ekran da oraya yazılır, yenileyince aynı ekran açılır),
-Android'de `VIEW` intent'i: manifest'e şeması için bir `intent-filter`, uygulama açıkken gelenler için
-`MainActivity.onNewIntent`'ten `KompozInput.onNewIntent(intent)` (örnekteki gibi). Süreç bittikten sonra
-`rememberSaveable` değerlerinin geri gelmesi için `MainActivity` `onCreate` (super'den önce), `onPause` (super'den önce)
-ve `onSaveInstanceState`'ten (super'den sonra) `KompozInput`'un aynı adlı yöntemlerini çağırır; masaüstünde
-`KOMPOZ_STATE_FILE=durum.bin` durumu çıkışta yazıp açılışta okur (süreç bitişini denemek için). Derin bağlantıyı denemek
+Android'de `VIEW` intent'i: manifest'e şeması için bir `intent-filter` (uygulama açıkken gelen bağlantıları da
+`KompozActivity` iletir). Android süreci bitirdikten sonra `rememberSaveable` değerleri geri gelir (`KompozActivity` onları
+kayıtlı örnek durumunda tutar); masaüstünde `KOMPOZ_STATE_FILE=durum.bin` durumu çıkışta yazıp açılışta okur (süreç
+bitişini denemek için). Derin bağlantıyı denemek
 için:
 
 ```bash
 adb shell am start -a android.intent.action.VIEW -d "kompoz://item/42"
 ```
 
-Klavye için SDL'in köprüsü yerine kendi `InputConnection`'ımız kullanılıyor
-([KompozInput.java](platform/android/java/dev/kompoz/KompozInput.java)). SDL'inki metnin ayrı bir kopyasını tutup yalnız
-farkları gönderdiği için öneri/otomatik düzeltme kullanınca metin bozuluyordu. Bizimkinde tek bir `Editable` var, her
+Klavye için Kompoz'un kendi `InputConnection`'ı kullanılıyor
+([KompozInput.java](platform/android/java/dev/kompoz/KompozInput.java)). Metnin ayrı bir kopyasını tutup yalnız farkları
+gönderen bir bağlantıda (SDL'inki gibi) öneri/otomatik düzeltme metni bozar. Bizimkinde tek bir `Editable` var, her
 değişiklikte metnin, seçimin ve yazılmakta olan kelimenin tamamı yerel tarafa gidiyor. Uygulama metni kendisi
 değiştirince (ör. "Ekle"den sonra temizleme) `restartInput` ile klavye yeniden eşitleniyor. Compose'un
-`TextInputServiceAndroid`'i de aynı modelle çalışıyor. `MainActivity` `createSDLSurface`'i
-`KompozInput.createSurface(context)` ile değiştirir: SDL'in yüzeyi klavyeyi kendisininki sanıp pencere boyu değişince
-(klavye açılınca) kendi giriş görünümünü öne çıkarmasın.
+`TextInputServiceAndroid`'i de aynı modelle çalışıyor.
 
 Android'de çalışanlar: dokunma, kaydırma ve fling, öneri ve otomatik düzeltmeli klavye, `KeyboardOptions` ile klavye türü
 ve eylem tuşu (e-posta, sayı, şifre; Next/Done/Search...), geri tuşu (popup → odak → `BackHandler` → uygulamadan çıkış)
@@ -517,7 +516,7 @@ almaz (her makinede aynı ekran görüntüsü için);
 
 `KOMPOZ_PROFILE=1` kare sürelerini loglar: yavaş her kare için girdi, compose + layout, çizim ve present süreleri,
 offscreen katmanlar ve yeni rasterleştirilen glifler; her saniye bir özet. Android'de ortam değişkeni olmadığından
-uygulamanın kendi deposundaki bir dosyaya bakar (çıktısı `adb logcat -s SDL/APP`):
+uygulamanın kendi deposundaki bir dosyaya bakar (çıktısı `adb logcat -s kompoz`):
 
 ```bash
 adb shell run-as dev.kompoz.showcase touch files/kompoz-profile

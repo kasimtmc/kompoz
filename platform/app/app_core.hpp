@@ -37,10 +37,13 @@ public:
     // is the host's for work between frames (idle).
     int64_t frameDue() const;
     void idle(int64_t budget);
-    // A frame: a script's next step, composition, what changed drawn and shown. `displayTime`: when
-    // it will be shown, where the platform knows (a vsync's time); else the core puts it on the
-    // display's beat.
+    // A frame: a script's next step, composition, what changed drawn and shown. `displayTime`: the
+    // frame's time, where the platform knows it (the vsync it starts on); else the core puts it on
+    // the display's beat.
     Next frame(int64_t displayTime = -1);
+    // The window's native surface went away or is another (between frames): what the GPU device
+    // made for the old one let go of now (gpu::Device::surfaceChanged).
+    void surfaceChanged();
     // Before the platform goes: KOMPOZ_STATE_FILE written.
     void quit();
     ComposeHost& host();

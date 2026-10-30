@@ -357,7 +357,16 @@
   once, without a pointer, a keyboard or a microphone, reading neither the desktop's accent color nor the wallpaper's,
   its loop and timers Kompoz's; the GPU device without a window, Vulkan from the system's loader or OpenGL ES 3
   through EGL (Mesa's surfaceless platform; ANGLE's on Windows). The GPU tests make their devices the same way, and on
-  the web their WebGL 2 context straight from Emscripten, without SDL.
+  the web their WebGL 2 context straight from Emscripten, without SDL. **Android no longer uses SDL**: an app's
+  activity extends Kompoz's own `dev.kompoz.KompozActivity`, whose `KompozView` (a `SurfaceView`) Kompoz draws into
+  with a Vulkan surface or an EGL window surface on its `ANativeWindow`; the app runs on the activity's UI thread, as
+  Compose does, its frames coming from the display's Choreographer (the vsync's time as the frame's) and its touches,
+  mouse, keys and lifecycle from the view and the activity; work from other threads wakes the UI thread's looper (an
+  eventfd), a coroutine's delay too (a timerfd), and what is left of each beat composes a lazy list's next items
+  ahead. The app's statics are made for one app a process: an activity created again in a process that ran one ends
+  it, and the system starts the app anew, as SDL's did. Measured against SDL's build on a Xiaomi 14 Ultra (120 Hz)
+  and a Redmi Note 9 Pro (60 Hz), as many refreshes are missed scrolling by hand and in flings; SDL's three patches
+  for its Android side are gone with it, and the showcase's footer no longer says SDL3.
 - **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
   blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
   scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and
