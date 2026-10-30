@@ -320,7 +320,8 @@ if(KOMPOZ_BUILD_SDL3)
         if(KOMPOZ_WAYLAND_INCLUDE_DIR AND KOMPOZ_XKBCOMMON_INCLUDE_DIR AND KOMPOZ_EGL_INCLUDE_DIR)
             file(GLOB kompoz_wayland_protocols CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/platform/linux/wayland/generated/*.c)
             target_sources(kompoz_sdl3 PRIVATE platform/linux/wayland/wayland_platform.cpp platform/linux/wayland/wayland_dynamic.cpp
-                           platform/linux/desktop_services.cpp platform/linux/media_devices.cpp ${kompoz_wayland_protocols})
+                           platform/linux/desktop_services.cpp platform/linux/egl_window.cpp platform/linux/media_devices.cpp
+                           ${kompoz_wayland_protocols})
             target_include_directories(kompoz_sdl3 PRIVATE ${KOMPOZ_WAYLAND_INCLUDE_DIR} ${KOMPOZ_XKBCOMMON_INCLUDE_DIR} ${KOMPOZ_EGL_INCLUDE_DIR})
             target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_WAYLAND=1)
         else()

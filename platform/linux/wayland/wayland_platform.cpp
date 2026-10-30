@@ -3,6 +3,7 @@
 #include "../../app/app_core.hpp"
 #include "../../common/system.hpp"
 #include "../desktop_services.hpp"
+#include "../egl_window.hpp"
 #include "../media_devices.hpp"
 #include "wayland_dynamic.hpp"
 // (after wayland_dynamic.hpp: their inline functions call through its pointers)
@@ -51,40 +52,6 @@
 
 namespace kompoz::platform {
 namespace {
-
-// EGL, loaded at run time as libwayland is (its functions by their declarations' types).
-struct Egl {
-    decltype(&eglGetPlatformDisplay) getPlatformDisplay = nullptr;
-    decltype(&eglInitialize) initialize = nullptr;
-    decltype(&eglBindAPI) bindApi = nullptr;
-    decltype(&eglChooseConfig) chooseConfig = nullptr;
-    decltype(&eglCreateContext) createContext = nullptr;
-    decltype(&eglCreatePlatformWindowSurface) createPlatformWindowSurface = nullptr;
-    decltype(&eglMakeCurrent) makeCurrent = nullptr;
-    decltype(&eglSwapBuffers) swapBuffers = nullptr;
-    decltype(&eglSwapInterval) swapInterval = nullptr;
-    decltype(&eglDestroySurface) destroySurface = nullptr;
-    decltype(&eglDestroyContext) destroyContext = nullptr;
-    decltype(&eglTerminate) terminate = nullptr;
-    decltype(&eglGetProcAddress) getProcAddress = nullptr;
-    void* library = nullptr;
-
-    bool load() {
-        if (!library) library = dlopen("libEGL.so.1", RTLD_NOW | RTLD_LOCAL);
-        if (!library) return false;
-        auto get = [this](auto& fn, const char* name) {
-            fn = reinterpret_cast<std::remove_reference_t<decltype(fn)>>(dlsym(library, name));
-            return fn != nullptr;
-        };
-        return get(getPlatformDisplay, "eglGetPlatformDisplay") && get(initialize, "eglInitialize") && get(bindApi, "eglBindAPI") &&
-               get(chooseConfig, "eglChooseConfig") && get(createContext, "eglCreateContext") &&
-               get(createPlatformWindowSurface, "eglCreatePlatformWindowSurface") && get(makeCurrent, "eglMakeCurrent") &&
-               get(swapBuffers, "eglSwapBuffers") && get(swapInterval, "eglSwapInterval") && get(destroySurface, "eglDestroySurface") &&
-               get(destroyContext, "eglDestroyContext") && get(terminate, "eglTerminate") && get(getProcAddress, "eglGetProcAddress");
-    }
-};
-Egl gEgl;
-void* gGles = nullptr;
 
 // A display output: its scale and refresh rate, and whether the window is on it.
 struct Output {
@@ -247,13 +214,7 @@ public:
     }
 
     void closeWindow() override {
-        if (eglDisplay_ != EGL_NO_DISPLAY) {
-            gEgl.makeCurrent(eglDisplay_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-            if (eglSurface_ != EGL_NO_SURFACE) gEgl.destroySurface(eglDisplay_, eglSurface_);
-            if (eglContext_ != EGL_NO_CONTEXT) gEgl.destroyContext(eglDisplay_, eglContext_);
-            gEgl.terminate(eglDisplay_);
-        }
-        eglDisplay_ = EGL_NO_DISPLAY, eglSurface_ = EGL_NO_SURFACE, eglContext_ = EGL_NO_CONTEXT;
+        egl_.close();
         if (eglWindow_) wl_egl_window_destroy(std::exchange(eglWindow_, nullptr));
         auto destroy = [](auto*& proxy) {
             if (proxy) wl_proxy_destroy(reinterpret_cast<wl_proxy*>(std::exchange(proxy, nullptr)));
@@ -395,9 +356,7 @@ private:
     wl_callback* frameCallback_ = nullptr;  // the frame callback asked for, until it comes
     wl_egl_window* eglWindow_ = nullptr;
     void* vulkan_ = nullptr;
-    EGLDisplay eglDisplay_ = EGL_NO_DISPLAY;
-    EGLContext eglContext_ = EGL_NO_CONTEXT;
-    EGLSurface eglSurface_ = EGL_NO_SURFACE;
+    EglWindow egl_;
     std::string title_ = "Kompoz";
     int width_ = 1, height_ = 1;              // points
     int pendingWidth_ = 0, pendingHeight_ = 0;  // a configure's, 0: the app's own
@@ -856,43 +815,15 @@ private:
     // ---- OpenGL ES -------------------------------------------------------------------------
 
     bool openGles(gpu::Surface& surface, std::string* error) {
-        if (!wayland::fn.egl || !gEgl.load()) {
-            *error = "no EGL or libwayland-egl";
+        if (!wayland::fn.egl) {
+            *error = "no libwayland-egl";
             return false;
         }
-        eglDisplay_ = gEgl.getPlatformDisplay(EGL_PLATFORM_WAYLAND_KHR, display_, nullptr);
-        if (eglDisplay_ == EGL_NO_DISPLAY || !gEgl.initialize(eglDisplay_, nullptr, nullptr)) {
-            eglDisplay_ = EGL_NO_DISPLAY;
-            *error = "no EGL display";
-            return false;
-        }
-        const EGLint attributes[] = {EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT, EGL_SURFACE_TYPE, EGL_WINDOW_BIT, EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8,
-                                     EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8, EGL_NONE};
-        EGLConfig config = nullptr;
-        EGLint count = 0;
-        if (!gEgl.chooseConfig(eglDisplay_, attributes, &config, 1, &count) || count < 1) {
-            *error = "no OpenGL ES 3 configuration";
-            return false;
-        }
-        gEgl.bindApi(EGL_OPENGL_ES_API);
-        bool debug = option("KOMPOZ_GPU_VALIDATION") == "1";
-        const EGLint contextAttributes[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 0,
-                                            EGL_CONTEXT_OPENGL_DEBUG, debug ? EGL_TRUE : EGL_FALSE, EGL_NONE};
-        eglContext_ = gEgl.createContext(eglDisplay_, config, EGL_NO_CONTEXT, contextAttributes);
-        eglWindow_ = eglContext_ != EGL_NO_CONTEXT ? wl_egl_window_create(surface_, pixelWidth(), pixelHeight()) : nullptr;
-        eglSurface_ = eglWindow_ ? gEgl.createPlatformWindowSurface(eglDisplay_, config, eglWindow_, nullptr) : EGL_NO_SURFACE;
-        if (eglSurface_ == EGL_NO_SURFACE || !gEgl.makeCurrent(eglDisplay_, eglSurface_, eglSurface_, eglContext_)) {
-            *error = "no OpenGL ES 3 context on the window";
-            return false;
-        }
-        gEgl.swapInterval(eglDisplay_, 0);  // (the frames are paced by the compositor's frame callbacks)
-        if (!gGles) gGles = dlopen("libGLESv2.so.2", RTLD_NOW | RTLD_LOCAL);
-        surface.glGetProcAddress = [](const char* name) -> void* {
-            if (void* f = gGles ? dlsym(gGles, name) : nullptr) return f;
-            return reinterpret_cast<void*>(gEgl.getProcAddress(name));
-        };
-        surface.glSwap = [this] { gEgl.swapBuffers(eglDisplay_, eglSurface_); };
-        return true;
+        eglWindow_ = wl_egl_window_create(surface_, pixelWidth(), pixelHeight());
+        // (Swap interval 0: the frames are paced by the compositor's frame callbacks.)
+        return egl_.open({.platform = EGL_PLATFORM_WAYLAND_KHR, .display = display_, .window = eglWindow_, .swapInterval = 0,
+                          .debug = option("KOMPOZ_GPU_VALIDATION") == "1"},
+                         surface, error);
     }
 
     // ---- Listeners -------------------------------------------------------------------------

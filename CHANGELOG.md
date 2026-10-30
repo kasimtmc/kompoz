@@ -382,7 +382,8 @@
   `color-scheme`. `libwayland-client`, `libwayland-egl`, `libxkbcommon` and EGL are loaded at run time and the
   protocols' code is generated ahead (`scripts/wayland-protocols.sh`), so building needs only their headers; where
   they aren't there, or with `KOMPOZ_PLATFORM=sdl`, apps run on SDL's platform. X11 comes next: what the two share
-  (keys, links, the desktop's services) is in `platform/linux/desktop_services`.
+  (keys, links, the desktop's services) is in `platform/linux/desktop_services`, OpenGL ES through EGL in
+  `egl_window`.
 - **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
   blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
   scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and
