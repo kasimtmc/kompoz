@@ -59,10 +59,19 @@ struct Egl {
     void* (*getProcAddress)(const char*) = nullptr;
     void* library = nullptr;
     void* gles = nullptr;
+    std::string failure;  // why libEGL couldn't be loaded where it is there
 
     bool load() {
         if (!library) library = openLibrary(eglLibrary());
-        if (!library) return false;
+        if (!library) {
+#if defined(_WIN32)
+            // There but not loadable: a DLL it needs is missing (ANGLE's: the Visual C++ runtime).
+            if (DWORD code = GetLastError(); std::filesystem::exists(std::filesystem::path(std::u8string(eglLibrary().begin(), eglLibrary().end()))))
+                failure = "libEGL.dll is beside the program but couldn't be loaded (Windows error " + std::to_string(code) +
+                          "; a DLL it needs, such as the Visual C++ runtime, may be missing)";
+#endif
+            return false;
+        }
         if (!gles) gles = openLibrary(glesLibrary());
         auto get = [this](auto& fn, const char* name) {
             fn = reinterpret_cast<std::remove_reference_t<decltype(fn)>>(symbol(library, name));
@@ -81,6 +90,11 @@ Egl gEgl;
 } // namespace
 
 bool EglWindow::available() { return gEgl.load(); }
+
+std::string EglWindow::unavailable() {
+    gEgl.load();
+    return gEgl.failure;
+}
 
 bool EglWindow::open(const Options& o, gpu::Surface& surface, std::string* error) {
     if (!gEgl.load() || (o.platform && (!gEgl.getPlatformDisplay || !gEgl.createPlatformWindowSurface))) {

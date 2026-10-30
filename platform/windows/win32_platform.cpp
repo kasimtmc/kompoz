@@ -339,6 +339,7 @@ public:
             // ANGLE's where the app has it beside it (libEGL.dll, libGLESv2.dll): OpenGL ES over
             // Direct3D 11, the same on every GPU. Else the driver's own OpenGL ES.
             bool debug = option("KOMPOZ_GPU_VALIDATION") == "1";
+            if (std::string why = EglWindow::unavailable(); !why.empty()) return failed(why);  // (ANGLE there, not loadable)
             bool made = EglWindow::available() ? egl_.open({.window = hwnd_, .swapInterval = 1, .debug = debug}, surface, error)
                                                : wgl_.open(hwnd_, debug, surface, error);
             if (!made) return failed(*error);

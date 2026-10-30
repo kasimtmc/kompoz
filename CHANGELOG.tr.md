@@ -19,9 +19,9 @@
   bir uygulama (Windows'ta ve artık Kompoz'un çalıştığı macOS'ta gerçek pencerede, macOS'ta ekransız da).
   `CONTRIBUTING.md`, issue formları ve bir sürümün paketlerini yayımlayan `scripts/release.sh`. vcpkg işleri
   sınadıkları kaydın Kompoz'unu derliyor (vcpkg'nin ikili önbelleği port dosyalarına göre anahtarlandığından,
-  kaynaklara göre değil, daha önceki bir kaydınkini geri yüklüyordu). Windows işi vitrini yanında ANGLE'ın DLL'leriyle
-  indirilebilir olarak saklıyor (`kompoz-showcase-windows-x86_64`): GPU sürücüsü olmayanlar dahil her Windows 10+'da
-  çalışıyor.
+  kaynaklara göre değil, daha önceki bir kaydınkini geri yüklüyordu). Windows işi vitrini yanında ANGLE'ın DLL'leri ve
+  onların ihtiyaç duyduğu Visual C++ çalışma zamanıyla indirilebilir olarak saklıyor
+  (`kompoz-showcase-windows-x86_64`): GPU sürücüsü olmayanlar dahil her Windows 10+'da çalışıyor.
 - **Kompoz'un kendi GPU renderer'ı**, yapım aşamasında (`KOMPOZ_GPU=vulkan`, `metal`, `webgpu`, `gles` ya da `auto`: platformun en iyisi, olmazsa sıradaki): her native grafik API'si için ince bir
   katmanın üstünde tek bir çekirdek; önce Linux, Windows ve Android'de Vulkan, ardından Apple'ın sistemlerinde Metal, web'de WebGPU ve bunların hiçbiri olmayan yerlerde OpenGL ES 3 (eski GPU'lar, WebGL 2, Windows'ta ANGLE).
   Yuvarlak dikdörtgenler, kenarlıklar, çizgiler, yaylar, gölgeler, yazı, resimler, clip'ler ve katmanlar GPU'da birebir

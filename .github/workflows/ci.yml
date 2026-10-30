@@ -158,7 +158,7 @@ jobs:
         run: cp ../angle/x64-windows-release/bin/*.dll . && KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo.exe && test -s shot.png
       # The showcase, ready to run on any Windows 10+ (one without a GPU driver too: ANGLE beside it
       # draws through Direct3D 11's WARP there), to download from the run: its files, ANGLE's DLLs
-      # and ANGLE's license among the others.
+      # with the Visual C++ runtime they need, and ANGLE's license among the others.
       - name: The showcase as a package with ANGLE beside it
         run: |
           out=kompoz-showcase-windows-x86_64
@@ -167,6 +167,13 @@ jobs:
           for dir in fonts licenses images vectors; do [ -d build/$dir ] && cp -r build/$dir $out/; done
           cp angle/x64-windows-release/bin/*.dll $out/
           cp angle/x64-windows-release/share/angle/copyright $out/licenses/ANGLE.txt
+          # ANGLE is built with MSVC: the Visual C++ runtime it needs (which a Windows without
+          # Visual Studio's redistributable lacks) beside it, as Microsoft lets apps ship it.
+          objdump -p angle/x64-windows-release/bin/*.dll | grep 'DLL Name' | sort -u
+          for dll in vcruntime140.dll vcruntime140_1.dll msvcp140.dll; do
+            if objdump -p angle/x64-windows-release/bin/*.dll | grep -qi "DLL Name: $dll"; then cp "/c/Windows/System32/$dll" $out/; fi
+          done
+          ls $out
       - uses: actions/upload-artifact@v4
         with:
           name: kompoz-showcase-windows-x86_64

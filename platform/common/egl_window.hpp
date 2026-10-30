@@ -33,6 +33,8 @@ public:
     };
     // Whether EGL is there (on Windows: ANGLE beside the program).
     static bool available();
+    // Why it isn't though its library is there (it couldn't be loaded); empty otherwise.
+    static std::string unavailable();
     // Made, with what the GPU device needs into `surface` (its functions, the swap); false (and
     // `error`) if it can't be.
     bool open(const Options& options, gpu::Surface& surface, std::string* error);
