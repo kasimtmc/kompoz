@@ -405,9 +405,16 @@
   ekranı açık tutma (`idle-inhibit`), bağlantılar için `xdg-open`, açık ya da koyu tercih portalın
   `color-scheme`'inden. `libwayland-client`, `libwayland-egl`, `libxkbcommon` ve EGL çalışma anında yükleniyor,
   protokollerin kodu önceden üretiliyor (`scripts/wayland-protocols.sh`); derlemek için yalnızca başlıkları gerekiyor.
-  Bunlar yoksa, ya da `KOMPOZ_PLATFORM=sdl` ile, uygulamalar SDL'in platformunda çalışıyor. Sırada X11 var: ikisinin
-  ortak kullandıkları (tuşlar, bağlantılar, masaüstünün hizmetleri) `platform/linux/desktop_services`'ta, EGL
-  üzerinden OpenGL ES `egl_window`'da.
+  Bunlar yoksa, ya da `KOMPOZ_PLATFORM=sdl` ile, uygulamalar SDL'in platformunda çalışıyor. **Bir X11 oturumu
+  Kompoz'un kendi X11 platformunda çalışıyor** (`platform/linux/x11`): pencere yöneticisinin çerçevesini çizdiği bir
+  pencere; masaüstünün ölçeğinde (`Xft.dpi`, değiştikçe izleniyor) Vulkan (`VK_KHR_xlib_surface`) ya da OpenGL ES
+  (EGL'in X11 platformu) ile çiziliyor, kareleri ekranın vuruşunda. İşaretçi, tekerleği (XInput 2'nin söylediği gibi
+  yumuşak), dokunma ve touchpad sıkıştırmaları XInput 2 üzerinden; klavye bir giriş yöntemiyle (XIM, söylenebildiği
+  yerde alanın yeri de söyleniyor); pano (büyükse parça parça) ve dosya ya da metin bırakmalar seçimler olarak (XDND);
+  masaüstü temasının imleçleri (libXcursor), XRandR'dan yenileme hızı, `org.freedesktop.ScreenSaver` üzerinden ekranı
+  açık tutma. libX11, libXi, libXcursor ve libXrandr çalışma anında yükleniyor; `KOMPOZ_PLATFORM=x11` onu bir Wayland
+  oturumunda da XWayland üzerinden çalıştırıyor. İkisinin ortak kullandıkları (tuşlar, bağlantılar, masaüstünün
+  hizmetleri) `platform/linux/desktop_services`'ta, EGL üzerinden OpenGL ES `egl_window`'da.
 - **Bir yolun gölgesi önceden sahip olduğu maskeden çiziliyor** (Compose'un bir `dropShadow`'un ya da
   `innerShadow`'un bulanık bitmap'ini tutması gibi): GPU renderer'ı yuvarlak köşeli dikdörtgen olmayan bir şeklin
   (kalp, yıldız, kurabiye) gölgesini her seferinde baştan, her biri iki geçişli bir katman ve bir bulanıklıkla

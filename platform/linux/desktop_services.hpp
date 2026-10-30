@@ -15,6 +15,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace kompoz::platform {
 
@@ -27,6 +28,9 @@ Key keyOf(uint32_t keysym);
 // The browser, or the app for the scheme (xdg-open), its process waited for on a thread.
 void openUri(const std::string& uri);
 int64_t monotonicNow();  // ns
+// The local files a text/uri-list names (file:// addresses, percent-decoded; comments and other
+// schemes left out): what a drop of files holds.
+std::vector<std::string> filesInUriList(const std::string& list);
 // `run` (a platform's app, what main returns, -1: it couldn't run) with libdbus kept loaded
 // until what it keeps for the process is freed after it, its users all done, as SDL_Quit does.
 int withDbus(const std::function<int()>& run);
@@ -54,6 +58,9 @@ public:
     bool wantsFrames() const;
     // Their threads ended, before the loop they wake goes.
     void stop();
+    // The screen saver held off (org.freedesktop.ScreenSaver's Inhibit, for as long as the
+    // connection that asked is open), for the app named `app`; where the window system can't.
+    void keepScreenOn(bool on, const std::string& app);
 
 private:
     std::atomic<bool> accentChanged_{false}, wallpaperChanged_{false}, a11yRequested_{false};
@@ -63,6 +70,7 @@ private:
     std::unique_ptr<WallpaperColors> wallpaper_;
     std::unique_ptr<AtspiBridge> a11y_;
     bool focused_ = false, semanticsDirty_ = true;
+    void* screenSaverBus_ = nullptr;  // the D-Bus connection holding the screen saver off
     int64_t lastSemantics_ = 0;
 };
 

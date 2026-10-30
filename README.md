@@ -334,7 +334,7 @@ Layout of the repository:
 | `platform/app/` | the app core (frames, drawing, scripts, screenshots) and the platform interface it runs on |
 | `platform/gpu/` | the GPU renderer and its Vulkan, OpenGL ES, Metal and WebGPU backends |
 | `platform/common/` | what every platform shares: fonts, images, files and logging, the wallpaper's colors |
-| `platform/linux/`, `platform/windows/` | the desktops' own: Linux's Wayland platform (`wayland/`), screen readers (AT-SPI, UI Automation), the accent color |
+| `platform/linux/`, `platform/windows/` | the desktops' own: Linux's Wayland and X11 platforms (`wayland/`, `x11/`), screen readers (AT-SPI, UI Automation), the accent color |
 | `platform/android/` | Android's platform: its native side (the frames, input and surfaces, the keyboard, performance hints) and its Java side in `java/` (the activity and its view, keyboard, accessibility, insets, intents) |
 | `platform/headless/` | the platform without a screen (`KOMPOZ_HEADLESS=1`): tests, scripted runs, CI |
 | `platform/sdl3/` | the SDL3 platform: windows, input and the event loop on the desktops and the web |

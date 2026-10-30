@@ -3,6 +3,7 @@
 #include "../common/desktop_accent.hpp"
 #include "../common/system.hpp"
 #include "atspi_bridge.hpp"
+#include "libdbus.hpp"
 #ifdef KOMPOZ_WALLPAPER_COLORS
 #include "../common/wallpaper_colors.hpp"
 #endif
@@ -13,6 +14,7 @@
 #include <spawn.h>
 #include <sys/wait.h>
 
+#include <cctype>
 #include <ctime>
 #include <thread>
 
@@ -60,6 +62,31 @@ int64_t monotonicNow() {
     timespec t{};
     clock_gettime(CLOCK_MONOTONIC, &t);
     return int64_t(t.tv_sec) * 1'000'000'000 + t.tv_nsec;
+}
+
+std::vector<std::string> filesInUriList(const std::string& list) {
+    std::vector<std::string> files;
+    size_t start = 0;
+    while (start < list.size()) {
+        size_t end = list.find('\n', start);
+        std::string line = list.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        start = end == std::string::npos ? list.size() : end + 1;
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (!line.starts_with("file://")) continue;
+        line.erase(0, 7);
+        if (size_t slash = line.find('/'); slash != 0) line.erase(0, slash);  // (a host before the path)
+        std::string path;
+        for (size_t i = 0; i < line.size(); ++i) {
+            if (line[i] == '%' && i + 2 < line.size() && std::isxdigit(uint8_t(line[i + 1])) && std::isxdigit(uint8_t(line[i + 2]))) {
+                path += char(std::stoi(line.substr(i + 1, 2), nullptr, 16));
+                i += 2;
+            } else {
+                path += line[i];
+            }
+        }
+        if (!path.empty()) files.push_back(path);
+    }
+    return files;
 }
 
 int withDbus(const std::function<int()>& run) {
@@ -157,9 +184,46 @@ void DesktopServices::composed(ComposeHost& host, bool redraw, int64_t frameTime
 }
 
 void DesktopServices::stop() {
+    keepScreenOn(false, {});
     a11y_.reset();
     wallpaper_.reset();
     accent_.reset();
+}
+
+void DesktopServices::keepScreenOn(bool on, const std::string& app) {
+    static dbus::Lib bus;
+    static const bool loaded = bus.load();
+    if (!loaded || on == (screenSaverBus_ != nullptr)) return;
+    if (!on) {  // (closing the connection lets the screen saver go)
+        bus.connection_close(screenSaverBus_);
+        bus.connection_unref(std::exchange(screenSaverBus_, nullptr));
+        return;
+    }
+    dbus::Error error;
+    bus.error_init(&error);
+    dbus::Connection* connection = bus.bus_get_private(dbus::kSessionBus, &error);
+    bus.error_free(&error);
+    if (!connection) return;
+    bus.connection_set_exit_on_disconnect(connection, 0);
+    dbus::Message* call =
+        bus.message_new_method_call("org.freedesktop.ScreenSaver", "/org/freedesktop/ScreenSaver", "org.freedesktop.ScreenSaver", "Inhibit");
+    const char* name = app.c_str();
+    const char* reason = "keepScreenOn";
+    dbus::Message* reply = nullptr;
+    if (call) {
+        bus.message_append_args(call, dbus::kTypeString, &name, dbus::kTypeString, &reason, dbus::kTypeInvalid);
+        bus.error_init(&error);
+        reply = bus.connection_send_with_reply_and_block(connection, call, 1000, &error);
+        bus.error_free(&error);
+        bus.message_unref(call);
+    }
+    if (!reply) {
+        bus.connection_close(connection);
+        bus.connection_unref(connection);
+        return;
+    }
+    bus.message_unref(reply);
+    screenSaverBus_ = connection;
 }
 
 bool DesktopServices::wantsFrames() const { return a11y_ && a11y_->active() && semanticsDirty_; }  // one more frame publishes it

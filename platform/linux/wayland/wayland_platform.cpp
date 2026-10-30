@@ -36,7 +36,6 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -870,33 +869,6 @@ private:
         wl_data_offer_destroy(offer);
     }
 
-    // The local files a text/uri-list names (file:// addresses, percent-decoded; comments and other
-    // schemes left out).
-    static std::vector<std::string> filesIn(const std::string& list) {
-        std::vector<std::string> files;
-        size_t start = 0;
-        while (start < list.size()) {
-            size_t end = list.find('\n', start);
-            std::string line = list.substr(start, end == std::string::npos ? std::string::npos : end - start);
-            start = end == std::string::npos ? list.size() : end + 1;
-            if (!line.empty() && line.back() == '\r') line.pop_back();
-            if (!line.starts_with("file://")) continue;
-            line.erase(0, 7);
-            if (size_t slash = line.find('/'); slash != 0) line.erase(0, slash);  // (a host before the path)
-            std::string path;
-            for (size_t i = 0; i < line.size(); ++i) {
-                if (line[i] == '%' && i + 2 < line.size() && std::isxdigit(uint8_t(line[i + 1])) && std::isxdigit(uint8_t(line[i + 2]))) {
-                    path += char(std::stoi(line.substr(i + 1, 2), nullptr, 16));
-                    i += 2;
-                } else {
-                    path += line[i];
-                }
-            }
-            if (!path.empty()) files.push_back(path);
-        }
-        return files;
-    }
-
     // ---- Listeners (defined after the class, where its members are complete) ---------------
 
     static const xdg_wm_base_listener kWmBase;
@@ -1303,7 +1275,7 @@ const wl_data_device_listener WaylandPlatform::kDataDevice = {
         wl_data_offer* offer = p.dragOffer_;
         if (!offer) return;
         if (p.offered(offer, {"text/uri-list"})) {
-            for (const std::string& path : filesIn(p.receive(offer, "text/uri-list"))) {
+            for (const std::string& path : filesInUriList(p.receive(offer, "text/uri-list"))) {
                 Event e = p.at(EventType::DropFile, p.dragX_, p.dragY_);
                 e.text = path;
                 p.events_.push_back(e);
@@ -1449,7 +1421,8 @@ const wl_registry_listener WaylandPlatform::kRegistry = {
 } // namespace
 
 int runWayland(int argc, char* argv[]) {
-    if (const char* forced = std::getenv("KOMPOZ_PLATFORM"); forced && std::string_view(forced) == "sdl") return -1;
+    if (const char* forced = std::getenv("KOMPOZ_PLATFORM"); forced && (std::string_view(forced) == "sdl" || std::string_view(forced) == "x11"))
+        return -1;
     return withDbus([&] {
         auto platform = std::make_unique<WaylandPlatform>();
         return platform->connect() ? platform->run(argc, argv) : -1;

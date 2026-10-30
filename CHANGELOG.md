@@ -381,9 +381,16 @@
   screen kept on (`idle-inhibit`), `xdg-open` for links, the light or dark preference from the portal's
   `color-scheme`. `libwayland-client`, `libwayland-egl`, `libxkbcommon` and EGL are loaded at run time and the
   protocols' code is generated ahead (`scripts/wayland-protocols.sh`), so building needs only their headers; where
-  they aren't there, or with `KOMPOZ_PLATFORM=sdl`, apps run on SDL's platform. X11 comes next: what the two share
-  (keys, links, the desktop's services) is in `platform/linux/desktop_services`, OpenGL ES through EGL in
-  `egl_window`.
+  they aren't there, or with `KOMPOZ_PLATFORM=sdl`, apps run on SDL's platform. **An X11 session runs on Kompoz's own
+  X11 platform** (`platform/linux/x11`): a window the window manager decorates, drawn into with Vulkan
+  (`VK_KHR_xlib_surface`) or OpenGL ES (EGL's X11 platform) at the desktop's scale (`Xft.dpi`, followed as it
+  changes), frames on the display's beat; the pointer, its wheel (smooth, as XInput 2 tells it), touch and touchpad
+  pinches through XInput 2, the keyboard through an input method (XIM, told where the field is where it can be), the
+  clipboard (in parts when it is large) and drops of files and text as selections (XDND), the desktop theme's cursors
+  (libXcursor), the refresh rate from XRandR, the screen kept on through `org.freedesktop.ScreenSaver`. libX11, libXi,
+  libXcursor and libXrandr are loaded at run time; `KOMPOZ_PLATFORM=x11` runs it in a Wayland session too, through
+  XWayland. What the two share (keys, links, the desktop's services) is in `platform/linux/desktop_services`, OpenGL
+  ES through EGL in `egl_window`.
 - **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
   blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
   scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and
