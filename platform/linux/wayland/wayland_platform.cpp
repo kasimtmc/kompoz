@@ -8,6 +8,7 @@
 #include "generated/cursor-shape-v1-client-protocol.h"
 #include "generated/fractional-scale-v1-client-protocol.h"
 #include "generated/idle-inhibit-unstable-v1-client-protocol.h"
+#include "generated/pointer-gestures-unstable-v1-client-protocol.h"
 #include "generated/text-input-unstable-v3-client-protocol.h"
 #include "generated/viewporter-client-protocol.h"
 #include "generated/wayland-client-protocol.h"
@@ -44,11 +45,13 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <deque>
+#include <initializer_list>
 #include <map>
 #include <memory>
 #include <string>
@@ -146,7 +149,8 @@ public:
         auto destroy = [](auto* proxy) {
             if (proxy) wl_proxy_destroy(reinterpret_cast<wl_proxy*>(proxy));
         };
-        destroy(textInput_), destroy(cursorDevice_), destroy(dataDevice_), destroy(selectionOffer_), destroy(source_);
+        destroy(textInput_), destroy(pinch_), destroy(cursorDevice_), destroy(dataDevice_), destroy(selectionOffer_), destroy(dragOffer_);
+        destroy(source_), destroy(gestures_);
         destroy(pointer_), destroy(keyboard_), destroy(touch_), destroy(seat_);
         for (Output& o : outputs_) destroy(o.output);
         destroy(compositor_), destroy(wmBase_), destroy(decorations_), destroy(fractionalManager_), destroy(viewporter_);
@@ -455,6 +459,7 @@ private:
     zwp_text_input_manager_v3* textInputs_ = nullptr;
     wl_data_device_manager* dataDevices_ = nullptr;
     zwp_idle_inhibit_manager_v1* idleInhibits_ = nullptr;
+    zwp_pointer_gestures_v1* gestures_ = nullptr;
     wl_seat* seat_ = nullptr;
     std::vector<Output> outputs_;
 
@@ -482,6 +487,8 @@ private:
     wl_keyboard* keyboard_ = nullptr;
     wl_touch* touch_ = nullptr;
     wp_cursor_shape_device_v1* cursorDevice_ = nullptr;
+    zwp_pointer_gesture_pinch_v1* pinch_ = nullptr;
+    double pinchScale_ = 1;  // the touchpad pinch's scale so far (Wayland tells it since the pinch began)
     uint32_t pointerSerial_ = 0, lastSerial_ = 0;
     double pointerX_ = 0, pointerY_ = 0, wheelX_ = 0, wheelY_ = 0;
     bool wheelDiscrete_ = false;
@@ -501,6 +508,8 @@ private:
 
     wl_data_device* dataDevice_ = nullptr;
     wl_data_offer* selectionOffer_ = nullptr;
+    wl_data_offer* dragOffer_ = nullptr;  // what is dragged over the window
+    double dragX_ = 0, dragY_ = 0;
     std::map<wl_data_offer*, std::vector<std::string>> offerTypes_;
     wl_data_source* source_ = nullptr;
     std::string clipboard_;
@@ -708,20 +717,27 @@ private:
 
     // ---- The clipboard ---------------------------------------------------------------------
 
+    // The first of `types` an offer has, or null.
+    const char* offered(wl_data_offer* offer, std::initializer_list<const char*> types) {
+        const std::vector<std::string>& has = offerTypes_[offer];
+        for (const char* type : types)
+            if (std::find(has.begin(), has.end(), type) != has.end()) return type;
+        return nullptr;
+    }
+
     std::string readClipboard() {
         if (source_) return clipboard_;  // (ours: we would have to answer ourselves)
         if (!selectionOffer_) return {};
-        const std::vector<std::string>& types = offerTypes_[selectionOffer_];
-        const char* wanted = nullptr;
-        for (const char* type : {"text/plain;charset=utf-8", "text/plain", "UTF8_STRING", "STRING", "TEXT"})
-            if (std::find(types.begin(), types.end(), type) != types.end()) {
-                wanted = type;
-                break;
-            }
-        if (!wanted) return {};
+        const char* type = offered(selectionOffer_, {"text/plain;charset=utf-8", "text/plain", "UTF8_STRING", "STRING", "TEXT"});
+        return type ? receive(selectionOffer_, type) : std::string();
+    }
+
+    // What an offer holds as `type`, read through a pipe from the app that offers it (which may
+    // take its time: a second at most between reads).
+    std::string receive(wl_data_offer* offer, const char* type) {
         int fds[2];
         if (pipe2(fds, O_CLOEXEC) != 0) return {};
-        wl_data_offer_receive(selectionOffer_, wanted, fds[1]);
+        wl_data_offer_receive(offer, type, fds[1]);
         close(fds[1]);
         wl_display_flush(display_);
         std::string text;
@@ -818,6 +834,10 @@ private:
             zwp_text_input_v3_add_listener(textInput_, &kTextInput, this);
         }
         if (pointer_ && cursorShapes_ && !cursorDevice_) cursorDevice_ = wp_cursor_shape_manager_v1_get_pointer(cursorShapes_, pointer_);
+        if (pointer_ && gestures_ && !pinch_) {
+            pinch_ = zwp_pointer_gestures_v1_get_pinch_gesture(gestures_, pointer_);
+            zwp_pointer_gesture_pinch_v1_add_listener(pinch_, &kPinch, this);
+        }
     }
 
     // Without fractional-scale or the surface's preferred scale: the largest scale of the
@@ -836,7 +856,35 @@ private:
     void forget(wl_data_offer* offer) {
         offerTypes_.erase(offer);
         if (offer == selectionOffer_) selectionOffer_ = nullptr;
+        if (offer == dragOffer_) dragOffer_ = nullptr;
         wl_data_offer_destroy(offer);
+    }
+
+    // The local files a text/uri-list names (file:// addresses, percent-decoded; comments and other
+    // schemes left out).
+    static std::vector<std::string> filesIn(const std::string& list) {
+        std::vector<std::string> files;
+        size_t start = 0;
+        while (start < list.size()) {
+            size_t end = list.find('\n', start);
+            std::string line = list.substr(start, end == std::string::npos ? std::string::npos : end - start);
+            start = end == std::string::npos ? list.size() : end + 1;
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            if (!line.starts_with("file://")) continue;
+            line.erase(0, 7);
+            if (size_t slash = line.find('/'); slash != 0) line.erase(0, slash);  // (a host before the path)
+            std::string path;
+            for (size_t i = 0; i < line.size(); ++i) {
+                if (line[i] == '%' && i + 2 < line.size() && std::isxdigit(uint8_t(line[i + 1])) && std::isxdigit(uint8_t(line[i + 2]))) {
+                    path += char(std::stoi(line.substr(i + 1, 2), nullptr, 16));
+                    i += 2;
+                } else {
+                    path += line[i];
+                }
+            }
+            if (!path.empty()) files.push_back(path);
+        }
+        return files;
     }
 
     // ---- Listeners (defined after the class, where its members are complete) ---------------
@@ -855,6 +903,7 @@ private:
     static const wl_data_offer_listener kOffer;
     static const wl_data_device_listener kDataDevice;
     static const wl_data_source_listener kSource;
+    static const zwp_pointer_gesture_pinch_v1_listener kPinch;
     static const wl_seat_listener kSeat;
     static const wl_registry_listener kRegistry;
 };
@@ -1131,12 +1180,52 @@ const wl_data_offer_listener WaylandPlatform::kOffer = {
 
 const wl_data_device_listener WaylandPlatform::kDataDevice = {
     .data_offer = [](void* data, wl_data_device*, wl_data_offer* offer) { wl_data_offer_add_listener(offer, &kOffer, data); },
-    .enter = [](void* data, wl_data_device*, uint32_t, wl_surface*, wl_fixed_t, wl_fixed_t, wl_data_offer* offer) {
-        if (offer) self(data).forget(offer);  // (drops: not yet)
+    // Files from a file manager, text from a browser: taken as a copy, told to the core as SDL
+    // told them (begin, moves, each file or the text at the drop, complete; complete alone: it left).
+    .enter = [](void* data, wl_data_device*, uint32_t serial, wl_surface*, wl_fixed_t x, wl_fixed_t y, wl_data_offer* offer) {
+        WaylandPlatform& p = self(data);
+        if (p.dragOffer_) p.forget(p.dragOffer_);
+        p.dragOffer_ = offer;
+        if (!offer) return;
+        p.dragX_ = wl_fixed_to_double(x), p.dragY_ = wl_fixed_to_double(y);
+        const char* type = p.offered(offer, {"text/uri-list", "text/plain;charset=utf-8", "text/plain"});
+        wl_data_offer_accept(offer, serial, type);
+        if (wl_data_offer_get_version(offer) >= 3)
+            wl_data_offer_set_actions(offer, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY);
+        p.events_.push_back({.type = EventType::DropBegin});
+        p.events_.push_back(p.at(EventType::DropMove, p.dragX_, p.dragY_));
     },
-    .leave = [](void*, wl_data_device*) {},
-    .motion = [](void*, wl_data_device*, uint32_t, wl_fixed_t, wl_fixed_t) {},
-    .drop = [](void*, wl_data_device*) {},
+    .leave = [](void* data, wl_data_device*) {
+        WaylandPlatform& p = self(data);
+        if (!p.dragOffer_) return;
+        p.forget(p.dragOffer_);
+        p.events_.push_back({.type = EventType::DropComplete});
+    },
+    .motion = [](void* data, wl_data_device*, uint32_t, wl_fixed_t x, wl_fixed_t y) {
+        WaylandPlatform& p = self(data);
+        if (!p.dragOffer_) return;
+        p.dragX_ = wl_fixed_to_double(x), p.dragY_ = wl_fixed_to_double(y);
+        p.events_.push_back(p.at(EventType::DropMove, p.dragX_, p.dragY_));
+    },
+    .drop = [](void* data, wl_data_device*) {
+        WaylandPlatform& p = self(data);
+        wl_data_offer* offer = p.dragOffer_;
+        if (!offer) return;
+        if (p.offered(offer, {"text/uri-list"})) {
+            for (const std::string& path : filesIn(p.receive(offer, "text/uri-list"))) {
+                Event e = p.at(EventType::DropFile, p.dragX_, p.dragY_);
+                e.text = path;
+                p.events_.push_back(e);
+            }
+        } else if (const char* type = p.offered(offer, {"text/plain;charset=utf-8", "text/plain"})) {
+            Event e = p.at(EventType::DropText, p.dragX_, p.dragY_);
+            e.text = p.receive(offer, type);
+            p.events_.push_back(e);
+        }
+        if (wl_data_offer_get_version(offer) >= 3) wl_data_offer_finish(offer);
+        p.forget(offer);
+        p.events_.push_back({.type = EventType::DropComplete});
+    },
     .selection = [](void* data, wl_data_device*, wl_data_offer* offer) {
         WaylandPlatform& p = self(data);
         if (p.selectionOffer_ && p.selectionOffer_ != offer) p.forget(p.selectionOffer_);
@@ -1166,6 +1255,25 @@ const wl_data_source_listener WaylandPlatform::kSource = {
     .action = [](void*, wl_data_source*, uint32_t) {},
 };
 
+// A touchpad pinch (pointer-gestures), about the pointer: each step as the change since the
+// last (Wayland tells the scale since the pinch began).
+const zwp_pointer_gesture_pinch_v1_listener WaylandPlatform::kPinch = {
+    .begin = [](void* data, zwp_pointer_gesture_pinch_v1*, uint32_t, uint32_t, wl_surface*, uint32_t) {
+        WaylandPlatform& p = self(data);
+        p.pinchScale_ = 1;
+        p.events_.push_back(p.at(EventType::PinchBegin, p.pointerX_, p.pointerY_));
+    },
+    .update = [](void* data, zwp_pointer_gesture_pinch_v1*, uint32_t, wl_fixed_t, wl_fixed_t, wl_fixed_t scale, wl_fixed_t) {
+        WaylandPlatform& p = self(data);
+        double s = wl_fixed_to_double(scale);
+        Event e = p.at(EventType::Pinch, p.pointerX_, p.pointerY_);
+        e.scale = float(s / std::max(p.pinchScale_, 1e-3));
+        p.pinchScale_ = s;
+        p.events_.push_back(e);
+    },
+    .end = [](void*, zwp_pointer_gesture_pinch_v1*, uint32_t, uint32_t, int32_t) {},
+};
+
 const wl_seat_listener WaylandPlatform::kSeat = {
     .capabilities = [](void* data, wl_seat* seat, uint32_t caps) {
         WaylandPlatform& p = self(data);
@@ -1176,6 +1284,7 @@ const wl_seat_listener WaylandPlatform::kSeat = {
             changed = true;
         } else if (!(caps & WL_SEAT_CAPABILITY_POINTER) && p.pointer_) {
             if (p.cursorDevice_) wp_cursor_shape_device_v1_destroy(std::exchange(p.cursorDevice_, nullptr));
+            if (p.pinch_) zwp_pointer_gesture_pinch_v1_destroy(std::exchange(p.pinch_, nullptr));
             wl_pointer_destroy(std::exchange(p.pointer_, nullptr));
             changed = true;
         }
@@ -1220,6 +1329,8 @@ const wl_registry_listener WaylandPlatform::kRegistry = {
             p.textInputs_ = bind<zwp_text_input_manager_v3>(registry, name, &zwp_text_input_manager_v3_interface, version, 1);
         else if (i == wl_data_device_manager_interface.name)
             p.dataDevices_ = bind<wl_data_device_manager>(registry, name, &wl_data_device_manager_interface, version, 3);
+        else if (i == zwp_pointer_gestures_v1_interface.name)
+            p.gestures_ = bind<zwp_pointer_gestures_v1>(registry, name, &zwp_pointer_gestures_v1_interface, version, 1);
         else if (i == zwp_idle_inhibit_manager_v1_interface.name)
             p.idleInhibits_ = bind<zwp_idle_inhibit_manager_v1>(registry, name, &zwp_idle_inhibit_manager_v1_interface, version, 1);
         else if (i == wl_seat_interface.name && !p.seat_) {

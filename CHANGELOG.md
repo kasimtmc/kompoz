@@ -371,14 +371,14 @@
   **A Wayland session runs on Kompoz's own Wayland platform** (`platform/linux/wayland`): an `xdg_toplevel` that the
   compositor decorates (`xdg-decoration`), drawn into with Vulkan (`VK_KHR_wayland_surface`) or OpenGL ES (a
   `wl_egl_window`) at the compositor's scale (fractional-scale and viewporter, else the surface's integer scale),
-  frames on its frame callbacks; the pointer, the wheel (a notch is 1), touch and the keyboard (xkbcommon, keys
-  repeated at the compositor's rate), typing through `text-input-v3` too, the clipboard through the data device, the
-  cursor's shape (`cursor-shape`), the screen kept on (`idle-inhibit`), `xdg-open` for links, the light or dark
-  preference from the portal's `color-scheme`. `libwayland-client`, `libwayland-egl`, `libxkbcommon` and EGL are
-  loaded at run time and the protocols' code is generated ahead (`scripts/wayland-protocols.sh`), so building needs
-  only their headers; where they or a compositor's decorations aren't there, or with `KOMPOZ_PLATFORM=sdl`, apps run
-  on SDL's platform. Drops and touchpad pinches come next, then Kompoz's own title bar for compositors without
-  decorations, and X11.
+  frames on its frame callbacks; the pointer, the wheel (a notch is 1), touch, touchpad pinches (`pointer-gestures`)
+  and the keyboard (xkbcommon, keys repeated at the compositor's rate), typing through `text-input-v3` too, the
+  clipboard and files or text dropped on the window through the data device, the cursor's shape (`cursor-shape`), the
+  screen kept on (`idle-inhibit`), `xdg-open` for links, the light or dark preference from the portal's
+  `color-scheme`. `libwayland-client`, `libwayland-egl`, `libxkbcommon` and EGL are loaded at run time and the
+  protocols' code is generated ahead (`scripts/wayland-protocols.sh`), so building needs only their headers; where
+  they or a compositor's decorations aren't there, or with `KOMPOZ_PLATFORM=sdl`, apps run on SDL's platform. Kompoz's
+  own title bar for compositors without decorations comes next, then X11.
 - **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
   blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
   scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and
