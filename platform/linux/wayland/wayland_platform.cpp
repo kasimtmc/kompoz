@@ -839,390 +839,407 @@ private:
         wl_data_offer_destroy(offer);
     }
 
-    // ---- Listeners (in the order they refer to each other) ---------------------------------
+    // ---- Listeners (defined after the class, where its members are complete) ---------------
 
-    static constexpr xdg_wm_base_listener kWmBase = {
-        .ping = [](void*, xdg_wm_base* base, uint32_t serial) { xdg_wm_base_pong(base, serial); },
-    };
+    static const xdg_wm_base_listener kWmBase;
+    static const wl_output_listener kOutput;
+    static const wl_surface_listener kSurface;
+    static const wp_fractional_scale_v1_listener kFractional;
+    static const xdg_surface_listener kXdgSurface;
+    static const xdg_toplevel_listener kToplevel;
+    static const wl_callback_listener kFrameCallback;
+    static const wl_pointer_listener kPointer;
+    static const wl_keyboard_listener kKeyboard;
+    static const wl_touch_listener kTouch;
+    static const zwp_text_input_v3_listener kTextInput;
+    static const wl_data_offer_listener kOffer;
+    static const wl_data_device_listener kDataDevice;
+    static const wl_data_source_listener kSource;
+    static const wl_seat_listener kSeat;
+    static const wl_registry_listener kRegistry;
+};
 
-    static constexpr wl_output_listener kOutput = {
-        .geometry = [](void*, wl_output*, int32_t, int32_t, int32_t, int32_t, int32_t, const char*, const char*, int32_t) {},
-        .mode = [](void* data, wl_output* output, uint32_t flags, int32_t, int32_t, int32_t refresh) {
-            if (!(flags & WL_OUTPUT_MODE_CURRENT)) return;
-            for (Output& o : self(data).outputs_)
-                if (o.output == output) o.refreshMhz = refresh;
-        },
-        .done = [](void*, wl_output*) {},
-        .scale = [](void* data, wl_output* output, int32_t scale) {
-            WaylandPlatform& p = self(data);
-            for (Output& o : p.outputs_)
-                if (o.output == output) o.scale = scale;
-            p.outputScaleChanged();
-        },
-    };
+const xdg_wm_base_listener WaylandPlatform::kWmBase = {
+    .ping = [](void*, xdg_wm_base* base, uint32_t serial) { xdg_wm_base_pong(base, serial); },
+};
 
-    static constexpr wl_surface_listener kSurface = {
-        .enter = [](void* data, wl_surface*, wl_output* output) {
-            WaylandPlatform& p = self(data);
-            for (Output& o : p.outputs_)
-                if (o.output == output) o.entered = true;
-            p.outputScaleChanged();
-            p.events_.push_back({.type = EventType::MetricsChanged});  // (its refresh rate)
-        },
-        .leave = [](void* data, wl_surface*, wl_output* output) {
-            WaylandPlatform& p = self(data);
-            for (Output& o : p.outputs_)
-                if (o.output == output) o.entered = false;
-            p.outputScaleChanged();
-        },
-        .preferred_buffer_scale = [](void* data, wl_surface*, int32_t scale) {
-            WaylandPlatform& p = self(data);
-            if (scale != p.bufferScale_) {
-                p.bufferScale_ = scale;
-                if (p.scale120_ == 0) p.scaleChanged();
-            }
-        },
-        .preferred_buffer_transform = [](void*, wl_surface*, uint32_t) {},
-    };
+const wl_output_listener WaylandPlatform::kOutput = {
+    .geometry = [](void*, wl_output*, int32_t, int32_t, int32_t, int32_t, int32_t, const char*, const char*, int32_t) {},
+    .mode = [](void* data, wl_output* output, uint32_t flags, int32_t, int32_t, int32_t refresh) {
+        if (!(flags & WL_OUTPUT_MODE_CURRENT)) return;
+        for (Output& o : self(data).outputs_)
+            if (o.output == output) o.refreshMhz = refresh;
+    },
+    .done = [](void*, wl_output*) {},
+    .scale = [](void* data, wl_output* output, int32_t scale) {
+        WaylandPlatform& p = self(data);
+        for (Output& o : p.outputs_)
+            if (o.output == output) o.scale = scale;
+        p.outputScaleChanged();
+    },
+};
 
-    static constexpr wp_fractional_scale_v1_listener kFractional = {
-        .preferred_scale = [](void* data, wp_fractional_scale_v1*, uint32_t scale) {
-            WaylandPlatform& p = self(data);
-            if (int(scale) != p.scale120_) {
-                p.scale120_ = int(scale);
-                p.scaleChanged();
-            }
-        },
-    };
+const wl_surface_listener WaylandPlatform::kSurface = {
+    .enter = [](void* data, wl_surface*, wl_output* output) {
+        WaylandPlatform& p = self(data);
+        for (Output& o : p.outputs_)
+            if (o.output == output) o.entered = true;
+        p.outputScaleChanged();
+        p.events_.push_back({.type = EventType::MetricsChanged});  // (its refresh rate)
+    },
+    .leave = [](void* data, wl_surface*, wl_output* output) {
+        WaylandPlatform& p = self(data);
+        for (Output& o : p.outputs_)
+            if (o.output == output) o.entered = false;
+        p.outputScaleChanged();
+    },
+    .preferred_buffer_scale = [](void* data, wl_surface*, int32_t scale) {
+        WaylandPlatform& p = self(data);
+        if (scale != p.bufferScale_) {
+            p.bufferScale_ = scale;
+            if (p.scale120_ == 0) p.scaleChanged();
+        }
+    },
+    .preferred_buffer_transform = [](void*, wl_surface*, uint32_t) {},
+};
 
-    static constexpr xdg_surface_listener kXdgSurface = {
-        .configure = [](void* data, xdg_surface* surface, uint32_t serial) {
-            WaylandPlatform& p = self(data);
-            xdg_surface_ack_configure(surface, serial);
-            bool resized = false;
-            if (p.pendingWidth_ > 0 && p.pendingHeight_ > 0 && (p.pendingWidth_ != p.width_ || p.pendingHeight_ != p.height_)) {
-                p.width_ = p.pendingWidth_, p.height_ = p.pendingHeight_;
-                resized = true;
-            }
-            if (resized && p.configured_) {
-                p.applySize();
-                p.events_.push_back({.type = EventType::Resized});
-            }
-            if (!p.configured_) {
-                p.configured_ = true;
-                p.events_.push_back({.type = EventType::Shown});
-                p.events_.push_back({.type = EventType::Resized});
-            }
-        },
-    };
+const wp_fractional_scale_v1_listener WaylandPlatform::kFractional = {
+    .preferred_scale = [](void* data, wp_fractional_scale_v1*, uint32_t scale) {
+        WaylandPlatform& p = self(data);
+        if (int(scale) != p.scale120_) {
+            p.scale120_ = int(scale);
+            p.scaleChanged();
+        }
+    },
+};
 
-    static constexpr xdg_toplevel_listener kToplevel = {
-        .configure = [](void* data, xdg_toplevel*, int32_t width, int32_t height, wl_array*) {
-            WaylandPlatform& p = self(data);
-            p.pendingWidth_ = width, p.pendingHeight_ = height;  // (0: the app's own size)
-        },
-        .close = [](void* data, xdg_toplevel*) { self(data).events_.push_back({.type = EventType::Quit}); },
-    };
+const xdg_surface_listener WaylandPlatform::kXdgSurface = {
+    .configure = [](void* data, xdg_surface* surface, uint32_t serial) {
+        WaylandPlatform& p = self(data);
+        xdg_surface_ack_configure(surface, serial);
+        bool resized = false;
+        if (p.pendingWidth_ > 0 && p.pendingHeight_ > 0 && (p.pendingWidth_ != p.width_ || p.pendingHeight_ != p.height_)) {
+            p.width_ = p.pendingWidth_, p.height_ = p.pendingHeight_;
+            resized = true;
+        }
+        if (resized && p.configured_) {
+            p.applySize();
+            p.events_.push_back({.type = EventType::Resized});
+        }
+        if (!p.configured_) {
+            p.configured_ = true;
+            p.events_.push_back({.type = EventType::Shown});
+            p.events_.push_back({.type = EventType::Resized});
+        }
+    },
+};
 
-    static constexpr wl_callback_listener kFrameCallback = {
-        .done = [](void* data, wl_callback* callback, uint32_t) {
-            WaylandPlatform& p = self(data);
-            wl_callback_destroy(callback);
-            p.frameCallback_ = nullptr;
-            p.awaitingCallback_ = false;
-            p.callbackDone_ = true;
-        },
-    };
+const xdg_toplevel_listener WaylandPlatform::kToplevel = {
+    .configure = [](void* data, xdg_toplevel*, int32_t width, int32_t height, wl_array*) {
+        WaylandPlatform& p = self(data);
+        p.pendingWidth_ = width, p.pendingHeight_ = height;  // (0: the app's own size)
+    },
+    .close = [](void* data, xdg_toplevel*) { self(data).events_.push_back({.type = EventType::Quit}); },
+};
 
-    static constexpr wl_pointer_listener kPointer = {
-        .enter = [](void* data, wl_pointer*, uint32_t serial, wl_surface*, wl_fixed_t x, wl_fixed_t y) {
-            WaylandPlatform& p = self(data);
-            p.pointerSerial_ = serial;
-            p.pointerX_ = wl_fixed_to_double(x), p.pointerY_ = wl_fixed_to_double(y);
-            p.showCursor();
-            p.events_.push_back(p.at(EventType::MouseMove, p.pointerX_, p.pointerY_));
-        },
-        .leave = [](void* data, wl_pointer*, uint32_t, wl_surface*) { self(data).events_.push_back({.type = EventType::PointerLeft}); },
-        .motion = [](void* data, wl_pointer*, uint32_t, wl_fixed_t x, wl_fixed_t y) {
-            WaylandPlatform& p = self(data);
-            p.pointerX_ = wl_fixed_to_double(x), p.pointerY_ = wl_fixed_to_double(y);
-            p.events_.push_back(p.at(EventType::MouseMove, p.pointerX_, p.pointerY_));
-        },
-        .button = [](void* data, wl_pointer*, uint32_t serial, uint32_t, uint32_t button, uint32_t state) {
-            WaylandPlatform& p = self(data);
-            p.lastSerial_ = serial;
-            Event e = p.at(state == WL_POINTER_BUTTON_STATE_PRESSED ? EventType::MouseDown : EventType::MouseUp, p.pointerX_, p.pointerY_);
-            switch (button) {  // (linux/input-event-codes.h's BTN_LEFT...)
-            case 0x110: e.button = MouseButton::Left; break;
-            case 0x111: e.button = MouseButton::Right; break;
-            case 0x112: e.button = MouseButton::Middle; break;
-            case 0x113: e.button = MouseButton::Back; break;
-            case 0x114: e.button = MouseButton::Forward; break;
-            default: return;
-            }
+const wl_callback_listener WaylandPlatform::kFrameCallback = {
+    .done = [](void* data, wl_callback* callback, uint32_t) {
+        WaylandPlatform& p = self(data);
+        wl_callback_destroy(callback);
+        p.frameCallback_ = nullptr;
+        p.awaitingCallback_ = false;
+        p.callbackDone_ = true;
+    },
+};
+
+const wl_pointer_listener WaylandPlatform::kPointer = {
+    .enter = [](void* data, wl_pointer*, uint32_t serial, wl_surface*, wl_fixed_t x, wl_fixed_t y) {
+        WaylandPlatform& p = self(data);
+        p.pointerSerial_ = serial;
+        p.pointerX_ = wl_fixed_to_double(x), p.pointerY_ = wl_fixed_to_double(y);
+        p.showCursor();
+        p.events_.push_back(p.at(EventType::MouseMove, p.pointerX_, p.pointerY_));
+    },
+    .leave = [](void* data, wl_pointer*, uint32_t, wl_surface*) { self(data).events_.push_back({.type = EventType::PointerLeft}); },
+    .motion = [](void* data, wl_pointer*, uint32_t, wl_fixed_t x, wl_fixed_t y) {
+        WaylandPlatform& p = self(data);
+        p.pointerX_ = wl_fixed_to_double(x), p.pointerY_ = wl_fixed_to_double(y);
+        p.events_.push_back(p.at(EventType::MouseMove, p.pointerX_, p.pointerY_));
+    },
+    .button = [](void* data, wl_pointer*, uint32_t serial, uint32_t, uint32_t button, uint32_t state) {
+        WaylandPlatform& p = self(data);
+        p.lastSerial_ = serial;
+        Event e = p.at(state == WL_POINTER_BUTTON_STATE_PRESSED ? EventType::MouseDown : EventType::MouseUp, p.pointerX_, p.pointerY_);
+        switch (button) {  // (linux/input-event-codes.h's BTN_LEFT...)
+        case 0x110: e.button = MouseButton::Left; break;
+        case 0x111: e.button = MouseButton::Right; break;
+        case 0x112: e.button = MouseButton::Middle; break;
+        case 0x113: e.button = MouseButton::Back; break;
+        case 0x114: e.button = MouseButton::Forward; break;
+        default: return;
+        }
+        p.events_.push_back(e);
+    },
+    // The wheel as SDL tells it: a notch is 1 (value120 / 120), a touchpad's scroll a tenth of
+    // its surface units; up and right positive. Gathered until the pointer's frame.
+    .axis = [](void* data, wl_pointer*, uint32_t, uint32_t axis, wl_fixed_t value) {
+        WaylandPlatform& p = self(data);
+        if (p.wheelDiscrete_) return;
+        double v = wl_fixed_to_double(value) / 10;
+        if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL) p.wheelY_ -= v;
+        else p.wheelX_ += v;
+    },
+    .frame = [](void* data, wl_pointer*) {
+        WaylandPlatform& p = self(data);
+        if (p.wheelX_ != 0 || p.wheelY_ != 0) {
+            Event e = p.at(EventType::Wheel, p.pointerX_, p.pointerY_);
+            e.dx = float(p.wheelX_), e.dy = float(p.wheelY_);
             p.events_.push_back(e);
-        },
-        // The wheel as SDL tells it: a notch is 1 (value120 / 120), a touchpad's scroll a tenth of
-        // its surface units; up and right positive. Gathered until the pointer's frame.
-        .axis = [](void* data, wl_pointer*, uint32_t, uint32_t axis, wl_fixed_t value) {
-            WaylandPlatform& p = self(data);
-            if (p.wheelDiscrete_) return;
-            double v = wl_fixed_to_double(value) / 10;
-            if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL) p.wheelY_ -= v;
-            else p.wheelX_ += v;
-        },
-        .frame = [](void* data, wl_pointer*) {
-            WaylandPlatform& p = self(data);
-            if (p.wheelX_ != 0 || p.wheelY_ != 0) {
-                Event e = p.at(EventType::Wheel, p.pointerX_, p.pointerY_);
-                e.dx = float(p.wheelX_), e.dy = float(p.wheelY_);
-                p.events_.push_back(e);
-            }
-            p.wheelX_ = p.wheelY_ = 0;
-            p.wheelDiscrete_ = false;
-        },
-        .axis_source = [](void*, wl_pointer*, uint32_t) {},
-        .axis_stop = [](void*, wl_pointer*, uint32_t, uint32_t) {},
-        .axis_discrete = [](void*, wl_pointer*, uint32_t, int32_t) {},
-        .axis_value120 = [](void* data, wl_pointer*, uint32_t axis, int32_t value) {
-            WaylandPlatform& p = self(data);
-            if (!p.wheelDiscrete_) p.wheelX_ = p.wheelY_ = 0;  // (the notches, not the axis' distance)
-            p.wheelDiscrete_ = true;
-            if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL) p.wheelY_ -= value / 120.0;
-            else p.wheelX_ += value / 120.0;
-        },
-    };
+        }
+        p.wheelX_ = p.wheelY_ = 0;
+        p.wheelDiscrete_ = false;
+    },
+    .axis_source = [](void*, wl_pointer*, uint32_t) {},
+    .axis_stop = [](void*, wl_pointer*, uint32_t, uint32_t) {},
+    .axis_discrete = [](void*, wl_pointer*, uint32_t, int32_t) {},
+    .axis_value120 = [](void* data, wl_pointer*, uint32_t axis, int32_t value) {
+        WaylandPlatform& p = self(data);
+        if (!p.wheelDiscrete_) p.wheelX_ = p.wheelY_ = 0;  // (the notches, not the axis' distance)
+        p.wheelDiscrete_ = true;
+        if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL) p.wheelY_ -= value / 120.0;
+        else p.wheelX_ += value / 120.0;
+    },
+};
 
-    static constexpr wl_keyboard_listener kKeyboard = {
-        .keymap = [](void* data, wl_keyboard*, uint32_t format, int32_t fd, uint32_t size) {
-            WaylandPlatform& p = self(data);
-            if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
-                close(fd);
-                return;
-            }
-            void* map = mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
+const wl_keyboard_listener WaylandPlatform::kKeyboard = {
+    .keymap = [](void* data, wl_keyboard*, uint32_t format, int32_t fd, uint32_t size) {
+        WaylandPlatform& p = self(data);
+        if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
             close(fd);
-            if (map == MAP_FAILED) return;
-            xkb_keymap* keymap = xkb_keymap_new_from_string(p.xkb_, static_cast<const char*>(map), XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
-            munmap(map, size);
-            if (!keymap) return;
-            if (p.xkbState_) xkb_state_unref(p.xkbState_);
-            if (p.keymap_) xkb_keymap_unref(p.keymap_);
-            p.keymap_ = keymap;
-            p.xkbState_ = xkb_state_new(keymap);
-        },
-        .enter = [](void* data, wl_keyboard*, uint32_t serial, wl_surface*, wl_array*) {
-            WaylandPlatform& p = self(data);
-            p.lastSerial_ = serial;
-            p.events_.push_back({.type = EventType::FocusGained});
-        },
-        .leave = [](void* data, wl_keyboard*, uint32_t, wl_surface*) {
-            WaylandPlatform& p = self(data);
-            p.stopRepeat();
-            p.modifiers_ = {};
-            p.events_.push_back({.type = EventType::FocusLost});
-        },
-        .key = [](void* data, wl_keyboard*, uint32_t serial, uint32_t, uint32_t key, uint32_t state) {
-            WaylandPlatform& p = self(data);
-            p.lastSerial_ = serial;
-            uint32_t code = key + 8;  // (evdev's codes are 8 below X's, which xkbcommon takes)
-            bool down = state == WL_KEYBOARD_KEY_STATE_PRESSED;
-            p.key(code, down);
-            if (down) p.startRepeat(code);
-            else if (code == p.repeatKey_) p.stopRepeat();
-        },
-        .modifiers = [](void* data, wl_keyboard*, uint32_t, uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group) {
-            WaylandPlatform& p = self(data);
-            if (!p.xkbState_) return;
-            xkb_state_update_mask(p.xkbState_, depressed, latched, locked, 0, 0, group);
-            auto on = [&](const char* name) { return xkb_state_mod_name_is_active(p.xkbState_, name, XKB_STATE_MODS_EFFECTIVE) > 0; };
-            p.modifiers_ = KeyModifiers{on(XKB_MOD_NAME_SHIFT), on(XKB_MOD_NAME_CTRL) || on(XKB_MOD_NAME_LOGO), on(XKB_MOD_NAME_ALT)};
-        },
-        .repeat_info = [](void* data, wl_keyboard*, int32_t rate, int32_t delay) {
-            WaylandPlatform& p = self(data);
-            p.repeatRate_ = rate, p.repeatDelay_ = delay;
-        },
-    };
+            return;
+        }
+        void* map = mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
+        close(fd);
+        if (map == MAP_FAILED) return;
+        xkb_keymap* keymap = xkb_keymap_new_from_string(p.xkb_, static_cast<const char*>(map), XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
+        munmap(map, size);
+        if (!keymap) return;
+        if (p.xkbState_) xkb_state_unref(p.xkbState_);
+        if (p.keymap_) xkb_keymap_unref(p.keymap_);
+        p.keymap_ = keymap;
+        p.xkbState_ = xkb_state_new(keymap);
+    },
+    .enter = [](void* data, wl_keyboard*, uint32_t serial, wl_surface*, wl_array*) {
+        WaylandPlatform& p = self(data);
+        p.lastSerial_ = serial;
+        p.events_.push_back({.type = EventType::FocusGained});
+    },
+    .leave = [](void* data, wl_keyboard*, uint32_t, wl_surface*) {
+        WaylandPlatform& p = self(data);
+        p.stopRepeat();
+        p.modifiers_ = {};
+        p.events_.push_back({.type = EventType::FocusLost});
+    },
+    .key = [](void* data, wl_keyboard*, uint32_t serial, uint32_t, uint32_t key, uint32_t state) {
+        WaylandPlatform& p = self(data);
+        p.lastSerial_ = serial;
+        uint32_t code = key + 8;  // (evdev's codes are 8 below X's, which xkbcommon takes)
+        bool down = state == WL_KEYBOARD_KEY_STATE_PRESSED;
+        p.key(code, down);
+        if (down) p.startRepeat(code);
+        else if (code == p.repeatKey_) p.stopRepeat();
+    },
+    .modifiers = [](void* data, wl_keyboard*, uint32_t, uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group) {
+        WaylandPlatform& p = self(data);
+        if (!p.xkbState_) return;
+        xkb_state_update_mask(p.xkbState_, depressed, latched, locked, 0, 0, group);
+        auto on = [&](const char* name) { return xkb_state_mod_name_is_active(p.xkbState_, name, XKB_STATE_MODS_EFFECTIVE) > 0; };
+        p.modifiers_ = KeyModifiers{on(XKB_MOD_NAME_SHIFT), on(XKB_MOD_NAME_CTRL) || on(XKB_MOD_NAME_LOGO), on(XKB_MOD_NAME_ALT)};
+    },
+    .repeat_info = [](void* data, wl_keyboard*, int32_t rate, int32_t delay) {
+        WaylandPlatform& p = self(data);
+        p.repeatRate_ = rate, p.repeatDelay_ = delay;
+    },
+};
 
-    static constexpr wl_touch_listener kTouch = {
-        .down = [](void* data, wl_touch*, uint32_t serial, uint32_t, wl_surface*, int32_t id, wl_fixed_t x, wl_fixed_t y) {
-            WaylandPlatform& p = self(data);
-            p.lastSerial_ = serial;
-            p.touches_[id] = {wl_fixed_to_double(x), wl_fixed_to_double(y)};
-            Event e = p.at(EventType::TouchDown, wl_fixed_to_double(x), wl_fixed_to_double(y));
+const wl_touch_listener WaylandPlatform::kTouch = {
+    .down = [](void* data, wl_touch*, uint32_t serial, uint32_t, wl_surface*, int32_t id, wl_fixed_t x, wl_fixed_t y) {
+        WaylandPlatform& p = self(data);
+        p.lastSerial_ = serial;
+        p.touches_[id] = {wl_fixed_to_double(x), wl_fixed_to_double(y)};
+        Event e = p.at(EventType::TouchDown, wl_fixed_to_double(x), wl_fixed_to_double(y));
+        e.pointer = id;
+        p.events_.push_back(e);
+    },
+    .up = [](void* data, wl_touch*, uint32_t, uint32_t, int32_t id) {
+        WaylandPlatform& p = self(data);
+        auto [x, y] = p.touches_[id];
+        p.touches_.erase(id);
+        Event e = p.at(EventType::TouchUp, x, y);
+        e.pointer = id;
+        p.events_.push_back(e);
+    },
+    .motion = [](void* data, wl_touch*, uint32_t, int32_t id, wl_fixed_t x, wl_fixed_t y) {
+        WaylandPlatform& p = self(data);
+        p.touches_[id] = {wl_fixed_to_double(x), wl_fixed_to_double(y)};
+        Event e = p.at(EventType::TouchMove, wl_fixed_to_double(x), wl_fixed_to_double(y));
+        e.pointer = id;
+        p.events_.push_back(e);
+    },
+    .frame = [](void*, wl_touch*) {},
+    .cancel = [](void* data, wl_touch*) {
+        WaylandPlatform& p = self(data);
+        for (auto& [id, xy] : p.touches_) {
+            Event e = p.at(EventType::TouchUp, xy.first, xy.second);
             e.pointer = id;
             p.events_.push_back(e);
-        },
-        .up = [](void* data, wl_touch*, uint32_t, uint32_t, int32_t id) {
-            WaylandPlatform& p = self(data);
-            auto [x, y] = p.touches_[id];
-            p.touches_.erase(id);
-            Event e = p.at(EventType::TouchUp, x, y);
-            e.pointer = id;
-            p.events_.push_back(e);
-        },
-        .motion = [](void* data, wl_touch*, uint32_t, int32_t id, wl_fixed_t x, wl_fixed_t y) {
-            WaylandPlatform& p = self(data);
-            p.touches_[id] = {wl_fixed_to_double(x), wl_fixed_to_double(y)};
-            Event e = p.at(EventType::TouchMove, wl_fixed_to_double(x), wl_fixed_to_double(y));
-            e.pointer = id;
-            p.events_.push_back(e);
-        },
-        .frame = [](void*, wl_touch*) {},
-        .cancel = [](void* data, wl_touch*) {
-            WaylandPlatform& p = self(data);
-            for (auto& [id, xy] : p.touches_) {
-                Event e = p.at(EventType::TouchUp, xy.first, xy.second);
-                e.pointer = id;
-                p.events_.push_back(e);
-            }
-            p.touches_.clear();
-        },
-        .shape = [](void*, wl_touch*, int32_t, wl_fixed_t, wl_fixed_t) {},
-        .orientation = [](void*, wl_touch*, int32_t, wl_fixed_t) {},
-    };
+        }
+        p.touches_.clear();
+    },
+    .shape = [](void*, wl_touch*, int32_t, wl_fixed_t, wl_fixed_t) {},
+    .orientation = [](void*, wl_touch*, int32_t, wl_fixed_t) {},
+};
 
-    // An input method's typing (text-input-v3): the text it commits, at its done.
-    static constexpr zwp_text_input_v3_listener kTextInput = {
-        .enter = [](void* data, zwp_text_input_v3*, wl_surface*) {
-            WaylandPlatform& p = self(data);
-            p.textEntered_ = true;
-            p.tellTextInput();
-        },
-        .leave = [](void* data, zwp_text_input_v3* input, wl_surface*) {
-            WaylandPlatform& p = self(data);
-            p.textEntered_ = false;
-            zwp_text_input_v3_disable(input);
-            zwp_text_input_v3_commit(input);
-        },
-        .preedit_string = [](void*, zwp_text_input_v3*, const char*, int32_t, int32_t) {},
-        .commit_string = [](void* data, zwp_text_input_v3*, const char* text) { self(data).pendingCommit_ = text ? text : ""; },
-        .delete_surrounding_text = [](void*, zwp_text_input_v3*, uint32_t, uint32_t) {},
-        .done = [](void* data, zwp_text_input_v3*, uint32_t) {
-            WaylandPlatform& p = self(data);
-            if (!p.pendingCommit_.empty() && p.textActive_) p.events_.push_back({.type = EventType::Text, .text = std::exchange(p.pendingCommit_, {})});
-            p.pendingCommit_.clear();
-        },
-    };
+// An input method's typing (text-input-v3): the text it commits, at its done.
+const zwp_text_input_v3_listener WaylandPlatform::kTextInput = {
+    .enter = [](void* data, zwp_text_input_v3*, wl_surface*) {
+        WaylandPlatform& p = self(data);
+        p.textEntered_ = true;
+        p.tellTextInput();
+    },
+    .leave = [](void* data, zwp_text_input_v3* input, wl_surface*) {
+        WaylandPlatform& p = self(data);
+        p.textEntered_ = false;
+        zwp_text_input_v3_disable(input);
+        zwp_text_input_v3_commit(input);
+    },
+    .preedit_string = [](void*, zwp_text_input_v3*, const char*, int32_t, int32_t) {},
+    .commit_string = [](void* data, zwp_text_input_v3*, const char* text) { self(data).pendingCommit_ = text ? text : ""; },
+    .delete_surrounding_text = [](void*, zwp_text_input_v3*, uint32_t, uint32_t) {},
+    .done = [](void* data, zwp_text_input_v3*, uint32_t) {
+        WaylandPlatform& p = self(data);
+        if (!p.pendingCommit_.empty() && p.textActive_) p.events_.push_back({.type = EventType::Text, .text = std::exchange(p.pendingCommit_, {})});
+        p.pendingCommit_.clear();
+    },
+};
 
-    static constexpr wl_data_offer_listener kOffer = {
-        .offer = [](void* data, wl_data_offer* offer, const char* type) { self(data).offerTypes_[offer].push_back(type); },
-        .source_actions = [](void*, wl_data_offer*, uint32_t) {},
-        .action = [](void*, wl_data_offer*, uint32_t) {},
-    };
+const wl_data_offer_listener WaylandPlatform::kOffer = {
+    .offer = [](void* data, wl_data_offer* offer, const char* type) { self(data).offerTypes_[offer].push_back(type); },
+    .source_actions = [](void*, wl_data_offer*, uint32_t) {},
+    .action = [](void*, wl_data_offer*, uint32_t) {},
+};
 
-    static constexpr wl_data_device_listener kDataDevice = {
-        .data_offer = [](void* data, wl_data_device*, wl_data_offer* offer) { wl_data_offer_add_listener(offer, &kOffer, data); },
-        .enter = [](void* data, wl_data_device*, uint32_t, wl_surface*, wl_fixed_t, wl_fixed_t, wl_data_offer* offer) {
-            if (offer) self(data).forget(offer);  // (drops: not yet)
-        },
-        .leave = [](void*, wl_data_device*) {},
-        .motion = [](void*, wl_data_device*, uint32_t, wl_fixed_t, wl_fixed_t) {},
-        .drop = [](void*, wl_data_device*) {},
-        .selection = [](void* data, wl_data_device*, wl_data_offer* offer) {
-            WaylandPlatform& p = self(data);
-            if (p.selectionOffer_ && p.selectionOffer_ != offer) p.forget(p.selectionOffer_);
-            p.selectionOffer_ = offer;
-        },
-    };
+const wl_data_device_listener WaylandPlatform::kDataDevice = {
+    .data_offer = [](void* data, wl_data_device*, wl_data_offer* offer) { wl_data_offer_add_listener(offer, &kOffer, data); },
+    .enter = [](void* data, wl_data_device*, uint32_t, wl_surface*, wl_fixed_t, wl_fixed_t, wl_data_offer* offer) {
+        if (offer) self(data).forget(offer);  // (drops: not yet)
+    },
+    .leave = [](void*, wl_data_device*) {},
+    .motion = [](void*, wl_data_device*, uint32_t, wl_fixed_t, wl_fixed_t) {},
+    .drop = [](void*, wl_data_device*) {},
+    .selection = [](void* data, wl_data_device*, wl_data_offer* offer) {
+        WaylandPlatform& p = self(data);
+        if (p.selectionOffer_ && p.selectionOffer_ != offer) p.forget(p.selectionOffer_);
+        p.selectionOffer_ = offer;
+    },
+};
 
-    // Ours on the clipboard: its text written to who asks.
-    static constexpr wl_data_source_listener kSource = {
-        .target = [](void*, wl_data_source*, const char*) {},
-        .send = [](void* data, wl_data_source*, const char*, int32_t fd) {
-            const std::string& text = self(data).clipboard_;
-            for (size_t done = 0; done < text.size();) {
-                ssize_t n = write(fd, text.data() + done, text.size() - done);
-                if (n <= 0) break;
-                done += size_t(n);
-            }
-            close(fd);
-        },
-        .cancelled = [](void* data, wl_data_source* source) {
-            WaylandPlatform& p = self(data);
-            if (p.source_ == source) p.source_ = nullptr;
-            wl_data_source_destroy(source);
-        },
-        .dnd_drop_performed = [](void*, wl_data_source*) {},
-        .dnd_finished = [](void*, wl_data_source*) {},
-        .action = [](void*, wl_data_source*, uint32_t) {},
-    };
+// Ours on the clipboard: its text written to who asks.
+const wl_data_source_listener WaylandPlatform::kSource = {
+    .target = [](void*, wl_data_source*, const char*) {},
+    .send = [](void* data, wl_data_source*, const char*, int32_t fd) {
+        const std::string& text = self(data).clipboard_;
+        for (size_t done = 0; done < text.size();) {
+            ssize_t n = write(fd, text.data() + done, text.size() - done);
+            if (n <= 0) break;
+            done += size_t(n);
+        }
+        close(fd);
+    },
+    .cancelled = [](void* data, wl_data_source* source) {
+        WaylandPlatform& p = self(data);
+        if (p.source_ == source) p.source_ = nullptr;
+        wl_data_source_destroy(source);
+    },
+    .dnd_drop_performed = [](void*, wl_data_source*) {},
+    .dnd_finished = [](void*, wl_data_source*) {},
+    .action = [](void*, wl_data_source*, uint32_t) {},
+};
 
-    static constexpr wl_seat_listener kSeat = {
-        .capabilities = [](void* data, wl_seat* seat, uint32_t caps) {
-            WaylandPlatform& p = self(data);
-            bool changed = false;
-            if ((caps & WL_SEAT_CAPABILITY_POINTER) && !p.pointer_) {
-                p.pointer_ = wl_seat_get_pointer(seat);
-                wl_pointer_add_listener(p.pointer_, &kPointer, &p);
-                changed = true;
-            } else if (!(caps & WL_SEAT_CAPABILITY_POINTER) && p.pointer_) {
-                if (p.cursorDevice_) wp_cursor_shape_device_v1_destroy(std::exchange(p.cursorDevice_, nullptr));
-                wl_pointer_destroy(std::exchange(p.pointer_, nullptr));
-                changed = true;
-            }
-            if ((caps & WL_SEAT_CAPABILITY_KEYBOARD) && !p.keyboard_) {
-                p.keyboard_ = wl_seat_get_keyboard(seat);
-                wl_keyboard_add_listener(p.keyboard_, &kKeyboard, &p);
-                changed = true;
-            } else if (!(caps & WL_SEAT_CAPABILITY_KEYBOARD) && p.keyboard_) {
-                wl_keyboard_destroy(std::exchange(p.keyboard_, nullptr));
-                changed = true;
-            }
-            if ((caps & WL_SEAT_CAPABILITY_TOUCH) && !p.touch_) {
-                p.touch_ = wl_seat_get_touch(seat);
-                wl_touch_add_listener(p.touch_, &kTouch, &p);
-                changed = true;
-            } else if (!(caps & WL_SEAT_CAPABILITY_TOUCH) && p.touch_) {
-                wl_touch_destroy(std::exchange(p.touch_, nullptr));
-                changed = true;
-            }
-            p.attachSeat();
-            if (changed) p.events_.push_back({.type = EventType::DevicesChanged});
-        },
-        .name = [](void*, wl_seat*, const char*) {},
-    };
+const wl_seat_listener WaylandPlatform::kSeat = {
+    .capabilities = [](void* data, wl_seat* seat, uint32_t caps) {
+        WaylandPlatform& p = self(data);
+        bool changed = false;
+        if ((caps & WL_SEAT_CAPABILITY_POINTER) && !p.pointer_) {
+            p.pointer_ = wl_seat_get_pointer(seat);
+            wl_pointer_add_listener(p.pointer_, &kPointer, &p);
+            changed = true;
+        } else if (!(caps & WL_SEAT_CAPABILITY_POINTER) && p.pointer_) {
+            if (p.cursorDevice_) wp_cursor_shape_device_v1_destroy(std::exchange(p.cursorDevice_, nullptr));
+            wl_pointer_destroy(std::exchange(p.pointer_, nullptr));
+            changed = true;
+        }
+        if ((caps & WL_SEAT_CAPABILITY_KEYBOARD) && !p.keyboard_) {
+            p.keyboard_ = wl_seat_get_keyboard(seat);
+            wl_keyboard_add_listener(p.keyboard_, &kKeyboard, &p);
+            changed = true;
+        } else if (!(caps & WL_SEAT_CAPABILITY_KEYBOARD) && p.keyboard_) {
+            wl_keyboard_destroy(std::exchange(p.keyboard_, nullptr));
+            changed = true;
+        }
+        if ((caps & WL_SEAT_CAPABILITY_TOUCH) && !p.touch_) {
+            p.touch_ = wl_seat_get_touch(seat);
+            wl_touch_add_listener(p.touch_, &kTouch, &p);
+            changed = true;
+        } else if (!(caps & WL_SEAT_CAPABILITY_TOUCH) && p.touch_) {
+            wl_touch_destroy(std::exchange(p.touch_, nullptr));
+            changed = true;
+        }
+        p.attachSeat();
+        if (changed) p.events_.push_back({.type = EventType::DevicesChanged});
+    },
+    .name = [](void*, wl_seat*, const char*) {},
+};
 
-    static constexpr wl_registry_listener kRegistry = {
-        .global = [](void* data, wl_registry* registry, uint32_t name, const char* interface, uint32_t version) {
-            WaylandPlatform& p = self(data);
-            std::string_view i(interface);
-            if (i == wl_compositor_interface.name) p.compositor_ = bind<wl_compositor>(registry, name, &wl_compositor_interface, version, 6);
-            else if (i == xdg_wm_base_interface.name) {
-                p.wmBase_ = bind<xdg_wm_base>(registry, name, &xdg_wm_base_interface, version, 3);
-                xdg_wm_base_add_listener(p.wmBase_, &kWmBase, &p);
-            } else if (i == zxdg_decoration_manager_v1_interface.name)
-                p.decorations_ = bind<zxdg_decoration_manager_v1>(registry, name, &zxdg_decoration_manager_v1_interface, version, 1);
-            else if (i == wp_fractional_scale_manager_v1_interface.name)
-                p.fractionalManager_ = bind<wp_fractional_scale_manager_v1>(registry, name, &wp_fractional_scale_manager_v1_interface, version, 1);
-            else if (i == wp_viewporter_interface.name) p.viewporter_ = bind<wp_viewporter>(registry, name, &wp_viewporter_interface, version, 1);
-            else if (i == wp_cursor_shape_manager_v1_interface.name)
-                p.cursorShapes_ = bind<wp_cursor_shape_manager_v1>(registry, name, &wp_cursor_shape_manager_v1_interface, version, 1);
-            else if (i == zwp_text_input_manager_v3_interface.name)
-                p.textInputs_ = bind<zwp_text_input_manager_v3>(registry, name, &zwp_text_input_manager_v3_interface, version, 1);
-            else if (i == wl_data_device_manager_interface.name)
-                p.dataDevices_ = bind<wl_data_device_manager>(registry, name, &wl_data_device_manager_interface, version, 3);
-            else if (i == zwp_idle_inhibit_manager_v1_interface.name)
-                p.idleInhibits_ = bind<zwp_idle_inhibit_manager_v1>(registry, name, &zwp_idle_inhibit_manager_v1_interface, version, 1);
-            else if (i == wl_seat_interface.name && !p.seat_) {
-                p.seat_ = bind<wl_seat>(registry, name, &wl_seat_interface, version, 8);
-                wl_seat_add_listener(p.seat_, &kSeat, &p);
-            } else if (i == wl_output_interface.name) {
-                Output o{.output = bind<wl_output>(registry, name, &wl_output_interface, version, 2), .name = name};
-                p.outputs_.push_back(o);
-                wl_output_add_listener(o.output, &kOutput, &p);
-            }
-            p.attachSeat();
-        },
-        .global_remove = [](void* data, wl_registry*, uint32_t name) {
-            WaylandPlatform& p = self(data);
-            std::erase_if(p.outputs_, [name](Output& o) {
-                if (o.name != name) return false;
-                wl_output_destroy(o.output);
-                return true;
-            });
-        },
-    };
+const wl_registry_listener WaylandPlatform::kRegistry = {
+    .global = [](void* data, wl_registry* registry, uint32_t name, const char* interface, uint32_t version) {
+        WaylandPlatform& p = self(data);
+        std::string_view i(interface);
+        if (i == wl_compositor_interface.name) p.compositor_ = bind<wl_compositor>(registry, name, &wl_compositor_interface, version, 6);
+        else if (i == xdg_wm_base_interface.name) {
+            p.wmBase_ = bind<xdg_wm_base>(registry, name, &xdg_wm_base_interface, version, 3);
+            xdg_wm_base_add_listener(p.wmBase_, &kWmBase, &p);
+        } else if (i == zxdg_decoration_manager_v1_interface.name)
+            p.decorations_ = bind<zxdg_decoration_manager_v1>(registry, name, &zxdg_decoration_manager_v1_interface, version, 1);
+        else if (i == wp_fractional_scale_manager_v1_interface.name)
+            p.fractionalManager_ = bind<wp_fractional_scale_manager_v1>(registry, name, &wp_fractional_scale_manager_v1_interface, version, 1);
+        else if (i == wp_viewporter_interface.name) p.viewporter_ = bind<wp_viewporter>(registry, name, &wp_viewporter_interface, version, 1);
+        else if (i == wp_cursor_shape_manager_v1_interface.name)
+            p.cursorShapes_ = bind<wp_cursor_shape_manager_v1>(registry, name, &wp_cursor_shape_manager_v1_interface, version, 1);
+        else if (i == zwp_text_input_manager_v3_interface.name)
+            p.textInputs_ = bind<zwp_text_input_manager_v3>(registry, name, &zwp_text_input_manager_v3_interface, version, 1);
+        else if (i == wl_data_device_manager_interface.name)
+            p.dataDevices_ = bind<wl_data_device_manager>(registry, name, &wl_data_device_manager_interface, version, 3);
+        else if (i == zwp_idle_inhibit_manager_v1_interface.name)
+            p.idleInhibits_ = bind<zwp_idle_inhibit_manager_v1>(registry, name, &zwp_idle_inhibit_manager_v1_interface, version, 1);
+        else if (i == wl_seat_interface.name && !p.seat_) {
+            p.seat_ = bind<wl_seat>(registry, name, &wl_seat_interface, version, 8);
+            wl_seat_add_listener(p.seat_, &kSeat, &p);
+        } else if (i == wl_output_interface.name) {
+            Output o{.output = bind<wl_output>(registry, name, &wl_output_interface, version, 2), .name = name};
+            p.outputs_.push_back(o);
+            wl_output_add_listener(o.output, &kOutput, &p);
+        }
+        p.attachSeat();
+    },
+    .global_remove = [](void* data, wl_registry*, uint32_t name) {
+        WaylandPlatform& p = self(data);
+        std::erase_if(p.outputs_, [name](Output& o) {
+            if (o.name != name) return false;
+            wl_output_destroy(o.output);
+            return true;
+        });
+    },
 };
 
 } // namespace
