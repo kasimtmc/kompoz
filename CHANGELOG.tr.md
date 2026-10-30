@@ -442,7 +442,9 @@
   katmanının hedefi `kompoz::app`, seçeneği `KOMPOZ_BUILD_APP` (`kompoz::sdl3` ve `KOMPOZ_BUILD_SDL3` kalktı:
   `kompoz::app`'e bağlayın); `KOMPOZ_PLATFORM=sdl` kalktı; ne `scripts/fetch-deps.sh`, ne vcpkg port'u, ne Conan
   reçetesi, ne de Homebrew SDL3 istiyor, lisansı da artık bir uygulamanın lisansları arasında değil. Linux'ta derlemek
-  için Wayland ile xkbcommon'ın ya da X11'in başlıkları gerekiyor.
+  için Wayland ile xkbcommon'ın ya da X11'in başlıkları gerekiyor. Dokunmatik yüzeyde iki parmağın dönmesi artık
+  Wayland'de, X11'de ve macOS'ta `transformable`'ın tuttuğunu döndürüyor (hareketin açısı `ComposeHost::zoom`'a
+  ulaşıyor; SDL'in sıkıştırma olayı bunu hiç taşımıyordu).
 - **Bir yolun gölgesi önceden sahip olduğu maskeden çiziliyor** (Compose'un bir `dropShadow`'un ya da
   `innerShadow`'un bulanık bitmap'ini tutması gibi): GPU renderer'ı yuvarlak köşeli dikdörtgen olmayan bir şeklin
   (kalp, yıldız, kurabiye) gölgesini her seferinde baştan, her biri iki geçişli bir katman ve bir bulanıklıkla

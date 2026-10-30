@@ -1317,18 +1317,20 @@ const wl_data_source_listener WaylandPlatform::kSource = {
 };
 
 // A touchpad pinch (pointer-gestures), about the pointer: each step as the change since the
-// last (Wayland tells the scale since the pinch began).
+// last (Wayland tells the scale since the pinch began, the rotation since the last), the
+// fingers' turning too.
 const zwp_pointer_gesture_pinch_v1_listener WaylandPlatform::kPinch = {
     .begin = [](void* data, zwp_pointer_gesture_pinch_v1*, uint32_t, uint32_t, wl_surface*, uint32_t) {
         WaylandPlatform& p = self(data);
         p.pinchScale_ = 1;
         p.events_.push_back(p.at(EventType::PinchBegin, p.pointerX_, p.pointerY_));
     },
-    .update = [](void* data, zwp_pointer_gesture_pinch_v1*, uint32_t, wl_fixed_t, wl_fixed_t, wl_fixed_t scale, wl_fixed_t) {
+    .update = [](void* data, zwp_pointer_gesture_pinch_v1*, uint32_t, wl_fixed_t, wl_fixed_t, wl_fixed_t scale, wl_fixed_t rotation) {
         WaylandPlatform& p = self(data);
         double s = wl_fixed_to_double(scale);
         Event e = p.at(EventType::Pinch, p.pointerX_, p.pointerY_);
         e.scale = float(s / std::max(p.pinchScale_, 1e-3));
+        e.rotation = float(wl_fixed_to_double(rotation));  // (clockwise, since the last)
         p.pinchScale_ = s;
         p.events_.push_back(e);
     },

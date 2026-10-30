@@ -418,7 +418,9 @@
   code, the build, the packages and CI. The platform layer's target is `kompoz::app` and its option `KOMPOZ_BUILD_APP`
   (`kompoz::sdl3` and `KOMPOZ_BUILD_SDL3` are gone: link `kompoz::app`); `KOMPOZ_PLATFORM=sdl` is gone; neither
   `scripts/fetch-deps.sh`, the vcpkg port, the Conan recipe nor Homebrew needs SDL3, and its license is no longer
-  among an app's. On Linux the build needs Wayland's and xkbcommon's headers or X11's.
+  among an app's. On Linux the build needs Wayland's and xkbcommon's headers or X11's. A touchpad's two fingers
+  turning now turn what `transformable` holds on Wayland, X11 and macOS (the gesture's rotation reaches
+  `ComposeHost::zoom`, which SDL's pinch never carried).
 - **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
   blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
   scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and

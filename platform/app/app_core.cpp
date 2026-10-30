@@ -885,7 +885,7 @@ void handleEvent(App& app, const platform::Event& e) {
         if (e.modifiers.ctrl && host.zoom(at, std::pow(1.1f, e.dy))) break;
         host.scroll(at, e.dy, e.dx);
         break;
-    case EventType::Pinch: host.zoom(at, e.scale); break;
+    case EventType::Pinch: host.zoom(at, e.scale, e.rotation); break;
     case EventType::Text: host.textInput(e.text); break;
     case EventType::Back:
         if (!host.keyDown(Key::Escape)) app.platform.leaveApp();  // as usual (Android leaves the app)

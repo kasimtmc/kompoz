@@ -583,6 +583,15 @@ using kompoz::platform::MouseButton;
         platform->push({.type = EventType::Pinch, .x = float(p.x), .y = float(p.y), .scale = float(1 + e.magnification)});
 }
 
+// A trackpad's two fingers turning: the turn since the last (AppKit's is counterclockwise).
+- (void)rotateWithEvent:(NSEvent*)e {
+    if (!platform) return;
+    NSPoint p = [self convertPoint:[self.window mouseLocationOutsideOfEventStream] fromView:nil];
+    Event out{.type = EventType::Pinch, .x = float(p.x), .y = float(p.y)};
+    out.rotation = -e.rotation;
+    platform->push(out);
+}
+
 // ---- The keyboard and typing ----
 
 - (void)keyDown:(NSEvent*)e {

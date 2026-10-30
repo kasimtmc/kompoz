@@ -574,6 +574,7 @@ private:
             } else if (type == XI_GesturePinchUpdate) {  // (the scale since the pinch began: each step the change since the last)
                 Event e = at(EventType::Pinch, g->event_x, g->event_y, g->mods);
                 e.scale = float(g->scale / std::max(pinchScale_, 1e-3));
+                e.rotation = float(g->delta_angle);  // (clockwise, since the last)
                 pinchScale_ = g->scale;
                 events_.push_back(e);
             }

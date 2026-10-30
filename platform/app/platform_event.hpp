@@ -24,7 +24,7 @@ enum class EventType {
     PointerLeft,                  // the mouse left the window
     MouseMove, MouseDown, MouseUp,
     Wheel,                        // dx, dy: notches (as the user turns them: flipped back if the system flips)
-    PinchBegin, Pinch,            // a touchpad's: `scale` since the last, around (x, y)
+    PinchBegin, Pinch,            // a touchpad's: `scale` and `rotation` since the last, around (x, y)
     TouchDown, TouchMove, TouchUp,  // a finger on the screen (`pointer` its id)
     KeyDown, KeyUp,
     Text,                         // text typed (`text`)
@@ -45,6 +45,7 @@ struct Event {
     float x = 0, y = 0;
     float dx = 0, dy = 0;  // Wheel
     float scale = 1;       // Pinch
+    float rotation = 0;    // Pinch: degrees clockwise
     int64_t pointer = 0;   // a finger's
     MouseButton button = MouseButton::Left;
     Key key = Key::Unknown;
