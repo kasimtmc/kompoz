@@ -566,6 +566,7 @@ Kompoz [Apache Lisansı 2.0](LICENSE) ile lisanslıdır; bkz. [NOTICE](NOTICE). 
 Utilities'in (ikisi de Apache 2.0) davranışını ve API'sini, kaynaklarını içermeden izler.
 
 Kompoz'la yapılan uygulamalar paketlenen Noto Sans fontlarını (SIL Open Font License 1.1) ve kaynaktan derlenen
-sürümlerde (Android, iOS, Windows, web) SDL'i (zlib), FreeType'ı (FreeType Lisansı) ve HarfBuzz'ı (MIT) taşır. Lisans
-metinleri [assets/licenses](assets/licenses) içinde; bu klasör her uygulamanın yanına öteki varlıklarıyla kopyalanır,
-uygulamayı dağıtırken onu da koruyun.
+sürümlerde (Android, iOS, Windows, web) FreeType'ı (FreeType Lisansı), HarfBuzz'ı (MIT), libpng'yi (PNG Reference
+Library License sürüm 2) ve zlib'i (zlib Lisansı), Android dışında SDL'i de (zlib Lisansı) taşır. Lisans metinleri
+[assets/licenses](assets/licenses) içinde; bu klasör her uygulamanın yanına öteki varlıklarıyla kopyalanır, uygulamayı
+dağıtırken onu da koruyun.

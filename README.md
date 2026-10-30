@@ -570,6 +570,7 @@ Kompoz is licensed under the [Apache License, Version 2.0](LICENSE); see [NOTICE
 and API of Jetpack Compose and Material Color Utilities (both Apache 2.0) without including their sources.
 
 Apps built with Kompoz ship the bundled Noto Sans fonts (SIL Open Font License 1.1) and, in the vendored builds
-(Android, iOS, Windows, the web), SDL (zlib), FreeType (FreeType License) and HarfBuzz (MIT). Their license texts are
-in [assets/licenses](assets/licenses), which is copied next to every app with its other assets; keep it when you
-ship one.
+(Android, iOS, Windows, the web), FreeType (FreeType License), HarfBuzz (MIT), libpng (PNG Reference Library License
+version 2) and zlib (zlib License), and SDL (zlib License) but on Android. Their license texts are in
+[assets/licenses](assets/licenses), which is copied next to every app with its other assets; keep it when you ship
+one.

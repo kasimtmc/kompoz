@@ -375,22 +375,23 @@
   Conan'ın libpng'si, yoksa zlib'le birlikte `third_party/`'den derlenen: `scripts/fetch-deps.sh`); dosyanın gaması ve
   renk alanı Android'in ve tarayıcıların yaptığı gibi hesaba katılıyor, gaması hakkında bir şey söylemeyen 16 bitlik
   bir dosya sRGB olarak okunuyor. BMP'yi Kompoz kendisi okuyor (piksel başına 1'den 32 bite, sıkıştırmasız ya da bit
-  alanlarıyla). Masaüstlerinde `KOMPOZ_HEADLESS=1` bir uygulamayı SDL'in ekransız sürücüsü (`SDL_VIDEODRIVER=offscreen`)
-  yerine Kompoz'un kendi ekransız platformunda çalıştırıyor: penceresi yalnızca bir boyut, hemen gösterilmiş ve odaklı;
-  işaretçisi, klavyesi, mikrofonu yok; masaüstünün vurgu rengini de duvar kâğıdınınkini de okumuyor; döngüsü ve
-  zamanlayıcıları Kompoz'un. GPU aygıtı pencere olmadan kuruluyor: Vulkan sistemin yükleyicisinden, OpenGL ES 3 EGL
-  üzerinden (Mesa'nın yüzeysiz platformu; Windows'ta ANGLE'ınki). GPU testleri aygıtlarını aynı yolla, web'de WebGL 2
-  bağlamlarını doğrudan Emscripten'den alıyor; SDL'siz. **Android artık SDL kullanmıyor**: bir uygulamanın etkinliği
-  Kompoz'un kendi `dev.kompoz.KompozActivity`'sini genişletiyor; Kompoz onun `KompozView`'una (bir `SurfaceView`)
-  `ANativeWindow`'u üzerindeki bir Vulkan yüzeyi ya da EGL pencere yüzeyiyle çiziyor. Uygulama, Compose'daki gibi
-  etkinliğin UI iş parçacığında çalışıyor; kareleri ekranın Choreographer'ından geliyor (vsync zamanı karenin zamanı),
-  dokunmaları, faresi, tuşları ve yaşam döngüsü görünümden ve etkinlikten. Başka iş parçacıklarından gelen işler UI iş
-  parçacığının looper'ını uyandırıyor (bir eventfd), coroutine gecikmeleri de (bir timerfd); her vuruştan kalan zaman bir
-  tembel listenin sıradaki öğelerini önceden kompoze ediyor. Uygulamanın statik durumu süreç başına tek uygulama için:
-  bir uygulamayı çalıştırmış bir süreçte yeniden oluşturulan etkinlik süreci bitiriyor ve sistem uygulamayı yeniden
-  başlatıyor, SDL'inkinin yaptığı gibi. Bir Xiaomi 14 Ultra'da (120 Hz) ve bir Redmi Note 9 Pro'da (60 Hz) SDL'li yapıyla
-  karşılaştırıldığında elle kaydırırken ve fırlatmalarda aynı sayıda yenileme kaçırılıyor; SDL'in Android tarafı için
-  tuttuğumuz üç yama da onunla birlikte gitti, vitrinin alt satırı da artık SDL3 demiyor.
+  alanlarıyla); libpng'nin ve zlib'in lisansları da ötekilerle birlikte `assets/licenses`'ta. Masaüstlerinde
+  `KOMPOZ_HEADLESS=1` bir uygulamayı SDL'in ekransız sürücüsü (`SDL_VIDEODRIVER=offscreen`) yerine Kompoz'un kendi
+  ekransız platformunda çalıştırıyor: penceresi yalnızca bir boyut, hemen gösterilmiş ve odaklı; işaretçisi, klavyesi,
+  mikrofonu yok; masaüstünün vurgu rengini de duvar kâğıdınınkini de okumuyor; döngüsü ve zamanlayıcıları Kompoz'un.
+  GPU aygıtı pencere olmadan kuruluyor: Vulkan sistemin yükleyicisinden, OpenGL ES 3 EGL üzerinden (Mesa'nın yüzeysiz
+  platformu; Windows'ta ANGLE'ınki). GPU testleri aygıtlarını aynı yolla, web'de WebGL 2 bağlamlarını doğrudan
+  Emscripten'den alıyor; SDL'siz. **Android artık SDL kullanmıyor**: bir uygulamanın etkinliği Kompoz'un kendi
+  `dev.kompoz.KompozActivity`'sini genişletiyor; Kompoz onun `KompozView`'una (bir `SurfaceView`) `ANativeWindow`'u
+  üzerindeki bir Vulkan yüzeyi ya da EGL pencere yüzeyiyle çiziyor. Uygulama, Compose'daki gibi etkinliğin UI iş
+  parçacığında çalışıyor; kareleri ekranın Choreographer'ından geliyor (vsync zamanı karenin zamanı), dokunmaları,
+  faresi, tuşları ve yaşam döngüsü görünümden ve etkinlikten. Başka iş parçacıklarından gelen işler UI iş parçacığının
+  looper'ını uyandırıyor (bir eventfd), coroutine gecikmeleri de (bir timerfd); her vuruştan kalan zaman bir tembel
+  listenin sıradaki öğelerini önceden kompoze ediyor. Uygulamanın statik durumu süreç başına tek uygulama için: bir
+  uygulamayı çalıştırmış bir süreçte yeniden oluşturulan etkinlik süreci bitiriyor ve sistem uygulamayı yeniden
+  başlatıyor, SDL'inkinin yaptığı gibi. Bir Xiaomi 14 Ultra'da (120 Hz) ve bir Redmi Note 9 Pro'da (60 Hz) SDL'li
+  yapıyla karşılaştırıldığında elle kaydırırken ve fırlatmalarda aynı sayıda yenileme kaçırılıyor; SDL'in Android
+  tarafı için tuttuğumuz üç yama da onunla birlikte gitti, vitrinin alt satırı da artık SDL3 demiyor.
 - **Bir yolun gölgesi önceden sahip olduğu maskeden çiziliyor** (Compose'un bir `dropShadow`'un ya da
   `innerShadow`'un bulanık bitmap'ini tutması gibi): GPU renderer'ı yuvarlak köşeli dikdörtgen olmayan bir şeklin
   (kalp, yıldız, kurabiye) gölgesini her seferinde baştan, her biri iki geçişli bir katman ve bir bulanıklıkla
