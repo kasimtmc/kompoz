@@ -88,5 +88,6 @@ std::optional<Color> DesktopAccent::accent() const {
 }
 
 std::optional<bool> DesktopAccent::darkScheme() const { return std::nullopt; }
+std::optional<std::string> DesktopAccent::buttonLayout() const { return std::nullopt; }
 
 } // namespace kompoz::platform

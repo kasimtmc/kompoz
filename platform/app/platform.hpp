@@ -19,6 +19,24 @@
 
 namespace kompoz::platform {
 
+enum class WindowButton { Minimize, Maximize, Close };
+
+// The title bar Kompoz draws above the app where the platform leaves the window undecorated
+// (Wayland without the compositor's decorations, as on GNOME): its buttons on each side, in
+// order, those the window manager has (the desktop's layout: GNOME's has only Close).
+struct TitleBar {
+    std::vector<WindowButton> start, end;
+    bool maximized = false;
+    bool operator==(const TitleBar&) const = default;
+};
+
+// What the title bar asks of the window.
+enum class WindowAction {
+    Move,            // dragged by the pointer or finger last pressed on it
+    Minimize, ToggleMaximize, Close,
+    Menu,            // the window manager's menu, at (x, y)
+};
+
 // The window's measures, as the app lays out and draws by them.
 struct Metrics {
     int pixelWidth = 1, pixelHeight = 1;  // the drawable's
@@ -32,6 +50,7 @@ struct Metrics {
     std::optional<Rect> safeArea;
     bool darkTheme = false;  // the system's
     std::string language;    // the preferred one ("tr", "en")
+    std::optional<TitleBar> titleBar;  // drawn by Kompoz at the top of the window; none: the system's, or none at all
 };
 
 class Platform {
@@ -54,6 +73,8 @@ public:
     virtual Metrics metrics() const = 0;
     virtual void pixelSize(int* width, int* height) const = 0;  // the drawable's, as metrics() has it (cheaper: each frame)
     virtual void setWindowSize(int width, int height) = 0;  // in points
+    // What Kompoz's title bar asks (Metrics::titleBar); (x, y): where, in points.
+    virtual void windowAction(WindowAction action, float x, float y) { (void)action, (void)x, (void)y; }
     // The pointer and the keyboard; with `probe` (after the first frame: what tells may take a
     // few tens of milliseconds to start) a microphone and a camera looked for too, kept after.
     virtual MediaInfo media(bool probe) = 0;

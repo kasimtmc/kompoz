@@ -121,7 +121,7 @@ On the desktop the command line can carry a deep link that the app opens with, s
 
 ### Linux
 
-The build above is all it takes. Dark mode and the desktop's accent color come from the XDG desktop portal and follow it as it changes: `isSystemInDarkTheme()` and `dynamicLightColorScheme()` see them. The wallpaper is read from the desktop's settings (KDE Plasma, GNOME, Cinnamon, MATE, Xfce) for `wallpaperLightColorScheme()`.
+The build above is all it takes. Dark mode and the desktop's accent color come from the XDG desktop portal and follow it as it changes: `isSystemInDarkTheme()` and `dynamicLightColorScheme()` see them. The wallpaper is read from the desktop's settings (KDE Plasma, GNOME, Cinnamon, MATE, Xfce) for `wallpaperLightColorScheme()`. In a Wayland session the compositor decorates the window where it does (KDE Plasma, Sway); where it doesn't (GNOME), Kompoz draws the title bar itself, in the system's colors and with the buttons the desktop lays out, and shadows around the window that resize it.
 
 ### Windows
 

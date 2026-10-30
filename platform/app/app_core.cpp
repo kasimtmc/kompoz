@@ -2,6 +2,7 @@
 // through Platform; nothing here knows which one it is on.
 
 #include "app_core.hpp"
+#include "title_bar.hpp"
 
 #include <kompoz/display_list.hpp>
 #include <kompoz/host.hpp>
@@ -76,6 +77,7 @@ struct AppState {
     float pixelScale() const { return gpuCanvas->scale; }
     std::unique_ptr<ComposeHost> host;
     float scale = 1, pointToDp = 1;
+    MutableState<std::optional<TitleBar>> titleBar{std::nullopt};  // Kompoz's, as the platform says (Metrics::titleBar)
     bool quit = false;
     Script script;
     int64_t clockOffset = 0;  // added to the platform's clock after a script whose virtual time got ahead of it
@@ -197,6 +199,7 @@ void updateMetrics(App& app) {
         app.host->setWindowInsets({safe.x * k, safe.y * k, (float(m.pointWidth) - safe.x - safe.width) * k, (float(m.pointHeight) - safe.y - safe.height) * k});
     }
     app.host->setSystemDarkTheme(m.darkTheme);
+    app.titleBar.set(m.titleBar);
     // The preferred language: right to left when it is written so (KOMPOZ_LAYOUT_DIRECTION=rtl|ltr
     // decides instead), and the library's texts in it (KOMPOZ_LANGUAGE=tr|en decides instead).
     std::string language = m.language;
@@ -1015,9 +1018,13 @@ bool AppCore::start(int argc, char** argv) {
     app.display->keepNodes(true);  // (nodes that didn't change aren't drawn again)
     app.bitmaps = std::make_unique<AppBitmaps>(app);
     kompoz::detail::setBitmapRenderer(app.bitmaps.get());
-    app.host = std::make_unique<kompoz::ComposeHost>(*app.fonts, app.config.content);
-
     App* raw = &app;
+    app.host = std::make_unique<kompoz::ComposeHost>(*app.fonts, [raw] {
+        WindowFrame(raw->titleBar.get(), raw->config.title,
+                    [raw](WindowAction action, Offset at) { raw->platform.windowAction(action, at.x / raw->pointToDp, at.y / raw->pointToDp); },
+                    raw->config.content);
+    });
+
     ComposeHost::Callbacks callbacks{
         .loadImage = [](std::string_view path) { return loadImageFile(path); },
         .loadImageAsync = [](const std::string& model, kompoz::ImageRequestSize size, std::function<void(kompoz::ImageBitmap)> done) {

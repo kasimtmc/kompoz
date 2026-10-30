@@ -52,8 +52,10 @@
 #include <ctime>
 #include <deque>
 #include <initializer_list>
+#include <list>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -154,6 +156,7 @@ public:
         destroy(pointer_), destroy(keyboard_), destroy(touch_), destroy(seat_);
         for (Output& o : outputs_) destroy(o.output);
         destroy(compositor_), destroy(wmBase_), destroy(decorations_), destroy(fractionalManager_), destroy(viewporter_);
+        destroy(shm_), destroy(subcompositor_);
         destroy(cursorShapes_), destroy(textInputs_), destroy(dataDevices_), destroy(idleInhibits_), destroy(registry_);
         if (xkbState_) xkb_state_unref(xkbState_);
         if (keymap_) xkb_keymap_unref(keymap_);
@@ -171,7 +174,7 @@ public:
         registry_ = wl_display_get_registry(display_);
         wl_registry_add_listener(registry_, &kRegistry, this);
         wl_display_roundtrip(display_);  // the globals
-        if (!compositor_ || !wmBase_ || !decorations_) return false;  // (no decorations: until Kompoz draws its own title bar)
+        if (!compositor_ || !wmBase_ || !shm_ || !subcompositor_) return false;
         wl_display_roundtrip(display_);  // the seat's capabilities, the outputs
         xkb_ = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
         wakeFd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
@@ -250,12 +253,21 @@ public:
         xdg_toplevel_add_listener(toplevel_, &kToplevel, this);
         xdg_toplevel_set_title(toplevel_, app.title.c_str());
         xdg_toplevel_set_app_id(toplevel_, "dev.kompoz.app");
-        decoration_ = zxdg_decoration_manager_v1_get_toplevel_decoration(decorations_, toplevel_);
-        zxdg_toplevel_decoration_v1_set_mode(decoration_, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+        // The compositor's decorations where it has them (unless KOMPOZ_DECORATIONS=kompoz), else
+        // Kompoz's own: as the decoration's configure says.
+        if (decorations_) {
+            decoration_ = zxdg_decoration_manager_v1_get_toplevel_decoration(decorations_, toplevel_);
+            zxdg_toplevel_decoration_v1_add_listener(decoration_, &kDecoration, this);
+            bool own = option("KOMPOZ_DECORATIONS") == "kompoz";
+            zxdg_toplevel_decoration_v1_set_mode(decoration_, own ? ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE : ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+        } else {
+            ownDecorations_ = true;
+        }
         wl_surface_commit(surface_);
         while (!configured_)  // (the first configure, acknowledged before anything is drawn)
             if (wl_display_roundtrip(display_) < 0) return failed("the compositor didn't configure the window");
         applySize();
+        updateEdges();
         surface.drawableSize = [this](int* w, int* h) { *w = pixelWidth(), *h = pixelHeight(); };
         switch (backend) {
 #ifdef KOMPOZ_GPU_VULKAN
@@ -294,6 +306,12 @@ public:
         auto destroy = [](auto*& proxy) {
             if (proxy) wl_proxy_destroy(reinterpret_cast<wl_proxy*>(std::exchange(proxy, nullptr)));
         };
+        for (Edge& e : edges_) {
+            destroy(e.subsurface), destroy(e.surface);
+            e = {};
+        }
+        for (ShmBuffer& b : shmBuffers_) wl_buffer_destroy(b.buffer);
+        shmBuffers_.clear();
         destroy(frameCallback_), destroy(inhibitor_), destroy(decoration_), destroy(viewport_), destroy(fractional_), destroy(toplevel_), destroy(xdgSurface_);
         destroy(surface_);
         configured_ = false, awaitingCallback_ = false;
@@ -318,6 +336,7 @@ public:
         m.darkTheme = accent_ && accent_->darkScheme().value_or(false);
 #endif
         m.language = preferredLanguage();
+        if (ownDecorations_ && !state_.fullscreen) m.titleBar = titleBar();
         return m;
     }
     void metricsUpdated(ComposeHost&) override {
@@ -329,7 +348,28 @@ public:
     void setWindowSize(int width, int height) override {
         width_ = width, height_ = height;
         applySize();
+        updateEdges();
         events_.push_back({.type = EventType::Resized});
+    }
+
+    void windowAction(WindowAction action, float x, float y) override {
+        if (!toplevel_) return;
+        switch (action) {
+        case WindowAction::Move:
+            if (!seat_) return;
+            letGo();
+            xdg_toplevel_move(toplevel_, seat_, pressSerial_);
+            break;
+        case WindowAction::Minimize: xdg_toplevel_set_minimized(toplevel_); break;
+        case WindowAction::ToggleMaximize:
+            if (state_.maximized) xdg_toplevel_unset_maximized(toplevel_);
+            else xdg_toplevel_set_maximized(toplevel_);
+            break;
+        case WindowAction::Close: events_.push_back({.type = EventType::Quit}); break;
+        case WindowAction::Menu:
+            if (seat_) xdg_toplevel_show_window_menu(toplevel_, seat_, pressSerial_, int(x), int(y));
+            break;
+        }
     }
 
     // A mouse is a fine pointer, a touch screen a coarse one, a keyboard the seat has a physical
@@ -460,6 +500,8 @@ private:
     wl_data_device_manager* dataDevices_ = nullptr;
     zwp_idle_inhibit_manager_v1* idleInhibits_ = nullptr;
     zwp_pointer_gestures_v1* gestures_ = nullptr;
+    wl_shm* shm_ = nullptr;
+    wl_subcompositor* subcompositor_ = nullptr;
     wl_seat* seat_ = nullptr;
     std::vector<Output> outputs_;
 
@@ -483,6 +525,40 @@ private:
     int scale120_ = 0;     // fractional-scale's, in 120ths; 0: none told
     int bufferScale_ = 1;  // else the integer scale the surface is given
 
+    // The window's state, as the last configure told it (the next one's until its xdg_surface
+    // configure); tiled: on which sides (Edge's order) it meets another window or the screen's edge.
+    struct WindowState {
+        bool maximized = false, fullscreen = false, activated = false;
+        std::array<bool, 4> tiled{};
+        bool operator==(const WindowState&) const = default;
+    };
+    WindowState pendingState_, state_;
+    // What the window manager does (xdg_toplevel's wm_capabilities; all until it says).
+    bool canMinimize_ = true, canMaximize_ = true;
+    // Kompoz's own decorations (the compositor has none, as GNOME, or KOMPOZ_DECORATIONS=kompoz):
+    // the title bar the app core draws (Metrics::titleBar), and around the window its edges, a
+    // shadow each, the pointer or a finger resizing the window by them (subsurfaces of the
+    // window's, below it, outside its geometry).
+    bool ownDecorations_ = false;
+    struct ShmBuffer;
+    struct Edge {
+        wl_surface* surface = nullptr;
+        wl_subsurface* subsurface = nullptr;
+        ShmBuffer* buffer = nullptr;  // what it shows
+        int x = 0, y = 0, width = 0, height = 0;  // points, from the window's top left
+        bool shown = false, activated = false;     // (what its shadow was drawn for)
+    };
+    enum { kTop, kBottom, kLeft, kRight };
+    std::array<Edge, 4> edges_;
+    // Buffers the edges were drawn into: each let go once the compositor no longer reads it.
+    struct ShmBuffer {
+        wl_buffer* buffer = nullptr;
+        bool busy = true, retired = false;
+    };
+    std::list<ShmBuffer> shmBuffers_;
+    static constexpr int kEdgeSize = 12;    // points beyond the window
+    static constexpr int kCornerSize = 16;  // along each side from a corner: the corner's (two ways)
+
     wl_pointer* pointer_ = nullptr;
     wl_keyboard* keyboard_ = nullptr;
     wl_touch* touch_ = nullptr;
@@ -490,6 +566,12 @@ private:
     zwp_pointer_gesture_pinch_v1* pinch_ = nullptr;
     double pinchScale_ = 1;  // the touchpad pinch's scale so far (Wayland tells it since the pinch began)
     uint32_t pointerSerial_ = 0, lastSerial_ = 0;
+    uint32_t pressSerial_ = 0;   // the last button pressed or finger put down: what a move or the window menu goes by
+    int32_t pressTouch_ = -1;    // its finger; -1: the pointer's
+    wl_surface* pointerOn_ = nullptr;  // the surface the pointer is over (the window's or an edge's)
+    std::set<int32_t> edgeTouches_;    // fingers that resize the window from an edge
+    double edgeX_ = 0, edgeY_ = 0;     // the pointer over an edge, in the window's points
+    uint32_t edgeCursor_ = 0;          // the resize cursor shown over it (XDG_TOPLEVEL_RESIZE_EDGE_*)
     double pointerX_ = 0, pointerY_ = 0, wheelX_ = 0, wheelY_ = 0;
     bool wheelDiscrete_ = false;
     std::map<int32_t, std::pair<double, double>> touches_;
@@ -525,6 +607,7 @@ private:
 #ifdef KOMPOZ_DESKTOP_ACCENT
     std::unique_ptr<DesktopAccent> accent_;
     std::optional<bool> dark_;
+    std::optional<std::string> buttonLayout_;
 #endif
 #ifdef KOMPOZ_WALLPAPER_COLORS
     std::unique_ptr<WallpaperColors> wallpaper_;
@@ -592,8 +675,9 @@ private:
         if (accentChanged_.exchange(false)) {
             events_.push_back({.type = EventType::AccentChanged});
 #ifdef KOMPOZ_DESKTOP_ACCENT
-            if (accent_ && accent_->darkScheme() != dark_) {  // (the same reader tells the light/dark preference)
-                dark_ = accent_->darkScheme();
+            // (The same reader tells the light/dark preference and the title bar's buttons.)
+            if (accent_ && (accent_->darkScheme() != dark_ || accent_->buttonLayout() != buttonLayout_)) {
+                dark_ = accent_->darkScheme(), buttonLayout_ = accent_->buttonLayout();
                 events_.push_back({.type = EventType::MetricsChanged});
             }
 #endif
@@ -713,6 +797,162 @@ private:
         repeatKey_ = 0;
         itimerspec spec{};
         timerfd_settime(repeatFd_, 0, &spec, nullptr);
+    }
+
+    // ---- Kompoz's decorations --------------------------------------------------------------
+
+    // The title bar's buttons as the desktop lays them out (GNOME's button-layout; elsewhere
+    // Minimize, Maximize and Close on the right), those the window manager does.
+    TitleBar titleBar() const {
+        std::string layout = "appmenu:minimize,maximize,close";
+#ifdef KOMPOZ_DESKTOP_ACCENT
+        if (accent_)
+            if (std::optional<std::string> desktop = accent_->buttonLayout()) layout = *desktop;
+#endif
+        TitleBar bar{.maximized = state_.maximized};
+        auto side = [this](std::string_view names, std::vector<WindowButton>& out) {
+            while (!names.empty()) {
+                size_t comma = names.find(',');
+                std::string_view name = names.substr(0, comma);
+                names = comma == std::string_view::npos ? std::string_view() : names.substr(comma + 1);
+                if (name == "close") out.push_back(WindowButton::Close);
+                else if (name == "minimize" && canMinimize_) out.push_back(WindowButton::Minimize);
+                else if (name == "maximize" && canMaximize_) out.push_back(WindowButton::Maximize);
+            }
+        };
+        std::string_view all = layout;
+        size_t colon = all.find(':');
+        side(all.substr(0, colon), bar.start);
+        if (colon != std::string_view::npos) side(all.substr(colon + 1), bar.end);
+        return bar;
+    }
+
+    // The pointer or the finger last pressed let go, as far as the app knows: the window manager
+    // takes it to move the window (no release comes to the window after).
+    void letGo() {
+        if (pressTouch_ < 0) {
+            events_.push_back(at(EventType::MouseUp, pointerX_, pointerY_));  // (the left button's)
+            return;
+        }
+        auto touch = touches_.find(pressTouch_);
+        if (touch == touches_.end()) return;
+        Event e = at(EventType::TouchUp, touch->second.first, touch->second.second);
+        e.pointer = pressTouch_;
+        events_.push_back(e);
+        touches_.erase(touch);
+    }
+
+    int edgeOf(wl_surface* surface) const {
+        for (int i = 0; i < 4; ++i)
+            if (surface && edges_[i].surface == surface) return i;
+        return -1;
+    }
+
+    // Where the window is resized from at (x, y), a point of an edge (the window's points): a
+    // side, or a corner within kCornerSize of it.
+    uint32_t resizeEdgeAt(double x, double y) const {
+        bool aboveOrBelow = y < 0 || y >= height_, beside = x < 0 || x >= width_;
+        uint32_t edge = XDG_TOPLEVEL_RESIZE_EDGE_NONE;
+        if (y < (beside ? kCornerSize : 0)) edge |= XDG_TOPLEVEL_RESIZE_EDGE_TOP;
+        else if (y >= height_ - (beside ? kCornerSize : 0)) edge |= XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM;
+        if (x < (aboveOrBelow ? kCornerSize : 0)) edge |= XDG_TOPLEVEL_RESIZE_EDGE_LEFT;
+        else if (x >= width_ - (aboveOrBelow ? kCornerSize : 0)) edge |= XDG_TOPLEVEL_RESIZE_EDGE_RIGHT;
+        return edge;
+    }
+
+    // The pointer over an edge at (x, y) of it: the resize cursor for where it would resize from.
+    void overEdge(int i, double x, double y) {
+        edgeX_ = edges_[i].x + x, edgeY_ = edges_[i].y + y;
+        uint32_t edge = resizeEdgeAt(edgeX_, edgeY_);
+        if (!cursorDevice_ || !pointerSerial_ || edge == edgeCursor_) return;
+        edgeCursor_ = edge;
+        wp_cursor_shape_device_v1_shape shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
+        switch (edge) {
+        case XDG_TOPLEVEL_RESIZE_EDGE_TOP: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_N_RESIZE; break;
+        case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_S_RESIZE; break;
+        case XDG_TOPLEVEL_RESIZE_EDGE_LEFT: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_W_RESIZE; break;
+        case XDG_TOPLEVEL_RESIZE_EDGE_RIGHT: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_E_RESIZE; break;
+        case XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NW_RESIZE; break;
+        case XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NE_RESIZE; break;
+        case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_SW_RESIZE; break;
+        case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_SE_RESIZE; break;
+        default: break;
+        }
+        wp_cursor_shape_device_v1_set_shape(cursorDevice_, pointerSerial_, shape);
+    }
+
+    // The edges as the window is now: around it while it floats (not maximized or fullscreen,
+    // nor on its tiled sides) and Kompoz decorates it, else none. Its geometry is the window's
+    // surface, without them.
+    void updateEdges() {
+        if (!surface_ || !xdgSurface_) return;
+        std::erase_if(shmBuffers_, [](ShmBuffer& b) {
+            if (!b.retired || b.busy) return false;
+            wl_buffer_destroy(b.buffer);
+            return true;
+        });
+        bool floating = ownDecorations_ && !state_.maximized && !state_.fullscreen;
+        std::array<bool, 4> shown{};
+        for (int i = 0; i < 4; ++i) shown[i] = floating && !state_.tiled[i];
+        int m = kEdgeSize, left = shown[kLeft] ? m : 0, across = left + width_ + (shown[kRight] ? m : 0);
+        const std::array<std::array<int, 4>, 4> places = {{{-left, -m, across, m}, {-left, height_, across, m}, {-m, 0, m, height_}, {width_, 0, m, height_}}};
+        for (int i = 0; i < 4; ++i) {
+            Edge& e = edges_[i];
+            if (!shown[i]) {
+                if (e.shown) {
+                    wl_surface_attach(e.surface, nullptr, 0, 0);
+                    wl_surface_commit(e.surface);
+                    if (e.buffer) e.buffer->retired = true;
+                    e.buffer = nullptr, e.shown = false;
+                }
+                continue;
+            }
+            if (!e.surface) {
+                e.surface = wl_compositor_create_surface(compositor_);
+                e.subsurface = wl_subcompositor_get_subsurface(subcompositor_, e.surface, surface_);
+                wl_subsurface_place_below(e.subsurface, surface_);
+            }
+            auto [x, y, w, h] = places[i];
+            wl_subsurface_set_position(e.subsurface, x, y);
+            if (e.shown && x == e.x && y == e.y && w == e.width && h == e.height && e.activated == state_.activated) continue;
+            e.x = x, e.y = y, e.width = w, e.height = h, e.activated = state_.activated;
+            e.shown = drawEdge(e);
+        }
+        xdg_surface_set_window_geometry(xdgSurface_, 0, 0, width_, height_);
+    }
+
+    // An edge's shadow into a buffer of its own, shown on it: a pixel a point (a blur scaled up
+    // looks the same), black fading out from the window, stronger while it is the active one.
+    bool drawEdge(Edge& e) {
+        int stride = e.width * 4;
+        size_t size = size_t(stride) * size_t(e.height);
+        int fd = memfd_create("kompoz-edge", MFD_CLOEXEC);
+        if (fd < 0) return false;
+        void* map = ftruncate(fd, off_t(size)) == 0 ? mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0) : MAP_FAILED;
+        if (map == MAP_FAILED) {
+            close(fd);
+            return false;
+        }
+        auto* pixels = static_cast<uint32_t*>(map);
+        double strength = state_.activated ? 0.32 : 0.16;
+        for (int j = 0; j < e.height; ++j)
+            for (int i = 0; i < e.width; ++i) {
+                double x = e.x + i + 0.5, y = e.y + j + 0.5;
+                double t = std::min(1.0, std::hypot(std::max({0.0, -x, x - width_}), std::max({0.0, -y, y - height_})) / kEdgeSize);
+                pixels[size_t(j) * size_t(e.width) + size_t(i)] = uint32_t(std::lround(255 * strength * (1 - t) * (1 - t))) << 24;  // (ARGB, premultiplied)
+            }
+        munmap(map, size);
+        wl_shm_pool* pool = wl_shm_create_pool(shm_, fd, int32_t(size));
+        wl_buffer* buffer = wl_shm_pool_create_buffer(pool, 0, e.width, e.height, stride, WL_SHM_FORMAT_ARGB8888);
+        wl_shm_pool_destroy(pool);
+        close(fd);
+        if (e.buffer) e.buffer->retired = true;
+        e.buffer = &shmBuffers_.emplace_back(ShmBuffer{.buffer = buffer});
+        wl_buffer_add_listener(buffer, &kBuffer, e.buffer);
+        wl_surface_attach(e.surface, buffer, 0, 0);
+        wl_surface_damage(e.surface, 0, 0, e.width, e.height);
+        wl_surface_commit(e.surface);  // (applied with the window's next commit: a subsurface's state waits for its parent's)
+        return true;
     }
 
     // ---- The clipboard ---------------------------------------------------------------------
@@ -895,6 +1135,8 @@ private:
     static const wp_fractional_scale_v1_listener kFractional;
     static const xdg_surface_listener kXdgSurface;
     static const xdg_toplevel_listener kToplevel;
+    static const zxdg_toplevel_decoration_v1_listener kDecoration;
+    static const wl_buffer_listener kBuffer;
     static const wl_callback_listener kFrameCallback;
     static const wl_pointer_listener kPointer;
     static const wl_keyboard_listener kKeyboard;
@@ -971,10 +1213,14 @@ const xdg_surface_listener WaylandPlatform::kXdgSurface = {
             p.width_ = p.pendingWidth_, p.height_ = p.pendingHeight_;
             resized = true;
         }
+        bool stateChanged = p.pendingState_ != p.state_;
+        p.state_ = p.pendingState_;
         if (resized && p.configured_) {
             p.applySize();
             p.events_.push_back({.type = EventType::Resized});
         }
+        if ((resized || stateChanged) && p.configured_) p.updateEdges();
+        if (stateChanged && p.configured_) p.events_.push_back({.type = EventType::MetricsChanged});  // (the title bar's)
         if (!p.configured_) {
             p.configured_ = true;
             p.events_.push_back({.type = EventType::Shown});
@@ -984,11 +1230,52 @@ const xdg_surface_listener WaylandPlatform::kXdgSurface = {
 };
 
 const xdg_toplevel_listener WaylandPlatform::kToplevel = {
-    .configure = [](void* data, xdg_toplevel*, int32_t width, int32_t height, wl_array*) {
+    .configure = [](void* data, xdg_toplevel*, int32_t width, int32_t height, wl_array* states) {
         WaylandPlatform& p = self(data);
         p.pendingWidth_ = width, p.pendingHeight_ = height;  // (0: the app's own size)
+        WindowState state;
+        const auto* told = static_cast<const uint32_t*>(states->data);
+        for (size_t i = 0; i < states->size / sizeof(uint32_t); ++i) switch (told[i]) {
+            case XDG_TOPLEVEL_STATE_MAXIMIZED: state.maximized = true; break;
+            case XDG_TOPLEVEL_STATE_FULLSCREEN: state.fullscreen = true; break;
+            case XDG_TOPLEVEL_STATE_ACTIVATED: state.activated = true; break;
+            case XDG_TOPLEVEL_STATE_TILED_TOP: state.tiled[kTop] = true; break;
+            case XDG_TOPLEVEL_STATE_TILED_BOTTOM: state.tiled[kBottom] = true; break;
+            case XDG_TOPLEVEL_STATE_TILED_LEFT: state.tiled[kLeft] = true; break;
+            case XDG_TOPLEVEL_STATE_TILED_RIGHT: state.tiled[kRight] = true; break;
+            default: break;
+            }
+        p.pendingState_ = state;
     },
     .close = [](void* data, xdg_toplevel*) { self(data).events_.push_back({.type = EventType::Quit}); },
+    .configure_bounds = [](void*, xdg_toplevel*, int32_t, int32_t) {},
+    .wm_capabilities = [](void* data, xdg_toplevel*, wl_array* capabilities) {
+        WaylandPlatform& p = self(data);
+        p.canMinimize_ = p.canMaximize_ = false;
+        const auto* told = static_cast<const uint32_t*>(capabilities->data);
+        for (size_t i = 0; i < capabilities->size / sizeof(uint32_t); ++i) {
+            if (told[i] == XDG_TOPLEVEL_WM_CAPABILITIES_MINIMIZE) p.canMinimize_ = true;
+            if (told[i] == XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE) p.canMaximize_ = true;
+        }
+        p.events_.push_back({.type = EventType::MetricsChanged});
+    },
+};
+
+// Whether the compositor decorates the window, or Kompoz.
+const zxdg_toplevel_decoration_v1_listener WaylandPlatform::kDecoration = {
+    .configure = [](void* data, zxdg_toplevel_decoration_v1*, uint32_t mode) {
+        WaylandPlatform& p = self(data);
+        bool own = mode == ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE;
+        if (own == p.ownDecorations_) return;
+        p.ownDecorations_ = own;
+        if (!p.configured_) return;
+        p.updateEdges();
+        p.events_.push_back({.type = EventType::MetricsChanged});
+    },
+};
+
+const wl_buffer_listener WaylandPlatform::kBuffer = {
+    .release = [](void* data, wl_buffer*) { static_cast<ShmBuffer*>(data)->busy = false; },
 };
 
 const wl_callback_listener WaylandPlatform::kFrameCallback = {
@@ -1002,22 +1289,39 @@ const wl_callback_listener WaylandPlatform::kFrameCallback = {
 };
 
 const wl_pointer_listener WaylandPlatform::kPointer = {
-    .enter = [](void* data, wl_pointer*, uint32_t serial, wl_surface*, wl_fixed_t x, wl_fixed_t y) {
+    .enter = [](void* data, wl_pointer*, uint32_t serial, wl_surface* surface, wl_fixed_t x, wl_fixed_t y) {
         WaylandPlatform& p = self(data);
         p.pointerSerial_ = serial;
+        p.pointerOn_ = surface;
+        if (int edge = p.edgeOf(surface); edge >= 0) {
+            p.edgeCursor_ = 0;
+            p.overEdge(edge, wl_fixed_to_double(x), wl_fixed_to_double(y));
+            return;
+        }
         p.pointerX_ = wl_fixed_to_double(x), p.pointerY_ = wl_fixed_to_double(y);
         p.showCursor();
         p.events_.push_back(p.at(EventType::MouseMove, p.pointerX_, p.pointerY_));
     },
-    .leave = [](void* data, wl_pointer*, uint32_t, wl_surface*) { self(data).events_.push_back({.type = EventType::PointerLeft}); },
+    .leave = [](void* data, wl_pointer*, uint32_t, wl_surface* surface) {
+        WaylandPlatform& p = self(data);
+        p.pointerOn_ = nullptr;
+        if (p.edgeOf(surface) < 0) p.events_.push_back({.type = EventType::PointerLeft});
+    },
     .motion = [](void* data, wl_pointer*, uint32_t, wl_fixed_t x, wl_fixed_t y) {
         WaylandPlatform& p = self(data);
+        if (int edge = p.edgeOf(p.pointerOn_); edge >= 0) return p.overEdge(edge, wl_fixed_to_double(x), wl_fixed_to_double(y));
         p.pointerX_ = wl_fixed_to_double(x), p.pointerY_ = wl_fixed_to_double(y);
         p.events_.push_back(p.at(EventType::MouseMove, p.pointerX_, p.pointerY_));
     },
     .button = [](void* data, wl_pointer*, uint32_t serial, uint32_t, uint32_t button, uint32_t state) {
         WaylandPlatform& p = self(data);
         p.lastSerial_ = serial;
+        if (state == WL_POINTER_BUTTON_STATE_PRESSED) p.pressSerial_ = serial, p.pressTouch_ = -1;
+        if (p.edgeOf(p.pointerOn_) >= 0) {  // (an edge: the left button resizes the window by it)
+            if (state == WL_POINTER_BUTTON_STATE_PRESSED && button == 0x110 && p.seat_)
+                xdg_toplevel_resize(p.toplevel_, p.seat_, serial, p.resizeEdgeAt(p.edgeX_, p.edgeY_));
+            return;
+        }
         Event e = p.at(state == WL_POINTER_BUTTON_STATE_PRESSED ? EventType::MouseDown : EventType::MouseUp, p.pointerX_, p.pointerY_);
         switch (button) {  // (linux/input-event-codes.h's BTN_LEFT...)
         case 0x110: e.button = MouseButton::Left; break;
@@ -1040,7 +1344,7 @@ const wl_pointer_listener WaylandPlatform::kPointer = {
     },
     .frame = [](void* data, wl_pointer*) {
         WaylandPlatform& p = self(data);
-        if (p.wheelX_ != 0 || p.wheelY_ != 0) {
+        if ((p.wheelX_ != 0 || p.wheelY_ != 0) && p.edgeOf(p.pointerOn_) < 0) {
             Event e = p.at(EventType::Wheel, p.pointerX_, p.pointerY_);
             e.dx = float(p.wheelX_), e.dy = float(p.wheelY_);
             p.events_.push_back(e);
@@ -1112,9 +1416,18 @@ const wl_keyboard_listener WaylandPlatform::kKeyboard = {
 };
 
 const wl_touch_listener WaylandPlatform::kTouch = {
-    .down = [](void* data, wl_touch*, uint32_t serial, uint32_t, wl_surface*, int32_t id, wl_fixed_t x, wl_fixed_t y) {
+    .down = [](void* data, wl_touch*, uint32_t serial, uint32_t, wl_surface* surface, int32_t id, wl_fixed_t x, wl_fixed_t y) {
         WaylandPlatform& p = self(data);
         p.lastSerial_ = serial;
+        if (int edge = p.edgeOf(surface); edge >= 0) {  // (an edge: the finger resizes the window by it)
+            p.edgeTouches_.insert(id);
+            if (p.seat_) {
+                const Edge& e = p.edges_[size_t(edge)];
+                xdg_toplevel_resize(p.toplevel_, p.seat_, serial, p.resizeEdgeAt(e.x + wl_fixed_to_double(x), e.y + wl_fixed_to_double(y)));
+            }
+            return;
+        }
+        p.pressSerial_ = serial, p.pressTouch_ = id;
         p.touches_[id] = {wl_fixed_to_double(x), wl_fixed_to_double(y)};
         Event e = p.at(EventType::TouchDown, wl_fixed_to_double(x), wl_fixed_to_double(y));
         e.pointer = id;
@@ -1122,14 +1435,17 @@ const wl_touch_listener WaylandPlatform::kTouch = {
     },
     .up = [](void* data, wl_touch*, uint32_t, uint32_t, int32_t id) {
         WaylandPlatform& p = self(data);
-        auto [x, y] = p.touches_[id];
-        p.touches_.erase(id);
+        auto touch = p.touches_.find(id);
+        if (p.edgeTouches_.erase(id) || touch == p.touches_.end()) return;  // (an edge's, or one let go for a move)
+        auto [x, y] = touch->second;
+        p.touches_.erase(touch);
         Event e = p.at(EventType::TouchUp, x, y);
         e.pointer = id;
         p.events_.push_back(e);
     },
     .motion = [](void* data, wl_touch*, uint32_t, int32_t id, wl_fixed_t x, wl_fixed_t y) {
         WaylandPlatform& p = self(data);
+        if (!p.touches_.contains(id)) return;
         p.touches_[id] = {wl_fixed_to_double(x), wl_fixed_to_double(y)};
         Event e = p.at(EventType::TouchMove, wl_fixed_to_double(x), wl_fixed_to_double(y));
         e.pointer = id;
@@ -1144,6 +1460,7 @@ const wl_touch_listener WaylandPlatform::kTouch = {
             p.events_.push_back(e);
         }
         p.touches_.clear();
+        p.edgeTouches_.clear();
     },
     .shape = [](void*, wl_touch*, int32_t, wl_fixed_t, wl_fixed_t) {},
     .orientation = [](void*, wl_touch*, int32_t, wl_fixed_t) {},
@@ -1182,9 +1499,13 @@ const wl_data_device_listener WaylandPlatform::kDataDevice = {
     .data_offer = [](void* data, wl_data_device*, wl_data_offer* offer) { wl_data_offer_add_listener(offer, &kOffer, data); },
     // Files from a file manager, text from a browser: taken as a copy, told to the core as SDL
     // told them (begin, moves, each file or the text at the drop, complete; complete alone: it left).
-    .enter = [](void* data, wl_data_device*, uint32_t serial, wl_surface*, wl_fixed_t x, wl_fixed_t y, wl_data_offer* offer) {
+    .enter = [](void* data, wl_data_device*, uint32_t serial, wl_surface* surface, wl_fixed_t x, wl_fixed_t y, wl_data_offer* offer) {
         WaylandPlatform& p = self(data);
         if (p.dragOffer_) p.forget(p.dragOffer_);
+        if (offer && p.edgeOf(surface) >= 0) {  // (over an edge: not the window's to take)
+            p.forget(offer);
+            offer = nullptr;
+        }
         p.dragOffer_ = offer;
         if (!offer) return;
         p.dragX_ = wl_fixed_to_double(x), p.dragY_ = wl_fixed_to_double(y);
@@ -1316,7 +1637,7 @@ const wl_registry_listener WaylandPlatform::kRegistry = {
         std::string_view i(interface);
         if (i == wl_compositor_interface.name) p.compositor_ = bind<wl_compositor>(registry, name, &wl_compositor_interface, version, 6);
         else if (i == xdg_wm_base_interface.name) {
-            p.wmBase_ = bind<xdg_wm_base>(registry, name, &xdg_wm_base_interface, version, 3);
+            p.wmBase_ = bind<xdg_wm_base>(registry, name, &xdg_wm_base_interface, version, 6);
             xdg_wm_base_add_listener(p.wmBase_, &kWmBase, &p);
         } else if (i == zxdg_decoration_manager_v1_interface.name)
             p.decorations_ = bind<zxdg_decoration_manager_v1>(registry, name, &zxdg_decoration_manager_v1_interface, version, 1);
@@ -1329,6 +1650,8 @@ const wl_registry_listener WaylandPlatform::kRegistry = {
             p.textInputs_ = bind<zwp_text_input_manager_v3>(registry, name, &zwp_text_input_manager_v3_interface, version, 1);
         else if (i == wl_data_device_manager_interface.name)
             p.dataDevices_ = bind<wl_data_device_manager>(registry, name, &wl_data_device_manager_interface, version, 3);
+        else if (i == wl_shm_interface.name) p.shm_ = bind<wl_shm>(registry, name, &wl_shm_interface, version, 1);
+        else if (i == wl_subcompositor_interface.name) p.subcompositor_ = bind<wl_subcompositor>(registry, name, &wl_subcompositor_interface, version, 1);
         else if (i == zwp_pointer_gestures_v1_interface.name)
             p.gestures_ = bind<zwp_pointer_gestures_v1>(registry, name, &zwp_pointer_gestures_v1_interface, version, 1);
         else if (i == zwp_idle_inhibit_manager_v1_interface.name)

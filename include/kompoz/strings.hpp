@@ -49,11 +49,13 @@ struct Strings {
     // For accessibility: what icons stand for and states mean.
     std::string selected = "Selected", checked = "Checked", partiallyChecked = "Partially checked";
     std::string moreOptions = "More options", submenu = "Submenu";
-    std::string open = "Open", close = "Close";            // an exposed dropdown menu's arrow
+    std::string open = "Open", close = "Close";            // an exposed dropdown menu's arrow, a window
     std::string openMenu = "Open menu", closeMenu = "Close menu";  // a split button's trailing arrow
     std::string dismiss = "Dismiss";                       // a snackbar's close button
     std::string dragHandle = "Drag handle";                // a bottom sheet's
     std::string pullToRefresh = "Pull to refresh", refreshing = "Refreshing";
+    // The title bar Kompoz draws where the desktop leaves a window undecorated (its close button: `close`).
+    std::string minimize = "Minimize", maximize = "Maximize", restore = "Restore";
     // Pickers.
     DatePickerStrings datePicker = DatePickerStrings::english();
     std::string am = "AM", pm = "PM", hour = "Hour", minute = "Minute";  // TimePicker, TimeInput

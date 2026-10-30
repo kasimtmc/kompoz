@@ -6,7 +6,8 @@
 // does); it notifies (Notifier) as each value comes (linux/desktop_accent.cpp). On Windows, the
 // one in Settings > Personalization > Colors, from the registry (windows/desktop_accent.cpp). On
 // Linux the light/dark preference too, the portal's color-scheme (for Kompoz's own platforms: SDL
-// follows it itself, SDL_EVENT_SYSTEM_THEME_CHANGED).
+// follows it itself, SDL_EVENT_SYSTEM_THEME_CHANGED), and GNOME's layout of a window's buttons
+// (org.gnome.desktop.wm.preferences button-layout), for the title bar Kompoz draws.
 
 #include "system.hpp"
 
@@ -14,6 +15,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 
 namespace kompoz::platform {
 
@@ -31,6 +33,9 @@ public:
     // Whether the desktop prefers dark (the portal's color-scheme, read even with
     // KOMPOZ_NO_DESKTOP_ACCENT); none: it doesn't say (nor on Windows, where the platform asks).
     std::optional<bool> darkScheme() const;
+    // The window buttons' layout, as GNOME writes it ("appmenu:close": the buttons before the colon
+    // on the left, those after it on the right); none: the desktop doesn't say (nor on Windows).
+    std::optional<std::string> buttonLayout() const;
 
     struct State;
 

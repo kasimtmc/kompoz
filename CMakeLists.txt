@@ -223,7 +223,7 @@ if(KOMPOZ_BUILD_SDL3)
     else()
         set(kompoz_platform_source platform/android/android_platform.cpp)
     endif()
-    add_library(kompoz_sdl3 OBJECT platform/app/app_core.cpp platform/common/system.cpp ${kompoz_platform_source} platform/common/font_system.cpp
+    add_library(kompoz_sdl3 OBJECT platform/app/app_core.cpp platform/app/title_bar.cpp platform/common/system.cpp ${kompoz_platform_source} platform/common/font_system.cpp
                                    platform/common/image_loader.cpp platform/common/image_codec.cpp)
     target_link_libraries(kompoz_sdl3 PUBLIC kompoz_core Freetype::Freetype PNG::PNG)
     if(kompoz_sdl)

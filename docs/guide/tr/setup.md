@@ -121,7 +121,7 @@ Masaüstünde komut satırı, uygulamanın açılışta açacağı bir derin ba�
 
 ### Linux
 
-Yukarıdaki derleme yeterlidir. Koyu mod ve masaüstünün vurgu rengi XDG masaüstü portalından gelir ve değiştikçe onu izler: `isSystemInDarkTheme()` ve `dynamicLightColorScheme()` bunları görür. `wallpaperLightColorScheme()` için duvar kağıdı masaüstünün ayarlarından okunur (KDE Plasma, GNOME, Cinnamon, MATE, Xfce).
+Yukarıdaki derleme yeterlidir. Koyu mod ve masaüstünün vurgu rengi XDG masaüstü portalından gelir ve değiştikçe onu izler: `isSystemInDarkTheme()` ve `dynamicLightColorScheme()` bunları görür. `wallpaperLightColorScheme()` için duvar kağıdı masaüstünün ayarlarından okunur (KDE Plasma, GNOME, Cinnamon, MATE, Xfce). Bir Wayland oturumunda pencerenin çerçevesini, çizdiği yerde (KDE Plasma, Sway) bileşikleyici çizer; çizmediği yerde (GNOME) başlık çubuğunu sistemin renkleriyle ve masaüstünün dizdiği düğmelerle Kompoz kendisi çizer, pencerenin çevresine de onu boyutlandıran gölgeler koyar.
 
 ### Windows
 
