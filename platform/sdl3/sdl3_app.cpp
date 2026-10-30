@@ -28,6 +28,9 @@
 #ifdef KOMPOZ_WEB
 #include "../web/web_platform.hpp"
 #endif
+#ifdef KOMPOZ_MACOS
+#include "../macos/macos_platform.hpp"
+#endif
 #ifdef KOMPOZ_GPU_VULKAN
 #include <SDL3/SDL_vulkan.h>
 #endif
@@ -759,6 +762,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef KOMPOZ_WEB
     if (int result = kompoz::platform::runWeb(argc, argv); result >= 0) return result;  // (it goes on in the page; else SDL's)
+#endif
+#ifdef KOMPOZ_MACOS
+    if (int result = kompoz::platform::runMacOS(argc, argv); result >= 0) return result;  // (else SDL's)
 #endif
     return SDL_EnterAppMainCallbacks(argc, argv, SDL_AppInit, SDL_AppIterate, SDL_AppEvent, SDL_AppQuit);
 }

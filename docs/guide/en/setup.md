@@ -167,7 +167,7 @@ For the web build of your own app, copy the Emscripten options from `examples/sh
 
 ### macOS and iOS
 
-On macOS Kompoz builds with Homebrew's SDL3, FreeType, HarfBuzz and libpng (`brew install sdl3 freetype harfbuzz libpng`) as on Linux, and runs: CI builds it there, runs the tests and an app in a real window (Cocoa, Metal). It hasn't been used by hand on a Mac yet, and screen readers there (NSAccessibility) aren't connected. iOS hasn't been built: it needs an Xcode project or CMake setup like the Android one.
+On macOS Kompoz builds with Homebrew's SDL3, FreeType, HarfBuzz and libpng (`brew install sdl3 freetype harfbuzz libpng`) as on Linux, and runs: CI builds it there, runs the tests and an app in a real window, on Kompoz's own macOS platform (AppKit, Metal). It hasn't been used by hand on a Mac yet, and screen readers there (NSAccessibility) aren't connected. iOS hasn't been built: it needs an Xcode project or CMake setup like the Android one.
 
 ## Packaging
 

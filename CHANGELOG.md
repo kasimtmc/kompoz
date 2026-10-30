@@ -406,7 +406,13 @@
   through a hidden textarea; the system's clipboard through the copy and paste events (and `navigator.clipboard`),
   where SDL kept one of its own; files (read into the virtual file system) and text dropped on the page; CSS cursors;
   `keepScreenOn` as a screen wake lock; the light or dark preference; links in new tabs, the route in the address's
-  #fragment, vibration for haptics, as before.
+  #fragment, vibration for haptics, as before. **macOS runs on Kompoz's own macOS platform** (`platform/macos`,
+  Objective-C++ over AppKit): an `NSWindow` whose view's layer is the `CAMetalLayer` the Metal device presents to, at
+  the screen's backing scale, frames on the display's beat and drawn on while the window is resized; the mouse, a
+  trackpad's scrolling (a tenth of its points, a wheel's notches whole, as SDL) and pinch, the keys (Command as
+  Kompoz's Ctrl) and input methods (`NSTextInputClient`, told where the field is), the pasteboard, drops of files and
+  text, the system's cursors, the light or dark appearance, `keepScreenOn` as an IOKit power assertion, the app's menu
+  (Hide, Quit, the window's), links opened by `NSWorkspace`.
 - **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
   blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
   scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and

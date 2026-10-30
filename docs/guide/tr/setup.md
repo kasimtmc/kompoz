@@ -167,7 +167,7 @@ Kendi uygulamanızın web derlemesi için Emscripten seçeneklerini `examples/sh
 
 ### macOS ve iOS
 
-macOS'ta Kompoz, Linux'taki gibi Homebrew'un SDL3, FreeType, HarfBuzz ve libpng'siyle derlenir (`brew install sdl3 freetype harfbuzz libpng`) ve çalışır: CI onu orada derliyor, testleri ve bir uygulamayı gerçek bir pencerede (Cocoa, Metal) çalıştırıyor. Henüz bir Mac'te elle kullanılmadı, oradaki ekran okuyuculara da (NSAccessibility) bağlı değil. iOS derlenmedi: Android'inki gibi bir Xcode projesi ya da CMake kurulumu gerekiyor.
+macOS'ta Kompoz, Linux'taki gibi Homebrew'un SDL3, FreeType, HarfBuzz ve libpng'siyle derlenir (`brew install sdl3 freetype harfbuzz libpng`) ve çalışır: CI onu orada derliyor, testleri ve bir uygulamayı gerçek bir pencerede, Kompoz'un kendi macOS platformunda (AppKit, Metal) çalıştırıyor. Henüz bir Mac'te elle kullanılmadı, oradaki ekran okuyuculara da (NSAccessibility) bağlı değil. iOS derlenmedi: Android'inki gibi bir Xcode projesi ya da CMake kurulumu gerekiyor.
 
 ## Paketleme
 
