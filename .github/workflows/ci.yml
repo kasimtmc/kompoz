@@ -247,6 +247,9 @@ jobs:
           restore-keys: vcpkg-${{ matrix.triplet }}-
       - name: Install Kompoz with vcpkg
         run: |
+          # The commit among the port's files: vcpkg keys its binary cache by those, not by the sources the port
+          # builds, so without it a build of an earlier commit would be restored instead of this one's.
+          git rev-parse HEAD > packaging/vcpkg/ports/kompoz/source-commit
           "$VCPKG_INSTALLATION_ROOT/vcpkg" install kompoz --overlay-ports=packaging/vcpkg/ports \
             --x-install-root="$PWD/vcpkg_installed" --triplet ${{ matrix.triplet }}
       - name: Build an app against it
