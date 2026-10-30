@@ -398,7 +398,15 @@
   and its wheel, touch (`WM_POINTER`; a pen as the mouse), the keyboard (AltGr not taken for Ctrl) and the input
   method (IMM32, at the field), the clipboard, drops of files and text (OLE), the system's cursors, the screen kept
   on, the accent color, the wallpaper's colors and UI Automation as before, a microphone (waveIn) and a camera (its
-  device interface) for `mediaQuery`.
+  device interface) for `mediaQuery`. **The web runs on Kompoz's own web platform** (`platform/web`): the page's
+  canvas, its CSS pixels the points and its drawing buffer at the device pixel ratio (followed as it changes), drawn
+  into with WebGPU or WebGL 2, frames on the browser's animation frames and the loop paused while there is nothing to
+  draw; the mouse (followed outside the canvas while a button is down), the wheel, touch and the keys through
+  Emscripten's html5 events; typing, input methods and a phone's keyboard (the field's kind as its `inputmode`)
+  through a hidden textarea; the system's clipboard through the copy and paste events (and `navigator.clipboard`),
+  where SDL kept one of its own; files (read into the virtual file system) and text dropped on the page; CSS cursors;
+  `keepScreenOn` as a screen wake lock; the light or dark preference; links in new tabs, the route in the address's
+  #fragment, vibration for haptics, as before.
 - **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
   blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
   scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and

@@ -422,7 +422,15 @@
   pencereyi boyutlandırırken ya da taşırken de çiziliyor. Fare (bir düğmesi basılıyken yakalı) ve tekerleği, dokunma
   (`WM_POINTER`; kalem fare gibi), klavye (AltGr Ctrl sayılmıyor) ve giriş yöntemi (IMM32, alanın yerinde), pano,
   dosya ve metin bırakmalar (OLE), sistemin imleçleri, ekranı açık tutma; vurgu rengi, duvar kağıdının renkleri ve UI
-  Automation eskisi gibi; `mediaQuery` için mikrofon (waveIn) ve kamera (aygıt arayüzü).
+  Automation eskisi gibi; `mediaQuery` için mikrofon (waveIn) ve kamera (aygıt arayüzü). **Web, Kompoz'un kendi web
+  platformunda çalışıyor** (`platform/web`): sayfanın tuvali; noktaları CSS pikselleri, çizim tamponu aygıtın piksel
+  oranında (değiştikçe izleniyor), WebGPU ya da WebGL 2 ile çiziliyor, kareleri tarayıcının canlandırma karelerinde,
+  çizecek bir şey yokken döngü duruyor. Fare (bir düğmesi basılıyken tuvalin dışında da izleniyor), tekerlek, dokunma
+  ve tuşlar Emscripten'in html5 olaylarıyla; yazma, giriş yöntemleri ve telefon klavyesi (alanın türü `inputmode`
+  olarak) gizli bir metin alanından; sistemin panosu kopyala ve yapıştır olaylarıyla (ve `navigator.clipboard` ile),
+  SDL kendine ait bir pano tutuyordu; sayfaya bırakılan dosyalar (sanal dosya sistemine okunuyor) ve metin; CSS
+  imleçleri; `keepScreenOn` ekranı uyanık tutma (Wake Lock) olarak; açık ya da koyu tercih; bağlantılar yeni sekmede,
+  adresin #parçasında yol, dokunsal geri bildirim için titreşim, eskisi gibi.
 - **Bir yolun gölgesi önceden sahip olduğu maskeden çiziliyor** (Compose'un bir `dropShadow`'un ya da
   `innerShadow`'un bulanık bitmap'ini tutması gibi): GPU renderer'ı yuvarlak köşeli dikdörtgen olmayan bir şeklin
   (kalp, yıldız, kurabiye) gölgesini her seferinde baştan, her biri iki geçişli bir katman ve bir bulanıklıkla

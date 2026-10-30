@@ -152,7 +152,7 @@ Kendi uygulamanızı yapmak için vitrinin `android/` klasöründen başlayın: 
 
 ### Web
 
-Kompoz tarayıcı için Emscripten ile derlenir (Arch'ta: `pacman -S emscripten`). SDL3, FreeType, HarfBuzz, zlib ve libpng kaynaktan derlenir; fontlar ve resimler sayfanın yanındaki bir `.data` dosyasına paketlenir.
+Kompoz tarayıcı için Emscripten ile derlenir (Arch'ta: `pacman -S emscripten`). SDL3, FreeType, HarfBuzz, zlib ve libpng kaynaktan derlenir; fontlar ve resimler sayfanın yanındaki bir `.data` dosyasına paketlenir. Uygulama Kompoz'un kendi web platformunda çalışır: yazma ve giriş yöntemleri (ve telefonun klavyesi) gizli bir metin alanından geçer, pano sistemin panosudur (Ctrl+C ile kopyalanır, Ctrl+V ile yapıştırılır), sayfaya dosya ve metin bırakılabilir, `keepScreenOn` ekranı uyanık tutar (Wake Lock).
 
 ```bash
 scripts/fetch-deps.sh

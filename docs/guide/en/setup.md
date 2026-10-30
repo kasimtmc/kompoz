@@ -152,7 +152,7 @@ To make your own app, start from the showcase's `android/` folder: it has only t
 
 ### Web
 
-Kompoz builds for the browser with Emscripten (on Arch: `pacman -S emscripten`). SDL3, FreeType, HarfBuzz, zlib and libpng are built from source; the fonts and images are packed into a `.data` file next to the page.
+Kompoz builds for the browser with Emscripten (on Arch: `pacman -S emscripten`). SDL3, FreeType, HarfBuzz, zlib and libpng are built from source; the fonts and images are packed into a `.data` file next to the page. The app runs on Kompoz's own web platform: typing and input methods (and a phone's keyboard) go through a hidden textarea, the clipboard is the system's (copied with Ctrl+C, pasted with Ctrl+V), files and text can be dropped on the page, and `keepScreenOn` holds a screen wake lock.
 
 ```bash
 scripts/fetch-deps.sh

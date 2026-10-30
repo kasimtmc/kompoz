@@ -274,7 +274,8 @@ if(KOMPOZ_BUILD_SDL3)
     # On the web the WebGPU backend too: Dawn's webgpu.h for Emscripten (its emdawnwebgpu port), and
     # ASYNCIFY, through which a readback waits for the GPU (WebGPU's mapping is asynchronous).
     if(EMSCRIPTEN)
-        target_sources(kompoz_sdl3 PRIVATE platform/gpu/webgpu_device.cpp)
+        target_sources(kompoz_sdl3 PRIVATE platform/gpu/webgpu_device.cpp platform/web/web_platform.cpp)  # (and Kompoz's own web platform)
+        target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_WEB=1)
         set_source_files_properties(platform/gpu/webgpu_device.cpp PROPERTIES COMPILE_OPTIONS --use-port=emdawnwebgpu)
         target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_GPU_WEBGPU=1)
         target_link_options(kompoz_sdl3 INTERFACE -sMAX_WEBGL_VERSION=2 --use-port=emdawnwebgpu -sASYNCIFY)
