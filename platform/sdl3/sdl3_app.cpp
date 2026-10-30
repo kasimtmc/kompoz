@@ -1,9 +1,9 @@
 // Kompoz's platform on SDL3 (app/platform.hpp): the window, input, the soft keyboard and the
 // frame loop, on Windows, macOS, Linux, Android and the web, for the app core (app/app_core.hpp).
-// SDL's main callbacks (SDL_AppInit / SDL_AppIterate / SDL_AppEvent) drive it on all of them.
+// SDL's main callbacks (SDL_AppInit / SDL_AppIterate / SDL_AppEvent) drive it on all of them; on
+// the desktops KOMPOZ_HEADLESS=1 runs the app on Kompoz's headless platform instead.
 // (Each platform is getting a layer of its own in its place.)
 
-#define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
@@ -12,6 +12,9 @@
 
 #include "../app/app_core.hpp"
 #include "../common/system.hpp"
+#ifdef KOMPOZ_HEADLESS
+#include "../headless/headless.hpp"
+#endif
 #ifdef KOMPOZ_GPU_VULKAN
 #include <SDL3/SDL_vulkan.h>
 #endif
@@ -119,7 +122,6 @@ struct SdlPlatform final : platform::Platform {
     SDL_Window* window = nullptr;
     SDL_GLContext glContext = nullptr;  // KOMPOZ_GPU=gles: the OpenGL ES context it draws with
     SDL_MetalView metalView = nullptr;  // KOMPOZ_GPU=metal: the view whose layer it draws into
-    bool vulkanLoaded = false;          // headless Vulkan: the library loaded here (no Vulkan window loads it)
 #ifdef KOMPOZ_DESKTOP_ACCENT
     std::unique_ptr<platform::DesktopAccent> accent;  // the desktop's accent color: dynamic color (Linux)
 #endif
@@ -208,13 +210,6 @@ struct SdlPlatform final : platform::Platform {
     void log(const std::string& message) const override { SDL_Log("%s", message.c_str()); }
     int64_t now() const override { return int64_t(SDL_GetTicksNS()); }
 
-    // Whether there is no screen to show frames on (SDL's offscreen driver: tests, CI,
-    // screenshots): the GPU renderer then draws only into its kept frame, a texture.
-    bool headless() const override {
-        const char* driver = SDL_GetCurrentVideoDriver();
-        return driver && std::string_view(driver) == "offscreen";
-    }
-
     // The platform's own first, then OpenGL ES: Metal on Apple's systems; on the web WebGPU, then
     // WebGL 2; elsewhere Vulkan (on Android from Android 10, before which its drivers were often
     // wrong), then OpenGL ES 3.
@@ -233,15 +228,15 @@ struct SdlPlatform final : platform::Platform {
     }
 
     // The window, made for `backend`'s graphics API, and what the device needs of it (an OpenGL ES
-    // context, a Metal view; headless, Vulkan and Metal nothing: they draw only into textures).
+    // context, a Metal view, a Vulkan surface).
     bool openWindow(const Application& config, gpu::Backend backend, gpu::Surface& surface, std::string* error) override {
         SDL_SetAppMetadata(config.title.c_str(), "0.1", "dev.kompoz.app");
         SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
 #ifdef SDL_PLATFORM_EMSCRIPTEN
         flags |= SDL_WINDOW_FILL_DOCUMENT;  // the whole page, resized with the browser window
 #endif
-        if (backend == gpu::Backend::Vulkan && !headless()) flags |= SDL_WINDOW_VULKAN;
-        if (backend == gpu::Backend::Metal && !headless()) flags |= SDL_WINDOW_METAL;
+        if (backend == gpu::Backend::Vulkan) flags |= SDL_WINDOW_VULKAN;
+        if (backend == gpu::Backend::Metal) flags |= SDL_WINDOW_METAL;
         if (backend == gpu::Backend::GLES) {  // an OpenGL ES 3.0 context (a debug one with KOMPOZ_GPU_VALIDATION=1)
             flags |= SDL_WINDOW_OPENGL;
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
@@ -263,9 +258,6 @@ struct SdlPlatform final : platform::Platform {
         SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, config.width);
         SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, config.height);
         SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, static_cast<Sint64>(flags));
-        // Headless, a window without a graphics API is just that: on macOS SDL would make it an OpenGL
-        // window, which offscreen means EGL, which macOS hasn't.
-        if (headless() && backend != gpu::Backend::GLES) SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_EXTERNAL_GRAPHICS_CONTEXT_BOOLEAN, true);
         window = SDL_CreateWindowWithProperties(props);
         SDL_DestroyProperties(props);
         if (!window) {
@@ -293,22 +285,15 @@ struct SdlPlatform final : platform::Platform {
             break;
         }
         case gpu::Backend::Metal:
-            if (headless()) break;
             metalView = SDL_Metal_CreateView(window);
             if (!metalView) return failed(std::string("no Metal view: ") + SDL_GetError());
             surface.metalLayer = SDL_Metal_GetLayer(metalView);
             break;
         case gpu::Backend::Vulkan:
 #ifdef KOMPOZ_GPU_VULKAN
-            if (headless()) {  // (no surface to present to, so no extensions for one)
-                if (!vulkanLoaded && !SDL_Vulkan_LoadLibrary(nullptr)) return failed(std::string("no Vulkan library: ") + SDL_GetError());
-                vulkanLoaded = true;
-            } else {
-                Uint32 count = 0;
-                if (const char* const* names = SDL_Vulkan_GetInstanceExtensions(&count)) surface.vulkanInstanceExtensions.assign(names, names + count);
-            }
+            if (Uint32 count = 0; const char* const* names = SDL_Vulkan_GetInstanceExtensions(&count)) surface.vulkanInstanceExtensions.assign(names, names + count);
             surface.vulkanGetInstanceProcAddr = reinterpret_cast<void* (*)(void*, const char*)>(SDL_Vulkan_GetVkGetInstanceProcAddr());
-            if (!headless()) surface.createVulkanSurface = [w](void* instance, uint64_t* out) {
+            surface.createVulkanSurface = [w](void* instance, uint64_t* out) {
                 VkSurfaceKHR made{};
                 if (!SDL_Vulkan_CreateSurface(w, static_cast<VkInstance>(instance), nullptr, &made)) return false;
                 std::memcpy(out, &made, sizeof made);
@@ -330,10 +315,6 @@ struct SdlPlatform final : platform::Platform {
     void closeWindow() override {
         if (glContext) SDL_GL_DestroyContext(std::exchange(glContext, nullptr));
         if (metalView) SDL_Metal_DestroyView(std::exchange(metalView, nullptr));
-#ifdef KOMPOZ_GPU_VULKAN
-        if (vulkanLoaded) SDL_Vulkan_UnloadLibrary();
-        vulkanLoaded = false;
-#endif
         if (window) SDL_DestroyWindow(std::exchange(window, nullptr));
     }
 
@@ -943,4 +924,12 @@ void SDL_AppQuit(void* appstate, SDL_AppResult) {
     auto* app = static_cast<SdlApp*>(appstate);
     if (app) app->core.quit();
     delete app;
+}
+
+// (SDL_main.h makes it the program's entry: SDL_main where SDL's own starts the app.)
+int main(int argc, char* argv[]) {
+#ifdef KOMPOZ_HEADLESS
+    if (kompoz::platform::headlessRequested()) return kompoz::platform::runHeadless(argc, argv);
+#endif
+    return SDL_EnterAppMainCallbacks(argc, argv, SDL_AppInit, SDL_AppIterate, SDL_AppEvent, SDL_AppQuit);
 }

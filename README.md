@@ -377,7 +377,7 @@ KOMPOZ_PREVIEW=CounterCardPreview scripts/dev.sh
 The window shows only that preview and comes back on every save; `KOMPOZ_PREVIEW='*'` (or a name it doesn't know)
 shows them all, one under another, with their names and sizes. `.darkTheme = true` sets `isSystemInDarkTheme()`
 inside it, `.background` a background; the text scale is the window's (`KOMPOZ_FONT_SCALE`). As a picture:
-`SDL_VIDEODRIVER=offscreen KOMPOZ_PREVIEW=CounterCardPreview KOMPOZ_SCRIPT="wait 10; shot preview.png; quit" ./build/showcase`.
+`KOMPOZ_HEADLESS=1 KOMPOZ_PREVIEW=CounterCardPreview KOMPOZ_SCRIPT="wait 10; shot preview.png; quit" ./build/showcase`.
 
 ### Tests
 
@@ -502,10 +502,11 @@ animations are deterministic; when it ends, real time takes over and you can go 
 script left it):
 
 ```bash
-SDL_VIDEODRIVER=offscreen KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
+KOMPOZ_HEADLESS=1 KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 ```
 
-Without a window the GPU renderer draws only into its kept frame, from which the screenshot is taken.
+With `KOMPOZ_HEADLESS=1` it runs on Kompoz's headless platform, without a window: the GPU renderer draws only into its
+kept frame, from which the screenshot is taken.
 
 Commands: `click x y`, `rclick x y`, `move x y`, `down x y` / `up x y` (holding down), `drag x1 y1 x2 y2`,
 `mdrag x1 y1 x2 y2` (with the mouse), `resize w h`, `swipe x1 y1 x2 y2 frames` (a move per frame, so it flings),

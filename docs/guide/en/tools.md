@@ -62,13 +62,13 @@ KOMPOZ_PREVIEW=CounterCardPreview scripts/dev.sh
 `KOMPOZ_SCRIPT` drives the app without a user: clicks, typing, swipes and screenshots, with coordinates in dp. While the script runs, time is virtual, so animations are the same on every run; when it ends, real time takes over and you can go on using the app from where it left off. After `realtime`, the rest of the script runs in real time, its frames paced to the display as a person would see them: for measuring with `KOMPOZ_PROFILE`.
 
 ```bash
-SDL_VIDEODRIVER=offscreen KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
+KOMPOZ_HEADLESS=1 KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 ```
 
-`SDL_VIDEODRIVER=offscreen` runs without a window, which is useful on a build server: the GPU renderer draws only into its kept frame (a computer without a GPU has a software one: lavapipe or llvmpipe on Linux, WARP on Windows). A preview becomes a picture the same way:
+`KOMPOZ_HEADLESS=1` runs the app on Kompoz's headless platform, without a window, which is useful on a build server: the GPU renderer draws only into its kept frame (a computer without a GPU has a software one: lavapipe or llvmpipe on Linux, WARP through ANGLE on Windows). Its window is the app's size until the script's `resize`; it has no pointer, keyboard or microphone, and reads neither the desktop's accent color nor the wallpaper's, so the screenshots are the same on every machine. A preview becomes a picture the same way:
 
 ```bash
-SDL_VIDEODRIVER=offscreen KOMPOZ_PREVIEW=CounterCardPreview KOMPOZ_SCRIPT="wait 10; shot preview.png; quit" ./build/myapp
+KOMPOZ_HEADLESS=1 KOMPOZ_PREVIEW=CounterCardPreview KOMPOZ_SCRIPT="wait 10; shot preview.png; quit" ./build/myapp
 ```
 
 The commands, separated by `;`:
@@ -144,6 +144,7 @@ On the web, the page's query sets them: `showcase.html?KOMPOZ_GPU=gles&KOMPOZ_PR
 |---|---|
 | `KOMPOZ_PREVIEW=name` | Shows one preview, or all of them with `*`. |
 | `KOMPOZ_SCRIPT="…"` | Drives the app with the commands above. |
+| `KOMPOZ_HEADLESS=1` | Runs the app without a window, on the desktops (see above). |
 | `KOMPOZ_STATE_FILE=file` | Writes the saved state (`rememberSaveable`, the navigation back stack) at exit and reads it at start. |
 | `KOMPOZ_FONT_SCALE=1.3` | Stands in for the system's font scale on the desktop. |
 | `KOMPOZ_SCALE=2.625` | Stands in for a screen's density, to see a phone's layout on the desktop. |

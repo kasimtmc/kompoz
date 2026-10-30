@@ -1,5 +1,6 @@
-# Builds tests/package (the README's first example) against the package and runs it: offscreen,
-# and on Windows (whose offscreen driver has no graphics API) in a window.
+# Builds tests/package (the README's first example) against the package and runs it: headless
+# (KOMPOZ_HEADLESS=1), and on Windows, where that needs a Vulkan driver or ANGLE beside the program,
+# in a window.
 import os
 
 from conan import ConanFile
@@ -30,7 +31,7 @@ class KompozTestConan(ConanFile):
             demo = os.path.join("package", self.cpp.build.bindir, "demo")
             env = Environment()
             if self.settings.os != "Windows":
-                env.define("SDL_VIDEO_DRIVER", "offscreen")
+                env.define("KOMPOZ_HEADLESS", "1")
             env.define("KOMPOZ_SCRIPT", "wait 5;click 70 70;wait 5;quit")
             with env.vars(self, scope="run").apply():
                 self.run(demo, env="conanrun")

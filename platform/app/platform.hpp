@@ -44,8 +44,6 @@ public:
     virtual std::optional<std::string> option(std::string_view name) const = 0;
     virtual void log(const std::string& message) const = 0;
     virtual int64_t now() const = 0;  // ns, on the clock the events' times are on
-    // No screen to show frames on (tests, CI, screenshots): drawn only into the kept frame.
-    virtual bool headless() const = 0;
     // The GPU backends KOMPOZ_GPU=auto tries here, the best first.
     virtual std::vector<gpu::Backend> backends() const = 0;
     // The window, made to be drawn into with `backend` (what the device needs of it into

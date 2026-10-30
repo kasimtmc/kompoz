@@ -9,7 +9,7 @@
 //
 // and start the app with KOMPOZ_PREVIEW=CounterCardPreview: its window shows only that, at that
 // size. KOMPOZ_PREVIEW=* (or a name it doesn't know) shows them all, one under another. With
-// scripts/dev.sh it comes back on every save; with SDL's offscreen driver and
+// scripts/dev.sh it comes back on every save; with KOMPOZ_HEADLESS=1 and
 // KOMPOZ_SCRIPT="wait 10; shot preview.png; quit" it is a picture. The text scale is the
 // window's (KOMPOZ_FONT_SCALE=1.3), not a preview's own.
 //

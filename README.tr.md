@@ -376,7 +376,7 @@ KOMPOZ_PREVIEW=CounterCardPreview scripts/dev.sh
 Pencere yalnız o önizlemeyi gösterir ve her kayıtta yenilenir; `KOMPOZ_PREVIEW='*'` (ya da bilinmeyen bir ad) hepsini
 alt alta, adları ve boyutlarıyla gösterir. `.darkTheme = true` içinde `isSystemInDarkTheme()`'i, `.background` arka
 planı verir; yazı ölçeği pencerenin (`KOMPOZ_FONT_SCALE`). Resim olarak:
-`SDL_VIDEODRIVER=offscreen KOMPOZ_PREVIEW=CounterCardPreview KOMPOZ_SCRIPT="wait 10; shot onizleme.png; quit" ./build/showcase`.
+`KOMPOZ_HEADLESS=1 KOMPOZ_PREVIEW=CounterCardPreview KOMPOZ_SCRIPT="wait 10; shot onizleme.png; quit" ./build/showcase`.
 
 ### Testler
 
@@ -498,10 +498,11 @@ deterministiktir; betik bitince gerçek zaman devralır, uygulamayı betiğin ge
 edebilirsiniz):
 
 ```bash
-SDL_VIDEODRIVER=offscreen KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
+KOMPOZ_HEADLESS=1 KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 ```
 
-Pencere yokken GPU renderer'ı yalnızca sakladığı kareye çizer; ekran görüntüsü ondan alınır.
+`KOMPOZ_HEADLESS=1` ile Kompoz'un ekransız platformunda, pencere olmadan çalışır: GPU renderer'ı yalnızca sakladığı
+kareye çizer; ekran görüntüsü ondan alınır.
 
 Komutlar: `click x y`, `rclick x y`, `move x y`, `down x y` / `up x y` (basılı tutma), `drag x1 y1 x2 y2`,
 `mdrag x1 y1 x2 y2` (fareyle), `resize w h`, `swipe x1 y1 x2 y2 kare` (kare başına bir hareket, fling'i de tetikler),

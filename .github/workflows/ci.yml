@@ -2,7 +2,8 @@
 # but Android and the web), the platform tests (Linux: the wallpaper's colors, images, AT-SPI on a
 # D-Bus of their own; Windows: UI Automation), and an app (tests/package, the README's first
 # example) built against Kompoz as it is installed (cmake --install, vcpkg, Conan), run, clicked
-# and photographed: offscreen on Linux, in a real window on Windows and macOS.
+# and photographed: on Kompoz's headless platform on Linux, in a real window on Windows and macOS
+# (and headless on macOS too).
 name: CI
 
 on:
@@ -97,11 +98,11 @@ jobs:
           cmake -S tests/package -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/install" \
             -DCMAKE_CXX_FLAGS="${{ matrix.flags }}" -DCMAKE_EXE_LINKER_FLAGS="${{ matrix.flags }}"
           cmake --build build-package
-      # Kompoz's GPU renderer on Vulkan (lavapipe), drawing only into its kept frame without a window.
-      - name: Run it offscreen, click its button, take a screenshot
+      # Kompoz's headless platform: the GPU renderer on Vulkan (lavapipe), drawing only into its kept frame.
+      - name: Run it headless, click its button, take a screenshot
         working-directory: build-package
         env:
-          SDL_VIDEO_DRIVER: offscreen
+          KOMPOZ_HEADLESS: 1
           # ASan still checks every access; only the leak report at exit is off: it lists what Mesa's drivers and
           # ALSA allocate in libraries already unloaded by then. Kompoz's own leaks are checked by the tests.
           ASAN_OPTIONS: detect_leaks=0
@@ -186,12 +187,12 @@ jobs:
         env:
           KOMPOZ_GPU_VALIDATION: 1
         run: KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo && test -s shot.png
-      # Offscreen: Metal without the window's layer, drawing only into the kept frame.
-      - name: Run it offscreen, click its button, take a screenshot
+      # Headless: Metal without a window, drawing only into the kept frame.
+      - name: Run it headless, click its button, take a screenshot
         working-directory: build-package
         env:
-          SDL_VIDEO_DRIVER: offscreen
-        run: KOMPOZ_SCRIPT="${KOMPOZ_SCRIPT_RUN/shot.png/shot-offscreen.png}" ./demo && test -s shot-offscreen.png
+          KOMPOZ_HEADLESS: 1
+        run: KOMPOZ_SCRIPT="${KOMPOZ_SCRIPT_RUN/shot.png/shot-headless.png}" ./demo && test -s shot-headless.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -256,12 +257,12 @@ jobs:
           cmake --build build-package --config Release
       - uses: ./.github/actions/angle
         if: runner.os == 'Windows'
-      - name: Run it, click its button, take a screenshot (offscreen on Linux, in a window elsewhere)
+      - name: Run it, click its button, take a screenshot (headless on Linux, in a window elsewhere)
         run: |
           app=$(find build-package -type f \( -name demo -o -name demo.exe \) | head -1)
           cd "$(dirname "$app")"
           # Linux: Vulkan on lavapipe without a window; Windows: OpenGL ES through ANGLE beside it.
-          if [ "$RUNNER_OS" = Linux ]; then export SDL_VIDEO_DRIVER=offscreen VK_DRIVER_FILES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"; fi
+          if [ "$RUNNER_OS" = Linux ]; then export KOMPOZ_HEADLESS=1 VK_DRIVER_FILES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"; fi
           if [ "$RUNNER_OS" = Windows ]; then cp "$GITHUB_WORKSPACE"/angle/x64-windows-release/bin/*.dll .; fi
           KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" "./$(basename "$app")" && test -s shot.png
       - name: The logs of what failed

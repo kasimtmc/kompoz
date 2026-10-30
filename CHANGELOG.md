@@ -351,7 +351,12 @@
   and screenshots and the GPU tests' pictures are written, with libpng (the system's, vcpkg's or Conan's, else built
   from `third_party/` with zlib: `scripts/fetch-deps.sh`), a file's gamma and color space honored as Android and the
   browsers do, a 16-bit one that says nothing of its gamma read as sRGB; BMP is read by Kompoz itself (1 to 32 bits a
-  pixel, uncompressed or with bit fields).
+  pixel, uncompressed or with bit fields). On the desktops `KOMPOZ_HEADLESS=1` runs an app on Kompoz's own headless
+  platform, in place of SDL's offscreen driver (`SDL_VIDEODRIVER=offscreen`): its window a size, shown and focused at
+  once, without a pointer, a keyboard or a microphone, reading neither the desktop's accent color nor the wallpaper's,
+  its loop and timers Kompoz's; the GPU device without a window, Vulkan from the system's loader or OpenGL ES 3
+  through EGL (Mesa's surfaceless platform; ANGLE's on Windows). The GPU tests make their devices the same way, and on
+  the web their WebGL 2 context straight from Emscripten, without SDL.
 - **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
   blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
   scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and

@@ -13,16 +13,16 @@
 //   KOMPOZ_GPU=webgpu        WebGPU's (on the web; OpenGL ES's, WebGL 2, is the default there)
 //   KOMPOZ_GOLDEN_DIR=<dir>  the pictures from there (a phone's copy)
 //
-// On Android it is a program run from adb shell, on OpenGL ES 3 through EGL (no SDL video there),
-// or on Vulkan (KOMPOZ_GPU=vulkan) without a window:
+// On Android it is a program run from adb shell, on OpenGL ES 3 through EGL, or on Vulkan
+// (KOMPOZ_GPU=vulkan):
 //   adb push kompoz_gpu_tests libSDL3.so assets/fonts tests/golden /data/local/tmp/kgt/
 //   adb shell 'cd /data/local/tmp/kgt && LD_LIBRARY_PATH=. KOMPOZ_GOLDEN_DIR=golden ./kompoz_gpu_tests'
 // On the web it is a page on the browser's WebGL 2 (or WebGPU), the variables its query, which
 // emrun opens and reports on (in CI on Chrome's SwiftShader):
 //   emrun --browser chrome build-web/kompoz_gpu_tests.html KOMPOZ_GPU_REQUIRED=1
 //
-// The device is Vulkan's (or OpenGL ES's), on SDL's offscreen video driver (a headless surface):
-// lavapipe (llvmpipe) in CI. On Windows, a hidden window.
+// The device is made without a window (platform/headless/headless_gpu.hpp), drawing only into
+// textures: lavapipe (llvmpipe) in CI.
 
 #include "../platform/gpu/device.hpp"
 #include "../platform/gpu/path_geometry.hpp"
@@ -34,20 +34,19 @@
 #include <kompoz/display_list.hpp>
 #include <kompoz/draw.hpp>
 
-#include <SDL3/SDL.h>
-#define SDL_MAIN_HANDLED  // (its own main, which says SDL may start: SDL_SetMainReady)
-#include <SDL3/SDL_main.h>
-#include <SDL3/SDL_vulkan.h>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
+#include <emscripten/html5.h>
+#else
+#include "../platform/headless/headless_gpu.hpp"
 #endif
 #ifdef __ANDROID__
-#include <dlfcn.h>
 #include <unistd.h>
 #endif
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -84,8 +83,11 @@ struct Pixels {
 
 // A device, fonts and a renderer for the tests.
 struct Gpu {
-    SDL_Window* window = nullptr;
-    SDL_GLContext context = nullptr;
+#ifdef __EMSCRIPTEN__
+    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE context = 0;
+#else
+    platform::HeadlessGpu headless;
+#endif
     std::unique_ptr<gpu::Device> device;
     std::unique_ptr<platform::FontSystem> fonts;
     std::unique_ptr<gpu::Renderer> renderer;
@@ -116,121 +118,44 @@ struct Gpu {
         return false;
     }
 
-#ifdef __ANDROID__
-    // On Android, a program run from adb shell has no SDL (it needs an app's Java side): Vulkan
-    // (KOMPOZ_GPU=vulkan) from the system's loader, drawing only into textures; else an OpenGL ES 3
-    // context of its own, through EGL, current on a pbuffer.
-    void* egl = nullptr;
-    void* glesLibrary = nullptr;
     bool start(std::string* why) {
-        using Fn = void* (*)(...);
-        if (const char* choice = std::getenv("KOMPOZ_GPU"); choice && std::string(choice) == "vulkan") {
-            void* loader = dlopen("libvulkan.so", RTLD_NOW);
-            gpu::Surface s = surface();
-            s.vulkanGetInstanceProcAddr = loader ? reinterpret_cast<void* (*)(void*, const char*)>(dlsym(loader, "vkGetInstanceProcAddr")) : nullptr;
-            device = gpu::Device::create(gpu::Backend::Vulkan, s, why);
-            return device && startRenderer(why);
-        }
-        egl = dlopen("libEGL.so", RTLD_NOW);
-        glesLibrary = dlopen("libGLESv3.so", RTLD_NOW);
-        if (!egl || !glesLibrary) {
-            *why = "no libEGL.so or libGLESv3.so";
-            return false;
-        }
-        auto fn = [&](const char* name) { return reinterpret_cast<Fn>(dlsym(egl, name)); };
-        void* display = fn("eglGetDisplay")(nullptr);
-        int major = 0, minor = 0;
-        if (!display || !fn("eglInitialize")(display, &major, &minor)) {
-            *why = "no EGL display";
-            return false;
-        }
-        const int attributes[] = {0x3040 /*EGL_RENDERABLE_TYPE*/, 0x40 /*EGL_OPENGL_ES3_BIT*/, 0x3033 /*EGL_SURFACE_TYPE*/, 0x1 /*EGL_PBUFFER_BIT*/,
-                                  0x3024, 8, 0x3023, 8, 0x3022, 8, 0x3021, 8, 0x3038 /*EGL_NONE*/};
-        void* config = nullptr;
-        int count = 0;
-        fn("eglChooseConfig")(display, attributes, &config, 1, &count);
-        const int contextAttributes[] = {0x3098 /*EGL_CONTEXT_MAJOR_VERSION*/, 3, 0x3038};
-        void* context = count > 0 ? reinterpret_cast<void*>(fn("eglCreateContext")(display, config, nullptr, contextAttributes)) : nullptr;
-        const int surfaceAttributes[] = {0x3057 /*EGL_WIDTH*/, 64, 0x3056 /*EGL_HEIGHT*/, 64, 0x3038};
-        void* pbuffer = context ? reinterpret_cast<void*>(fn("eglCreatePbufferSurface")(display, config, surfaceAttributes)) : nullptr;
-        if (!pbuffer || !fn("eglMakeCurrent")(display, pbuffer, pbuffer, context)) {
-            *why = "no OpenGL ES 3 context through EGL";
-            return false;
-        }
-        static void* gles = glesLibrary;
-        static Fn getProcAddress = fn("eglGetProcAddress");
+        std::string choice = std::getenv("KOMPOZ_GPU") ? std::getenv("KOMPOZ_GPU") : "";
         gpu::Surface s = surface();
-        s.glGetProcAddress = glProcAddress = [](const char* name) -> void* {
-            if (void* f = dlsym(gles, name)) return f;
-            return reinterpret_cast<void*>(getProcAddress(name));
-        };
         s.drawableSize = [](int* w, int* h) { *w = 64, *h = 64; };
-        device = gpu::Device::create(gpu::Backend::GLES, s, why);
-        return device && startRenderer(why);
-    }
-#else
-    bool start(std::string* why) {
-        const char* choice = std::getenv("KOMPOZ_GPU");
 #ifdef __EMSCRIPTEN__
-        if (choice && std::string(choice) == "webgpu") {  // (no canvas: it draws only into textures)
-            device = gpu::Device::create(gpu::Backend::WebGPU, surface(), why);
+        if (choice == "webgpu") {  // (no canvas: it draws only into textures)
+            device = gpu::Device::create(gpu::Backend::WebGPU, s, why);
             return device && startRenderer(why);
         }
-        bool gles = true;  // (WebGL 2, the web's other)
-#else
-        bool gles = choice && std::string(choice) == "gles";
-#endif
-#ifdef __APPLE__
-        if (!choice || std::string(choice) == "metal") {  // (no window: it draws only into textures)
-            device = gpu::Device::create(gpu::Backend::Metal, surface(), why);
-            return device && startRenderer(why);
-        }
-#endif
-        if (gles) {
-            // An OpenGL ES 3.0 context (a debug one for validation), current on this thread.
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-            const char* validation = std::getenv("KOMPOZ_GPU_VALIDATION");
-            if (validation && std::string(validation) == "1") SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
-#ifdef _WIN32  // (ANGLE's where it is beside the test, as an app's: see sdl3_app.cpp)
-            if (const char* base = SDL_GetBasePath(); base && SDL_GetPathInfo((std::string(base) + "libEGL.dll").c_str(), nullptr))
-                SDL_SetHint(SDL_HINT_OPENGL_ES_DRIVER, "1");
-#endif
-            window = SDL_CreateWindow("kompoz_gpu_tests", 64, 64, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
-            if (!window || !(context = SDL_GL_CreateContext(window))) {
-                *why = std::string("no OpenGL ES 3 context: ") + SDL_GetError();
-                return false;
-            }
-            gpu::Surface s = surface();
-            s.glGetProcAddress = glProcAddress = [](const char* name) { return reinterpret_cast<void*>(SDL_GL_GetProcAddress(name)); };
-            SDL_Window* w = window;
-            s.glSwap = [w] { SDL_GL_SwapWindow(w); };
-            s.drawableSize = [w](int* width, int* height) { SDL_GetWindowSizeInPixels(w, width, height); };
-            device = gpu::Device::create(gpu::Backend::GLES, s, why);
-            return device && startRenderer(why);
-        }
-        window = SDL_CreateWindow("kompoz_gpu_tests", 64, 64, SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN);
-        if (!window) {
-            *why = std::string("no Vulkan window: ") + SDL_GetError();
+        // WebGL 2 (the web's other) on the page's canvas, current on this thread.
+        EmscriptenWebGLContextAttributes attributes;
+        emscripten_webgl_init_context_attributes(&attributes);
+        attributes.majorVersion = 2;
+        attributes.depth = attributes.stencil = attributes.antialias = false;
+        context = emscripten_webgl_create_context("#canvas", &attributes);
+        if (context <= 0 || emscripten_webgl_make_context_current(context) != EMSCRIPTEN_RESULT_SUCCESS) {
+            *why = "no WebGL 2 context";
             return false;
         }
-        gpu::Surface s = surface();
-        Uint32 count = 0;
-        if (const char* const* names = SDL_Vulkan_GetInstanceExtensions(&count)) s.vulkanInstanceExtensions.assign(names, names + count);
-        s.vulkanGetInstanceProcAddr = reinterpret_cast<void* (*)(void*, const char*)>(SDL_Vulkan_GetVkGetInstanceProcAddr());
-        SDL_Window* w = window;
-        s.createVulkanSurface = [w](void* instance, uint64_t* out) {
-            VkSurfaceKHR made{};
-            if (!SDL_Vulkan_CreateSurface(w, static_cast<VkInstance>(instance), nullptr, &made)) return false;
-            std::memcpy(out, &made, sizeof made);
-            return true;
-        };
-        s.drawableSize = [w](int* width, int* height) { SDL_GetWindowSizeInPixels(w, width, height); };
-        device = gpu::Device::create(gpu::Backend::Vulkan, s, why);
+        s.glGetProcAddress = glProcAddress = [](const char* name) { return emscripten_webgl_get_proc_address(name); };
+        device = gpu::Device::create(gpu::Backend::GLES, s, why);
+#else
+        // The platform's own unless another is asked for: Metal on Apple's systems, OpenGL ES 3 on
+        // Android (Vulkan with KOMPOZ_GPU=vulkan), else Vulkan (OpenGL ES with KOMPOZ_GPU=gles).
+#if defined(__APPLE__)
+        gpu::Backend backend = choice.empty() || choice == "metal" ? gpu::Backend::Metal : choice == "gles" ? gpu::Backend::GLES : gpu::Backend::Vulkan;
+#elif defined(__ANDROID__)
+        gpu::Backend backend = choice == "vulkan" ? gpu::Backend::Vulkan : gpu::Backend::GLES;
+#else
+        gpu::Backend backend = choice == "gles" ? gpu::Backend::GLES : gpu::Backend::Vulkan;
+#endif
+        const char* validation = std::getenv("KOMPOZ_GPU_VALIDATION");
+        if (!headless.open(backend, validation && std::string(validation) == "1", s, why)) return false;
+        glProcAddress = s.glGetProcAddress;
+        device = gpu::Device::create(backend, s, why);
+#endif
         return device && startRenderer(why);
     }
-#endif
 
     bool startRenderer(std::string* why) {
         fonts = loadFonts();
@@ -259,8 +184,11 @@ struct Gpu {
     ~Gpu() {
         renderer.reset();
         device.reset();
-        if (context) SDL_GL_DestroyContext(context);
-        if (window) SDL_DestroyWindow(window);
+#ifdef __EMSCRIPTEN__
+        if (context > 0) emscripten_webgl_destroy_context(context);
+#else
+        headless.close();
+#endif
     }
 
     // `draw` on a w x h px target (white, or `clear`) at `scale` px per dp, read back (premultiplied).
@@ -3519,9 +3447,9 @@ void gpuTimesComeBack(Gpu& g) {
     std::vector<gpu::GpuFrameTime> times;
     double longest = 0;  // a frame's wall time, drawn and read back: its GPU work's within it
     for (int i = 0; i < 16 && times.size() < 3; ++i) {
-        uint64_t start = SDL_GetTicksNS();
+        auto start = std::chrono::steady_clock::now();
         g.render(192, 192, 1, rects);
-        longest = std::max(longest, double(SDL_GetTicksNS() - start) / 1e6);
+        longest = std::max(longest, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
 #ifdef __EMSCRIPTEN__
         emscripten_sleep(1);  // (WebGL has a query's result only after the page's task, as an app's frames are)
 #endif
@@ -4322,17 +4250,7 @@ void pipelinesAreKeptBetweenRuns() {
 
 int main() {
     setvbuf(stdout, nullptr, _IOLBF, 0);
-    SDL_SetMainReady();  // (its own main)
-#if !defined(__EMSCRIPTEN__) && !defined(_WIN32)  // (there, the page's canvas; on Windows a hidden window, as ANGLE's
-    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");    // EGL hasn't the device enumeration the offscreen driver's wants)
-#endif
     bool required = std::getenv("KOMPOZ_GPU_REQUIRED") && std::string(std::getenv("KOMPOZ_GPU_REQUIRED")) == "1";
-#ifndef __ANDROID__  // (there, no SDL video: see Gpu::start)
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
-        std::printf("no SDL video: %s\n", SDL_GetError());
-        return required ? 1 : 0;
-    }
-#endif
     int result = 0;
     bool started = false;
     {
@@ -4397,6 +4315,5 @@ int main() {
         std::printf("%d checks, %d failed\n", checks, failures);
         result = failures == 0 ? 0 : 1;
     }
-    SDL_Quit();
     return result;
 }

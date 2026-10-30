@@ -62,13 +62,13 @@ KOMPOZ_PREVIEW=CounterCardPreview scripts/dev.sh
 `KOMPOZ_SCRIPT` uygulamayı bir kullanıcı olmadan sürer: tıklamalar, yazma, kaydırmalar ve ekran görüntüleri, koordinatlar dp cinsinden. Betik çalışırken zaman sanaldır, böylece animasyonlar her çalıştırmada aynıdır; betik bitince gerçek zaman devralır ve uygulamayı kaldığı yerden kullanmaya devam edebilirsiniz. `realtime`'dan sonra betiğin geri kalanı gerçek zamanda çalışır, kareleri bir insanın göreceği gibi ekranın hızına göre bekletilir: `KOMPOZ_PROFILE` ile ölçmek için.
 
 ```bash
-SDL_VIDEODRIVER=offscreen KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
+KOMPOZ_HEADLESS=1 KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 ```
 
-`SDL_VIDEODRIVER=offscreen` pencere olmadan çalıştırır; bu, bir derleme sunucusunda işe yarar: GPU renderer'ı yalnızca sakladığı kareye çizer (GPU'su olmayan bir bilgisayarın yazılımla çalışan bir GPU'su vardır: Linux'ta lavapipe ya da llvmpipe, Windows'ta WARP). Bir önizleme de aynı yolla resme dönüşür:
+`KOMPOZ_HEADLESS=1` uygulamayı Kompoz'un ekransız platformunda, pencere olmadan çalıştırır; bu, bir derleme sunucusunda işe yarar: GPU renderer'ı yalnızca sakladığı kareye çizer (GPU'su olmayan bir bilgisayarın yazılımla çalışan bir GPU'su vardır: Linux'ta lavapipe ya da llvmpipe, Windows'ta ANGLE üzerinden WARP). Penceresi, betikteki `resize`'a kadar uygulamanın boyutundadır; işaretçisi, klavyesi, mikrofonu yoktur, masaüstünün vurgu rengini de duvar kâğıdınınkini de okumaz; böylece ekran görüntüleri her makinede aynıdır. Bir önizleme de aynı yolla resme dönüşür:
 
 ```bash
-SDL_VIDEODRIVER=offscreen KOMPOZ_PREVIEW=CounterCardPreview KOMPOZ_SCRIPT="wait 10; shot preview.png; quit" ./build/myapp
+KOMPOZ_HEADLESS=1 KOMPOZ_PREVIEW=CounterCardPreview KOMPOZ_SCRIPT="wait 10; shot preview.png; quit" ./build/myapp
 ```
 
 `;` ile ayrılan komutlar:
@@ -144,6 +144,7 @@ Web'de onları sayfanın sorgusu belirler: `showcase.html?KOMPOZ_GPU=gles&KOMPOZ
 |---|---|
 | `KOMPOZ_PREVIEW=name` | Tek bir önizlemeyi, `*` ile de hepsini gösterir. |
 | `KOMPOZ_SCRIPT="…"` | Uygulamayı yukarıdaki komutlarla sürer. |
+| `KOMPOZ_HEADLESS=1` | Uygulamayı masaüstlerinde pencere olmadan çalıştırır (yukarıya bakın). |
 | `KOMPOZ_STATE_FILE=file` | Kaydedilen durumu (`rememberSaveable`, gezinmenin geri yığını) çıkışta yazar, açılışta okur. |
 | `KOMPOZ_FONT_SCALE=1.3` | Masaüstünde sistemin yazı ölçeğinin yerini tutar. |
 | `KOMPOZ_SCALE=2.625` | Bir telefonun yerleşimini masaüstünde görmek için ekran yoğunluğunun yerini tutar. |
