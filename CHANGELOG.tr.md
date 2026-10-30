@@ -415,7 +415,14 @@
   açık tutma. libX11, libXi, libXcursor ve libXrandr çalışma anında yükleniyor; `KOMPOZ_PLATFORM=x11` onu bir Wayland
   oturumunda da XWayland üzerinden çalıştırıyor. İkisinin ortak kullandıkları (tuşlar, bağlantılar, masaüstünün
   hizmetleri) `platform/linux/desktop_services`'ta, EGL üzerinden OpenGL ES `platform/common/egl_window`'da (derlemek
-  için EGL başlığı gerekmiyor; Windows'ta ANGLE'ınkiyle de).
+  için EGL başlığı gerekmiyor; Windows'ta ANGLE'ınkiyle de). **Windows, Kompoz'un kendi Win32 platformunda çalışıyor**
+  (`platform/windows`): her monitörün DPI'ını bilen bir pencere (monitör başına v2; uygulamanın dp boyutu açıldığı
+  monitörde), başlık çubuğu Windows'un koyu moduyla koyulaşıyor; Vulkan (`VK_KHR_win32_surface`) ya da OpenGL ES
+  (programın yanındaki ANGLE, yoksa sürücünün WGL üzerinden) ile çiziliyor, kareleri ekranın vuruşunda, Windows
+  pencereyi boyutlandırırken ya da taşırken de çiziliyor. Fare (bir düğmesi basılıyken yakalı) ve tekerleği, dokunma
+  (`WM_POINTER`; kalem fare gibi), klavye (AltGr Ctrl sayılmıyor) ve giriş yöntemi (IMM32, alanın yerinde), pano,
+  dosya ve metin bırakmalar (OLE), sistemin imleçleri, ekranı açık tutma; vurgu rengi, duvar kağıdının renkleri ve UI
+  Automation eskisi gibi; `mediaQuery` için mikrofon (waveIn) ve kamera (aygıt arayüzü).
 - **Bir yolun gölgesi önceden sahip olduğu maskeden çiziliyor** (Compose'un bir `dropShadow`'un ya da
   `innerShadow`'un bulanık bitmap'ini tutması gibi): GPU renderer'ı yuvarlak köşeli dikdörtgen olmayan bir şeklin
   (kalp, yıldız, kurabiye) gölgesini her seferinde baştan, her biri iki geçişli bir katman ve bir bulanıklıkla

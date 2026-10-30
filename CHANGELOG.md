@@ -390,7 +390,15 @@
   (libXcursor), the refresh rate from XRandR, the screen kept on through `org.freedesktop.ScreenSaver`. libX11, libXi,
   libXcursor and libXrandr are loaded at run time; `KOMPOZ_PLATFORM=x11` runs it in a Wayland session too, through
   XWayland. What the two share (keys, links, the desktop's services) is in `platform/linux/desktop_services`, OpenGL
-  ES through EGL in `platform/common/egl_window` (no EGL header needed to build it; ANGLE's on Windows too).
+  ES through EGL in `platform/common/egl_window` (no EGL header needed to build it; ANGLE's on Windows too). **Windows
+  runs on Kompoz's own Win32 platform** (`platform/windows`): a window aware of each monitor's DPI (per-monitor v2,
+  the app's size in dp on the monitor it opens on), its title bar dark with Windows' dark mode, drawn into with Vulkan
+  (`VK_KHR_win32_surface`) or OpenGL ES (ANGLE's beside the program, else the driver's through WGL), frames on the
+  display's beat and drawn on while Windows resizes or moves the window; the mouse (captured while a button is down)
+  and its wheel, touch (`WM_POINTER`; a pen as the mouse), the keyboard (AltGr not taken for Ctrl) and the input
+  method (IMM32, at the field), the clipboard, drops of files and text (OLE), the system's cursors, the screen kept
+  on, the accent color, the wallpaper's colors and UI Automation as before, a microphone (waveIn) and a camera (its
+  device interface) for `mediaQuery`.
 - **A path's shadow is drawn from the mask it had before** (as Compose keeps a `dropShadow`'s or `innerShadow`'s
   blurred bitmap): the GPU renderer drew a shape's shadow that isn't a rounded rect (a heart, a star, a cookie) from
   scratch each time, a layer and a blur in two passes each; it now draws it white once into a texture of its own and

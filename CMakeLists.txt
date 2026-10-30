@@ -367,10 +367,12 @@ if(KOMPOZ_BUILD_SDL3)
         target_link_libraries(kompoz_sdl3 PUBLIC ${CMAKE_DL_LIBS})
     elseif(WIN32)
         # Windows' accent color (DWM's, in the registry): dynamic color. Screen readers read the
-        # semantics tree through UI Automation.
-        target_sources(kompoz_sdl3 PRIVATE platform/windows/desktop_accent.cpp platform/windows/uia_bridge.cpp)
-        target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_DESKTOP_ACCENT=1 KOMPOZ_UIA=1)
-        target_link_libraries(kompoz_sdl3 PUBLIC uiautomationcore oleaut32)
+        # semantics tree through UI Automation. Kompoz's own Win32 platform (platform/windows), picked
+        # over SDL's.
+        target_sources(kompoz_sdl3 PRIVATE platform/windows/desktop_accent.cpp platform/windows/uia_bridge.cpp
+                       platform/windows/win32_platform.cpp platform/common/egl_window.cpp)
+        target_compile_definitions(kompoz_sdl3 PRIVATE KOMPOZ_DESKTOP_ACCENT=1 KOMPOZ_UIA=1 KOMPOZ_WIN32=1)
+        target_link_libraries(kompoz_sdl3 PUBLIC uiautomationcore oleaut32 dwmapi imm32 winmm cfgmgr32 shell32 uuid)
     endif()
     # Kompoz's headless platform on the desktops (KOMPOZ_HEADLESS=1: tests, scripted runs, CI).
     if(NOT kompoz_mobile)

@@ -125,7 +125,7 @@ The build above is all it takes. Dark mode and the desktop's accent color come f
 
 ### Windows
 
-Windows builds are cross-compiled from Linux with MinGW-w64 (on Arch: `pacman -S mingw-w64-gcc`). The dependencies are built from source and linked statically, so the program needs only Windows' own DLLs and runs on Windows 10 and later.
+Windows builds are cross-compiled from Linux with MinGW-w64 (on Arch: `pacman -S mingw-w64-gcc`). The dependencies are built from source and linked statically, so the program needs only Windows' own DLLs and runs on Windows 10 and later, on Kompoz's own Win32 platform: aware of each monitor's DPI, its title bar dark with Windows' dark mode.
 
 ```bash
 scripts/fetch-deps.sh

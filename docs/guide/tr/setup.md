@@ -125,7 +125,7 @@ Yukarıdaki derleme yeterlidir. Koyu mod ve masaüstünün vurgu rengi XDG masa�
 
 ### Windows
 
-Windows derlemeleri Linux'tan MinGW-w64 ile çapraz derlenir (Arch'ta: `pacman -S mingw-w64-gcc`). Bağımlılıklar kaynaktan derlenip statik bağlanır; böylece program yalnızca Windows'un kendi DLL'lerine ihtiyaç duyar ve Windows 10 ve sonrasında çalışır.
+Windows derlemeleri Linux'tan MinGW-w64 ile çapraz derlenir (Arch'ta: `pacman -S mingw-w64-gcc`). Bağımlılıklar kaynaktan derlenip statik bağlanır; böylece program yalnızca Windows'un kendi DLL'lerine ihtiyaç duyar ve Windows 10 ve sonrasında Kompoz'un kendi Win32 platformunda çalışır: her monitörün DPI'ını bilir, başlık çubuğu Windows'un koyu moduyla koyulaşır.
 
 ```bash
 scripts/fetch-deps.sh
