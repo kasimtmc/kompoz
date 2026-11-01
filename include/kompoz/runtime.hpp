@@ -451,7 +451,38 @@ public:
     friend bool operator==(const MutableState& a, const MutableState& b) { return a.cell_ == b.cell_; }
 
 private:
+    template <class>
+    friend class State;
     std::shared_ptr<detail::StateCell<T>> cell_;
+};
+
+// A state that can be read but not set (Compose's State<T>): what a composable that only reads a
+// value takes, given a MutableState or a derived state.
+//   void Progress(State<float> fraction) { LinearProgressIndicator(fraction.get()); }
+template <class T>
+class State {
+public:
+    State(const MutableState<T>& state)
+        : owner_(state.cell_), read_([](const void* cell, bool subscribe) -> const T& {
+              if (subscribe) detail::recordRead(cell);
+              return static_cast<const detail::StateCell<T>*>(cell)->value;
+          }) {}
+    // For a state holder of its own: `read` gives the value of what `owner` points to, recording
+    // the read if `subscribe`.
+    State(std::shared_ptr<const void> owner, const T& (*read)(const void* owner, bool subscribe))
+        : owner_(std::move(owner)), read_(read) {}
+
+    const T& get() const { return read_(owner_.get(), true); }
+    const T& peek() const { return read_(owner_.get(), false); }  // without subscribing
+    const T& operator*() const { return get(); }
+    const T* operator->() const { return &get(); }
+
+    // The same state, not the same value.
+    friend bool operator==(const State& a, const State& b) { return a.owner_ == b.owner_; }
+
+private:
+    std::shared_ptr<const void> owner_;
+    const T& (*read_)(const void*, bool);
 };
 
 template <class T>

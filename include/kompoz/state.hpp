@@ -37,11 +37,9 @@ public:
         }
     }
 
-    const T& get() const {
-        if (!d_->valid || !d_->observer) d_->recompute();  // unobserved: always fresh
-        detail::recordRead(d_.get());
-        return *d_->value;
-    }
+    const T& get() const { return read(d_.get(), true); }
+    const T& peek() const { return read(d_.get(), false); }  // without subscribing
+    operator State<T>() const { return State<T>(d_, &read); }
 
     friend bool operator==(const DerivedState& a, const DerivedState& b) { return a.d_ == b.d_; }
 
@@ -66,6 +64,12 @@ private:
             return changed;
         }
     };
+    static const T& read(const void* data, bool subscribe) {
+        auto* d = const_cast<Data*>(static_cast<const Data*>(data));
+        if (!d->valid || !d->observer) d->recompute();  // unobserved: always fresh
+        if (subscribe) detail::recordRead(d);
+        return *d->value;
+    }
     std::shared_ptr<Data> d_;
 };
 

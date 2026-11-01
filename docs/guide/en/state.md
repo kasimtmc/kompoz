@@ -28,6 +28,14 @@ void NameField() {
 }
 ```
 
+A composable that only reads a state can take a `State<T>`, Compose's read-only `State`: a `MutableState<T>` or a derived state (`derivedStateOf`) converts to it. It has `get()`, `peek()` and `*`, but no `set`, and compares by which state it is, so the composable is skipped when it is given the same one again:
+
+```cpp
+void Progress(State<float> fraction, CallSite site = CallSite::current()) {
+    composable(site, fraction, [fraction] { LinearProgressIndicator(fraction.get()); });
+}
+```
+
 ## remember
 
 A composable's body runs on every recomposition, so a state created in it would start over each time. `remember` keeps a value across recompositions:

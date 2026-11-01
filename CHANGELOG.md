@@ -581,6 +581,9 @@
 - **Mutation policies**: `mutableStateOf(v, neverEqualPolicy<T>())` recomposes the readers on every `set`, the same value
   too; `SnapshotMutationPolicy<T>{equivalent}` decides by a function of the app's; `structuralEqualityPolicy<T>()`
   (`==`) stays the default. `derivedStateOf(policy, calc)` takes one too.
+- **`State<T>`**, Compose's read-only state: a composable that only reads a value takes one, given a `MutableState` or
+  a derived state (which converts to it); `get()`, `peek()`, compared by which state it is. Derived states have
+  `peek()` too.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

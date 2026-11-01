@@ -185,6 +185,40 @@ struct Remembered : RememberObserver {
 };
 } // namespace
 
+namespace {
+int gShownRuns = 0;
+// Takes a state it only reads: a MutableState or a derived state.
+void Shown(State<int> value, CallSite site = CallSite::current()) {
+    composable(site, value, [value] {
+        ++gShownRuns;
+        Text("değer=" + std::to_string(value.get()));
+    });
+}
+} // namespace
+
+TEST(read_only_states_come_from_mutable_and_derived_ones) {
+    gShownRuns = 0;
+    auto count = mutableStateOf(1);
+    auto other = mutableStateOf(0);
+    ComposeTestRule rule([&] {
+        other.get();  // the parent runs again, the same states given: they're skipped
+        auto doubled = remember([&] { return derivedStateOf([count] { return count.get() * 2; }); });
+        Column([&] {
+            Shown(count);
+            Shown(doubled);
+        });
+    });
+    CHECK(rule.onNodeWithText("değer=1").exists() && rule.onNodeWithText("değer=2").exists() && gShownRuns == 2);
+    other.set(1);
+    rule.waitForIdle();
+    CHECK(gShownRuns == 2);
+    count.set(5);  // each read its state: both again
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("değer=5").exists() && rule.onNodeWithText("değer=10").exists() && gShownRuns == 4);
+    State<int> plain = count;
+    CHECK(plain.peek() == 5 && *plain == 5 && plain == State<int>(count) && !(plain == State<int>(other)));
+}
+
 TEST(states_take_a_mutation_policy) {
     auto same = mutableStateOf(1);                            // ==: the same value changes nothing
     auto every = mutableStateOf(1, neverEqualPolicy<int>());  // every set() recomposes

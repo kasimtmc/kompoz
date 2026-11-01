@@ -28,6 +28,14 @@ void NameField() {
 }
 ```
 
+Bir durumu yalnızca okuyan bir composable, Compose'un salt okunur `State`'i olan bir `State<T>` alabilir: bir `MutableState<T>` ya da türetilmiş bir durum (`derivedStateOf`) ona dönüşür. `get()`, `peek()` ve `*` vardır ama `set` yoktur; hangi durum olduğuna göre karşılaştırılır, bu yüzden composable aynısı yeniden verildiğinde atlanır:
+
+```cpp
+void Progress(State<float> fraction, CallSite site = CallSite::current()) {
+    composable(site, fraction, [fraction] { LinearProgressIndicator(fraction.get()); });
+}
+```
+
 ## remember
 
 Bir composable'ın gövdesi her recomposition'da çalışır, yani içinde oluşturulan bir durum her seferinde baştan başlar. `remember` bir değeri recomposition'lar boyunca korur:
