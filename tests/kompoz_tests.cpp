@@ -13882,6 +13882,37 @@ TEST(layout_measures_again_only_what_changed) {
     CHECK(rule.onNodeWithTag("içteki").bounds().x == 5 && measuredA == a && measuredB == b);
 }
 
+TEST(host_environment_changes_recompose_and_measure_only_their_readers) {
+    struct NoCheck {  // the check's reference layout measures everything once more
+        NoCheck() { detail::setLayoutCheck(false); }
+        ~NoCheck() { detail::setLayoutCheck(true); }
+    } noCheck;
+    int composed = 0, darkRuns = 0, measured = 0;
+    ComposeTestRule rule([&] {
+        ++composed;
+        Column([&] {
+            Layout(Modifier(), [] {}, [&](const std::vector<Measurable>&, const Constraints&) { return ++measured, Size{10, 10}; });
+            composable(CallSite::current(), [&] {
+                ++darkRuns;
+                Text(isSystemInDarkTheme() ? "koyu" : "açık");
+            });
+        });
+    });
+    int m = measured;
+    // The system's theme, insets and the window's focus: what read them again, nothing else.
+    rule.host().setSystemDarkTheme(true);
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("koyu").exists() && darkRuns == 2);
+    rule.host().setSystemInsets({.statusBars = {0, 24, 0, 0}, .ime = {0, 0, 0, 300}, .imeVisible = true});
+    rule.host().setWindowFocused(false);
+    rule.waitForIdle();
+    CHECK(composed == 1 && darkRuns == 2 && measured == m);
+    // invalidate(): all of it again, as it says.
+    rule.host().invalidate();
+    rule.waitForIdle();
+    CHECK(composed == 2 && measured > m);
+}
+
 TEST(modal_drawer_closes_by_its_own_width) {
     // In a window narrower than the default sheet (360 dp): its offset goes by the width it got.
     std::optional<DrawerState> drawer;

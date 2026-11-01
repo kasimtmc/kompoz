@@ -182,7 +182,11 @@ ComposeHost::ComposeHost(TextMeasurer& measurer, Content content)
                                   LocalDynamicTonalPalette.provides(dynamicPalette_),
                                   LocalWallpaperTonalPalette.provides(wallpaperPalette_), LocalUiMediaScope.provides(media_),
                                   detail::LocalSaveableRegistry.provides(saveable_)},
-                                 content_);
+                                 [this] {
+                                     // Skipped when only a provided value changed: its readers
+                                     // recompose, the rest stays as it is.
+                                     composable(CallSite::current(), contentPass_, [this] { content_(); });
+                                 });
     });
     std::lock_guard lock(gMutex);
     gHosts.push_back(this);
@@ -266,7 +270,7 @@ void ComposeHost::setViewportSize(Size size) {
     viewport_ = size;
     media_.update(viewport_, insets_.imeVisible, mediaInfo_);
     requestLayout();
-    invalidate();  // LocalWindowSize changed (only its readers recompose)
+    environmentChanged();
 }
 
 void ComposeHost::setSystemInsets(SystemInsets insets) {
@@ -274,7 +278,7 @@ void ComposeHost::setSystemInsets(SystemInsets insets) {
     if (!(insets.ime == insets_.ime) && isTextField(focused_)) bringFocusedIntoView_ = true;  // keep it above the keyboard
     insets_ = insets;
     media_.update(viewport_, insets_.imeVisible, mediaInfo_);
-    invalidate();
+    environmentChanged();
 }
 
 void ComposeHost::setWindowInsets(PaddingValues insets) { setSystemInsets({.displayCutout = insets}); }
@@ -315,13 +319,13 @@ void ComposeHost::setMediaInfo(const MediaInfo& info) {
 void ComposeHost::setDynamicTonalPalette(std::optional<TonalPalette> palette) {
     if (palette == dynamicPalette_) return;
     dynamicPalette_ = std::move(palette);
-    invalidate();
+    environmentChanged();
 }
 
 void ComposeHost::setWallpaperTonalPalette(std::optional<TonalPalette> palette) {
     if (palette == wallpaperPalette_) return;
     wallpaperPalette_ = std::move(palette);
-    invalidate();
+    environmentChanged();
 }
 
 void ComposeHost::setSystemBarsAppearance(bool lightStatusBars, bool lightNavigationBars) {
@@ -334,31 +338,31 @@ void ComposeHost::setSystemBarsAppearance(bool lightStatusBars, bool lightNaviga
 void ComposeHost::setSystemDarkTheme(bool dark) {
     if (dark == systemDark_) return;
     systemDark_ = dark;
-    invalidate();
+    environmentChanged();
 }
 
 void ComposeHost::setViewConfiguration(const ViewConfiguration& configuration) {
     if (configuration == viewConfiguration_) return;
     viewConfiguration_ = configuration;
-    invalidate();
+    environmentChanged();
 }
 
 void ComposeHost::setWindowFocused(bool focused) {
     if (focused == windowFocused_) return;
     windowFocused_ = focused;
-    invalidate();
+    environmentChanged();
 }
 
 void ComposeHost::setLayoutDirection(LayoutDirection direction) {
     if (direction == layoutDirection_) return;
     layoutDirection_ = direction;
-    invalidate();
+    environmentChanged();
 }
 
 void ComposeHost::setStrings(Strings strings) {
     if (strings == strings_) return;
     strings_ = std::move(strings);
-    invalidate();
+    environmentChanged();
 }
 
 bool ComposeHost::frame(int64_t frameTimeNanos) {
@@ -392,10 +396,12 @@ bool ComposeHost::frame(int64_t frameTimeNanos) {
         // State read outside composition (offset { }, graphicsLayer { }, drawBehind) only
         // needs layout and drawing again.
         if (!changed.empty()) layoutDirty_ = true;
-        if (rootInvalid_.exchange(false)) {  // something global changed (density, theme, fonts): all of it again
+        if (rootInvalid_.exchange(false)) {  // something global changed (density, fonts): all of it again
+            ++contentPass_;
             composer_.invalidateRoot();
             layoutEverything_ = true;
         }
+        if (std::exchange(environmentChanged_, false)) composer_.invalidateRoot();  // the providers again, then their readers
         if (pass == 0) composer_.invalidateFrameScopes(frameTimeNanos);
         if (composer_.recompose(frameTimeNanos)) {
             layoutDirty_ = true;
@@ -484,7 +490,7 @@ void ComposeHost::idle(int64_t budgetNanos) {
 }
 
 bool ComposeHost::wantsFrame() const {
-    if (rootInvalid_ || animating_ || layoutDirty_ || redraw_ || flingNode_ || layoutAnimating_ || lastFrameTime_ < drawingAnimatedUntil_ ||
+    if (rootInvalid_ || environmentChanged_ || animating_ || layoutDirty_ || redraw_ || flingNode_ || layoutAnimating_ || lastFrameTime_ < drawingAnimatedUntil_ ||
         composer_.hasInvalidScopes() || dispatcher_->hasFrameWaiters())
         return true;
     std::lock_guard lock(gMutex);
@@ -1409,6 +1415,11 @@ void ComposeHost::endDragAndDrop(bool drop) {
 void ComposeHost::invalidate() {
     rootInvalid_ = true;
     if (callbacks_.wake) callbacks_.wake();
+}
+
+void ComposeHost::environmentChanged() {
+    environmentChanged_ = true;
+    wake();
 }
 
 // Called with the global host mutex held.

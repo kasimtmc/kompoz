@@ -418,6 +418,7 @@ private:
     LayoutNode* findRequester(LayoutNode& node, const FocusRequester::Data* data);
     void collectFocusables(LayoutNode& node, std::vector<LayoutNode*>& out);
     void showTextInput(bool touched = true);
+    void environmentChanged();  // a value the root provides changed (UI thread)
     void syncTextInput();
     static TextEditState fieldState(const FocusableElement& f);  // what the input method starts from
     // Texts the input method sent to the focused field that the app hasn't shown yet (and its
@@ -492,6 +493,8 @@ private:
     std::optional<std::pair<bool, bool>> barsAppearance_;
 
     std::atomic<bool> rootInvalid_{false};
+    uint64_t contentPass_ = 0;  // which invalidate() the content last ran for (it runs again when this changes)
+    bool environmentChanged_ = false;  // a value the root provides changed: its readers recompose
     std::vector<const void*> pendingChanges_;  // guarded by the global host mutex
     bool animating_ = false, layoutDirty_ = true, redraw_ = true, layoutAnimating_ = false;
     bool layoutEverything_ = true;  // next layout measures every node again

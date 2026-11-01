@@ -565,6 +565,12 @@
 - **A composition local's readers are its provider's**: a provider giving another value recomposes the scopes that
   read it from it, found at once, not by going through every reader of the local and up from each; a scope leaving
   the composition leaves the readers at once. Switching the showcase's tabs took a fifth less of the main thread.
+- **The system's values recompose only their readers**: the window's size and focus, the insets, the dark theme, the
+  layout direction, the library's texts and the desktop's palettes are provided by the root as before, but a change
+  in one of them recomposes the scopes that read it and measures again only what they changed, instead of composing
+  the app from its root and measuring every node (as a change of density still does, and `ComposeHost::invalidate`).
+  On the Redmi Note 9 Pro the keyboard sliding in and out took 1.8 ms of composition and layout a frame instead of
+  2.1.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

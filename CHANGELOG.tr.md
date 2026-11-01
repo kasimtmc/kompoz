@@ -599,6 +599,12 @@
   scope'ları yeniden kompoze eder; bunlar local'ın her okuyucusu dolaşılıp her birinden yukarı çıkılarak değil, hemen
   bulunur. Kompozisyondan çıkan bir scope okuyuculardan da hemen çıkar. Showcase'in sekmelerini değiştirmek ana
   thread'in beşte bir daha azını aldı.
+- **Sistemin değerleri yalnızca okuyucularını yeniden kompoze eder**: pencerenin boyutu ve odağı, insets, koyu tema,
+  yerleşim yönü, kütüphanenin metinleri ve masaüstünün paletleri eskisi gibi kökten sağlanıyor, ama birindeki bir
+  değişiklik uygulamayı kökünden kompoze edip her node'u yeniden ölçmek yerine onu okuyan scope'ları yeniden kompoze
+  ediyor ve yalnızca onların değiştirdiğini yeniden ölçüyor (yoğunluktaki bir değişiklik ve `ComposeHost::invalidate`
+  hâlâ hepsini yapıyor). Redmi Note 9 Pro'da klavyenin açılıp kapanması kare başına 2,1 yerine 1,8 ms kompozisyon ve
+  yerleşim aldı.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine
