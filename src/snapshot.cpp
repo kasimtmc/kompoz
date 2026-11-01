@@ -87,13 +87,23 @@ Globals& globals() {
 }
 
 constinit int64_t gNextId = kPreexistingSnapshot + 2;
-constinit GlobalView gFirstView{kPreexistingSnapshot + 1, {}};
-constinit std::atomic<const GlobalView*> gView{&gFirstView};
+constinit std::atomic<const GlobalView*> gView{nullptr};  // nullptr: firstView()
 constinit std::atomic<bool> gGlobalDirty{false};
 constinit void (*gGlobalWriteObserver)() = nullptr;
 constinit std::atomic<bool> gUiThreadSet{false};
 std::thread::id gUiThread;
 constinit thread_local SnapshotData* tCurrent = nullptr;  // nullptr: the global snapshot
+
+// The global snapshot's first view, before any was replaced (made when first asked for, so a state
+// used while statics are made finds it).
+const GlobalView& firstView() {
+    static const GlobalView* first = new GlobalView{kPreexistingSnapshot + 1, {}};  // (never destroyed)
+    return *first;
+}
+const GlobalView* loadView(std::memory_order order) {
+    const GlobalView* view = gView.load(order);
+    return view ? view : &firstView();
+}
 
 bool onUiThread() { return !gUiThreadSet.load(std::memory_order_acquire) || std::this_thread::get_id() == gUiThread; }
 
@@ -116,7 +126,7 @@ IdSet openIds() {
 
 // A new global view (under the lock): its invalid set the open snapshots', at `id`.
 void replaceView(int64_t id) {
-    const GlobalView* old = gView.load(std::memory_order_relaxed);
+    const GlobalView* old = loadView(std::memory_order_relaxed);
     gView.store(new GlobalView{id, openIds()}, std::memory_order_release);
     detail::globals().retiredViews.push_back(old);
 }
@@ -136,7 +146,7 @@ void close(SnapshotData& s) {
 // global snapshot reads is what every snapshot taken from now on will, and the open ones (an open
 // mutable one's own records among them) keep what they read.
 void prune(StateObject& object) {
-    const GlobalView* view = gView.load(std::memory_order_relaxed);
+    const GlobalView* view = loadView(std::memory_order_relaxed);
     std::unordered_set<const StateRecord*> read{find(object, view->id, view->invalid)};
     for (const SnapshotData* s : detail::globals().open) read.insert(find(object, s->id, s->invalid));
     StateRecord* previous = nullptr;
@@ -164,7 +174,7 @@ void collect() {
         return true;
     });
     for (const GlobalView* v : detail::globals().retiredViews)
-        if (v != &gFirstView) delete v;
+        if (v != &firstView()) delete v;
     detail::globals().retiredViews.clear();
 }
 
@@ -205,10 +215,10 @@ const StateRecord& readable(const StateObject& object, bool observe) {
     }
     if (!onUiThread()) {  // (a read meant for a snapshot: at least not torn by a write)
         std::lock_guard lock(detail::globals().lock);
-        const GlobalView* view = gView.load(std::memory_order_relaxed);
+        const GlobalView* view = loadView(std::memory_order_relaxed);
         return *find(object, view->id, view->invalid);
     }
-    const GlobalView* view = gView.load(std::memory_order_acquire);
+    const GlobalView* view = loadView(std::memory_order_acquire);
     return *find(object, view->id, view->invalid);
 }
 
@@ -219,7 +229,7 @@ StateWriter::StateWriter(StateObject& object) : lock_(detail::globals().lock), o
         if (current_->snapshotId.load(std::memory_order_relaxed) == snapshot_->id) own_ = const_cast<StateRecord*>(current_);
         return;
     }
-    const GlobalView* view = gView.load(std::memory_order_relaxed);
+    const GlobalView* view = loadView(std::memory_order_relaxed);
     current_ = find(object, view->id, view->invalid);
     if (!onUiThread())
         freshId_ = true;  // never in place: the UI thread may be reading it
@@ -236,7 +246,7 @@ void StateWriter::add(StateRecord* fresh) {
         prepend(object_, fresh, gNextId++);
         replaceView(gNextId++);
     } else {
-        prepend(object_, fresh, gView.load(std::memory_order_relaxed)->id);
+        prepend(object_, fresh, loadView(std::memory_order_relaxed)->id);
     }
     own_ = fresh;
 }
@@ -341,7 +351,7 @@ SnapshotApplyResult MutableSnapshot::apply() const {
         if (d.parent) {
             intoId = d.parent->id, into = d.parent->invalid;
         } else {
-            const detail::GlobalView* view = detail::gView.load(std::memory_order_relaxed);
+            const detail::GlobalView* view = detail::loadView(std::memory_order_relaxed);
             intoId = view->id, into = view->invalid;
         }
         detail::IdSet before = d.invalid;  // what it saw before it wrote
@@ -369,7 +379,7 @@ SnapshotApplyResult MutableSnapshot::apply() const {
             p.changed.insert(p.changed.end(), d.changed.begin(), d.changed.end());
             return SnapshotApplyResult::Success;
         }
-        detail::replaceView(detail::gView.load(std::memory_order_relaxed)->id);  // its writes seen from now on
+        detail::replaceView(detail::loadView(std::memory_order_relaxed)->id);  // its writes seen from now on
         for (detail::StateObject* object : d.modified) {
             changed.push_back(object);
             detail::globals().toPrune.insert(object);
@@ -393,7 +403,7 @@ void disposeLocked(SnapshotData& d) {
         }
     if (d.open) {
         detail::close(d);
-        if (!d.parent) detail::replaceView(detail::gView.load(std::memory_order_relaxed)->id);
+        if (!d.parent) detail::replaceView(detail::loadView(std::memory_order_relaxed)->id);
     }
 }
 
