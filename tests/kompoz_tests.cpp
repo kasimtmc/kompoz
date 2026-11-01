@@ -4789,6 +4789,57 @@ struct City {
     friend bool operator==(const City&, const City&) = default;
 };
 
+TEST(remember_saveable_starts_again_when_its_inputs_change) {
+    const CustomSaver<int> doubled{[](const int& n) { return SavedValue(n * 2); },
+                                   [](const SavedValue& v) -> std::optional<int> {
+                                       auto n = v.integer();
+                                       return n ? std::optional<int>(int(*n / 2)) : std::nullopt;
+                                   }};
+    struct Run {
+        MutableState<int> id = mutableStateOf(1);
+        MutableState<bool> live = mutableStateOf(true), shown = mutableStateOf(true);
+        int made = 0;
+        std::optional<MutableState<int>> top, count, bySaver;
+    };
+    auto app = [&](Run& r) {
+        return [&] {
+            if (!r.live.get()) return;  // made after the state came back, as on Android
+            int k = r.id.get();
+            r.top = rememberSaveable(k, [] { return mutableStateOf(0); });
+            auto holder = rememberSaveableStateHolder();
+            if (r.shown.get())
+                holder.SaveableStateProvider("ekran", [&, k] {
+                    r.count = rememberSaveable(k, [&] { return ++r.made, mutableStateOf(0); });
+                    r.bySaver = rememberSaveable(k, doubled, [] { return mutableStateOf(1); });
+                });
+        };
+    };
+    std::vector<uint8_t> bytes;
+    {
+        Run r;
+        ComposeTestRule rule(app(r), {400, 800});
+        r.top->set(4), r.count->set(5), r.bySaver->set(7);
+        r.shown.set(false);  // away and back, the same inputs: what it had
+        rule.waitForIdle();
+        r.shown.set(true);
+        rule.waitForIdle();
+        CHECK(r.made == 1 && r.top->peek() == 4 && r.count->peek() == 5 && r.bySaver->peek() == 7);
+        r.id.set(2);  // other inputs: made again
+        rule.waitForIdle();
+        CHECK(r.made == 2 && r.top->peek() == 0 && r.count->peek() == 0 && r.bySaver->peek() == 1);
+        r.top->set(8), r.count->set(3), r.bySaver->set(9);
+        rule.waitForIdle();
+        bytes = rule.host().saveState();
+    }
+    Run r;  // after the process ended, the same inputs: what was saved
+    r.id.set(2), r.live.set(false);
+    ComposeTestRule rule(app(r), {400, 800});
+    rule.host().restoreState(bytes);
+    r.live.set(true);
+    rule.waitForIdle();
+    CHECK(r.made == 0 && r.top->peek() == 8 && r.count->peek() == 3 && r.bySaver->peek() == 9);
+}
+
 TEST(remember_saveable_with_a_saver_of_its_own) {
     int reads = 0;  // restores called (only with what they can read: a list, a map)
     const auto asMap = mapSaver<City>([](const City& c) { return SavedValue::Map{{"name", c.name}, {"country", c.country}}; },

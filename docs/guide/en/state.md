@@ -76,6 +76,8 @@ The key can be any value that compares with `==`. Two or three keys can be given
 auto query = rememberSaveable([] { return mutableStateOf(std::string()); });
 ```
 
+Given inputs first, as Compose's `rememberSaveable(inputs)`, it makes the value again when they change, dropping the one it had and its saved one: `rememberSaveable(userId, [] { return mutableStateOf(std::string()); })`. Several inputs go in a `std::tuple`; a saver of its own goes after them.
+
 To survive the process ending, the value must be *saveable*. Numbers, `bool`, enums, strings, and `std::vector` and `std::optional` of saveable types are; so are `MutableState` of a saveable value and the library's own state objects (scroll and lazy list states, `TextFieldState`, `NavController`). For your own type, specialize `Saver`:
 
 ```cpp

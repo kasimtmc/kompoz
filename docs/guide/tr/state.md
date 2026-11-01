@@ -76,6 +76,8 @@ Anahtar `==` ile karşılaştırılabilen herhangi bir değer olabilir. Compose'
 auto query = rememberSaveable([] { return mutableStateOf(std::string()); });
 ```
 
+Compose'un `rememberSaveable(inputs)`'u gibi önce girdiler verilirse, girdiler değiştiğinde değeri yeniden yapar; elindekini de kaydedilmiş olanı da bırakır: `rememberSaveable(userId, [] { return mutableStateOf(std::string()); })`. Birden fazla girdi bir `std::tuple`'a girer; kendine ait bir saver onlardan sonra gelir.
+
 Sürecin sonlanmasından sağ çıkmak için değerin *kaydedilebilir* olması gerekir. Sayılar, `bool`, enum'lar, string'ler ve kaydedilebilir türlerin `std::vector`'ı ve `std::optional`'ı kaydedilebilirdir; kaydedilebilir bir değerin `MutableState`'i ve kütüphanenin kendi durum nesneleri de (kaydırma ve tembel liste durumları, `TextFieldState`, `NavController`) öyledir. Kendi türünüz için `Saver`'ı özelleştirin:
 
 ```cpp

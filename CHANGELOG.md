@@ -586,6 +586,9 @@
 - **`State<T>`**, Compose's read-only state: a composable that only reads a value takes one, given a `MutableState` or
   a derived state (which converts to it); `get()`, `peek()`, compared by which state it is. Derived states have
   `peek()` too.
+- **`rememberSaveable` with inputs**, as Compose's `rememberSaveable(inputs)`: `rememberSaveable(inputs, init)` and
+  `rememberSaveable(inputs, saver, init)` make the value again, dropping the one it had and its saved one, when the
+  inputs change.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

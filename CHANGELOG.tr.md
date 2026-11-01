@@ -620,6 +620,9 @@
 - **`State<T>`**, Compose'un salt okunur durumu: bir değeri yalnızca okuyan bir composable, bir `MutableState` ya da
   türetilmiş bir durum verilerek (ona dönüşür) bir tane alıyor; `get()`, `peek()`, hangi durum olduğuna göre
   karşılaştırılıyor. Türetilmiş durumların da artık `peek()`'i var.
+- **Girdili `rememberSaveable`**, Compose'un `rememberSaveable(inputs)`'u gibi: `rememberSaveable(inputs, init)` ve
+  `rememberSaveable(inputs, saver, init)` girdiler değişince değeri, elindekini ve kaydedilmiş olanı bırakarak,
+  yeniden yapıyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

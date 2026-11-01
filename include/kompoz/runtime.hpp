@@ -847,13 +847,15 @@ struct SaveableSlot {
 
 namespace detail {
 // rememberSaveable with how its value is saved: `save` and `restore` (Saver<T>'s, a
-// CustomSaver's), or nullptr for a value that isn't written out.
+// CustomSaver's), or nullptr for a value that isn't written out; `reset`: made again, the value
+// it had (and its saved one) dropped.
 template <class T, class F, class Save, class Restore>
-T& rememberSaveableWith(F& init, const Save& save, const Restore& restore, CallSite site) {
+T& rememberSaveableWith(F& init, const Save& save, const Restore& restore, CallSite site, bool reset = false) {
     constexpr bool saveable = !std::is_same_v<Save, std::nullptr_t>;
     auto& c = detail::Composer::require();
     std::shared_ptr<detail::SaveableRegistry> registry = detail::LocalSaveableRegistry.current();
     c.startGroup(detail::keyOf(site));
+    if (reset) Composer::forgetSlot(c.group());  // (its registry entry dropped, or noted as leaving: made anew below)
     auto make = [&]() -> detail::SaveableSlot<T> {
         if (!registry) return {std::make_shared<T>(init()), {}, 0};
         uint64_t key = detail::keyBelow(registry->boundary);
@@ -884,6 +886,34 @@ T& rememberSaveableWith(F& init, const Save& save, const Restore& restore, CallS
     c.endGroup();
     return *slot.value;
 }
+
+// Whether `inputs` differ from those of the last call here (not on the first).
+template <class K>
+bool inputsChanged(const K& inputs, CallSite site = CallSite::current()) {
+    auto& c = Composer::require();
+    c.startGroup(keyOf(site));
+    auto make = [&] { return inputs; };
+    K& last = c.rememberSlot<K>(make);
+    bool changed = !(last == inputs);
+    if (changed) last = inputs;
+    c.endGroup();
+    return changed;
+}
+
+template <class T, class S, class F>
+T& rememberSaveableBy(const CustomSaver<S>& saver, F& init, CallSite site, bool reset) {
+    if constexpr (std::is_same_v<T, S>) {
+        return rememberSaveableWith<T>(init, saver.save, saver.restore, site, reset);
+    } else {
+        static_assert(std::is_same_v<T, MutableState<S>>, "rememberSaveable(saver, init): init makes the saver's type or a MutableState of it");
+        auto save = [s = saver.save](const T& state) { return s(state.peek()); };
+        auto restore = [r = saver.restore](const SavedValue& saved) -> std::optional<T> {
+            std::optional<S> v = r(saved);
+            return v ? std::optional<T>(mutableStateOf(std::move(*v))) : std::nullopt;
+        };
+        return rememberSaveableWith<T>(init, save, restore, site, reset);
+    }
+}
 } // namespace detail
 
 // remember { ... } that a SaveableStateHolder keeps while the composable is away, and that
@@ -901,18 +931,28 @@ auto rememberSaveable(F&& init, CallSite site = CallSite::current()) -> std::dec
 // MutableState<T> made by init too (Compose's stateSaver).
 template <class S, class F>
 auto rememberSaveable(const CustomSaver<S>& saver, F&& init, CallSite site = CallSite::current()) -> std::decay_t<std::invoke_result_t<F&>>& {
+    return detail::rememberSaveableBy<std::decay_t<std::invoke_result_t<F&>>>(saver, init, site, false);
+}
+
+// rememberSaveable(inputs) { ... }: made again, the value it had and its saved one dropped, when
+// `inputs` change (compared with ==; several: a std::tuple), as Compose's rememberSaveable(inputs).
+template <class K, class F>
+    requires std::invocable<F&>
+auto rememberSaveable(const K& inputs, F&& init, CallSite site = CallSite::current()) -> std::decay_t<std::invoke_result_t<F&>>& {
     using T = std::decay_t<std::invoke_result_t<F&>>;
-    if constexpr (std::is_same_v<T, S>) {
-        return detail::rememberSaveableWith<T>(init, saver.save, saver.restore, site);
-    } else {
-        static_assert(std::is_same_v<T, MutableState<S>>, "rememberSaveable(saver, init): init makes the saver's type or a MutableState of it");
-        auto save = [s = saver.save](const T& state) { return s(state.peek()); };
-        auto restore = [r = saver.restore](const SavedValue& saved) -> std::optional<T> {
-            std::optional<S> v = r(saved);
-            return v ? std::optional<T>(mutableStateOf(std::move(*v))) : std::nullopt;
-        };
-        return detail::rememberSaveableWith<T>(init, save, restore, site);
-    }
+    ComposableScope scope(site);
+    bool changed = detail::inputsChanged(inputs);
+    if constexpr (HasSaver<T>)
+        return detail::rememberSaveableWith<T>(init, &Saver<T>::save, &Saver<T>::restore, CallSite::current(), changed);
+    else
+        return detail::rememberSaveableWith<T>(init, nullptr, nullptr, CallSite::current(), changed);
+}
+template <class K, class S, class F>
+auto rememberSaveable(const K& inputs, const CustomSaver<S>& saver, F&& init, CallSite site = CallSite::current())
+    -> std::decay_t<std::invoke_result_t<F&>>& {
+    ComposableScope scope(site);
+    bool changed = detail::inputsChanged(inputs);
+    return detail::rememberSaveableBy<std::decay_t<std::invoke_result_t<F&>>>(saver, init, CallSite::current(), changed);
 }
 
 // A state of a saveable value is saveable.
