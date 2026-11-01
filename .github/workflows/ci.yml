@@ -3,7 +3,7 @@
 # D-Bus of their own; Windows: UI Automation), and an app (tests/package, the README's first
 # example) built against Kompoz as it is installed (cmake --install, vcpkg, Conan), run, clicked
 # and photographed: on Kompoz's headless platform on Linux, in a real window on Windows and macOS
-# (and headless on macOS too).
+# (and headless on macOS too, and resized there).
 name: CI
 
 on:
@@ -203,11 +203,19 @@ jobs:
           cmake --install build --prefix "$PWD/install"
           cmake -S tests/package -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/install"
           cmake --build build-package
-      - name: Run it in a window (Cocoa, Metal presenting to the window's layer, validated), click its button, take a screenshot
+      # The click must show (the count changes), and the window the script resizes must be photographed at its new size.
+      - name: Run it in a window (Cocoa, Metal presenting to the window's layer, validated), click its button, resize it, take screenshots
         working-directory: build-package
         env:
           KOMPOZ_GPU_VALIDATION: 1
-        run: KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo && test -s shot.png
+        run: |
+          KOMPOZ_SCRIPT="wait 30;shot shot-start.png;click 70 70;wait 30;shot shot.png;resize 360 520;wait 30;shot shot-resized.png;quit" ./demo
+          if cmp -s shot-start.png shot.png; then echo "the click changed nothing on the screen"; exit 1; fi
+          size() { sips -g pixelWidth -g pixelHeight "$1" | awk '/pixel/ { printf "%s ", $2 }'; }
+          read -r w h <<< "$(size shot.png)"
+          read -r rw rh <<< "$(size shot-resized.png)"
+          echo "window $w x $h pixels (480 dp wide), resized to 360 x 520 dp: $rw x $rh pixels"
+          if [ $((rw * 480)) -ne $((360 * w)) ] || [ $((rh * 480)) -ne $((520 * w)) ]; then echo "not the size it was resized to"; exit 1; fi
       # Headless: Metal without a window, drawing only into the kept frame.
       - name: Run it headless, click its button, take a screenshot
         working-directory: build-package

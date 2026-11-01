@@ -21,6 +21,8 @@
   the Kompoz of the commit they test (vcpkg's binary cache, keyed by the port's files and not by the sources, restored
   an earlier one's). The Windows job keeps the showcase with ANGLE's DLLs and the Visual C++ runtime they need beside
   it as a download (`kompoz-showcase-windows-x86_64`): it runs on any Windows 10+, one without a GPU driver too.
+  On macOS the app's click must change what the window shows, and the window the script resizes must be photographed
+  at its new size.
 - **Kompoz's own GPU renderer**, being built (`KOMPOZ_GPU=vulkan`, `metal`, `webgpu`, `gles`, or `auto`: the platform's best, falling back to the next): one core over a thin layer per native graphics
   API: Vulkan on Linux, Windows and Android first, then Metal on Apple's systems, WebGPU on the web, and OpenGL ES 3 where there is none of those (old GPUs, WebGL 2, ANGLE on Windows). Rounded rects, borders, lines, arcs,
   shadows, text, images, clips and layers are drawn on the GPU with exact anti-aliasing (a straight edge at any angle
