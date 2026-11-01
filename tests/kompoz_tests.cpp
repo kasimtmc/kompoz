@@ -174,6 +174,60 @@ TEST(disposable_effect_restarts_when_key_changes) {
     CHECK((*log == std::vector<std::string>{"start1", "stop1", "start2"}));
 }
 
+namespace {
+// Tells what it is told, as Compose's RememberObserver.
+struct Remembered : RememberObserver {
+    std::shared_ptr<std::vector<std::string>> log;
+    std::string name;
+    Remembered(std::shared_ptr<std::vector<std::string>> l, std::string n) : log(std::move(l)), name(std::move(n)) {}
+    void onRemembered() override { log->push_back("+" + name); }
+    void onForgotten() override { log->push_back("-" + name); }
+};
+} // namespace
+
+TEST(effects_run_in_composes_order) {
+    // As Compose applies a composition: what left it is forgotten first, in the reverse of the
+    // order it was composed in, then what entered it is remembered in order, then the side effects.
+    auto key = mutableStateOf(1);
+    auto show = mutableStateOf(true);
+    auto log = std::make_shared<std::vector<std::string>>();
+    auto effect = [log](const std::string& name, int k) {
+        DisposableEffect(k, [log, name, k]() -> std::function<void()> {
+            log->push_back("+" + name + std::to_string(k));
+            return [log, name, k] { log->push_back("-" + name + std::to_string(k)); };
+        });
+    };
+    std::optional<ComposeTestRule> rule;
+    rule.emplace([&] {
+        int k = key.get();
+        SideEffect([log] { log->push_back("side"); });
+        effect("a", k);
+        effect("b", k);
+        remember(k, [&] { return Remembered(log, "r" + std::to_string(k)); });
+        Column([&] {
+            if (show.get()) {
+                effect("x", 0);
+                effect("y", 0);
+                effect("z", 0);
+            }
+        });
+        Text("later", Modifier().testTag("later"));
+        if (!show.get()) log->push_back("composed");
+    });
+    CHECK((*log == std::vector<std::string>{"+a1", "+b1", "+r1", "+x0", "+y0", "+z0", "side"}));
+    log->clear();
+    key.set(2);  // a key changed: the old ones go, all of them before the new ones come
+    rule->waitForIdle();
+    CHECK((*log == std::vector<std::string>{"-r1", "-b1", "-a1", "+a2", "+b2", "+r2", "side"}));
+    log->clear();
+    show.set(false);  // left: after the composition is over, last composed first
+    rule->waitForIdle();
+    CHECK((*log == std::vector<std::string>{"composed", "-z0", "-y0", "-x0", "side"}));
+    log->clear();
+    rule.reset();  // the composition disposed of: all of it, last composed first
+    CHECK((*log == std::vector<std::string>{"-r2", "-b2", "-a2"}));
+}
+
 TEST(composition_local_is_scoped) {
     static const CompositionLocal<std::string> LocalName{"default"};
     ComposeTestRule rule([] {

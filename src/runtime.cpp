@@ -12,6 +12,15 @@ namespace kompoz::detail {
 namespace {
 
 thread_local Composer* gCurrent = nullptr;
+// Where what leaves the composition is handed over (forgetLater), while one goes on or groups go.
+thread_local std::vector<std::function<void()>>* gForgets = nullptr;
+
+// Groups in the order they were called (seq), for what they hold to be forgotten in it.
+void destroyInCallOrder(std::vector<std::unique_ptr<Group>>& groups) {
+    std::sort(groups.begin(), groups.end(), [](const auto& a, const auto& b) { return a->seq < b->seq; });
+    for (auto& g : groups) g.reset();
+    groups.clear();
+}
 
 // The layout nodes directly below `g`, in call order, looking through groups that don't
 // emit a node themselves. Popup roots go to their own list: they don't take part in the layout.
@@ -69,11 +78,38 @@ void recordRead(const void* key) {
 
 Scope::~Scope() { composer.forget(*this); }
 
+void forgetLater(std::function<void()> forgotten) {
+    if (gForgets) gForgets->push_back(std::move(forgotten));
+    else forgotten();
+}
+
+void Composer::forgetSlot(Group& g) {
+    if (!g.slot) return;
+    if (RememberObserver* o = g.slot->observer())
+        forgetLater([o, keep = std::shared_ptr<SlotBase>(std::move(g.slot))] { o->onForgotten(); });  // kept until told
+    g.slot.reset();
+    g.slotType = nullptr;
+}
+
+// What it held is forgotten as Compose forgets what leaves a composition: in the reverse of the
+// order it was composed in, after the composition if one goes on, else (the composition disposed
+// of) when the outermost group going is gone.
 Group::~Group() {
-    children.clear();  // descendants are forgotten first
-    if (onForget) onForget();
+    std::vector<std::function<void()>> forgotten;
+    bool outermost = !gForgets;
+    if (outermost) gForgets = &forgotten;
+    if (onForget) gForgets->push_back(std::move(onForget));
+    Composer::forgetSlot(*this);
+    std::vector<std::unique_ptr<Group>> below;
+    for (auto& [k, child] : children) below.push_back(std::move(child));
+    children.clear();
+    destroyInCallOrder(below);
     scope.reset();
     if (movable && movable->group == this) movable->group = nullptr;
+    if (outermost) {
+        gForgets = nullptr;
+        for (auto it = forgotten.rbegin(); it != forgotten.rend(); ++it) (*it)();
+    }
 }
 
 Composer* Composer::current() { return gCurrent; }
@@ -144,6 +180,9 @@ bool Composer::recompose(int64_t frameTimeNanos) {
     Composer* previous = std::exchange(gCurrent, this);
     frameTime_ = frameTimeNanos;
     effects_.clear();
+    sideEffects_.clear();
+    std::vector<std::function<void()>> forgotten;
+    auto* outerForgets = std::exchange(gForgets, &forgotten);
     ++stats_.recompositions;
     ++pass_;
 
@@ -159,11 +198,17 @@ bool Composer::recompose(int64_t frameTimeNanos) {
     parked_.clear();  // movable contents not called again: they leave the composition
     detail::settleSaveables();
 
+    gForgets = outerForgets;
     gCurrent = previous;
-    // Effects run after the composition is complete, outside of it.
+    // After the composition, outside of it, as Compose applies one: what left it forgotten (last
+    // composed first), then what entered it remembered and its effects run, then the side effects.
+    for (auto it = forgotten.rbegin(); it != forgotten.rend(); ++it) (*it)();
     auto effects = std::move(effects_);
     effects_.clear();
     for (auto& effect : effects) effect();
+    auto sideEffects = std::move(sideEffects_);
+    sideEffects_.clear();
+    for (auto& effect : sideEffects) effect();
     return true;
 }
 
@@ -251,6 +296,7 @@ Group& Composer::beginGroup(uint64_t key) {
     }
     child->visited = true;
     child->composedIn = pass_;
+    child->seq = ++seq_;
     parent.order.push_back(child.get());
     return *child;
 }
@@ -319,6 +365,7 @@ void Composer::composeMovable(const std::shared_ptr<MovableData>& data) {
     }
     child->visited = true;
     child->composedIn = pass_;
+    child->seq = ++seq_;
     parent.order.push_back(child.get());
     Content content = data->content;  // (it may be replaced while it runs)
     enter(*child);
@@ -339,14 +386,17 @@ void Composer::endGroup() {
     Group& g = *groups_.back();
     // Whatever was not called this time has left the composition. Skipped scopes count as
     // called: they keep their slots and nodes.
+    std::vector<std::unique_ptr<Group>> gone;
     for (auto it = g.children.begin(); it != g.children.end();) {
         if (it->second->visited) {
             ++it;
             continue;
         }
         park(it->second);  // movable contents inside may be called further on
+        if (it->second) gone.push_back(std::move(it->second));
         it = g.children.erase(it);
     }
+    destroyInCallOrder(gone);
     if (g.node) rebuildChildren(g);
     groups_.pop_back();
 }

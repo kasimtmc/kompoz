@@ -24,6 +24,21 @@ void Details(bool show) {
 }
 ```
 
+What enters and leaves is told after the composition, in the order Compose tells it. First, what left is forgotten, last composed first: `DisposableEffect` clean-ups, also those of effects whose key changed. Then what entered is remembered in the order it was composed: `DisposableEffect` and `LaunchedEffect` start. Then the `SideEffect`s run. A remembered value whose type derives from `RememberObserver` is told too:
+
+```cpp
+#! void connect(); void disconnect();
+struct Connection : RememberObserver {
+    void onRemembered() override { connect(); }
+    void onForgotten() override { disconnect(); }
+};
+
+void Chat() {
+    remember([] { return Connection{}; });  // connected while Chat is in the composition
+    Text("Chat");
+}
+```
+
 A composable that leaves and comes back starts fresh: `remember` runs its lambda again. To keep a value across that, use `rememberSaveable` inside a `SaveableStateHolder` (navigation does this for its screens) or hoist the state above the `if`.
 
 ## Identity: where a call comes from

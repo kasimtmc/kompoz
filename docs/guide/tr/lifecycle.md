@@ -24,6 +24,21 @@ void Details(bool show) {
 }
 ```
 
+Girenler ve çıkanlar, kompozisyondan sonra Compose'un bildirdiği sırayla bildirilir. Önce çıkanlar unutulur, en son kompoze edilen ilk: `DisposableEffect` temizlikleri, anahtarı değişen efektlerinkiler de. Sonra girenler kompoze edildikleri sırayla hatırlanır: `DisposableEffect` ve `LaunchedEffect` başlar. Ardından `SideEffect`'ler çalışır. Türü `RememberObserver`'dan türeyen hatırlanmış bir değere de bildirilir:
+
+```cpp
+#! void connect(); void disconnect();
+struct Connection : RememberObserver {
+    void onRemembered() override { connect(); }
+    void onForgotten() override { disconnect(); }
+};
+
+void Chat() {
+    remember([] { return Connection{}; });  // Chat kompozisyondayken bağlı
+    Text("Chat");
+}
+```
+
 Çıkıp geri gelen bir composable sıfırdan başlar: `remember` lambdasını yeniden çalıştırır. Bir değeri bunun ötesinde korumak için bir `SaveableStateHolder`'ın içinde `rememberSaveable` kullanın (gezinme ekranları için bunu yapar) ya da durumu `if`'in üstüne taşıyın.
 
 ## Kimlik: bir çağrı nereden geliyor

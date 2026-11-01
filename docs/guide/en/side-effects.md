@@ -111,7 +111,7 @@ void Compass() {
 
 ## SideEffect
 
-`SideEffect(effect)` runs after every successful composition of the enclosing scope. Use it to hand state to something that isn't managed by Kompoz, such as an analytics library, after the UI it describes was composed:
+`SideEffect(effect)` runs after every successful composition of the enclosing scope, once what entered it was told so. Use it to hand state to something that isn't managed by Kompoz, such as an analytics library, after the UI it describes was composed:
 
 ```cpp
 #! struct Analytics { void setUserType(const std::string&) {} };

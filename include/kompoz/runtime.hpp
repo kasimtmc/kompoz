@@ -42,21 +42,54 @@ using CallSite = std::source_location;
 class LayoutNode;
 class ComposeHost;
 
+// What remember() keeps, told when it enters the composition and when it leaves it, as Compose's
+// RememberObserver: a remembered value whose type derives from it. Both are called after the
+// composition: what left forgotten first (in the reverse of the order it was composed in), then
+// what entered remembered (in order), before the side effects.
+struct RememberObserver {
+    virtual ~RememberObserver() = default;
+    virtual void onRemembered() {}
+    virtual void onForgotten() {}
+};
+
 namespace detail {
 
 uint64_t keyOf(const CallSite& site);
 uint64_t mixKey(uint64_t a, uint64_t b);
 
+// remember(key)'s slot: the value and the key it was made for.
+template <class K, class T>
+struct Keyed {
+    K key;
+    T value;
+};
+
+template <class T>
+RememberObserver* observerOf(T& value) {
+    if constexpr (std::is_base_of_v<RememberObserver, T>) return &value;
+    else return nullptr;
+}
+template <class K, class T>
+RememberObserver* observerOf(Keyed<K, T>& keyed) {
+    return observerOf(keyed.value);
+}
+
 struct SlotBase {
     virtual ~SlotBase() = default;
+    virtual RememberObserver* observer() = 0;
 };
 
 template <class T>
 struct Slot final : SlotBase {
     template <class F>
     explicit Slot(F& init) : value(init()) {}
+    RememberObserver* observer() override { return observerOf(value); }
     T value;
 };
+
+// Runs `forgotten` once the composition going on is over, with what else left it (in the reverse
+// of the order they were handed over); right away outside of one.
+void forgetLater(std::function<void()> forgotten);
 
 // The arguments a scope was last called with, compared to decide whether it can be skipped.
 struct ArgsBase {
@@ -162,6 +195,7 @@ struct Group {
     std::unique_ptr<Scope> scope;                         // set for restartable composables
     std::vector<Provided> provided;                       // set for CompositionLocalProvider
     std::function<void()> onForget;                       // cleanup registered by DisposableEffect
+    uint64_t seq = 0;                                      // when it was last called, among the calls of its parent
     std::shared_ptr<MovableData> movable;                  // set for a movable content's group
     uint64_t composedIn = 0;                               // the composition pass it was last called in
     bool visited = false;
@@ -227,13 +261,20 @@ public:
     T& rememberSlot(F& init) {
         Group& g = group();
         if (!g.slot || *g.slotType != typeid(T)) {
+            forgetSlot(g);
             g.slot = std::make_unique<Slot<T>>(init);
             g.slotType = &typeid(T);
+            if (RememberObserver* o = g.slot->observer()) afterComposition([o] { o->onRemembered(); });
         }
         return static_cast<Slot<T>&>(*g.slot).value;
     }
+    // What `g` remembered leaves the composition (told after it, if it's a RememberObserver).
+    static void forgetSlot(Group& g);
 
+    // After the composition: with what entered it (remembered values, DisposableEffect), and
+    // then with the side effects.
     void afterComposition(std::function<void()> effect) { effects_.push_back(std::move(effect)); }
+    void sideEffect(std::function<void()> effect) { sideEffects_.push_back(std::move(effect)); }
     int64_t frameTimeNanos() const { return frameTime_; }
     void requestFrame();
     // The running scope composed again at the frame at `frameTimeNanos` (or the first after),
@@ -259,7 +300,8 @@ private:
     Group* root_ = nullptr;
     std::vector<Group*> groups_;
     std::vector<Provided> locals_;
-    std::vector<std::function<void()>> effects_;
+    std::vector<std::function<void()>> effects_, sideEffects_;
+    uint64_t seq_ = 0;  // calls so far (Group::seq)
     Scope* currentScope_ = nullptr;
     // Who read each key, in the order they did (a scope gone leaves a hole, filled in as they mount
     // up: removal is quick and the order stays).
@@ -410,16 +452,13 @@ template <class K, class F>
 auto remember(const K& key, F&& init, CallSite site = CallSite::current())
     -> std::decay_t<std::invoke_result_t<F&>>& {
     using T = std::decay_t<std::invoke_result_t<F&>>;
-    struct Keyed {
-        K key;
-        T value;
-    };
+    using Keyed = detail::Keyed<K, T>;
     auto& c = detail::Composer::require();
     c.startGroup(detail::keyOf(site));
     auto make = [&] { return Keyed{key, init()}; };
     Keyed* slot = &c.rememberSlot<Keyed>(make);
     if (!(slot->key == key)) {
-        c.group().slot.reset();
+        detail::Composer::forgetSlot(c.group());
         slot = &c.rememberSlot<Keyed>(make);
     }
     c.endGroup();
@@ -501,9 +540,10 @@ MovableContentWithReceiverOf<R, P...> movableContentWithReceiverOf(std::type_ide
     return MovableContentWithReceiverOf<R, P...>(std::move(content));
 }
 
-// Runs after every successful composition of the enclosing scope.
+// Runs after every successful composition of the enclosing scope (after what entered the
+// composition was told so).
 inline void SideEffect(std::function<void()> effect) {
-    detail::Composer::require().afterComposition(std::move(effect));
+    detail::Composer::require().sideEffect(std::move(effect));
 }
 
 // Runs `effect` after composition when it enters the composition or when `key` changes.
@@ -526,10 +566,8 @@ void DisposableEffect(const K& key, std::function<std::function<void()>()> effec
     }
     if (s.pending) {
         s.pending = false;
-        c.afterComposition([g, effect = std::move(effect)] {
-            if (g->onForget) std::exchange(g->onForget, nullptr)();
-            g->onForget = effect();
-        });
+        if (g->onForget) detail::forgetLater(std::exchange(g->onForget, nullptr));  // the old one's, before any new effect runs
+        c.afterComposition([g, effect = std::move(effect)] { g->onForget = effect(); });
     }
     c.endGroup();
 }

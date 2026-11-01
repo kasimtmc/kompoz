@@ -571,6 +571,11 @@
   the app from its root and measuring every node (as a change of density still does, and `ComposeHost::invalidate`).
   On the Redmi Note 9 Pro the keyboard sliding in and out took 1.8 ms of composition and layout a frame instead of
   2.1.
+- **Effects in Compose's order, and `RememberObserver`**: what leaves the composition is forgotten after it, not while
+  it goes on, and in the reverse of the order it was composed in (it was in no order among siblings); the clean-ups
+  of effects whose key changed all run before any new effect starts; then what entered is remembered in order, and
+  only then do the `SideEffect`s run (they ran among the effects, in call order). A remembered value whose type
+  derives from `RememberObserver` is told `onRemembered` and `onForgotten` at those times.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

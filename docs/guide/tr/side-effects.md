@@ -111,7 +111,7 @@ void Compass() {
 
 ## SideEffect
 
-`SideEffect(effect)`, saran scope'un her başarılı kompozisyonundan sonra çalışır. Bir analitik kütüphanesi gibi Kompoz'un yönetmediği bir şeye, tarif ettiği arayüz kompoze edildikten sonra durumu iletmek için kullanın:
+`SideEffect(effect)`, saran scope'un her başarılı kompozisyonundan sonra, kompozisyona girenlere bu bildirildikten sonra çalışır. Bir analitik kütüphanesi gibi Kompoz'un yönetmediği bir şeye, tarif ettiği arayüz kompoze edildikten sonra durumu iletmek için kullanın:
 
 ```cpp
 #! struct Analytics { void setUserType(const std::string&) {} };
