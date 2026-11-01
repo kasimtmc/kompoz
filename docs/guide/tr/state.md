@@ -55,7 +55,7 @@ void Greeting(const User& user) {
 }
 ```
 
-Anahtar `==` ile karşılaştırılabilen herhangi bir değer olabilir; birden fazlası için bir `std::tuple` ya da bir struct kullanın.
+Anahtar `==` ile karşılaştırılabilen herhangi bir değer olabilir. Compose'daki gibi iki ya da üç anahtar verilebilir: `remember(a, b, init)` biri değiştiğinde değeri yeniden hesaplar; daha fazlası için bir `std::tuple` ya da bir struct kullanın.
 
 ## rememberSaveable
 

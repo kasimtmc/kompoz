@@ -380,6 +380,15 @@ void LaunchedEffect(const K& key, F coroutine, CallSite site = CallSite::current
         },
         site);
 }
+// With two or three keys: run again when any of them changes.
+template <class K1, class K2, class F>
+void LaunchedEffect(const K1& key1, const K2& key2, F coroutine, CallSite site = CallSite::current()) {
+    LaunchedEffect(std::tuple<K1, K2>(key1, key2), std::move(coroutine), site);
+}
+template <class K1, class K2, class K3, class F>
+void LaunchedEffect(const K1& key1, const K2& key2, const K3& key3, F coroutine, CallSite site = CallSite::current()) {
+    LaunchedEffect(std::tuple<K1, K2, K3>(key1, key2, key3), std::move(coroutine), site);
+}
 
 namespace detail {
 
@@ -483,6 +492,15 @@ T produceState(T initial, const K& key, F producer, CallSite site = CallSite::cu
     auto state = remember([&] { return mutableStateOf(std::move(initial)); });
     LaunchedEffect(key, [state, producer]() -> Task { co_await producer(state); });
     return state.get();
+}
+// With two or three keys: restarted when any of them changes.
+template <class T, class K1, class K2, class F>
+T produceState(T initial, const K1& key1, const K2& key2, F producer, CallSite site = CallSite::current()) {
+    return produceState(std::move(initial), std::tuple<K1, K2>(key1, key2), std::move(producer), site);
+}
+template <class T, class K1, class K2, class K3, class F>
+T produceState(T initial, const K1& key1, const K2& key2, const K3& key3, F producer, CallSite site = CallSite::current()) {
+    return produceState(std::move(initial), std::tuple<K1, K2, K3>(key1, key2, key3), std::move(producer), site);
 }
 
 } // namespace kompoz

@@ -55,7 +55,7 @@ void Greeting(const User& user) {
 }
 ```
 
-The key can be any value that compares with `==`; for several, use a `std::tuple` or a struct.
+The key can be any value that compares with `==`. Two or three keys can be given, as in Compose: `remember(a, b, init)` computes it again when either changes; for more, use a `std::tuple` or a struct.
 
 ## rememberSaveable
 

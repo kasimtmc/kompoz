@@ -185,6 +185,39 @@ struct Remembered : RememberObserver {
 };
 } // namespace
 
+TEST(remember_and_effects_take_two_or_three_keys) {
+    auto a = mutableStateOf(1), b = mutableStateOf(1), c = mutableStateOf(1);
+    auto log = std::make_shared<std::vector<std::string>>();
+    int made2 = 0, made3 = 0, produced = 0;
+    ComposeTestRule rule([&] {
+        int x = a.get(), y = b.get(), z = c.get();
+        remember(x, y, [&] { return ++made2; });
+        remember(x, y, z, [&] { return ++made3; });
+        DisposableEffect(x, y, [log, x, y]() -> std::function<void()> {
+            log->push_back("+" + std::to_string(x) + std::to_string(y));
+            return [log] { log->push_back("-"); };
+        });
+        LaunchedEffect(y, z, [log]() -> Task {
+            log->push_back("launched");
+            co_return;
+        });
+        int p = produceState(0, x, z, [&produced](MutableState<int> state) -> Task {
+            state.set(++produced);
+            co_return;
+        });
+        Text("p=" + std::to_string(p));
+    });
+    CHECK(made2 == 1 && made3 == 1 && (*log == std::vector<std::string>{"+11", "launched"}) && rule.onNodeWithText("p=1").exists());
+    log->clear();
+    c.set(2);  // only in the three-key ones, the LaunchedEffect and produceState
+    rule.waitForIdle();
+    CHECK(made2 == 1 && made3 == 2 && (*log == std::vector<std::string>{"launched"}) && rule.onNodeWithText("p=2").exists());
+    log->clear();
+    b.set(2);
+    rule.waitForIdle();
+    CHECK(made2 == 2 && made3 == 3 && (*log == std::vector<std::string>{"-", "+12", "launched"}) && produced == 2);
+}
+
 TEST(effects_run_in_composes_order) {
     // As Compose applies a composition: what left it is forgotten first, in the reverse of the
     // order it was composed in, then what entered it is remembered in order, then the side effects.

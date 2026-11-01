@@ -77,7 +77,7 @@ void Greeting(const std::string& user, SnackbarHostState snackbar) {
 ```
 
 - Tam da efektin yeniden başlaması gerektiğinde değişen bir anahtar kullanın: bir id, bir URL. Bir kez çalışması gereken bir efekt için Compose'un `LaunchedEffect(Unit)`'i gibi bir sabit (`0`) kullanın.
-- Anahtar `==` ile karşılaştırılabilmelidir. Birden fazlası için bir `std::tuple` kullanın.
+- Anahtar `==` ile karşılaştırılabilmelidir. `LaunchedEffect`, `DisposableEffect` ve `produceState` Compose'daki gibi iki ya da üç anahtar da alır (`LaunchedEffect(userId, query, …)`: biri değişince yeniden başlar); daha fazlası için bir `std::tuple` kullanın.
 
 ## rememberCoroutineScope
 

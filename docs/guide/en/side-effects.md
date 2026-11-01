@@ -77,7 +77,7 @@ void Greeting(const std::string& user, SnackbarHostState snackbar) {
 ```
 
 - Use a key that changes exactly when the effect should restart: an id, a URL. For an effect that should run once, use a constant (`0`), like Compose's `LaunchedEffect(Unit)`.
-- The key must compare with `==`. For several, use a `std::tuple`.
+- The key must compare with `==`. `LaunchedEffect`, `DisposableEffect` and `produceState` take two or three keys too, as in Compose (`LaunchedEffect(userId, query, …)`: restarted when either changes); for more, use a `std::tuple`.
 
 ## rememberCoroutineScope
 

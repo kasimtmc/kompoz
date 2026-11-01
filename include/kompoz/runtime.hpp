@@ -465,6 +465,21 @@ auto remember(const K& key, F&& init, CallSite site = CallSite::current())
     return slot->value;
 }
 
+// remember(key1, key2) { ... }, remember(key1, key2, key3) { ... }: recomputes the value whenever
+// any of them changes.
+template <class K1, class K2, class F>
+    requires std::invocable<F&>
+auto remember(const K1& key1, const K2& key2, F&& init, CallSite site = CallSite::current())
+    -> std::decay_t<std::invoke_result_t<F&>>& {
+    return remember(std::tuple<K1, K2>(key1, key2), std::forward<F>(init), site);
+}
+template <class K1, class K2, class K3, class F>
+    requires std::invocable<F&>
+auto remember(const K1& key1, const K2& key2, const K3& key3, F&& init, CallSite site = CallSite::current())
+    -> std::decay_t<std::invoke_result_t<F&>>& {
+    return remember(std::tuple<K1, K2, K3>(key1, key2, key3), std::forward<F>(init), site);
+}
+
 // Gives `content` an explicit identity, e.g. for list items that can move or be removed.
 template <class K>
 void key(const K& id, const Content& content, CallSite site = CallSite::current()) {
@@ -570,6 +585,17 @@ void DisposableEffect(const K& key, std::function<std::function<void()>()> effec
         c.afterComposition([g, effect = std::move(effect)] { g->onForget = effect(); });
     }
     c.endGroup();
+}
+// With two or three keys: run again when any of them changes.
+template <class K1, class K2>
+void DisposableEffect(const K1& key1, const K2& key2, std::function<std::function<void()>()> effect,
+                      CallSite site = CallSite::current()) {
+    DisposableEffect(std::tuple<K1, K2>(key1, key2), std::move(effect), site);
+}
+template <class K1, class K2, class K3>
+void DisposableEffect(const K1& key1, const K2& key2, const K3& key3, std::function<std::function<void()>()> effect,
+                      CallSite site = CallSite::current()) {
+    DisposableEffect(std::tuple<K1, K2, K3>(key1, key2, key3), std::move(effect), site);
 }
 
 // A value handed down the composition (Compose's CompositionLocal): what the nearest provider
