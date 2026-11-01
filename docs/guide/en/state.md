@@ -147,6 +147,25 @@ void ScrollToTop() {
 
 Without `derivedStateOf`, reading `firstVisibleItemIndex()` directly would recompose on every item scrolled past. Create a derived state inside `remember`, so it is made once and can observe its inputs.
 
+### Snapshots and threads
+
+States are kept per *snapshot*, as in Compose: code sees each state as of the snapshot it runs in. Outside any, it runs in the global snapshot, whose writes are told to their readers at the next frame. A composition runs in a snapshot of its own, so it sees one consistent state whatever other threads write meanwhile, and what it writes is seen once it is done.
+
+`Snapshot::withMutableSnapshot` writes several states at once: nothing sees one change without the others. If one of them was written meanwhile elsewhere to a value its policy doesn't count as the same, it throws `SnapshotApplyConflictException` and none of its writes is kept:
+
+```cpp body
+auto from = remember([] { return mutableStateOf(100); });
+auto to = remember([] { return mutableStateOf(0); });
+Button([from, to] {
+    Snapshot::withMutableSnapshot([&] {  // a transfer: never seen half done
+        from.set(from.peek() - 10);
+        to.set(to.peek() + 10);
+    });
+}, [] { Text("Move 10"); });
+```
+
+On the UI thread, states are read and written freely. Another thread may write them, and reads them inside a snapshot: `Snapshot::takeSnapshot()` gives a view of them as they are, read in its `enter(block)`, and `dispose()` lets it go. `takeMutableSnapshot()` gives one to write in too, applied with `apply()`; taken inside another, it is applied to that one. Snapshots take read and write observers, and `Snapshot::registerApplyObserver` hears what every applied snapshot changed.
+
 ### State lists and maps
 
 `mutableStateListOf` and `mutableStateMapOf` are observable containers, like Compose's `SnapshotStateList` and `SnapshotStateMap`. Reading one subscribes; adding, removing or changing items recomposes the readers:

@@ -86,7 +86,7 @@ void FileView(const std::string& path) {
 }
 ```
 
-İşçi iş parçacığındaki iş kompozisyon durumuna dokunmamalıdır; sonucunu döndürür, durumu da arayüz iş parçacığına geri dönmüş coroutine ayarlar. Coroutine bu arada iptal edilirse iş yine sonuna kadar çalışır ve sonucu atılır. Web'de iş parçacığı yoktur, bu yüzden iş hemen çalışır.
+İşçi iş parçacığındaki iş sonucunu döndürür, durumu da arayüz iş parçacığına geri dönmüş coroutine ayarlar; iş durumları kendisi de yazabilir, onları ise yalnızca bir anlık görüntünün içinde okur (bkz. [Durum](state.md#anlık-görüntüler-ve-iş-parçacıkları)). Coroutine bu arada iptal edilirse iş yine sonuna kadar çalışır ve sonucu atılır. Web'de iş parçacığı yoktur, bu yüzden iş hemen çalışır.
 
 ## LaunchedEffect
 

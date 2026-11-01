@@ -15,6 +15,7 @@
 
 #include "graphics.hpp"
 #include "saved_value.hpp"
+#include "snapshot.hpp"
 
 #include <algorithm>
 #include <concepts>
@@ -408,10 +409,28 @@ SnapshotMutationPolicy<T> defaultPolicy() {
     if constexpr (std::equality_comparable<T>) return structuralEqualityPolicy<T>();
     else return neverEqualPolicy<T>();
 }
+// A MutableState's value, kept per snapshot.
 template <class T>
-struct StateCell {
-    T value;
+struct StateCell final : StateObject {
+    struct Record final : StateRecord {
+        T value;
+        explicit Record(T v) : value(std::move(v)) {}
+        StateRecord* copy() const override {
+            if constexpr (std::is_copy_constructible_v<T>) return new Record(value);
+            else throw std::logic_error("kompoz: a state of a type that can't be copied, written in a second snapshot");
+        }
+        void assign(const StateRecord& from) override {
+            if constexpr (std::is_copy_assignable_v<T>) value = static_cast<const Record&>(from).value;
+            else throw std::logic_error("kompoz: a state of a type that can't be copied, written in a second snapshot");
+        }
+    };
     bool (*equivalent)(const T&, const T&);
+    StateCell(T initial, bool (*eq)(const T&, const T&)) : equivalent(eq) { first.store(new Record(std::move(initial))); }
+    bool mergeable(const StateRecord& current, const StateRecord& applied) const override {
+        return equivalent && equivalent(static_cast<const Record&>(current).value, static_cast<const Record&>(applied).value);
+    }
+    const T& read(bool observe) const { return static_cast<const Record&>(readable(*this, observe)).value; }
+    const void* key() const { return static_cast<const StateObject*>(this); }
 };
 } // namespace detail
 
@@ -422,29 +441,36 @@ template <class T>
 class MutableState {
 public:
     explicit MutableState(T initial, SnapshotMutationPolicy<T> policy = detail::defaultPolicy<T>())
-        : cell_(std::make_shared<detail::StateCell<T>>(detail::StateCell<T>{std::move(initial), policy.equivalent})) {}
+        : cell_(std::make_shared<detail::StateCell<T>>(std::move(initial), policy.equivalent)) {}
 
+    // The value the snapshot this runs in sees.
     const T& get() const {
-        detail::recordRead(cell_.get());
-        return cell_->value;
+        detail::recordRead(cell_->key());
+        return cell_->read(true);
     }
     // Reads without subscribing the running composable.
-    const T& peek() const { return cell_->value; }
+    const T& peek() const { return cell_->read(false); }
     const T& operator*() const { return get(); }
     const T* operator->() const { return &get(); }
 
     // Nothing happens if `value` is equivalent to the one it has (its policy; by default ==).
     void set(T value) const {
-        if (cell_->equivalent && cell_->equivalent(cell_->value, value)) return;
-        cell_->value = std::move(value);
-        detail::notifyStateChanged(cell_.get());
+        using Record = typename detail::StateCell<T>::Record;
+        detail::StateWriter writer(*cell_);
+        if (cell_->equivalent && cell_->equivalent(static_cast<const Record&>(writer.current()).value, value)) return writer.cancel();
+        if (auto* own = static_cast<Record*>(writer.own()))
+            own->value = std::move(value);
+        else
+            writer.add(new Record(std::move(value)));
     }
 
     // Mutates the value in place: todos.update([](auto& list) { list.push_back(...); });
     template <class F>
     void update(F&& mutate) const {
-        std::forward<F>(mutate)(cell_->value);
-        detail::notifyStateChanged(cell_.get());
+        using Record = typename detail::StateCell<T>::Record;
+        detail::StateWriter writer(*cell_);
+        if (!writer.own()) writer.add(writer.current().copy());
+        std::forward<F>(mutate)(static_cast<Record*>(writer.own())->value);
     }
 
     // The same state, not the same value: lets composables taking a state be skipped.
@@ -464,8 +490,9 @@ class State {
 public:
     State(const MutableState<T>& state)
         : owner_(state.cell_), read_([](const void* cell, bool subscribe) -> const T& {
-              if (subscribe) detail::recordRead(cell);
-              return static_cast<const detail::StateCell<T>*>(cell)->value;
+              auto* c = static_cast<const detail::StateCell<T>*>(cell);
+              if (subscribe) detail::recordRead(c->key());
+              return c->read(subscribe);
           }) {}
     // For a state holder of its own: `read` gives the value of what `owner` points to, recording
     // the read if `subscribe`.

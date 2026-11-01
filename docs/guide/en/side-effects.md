@@ -86,7 +86,7 @@ void FileView(const std::string& path) {
 }
 ```
 
-The work on the worker thread mustn't touch composition state; it returns its result, and the coroutine, back on the UI thread, sets the state. If the coroutine is cancelled meanwhile, the work still runs to its end and its result is dropped. On the web there are no threads, so the work runs right away.
+The work on the worker thread returns its result, and the coroutine, back on the UI thread, sets the state; the work may also write states itself, and reads them only inside a snapshot (see [State](state.md#snapshots-and-threads)). If the coroutine is cancelled meanwhile, the work still runs to its end and its result is dropped. On the web there are no threads, so the work runs right away.
 
 ## LaunchedEffect
 

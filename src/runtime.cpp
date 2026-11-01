@@ -185,6 +185,10 @@ bool Composer::recompose(int64_t frameTimeNanos) {
     auto* outerForgets = std::exchange(gForgets, &forgotten);
     ++stats_.recompositions;
     ++pass_;
+    // In a snapshot of its own: one consistent state however other threads write meanwhile; what
+    // it writes is seen once it is applied, below.
+    MutableSnapshot snapshot = Snapshot::takeMutableSnapshot();
+    std::optional<Snapshot::Entered> entered(std::in_place, snapshot);
 
     // Outermost first: running a scope also runs (or skips) the scopes inside it, which
     // clears their invalid flag, so they are not run twice.
@@ -198,6 +202,10 @@ bool Composer::recompose(int64_t frameTimeNanos) {
     parked_.clear();  // movable contents not called again: they leave the composition
     detail::settleSaveables();
 
+    entered.reset();
+    bool applied = snapshot.apply() == SnapshotApplyResult::Success;
+    snapshot.dispose();
+    if (!applied) throw std::logic_error("kompoz: a state the composition wrote was written meanwhile on another thread");
     gForgets = outerForgets;
     gCurrent = previous;
     // After the composition, outside of it, as Compose applies one: what left it forgotten (last

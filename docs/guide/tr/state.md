@@ -147,6 +147,25 @@ void ScrollToTop() {
 
 `derivedStateOf` olmadan `firstVisibleItemIndex()`'i doğrudan okumak, kaydırırken geçilen her öğede yeniden kompoze ederdi. Türetilmiş durumu `remember`'ın içinde oluşturun ki bir kez yapılsın ve girdilerini izleyebilsin.
 
+### Anlık görüntüler ve iş parçacıkları
+
+Durumlar, Compose'daki gibi, *anlık görüntü* başına tutulur: kod her durumu, içinde çalıştığı anlık görüntüdeki haliyle görür. Hiçbirinin içinde değilse küresel anlık görüntüde çalışır; onun yazmaları okuyucularına bir sonraki karede bildirilir. Bir kompozisyon kendine ait bir anlık görüntüde çalışır: başka iş parçacıkları bu arada ne yazarsa yazsın tek ve tutarlı bir durum görür, onun yazdıkları da o bitince görülür.
+
+`Snapshot::withMutableSnapshot` birkaç durumu birden yazar: hiçbir şey bir değişikliği ötekiler olmadan görmez. Bunlardan biri bu arada başka bir yerde, kuralının aynı saymadığı bir değere yazıldıysa `SnapshotApplyConflictException` atar ve yazdıklarının hiçbiri kalmaz:
+
+```cpp body
+auto from = remember([] { return mutableStateOf(100); });
+auto to = remember([] { return mutableStateOf(0); });
+Button([from, to] {
+    Snapshot::withMutableSnapshot([&] {  // bir aktarım: hiç yarım görülmez
+        from.set(from.peek() - 10);
+        to.set(to.peek() + 10);
+    });
+}, [] { Text("10 aktar"); });
+```
+
+Arayüz iş parçacığında durumlar serbestçe okunur ve yazılır. Başka bir iş parçacığı onları yazabilir, okumayı ise bir anlık görüntünün içinde yapar: `Snapshot::takeSnapshot()` onların o anki halinin bir görünümünü verir; `enter(block)`'unda okunur, `dispose()` onu bırakır. `takeMutableSnapshot()` içine yazılabilen bir tane verir, `apply()` ile uygulanır; bir başkasının içinde alınırsa ona uygulanır. Anlık görüntüler okuma ve yazma gözlemcileri alır; `Snapshot::registerApplyObserver` uygulanan her anlık görüntünün neyi değiştirdiğini duyar.
+
 ### Durum listeleri ve haritaları
 
 `mutableStateListOf` ve `mutableStateMapOf`, Compose'un `SnapshotStateList` ve `SnapshotStateMap`'i gibi izlenebilir kapsayıcılardır. Birini okumak abone yapar; öğe eklemek, kaldırmak ya da değiştirmek okuyanları yeniden kompoze eder:

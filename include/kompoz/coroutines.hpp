@@ -299,8 +299,8 @@ int backgroundWorkInFlight();  // started and not done yet (the test rule waits 
 // co_await withBackground([] { return load(); }): `work` runs on a worker thread (Compose's
 // withContext(Dispatchers.IO) / Default: files, decoding, heavy sums), the coroutine carrying on
 // on the UI thread with what it returned (or what it threw). Cancelled meanwhile, the work still
-// runs to its end; what it gives is dropped. It mustn't touch composition state but through
-// what is safe from any thread (MutableStateFlow, Channel).
+// runs to its end; what it gives is dropped. It may write states, and reads them in a snapshot
+// (Snapshot::takeSnapshot().enter(...)), or goes through MutableStateFlow and Channel.
 //   LaunchedEffect(path, [path, text]() -> Task { text.set(co_await withBackground([path] { return readFile(path); })); });
 template <class T>
 struct BackgroundAwaiter {

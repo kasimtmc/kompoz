@@ -219,6 +219,146 @@ TEST(read_only_states_come_from_mutable_and_derived_ones) {
     CHECK(plain.peek() == 5 && *plain == 5 && plain == State<int>(count) && !(plain == State<int>(other)));
 }
 
+TEST(snapshots_see_states_as_they_were_and_apply_their_writes_together) {
+    auto a = mutableStateOf(1), b = mutableStateOf(10);
+    Snapshot taken = Snapshot::takeSnapshot();  // what is written after isn't seen in it
+    a.set(2);
+    CHECK(taken.enter([&] { return a.get(); }) == 1 && a.peek() == 2);
+    taken.dispose();
+    // A mutable snapshot's writes: seen once it is applied, together.
+    MutableSnapshot both = Snapshot::takeMutableSnapshot();
+    both.enter([&] { a.set(3), b.set(30); });
+    CHECK(a.peek() == 2 && b.peek() == 10 && both.enter([&] { return a.peek() + b.peek(); }) == 33);
+    CHECK(both.apply() == SnapshotApplyResult::Success && a.peek() == 3 && b.peek() == 30);
+    both.dispose();
+    // Written meanwhile elsewhere to another value: it fails; to the same one, it applies.
+    MutableSnapshot late = Snapshot::takeMutableSnapshot();
+    late.enter([&] { a.set(4); });
+    a.set(5);
+    CHECK(late.apply() == SnapshotApplyResult::Failure && a.peek() == 5);
+    late.dispose();
+    MutableSnapshot same = Snapshot::takeMutableSnapshot();
+    same.enter([&] { a.set(6); });
+    a.set(6);
+    CHECK(same.apply() == SnapshotApplyResult::Success && a.peek() == 6);
+    same.dispose();
+    bool conflicted = false;
+    try {
+        Snapshot::withMutableSnapshot([&] {
+            a.set(7);
+            Snapshot::withMutableSnapshot([&] { a.set(8); });  // (nested: applied to the outer one, which then sees 8)
+            CHECK(a.peek() == 8);
+            std::thread([&] { a.set(9); }).join();  // another thread writes it meanwhile
+        });
+    } catch (const SnapshotApplyConflictException&) {
+        conflicted = true;
+    }
+    CHECK(conflicted && a.peek() == 9);
+    // Nested: applied to its parent, seen outside once the parent is.
+    MutableSnapshot outer = Snapshot::takeMutableSnapshot();
+    outer.enter([&] {
+        MutableSnapshot inner = Snapshot::takeMutableSnapshot();
+        inner.enter([&] { b.set(40); });
+        CHECK(b.peek() == 30);
+        CHECK(inner.apply() == SnapshotApplyResult::Success && b.peek() == 40);
+        inner.dispose();
+    });
+    CHECK(b.peek() == 30 && outer.apply() == SnapshotApplyResult::Success && b.peek() == 40);
+    outer.dispose();
+    CHECK(Snapshot::withMutableSnapshot([&] {
+              b.set(41);
+              return b.peek();
+          }) == 41 &&
+          b.peek() == 41);
+    // A read observer hears what is read in it (not peeked); a read-only snapshot can't be written.
+    std::vector<const void*> reads;
+    Snapshot observed = Snapshot::takeSnapshot([&](const void* state) { reads.push_back(state); });
+    observed.enter([&] { a.get(), b.peek(); });
+    CHECK(reads.size() == 1);
+    bool refused = false;
+    try {
+        observed.enter([&] { a.set(0); });
+    } catch (const std::logic_error&) {
+        refused = true;
+    }
+    CHECK(refused && a.peek() == 9);
+    observed.dispose();
+}
+
+namespace {
+// A state object of its own: how many records it keeps.
+struct CountedState : detail::StateObject {
+    struct Record : detail::StateRecord {
+        int value;
+        explicit Record(int v) : value(v) {}
+        StateRecord* copy() const override { return new Record(value); }
+        void assign(const StateRecord& from) override { value = static_cast<const Record&>(from).value; }
+    };
+    CountedState() { first.store(new Record(0)); }
+    void set(int v) {
+        detail::StateWriter writer(*this);
+        if (auto* own = static_cast<Record*>(writer.own())) own->value = v;
+        else writer.add(new Record(v));
+    }
+    int get() const { return static_cast<const Record&>(detail::readable(*this)).value; }
+    int records() const {
+        int n = 0;
+        for (auto* r = first.load(); r; r = r->next.load()) ++n;
+        return n;
+    }
+};
+} // namespace
+
+TEST(snapshots_keep_only_the_records_someone_reads) {
+    CountedState state;
+    for (int i = 1; i <= 50; ++i) {
+        state.set(i);
+        Snapshot::sendApplyNotifications();
+    }
+    CHECK(state.get() == 50 && state.records() <= 2);
+    Snapshot pinned = Snapshot::takeSnapshot();  // reads 50 as long as it is open
+    for (int i = 51; i <= 100; ++i) {
+        state.set(i);
+        Snapshot::sendApplyNotifications();
+    }
+    CHECK(pinned.enter([&] { return state.get(); }) == 50 && state.get() == 100 && state.records() <= 3);
+    pinned.dispose();
+    state.set(101);
+    Snapshot::sendApplyNotifications();
+    CHECK(state.get() == 101 && state.records() <= 2);
+}
+
+TEST(a_composition_sees_other_threads_writes_whole_and_once_applied) {
+    auto first = mutableStateOf(0), second = mutableStateOf(0);
+    std::vector<std::pair<int, int>> seen;
+    ComposeTestRule rule([&] { seen.emplace_back(first.get(), second.get()); });
+    Snapshot::withMutableSnapshot([&] { first.set(1), second.set(1); });
+    rule.waitForIdle();
+    CHECK(seen.size() == 2 && (seen.back() == std::pair{1, 1}));  // composed once for both
+    // Another thread writing both together, the composition going on meanwhile: never one without
+    // the other.
+    std::atomic<bool> done = false;
+    std::thread writer([&] {
+        for (int i = 2; i <= 300; ++i) Snapshot::withMutableSnapshot([&] { first.set(i), second.set(i); });
+        done = true;
+    });
+    while (!done) rule.waitForIdle();
+    writer.join();
+    rule.waitForIdle();
+    CHECK((seen.back() == std::pair{300, 300}) && std::ranges::all_of(seen, [](const auto& p) { return p.first == p.second; }));
+    // Written outside a snapshot from another thread, read there in one: as written; on the UI
+    // thread after a frame.
+    int read = 0;
+    std::thread([&] {
+        first.set(400);
+        Snapshot snapshot = Snapshot::takeSnapshot();
+        read = snapshot.enter([&] { return first.peek(); });
+        snapshot.dispose();
+    }).join();
+    rule.waitForIdle();
+    CHECK(read == 400 && seen.back().first == 400);
+}
+
 TEST(states_take_a_mutation_policy) {
     auto same = mutableStateOf(1);                            // ==: the same value changes nothing
     auto every = mutableStateOf(1, neverEqualPolicy<int>());  // every set() recomposes

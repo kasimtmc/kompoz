@@ -594,6 +594,13 @@
   failing cancels the others and is thrown, and the awaiting coroutine cancelled cancels them all; `supervisorScope`
   lets children fail on their own; `withTimeout` / `withTimeoutOrNull` cancel what runs too long. A coroutine ending
   with a `CancellationException` (a timeout's too) is cancelled, not failed: it isn't reported.
+- **Snapshots**, as Compose's snapshot system: a state keeps a record per snapshot that wrote it and is read as the
+  snapshot the code runs in sees it. A composition runs in a snapshot of its own, applied when it is over, so it sees
+  one consistent state whatever other threads write; `Snapshot::withMutableSnapshot` writes several states at once
+  (`SnapshotApplyConflictException` if one was written meanwhile to a value its policy doesn't count as the same);
+  `takeSnapshot`, `takeMutableSnapshot` (nested ones apply to their parent), read and write observers,
+  `registerApplyObserver`. Another thread may now write states (a race before) and reads them in a snapshot. Records
+  no snapshot reads are dropped between frames.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

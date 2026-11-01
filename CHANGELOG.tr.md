@@ -629,6 +629,14 @@
   `supervisorScope` çocukların kendi başlarına hata vermesine izin veriyor; `withTimeout` / `withTimeoutOrNull` çok
   uzun süreni iptal ediyor. Bir `CancellationException` ile (zaman aşımınınki de) biten bir coroutine hata vermiş değil
   iptal edilmiş sayılıyor: bildirilmiyor.
+- **Anlık görüntüler**, Compose'un anlık görüntü sistemi gibi: bir durum onu yazan her anlık görüntü için bir kayıt
+  tutuyor ve kodun içinde çalıştığı anlık görüntünün gördüğü haliyle okunuyor. Bir kompozisyon kendine ait, bitince
+  uygulanan bir anlık görüntüde çalışıyor; böylece başka iş parçacıkları ne yazarsa yazsın tek ve tutarlı bir durum
+  görüyor. `Snapshot::withMutableSnapshot` birkaç durumu birden yazıyor (biri bu arada kuralının aynı saymadığı bir
+  değere yazıldıysa `SnapshotApplyConflictException`); `takeSnapshot`, `takeMutableSnapshot` (iç içe olanlar
+  ebeveynlerine uygulanıyor), okuma ve yazma gözlemcileri, `registerApplyObserver`. Başka bir iş parçacığı artık
+  durumları yazabiliyor (önceden bir veri yarışıydı) ve onları bir anlık görüntüde okuyor. Hiçbir anlık görüntünün
+  okumadığı kayıtlar kareler arasında bırakılıyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

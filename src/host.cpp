@@ -116,10 +116,23 @@ Rect hitBoundsOf(const LayoutNode& node, const ModifierElement* element) {
 
 } // namespace
 
-void detail::notifyStateChanged(const void* key) {
-    std::lock_guard lock(gMutex);
-    for (auto* host : gHosts) host->stateChanged(key);
+void detail::notifyStateChanged(const void* key) { detail::stateChanged(key); }
+
+namespace {
+// What every applied snapshot changed goes to every host (its readers recompose); a write to the
+// global snapshot asks them for a frame, which applies it.
+void hookSnapshots() {
+    static Snapshot::ObserverHandle applied = Snapshot::registerApplyObserver([](const std::vector<const void*>& changed) {
+        std::lock_guard lock(gMutex);
+        for (auto* host : gHosts)
+            for (const void* key : changed) host->stateChanged(key);
+    });
+    detail::setGlobalWriteObserver([] {
+        std::lock_guard lock(gMutex);
+        for (auto* host : gHosts) host->wake();
+    });
 }
+} // namespace
 
 void detail::requestDraw() {
     std::lock_guard lock(gMutex);
@@ -188,6 +201,8 @@ ComposeHost::ComposeHost(TextMeasurer& measurer, Content content)
                                      composable(CallSite::current(), contentPass_, [this] { content_(); });
                                  });
     });
+    detail::setUiThread();
+    hookSnapshots();
     std::lock_guard lock(gMutex);
     gHosts.push_back(this);
 }
@@ -387,6 +402,7 @@ bool ComposeHost::frame(int64_t frameTimeNanos) {
     // Composition, then layout. Layout may write state (a lazy list that needs more items,
     // a scaffold that measured its bars); then compose and lay out again before drawing.
     for (int pass = 0; pass < 4; ++pass) {
+        Snapshot::sendApplyNotifications();  // what was written outside a composition: told to the readers
         std::vector<const void*> changed;
         {
             std::lock_guard lock(gMutex);
@@ -412,6 +428,7 @@ bool ComposeHost::frame(int64_t frameTimeNanos) {
         // Nothing measured or moved (a state read only while drawing): nothing new to report.
         if (layout()) reportPositions(frameTimeNanos);  // may write state: then another pass
         redraw_ = true;
+        if (detail::globalSnapshotChanged()) continue;  // the layout wrote state: told next pass
         std::lock_guard lock(gMutex);
         if (pendingChanges_.empty()) break;
     }
@@ -474,6 +491,7 @@ void ComposeHost::idle(int64_t budgetNanos) {
         auto started = Clock::now();
         if (!work.start()) continue;
         // What it changed composed now, as a frame would (not laid out: the next frame does that).
+        Snapshot::sendApplyNotifications();
         std::vector<const void*> changed;
         {
             std::lock_guard lock(gMutex);
@@ -490,7 +508,7 @@ void ComposeHost::idle(int64_t budgetNanos) {
 }
 
 bool ComposeHost::wantsFrame() const {
-    if (rootInvalid_ || environmentChanged_ || animating_ || layoutDirty_ || redraw_ || flingNode_ || layoutAnimating_ || lastFrameTime_ < drawingAnimatedUntil_ ||
+    if (rootInvalid_ || environmentChanged_ || detail::globalSnapshotChanged() || animating_ || layoutDirty_ || redraw_ || flingNode_ || layoutAnimating_ || lastFrameTime_ < drawingAnimatedUntil_ ||
         composer_.hasInvalidScopes() || dispatcher_->hasFrameWaiters())
         return true;
     std::lock_guard lock(gMutex);
@@ -850,7 +868,7 @@ bool ComposeHost::layout() {
     bool settled;
     {
         std::lock_guard lock(gMutex);
-        settled = pendingChanges_.empty();
+        settled = pendingChanges_.empty() && !detail::globalSnapshotChanged();
     }
     if (gLayoutCheck && settled) {
         // The walk after layout's counts and what it knows of each node, as worked out afresh.

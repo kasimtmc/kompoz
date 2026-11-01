@@ -57,6 +57,7 @@ endif()
 # Platform-independent core: runtime, layout, input, widgets. No system dependencies.
 add_library(kompoz_core STATIC
     src/runtime.cpp
+    src/snapshot.cpp
     src/saved_value.cpp
     src/animated.cpp
     src/bidi.cpp
