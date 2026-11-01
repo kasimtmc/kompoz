@@ -12,30 +12,83 @@ namespace kompoz::detail {
 
 Dispatcher& currentDispatcher() { return Composer::require().host().dispatcher(); }
 
+namespace {
+// What a coroutine threw that nobody takes (a cancellation isn't a failure).
+void report(const std::exception_ptr& error) {
+    try {
+        std::rethrow_exception(error);
+    } catch (const CancellationException&) {
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "kompoz: coroutine failed: %s\n", e.what());
+    } catch (...) {
+        std::fprintf(stderr, "kompoz: coroutine failed\n");
+    }
+}
+} // namespace
+
 void JobState::cancel() {
     if (done || cancelled) return;
     cancelled = true;
     if (running) return;  // cancelled from inside: finish() cleans up once it suspends
-    done = true;
-    if (handle) std::exchange(handle, {}).destroy();
-    callable.reset();
+    complete();
 }
 
 void JobState::finish() {
     if (!cancelled && handle && !handle.done()) return;  // suspended again: still running
     if (handle && handle.done() && handle.promise().exception) {
-        try {
-            std::rethrow_exception(handle.promise().exception);
-        } catch (const std::exception& e) {
-            std::fprintf(stderr, "kompoz: coroutine failed: %s\n", e.what());
-        } catch (...) {
-            std::fprintf(stderr, "kompoz: coroutine failed\n");
-        }
+        failure = handle.promise().exception;
+        auto s = scope.lock();
+        if (s && s->structured)
+            s->childFailed(*this, failure);
+        else if (!deferred)  // (an async's goes to who awaits it)
+            report(failure);
     }
+    complete();
+}
+
+void JobState::complete() {
+    if (done) return;
     done = true;
-    if (handle) std::exchange(handle, {}).destroy();
+    auto self = shared_from_this();  // (kept while what it ends lets go of it)
+    if (handle) std::exchange(handle, {}).destroy();  // (awaiters in it go: a coroutineScope's children are cancelled)
     callable.reset();
-    if (auto s = scope.lock()) std::erase(s->jobs, shared_from_this());
+    for (auto& [job, h] : std::exchange(joiners, {}))
+        if (auto j = job.lock()) dispatcher->resumeNow(j, h);
+    if (auto s = scope.lock()) {
+        std::erase(s->jobs, self);
+        s->left();
+    }
+}
+
+void ScopeState::cancel(const JobState* except) {
+    cancelled = true;
+    cancelling_ = true;  // (who awaits it resumes once all of them are gone, not after the first)
+    auto all = jobs;
+    for (auto& job : all)
+        if (job.get() != except) job->cancel();
+    cancelling_ = false;
+    left();
+}
+
+void ScopeState::childFailed(JobState& child, std::exception_ptr error) {
+    bool cancellation = false;
+    try {
+        std::rethrow_exception(error);
+    } catch (const CancellationException&) {
+        cancellation = true;
+    } catch (...) {
+    }
+    if (cancellation) return;
+    if (supervisor && !child.body) {  // a supervisor's children fail on their own
+        report(error);
+        return;
+    }
+    if (!failure) failure = error;
+    cancel(&child);
+}
+
+void ScopeState::left() {
+    if (!cancelling_ && jobs.empty() && whenEmpty) std::exchange(whenEmpty, nullptr)();
 }
 
 void Dispatcher::resume(const std::shared_ptr<JobState>& job, std::coroutine_handle<> h) {

@@ -47,6 +47,30 @@ void UserName(int id) {
 
 Bir coroutine'in yakaladıkları o çalıştığı sürece canlı tutulur, bu yüzden **değerle** yakalayın. Referansla yakalayan bir lambda onu yapan composable'dan uzun yaşar ve referansları boşa düşer.
 
+### İşler, async ve yapılandırılmış kapsamlar
+
+`launch` bir `Job` döndürür: onu `cancel()` edebilir, `isActive()`, `isCompleted()` ya da `isCancelled()` diye sorabilir ya da başka bir coroutine'de `co_await job.join()` ile bitmesini bekleyebilirsiniz. `async`, `TaskOf<T>` döndüren bir coroutine başlatır ve bir `Deferred<T>` döndürür; onun `co_await deferred.await()`'i değerini verir ya da attığını atar, böylece iki iş aynı anda yürüyebilir:
+
+```cpp
+#! struct User { std::string name; }; struct Posts { int count = 0; };
+#! TaskOf<User> loadUser(int) { co_return User{"Ada"}; }
+#! TaskOf<Posts> loadPosts(int) { co_return Posts{3}; }
+void Profile(int id) {
+    auto line = remember([] { return mutableStateOf(std::string("…")); });
+    auto scope = rememberCoroutineScope();
+    LaunchedEffect(id, [id, line, scope]() -> Task {
+        auto user = scope.async([id] { return loadUser(id); });
+        auto posts = scope.async([id] { return loadPosts(id); });  // aynı anda yükleniyor
+        line.set((co_await user.await()).name + ": " + std::to_string((co_await posts.await()).count));
+    });
+    Text(line.get());
+}
+```
+
+`co_await coroutineScope([](CoroutineScope scope) -> Task { … })`, Kotlin'deki gibi, kendine ait bir kapsamda başlatan bir blok çalıştırır ve ancak blok ve başlattığı her şey bitince devam eder; blok `TaskOf<T>` döndürüyorsa onun değeriyle. Bir çocuk hata verirse diğerleri iptal edilir ve `co_await` onun attığını atar; onu bekleyen coroutine iptal edilirse hepsi iptal edilir. `supervisorScope` da aynıdır, ama çocukları kendi başlarına hata verir: bir çocuğun hatası bildirilir ve hiçbir şeyi iptal etmez.
+
+`withTimeout(limit, block)` süre sınırı olan bir `coroutineScope`'tur: süre dolunca hepsi iptal edilir ve `co_await` `TimeoutCancellationException` atar. `withTimeoutOrNull` bunun yerine boş bir `std::optional` verir (değer vermeyen bir blok için `false`). Yakalamadığı bir `CancellationException` ile biten bir coroutine hata vermiş değil iptal edilmiştir: bildirilmez.
+
 ### Ağır işler
 
 Coroutine'ler arayüz iş parçacığında çalışır: birinin içindeki uzun bir hesap, başka her yerde olduğu gibi arayüzü dondurur. Dosya okumayı, kod çözmeyi ve ağır hesapları `withBackground` ile bir işçi iş parçacığına verin, sonuçla arayüz iş parçacığına geri dönün:

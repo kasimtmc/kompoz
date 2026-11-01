@@ -2665,6 +2665,174 @@ TEST(coroutines_give_back_values_and_work_in_the_background) {
     CHECK(shown.peek() == "iki katı 14");
 }
 
+TEST(launch_gives_a_job_and_async_a_deferred) {
+    using namespace std::chrono_literals;
+    std::optional<CoroutineScope> scope;
+    ComposeTestRule rule([&] { scope = rememberCoroutineScope(); });
+    auto log = std::make_shared<std::vector<std::string>>();
+    Job slow = scope->launch([log]() -> Task {
+        co_await delay(300ms);
+        log->push_back("slow");
+    });
+    scope->launch([log, slow]() -> Task {  // waits for the other to end
+        co_await slow.join();
+        log->push_back("joined");
+    });
+    CHECK(slow.isActive() && !slow.isCompleted());
+    rule.advanceTimeBy(400);
+    CHECK((*log == std::vector<std::string>{"slow", "joined"}) && slow.isCompleted() && !slow.isCancelled());
+    // Cancelled, a job is done too: who joins it goes on.
+    Job forever = scope->launch([]() -> Task { co_await delay(1h); });
+    scope->launch([log, forever]() -> Task {
+        co_await forever.join();
+        log->push_back("after cancel");
+    });
+    forever.cancel();
+    CHECK(forever.isCancelled() && forever.isCompleted() && log->back() == "after cancel");
+    // Two asyncs at once: both values after the longer one, not after both one after the other.
+    int sum = 0;
+    scope->launch([&sum, s = *scope]() -> Task {
+        auto a = s.async([]() -> TaskOf<int> {
+            co_await delay(200ms);
+            co_return 2;
+        });
+        auto b = s.async([]() -> TaskOf<int> {
+            co_await delay(300ms);
+            co_return 3;
+        });
+        sum = co_await a.await() + co_await b.await();
+    });
+    rule.advanceTimeBy(250);
+    CHECK(sum == 0);
+    rule.advanceTimeBy(100);
+    CHECK(sum == 5);
+    // What an async throws is thrown where it's awaited, not reported.
+    std::string caught;
+    scope->launch([&caught, s = *scope]() -> Task {
+        auto failing = s.async([]() -> TaskOf<int> {
+            co_await delay(10ms);
+            throw std::runtime_error("yok");
+        });
+        try {
+            co_await failing.await();
+        } catch (const std::exception& e) {
+            caught = e.what();
+        }
+    });
+    rule.advanceTimeBy(50);
+    CHECK(caught == "yok");
+}
+
+TEST(coroutine_scopes_wait_for_their_children_and_fail_with_them) {
+    using namespace std::chrono_literals;
+    std::optional<CoroutineScope> scope;
+    ComposeTestRule rule([&] { scope = rememberCoroutineScope(); });
+    auto log = std::make_shared<std::vector<std::string>>();
+    // coroutineScope: on once its children are done, with the block's value.
+    scope->launch([log]() -> Task {
+        int n = co_await coroutineScope([log](CoroutineScope s) -> TaskOf<int> {
+            s.launch([log]() -> Task {
+                co_await delay(300ms);
+                log->push_back("child");
+            });
+            co_return 7;
+        });
+        log->push_back("scope " + std::to_string(n));
+    });
+    rule.advanceTimeBy(200);
+    CHECK(log->empty());
+    rule.advanceTimeBy(200);
+    CHECK((*log == std::vector<std::string>{"child", "scope 7"}));
+    // A child failing cancels its siblings, and the await throws what it threw.
+    log->clear();
+    scope->launch([log]() -> Task {
+        try {
+            co_await coroutineScope([log](CoroutineScope s) -> Task {
+                s.launch([log]() -> Task {
+                    Guard guard{log, "sibling"};
+                    co_await delay(1h);
+                });
+                s.launch([]() -> Task {
+                    co_await delay(100ms);
+                    throw std::runtime_error("bozuldu");
+                });
+                co_return;
+            });
+        } catch (const std::exception& e) {
+            log->push_back(std::string("caught ") + e.what());
+        }
+    });
+    rule.advanceTimeBy(200);
+    CHECK((*log == std::vector<std::string>{"sibling destroyed", "caught bozuldu"}));
+    // The awaiting coroutine cancelled: the scope's children too.
+    log->clear();
+    Job outer = scope->launch([log]() -> Task {
+        co_await coroutineScope([log](CoroutineScope s) -> Task {
+            s.launch([log]() -> Task {
+                Guard guard{log, "inner"};
+                co_await delay(1h);
+            });
+            co_return;
+        });
+        log->push_back("never");
+    });
+    rule.advanceTimeBy(100);
+    outer.cancel();
+    CHECK((*log == std::vector<std::string>{"inner destroyed"}));
+    // supervisorScope: a child's failure is its own.
+    log->clear();
+    scope->launch([log]() -> Task {
+        co_await supervisorScope([log](CoroutineScope s) -> Task {
+            s.launch([]() -> Task {
+                co_await delay(50ms);
+                throw std::runtime_error("one child (expected in this test)");
+            });
+            s.launch([log]() -> Task {
+                co_await delay(100ms);
+                log->push_back("other child");
+            });
+            co_return;
+        });
+        log->push_back("supervisor done");
+    });
+    rule.advanceTimeBy(200);
+    CHECK((*log == std::vector<std::string>{"other child", "supervisor done"}));
+    CHECK(!rule.host().hasTimers());
+}
+
+TEST(with_timeout_cancels_what_runs_too_long) {
+    using namespace std::chrono_literals;
+    std::optional<CoroutineScope> scope;
+    ComposeTestRule rule([&] { scope = rememberCoroutineScope(); });
+    auto log = std::make_shared<std::vector<std::string>>();
+    scope->launch([log]() -> Task {
+        try {
+            co_await withTimeout(100ms, [log](CoroutineScope) -> Task {
+                Guard guard{log, "slow"};
+                co_await delay(1s);
+            });
+        } catch (const TimeoutCancellationException&) {
+            log->push_back("timed out");
+        }
+        std::optional<int> quick = co_await withTimeoutOrNull(100ms, [](CoroutineScope) -> TaskOf<int> {
+            co_await delay(50ms);
+            co_return 4;
+        });
+        std::optional<int> late = co_await withTimeoutOrNull(100ms, [](CoroutineScope) -> TaskOf<int> {
+            co_await delay(1s);
+            co_return 5;
+        });
+        bool completed = co_await withTimeoutOrNull(100ms, [](CoroutineScope) -> Task { co_await delay(1s); });
+        log->push_back(std::to_string(quick.value_or(-1)) + " " + std::to_string(late.value_or(-1)) + " " + (completed ? "yes" : "no"));
+    });
+    rule.advanceTimeBy(1000);
+    CHECK((*log == std::vector<std::string>{"slow destroyed", "timed out", "4 -1 no"}));
+    // A coroutine ending with a timeout it didn't catch was cancelled, not failed: nothing reported.
+    scope->launch([]() -> Task { co_await withTimeout(10ms, [](CoroutineScope) -> Task { co_await delay(1s); }); });
+    rule.advanceTimeBy(100);
+    CHECK(!rule.host().hasTimers());
+}
+
 TEST(launched_effect_restarts_when_key_changes) {
     auto k = mutableStateOf(1);
     auto log = std::make_shared<std::vector<std::string>>();

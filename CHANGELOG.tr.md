@@ -623,6 +623,12 @@
 - **Girdili `rememberSaveable`**, Compose'un `rememberSaveable(inputs)`'u gibi: `rememberSaveable(inputs, init)` ve
   `rememberSaveable(inputs, saver, init)` girdiler değişince değeri, elindekini ve kaydedilmiş olanı bırakarak,
   yeniden yapıyor.
+- **Yapılandırılmış eşzamanlılık**: `launch` bir `Job` (`cancel`, `isActive`, `co_await join()`), `async` bir
+  `Deferred<T>` (`co_await await()`) veriyor; `co_await coroutineScope(block)` blok ve başlattıkları bitince devam
+  ediyor, hata veren bir çocuk diğerlerini iptal edip atılıyor, bekleyen coroutine iptal edilince hepsi ediliyor;
+  `supervisorScope` çocukların kendi başlarına hata vermesine izin veriyor; `withTimeout` / `withTimeoutOrNull` çok
+  uzun süreni iptal ediyor. Bir `CancellationException` ile (zaman aşımınınki de) biten bir coroutine hata vermiş değil
+  iptal edilmiş sayılıyor: bildirilmiyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

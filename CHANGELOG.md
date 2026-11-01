@@ -589,6 +589,11 @@
 - **`rememberSaveable` with inputs**, as Compose's `rememberSaveable(inputs)`: `rememberSaveable(inputs, init)` and
   `rememberSaveable(inputs, saver, init)` make the value again, dropping the one it had and its saved one, when the
   inputs change.
+- **Structured concurrency**: `launch` gives a `Job` (`cancel`, `isActive`, `co_await join()`), `async` a `Deferred<T>`
+  (`co_await await()`); `co_await coroutineScope(block)` goes on once the block and what it launched are done, a child
+  failing cancels the others and is thrown, and the awaiting coroutine cancelled cancels them all; `supervisorScope`
+  lets children fail on their own; `withTimeout` / `withTimeoutOrNull` cancel what runs too long. A coroutine ending
+  with a `CancellationException` (a timeout's too) is cancelled, not failed: it isn't reported.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

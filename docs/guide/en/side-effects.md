@@ -47,6 +47,30 @@ void UserName(int id) {
 
 A coroutine's captures are kept alive while it runs, so capture **by value**. A lambda that captures by reference outlives the composable that made it, and its references dangle.
 
+### Jobs, async and structured scopes
+
+`launch` gives back a `Job`: `cancel()` it, ask `isActive()`, `isCompleted()` or `isCancelled()`, or wait in another coroutine with `co_await job.join()` for it to end. `async` starts a coroutine that returns `TaskOf<T>` and gives back a `Deferred<T>`, whose `co_await deferred.await()` gives its value or throws what it threw, so two pieces of work can run at once:
+
+```cpp
+#! struct User { std::string name; }; struct Posts { int count = 0; };
+#! TaskOf<User> loadUser(int) { co_return User{"Ada"}; }
+#! TaskOf<Posts> loadPosts(int) { co_return Posts{3}; }
+void Profile(int id) {
+    auto line = remember([] { return mutableStateOf(std::string("…")); });
+    auto scope = rememberCoroutineScope();
+    LaunchedEffect(id, [id, line, scope]() -> Task {
+        auto user = scope.async([id] { return loadUser(id); });
+        auto posts = scope.async([id] { return loadPosts(id); });  // loading at the same time
+        line.set((co_await user.await()).name + ": " + std::to_string((co_await posts.await()).count));
+    });
+    Text(line.get());
+}
+```
+
+`co_await coroutineScope([](CoroutineScope scope) -> Task { … })`, as Kotlin's, runs a block that launches in a scope of its own, and goes on only when the block and everything it launched are done, with the block's value if it returns `TaskOf<T>`. A child failing cancels the others and the `co_await` throws what it threw; the coroutine awaiting it cancelled, they are all cancelled. `supervisorScope` is the same, but its children fail on their own: a child's failure is reported and cancels nothing.
+
+`withTimeout(limit, block)` is a `coroutineScope` with a time limit: when it runs out, all of it is cancelled and the `co_await` throws `TimeoutCancellationException`. `withTimeoutOrNull` gives an empty `std::optional` instead (for a block that gives no value, `false`). A coroutine that ends with a `CancellationException` it didn't catch was cancelled, not failed: it isn't reported.
+
 ### Heavy work
 
 Coroutines run on the UI thread: a long computation in one freezes the UI just as it would anywhere else. Put reading files, decoding and heavy sums on a worker thread with `withBackground`, and come back to the UI thread with the result:

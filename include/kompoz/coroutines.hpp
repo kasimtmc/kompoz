@@ -23,14 +23,27 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
 namespace kompoz {
 
+// What a cancelled coroutineScope throws to the coroutine awaiting it, and what a withTimeout that
+// ran out throws (TimeoutCancellationException). A coroutine ending with one was cancelled, not
+// failed: it isn't reported, and a coroutineScope isn't failed by a child ending with one.
+struct CancellationException : std::runtime_error {
+    CancellationException() : std::runtime_error("cancelled") {}
+    using std::runtime_error::runtime_error;
+};
+struct TimeoutCancellationException : CancellationException {
+    TimeoutCancellationException() : CancellationException("timed out") {}
+};
+
 namespace detail {
 struct JobState;
 class Dispatcher;
+struct ScopeAccess;
 } // namespace detail
 
 namespace detail {
@@ -110,6 +123,7 @@ public:
     struct promise_type;
     using Handle = std::coroutine_handle<promise_type>;
 
+    using value_type = T;
     struct promise_type : detail::PromiseBase {
         std::optional<T> value;
         TaskOf get_return_object() { return TaskOf(Handle::from_promise(*this)); }
@@ -158,19 +172,42 @@ struct JobState : std::enable_shared_from_this<JobState> {
     std::shared_ptr<void> callable;  // the lambda whose captures the coroutine refers to
     std::weak_ptr<ScopeState> scope;
     bool running = false, cancelled = false, done = false;
+    bool deferred = false;  // an async's: what it throws goes to who awaits it
+    bool body = false;      // a coroutineScope's own block: what it throws fails the scope, a supervisor's too
+    std::exception_ptr failure;  // what it threw
+    std::vector<std::pair<std::weak_ptr<JobState>, std::coroutine_handle<>>> joiners;  // waiting for it to end
 
     ~JobState() {
         if (handle) handle.destroy();
     }
     void cancel();
     void finish();  // after a resume: clean up if it completed or was cancelled meanwhile
+
+private:
+    void complete();  // ended: its frame gone, who waits for it resumed, out of its scope
 };
 
 struct ScopeState {
     Dispatcher* dispatcher = nullptr;
     std::vector<std::shared_ptr<JobState>> jobs;
     bool cancelled = false;
+    // A coroutineScope's: a child failing fails it, cancelling the others (a supervisor's: only its
+    // block does); whenEmpty resumes who awaits it once its last child is done.
+    bool structured = false, supervisor = false;
+    std::exception_ptr failure;
+    std::function<void()> whenEmpty;
+
+    void cancel(const JobState* except = nullptr);
+    void childFailed(JobState& child, std::exception_ptr error);
+    void left();  // a child is done
+
+private:
+    bool cancelling_ = false;
 };
+
+// Starts `coroutine` in `scope` (nothing if it's cancelled): it runs until its first co_await.
+template <class F>
+std::shared_ptr<JobState> launchIn(const std::shared_ptr<ScopeState>& scope, F&& coroutine, bool deferred = false, bool body = false);
 
 // Resumes coroutines on the UI thread: timers and frame waiters, driven by ComposeHost::frame.
 class Dispatcher {
@@ -321,6 +358,59 @@ BackgroundAwaiter<std::invoke_result_t<F&>> withBackground(F work) {
     return {std::function<std::invoke_result_t<F&>()>(std::move(work))};
 }
 
+// A launched coroutine (Kotlin's Job): cancel it, ask how it is, or co_await job.join() for it to
+// end (completed or cancelled).
+class Job {
+public:
+    Job() = default;  // one that never ran: completed
+    explicit Job(std::shared_ptr<detail::JobState> state) : state_(std::move(state)) {}
+
+    void cancel() const {
+        if (state_) state_->cancel();
+    }
+    bool isActive() const { return state_ && !state_->done && !state_->cancelled; }
+    bool isCompleted() const { return !state_ || state_->done; }
+    bool isCancelled() const { return state_ && state_->cancelled; }
+
+    struct JoinAwaiter {
+        std::shared_ptr<detail::JobState> job;
+        bool await_ready() const noexcept { return !job || job->done; }
+        template <class P>
+        void await_suspend(std::coroutine_handle<P> h) const {
+            job->joiners.emplace_back(h.promise().job->weak_from_this(), h);
+        }
+        void await_resume() const noexcept {}
+    };
+    JoinAwaiter join() const { return {state_}; }
+
+    friend bool operator==(const Job& a, const Job& b) { return a.state_ == b.state_; }
+
+protected:
+    std::shared_ptr<detail::JobState> state_;
+};
+
+// An async's coroutine and the value it will give (Kotlin's Deferred): co_await deferred.await()
+// gives it, or throws what the coroutine threw (CancellationException if it was cancelled).
+template <class T>
+class Deferred : public Job {
+public:
+    Deferred(std::shared_ptr<detail::JobState> state, std::shared_ptr<std::optional<T>> value)
+        : Job(std::move(state)), value_(std::move(value)) {}
+
+    struct Awaiter : JoinAwaiter {
+        std::shared_ptr<std::optional<T>> value;
+        T await_resume() const {
+            if (this->job && this->job->failure) std::rethrow_exception(this->job->failure);
+            if (!value->has_value()) throw CancellationException();
+            return **value;
+        }
+    };
+    Awaiter await() const { return {{state_}, value_}; }
+
+private:
+    std::shared_ptr<std::optional<T>> value_;
+};
+
 class CoroutineScope {
 public:
     explicit CoroutineScope(detail::Dispatcher& dispatcher) : state_(std::make_shared<detail::ScopeState>()) {
@@ -329,33 +419,180 @@ public:
 
     // Starts `coroutine` (a callable returning Task) right away; it runs until its first co_await.
     template <class F>
-    void launch(F&& coroutine) const {
-        if (state_->cancelled) return;
-        auto job = std::make_shared<detail::JobState>();
-        job->dispatcher = state_->dispatcher;
-        auto callable = std::make_shared<std::decay_t<F>>(std::forward<F>(coroutine));
-        job->callable = callable;
-        job->handle = (*callable)().release();
-        job->handle.promise().job = job.get();
-        job->scope = state_;
-        state_->jobs.push_back(job);
-        state_->dispatcher->start(job);
+    Job launch(F&& coroutine) const {
+        return Job(detail::launchIn(state_, std::forward<F>(coroutine)));
+    }
+    // Starts `coroutine` (a callable returning TaskOf<T>) the same way, for its value:
+    //   auto user = scope.async([id] { return loadUser(id); });
+    //   auto posts = scope.async([id] { return loadPosts(id); });
+    //   show(co_await user.await(), co_await posts.await());  // the two loading at once
+    template <class F>
+    auto async(F&& coroutine) const -> Deferred<typename std::invoke_result_t<std::decay_t<F>&>::value_type> {
+        using T = typename std::invoke_result_t<std::decay_t<F>&>::value_type;
+        auto value = std::make_shared<std::optional<T>>();
+        auto job = detail::launchIn(
+            state_, [coroutine = std::forward<F>(coroutine), value]() mutable -> Task { value->emplace(co_await coroutine()); }, true);
+        return Deferred<T>(std::move(job), std::move(value));
     }
 
-    void cancel() const {
-        state_->cancelled = true;
-        auto jobs = std::move(state_->jobs);
-        state_->jobs.clear();
-        for (auto& job : jobs) job->cancel();
-    }
+    void cancel() const { state_->cancel(); }
     bool isActive() const { return !state_->cancelled; }
     size_t activeJobs() const { return state_->jobs.size(); }
 
     friend bool operator==(const CoroutineScope& a, const CoroutineScope& b) { return a.state_ == b.state_; }
 
 private:
+    friend struct detail::ScopeAccess;
+    explicit CoroutineScope(std::shared_ptr<detail::ScopeState> state) : state_(std::move(state)) {}
     std::shared_ptr<detail::ScopeState> state_;
 };
+
+namespace detail {
+template <class F>
+std::shared_ptr<JobState> launchIn(const std::shared_ptr<ScopeState>& scope, F&& coroutine, bool deferred, bool body) {
+    if (scope->cancelled) return nullptr;
+    auto job = std::make_shared<JobState>();
+    job->dispatcher = scope->dispatcher;
+    job->deferred = deferred;
+    job->body = body;
+    auto callable = std::make_shared<std::decay_t<F>>(std::forward<F>(coroutine));
+    job->callable = callable;
+    job->handle = (*callable)().release();
+    job->handle.promise().job = job.get();
+    job->scope = scope;
+    scope->jobs.push_back(job);
+    scope->dispatcher->start(job);
+    return job;
+}
+} // namespace detail
+
+namespace detail {
+struct ScopeAccess {
+    static const std::shared_ptr<ScopeState>& state(const CoroutineScope& scope) { return scope.state_; }
+    static CoroutineScope make(std::shared_ptr<ScopeState> state) { return CoroutineScope(std::move(state)); }
+};
+} // namespace detail
+
+// co_await coroutineScope(...), supervisorScope(...), withTimeout(...): `block` runs as a child of a
+// scope of its own, with what it launches there; the awaiting coroutine resumes once all of them
+// are done, with the block's value or what failed it. Cancelled itself (its frame destroyed), the
+// awaiter cancels them all. OrNull: a time running out gives nothing instead of throwing.
+template <class T, bool OrNull = false>
+struct ScopeAwaiter {
+    using Value = std::conditional_t<std::is_void_v<T>, bool, T>;
+    using Result = std::conditional_t<OrNull, std::conditional_t<std::is_void_v<T>, bool, std::optional<T>>, T>;
+    using Start = std::function<void(const std::shared_ptr<detail::ScopeState>&, const std::shared_ptr<std::optional<Value>>&)>;
+
+    ScopeAwaiter(Start start, int64_t timeout) : start_(std::move(start)), timeout_(timeout) {}
+    ScopeAwaiter(const ScopeAwaiter&) = delete;
+    ScopeAwaiter& operator=(const ScopeAwaiter&) = delete;
+    ~ScopeAwaiter() {
+        state_->whenEmpty = nullptr;
+        state_->cancel();
+    }
+
+    bool await_ready() const noexcept { return false; }
+    template <class P>
+    bool await_suspend(std::coroutine_handle<P> h) {
+        detail::JobState* parent = h.promise().job;
+        state_->dispatcher = parent->dispatcher;
+        state_->structured = true;
+        start_(state_, value_);
+        if (state_->jobs.empty()) return false;  // all done already: on at once
+        if (timeout_ >= 0) {
+            timer_ = std::make_shared<detail::JobState>();  // (the timer goes with the awaiter: done early, nothing left waiting)
+            timer_->dispatcher = parent->dispatcher;
+            parent->dispatcher->schedule(parent->dispatcher->now() + timeout_, timer_,
+                                         [state = std::weak_ptr(state_), timedOut = timedOut_] {
+                                             if (auto s = state.lock(); s && !s->jobs.empty()) *timedOut = true, s->cancel();
+                                         });
+        }
+        state_->whenEmpty = [job = parent->weak_from_this(), h] {
+            if (auto j = job.lock()) j->dispatcher->resumeNow(j, h);
+        };
+        return true;
+    }
+    // The block's value; what failed the scope thrown; TimeoutCancellationException if the time
+    // ran out (OrNull: nothing), CancellationException if it was cancelled from inside.
+    Result await_resume() {
+        if (state_->failure) std::rethrow_exception(state_->failure);
+        if (*timedOut_) {
+            if constexpr (OrNull) return Result{};
+            else throw TimeoutCancellationException();
+        }
+        if (!value_->has_value()) throw CancellationException();
+        if constexpr (OrNull && std::is_void_v<T>) return true;
+        else if constexpr (!std::is_void_v<T>) return std::move(**value_);
+    }
+
+private:
+    Start start_;
+    int64_t timeout_;  // ns; -1: none
+    std::shared_ptr<detail::ScopeState> state_ = std::make_shared<detail::ScopeState>();
+    std::shared_ptr<std::optional<Value>> value_ = std::make_shared<std::optional<Value>>();
+    std::shared_ptr<bool> timedOut_ = std::make_shared<bool>(false);
+    std::shared_ptr<detail::JobState> timer_;  // what the timeout's timer lives by
+};
+
+namespace detail {
+template <class R>
+struct TaskValue {
+    using type = typename R::value_type;
+};
+template <>
+struct TaskValue<Task> {
+    using type = void;
+};
+template <class F>
+using ScopeResult = typename TaskValue<std::invoke_result_t<F&, CoroutineScope>>::type;
+template <bool OrNull, class F>
+ScopeAwaiter<ScopeResult<F>, OrNull> scopeAwaiter(F block, bool supervisor, int64_t timeout) {
+    using T = ScopeResult<F>;
+    using Value = typename ScopeAwaiter<T, OrNull>::Value;
+    return {[block = std::move(block), supervisor](const std::shared_ptr<ScopeState>& state, const std::shared_ptr<std::optional<Value>>& value) {
+                state->supervisor = supervisor;
+                launchIn(
+                    state,
+                    [block, scope = ScopeAccess::make(state), value]() mutable -> Task {
+                        if constexpr (std::is_void_v<T>) {
+                            co_await block(scope);
+                            value->emplace(true);
+                        } else {
+                            value->emplace(co_await block(scope));
+                        }
+                    },
+                    false, true);
+            },
+            timeout};
+}
+} // namespace detail
+
+// co_await coroutineScope([](CoroutineScope scope) -> Task { scope.launch(...); ... }) (Kotlin's
+// coroutineScope): resumes once the block and everything it launched in `scope` are done, with the
+// block's value (if it returns TaskOf<T>). A child failing cancels the others, and the await
+// throws what it threw.
+template <class F>
+auto coroutineScope(F block) {
+    return detail::scopeAwaiter<false>(std::move(block), false, -1);
+}
+// The same, its children failing on their own (Kotlin's supervisorScope): a child's failure is
+// reported and cancels nothing; only the block's own fails the scope.
+template <class F>
+auto supervisorScope(F block) {
+    return detail::scopeAwaiter<false>(std::move(block), true, -1);
+}
+// coroutineScope with a time limit (Kotlin's withTimeout): when it runs out, all of it is
+// cancelled and the await throws TimeoutCancellationException.
+template <class F>
+auto withTimeout(std::chrono::nanoseconds limit, F block) {
+    return detail::scopeAwaiter<false>(std::move(block), false, limit.count());
+}
+// The same, giving nothing when the time runs out (Kotlin's withTimeoutOrNull): an optional of
+// the block's value, or for a block giving none whether it completed.
+template <class F>
+auto withTimeoutOrNull(std::chrono::nanoseconds limit, F block) {
+    return detail::scopeAwaiter<true>(std::move(block), false, limit.count());
+}
 
 // A scope bound to the composition: its coroutines are cancelled when the caller leaves it.
 // Use it to launch from event handlers: scope.launch([=]() -> Task { ... });
