@@ -578,6 +578,9 @@
   derives from `RememberObserver` is told `onRemembered` and `onForgotten` at those times.
 - **Two or three keys**: `remember(a, b, init)`, `remember(a, b, c, init)`, and the same for `DisposableEffect`,
   `LaunchedEffect` and `produceState`, as in Compose: computed or restarted again when any of them changes.
+- **Mutation policies**: `mutableStateOf(v, neverEqualPolicy<T>())` recomposes the readers on every `set`, the same value
+  too; `SnapshotMutationPolicy<T>{equivalent}` decides by a function of the app's; `structuralEqualityPolicy<T>()`
+  (`==`) stays the default. `derivedStateOf(policy, calc)` takes one too.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

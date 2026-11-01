@@ -13,7 +13,7 @@ name.set("Grace");        // writing it recomposes the readers
 ```
 
 - `get()` reads the value and records that the running composable depends on it.
-- `set(v)` stores a new value. If `T` can be compared with `==` and the value is the same, nothing happens; otherwise every composable that read it recomposes.
+- `set(v)` stores a new value. If `T` can be compared with `==` and the value is the same, nothing happens; otherwise every composable that read it recomposes. A policy, Compose's `SnapshotMutationPolicy`, can say otherwise: `mutableStateOf(v, neverEqualPolicy<T>())` recomposes the readers on every `set`, the same value too, and `SnapshotMutationPolicy<T>{[](const T& a, const T& b) { … }}` decides by a function of your own (without captures). `structuralEqualityPolicy<T>()` is the default, `==`; `derivedStateOf(policy, calc)` takes one as well.
 - `update(f)` changes the value in place, for containers: `todos.update([](auto& v) { v.push_back(item); })`.
 - `peek()` reads without subscribing, for code that must not recompose when the value changes.
 

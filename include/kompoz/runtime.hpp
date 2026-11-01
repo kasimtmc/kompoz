@@ -384,35 +384,66 @@ public:
     ComposableScope& operator=(const ComposableScope&) = delete;
 };
 
+// When a new value counts as the one a state has (Compose's SnapshotMutationPolicy): setting a
+// state to a value equivalent to its own changes nothing and recomposes no one. `equivalent` may be
+// any function without captures; none: never equivalent.
+template <class T>
+struct SnapshotMutationPolicy {
+    bool (*equivalent)(const T& a, const T& b) = nullptr;
+};
+// Equal by ==: the default where T has it.
+template <class T>
+SnapshotMutationPolicy<T> structuralEqualityPolicy() {
+    return {[](const T& a, const T& b) { return bool(a == b); }};
+}
+// Never equivalent: every set() recomposes the readers, the same value too.
+template <class T>
+SnapshotMutationPolicy<T> neverEqualPolicy() {
+    return {};
+}
+
+namespace detail {
+template <class T>
+SnapshotMutationPolicy<T> defaultPolicy() {
+    if constexpr (std::equality_comparable<T>) return structuralEqualityPolicy<T>();
+    else return neverEqualPolicy<T>();
+}
+template <class T>
+struct StateCell {
+    T value;
+    bool (*equivalent)(const T&, const T&);
+};
+} // namespace detail
+
 // Observable value holder. Copies share the same value, so a state can (and should) be
 // captured by value in event callbacks. Reading it inside a composable subscribes that
 // composable; setting it recomposes exactly the subscribers.
 template <class T>
 class MutableState {
 public:
-    explicit MutableState(T initial) : cell_(std::make_shared<T>(std::move(initial))) {}
+    explicit MutableState(T initial, SnapshotMutationPolicy<T> policy = detail::defaultPolicy<T>())
+        : cell_(std::make_shared<detail::StateCell<T>>(detail::StateCell<T>{std::move(initial), policy.equivalent})) {}
 
     const T& get() const {
         detail::recordRead(cell_.get());
-        return *cell_;
+        return cell_->value;
     }
     // Reads without subscribing the running composable.
-    const T& peek() const { return *cell_; }
+    const T& peek() const { return cell_->value; }
     const T& operator*() const { return get(); }
     const T* operator->() const { return &get(); }
 
+    // Nothing happens if `value` is equivalent to the one it has (its policy; by default ==).
     void set(T value) const {
-        if constexpr (std::equality_comparable<T>) {
-            if (*cell_ == value) return;
-        }
-        *cell_ = std::move(value);
+        if (cell_->equivalent && cell_->equivalent(cell_->value, value)) return;
+        cell_->value = std::move(value);
         detail::notifyStateChanged(cell_.get());
     }
 
     // Mutates the value in place: todos.update([](auto& list) { list.push_back(...); });
     template <class F>
     void update(F&& mutate) const {
-        std::forward<F>(mutate)(*cell_);
+        std::forward<F>(mutate)(cell_->value);
         detail::notifyStateChanged(cell_.get());
     }
 
@@ -420,12 +451,17 @@ public:
     friend bool operator==(const MutableState& a, const MutableState& b) { return a.cell_ == b.cell_; }
 
 private:
-    std::shared_ptr<T> cell_;
+    std::shared_ptr<detail::StateCell<T>> cell_;
 };
 
 template <class T>
 MutableState<T> mutableStateOf(T initial) {
     return MutableState<T>(std::move(initial));
+}
+// With a policy: mutableStateOf(list, neverEqualPolicy<List>()).
+template <class T>
+MutableState<T> mutableStateOf(T initial, SnapshotMutationPolicy<T> policy) {
+    return MutableState<T>(std::move(initial), policy);
 }
 inline MutableState<std::string> mutableStateOf(const char* initial) {
     return MutableState<std::string>(initial);

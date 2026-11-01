@@ -23,8 +23,10 @@ namespace kompoz {
 template <class T>
 class DerivedState {
 public:
-    explicit DerivedState(std::function<T()> calc) : d_(std::make_shared<Data>()) {
+    explicit DerivedState(std::function<T()> calc, SnapshotMutationPolicy<T> policy = detail::defaultPolicy<T>())
+        : d_(std::make_shared<Data>()) {
         d_->calc = std::move(calc);
+        d_->equivalent = policy.equivalent;
         if (auto* c = detail::Composer::current()) {
             d_->composer = c;
             d_->observer = std::make_unique<detail::Scope>(*c, nullptr);
@@ -46,6 +48,7 @@ public:
 private:
     struct Data {
         std::function<T()> calc;
+        bool (*equivalent)(const T&, const T&) = nullptr;
         std::optional<T> value;
         bool valid = false;
         detail::Composer* composer = nullptr;
@@ -57,8 +60,7 @@ private:
                 composer->observeReads(*observer, [&] { next.emplace(calc()); });
             else
                 next.emplace(calc());
-            bool changed = true;
-            if constexpr (std::equality_comparable<T>) changed = !value || !(*value == *next);
+            bool changed = !value || !equivalent || !equivalent(*value, *next);
             value = std::move(next);
             valid = true;
             return changed;
@@ -71,6 +73,12 @@ template <class F>
 auto derivedStateOf(F calc) -> DerivedState<std::decay_t<std::invoke_result_t<F&>>> {
     using T = std::decay_t<std::invoke_result_t<F&>>;
     return DerivedState<T>(std::function<T()>(std::move(calc)));
+}
+// With a policy for when a new value counts as the old one (by default ==): its readers recompose
+// only when it doesn't.
+template <class T, class F>
+DerivedState<T> derivedStateOf(SnapshotMutationPolicy<T> policy, F calc) {
+    return DerivedState<T>(std::function<T()>(std::move(calc)), policy);
 }
 
 // An observable list (Compose's SnapshotStateList): reading it subscribes, changing it

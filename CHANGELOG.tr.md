@@ -612,6 +612,9 @@
   hatırlanmış bir değere bu anlarda `onRemembered` ve `onForgotten` bildiriliyor.
 - **İki ya da üç anahtar**: `remember(a, b, init)`, `remember(a, b, c, init)` ve aynısı `DisposableEffect`,
   `LaunchedEffect` ve `produceState` için, Compose'daki gibi: biri değişince yeniden hesaplanır ya da yeniden başlar.
+- **Değişim kuralları**: `mutableStateOf(v, neverEqualPolicy<T>())` her `set`'te, aynı değerde de, okuyucuları yeniden
+  kompoze ediyor; `SnapshotMutationPolicy<T>{equivalent}` uygulamanın bir işleviyle karar veriyor;
+  `structuralEqualityPolicy<T>()` (`==`) varsayılan olarak kalıyor. `derivedStateOf(policy, calc)` da bir kural alıyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

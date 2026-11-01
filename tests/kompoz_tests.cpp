@@ -185,6 +185,28 @@ struct Remembered : RememberObserver {
 };
 } // namespace
 
+TEST(states_take_a_mutation_policy) {
+    auto same = mutableStateOf(1);                            // ==: the same value changes nothing
+    auto every = mutableStateOf(1, neverEqualPolicy<int>());  // every set() recomposes
+    auto sign = mutableStateOf(1, SnapshotMutationPolicy<int>{[](const int& a, const int& b) { return (a < 0) == (b < 0); }});
+    int sameRuns = 0, everyRuns = 0, signRuns = 0, derivedRuns = 0;
+    ComposeTestRule rule([&] {
+        composable(CallSite::current(), [&] { same.get(), ++sameRuns; });
+        composable(CallSite::current(), [&] { every.get(), ++everyRuns; });
+        composable(CallSite::current(), [&] { sign.get(), ++signRuns; });
+        // Its readers recompose whenever it's computed again, the same value too.
+        auto tens = remember([&] { return derivedStateOf(neverEqualPolicy<int>(), [&] { return same.get() / 10; }); });
+        composable(CallSite::current(), [&, tens] { tens.get(), ++derivedRuns; });
+    });
+    same.set(1), every.set(1), sign.set(5);
+    rule.waitForIdle();
+    CHECK(sameRuns == 1 && everyRuns == 2 && signRuns == 1 && derivedRuns == 1);
+    sign.set(-1);
+    same.set(2);  // 2 / 10 is 0 again, but the derived state's policy says it changed
+    rule.waitForIdle();
+    CHECK(sameRuns == 2 && signRuns == 2 && sign.peek() == -1 && derivedRuns == 2);
+}
+
 TEST(remember_and_effects_take_two_or_three_keys) {
     auto a = mutableStateOf(1), b = mutableStateOf(1), c = mutableStateOf(1);
     auto log = std::make_shared<std::vector<std::string>>();

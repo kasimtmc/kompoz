@@ -13,7 +13,7 @@ name.set("Grace");        // yazmak, okuyanları yeniden kompoze eder
 ```
 
 - `get()` değeri okur ve çalışan composable'ın ona bağlı olduğunu kaydeder.
-- `set(v)` yeni bir değer saklar. `T` `==` ile karşılaştırılabiliyorsa ve değer aynıysa hiçbir şey olmaz; değilse onu okuyan her composable yeniden kompoze edilir.
+- `set(v)` yeni bir değer saklar. `T` `==` ile karşılaştırılabiliyorsa ve değer aynıysa hiçbir şey olmaz; değilse onu okuyan her composable yeniden kompoze edilir. Bir kural, Compose'un `SnapshotMutationPolicy`'si, bunu değiştirebilir: `mutableStateOf(v, neverEqualPolicy<T>())` her `set`'te, aynı değerde de, okuyucuları yeniden kompoze eder; `SnapshotMutationPolicy<T>{[](const T& a, const T& b) { … }}` sizin bir işlevinizle (yakalamasız) karar verir. Varsayılan `structuralEqualityPolicy<T>()`, yani `==`; `derivedStateOf(policy, calc)` da bir kural alır.
 - `update(f)` değeri yerinde değiştirir, kapsayıcılar için: `todos.update([](auto& v) { v.push_back(item); })`.
 - `peek()` abone olmadan okur; değer değişince yeniden kompoze edilmemesi gereken kod için.
 
