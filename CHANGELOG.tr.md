@@ -615,6 +615,8 @@
 - **Değişim kuralları**: `mutableStateOf(v, neverEqualPolicy<T>())` her `set`'te, aynı değerde de, okuyucuları yeniden
   kompoze ediyor; `SnapshotMutationPolicy<T>{equivalent}` uygulamanın bir işleviyle karar veriyor;
   `structuralEqualityPolicy<T>()` (`==`) varsayılan olarak kalıyor. `derivedStateOf(policy, calc)` da bir kural alıyor.
+- **MSVC `/bigobj` ile derliyor**, uygulamalara da veriliyor: başlıklardaki şablonlar `widgets.cpp`'yi onsuz bir nesne
+  dosyasının alabileceğinden fazla bölüme çıkarmıştı.
 - **`State<T>`**, Compose'un salt okunur durumu: bir değeri yalnızca okuyan bir composable, bir `MutableState` ya da
   türetilmiş bir durum verilerek (ona dönüşür) bir tane alıyor; `get()`, `peek()`, hangi durum olduğuna göre
   karşılaştırılıyor. Türetilmiş durumların da artık `peek()`'i var.

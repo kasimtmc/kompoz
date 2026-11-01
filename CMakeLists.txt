@@ -123,8 +123,9 @@ target_link_libraries(kompoz_core PUBLIC Threads::Threads)
 if(MSVC)
     target_compile_options(kompoz_core PRIVATE /W4)
     # KOMPOZ_ROUTE needs the conforming preprocessor (__VA_OPT__), in apps too; the sources and the
-    # headers are UTF-8 (U'İ', "…"), which MSVC reads as the system's code page without /utf-8.
-    target_compile_options(kompoz_core PUBLIC /Zc:preprocessor /utf-8)
+    # headers are UTF-8 (U'İ', "…"), which MSVC reads as the system's code page without /utf-8. The
+    # headers' templates make more sections than an object file holds without /bigobj (widgets.cpp).
+    target_compile_options(kompoz_core PUBLIC /Zc:preprocessor /utf-8 /bigobj)
 else()
     # Designated initializers with omitted fields are how named arguments are written here.
     target_compile_options(kompoz_core PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
