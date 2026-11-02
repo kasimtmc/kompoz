@@ -10,10 +10,10 @@ If you know Compose, you know Kompoz: the same way of thinking (composable funct
 void Counter() {
     auto count = remember([] { return mutableStateOf(0); });
 
-    Column(Modifier().padding(16), {.verticalArrangement = Arrangement::spacedBy(8)}, [&] {
-        Text("Count: " + std::to_string(count.get()), {.font = typography().titleLarge});
+    Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
+        Text("Count: " + std::to_string(count.get()), style = typography().titleLarge);
         Button([count] { count.set(count.get() + 1); }, [] { Text("Add"); });
-    });
+    };
 }
 
 Application kompoz::createApplication(int, char**) {

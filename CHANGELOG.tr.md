@@ -637,6 +637,15 @@
   ebeveynlerine uygulanıyor), okuma ve yazma gözlemcileri, `registerApplyObserver`. Başka bir iş parçacığı artık
   durumları yazabiliyor (önceden bir veri yarışıydı) ve onları bir anlık görüntüde okuyor. Hiçbir anlık görüntünün
   okumadığı kayıtlar kareler arasında bırakılıyor.
+- **Adlı argümanlar ve bloklar**, Kotlin'deki gibi: `Text("Merhaba", fontSize = 22, color = cs.primary)`,
+  `Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8), [=] { … })`. Adsız argümanlar
+  parametreleri Compose'un sırasıyla dolduruyor, sonra adlılar istenen sırayla, en sonda blok geliyor; başka her şey
+  (parçanın almadığı bir ad, iki kez verilen bir ad, yanlış türde bir değer) derleme hatası. Bir blok kendine ait bir
+  kapsamda çalışıyor: yalnızca okuduğu değişince yalnız o yeniden çalışıyor, bu yüzden değerle yakalıyor.
+  `<kompoz/blocks.hpp>`, Compose'un yazdığı blok biçimini ekliyor: `Column(modifier) { … };`; vitrin ve rehber onu
+  kullanıyor. Şimdilik `Box`, `Column`, `Row`, `Spacer` ve `Text` bunları alıyor (`ColumnStyle` ve `RowStyle` kalktı;
+  Text'in `style`'ı bir temanın metin stilini, `typography().bodyMedium`'u, olduğu gibi alıyor); diğer parçalar sırayla
+  geliyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

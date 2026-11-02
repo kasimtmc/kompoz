@@ -75,11 +75,11 @@ For moving between screens with a back stack, see [Navigation](navigation.md).
 | `ButtonGroup`, `SplitButtonLayout`, `ToggleButton` | M3 Expressive's groups, split buttons and toggles. |
 
 ```cpp body
-Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
     Button([] {}, [] { Text("Save"); });
     OutlinedButton([] {}, [] { Text("Cancel"); });
     IconButton([] {}, [] { Icon(Icons::Filled::Favorite, "Like"); });
-});
+};
 ```
 
 ## Cards and lists
@@ -103,14 +103,14 @@ OutlinedCard(Modifier().fillMaxWidth(), [&] {
 void Volume() {
     auto volume = remember([] { return mutableStateOf(0.5f); });
     auto muted = remember([] { return mutableStateOf(false); });
-    Column([&] {
+    Column() {
         Slider(volume.get(), [volume](float v) { volume.set(v); });
         Row(Modifier().toggleable(muted.get(), [muted](bool v) { muted.set(v); }, SemanticsRole::Checkbox),
-            {.verticalAlignment = Alignment::CenterVertically}, [&] {
+            verticalAlignment = Alignment::CenterVertically) {
                 Checkbox(muted.get(), {});   // the whole row toggles it
                 Text("Mute");
-            });
-    });
+            };
+    };
 }
 ```
 

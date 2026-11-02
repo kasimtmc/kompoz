@@ -75,11 +75,11 @@ Ekranlar arasında bir geri yığınıyla geçiş için bkz. [Gezinme](navigatio
 | `ButtonGroup`, `SplitButtonLayout`, `ToggleButton` | M3 Expressive'in grupları, bölünmüş butonları ve açma/kapama butonları. |
 
 ```cpp body
-Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
     Button([] {}, [] { Text("Save"); });
     OutlinedButton([] {}, [] { Text("Cancel"); });
     IconButton([] {}, [] { Icon(Icons::Filled::Favorite, "Like"); });
-});
+};
 ```
 
 ## Kartlar ve listeler
@@ -103,14 +103,14 @@ OutlinedCard(Modifier().fillMaxWidth(), [&] {
 void Volume() {
     auto volume = remember([] { return mutableStateOf(0.5f); });
     auto muted = remember([] { return mutableStateOf(false); });
-    Column([&] {
+    Column() {
         Slider(volume.get(), [volume](float v) { volume.set(v); });
         Row(Modifier().toggleable(muted.get(), [muted](bool v) { muted.set(v); }, SemanticsRole::Checkbox),
-            {.verticalAlignment = Alignment::CenterVertically}, [&] {
+            verticalAlignment = Alignment::CenterVertically) {
                 Checkbox(muted.get(), {});   // onu bütün satır açıp kapatır
                 Text("Mute");
-            });
-    });
+            };
+    };
 }
 ```
 

@@ -11,12 +11,11 @@ void ArtistCard(const std::string& name) {
     Row(Modifier()
             .fillMaxWidth()
             .clickable([] { /* open the artist */ })
-            .padding(16),
-        [&] {
+            .padding(16)) {
             Icon(Icons::Filled::Person, "", Modifier().size(40));
             Spacer(Modifier().width(12));
-            Text(name, {.font = typography().titleMedium});
-        });
+            Text(name, style = typography().titleMedium);
+        };
 }
 ```
 
@@ -25,7 +24,7 @@ Modifiers are plain values: you can store them in variables, pass them around an
 ```cpp body
 #! bool selected = false;
 Modifier base = Modifier().fillMaxWidth().padding(8);
-Box(selected ? base.background(colorScheme().secondaryContainer, 12) : base);
+Box(selected ? base.background(colorScheme().secondaryContainer, 12) : base) {};
 ```
 
 ## Order matters
@@ -34,17 +33,17 @@ Each element wraps everything after it in the chain. The first element is the ou
 
 ```cpp body
 // The whole 72 dp area is clickable, and the padding is inside the click area.
-Box(Modifier().clickable([] {}).padding(16).size(40));
+Box(Modifier().clickable([] {}).padding(16).size(40)) {};
 
 // Only the 40 dp box is clickable; the padding is outside it.
-Box(Modifier().padding(16).clickable([] {}).size(40));
+Box(Modifier().padding(16).clickable([] {}).size(40)) {};
 ```
 
 The same goes for backgrounds:
 
 ```cpp body
-Box(Modifier().background(colorScheme().primaryContainer).padding(16).size(40));   // padding is colored
-Box(Modifier().padding(16).background(colorScheme().primaryContainer).size(40));   // padding is not
+Box(Modifier().background(colorScheme().primaryContainer).padding(16).size(40)) {};   // padding is colored
+Box(Modifier().padding(16).background(colorScheme().primaryContainer).size(40)) {};   // padding is not
 ```
 
 Read a chain from left to right as "from the outside in".
@@ -133,10 +132,10 @@ Some modifiers only make sense inside a particular parent, like Compose's scoped
 In C++ these are ordinary `Modifier` methods: the compiler won't stop you from using `weight` outside a `Row` or a `Column`, it just has no effect there.
 
 ```cpp body
-Row(Modifier().fillMaxWidth(), [&] {
+Row(Modifier().fillMaxWidth()) {
     Text("Left", Modifier().weight(1));
     Text("Right");
-});
+};
 ```
 
 ## Writing your own
@@ -151,7 +150,7 @@ Modifier cardSurface() {
 }
 
 void Note(const std::string& text) {
-    Box(Modifier().fillMaxWidth().then(cardSurface()), [&] { Text(text); });
+    Box(Modifier().fillMaxWidth().then(cardSurface())) { Text(text); };
 }
 ```
 

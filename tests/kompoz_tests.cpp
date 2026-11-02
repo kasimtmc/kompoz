@@ -81,10 +81,60 @@ Placed placedOf(const Matrix& m) {
 
 } // namespace
 
+namespace {
+// A composable taking named arguments and a block, as the library's do.
+namespace names {
+struct Prefix {};
+struct Tint {};
+} // namespace names
+inline constexpr Param<names::Prefix> prefix;
+inline constexpr Param<names::Tint> tint;
+int gTaglineRuns = 0, gTaglineBlockRuns = 0;
+struct TaglineImpl {
+    using P = detail::Params<names::Prefix, names::Tint, detail::Block>;
+    template <class... A>
+    static void call(CallSite site, std::string text, A&&... args) {
+        static_assert(P::check<A...>());
+        std::string shown = P::get<names::Prefix>(std::string(), args...) + text;
+        Color color = P::get<names::Tint>(colors::Black, args...);
+        Content block = P::block(std::forward<A>(args)...);
+        ComposableScope scope(site);
+        ++gTaglineRuns;
+        Text(shown, kompoz::color = color);
+        if (block) block();
+    }
+};
+inline constexpr Composable<TaglineImpl> Tagline;
+} // namespace
+
+TEST(composables_take_named_arguments_and_blocks_in_scopes_of_their_own) {
+    gTaglineRuns = gTaglineBlockRuns = 0;
+    auto inner = mutableStateOf(0);
+    ComposeTestRule rule([&] {
+        Tagline("a");
+        Tagline("b", tint = colors::Red, prefix = "> ");  // any order, only those wanted
+        Tagline("e", "- ", colors::Blue);                 // or by place, as Kotlin's
+        Tagline("c", prefix = "* ", [=] {
+            ++gTaglineBlockRuns;
+            Text("iç " + std::to_string(inner.get()));
+        });
+    });
+    CHECK(rule.onNodeWithText("a").exists() && rule.onNodeWithText("> b").exists() && rule.onNodeWithText("* c").exists() &&
+          rule.onNodeWithText("- e").exists());
+    CHECK(gTaglineRuns == 4 && gTaglineBlockRuns == 1);
+    inner.set(1);  // read in the block only: the block alone again
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("iç 1").exists() && gTaglineRuns == 4 && gTaglineBlockRuns == 2);
+    // A call before its block (what <kompoz/blocks.hpp>'s form makes): the same.
+    gTaglineRuns = 0;
+    ComposeTestRule other([&] { Tagline.withBlock("d", tint = colors::Blue) + [=] { Text("blok"); }; });
+    CHECK(other.onNodeWithText("d").exists() && other.onNodeWithText("blok").exists() && gTaglineRuns == 1);
+}
+
 TEST(counter_increments_on_click) {
     ComposeTestRule rule([] {
         auto count = remember([] { return mutableStateOf(0); });
-        Column([&] {
+        Column([=] {
             Text("Count: " + std::to_string(count.get()));
             Button([count] { count.set(count.get() + 1); }, [] { Text("+"); });
         });
@@ -117,7 +167,7 @@ static void Item(int id, CallSite site = CallSite::current()) {
 TEST(key_keeps_state_with_its_item) {
     auto ids = std::make_shared<MutableState<std::vector<int>>>(mutableStateOf(std::vector<int>{1, 2, 3}));
     ComposeTestRule rule([ids] {
-        Column([&] {
+        Column([=] {
             for (int id : ids->get()) key(id, [&] { Item(id); });
         });
     });
@@ -132,7 +182,7 @@ TEST(key_keeps_state_with_its_item) {
 TEST(without_key_state_is_positional) {
     auto ids = std::make_shared<MutableState<std::vector<int>>>(mutableStateOf(std::vector<int>{1, 2}));
     ComposeTestRule rule([ids] {
-        Column([&] {
+        Column([=] {
             for (int id : ids->get()) Item(id);
         });
     });
@@ -203,7 +253,7 @@ TEST(read_only_states_come_from_mutable_and_derived_ones) {
     ComposeTestRule rule([&] {
         other.get();  // the parent runs again, the same states given: they're skipped
         auto doubled = remember([&] { return derivedStateOf([count] { return count.get() * 2; }); });
-        Column([&] {
+        Column([=] {
             Shown(count);
             Shown(doubled);
         });
@@ -433,7 +483,7 @@ TEST(effects_run_in_composes_order) {
         effect("a", k);
         effect("b", k);
         remember(k, [&] { return Remembered(log, "r" + std::to_string(k)); });
-        Column([&] {
+        Column([=] {
             if (show.get()) {
                 effect("x", 0);
                 effect("y", 0);
@@ -526,22 +576,22 @@ TEST(composition_locals_from_factories_defaults_and_contexts) {
 
 TEST(rows_line_children_up_by_their_baselines) {
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Row(Modifier().testTag("satır"), [] {
-                Text("küçük", Modifier().alignByBaseline(), {.fontSize = 16});
-                Text("BÜYÜK", Modifier().alignByBaseline(), {.fontSize = 32});
-                Text("serbest", {.fontSize = 10});  // not lined up: at the top, as the Row says
+                Text("küçük", Modifier().alignByBaseline(), fontSize = 16);
+                Text("BÜYÜK", Modifier().alignByBaseline(), fontSize = 32);
+                Text("serbest", fontSize = 10);  // not lined up: at the top, as the Row says
             });
             Row([] {
                 Button([] {}, Modifier().alignByBaseline(), [] { Text("Tamam"); });  // the label's baseline, passed on
-                Text("etiket", Modifier().alignBy(LastBaseline), {.fontSize = 24});
+                Text("etiket", Modifier().alignBy(LastBaseline), fontSize = 24);
             });
             Row(Modifier().testTag("uzun"), [] {  // a text high up in a tall child: the row grows to line them up
                 Column(Modifier().alignByBaseline(), [] {
-                    Text("üstte", {.fontSize = 16});
+                    Text("üstte", fontSize = 16);
                     Box(Modifier().size(10, 60));
                 });
-                Text("yanında", Modifier().alignByBaseline(), {.fontSize = 32});
+                Text("yanında", Modifier().alignByBaseline(), fontSize = 32);
             });
         });
     }, {400, 800});
@@ -561,7 +611,7 @@ TEST(rows_line_children_up_by_their_baselines) {
 
 TEST(text_fields_line_up_by_their_baselines_too) {
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Row([] {
                 Text("Ad:", Modifier().alignByBaseline());
                 OutlinedTextField("ali", [](std::string) {}, Modifier().width(120).alignByBaseline(), {.singleLine = true, .label = "Ad"});
@@ -585,7 +635,7 @@ TEST(text_fields_line_up_by_their_baselines_too) {
 TEST(alignment_lines_pass_up_and_set_padding) {
     float seen = 0;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &seen] {
             Column(Modifier().padding(0, 10, 0, 0).testTag("sütun"), [] {
                 Text("ilk");
                 Text("ikinci\nüçüncü");
@@ -594,7 +644,7 @@ TEST(alignment_lines_pass_up_and_set_padding) {
             Box(Modifier().testTag("boş").size(20));
             Text("dipte", Modifier().height(100).paddingFrom(LastBaseline, std::numeric_limits<float>::quiet_NaN(), 10).testTag("dipte"));
             Layout(Modifier().testTag("kendi"), [] {
-                Text("ölçülen", {.fontSize = 32});
+                Text("ölçülen", fontSize = 32);
                 Text("yerleşen");
             }, [&](const std::vector<Measurable>& children, const Constraints& c) {
                 Placeable measuredOnly = children[0].measure(c.loosen()), placed = children[1].measure(c.loosen());
@@ -650,7 +700,7 @@ TEST(padding_offsets_content) {
 TEST(column_arrangement_and_alignment) {
     ComposeTestRule rule([] {
         Column(Modifier().size(200, 200),
-               {.verticalArrangement = Arrangement::spacedBy(10), .horizontalAlignment = Alignment::CenterHorizontally},
+               verticalArrangement = Arrangement::spacedBy(10), horizontalAlignment = Alignment::CenterHorizontally,
                [] {
                    Box(Modifier().size(50).testTag("first"));
                    Box(Modifier().size(100, 20).testTag("second"));
@@ -676,7 +726,7 @@ TEST(box_alignment) {
 TEST(text_wraps_to_width) {
     ComposeTestRule rule([] {
         // FakeTextMeasurer: 16sp font -> 8dp per character, 20dp line height
-        Text("aaaa bbbb cccc", Modifier().width(60).testTag("t"), {.fontSize = 16});
+        Text("aaaa bbbb cccc", Modifier().width(60).testTag("t"), fontSize = 16);
     });
     CHECK(near(rule.onNodeWithTag("t").bounds().height, 60));  // three lines
 }
@@ -783,9 +833,9 @@ TEST(ime_nested_scroll_moves_the_keyboard_past_the_end) {
     float moved = 0, peak = 0;
     std::vector<float> ends;
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize(), [&] {
+        Column(Modifier().fillMaxSize(), [=, &scroll] {
             Column(Modifier().weight(1).fillMaxWidth().imeNestedScroll().verticalScroll(scroll).testTag("liste"),
-                   [&] { for (int i = 0; i < 20; ++i) Box(Modifier().fillMaxWidth().height(50)); });
+                   [=] { for (int i = 0; i < 20; ++i) Box(Modifier().fillMaxWidth().height(50)); });
             TextField("", {}, Modifier().testTag("alan"));
         });
     }, {400, 800});
@@ -828,7 +878,7 @@ TEST(swiping_over_a_text_field_does_not_focus_it) {
     int shows = 0;
     ScrollState scroll;
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll), [=] {
             Box(Modifier().height(100));
             TextField("", {}, Modifier().testTag("field"));
             Box(Modifier().height(2000));
@@ -855,7 +905,7 @@ TEST(long_press_selects_a_word_with_handles_and_a_toolbar) {
     std::string clipboard;
     TextEditState ime;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Box(Modifier().height(200));  // room above for the toolbar
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().fillMaxWidth().testTag("field"),
                       {.singleLine = true});
@@ -939,7 +989,7 @@ TEST(platform_services_open_links_vibrate_and_hide_the_keyboard) {
         ClipboardManager clip = clipboardManager();
         Clipboard board = kompoz::clipboard();  // (the test's own `clipboard` is the platform's)
         auto scope = rememberCoroutineScope();
-        Column([&] {
+        Column([=, &longClicks] {
             // Compose 1.8's: in a coroutine, an entry or nothing.
             TextButton([board, scope, &value] {
                 scope.launch([board, &value]() -> Task {
@@ -1007,7 +1057,7 @@ TEST(uri_handler_opens_the_apps_own_links_in_it) {
     auto hosted = mutableStateOf(true);
     ComposeTestRule rule([&] {
         UriHandler links = uriHandler();
-        Column([&] {
+        Column([=] {
             TextButton([links] { links.openUri("kompoz://item/7"); }, [] { Text("kendi"); });
             TextButton([links] { links.openUri("https://kotlinlang.org"); }, [] { Text("dış"); });
             if (!hosted.get()) return;
@@ -1040,7 +1090,7 @@ TEST(a_field_whose_value_comes_back_a_frame_later_keeps_what_is_typed) {
     auto ticks = mutableStateOf(0);  // something else on the screen that changes in the same frame
     std::vector<std::string> resets;  // what the input method was told the text became
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &query] {
             Text(std::format("{}", ticks.get()));
             std::string q = query.collectAsState();
             TextField(q, [&query](std::string v) { query.setValue(std::move(v)); }, Modifier().testTag("ara"), {.singleLine = true});
@@ -1077,7 +1127,7 @@ TEST(caret_handle_for_fingers_double_click_for_the_mouse) {
     auto value = mutableStateOf(std::string("merhaba güzel dünya"));
     TextEditState ime;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Box(Modifier().height(200));
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().fillMaxWidth().testTag("field"),
                       {.singleLine = true});
@@ -1144,7 +1194,7 @@ TEST(the_mouse_selects_text_by_dragging_clicking_and_shift) {
     TextEditState ime;
     int shown = 0;  // the input method asked for (before the rule: told as it closes too)
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Box(Modifier().height(100));
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().fillMaxWidth().testTag("f"));
         });
@@ -1215,7 +1265,7 @@ TEST(selection_container_mouse_clicks_words_paragraphs_and_shift) {
     std::string clipboard;
     ComposeTestRule rule([&] {
         SelectionContainer(Modifier().fillMaxWidth(), [&] {
-            Column([&] {
+            Column([=] {
                 Text("alpha beta gamma", Modifier().testTag("first"));
                 Text("delta epsilon\nzeta eta", Modifier().testTag("second"));
             });
@@ -1275,10 +1325,10 @@ TEST(selection_container_mouse_clicks_words_paragraphs_and_shift) {
 TEST(selection_container_selects_and_copies_text) {
     std::string clipboard;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Box(Modifier().height(200));
             SelectionContainer(Modifier().fillMaxWidth().testTag("container"), [&] {
-                Column([&] {
+                Column([=] {
                     Text("merhaba güzel dünya", Modifier().testTag("first"));
                     Text("ikinci satır burada", Modifier().testTag("second"));
                     DisableSelection([&] { Text("seçilmeyen etiket", Modifier().testTag("disabled")); });
@@ -1579,7 +1629,7 @@ TEST(only_readers_of_a_state_recompose) {
     int rootRuns = 0;
     ComposeTestRule rule([&] {
         ++rootRuns;
-        Column([&] {
+        Column([=] {
             CounterView(count);
             StaticView();
         });
@@ -1596,7 +1646,7 @@ TEST(parent_recomposition_skips_unchanged_children) {
     gStaticRuns = 0;
     auto tick = mutableStateOf(0);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Text("tick=" + std::to_string(tick.get()));
             Text("fixed", Modifier().padding(4));
             StaticView();
@@ -1643,7 +1693,7 @@ TEST(local_change_reaches_reader_under_skipped_parent) {
 TEST(partial_recomposition_keeps_node_order) {
     auto n = mutableStateOf(1);
     ComposeTestRule rule([&] {
-        Column(Modifier().testTag("col"), [&] {
+        Column(Modifier().testTag("col"), [=] {
             Text("header");
             Items(n);
             Text("footer");
@@ -1720,7 +1770,7 @@ TEST(state_set_from_another_thread) {
 TEST(recompose_highlighter_counts_compositions) {
     auto tick = mutableStateOf(0);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Box(Modifier().size(10).recomposeHighlighter().testTag("box"));
             Text("tick=" + std::to_string(tick.get()));
             Text("fixed", Modifier().recomposeHighlighter().testTag("fixed"));
@@ -2001,7 +2051,7 @@ TEST(lazy_column_scroll_to_item_and_observable_index) {
     LazyListState state;
     ComposeTestRule rule(
         [&] {
-            Column([&] {
+            Column([=, &state] {
                 Text("first=" + std::to_string(state.firstVisibleItemIndex()));
                 LazyColumn(Modifier().fillMaxSize(), {.state = state}, [&](LazyListScope& list) {
                     list.items(data, [](int v) { Text("row " + std::to_string(v)); });
@@ -2237,14 +2287,14 @@ TEST(layout_is_in_whole_pixels_as_composes) {
         Column([] {
             Box(Modifier().size(31, 20).testTag("dış"), Alignment::Center, [] { Box(Modifier().size(10, 9).testTag("iç")); });
             Box(Modifier().width(40).padding(1.3f, 0, 1.3f, 0).testTag("dolgulu"), [] { Box(Modifier().fillMaxWidth().height(4).testTag("dolgu içi")); });
-            Row(Modifier().testTag("aralıklı"), {.horizontalArrangement = Arrangement::spacedBy(1.3f)}, [] {
+            Row(Modifier().testTag("aralıklı"), horizontalArrangement = Arrangement::spacedBy(1.3f), [] {
                 for (int i = 0; i < 3; ++i) Box(Modifier().size(10).testTag(std::format("a{}", i)));
             });
             Row(Modifier().width(100), [] {
                 for (int i = 0; i < 3; ++i) Box(Modifier().weight(1).height(4).testTag(std::format("w{}", i)));
             });
             Box(Modifier().offset(0.7f, 0.2f).size(5).testTag("kaymış"));
-            Text("abc", Modifier().testTag("yazı"), {.fontSize = 15});
+            Text("abc", Modifier().testTag("yazı"), fontSize = 15);
         });
     }, {400, 800});
     rule.host().setDensity({d, 1});
@@ -2282,7 +2332,7 @@ TEST(layout_is_in_whole_pixels_as_composes) {
     // over); a held button in a group grows by whole px, its neighbours give up whole px.
     MutableInteractionSource held;
     ComposeTestRule rows([&held] {
-        Column([&held] {
+        Column([=, &held] {
             PrimaryTabRow(0, Modifier().width(100), [] {
                 for (int i = 0; i < 3; ++i) Tab(i == 0, [] {}, [i] { Text(std::format("S{}", i)); }, {}, Modifier().testTag(std::format("s{}", i)));
             });
@@ -2319,7 +2369,7 @@ TEST(buttons_animate_composing_around_them_only_as_they_turn) {
     int composed = 0;
     ComposeTestRule rule([&] {
         ++composed;
-        Column([&] {
+        Column([=, &held] {
             Button([] {}, Modifier().testTag("düğme"), [] { Text("Gönder"); });
             ToggleButton(checked.get(), [&checked](bool c) { checked.set(c); }, Modifier().testTag("seçim"), {}, [] { Text("Seç"); });
             SmallExtendedFloatingActionButton([] {}, Icons::Filled::Add, "Ekle", expanded.get(), Modifier().testTag("fab"));
@@ -2377,7 +2427,7 @@ TEST(selection_controls_animate_composing_around_them_only_as_they_turn) {
     ComposeTestRule rule([&] {
         ++composed;
         bool o = on.get();
-        Column([&] {
+        Column([=, &held] {
             Checkbox(o, [&on](bool c) { on.set(c); });
             Switch(o, [&on](bool c) { on.set(c); });
             RadioButton(o, [&on] { on.set(true); });
@@ -2447,18 +2497,18 @@ TEST(overlays_fields_and_indicators_animate_composing_around_them_only_as_they_t
     ComposeTestRule rule([&] {
         ++composed;
         bool o = open.get();
-        Column([&] {
-            Box([&] {
+        Column([=, &blink, &rail, &scrolled, &tip, &wide] {
+            Box([=] {
                 DropdownMenu(o, [&open] { open.set(false); }, [&] {
                     Text("Seçenek");
                     DropdownMenuItem(mark.get(), [&mark](bool c) { mark.set(c); }, [] { Text("İşaretli"); });
                 });
             });
-            Row([&] {
+            Row([=, &scrolled] {
                 ExposedDropdownMenuDefaults::TrailingIcon(o);
                 SplitButtonDefaults::TrailingButtonIcon(o);
                 FilterChip(o, [] {}, [] { Text("Süz"); }, {.leadingIcon = o ? Content([] { Icon(Icons::Filled::Check, ""); }) : Content()});
-                Box(Modifier().size(60, 100), [&] {
+                Box(Modifier().size(60, 100), [=, &scrolled] {
                     Column(Modifier().fillMaxSize().verticalScroll(scrolled), [] { Box(Modifier().height(400)); });
                     VerticalScrollbar(rememberScrollbarAdapter(scrolled), Modifier().align(Alignment::CenterEnd).fillMaxHeight().testTag("çubuk"));
                 });
@@ -2545,7 +2595,7 @@ TEST(icon_sizes_tints_and_draws) {
 TEST(icon_button_clicks) {
     int clicks = 0;
     ComposeTestRule rule([&] {
-        Row([&] {
+        Row([=, &clicks] {
             IconButton([&] { ++clicks; }, [] { Icon(Icons::Filled::Favorite, "Beğen"); });
             IconButton([&] { ++clicks; }, Modifier(), {.enabled = false}, [] { Icon(Icons::Filled::Delete, "Sil"); });
         });
@@ -2567,7 +2617,7 @@ TEST(icon_toggle_buttons_flip_and_take_their_checked_colors) {
             };
         };
         auto icon = [] { Icon(Icons::Filled::Star, "Yıldız"); };
-        Row([&] {
+        Row([=, &on] {
             IconToggleButton(on[0].get(), set(0), Modifier().testTag("düz"), {}, icon);
             FilledIconToggleButton(on[1].get(), set(1), Modifier().testTag("dolu"), {}, icon);
             FilledTonalIconToggleButton(on[2].get(), set(2), Modifier().testTag("tonal"), {}, icon);
@@ -2614,7 +2664,7 @@ TEST(icon_toggle_buttons_disabled_and_restyled) {
     int changes = 0;
     ComposeTestRule rule([&] {
         auto icon = [] { Icon(Icons::Filled::Favorite, "Beğen"); };
-        Row([&] {
+        Row([=, &changes] {
             FilledIconToggleButton(liked.get(), [&](bool) { ++changes; }, Modifier().testTag("kapalı"), {.enabled = false}, icon);
             OutlinedIconToggleButton(liked.get(), [&](bool) { ++changes; }, Modifier().testTag("kapalı çerçeveli"), {.enabled = false}, icon);
             OutlinedIconToggleButton(!liked.get(), [&](bool) { ++changes; }, Modifier(), {.enabled = false}, icon);
@@ -2647,7 +2697,7 @@ TEST(outlined_icon_button_has_an_outline_and_ripples_in_its_circle) {
     int clicks = 0;
     auto on = mutableStateOf(true);
     ComposeTestRule rule([&] {
-        Row([&] {
+        Row([=, &clicks] {
             OutlinedIconButton([&] { ++clicks; }, Modifier().testTag("çerçeve"), {}, [] { Icon(Icons::Filled::Add, "Ekle"); });
             OutlinedIconButton([&] { ++clicks; }, Modifier(), {.enabled = false}, [] { Icon(Icons::Filled::Add, "Ekleme"); });
             FilledIconToggleButton(on.get(), [&](bool v) { on.set(v); }, Modifier().testTag("aç"), {},
@@ -2993,7 +3043,7 @@ TEST(coroutine_scope_launches_from_a_click) {
     auto value = mutableStateOf(0);
     ComposeTestRule rule([&] {
         auto scope = rememberCoroutineScope();
-        Column([&] {
+        Column([=] {
             Text("value=" + std::to_string(value.get()));
             Button(
                 [scope, value] {
@@ -3172,7 +3222,7 @@ TEST(image_sizes_follow_the_aspect_ratio) {
     ImageBitmap photo = testImage(640, 400);
     ComposeTestRule rule(
         [&] {
-            Column([&] {
+            Column([=, &photo] {
                 Image(photo, "natural", Modifier().testTag("natural"));
                 Image(photo, "wide", Modifier().fillMaxWidth().testTag("wide"));
                 Image(photo, "fixed", Modifier().size(100, 100).testTag("fixed"));
@@ -3188,7 +3238,7 @@ TEST(image_sizes_follow_the_aspect_ratio) {
 TEST(content_scale_places_the_image) {
     ImageBitmap photo = testImage(200, 100);  // 2:1 into a 100x100 box
     ComposeTestRule rule([&] {
-        Row([&] {
+        Row([=, &photo] {
             Image(photo, "fit", Modifier().size(100), ContentScale::Fit);
             Image(photo, "crop", Modifier().size(100), ContentScale::Crop);
         });
@@ -3247,7 +3297,7 @@ TEST(animated_visibility_expands_then_disposes_on_exit) {
     auto visible = mutableStateOf(false);
     auto log = std::make_shared<std::vector<std::string>>();
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             AnimatedVisibility(visible.get(), [&] {
                 DisposableEffect(0, [log]() -> std::function<void()> {
                     log->push_back("shown");
@@ -3327,7 +3377,7 @@ TEST(animated_content_puts_the_entering_content_by_its_z_index) {
 TEST(layout_coordinates_tell_their_parent_and_map_between_nodes) {
     std::optional<LayoutCoordinates> inner, other;
     ComposeTestRule rule([&] {
-        Column(Modifier().padding(10), [&] {
+        Column(Modifier().padding(10), [=, &inner, &other] {
             Box(Modifier().size(100, 50));
             Box(Modifier().padding(20, 5, 0, 0).size(40).onGloballyPositioned([&](const LayoutCoordinates& c) { inner = c; }));
             Box(Modifier().size(30).onGloballyPositioned([&](const LayoutCoordinates& c) { other = c; }));
@@ -3355,7 +3405,7 @@ TEST(graphics_layer_records_content_and_draws_it_again) {
     ComposeTestRule rule([&] {
         auto l = rememberGraphicsLayer();
         layer = l;
-        Column([&] {
+        Column([=, &red] {
             Box(Modifier().padding(10).size(100, 40).drawWithContent([l](ContentDrawScope& d) {
                     d.record(l, [&](DrawScope&) { d.drawContent(); });
                     d.drawLayer(l);  // where it is
@@ -3364,7 +3414,7 @@ TEST(graphics_layer_records_content_and_draws_it_again) {
                     d.drawLayer(l);
                     l.properties() = {};
                 }),
-                [&] {
+                [=, &red] {
                     Text("kayıt");
                     Box(Modifier().size(20).background(red));
                 });
@@ -3403,13 +3453,13 @@ TEST(leaving_content_takes_no_taps) {
     auto shown = mutableStateOf(true);
     int buttonClicks = 0;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &buttonClicks] {
             AnimatedContent(selected.get(), [&](const int& item) {
                 if (item >= 0) {
                     Text("ayrıntı " + std::to_string(item), Modifier().padding(0, 200, 0, 0));
                     return;
                 }
-                Column([&] {
+                Column([=] {
                     for (int i = 0; i < 3; ++i)
                         key(i, [&] { Box(Modifier().size(100, 40).testTag("card" + std::to_string(i)).clickable([&, i] { selected.set(i); })); });
                 });
@@ -3499,10 +3549,10 @@ TEST(shared_transition_overlay_draws_in_its_order_and_nodes_above) {
     auto details = mutableStateOf(false), inOverlay = mutableStateOf(true);
     ComposeTestRule rule([&] {
         SharedTransitionLayout(Modifier().fillMaxSize(), [&](const SharedTransitionScope& shared) {
-            Box(Modifier().fillMaxSize(), [&] {
+            Box(Modifier().fillMaxSize(), [=, &blue, &gray, &green, &red, &yellow] {
                 AnimatedContent<bool>(details.get(), [&](const AnimatedContentScope& scope, const bool& open) {
                     SharedContentState a = shared.rememberSharedContentState("a"), b = shared.rememberSharedContentState("b");
-                    Column([&] {
+                    Column([=, &green, &red] {
                         Box(Modifier().size(open ? 200.f : 40.f, open ? 100.f : 40.f).sharedElement(a, scope, defaultBoundsTransform(), inOverlay.get(), 2).background(red));
                         Box(Modifier().size(open ? 150.f : 30.f, 30).sharedElement(b, scope, defaultBoundsTransform(), true, 0).background(green));
                     });
@@ -3558,10 +3608,10 @@ TEST(approach_layout_approaches_the_lookahead_size) {
     ComposeTestRule rule([&] {
         CoroutineScope scope = rememberCoroutineScope();
         outer = scope;
-        Column([&] {
+        Column([=, &lookaheads, &seen, &size] {
             // By hand: half as wide as it is going to be, while approaching.
             // (inside a box as wide as it is going to be: a probe gets the lookahead size)
-            Box(Modifier().width(IntrinsicSize::Max).testTag("sarmal"), [&] {
+            Box(Modifier().width(IntrinsicSize::Max).testTag("sarmal"), [=, &lookaheads] {
                 Box(Modifier().approachLayout(
                         [&](Size target) {
                             lookaheads.push_back(target);
@@ -3570,7 +3620,7 @@ TEST(approach_layout_approaches_the_lookahead_size) {
                         [](const ApproachMeasureScope& s, const MeasureNext& measure, const Constraints&, Offset&) {
                             return measure(Constraints::fixed(s.lookaheadSize.width / 2, s.lookaheadSize.height));
                         }),
-                    [&] { Box(Modifier().size(wide.get() ? 200 : 100, 50).testTag("yarım")); });
+                    [=] { Box(Modifier().size(wide.get() ? 200 : 100, 50).testTag("yarım")); });
             });
             // Bigger than it may be: kept to its constraints.
             Box(Modifier().size(80, 50).approachLayout([](Size) { return true; },
@@ -3588,7 +3638,7 @@ TEST(approach_layout_approaches_the_lookahead_size) {
                         seen.push_back(now.width);
                         return measure(Constraints::fixed(now.width, now.height));
                     }),
-                [&] { Box(Modifier().size(wide.get() ? 200 : 100, 50).testTag("canlı")); });
+                [=] { Box(Modifier().size(wide.get() ? 200 : 100, 50).testTag("canlı")); });
         });
     });
     CHECK(near(rule.onNodeWithTag("yarım").bounds().width, 50) && !lookaheads.empty() && near(lookaheads.back().width, 100));
@@ -3612,17 +3662,17 @@ TEST(approach_layout_approaches_the_lookahead_size) {
 TEST(skip_to_lookahead_size_lays_out_where_it_goes) {
     auto wide = mutableStateOf(false), details = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize(), [&] {
+        Column(Modifier().fillMaxSize(), [=] {
             for (int skip : {1, 0})
-                Box(Modifier().animateBounds().width(wide.get() ? 300.f : 100.f).height(40), [&] {
+                Box(Modifier().animateBounds().width(wide.get() ? 300.f : 100.f).height(40), [=] {
                     Box((skip ? Modifier().skipToLookaheadSize() : Modifier()).fillMaxSize().testTag(std::format("dış{}", skip)),
-                        [&] { Box(Modifier().fillMaxSize().testTag(std::format("iç{}", skip))); });
+                        [=] { Box(Modifier().fillMaxSize().testTag(std::format("iç{}", skip))); });
                 });
             SharedTransitionLayout(Modifier().fillMaxWidth().height(300), [&](const SharedTransitionScope& shared) {
                 AnimatedContent<bool>(details.get(), [&](const AnimatedContentScope& scope, const bool& open) {
                     SharedContentState card = shared.rememberSharedContentState("kart");
                     Box(Modifier().size(open ? 300.f : 60.f, 60).sharedElement(card, scope).skipToLookaheadSize(),
-                        [&] { Box(Modifier().fillMaxSize().testTag(open ? "kart açık" : "kart kapalı")); });
+                        [=] { Box(Modifier().fillMaxSize().testTag(open ? "kart açık" : "kart kapalı")); });
                 });
             });
         });
@@ -3785,7 +3835,7 @@ TEST(shared_element_moves_from_its_match_and_hides_it) {
 
 TEST(offscreen_clipped_content_is_not_drawn) {
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(rememberScrollState()), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(rememberScrollState()), [=] {
             Text("görünen");
             Box(Modifier().height(2000));
             Box(Modifier().size(80).clip(RoundedCornerShape(12)), [] { Text("kırpılmış"); });
@@ -3819,12 +3869,12 @@ TEST(local_overscroll_factory_turns_the_stretch_off) {
     ScrollState plain, column;
     LazyListState lazy;
     ComposeTestRule rule([&] {
-        Row([&] {
+        Row([=, &column, &lazy, &plain] {
             Column(Modifier().weight(1).fillMaxHeight().verticalScroll(plain).testTag("açık"),
-                   [&] { for (int i = 0; i < 30; ++i) Box(Modifier().fillMaxWidth().height(50)); });
+                   [=] { for (int i = 0; i < 30; ++i) Box(Modifier().fillMaxWidth().height(50)); });
             CompositionLocalProvider({LocalOverscrollFactory.provides(std::nullopt)}, [&] {
                 Column(Modifier().weight(1).fillMaxHeight().verticalScroll(column).testTag("kapalı"),
-                       [&] { for (int i = 0; i < 30; ++i) Box(Modifier().fillMaxWidth().height(50)); });
+                       [=] { for (int i = 0; i < 30; ++i) Box(Modifier().fillMaxWidth().height(50)); });
                 LazyColumn(Modifier().weight(1).fillMaxHeight().testTag("tembel"), {.state = lazy},
                            [](LazyListScope& l) { l.items(30, [](int) { Box(Modifier().fillMaxWidth().height(50)); }); });
             });
@@ -3871,9 +3921,9 @@ TEST(scrollable_area_scrolls_clips_and_draws_its_overscroll) {
     ScrollableState own(consume(mutableStateOf(0.f)));
     auto rtl = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &own, &row, &state, &still] {
             Box(Modifier().size(200).scrollableArea(state, Orientation::Vertical).testTag("alan"),
-                [&] { Box(Modifier().offset(0, -pos.get()).size(200, 700)); });
+                [=] { Box(Modifier().offset(0, -pos.get()).size(200, 700)); });
             Box(Modifier().size(200, 50).scrollableArea(still, Orientation::Vertical, false).testTag("kapalı"));
             Box(Modifier().size(200, 50).scrollable(own, Orientation::Vertical).testTag("çıplak"));
             Box(Modifier().size(200, 50).scrollableArea(own, Orientation::Vertical, counting).testTag("efekt"), [] { Text("e"); });
@@ -3936,20 +3986,20 @@ TEST(scrollable_area_scrolls_clips_and_draws_its_overscroll) {
 TEST(required_size_ranges_ignore_the_incoming_constraints) {
     auto child = [](const char* tag) { Box(Modifier().fillMaxSize().testTag(tag)); };
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             // Wider than its 100: measured 160, centered over it.
-            Box(Modifier().size(100, 40).requiredWidthIn(150, 160).testTag("dar"), [&] { child("dar-içi"); });
+            Box(Modifier().size(100, 40).requiredWidthIn(150, 160).testTag("dar"), [=] { child("dar-içi"); });
             // A max under the incoming min: 200 inside 300, centered.
-            Box(Modifier().size(300, 40).requiredWidthIn(0, 200).testTag("geniş"), [&] { child("geniş-içi"); });
+            Box(Modifier().size(300, 40).requiredWidthIn(0, 200).testTag("geniş"), [=] { child("geniş-içi"); });
             // No max: the incoming one (all of its 300), at least its min.
-            Box(Modifier().size(300, 40).requiredWidthIn(50), [&] { child("serbest"); });
+            Box(Modifier().size(300, 40).requiredWidthIn(50), [=] { child("serbest"); });
             // Heights too, and both at once.
-            Box(Modifier().size(100, 40).requiredSizeIn(120, 60, 130, 70).testTag("kutu"), [&] { child("kutu-içi"); });
-            Box(Modifier().size(100, 100).requiredHeightIn(10, 30), [&] { child("alçak"); });
-            Box(Modifier().widthIn(0, 80).height(20).requiredWidthIn(0), [&] { child("sığar"); });
+            Box(Modifier().size(100, 40).requiredSizeIn(120, 60, 130, 70).testTag("kutu"), [=] { child("kutu-içi"); });
+            Box(Modifier().size(100, 100).requiredHeightIn(10, 30), [=] { child("alçak"); });
+            Box(Modifier().widthIn(0, 80).height(20).requiredWidthIn(0), [=] { child("sığar"); });
             // A min over the incoming max, no max given: the min; a min over its max: the max.
-            Box(Modifier().size(100, 20).requiredWidthIn(150), [&] { child("taşan"); });
-            Box(Modifier().size(300, 20).requiredWidthIn(200, 100), [&] { child("ters"); });
+            Box(Modifier().size(100, 20).requiredWidthIn(150), [=] { child("taşan"); });
+            Box(Modifier().size(300, 20).requiredWidthIn(200, 100), [=] { child("ters"); });
         });
     }, {400, 800});
     Rect narrow = rule.onNodeWithTag("dar").bounds(), in = rule.onNodeWithTag("dar-içi").bounds();
@@ -3966,7 +4016,7 @@ TEST(required_size_ranges_ignore_the_incoming_constraints) {
 TEST(overscroll_stretches_past_the_ends_and_springs_back) {
     ScrollState scroll;
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(scroll).testTag("list"), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll).testTag("list"), [=] {
             for (int i = 0; i < 30; ++i) Box(Modifier().fillMaxWidth().height(50));
         });
     }, {400, 800});
@@ -4064,7 +4114,7 @@ TEST(overscroll_effect_takes_the_touch_drags_and_flings_past_the_ends) {
     ScrollState scroll;
     auto effect = std::make_shared<RecordingOverscroll>();
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(scroll, effect).testTag("list"), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll, effect).testTag("list"), [=] {
             for (int i = 0; i < 30; ++i) Box(Modifier().fillMaxWidth().height(50));
         });
     }, {400, 800});
@@ -4143,8 +4193,8 @@ TEST(overscroll_effect_gets_what_the_nested_scroll_parents_leave) {
     ScrollState scroll;
     auto effect = std::make_shared<RecordingOverscroll>();
     ComposeTestRule rule([&] {
-        Box(Modifier().fillMaxSize().nestedScroll(std::make_shared<EatsFlings>()), [&] {
-            Column(Modifier().fillMaxSize().verticalScroll(scroll, effect), [&] { for (int i = 0; i < 30; ++i) Box(Modifier().fillMaxWidth().height(50)); });
+        Box(Modifier().fillMaxSize().nestedScroll(std::make_shared<EatsFlings>()), [=, &scroll] {
+            Column(Modifier().fillMaxSize().verticalScroll(scroll, effect), [=] { for (int i = 0; i < 30; ++i) Box(Modifier().fillMaxWidth().height(50)); });
         });
     }, {400, 800});
     auto& host = rule.host();
@@ -4162,8 +4212,8 @@ TEST(stretch_holds_while_touched_and_lets_a_fling_go_by) {
     ScrollState scroll;
     LazyListState row;
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize(), [&] {
-            Column(Modifier().fillMaxWidth().height(600).verticalScroll(scroll).testTag("list"), [&] {
+        Column(Modifier().fillMaxSize(), [=, &row, &scroll] {
+            Column(Modifier().fillMaxWidth().height(600).verticalScroll(scroll).testTag("list"), [=] {
                 for (int i = 0; i < 30; ++i) Box(Modifier().fillMaxWidth().height(50));
             });
             LazyRow(Modifier().fillMaxWidth().height(200).testTag("row"), {.state = row},
@@ -4246,8 +4296,8 @@ TEST(overscroll_effect_none_shared_or_halved) {
         shared = rememberOverscrollEffect();
         pager = rememberPagerState(0, [] { return 3; });
         CompositionLocalProvider({LocalOverscrollFactory.provides(std::nullopt)}, [&] { off = rememberOverscrollEffect(); });
-        Column([&] {
-            Row(Modifier().fillMaxWidth().height(600), [&] {
+        Column([=, &drawn, &effect, &events, &later, &lazy, &none, &off, &pager, &shared] {
+            Row(Modifier().fillMaxWidth().height(600), [=, &drawn, &effect, &events, &later, &lazy, &none, &off, &shared] {
                 Column(Modifier().weight(1).fillMaxHeight().verticalScroll(none, nullptr).testTag("yok"), items);
                 LazyColumn(Modifier().weight(1).fillMaxHeight().testTag("tembel"), {.state = lazy, .overscrollEffect = nullptr},
                            [](LazyListScope& l) { l.items(30, [](int) { Box(Modifier().fillMaxWidth().height(50)); }); });
@@ -4256,7 +4306,7 @@ TEST(overscroll_effect_none_shared_or_halved) {
                 LazyVerticalStaggeredGrid(GridCells::Fixed(2), Modifier().weight(1).fillMaxHeight().testTag("kademeli"), {.overscrollEffect = nullptr},
                                           [](LazyGridScope& g) { g.items(60, [](int) { Box(Modifier().fillMaxWidth().height(50)); }); });
                 // A bare scrollable (half its height) taking the drags into the effect the box around it draws.
-                Box(Modifier().weight(1).fillMaxHeight().overscroll(effect).testTag("kutu"), [&] {
+                Box(Modifier().weight(1).fillMaxHeight().overscroll(effect).testTag("kutu"), [=, &effect] {
                     Box(Modifier().fillMaxWidth().height(300).scrollable(rememberScrollableState([](float) { return 0.f; }), Orientation::Vertical, effect)
                             .testTag("iç"));
                 });
@@ -4403,7 +4453,7 @@ void SaveableScreen(const char* name, CallSite site = CallSite::current()) {
         auto saved = rememberSaveable([] { return mutableStateOf(0); });
         auto plain = remember([] { return mutableStateOf(0); });
         auto scroll = rememberScrollState();
-        Column(Modifier().fillMaxSize().verticalScroll(scroll).testTag(name), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll).testTag(name), [=] {
             Text(std::format("{} {} {}", name, saved.get(), plain.get()));
             Button([saved, plain] { saved.set(saved.peek() + 1), plain.set(plain.peek() + 1); }, Modifier().testTag(std::string(name) + "+"),
                    [] { Text("artır"); });
@@ -4642,7 +4692,7 @@ TEST(saveable_scroll_position_comes_back_with_its_entry) {
             graph.composable("list", [&](const NavBackStackEntry&) {
                 auto& scroll = rememberSaveable([] { return ScrollState(); });
                 seen = &scroll;
-                Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] { Box(Modifier().height(5000)); });
+                Column(Modifier().fillMaxSize().verticalScroll(scroll), [=] { Box(Modifier().height(5000)); });
             });
             graph.composable("other", [](const NavBackStackEntry&) { Text("öteki"); });
         }, {.transition = togetherWith(fadeIn(0, snap()), fadeOut(0, snap())), .popTransition = togetherWith(fadeIn(0, snap()), fadeOut(0, snap()))});
@@ -5258,7 +5308,7 @@ TEST(material_states_come_back_after_the_process_ended) {
             r.date = rememberDatePickerState();
             r.range = rememberDateRangePickerState();
             r.pane = rememberPaneExpansionState();
-            Column(Modifier().fillMaxSize(), [&] {
+            Column(Modifier().fillMaxSize(), [=] {
                 SwipeToDismissBox(*r.swipe, [] { Box(Modifier().fillMaxSize()); }, [] { Text("Satır", Modifier().fillMaxWidth().height(60)); });
             });
             if (r.sheet.has_value() && r.sheetShown.get()) ModalBottomSheet([] {}, *r.sheet, [] { Text("Sayfa", Modifier().height(200)); });
@@ -5452,9 +5502,9 @@ TEST(display_list_damage_is_what_changed_on_the_screen) {
     auto more = mutableStateOf(false);
     ScrollState scroll;
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize(), [&] {
+        Column(Modifier().fillMaxSize(), [=, &scroll] {
             Box(Modifier().size(100, 50).background(blink.get() ? Color{1, 0, 0, 1} : Color{0, 0, 1, 1}));
-            Column(Modifier().height(200).verticalScroll(scroll), [&] {  // clips what scrolled out
+            Column(Modifier().height(200).verticalScroll(scroll), [=] {  // clips what scrolled out
                 Box(Modifier().size(100, 300));
                 Box(Modifier().size(40).rotate(spin.get()).background(Color{0, 1, 0, 1}));  // at 300: out of view
             });
@@ -5534,11 +5584,11 @@ TEST(display_list_moves_what_scrolled_by_whole_pixels) {
     auto fab = mutableStateOf(false), gradient = mutableStateOf(false), rounded = mutableStateOf(false), raised = mutableStateOf(false);
     Color red{1, 0, 0, 1};
     ComposeTestRule rule([&] {
-        Box(Modifier().fillMaxSize().background(colors::White), [&] {
+        Box(Modifier().fillMaxSize().background(colors::White), [=, &red, &scroll] {
             Modifier list = Modifier().fillMaxSize();
             if (rounded.get()) list = list.clip(RoundedCornerShape(16));
             if (gradient.get()) list = list.background(Brush::verticalGradient({red, Color{0, 0, 1, 1}}));
-            Column(list.verticalScroll(scroll), [&] {
+            Column(list.verticalScroll(scroll), [=] {
                 for (int i = 0; i < 30; ++i) {
                     Modifier item = Modifier().fillMaxWidth().height(50).padding(4);
                     if (raised.get()) item = item.shadow(4, 8);
@@ -6140,7 +6190,7 @@ TEST(lazy_column_items_keep_saveable_state_when_scrolled_away) {
             items.items(200, [](int i) { return size_t(i); }, [](int i) {
                 auto liked = rememberSaveable([] { return mutableStateOf(false); });
                 auto plain = remember([] { return mutableStateOf(false); });
-                Row(Modifier().fillMaxWidth().height(50), [&] {
+                Row(Modifier().fillMaxWidth().height(50), [=] {
                     Text(std::format("satır {} {} {}", i, liked.get() ? "beğenildi" : "-", plain.get() ? "işaretli" : "-"),
                          Modifier().weight(1));
                     Button([liked, plain] { liked.set(true), plain.set(true); }, Modifier().testTag(std::format("like{}", i)),
@@ -6266,25 +6316,25 @@ TEST(inline_content_takes_its_room_in_the_text) {
         {"sonra", content({TextUnit::sp(10), TextUnit::sp(10)}, "sonra")},
     };
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &contents] {
             Text(buildAnnotatedString([](AnnotatedString::Builder& b) {
                      b.append("ab");
                      b.addStringAnnotation("başka", "yıldız", 0, 2);  // not inline content: only its own tag is
                      b.appendInlineContent("yıldız", "[yıldız]");
                      b.withLink(LinkAnnotation::Clickable("bağ", {}, {}), [&] { b.append("cd"); });  // its own node first
                  }),
-                 Modifier().testTag("satır"), {}, contents);
+                 Modifier().testTag("satır"), inlineContent = contents);
             Text(buildAnnotatedString([](AnnotatedString::Builder& b) {
                      b.append("x");
                      b.withStyle(SpanStyle{.fontSize = 32}, [&] { b.appendInlineContent("geniş"); });  // em of the size there
                  }),
-                 Modifier().testTag("em"), {}, contents);
-            for (const char* id : {"üst", "alt", "orta", "taban", "uzun"}) Text(around(id, "?"), Modifier().testTag(std::string(id) + " metni"), {}, contents);
-            Text(around("yok", "YOK"), Modifier().testTag("yok"), {}, contents);  // none for it: the alternate text shows
-            Box(Modifier().width(16), [&] { Text(around("bütün", "[a b]", ""), Modifier().testTag("dar"), {}, contents); });
-            Text(around("sağdan", "[ab]", "שלום "), Modifier().testTag("rtl"), {}, contents);
-            Box(Modifier().width(24), [&] {  // the second line's, past maxLines: not placed
-                Text(around("sonra", "?", "ab "), Modifier().testTag("kesik"), {.maxLines = 1}, contents);
+                 Modifier().testTag("em"), inlineContent = contents);
+            for (const char* id : {"üst", "alt", "orta", "taban", "uzun"}) Text(around(id, "?"), Modifier().testTag(std::string(id) + " metni"), inlineContent = contents);
+            Text(around("yok", "YOK"), Modifier().testTag("yok"), inlineContent = contents);  // none for it: the alternate text shows
+            Box(Modifier().width(16), [=, &contents] { Text(around("bütün", "[a b]", ""), Modifier().testTag("dar"), inlineContent = contents); });
+            Text(around("sağdan", "[ab]", "שלום "), Modifier().testTag("rtl"), inlineContent = contents);
+            Box(Modifier().width(24), [=, &contents] {  // the second line's, past maxLines: not placed
+                Text(around("sonra", "?", "ab "), Modifier().testTag("kesik"), maxLines = 1, inlineContent = contents);
             });
         });
     }, {400, 800});
@@ -6386,9 +6436,9 @@ TEST(min_intrinsic_widths_are_the_widest_words) {
         b.append(" ince");
     });
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &styled] {
             Column(Modifier().width(IntrinsicSize::Min).testTag("dar"), [] {
-                Text("kısa kelimeler burada", {.maxLines = 1});
+                Text("kısa kelimeler burada", maxLines = 1);
                 Box(Modifier().fillMaxWidth().height(2).testTag("çizgi"));  // as wide as the column came out
             });
             Row(Modifier().width(IntrinsicSize::Min).testTag("satır"), [] {
@@ -6396,7 +6446,7 @@ TEST(min_intrinsic_widths_are_the_widest_words) {
                 Text("üç dört beş");
             });
             Column(Modifier().width(IntrinsicSize::Max).testTag("geniş"), [] { Text("kısa kelimeler burada"); });
-            Box(Modifier().width(IntrinsicSize::Min).testTag("biçimli"), [&] { Text(styled); });
+            Box(Modifier().width(IntrinsicSize::Min).testTag("biçimli"), [=, &styled] { Text(styled); });
         });
     }, {400, 800});
     auto width = [&](const char* tag) { return rule.onNodeWithTag(tag).bounds().width; };
@@ -6413,10 +6463,10 @@ TEST(text_that_gives_way_to_the_width_takes_all_of_it) {
     ComposeTestRule rule([&] {
         Column(Modifier().width(200), [] {
             Text("kısa", Modifier().testTag("kısa"));
-            Text("bir iki üç dört beş altı yedi sekiz", Modifier().testTag("uzun"), {.textAlign = TextAlign::Center});
-            Text("tek satırda kesilecek kadar uzun bir metin", Modifier().testTag("kesik"), {.maxLines = 1, .overflow = TextOverflow::Ellipsis});
+            Text("bir iki üç dört beş altı yedi sekiz", Modifier().testTag("uzun"), textAlign = TextAlign::Center);
+            Text("tek satırda kesilecek kadar uzun bir metin", Modifier().testTag("kesik"), maxLines = 1, overflow = TextOverflow::Ellipsis);
             Text("satır\nsatır", Modifier().testTag("iki satır"));  // its own lines: as wide as the longest
-            Text("kaydırılmayan çok uzun bir satır metni", Modifier().testTag("taşan"), {.softWrap = false});
+            Text("kaydırılmayan çok uzun bir satır metni", Modifier().testTag("taşan"), softWrap = false);
         });
     }, {400, 800});
     auto width = [&](const char* tag) { return rule.onNodeWithTag(tag).bounds().width; };
@@ -6439,7 +6489,7 @@ TEST(text_that_gives_way_to_the_width_takes_all_of_it) {
 TEST(basic_text_takes_nothing_from_around_it) {
     ComposeTestRule rule([&] {
         MaterialTheme(darkColorScheme(), [&] {
-            Column([&] {
+            Column([=] {
                 Text("tema");        // bodyLarge, the theme's content color
                 BasicText("temel");  // 14 sp, black
                 BasicText("kendi", {}, {.fontSize = 20, .color = Color{1, 0, 0, 1}});
@@ -6473,7 +6523,7 @@ TEST(paragraph_styles_give_parts_of_a_text_their_own_settings) {
                  });
                  b.withStyle(ParagraphStyle{.lineHeight = 30}, [&] { b.append("kırp"); });  // a block of its own: trimmed both ways
              }),
-             Modifier().width(200).testTag("metin"), {.fontSize = 10}, [&](const TextLayoutResult& r) { result = r; });
+             Modifier().width(200).testTag("metin"), fontSize = 10, onTextLayout = [&](const TextLayoutResult& r) { result = r; });
     }, {400, 800});
     Rect t = rule.onNodeWithTag("metin").bounds();
     testing::RecordingCanvas canvas;
@@ -6531,14 +6581,14 @@ TEST(annotated_string_builder_pushes_styles_and_annotations) {
 TEST(styled_text_of_both_directions_is_ordered_as_one_line) {
     std::optional<TextLayoutResult> mixed, cut;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &cut, &mixed] {
             // Left to right, a bold Hebrew word and a plain one: the two read right to left together.
             Text(buildAnnotatedString([](AnnotatedString::Builder& b) {
                      b.append("abc ");
                      b.withStyle({.fontWeight = FontWeight::Bold}, [&] { b.append("אב"); });
                      b.append(" גד");
                  }),
-                 Modifier().testTag("ltr"), {}, [&](const TextLayoutResult& r) { mixed = r; });
+                 Modifier().testTag("ltr"), onTextLayout = [&](const TextLayoutResult& r) { mixed = r; });
             // Right to left, a bold Latin word and a plain one: left to right together, on the left.
             Text(buildAnnotatedString([](AnnotatedString::Builder& b) {
                      b.append("שלום ");
@@ -6552,14 +6602,14 @@ TEST(styled_text_of_both_directions_is_ordered_as_one_line) {
                      b.withStyle({.fontWeight = FontWeight::Bold}, [&] { b.append("cd הו"); });
                      b.append(" זח");
                  }),
-                 Modifier().testTag("cut"), {}, [&](const TextLayoutResult& r) { cut = r; });
+                 Modifier().testTag("cut"), onTextLayout = [&](const TextLayoutResult& r) { cut = r; });
             // A right-to-left first line's indent stays on its right, at the left edge too.
             Text(buildAnnotatedString([](AnnotatedString::Builder& b) {
                      b.append("עולם ");
                      b.withStyle({.fontWeight = FontWeight::Bold}, [&] { b.append("xyz"); });
                      b.append(" uvw");
                  }),
-                 Modifier().width(200).testTag("indent"), {.textAlign = TextAlign::Left, .textIndent = {16, 0}});
+                 Modifier().width(200).testTag("indent"), textAlign = TextAlign::Left, style = TextStyle{.textIndent = {16, 0}});
         });
     });
     testing::RecordingCanvas canvas;
@@ -6618,7 +6668,7 @@ TEST(magnifier_draws_the_scene_zoomed_over_everything) {
 TEST(dragging_a_handle_shows_the_text_magnifier) {
     auto value = mutableStateOf(std::string("merhaba güzel dünya"));
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Box(Modifier().height(200));
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().fillMaxWidth().testTag("field"),
                       {.singleLine = true});
@@ -6654,7 +6704,7 @@ TEST(dragging_a_handle_shows_the_text_magnifier) {
     // The same in a SelectionContainer's text (16 sp, 8 dp a letter, 20 dp lines; at y 100).
     ComposeTestRule plain([&] {
         SelectionContainer(Modifier().fillMaxWidth(), [&] {
-            Column([&] {
+            Column([=] {
                 Box(Modifier().height(100));
                 Text("merhaba güzel dünya");
             });
@@ -6685,7 +6735,7 @@ TEST(selection_handles_point_at_their_end_and_hold_its_line_by_the_middle) {
     auto value = mutableStateOf(std::string("merhaba güzel\ndünya burada"));
     TextEditState ime;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Box(Modifier().height(200));
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().fillMaxWidth().testTag("field"));
         });
@@ -6724,7 +6774,7 @@ TEST(selection_handles_point_at_their_end_and_hold_its_line_by_the_middle) {
     std::string clipboard;
     ComposeTestRule plain([&] {
         SelectionContainer(Modifier().fillMaxWidth(), [&] {
-            Column([&] {
+            Column([=] {
                 Box(Modifier().height(100));
                 Text("merhaba güzel dünya");
                 Text("ikinci satır burada");
@@ -6753,10 +6803,10 @@ TEST(right_to_left_text_aligns_and_selects_from_the_right) {
     auto direction = mutableStateOf(TextDirection::Content);
     ComposeTestRule rule([&] {
         SelectionContainer(Modifier().fillMaxWidth(), [&] {
-            Column([&] {
-                Text("שלום עולם", Modifier().fillMaxWidth().testTag("rtl"), {.textDirection = direction.get()});
+            Column([=] {
+                Text("שלום עולם", Modifier().fillMaxWidth().testTag("rtl"), style = TextStyle{.textDirection = direction.get()});
                 Text("abc אב", Modifier().testTag("mixed"));
-                Text("left", Modifier().fillMaxWidth().testTag("end"), {.textAlign = TextAlign::End});
+                Text("left", Modifier().fillMaxWidth().testTag("end"), textAlign = TextAlign::End);
                 Text(buildAnnotatedString([](AnnotatedString::Builder& b) {
                          b.withStyle({.fontWeight = FontWeight::Bold}, [&] { b.append("אב"); });
                          b.append(" גד");
@@ -7603,7 +7653,7 @@ TEST(aspect_ratio_wrap_content_and_required_size) {
 TEST(graphics_layer_transforms_without_a_layer_and_fades_through_one) {
     auto angle = mutableStateOf(0.f);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Box(Modifier().size(40).graphicsLayer({.rotationZ = 45}));
             Box(Modifier().size(40).graphicsLayer(GraphicsLayerScope{}));  // identity: nothing
             Box(Modifier().size(40).graphicsLayer({.alpha = 0.5f}));       // a layer, not transformed
@@ -7699,11 +7749,11 @@ TEST(small_touch_targets_take_touches_near_them) {
         auto target = [&](const char* name, float x, float y, float w, float h) {
             Box(Modifier().absoluteOffset(x, y).size(w, h).clickable([&taps, name] { ++taps[name]; }));
         };
-        Box(Modifier().fillMaxSize(), [&] {
+        Box(Modifier().fillMaxSize(), [=, &taps] {
             target("a", 100, 100, 20, 20);  // its minimum touch target: 86..134
             target("b", 140, 100, 20, 20);  // 126..174: overlapping a's
             target("geniş", 0, 300, 300, 20);  // wide enough: grown only up and down
-            Box(Modifier().absoluteOffset(0, 400).size(200, 100).clickable([&taps] { ++taps["kart"]; }), [&] {
+            Box(Modifier().absoluteOffset(0, 400).size(200, 100).clickable([&taps] { ++taps["kart"]; }), [=, &taps] {
                 Box(Modifier().absoluteOffset(100, 40).size(20).clickable([&taps] { ++taps["iç"]; }));  // a small button in a card
             });
             Box(Modifier().absoluteOffset(300, 100).size(20).pointerInput(0, [&taps](PointerInputScope& s) -> Task {
@@ -7711,7 +7761,7 @@ TEST(small_touch_targets_take_touches_near_them) {
             }));
             target("büyük", 100, 600, 100, 100);
             target("yanında", 205, 640, 20, 20);
-            Box(Modifier().absoluteOffset(250, 400).size(100).clipToBounds(), [&] {  // a clipping box, a small target at its corner
+            Box(Modifier().absoluteOffset(250, 400).size(100).clipToBounds(), [=, &taps] {  // a clipping box, a small target at its corner
                 Box(Modifier().size(20).clickable([&taps] { ++taps["köşe"]; }));
             });
         });
@@ -7780,7 +7830,7 @@ TEST(view_configuration_sets_the_gesture_thresholds) {
     ScrollState scroll;
     ComposeTestRule rule([&] {
         seen = LocalViewConfiguration.current();
-        Column([&] {
+        Column([=, &inner, &scroll, &tooltip] {
             Box(Modifier().size(100).pointerInput(0, [log](PointerInputScope& s) -> Task {  // 0..100
                 co_await detectTapGestures(s, {.onTap = [log](Offset) { log->push_back("tap"); },
                                                .onDoubleTap = [log](Offset) { log->push_back("double"); },
@@ -7789,7 +7839,7 @@ TEST(view_configuration_sets_the_gesture_thresholds) {
             // A part of the screen with a slop of its own: its pointerInput takes that one.
             CompositionLocalProvider({LocalViewConfiguration.provides(ViewConfiguration{.touchSlop = 40})}, [&] {
                 inner = LocalViewConfiguration.current();
-                Row([&] {  // 100..200
+                Row([=] {  // 100..200
                     Box(Modifier().size(100).pointerInput(0, [log](PointerInputScope& s) -> Task {
                         co_await detectDragGestures(s, {.onDragStart = [log](Offset) { log->push_back("drag"); }});
                     }));
@@ -7802,7 +7852,7 @@ TEST(view_configuration_sets_the_gesture_thresholds) {
             Column(Modifier().fillMaxWidth().height(200).verticalScroll(scroll), [] {  // 200..400
                 for (int i = 0; i < 100; ++i) Box(Modifier().fillMaxWidth().height(50));
             });
-            Row([&] {  // 400..500
+            Row([=, &tooltip] {  // 400..500
                 Box(Modifier().size(100).combinedClickable([] {}, [log] { log->push_back("uzun"); }));
                 auto t = rememberTooltipState();
                 tooltip = t;
@@ -7926,7 +7976,7 @@ TEST(a_drag_follows_its_own_finger_and_ends_cancelled_when_taken) {
                 PointerEvent e = co_await s.awaitPointerEvent(PointerEventPass::Initial);
                 if (*takes && e.type == PointerEventType::Move) e.change.consume();
             }
-        }), [&] {
+        }), [=] {
             Box(Modifier().fillMaxSize().pointerInput(lp, [h, lp](PointerInputScope& s) -> Task {
                 if (lp) co_await detectDragGesturesAfterLongPress(s, h);
                 else co_await detectDragGestures(s, h);
@@ -7976,7 +8026,7 @@ TEST(drag_gestures_move_an_offset_and_win_over_scrolling) {
     ScrollState scroll;
     Log events = std::make_shared<std::vector<std::string>>();
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll), [=, &events] {
             Box(Modifier()
                     .offset([dragged] { return dragged.get(); })
                     .size(100)
@@ -8014,7 +8064,7 @@ TEST(drags_after_a_long_press_pick_up_and_follow) {
     ScrollState scroll;
     Log events = std::make_shared<std::vector<std::string>>();
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll), [=, &events] {
             Box(Modifier().size(100).testTag("öğe").pointerInput(0, [dragged, events](PointerInputScope& scope) -> Task {
                 co_await detectDragGesturesAfterLongPress(scope, {
                     .onDragStart = [events](Offset at) { events->push_back(std::format("start {:.0f},{:.0f}", at.x, at.y)); },
@@ -8068,7 +8118,7 @@ TEST(gestures_built_from_compose_blocks) {
     auto events = std::make_shared<int>(0);
     auto downs = std::make_shared<std::vector<std::string>>();
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             // A tap of its own: a press, then its release unless the gesture was taken first.
             Box(Modifier().size(100).testTag("dokun").pointerInput(0, [taps](PointerInputScope& scope) -> Task {
                 co_await awaitEachGesture(scope, [taps](PointerInputScope& s) -> Task {
@@ -8147,11 +8197,11 @@ TEST(tap_handlers_and_clicks_respect_consumption) {
         };
     };
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &log] {
             Box(Modifier().size(100).clickable([log] { log->push_back("parent click"); }),
-                [&] { Box(Modifier().size(50).pointerInput(0, tapper("child tap"))); });
+                [=] { Box(Modifier().size(50).pointerInput(0, tapper("child tap"))); });
             Box(Modifier().size(100).pointerInput(0, tapper("parent tap")),
-                [&] { Box(Modifier().size(50).clickable([log] { log->push_back("child click"); })); });
+                [=, &log] { Box(Modifier().size(50).clickable([log] { log->push_back("child click"); })); });
         });
     });
     for (Offset p : {Offset{25, 25}, Offset{75, 75}, Offset{25, 125}, Offset{75, 175}}) {
@@ -8495,7 +8545,7 @@ TEST(brushes_paths_and_draw_with_cache_reach_the_canvas) {
     auto builds = std::make_shared<int>(0);
     auto wide = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Box(Modifier().size(50).background(Brush::verticalGradient({colors::Black, colors::White}), CircleShape));
             Box(Modifier().size(50).background(Brush::solid(colors::Black)));  // a plain fill
             Box(Modifier().size(wide.get() ? 80.f : 60.f, 40).drawWithCache([builds](CacheDrawScope& cache) {
@@ -8527,7 +8577,7 @@ TEST(interactive_list_items_take_the_tap_and_morph) {
     int clicks = 0;
     ComposeTestRule rule([&] {
         MaterialTheme(lightColorScheme(), [&] {
-            Column([&] {
+            Column([=, &checked, &clicks] {
                 ListItem([&] { ++clicks; }, {.headline = [] { Text("Tıkla"); }, .supporting = [] { Text("açıklama"); }}, Modifier().testTag("tık"));
                 ListItem(selected.get(), [&] { selected.set(!selected.peek()); }, {.headline = [] { Text("Seç"); }}, Modifier().testTag("seç"));
                 ListItem(checked, [&](bool v) { checked = v; }, {.headline = [] { Text("İşaretle"); }}, Modifier().testTag("işaret"));
@@ -8586,7 +8636,7 @@ TEST(segmented_list_items_round_the_ends_of_their_card) {
     CHECK(near(ListItemDefaults::segmentedShapes(0, 1).shape.radiiFor(r).bottomLeft, 4));  // alone: as it is
     int opened = -1;
     ComposeTestRule rule([&] {
-        Column(Modifier(), {.verticalArrangement = Arrangement::spacedBy(ListItemDefaults::SegmentedGap)}, [&] {
+        Column(Modifier(), verticalArrangement = Arrangement::spacedBy(ListItemDefaults::SegmentedGap), [=, &opened] {
             for (int i = 0; i < 3; ++i)
                 SegmentedListItem([&, i] { opened = i; }, ListItemDefaults::segmentedShapes(i, 3), {.headline = [i] { Text(std::format("Öğe {}", i)); }},
                                   Modifier().testTag(std::format("öğe{}", i)));
@@ -8652,12 +8702,12 @@ TEST(chips_radio_buttons_and_segments_select) {
         auto selected = remember([] { return mutableStateOf(std::string("Kahve")); });
         auto chipOn = remember([] { return mutableStateOf(false); });
         auto segment = remember([] { return mutableStateOf(0); });
-        Column([&] {
+        Column([=] {
             FilterChip(chipOn.get(), [chipOn] { chipOn.set(!chipOn.get()); }, [] { Text("Filtre"); },
                        {.leadingIcon = chipOn.get() ? Content([] { Icon(Icons::Filled::Check, "işaret", Modifier().size(18)); })
                                                     : Content()});
             for (const char* option : {"Kahve", "Çay"})
-                Row(Modifier().testTag(option), [&] {
+                Row(Modifier().testTag(option), [=] {
                     RadioButton(selected.get() == option, [selected, option] { selected.set(option); });
                     Text(option);
                 });
@@ -8693,7 +8743,7 @@ TEST(text_field_prefix_and_suffix_sit_around_the_text) {
     auto price = mutableStateOf(std::string("12"));
     auto weight = mutableStateOf(std::string());
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             TextField(price.get(), [price](std::string v) { price.set(std::move(v)); }, Modifier().testTag("fiyat"),
                       {.singleLine = true, .prefix = "$", .suffix = "kg"});
             OutlinedTextField(weight.get(), [weight](std::string v) { weight.set(std::move(v)); }, Modifier().testTag("kilo"),
@@ -8756,7 +8806,7 @@ TEST(range_slider_moves_the_nearer_thumb) {
     auto finished = std::make_shared<int>(0);
     ScrollState scroll;
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll), [=] {
             RangeSlider(range.get(), [range](std::pair<float, float> v) { range.set(v); }, Modifier().width(220).testTag("range"),
                         {.valueFrom = 0, .valueTo = 100, .onValueChangeFinished = [finished] { ++*finished; }});
             RangeSlider(range.get(), [range](std::pair<float, float> v) { range.set(v); }, Modifier().width(220),
@@ -8798,7 +8848,7 @@ TEST(slider_tap_drag_and_steps) {
     auto finished = std::make_shared<int>(0);
     ScrollState scroll;
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll), [=] {
             Slider(value.get(), [value](float v) { value.set(v); }, Modifier().width(220),
                    {.valueFrom = 0, .valueTo = 100, .onValueChangeFinished = [finished] { ++*finished; }});
             Slider(value.get(), [value](float v) { value.set(v); }, Modifier().width(220).testTag("stepped"),
@@ -8854,7 +8904,7 @@ TEST(tabs_as_compose_1_4) {
     auto selected = mutableStateOf(0);
     ComposeTestRule rule([&] {
         cs = colorScheme();
-        Column([&] {
+        Column([=, &cs] {
             PrimaryTabRow(selected.get(), Modifier().testTag("üst"), [&] {
                 Tab(selected.get() == 0, [&] { selected.set(0); }, [] { Text("Bir"); }, [] { Box(Modifier().size(24).testTag("simge")); },
                     Modifier().testTag("ilk"));
@@ -8928,7 +8978,7 @@ TEST(secondary_and_scrollable_tab_rows) {
     auto chosen = mutableStateOf(0);
     ScrollState scroll;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &scroll] {
             SecondaryTabRow(selected.get(), Modifier(), [&] {
                 const char* titles[] = {"Bir", "İkinci", "Üç"};
                 for (int i = 0; i < 3; ++i)
@@ -8984,7 +9034,7 @@ TEST(secondary_and_scrollable_tab_rows) {
 
 TEST(badges_sit_on_the_top_end_corner) {
     ComposeTestRule rule([] {
-        Row(Modifier().padding(20), {.horizontalArrangement = Arrangement::spacedBy(20)}, [] {
+        Row(Modifier().padding(20), horizontalArrangement = Arrangement::spacedBy(20), [] {
             BadgedBox([] { Badge(); }, Modifier().testTag("dot"), [] { Icon(Icons::Filled::Email, "Posta"); });
             BadgedBox([] { Badge(Modifier(), [] { Text("8"); }); }, Modifier().testTag("count"),
                       [] { Icon(Icons::Filled::Notifications, "Bildirim"); });
@@ -9010,7 +9060,7 @@ TEST(dialog_draws_on_top_takes_input_and_dismisses) {
     auto open = mutableStateOf(false);
     auto log = std::make_shared<std::vector<std::string>>();
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Button([log] { log->push_back("below"); }, Modifier().testTag("below"), [] { Text("Alttaki"); });
             if (open.get())
                 AlertDialog([open, log] { log->push_back("dismiss"); open.set(false); },
@@ -9047,8 +9097,8 @@ TEST(dropdown_menu_opens_below_its_anchor_and_closes_outside) {
     auto expanded = mutableStateOf(false);
     auto log = std::make_shared<std::vector<std::string>>();
     ComposeTestRule rule([&] {
-        Column(Modifier().padding(20), [&] {
-            Box(Modifier().testTag("anchor"), [&] {
+        Column(Modifier().padding(20), [=] {
+            Box(Modifier().testTag("anchor"), [=] {
                 Button([expanded] { expanded.set(true); }, [] { Text("Menü"); });
                 DropdownMenu(expanded.get(), [expanded] { expanded.set(false); }, [&] {
                     DropdownMenuItem([] { Text("Kopyala"); }, [log, expanded] { log->push_back("copy"); expanded.set(false); });
@@ -9110,7 +9160,7 @@ TEST(back_handlers_most_recent_enabled_wins) {
     auto innerEnabled = mutableStateOf(true);
     ComposeTestRule rule([&] {
         BackHandler(true, [log] { log->push_back("outer"); });
-        Column([&] { BackHandler(innerEnabled.get(), [log] { log->push_back("inner"); }); });
+        Column([=] { BackHandler(innerEnabled.get(), [log] { log->push_back("inner"); }); });
     });
     CHECK(rule.host().keyDown(Key::Escape));
     innerEnabled.set(false);
@@ -9438,7 +9488,7 @@ TEST(painters_size_and_draw_images_icons_and_paint) {
     Color content = lightColorScheme().onSurface;
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalContentColor.provides(content)}, [&] {
-            Column([&] {
+            Column([=, &bitmap, &own, &red] {
                 Image(bitmap, "kendi", Modifier().testTag("kendi"));                                   // its own size
                 Image(bitmap, "geniş", Modifier().width(80).testTag("geniş"));                          // Fit: no taller
                 Image(bitmap, "dolu", Modifier().width(80).testTag("dolu"), Alignment::Center, ContentScale::FillWidth);
@@ -9485,7 +9535,7 @@ TEST(painters_fill_bounded_space_mirror_and_fade) {
     Painter fill = ColorPainter(Color{1, 0, 0, 1});
     Painter own = Painter::custom([](DrawScope& d) { d.drawRect(Color{0, 1, 0, 1}); }, Size{30, 30});
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &fill, &own] {
             // No size of its own, not sized by it: as big as it may be (not fixed, but bounded).
             Box(Modifier().sizeIn(0, 0, 120, 50).testTag("sınırlı").paint(fill, false));
             CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] {
@@ -9521,7 +9571,7 @@ TEST(scrollable_reports_drags_in_the_finger_direction) {
             reversed.set(reversed.peek() + delta);
             return delta;
         });
-        Column(Modifier().fillMaxSize().verticalScroll(page), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(page), [=] {
             Box(Modifier().fillMaxWidth().height(300).scrollable(state, Orientation::Vertical).testTag("area"));
             Box(Modifier().fillMaxWidth().height(100).scrollable(other, Orientation::Horizontal, true, true).testTag("row"));
             Box(Modifier().height(2000));
@@ -9545,7 +9595,7 @@ TEST(test_rule_assertions) {
     auto ticked = mutableStateOf(false);
     ScrollState scroll;
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll), [=] {
             Button([] {}, [] { Text("Tamam"); });
             Button([] {}, Modifier(), {.enabled = false}, [] { Text("Kapalı"); });
             Checkbox(ticked.get(), [&](bool v) { ticked.set(v); }, Modifier().testTag("box"));
@@ -9608,7 +9658,7 @@ TEST(scale_rotate_and_primitive_states) {
     auto ratio = mutableDoubleStateOf(0.5);
     auto big = mutableLongStateOf(1LL << 40);
     ComposeTestRule rule([&] {
-        Row([&] {
+        Row([=] {
             Box(Modifier().size(40).scale(count.get() > 1 ? 2.f : 1.f).background(colors::Black));
             Box(Modifier().size(40).rotate(45).background(colors::Black));
         });
@@ -9630,7 +9680,7 @@ TEST(horizontal_pager_drags_snaps_and_animates) {
         auto state = rememberPagerState(0, [] { return 5; });
         pager = &remember([&] { return state; });
         *scopeBox = rememberCoroutineScope();
-        Column([&] {
+        Column([=, &pager] {
             HorizontalPager(state, Modifier().fillMaxWidth().height(200).testTag("pager"),
                             [](int page) { Text("Sayfa " + std::to_string(page), Modifier().testTag("page" + std::to_string(page))); });
             Text("Şu an: " + std::to_string(state.currentPage()));
@@ -9670,7 +9720,7 @@ TEST(pager_pages_of_a_fixed_size_snap_where_asked) {
         auto page = [](const char* name) {
             return [name](int i) { Box(Modifier().fillMaxSize().testTag(name + std::to_string(i))); };
         };
-        Column([&] {
+        Column([=] {
             // 200 dp pages in the middle of 300 dp of room (the padding's 50 each side), 10 apart.
             HorizontalPager(a, Modifier().fillMaxWidth().height(100), page("orta"),
                             {.contentPadding = {.start = 50, .end = 50}, .pageSize = PageSize::Fixed(200), .pageSpacing = 10,
@@ -9722,7 +9772,7 @@ TEST(pager_measured_without_end_shows_its_first_pages) {
     ComposeTestRule rule([&] {
         auto s = rememberPagerState(0, [] { return 5; });
         state = s;
-        Row(Modifier().horizontalScroll(rememberScrollState()), [&] {
+        Row(Modifier().horizontalScroll(rememberScrollState()), [=] {
             HorizontalPager(s, Modifier().height(100), [](int i) { Box(Modifier().fillMaxSize().testTag("sayfa" + std::to_string(i))); },
                             {.pageSize = PageSize::Fixed(120)});
         });
@@ -9730,7 +9780,7 @@ TEST(pager_measured_without_end_shows_its_first_pages) {
     CHECK(rule.onNodeWithTag("sayfa0").exists() && state->currentPage() == 0);
     // ...and a vertical one in a scrolling column, with no height of its own.
     ComposeTestRule column([&] {
-        Column(Modifier().verticalScroll(rememberScrollState()), [&] {
+        Column(Modifier().verticalScroll(rememberScrollState()), [=] {
             VerticalPager(rememberPagerState(0, [] { return 5; }), Modifier().fillMaxWidth(),
                           [](int i) { Box(Modifier().fillMaxWidth().height(50).testTag("dikey" + std::to_string(i))); });
         });
@@ -9766,7 +9816,7 @@ TEST(pagers_laid_out_from_the_end_and_keyed_pages) {
         auto list = names.get();
         auto b = rememberPagerState(2, [n = list.size()] { return int(n); });
         reversed = a, keyed = b;
-        Column([&] {
+        Column([=] {
             HorizontalPager(a, Modifier().fillMaxWidth().height(100),
                             [](int i) { Box(Modifier().fillMaxSize().testTag("ters" + std::to_string(i))); },
                             {.contentPadding = {.start = 20, .end = 40}, .pageSize = PageSize::Fixed(100), .reverseLayout = true});
@@ -9775,7 +9825,7 @@ TEST(pagers_laid_out_from_the_end_and_keyed_pages) {
             HorizontalPager(b, Modifier().fillMaxWidth().height(100), [&](int i) {
                 auto taps = remember([] { return mutableStateOf(0); });  // a page's own state, kept by its key
                 Box(Modifier().fillMaxSize().testTag("sayfa " + list[size_t(i)]).clickable([taps] { taps.set(taps.get() + 1); }),
-                    [&] { Text(list[size_t(i)] + " " + std::to_string(taps.get())); });
+                    [=] { Text(list[size_t(i)] + " " + std::to_string(taps.get())); });
             }, {.key = [list](int i) { return std::hash<std::string>{}(list[size_t(i)]); }});
         });
     }, {400, 800});
@@ -9814,7 +9864,7 @@ TEST(pager_flings_turn_as_many_pages_as_allowed) {
         auto a = rememberPagerState(0, [] { return 10; });
         auto b = rememberPagerState(1, [] { return 10; });
         far = a, near_ = b;
-        Column([&] {
+        Column([=] {
             HorizontalPager(a, Modifier().fillMaxWidth().height(100), [](int) { Box(Modifier().fillMaxSize()); },
                             {.flingBehavior = PagerDefaults::flingBehavior(a, PagerSnapDistance::atMost(3))});
             HorizontalPager(b, Modifier().fillMaxWidth().height(100), [](int) { Box(Modifier().fillMaxSize()); },
@@ -9880,7 +9930,7 @@ TEST(pager_flings_turn_as_many_pages_as_allowed) {
 
 TEST(pager_pages_line_up_across_it) {
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             auto small = [](const char* name) {
                 return [name](int i) { Box(Modifier().size(50).testTag(name + std::to_string(i))); };
             };
@@ -9914,9 +9964,9 @@ TEST(basic_text_fields_take_a_decorator_and_fields_line_limits) {
     TextFieldState query, secret, a, b, c, one;
     int submitted = 0;
     ComposeTestRule rule([&] {
-        Column(Modifier().width(300), [&] {
+        Column(Modifier().width(300), [=, &a, &b, &c, &one, &query, &secret, &submitted] {
             BasicTextField(query, Modifier(), {.placeholder = "Ara", .decorator = [](const Content& innerTextField) {
-                Row(Modifier().padding(10).testTag("süs"), [&] {
+                Row(Modifier().padding(10).testTag("süs"), [=] {
                     Box(Modifier().size(20).testTag("ikon"));
                     Box(Modifier().weight(1).testTag("iç"), innerTextField);
                 });
@@ -9967,7 +10017,7 @@ TEST(motion_schemes_set_how_material_components_move) {
     MotionScheme outside, inTheme, inExpressive, given;
     ComposeTestRule rule([&] {
         outside = motionScheme();
-        Column([&] {
+        Column([=, &expressiveShape, &given, &inExpressive, &inTheme, &standardShape] {
             MaterialTheme(darkColorScheme(), [&] {
                 inTheme = motionScheme();
                 standardShape = detail::morphingShape(RoundedCornerShape(pressed.get() ? 20.f : 0.f));
@@ -10001,7 +10051,7 @@ TEST(mutable_transition_states_animate_from_where_they_start) {
     step.setTargetState(1);
     AnimationSpec slow = tween(320, 0, LinearEasing);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &shown, &slow, &step] {
             if (!open.get()) return;
             AnimatedVisibility(shown, Modifier().testTag("ilk"), expandVertically(slow), shrinkVertically(slow), [] { Box(Modifier().size(50, 40)); });
             AnimatedVisibility(true, Modifier().testTag("düz"), expandVertically(slow), shrinkVertically(slow), [] { Box(Modifier().size(50, 40)); });
@@ -10046,7 +10096,7 @@ TEST(animate_content_size_follows_the_content) {
     ComposeTestRule rule([&] {
         if (shown.get())
             Box(Modifier().testTag("box").animateContentSize(tween(200, 0, LinearEasing)),
-                [&] { Box(Modifier().size(big.get() ? 200.f : 100.f)); });
+                [=] { Box(Modifier().size(big.get() ? 200.f : 100.f)); });
     });
     shown.set(true);
     rule.advanceFrame();
@@ -10076,15 +10126,15 @@ TEST(bring_into_view_requesters_scroll_their_node_into_view) {
     std::optional<CoroutineScope> scope;
     ComposeTestRule rule([&] {
         scope = rememberCoroutineScope();
-        Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
-            Column(Modifier().height(200).verticalScroll(box), [&] {  // a scrollable box, in view, the item far down in it
+        Column(Modifier().fillMaxSize().verticalScroll(scroll), [=, &across, &box, &boxed, &far, &inner, &part] {
+            Column(Modifier().height(200).verticalScroll(box), [=, &box, &boxed, &far] {  // a scrollable box, in view, the item far down in it
                 Box(Modifier().height(1500));  // (below the page's view, until the box brings it up)
                 Box(Modifier().size(50).bringIntoViewRequester(boxed).testTag("kutuda"));
             });
             Box(Modifier().height(1500));
             Box(Modifier().size(100).bringIntoViewRequester(far).testTag("uzak"));
             Box(Modifier().height(1500));
-            Row(Modifier().fillMaxWidth().horizontalScroll(across), [&] {  // in a scrollable across, in the one down
+            Row(Modifier().fillMaxWidth().horizontalScroll(across), [=, &across, &inner] {  // in a scrollable across, in the one down
                 Box(Modifier().size(1000, 50));
                 Box(Modifier().size(80, 50).bringIntoViewRequester(inner).testTag("iç"));
             });
@@ -10123,12 +10173,12 @@ TEST(bring_into_view_requesters_scroll_their_node_into_view) {
 TEST(focus_restorers_bring_the_focus_back_where_it_left) {
     FocusRequester fallback, wholeRow;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &fallback, &wholeRow] {
             Button([] {}, Modifier().testTag("x"), [] { Text("X"); });
             Row(Modifier().focusRestorer().focusRequester(wholeRow), [] {
                 for (const char* t : {"a", "b", "c"}) Button([] {}, Modifier().testTag(t), [t] { Text(t); });
             });
-            Row(Modifier().focusRestorer(fallback), [&] {
+            Row(Modifier().focusRestorer(fallback), [=, &fallback] {
                 Button([] {}, Modifier().testTag("d"), [] { Text("d"); });
                 Button([] {}, Modifier().testTag("e").focusRequester(fallback), [] { Text("e"); });
             });
@@ -10158,7 +10208,7 @@ TEST(a_focus_request_brings_the_node_into_view) {
     ScrollState scroll;
     FocusRequester below, above;
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll), [=, &above, &below] {
             Button([] {}, Modifier().height(60).focusRequester(above).testTag("üst"), [] { Text("Üst"); });
             Box(Modifier().height(1500));
             TextField("", [](std::string) {}, Modifier().focusRequester(below).testTag("alan"),
@@ -10179,7 +10229,7 @@ TEST(fields_focused_from_code_may_keep_the_keyboard_down) {
     FocusRequester quiet, loud;
     std::vector<bool> shown;  // what each text input start asked of the software keyboard
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &loud, &quiet] {
             TextField("ali", [](std::string) {}, Modifier().testTag("sessiz").focusRequester(quiet),
                       {.singleLine = true, .keyboardOptions = {.showKeyboardOnFocus = false}});
             TextField("veli", [](std::string) {}, Modifier().testTag("normal").focusRequester(loud), {.singleLine = true});
@@ -10226,7 +10276,7 @@ TEST(focus_requester_focus_manager_and_ime_actions) {
             requester.requestFocus();
             co_return;
         });
-        Column([&] {
+        Column([=] {
             OutlinedTextField(first.get(), [&](std::string v) { first.set(std::move(v)); },
                               Modifier().testTag("first").onFocusChanged([log](FocusState s) {
                                   log->push_back(std::string("first ") + (s.hasFocus ? "on" : "off"));
@@ -10306,7 +10356,7 @@ TEST(text_editing_keys_go_by_words_and_paragraphs) {
     auto locked = mutableStateOf(std::string("sabit metin"));
     std::string clipboard;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             TextField(line.get(), [&](std::string v) { line.set(std::move(v)); }, Modifier().testTag("tek"), {.singleLine = true});
             TextField(lines.get(), [&](std::string v) { lines.set(std::move(v)); }, Modifier().testTag("çok"));
             TextField(locked.get(), [&](std::string v) { locked.set(std::move(v)); }, Modifier().testTag("kilitli"), {.readOnly = true});
@@ -10439,7 +10489,7 @@ TEST(tap_places_the_caret_and_password_shows_dots) {
     auto secret = mutableStateOf(std::string("gizli"));
     std::vector<KeyboardOptions> shown;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             OutlinedTextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("f"));
             OutlinedTextField(secret.get(), [&](std::string v) { secret.set(std::move(v)); }, Modifier().testTag("p"),
                               {.supportingText = "En az 8 karakter", .isError = true,
@@ -10485,7 +10535,7 @@ TEST(text_field_colors_follow_focus_and_error) {
                            .focusedPrefixColor = c(0.22f), .unfocusedPrefixColor = c(0.23f),
                            .focusedSuffixColor = c(0.24f)};
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &colors, &errorTrailing, &leading, &trailing] {
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("ad"),
                       {.label = "Ad", .prefix = "@", .suffix = "!",
                        .leadingIcon = [&] { leading = LocalContentColor.current(); },
@@ -10553,7 +10603,7 @@ TEST(disabled_text_fields_take_no_focus_and_fade) {
     Color leading;
     std::vector<std::string> typed;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &leading] {
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("ad"),
                       {.label = "Ad", .prefix = "@", .leadingIcon = [&] { leading = LocalContentColor.current(); },
                        .supportingText = "ipucu", .enabled = enabled.get()});
@@ -10607,7 +10657,7 @@ TEST(disabled_text_fields_take_no_focus_and_fade) {
 
 TEST(text_field_labels_go_above_or_stay_up) {
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             OutlinedTextField("ali", [](std::string) {}, Modifier().testTag("üstte"),
                               {.label = "Ad", .labelPosition = TextFieldLabelPosition::Above()});
             TextField("veli", [](std::string) {}, Modifier().testTag("sonda"),
@@ -10643,7 +10693,7 @@ TEST(text_field_labels_go_above_or_stay_up) {
 
 TEST(outlined_fields_keep_room_for_the_floated_label) {
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             OutlinedTextField("ali", [](std::string) {}, Modifier().testTag("etiketli"), {.label = "Ad"});
             OutlinedTextField("veli", [](std::string) {}, Modifier().testTag("etiketsiz"));
             TextField("can", [](std::string) {}, Modifier().testTag("dolgulu"), {.label = "Ad"});
@@ -10664,7 +10714,7 @@ TEST(outlined_fields_keep_room_for_the_floated_label) {
 TEST(text_field_shapes_round_the_container_and_the_outline) {
     Color blue{0.2f, 0.4f, 0.8f, 1}, green{0.2f, 0.7f, 0.3f, 1};
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &blue, &green] {
             TextField("a", [](std::string) {}, Modifier().testTag("dolgulu"));  // 4 dp at the top
             TextField("b", [](std::string) {}, Modifier(), {.colors = {.unfocusedContainerColor = blue}, .shape = RoundedCornerShape(12)});
             OutlinedTextField("c", [](std::string) {}, Modifier().testTag("çizgili"));
@@ -10701,7 +10751,7 @@ TEST(text_selection_colors_come_from_the_theme_or_the_local) {
     auto pick = mutableStateOf(0);  // the light scheme, a dark theme, our own colors
     TextSelectionColors own{Color{1, 0, 0, 1}, Color{0, 1, 0, 0.5f}};
     ComposeTestRule rule([&] {
-        auto inside = [&] {
+        auto inside = [=] {
             SelectionContainer(Modifier(), [] { Text("seçilecek metin", Modifier().testTag("metin")); });
         };
         if (pick.get() == 1) MaterialTheme(darkColorScheme(), inside);
@@ -10749,7 +10799,7 @@ TEST(text_field_label_floats_and_keyboard_actions_run) {
 TEST(permanent_and_dismissible_drawers) {
     std::optional<DrawerState> drawer;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &drawer] {
             PermanentNavigationDrawer([] { PermanentDrawerSheet(Modifier().width(250), [] { Text("Kalıcı menü"); }); },
                                       Modifier().height(200), [] { Text("Kalıcı içerik", Modifier().testTag("permanent")); });
             auto s = rememberDrawerState();
@@ -10778,7 +10828,7 @@ TEST(permanent_and_dismissible_drawers) {
 
 TEST(standard_drawer_sheets_pad_by_the_insets_left_to_them) {
     ComposeTestRule rule([&] {
-        Row([&] {
+        Row([=] {
             PermanentDrawerSheet(Modifier().width(240), [] { Text("Kenarda", Modifier().testTag("edge")); });
             // A screen that already padded for the status bar.
             Box(Modifier().padding(0, 24, 0, 0).consumeWindowInsets(PaddingValues{0, 24, 0, 0}),
@@ -10927,7 +10977,7 @@ TEST(window_size_local_and_navigation_rail) {
     ComposeTestRule rule([] {
         Size window = LocalWindowSize.current();
         if (window.width >= 600)
-            Row(Modifier().fillMaxSize(), [&] {
+            Row(Modifier().fillMaxSize(), [=] {
                 NavigationRail(Modifier().testTag("rail"), {}, [] {
                     NavigationRailItem(true, [] {}, Icons::Filled::Home, "Ana");
                     NavigationRailItem(false, [] {}, Icons::Filled::Star, "Yıldız");
@@ -11079,7 +11129,7 @@ TEST(refocused_field_shows_no_stale_selection_and_password_is_not_copied) {
     auto value = mutableStateOf(std::string("metin")), secret = mutableStateOf(std::string("gizli"));
     std::string clipboard = "önceki";
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             OutlinedTextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("f"));
             OutlinedTextField(secret.get(), [&](std::string v) { secret.set(std::move(v)); }, Modifier().testTag("p"),
                               {.visualTransformation = VisualTransformation::Password});
@@ -11127,14 +11177,14 @@ TEST(tap_inside_a_dragged_pager_does_not_fire) {
 TEST(double_measured_children_settle) {
     auto big = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             // A tab row measures its tabs twice; IntrinsicSize does the same.
             PrimaryTabRow(0, Modifier(), [&] {
                 Tab(true, [] {}, [] { BoxWithConstraints(Modifier(), [](const Constraints& c) { Text(c.maxWidth > 50 ? "geniş" : "dar"); }); });
                 Tab(false, [] {}, [] { Text("İki"); });
             });
-            Row(Modifier().height(IntrinsicSize::Min), [&] {
-                Box(Modifier().animateContentSize(tween(100)).testTag("anim"), [&] { Box(Modifier().size(big.get() ? 80.f : 40.f)); });
+            Row(Modifier().height(IntrinsicSize::Min), [=] {
+                Box(Modifier().animateContentSize(tween(100)).testTag("anim"), [=] { Box(Modifier().size(big.get() ? 80.f : 40.f)); });
                 Box(Modifier().width(2).fillMaxHeight());
             });
         });
@@ -11151,7 +11201,7 @@ TEST(double_measured_children_settle) {
 TEST(annotated_string_styles_wraps_and_links) {
     auto clicks = std::make_shared<int>(0);
     ComposeTestRule rule([clicks] {
-        Column([&] {
+        Column([=] {
             Text(buildAnnotatedString([&](AnnotatedString::Builder& b) {
                      b.append("Merhaba ");
                      b.withStyle({.fontWeight = FontWeight::Bold, .color = colors::White}, [&] {
@@ -11192,10 +11242,10 @@ TEST(text_overflow_soft_wrap_and_max_lines) {
             // 16sp: 8 dp per character, 20 dp lines; 80 dp hold 10 characters.
             Text("bir iki üç dört beş", Modifier().width(80).testTag("wrap"));
             Text("bir iki üç dört beş", Modifier().width(80).testTag("ellipsis"),
-                 {.maxLines = 1, .overflow = TextOverflow::Ellipsis});
-            Text("bir iki üç dört beş", Modifier().width(80).testTag("clip"), {.maxLines = 1});
+                 maxLines = 1, overflow = TextOverflow::Ellipsis);
+            Text("bir iki üç dört beş", Modifier().width(80).testTag("clip"), maxLines = 1);
             Text("bir iki üç dört beş", Modifier().width(80).testTag("nowrap"),
-                 {.overflow = TextOverflow::Ellipsis, .softWrap = false});
+                 overflow = TextOverflow::Ellipsis, softWrap = false);
             Text("satır\n\nboş satır", Modifier().testTag("breaks"));
         });
     });
@@ -11223,8 +11273,8 @@ TEST(font_families_reach_the_canvas) {
     CHECK(lora.id >= 16 && lora == FontFamily::fromFiles({{"fonts/Lora-Regular.ttf"}, {"fonts/Lora-Bold.ttf", FontWeight::Bold}}));
     CHECK(FontFamily::files(lora.id).size() == 2 && FontFamily::files(FontFamily::Serif.id).empty());
     ComposeTestRule rule([lora] {
-        Column([&] {
-            Text("serif", {.fontFamily = FontFamily::Serif});
+        Column([=, &lora] {
+            Text("serif", fontFamily = FontFamily::Serif);
             Text(buildAnnotatedString([&](AnnotatedString::Builder& b) {
                 b.append("düz ");
                 b.withStyle({.fontFamily = FontFamily::Monospace}, [&] { b.append("mono"); });
@@ -11329,7 +11379,7 @@ TEST(async_image_loads_away_from_the_ui_thread_and_caches) {
                               .contentScale = ContentScale::Crop, .crossfadeMillis = 200};
     ComposeTestRule rule([&] {
         if (!shown.get()) return;
-        Column([&] {
+        Column([=, &options] {
             AsyncImage("images/a.jpg", "foto", Modifier().size(100, 60).testTag("a"), options);
             AsyncImage("images/a.jpg", "foto 2", Modifier().size(50, 50), options);  // the same model: one load
             AsyncImage("https://example.com/yok.webp", "yok", Modifier().size(80, 40).testTag("b"), options);
@@ -11460,7 +11510,7 @@ TEST(async_image_is_decoded_at_the_size_its_layout_gets) {
     std::vector<AsyncImageState> states;  // what the small one told
     ScrollState scroll;
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll), [=, &states] {
             if (small.get())
                 AsyncImage("photo.jpg", "küçük", Modifier().size(100, 60).testTag("small"),
                            {.contentScale = ContentScale::Crop, .onState = [&](const AsyncImageState& s) { states.push_back(s); }});
@@ -11543,7 +11593,7 @@ TEST(reverse_layout_puts_the_first_item_at_the_bottom) {
     LazyListState state;
     auto count = mutableStateOf(3);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &state] {
             LazyColumn(Modifier().size(200, 400), {.state = state, .contentPadding = {0, 10, 0, 20}, .reverseLayout = true},
                        [&](LazyListScope& list) {
                            list.items(count.get(), [](int i) { Box(Modifier().fillMaxWidth().height(40).testTag(std::format("i{}", i))); });
@@ -11709,7 +11759,7 @@ TEST(scroll_states_tell_their_value_and_whether_they_scroll) {
     std::optional<CoroutineScope> scope;
     ComposeTestRule rule([&] {
         scope = rememberCoroutineScope();
-        Column([&] {
+        Column([=, &grid, &list, &scroll] {
             // Read in composition: recomposed as they change.
             Text(std::format("değer {:.0f}/{:.0f} {}{}{}", scroll.value(), scroll.maxValue(), scroll.canScrollBackward() ? "<" : "",
                              scroll.canScrollForward() ? ">" : "", scroll.isScrollInProgress() ? " kayıyor" : ""));
@@ -11800,12 +11850,12 @@ TEST(scrolling_turned_off_for_the_user_and_scrolling_from_the_end) {
     LazyListState list, inner;
     FocusRequester deep;
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(page), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(page), [=, &deep, &fixedScroll, &fromEnd, &inner, &list, &page] {
             // Not by the user: a drag on it goes to the page around it.
             LazyColumn(Modifier().size(200, 200).testTag("liste"), {.state = list, .userScrollEnabled = false}, [](LazyListScope& s) {
                 s.items(50, [](int i) { Text(std::to_string(i), Modifier().height(40)); });
             });
-            Column(Modifier().size(200, 200).verticalScroll(fixedScroll, false).testTag("sabit"), [&] {
+            Column(Modifier().size(200, 200).verticalScroll(fixedScroll, false).testTag("sabit"), [=, &deep, &inner] {
                 LazyColumn(Modifier().size(200, 100), {.state = inner}, [](LazyListScope& s) {  // what it leaves goes past the fixed one
                     s.items(3, [](int i) { Text("iç " + std::to_string(i), Modifier().height(40)); });
                 });
@@ -11859,14 +11909,14 @@ TEST(lazy_lists_arrange_items_that_all_fit) {
     auto many = mutableStateOf(false);
     LazyListState bottom;
     ComposeTestRule rule([&] {
-        auto list = [&](const char* name, std::optional<Arrangement> arrangement, bool reverse = false) {
+        auto list = [=](const char* name, std::optional<Arrangement> arrangement, bool reverse = false) {
             LazyListOptions o{.reverseLayout = reverse, .arrangement = arrangement};
             if (std::string(name) == "alt") o.state = bottom;
             LazyColumn(Modifier().size(100, 400), o, [&](LazyListScope& s) {
                 s.items(many.get() ? 11 : 3, [name](int i) { Box(Modifier().fillMaxWidth().height(40).testTag(name + std::to_string(i))); });
             });
         };
-        Row([&] {
+        Row([=] {
             list("alt", Arrangement::Bottom);
             list("orta", Arrangement::spacedBy(10, Arrangement::Kind::Center));
             list("yayık", Arrangement::SpaceBetween);
@@ -11981,7 +12031,7 @@ TEST(paths_take_arcs_and_draw_scopes_clip_to_paths) {
 TEST(shadows_take_colors_and_clip_and_borders_take_brushes) {
     Color red{1, 0, 0, 1}, blue{0, 0, 1, 1};
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &blue, &red] {
             Box(Modifier().size(100).shadow(8, RoundedCornerShape(16)));                     // black, clipped (Compose's default)
             Box(Modifier().size(100).shadow(8, RoundedCornerShape(16), false, red, red));     // red, not clipped
             Box(Modifier().size(100).shadow(8, RectangleShape, true, blue.copy(0.5f), blue.copy(0.5f)));  // fainter; a plain clip
@@ -12014,8 +12064,8 @@ TEST(z_index_puts_a_sibling_above_the_others) {
     auto z = mutableStateOf(1.f);
     std::vector<std::string> clicked;
     ComposeTestRule rule([&] {
-        Column([&] {
-            Box(Modifier().size(200, 120), [&] {
+        Column([=, &clicked] {
+            Box(Modifier().size(200, 120), [=, &clicked] {
                 Box(Modifier().size(100, 100).zIndex(z.get()).clickable([&] { clicked.push_back("a"); }), [] { Text("a"); });
                 Box(Modifier().size(100, 100).clickable([&] { clicked.push_back("b"); }), [] { Text("b"); });  // after: on top as composed
                 Box(Modifier().size(100, 100).zIndex(-1).clickable([&] { clicked.push_back("c"); }), [] { Text("c"); });
@@ -12199,7 +12249,7 @@ TEST(bottom_sheet_scaffold_keeps_clear_of_the_system_bars_once) {
     PaddingValues seen;
     ComposeTestRule rule([&] {
         Modifier m = inside.get() ? Modifier().fillMaxSize().windowInsetsPadding(WindowInsets::systemBars()) : Modifier().fillMaxSize();
-        Box(m, [&] {
+        Box(m, [=, &seen, &sheet] {
             BottomSheetScaffold([] { Box(Modifier().fillMaxWidth().height(2000)); }, Modifier().fillMaxSize(),
                                 {.scaffoldState = BottomSheetScaffoldState{sheet}, .sheetPeekHeight = 100},
                                 [&](PaddingValues p) { seen = p; });
@@ -12223,8 +12273,8 @@ TEST(drag_and_drop_carries_data_from_a_source_to_a_target) {
     auto basket = mutableStateOf(std::vector<std::string>{});
     std::vector<HapticFeedbackType> felt;
     ComposeTestRule rule([&] {
-        Column([&] {
-            Row([&] {
+        Column([=, &log] {
+            Row([=, &log] {
                 for (const std::string& name : fruits.get())
                     Box(Modifier()
                             .size(80, 40)
@@ -12232,7 +12282,7 @@ TEST(drag_and_drop_carries_data_from_a_source_to_a_target) {
                                 return DragAndDropTransferData{.text = name, .localState = name};
                             })
                             .clickable([&log, name] { log.push_back("click " + name); }),
-                        [&] { Text(name); });
+                        [=] { Text(name); });
             });
             Box(Modifier().fillMaxWidth().height(100));
             Box(Modifier().fillMaxWidth().height(150).dragAndDropTarget(
@@ -12316,7 +12366,7 @@ TEST(drag_and_drop_carries_data_from_a_source_to_a_target) {
 TEST(drops_from_outside_the_app_reach_the_targets) {
     std::vector<std::string> log;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &log] {
             Box(Modifier().fillMaxWidth().height(200).dragAndDropTarget(
                 [&](const DragAndDropEvent& e) {
                     log.push_back(std::format("should {}", e.hasMimeType("text/uri-list")));
@@ -12381,7 +12431,7 @@ TEST(navigation_suite_scaffold_moves_its_items_and_keeps_the_screen) {
                 Scaffold(Modifier().fillMaxSize(), {}, [&](PaddingValues p) {
                     seen = p;
                     auto count = remember([] { return mutableStateOf(0); });
-                    Box(Modifier().fillMaxSize().padding(p).consumeWindowInsets(p).imePadding(), [&] {
+                    Box(Modifier().fillMaxSize().padding(p).consumeWindowInsets(p).imePadding(), [=] {
                         Box(Modifier().fillMaxSize().testTag("ekran"));
                         TextButton([count] { count.set(count.peek() + 1); }, Modifier().testTag("sayac"), {},
                                    [&] { Text(std::format("sayaç {}", count.get())); });
@@ -12821,7 +12871,7 @@ TEST(nodes_holding_popups_are_counted) {
     auto shown = mutableStateOf(true);
     {
         ComposeTestRule rule([&] {
-            Box([&] {
+            Box([=] {
                 if (shown.get()) Popup({}, [] { Box(Modifier().size(10).testTag("p")); });
             });
         }, {200, 200});
@@ -12839,7 +12889,7 @@ TEST(nodes_holding_popups_are_counted) {
 TEST(tri_state_checkbox_shows_a_partly_checked_group) {
     auto a = mutableStateOf(false), b = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             ToggleableState all = a.get() && b.get() ? ToggleableState::On : a.get() || b.get() ? ToggleableState::Indeterminate : ToggleableState::Off;
             TriStateCheckbox(all, [&a, &b, all] {
                 bool on = all != ToggleableState::On;  // partly or not at all: all of them
@@ -12862,11 +12912,11 @@ TEST(tri_state_checkbox_shows_a_partly_checked_group) {
 TEST(auto_size_text_takes_the_largest_size_that_fits) {
     // FakeTextMeasurer: half the size per character, lines 1.25 times the size.
     ComposeTestRule rule([&] {
-        Column([&] {
-            Text("Merhaba", Modifier().size(200, 40), {.autoSize = TextAutoSize::StepBased(8, 64, 1)});       // the height decides: 32
-            Text("Merhaba", Modifier().width(100), {.maxLines = 1, .autoSize = TextAutoSize::StepBased(8, 64, 1)});  // the width: 28
-            Text("Merhaba", Modifier().width(10), {.maxLines = 1, .autoSize = TextAutoSize::StepBased(8, 64, 1)});   // nothing fits: the smallest
-            Text("Merhaba", Modifier().size(400, 400), {.autoSize = TextAutoSize::StepBased(8, 64, 1)});      // room for the largest
+        Column([=] {
+            Text("Merhaba", Modifier().size(200, 40), autoSize = TextAutoSize::StepBased(8, 64, 1));       // the height decides: 32
+            Text("Merhaba", Modifier().width(100), maxLines = 1, autoSize = TextAutoSize::StepBased(8, 64, 1));  // the width: 28
+            Text("Merhaba", Modifier().width(10), maxLines = 1, autoSize = TextAutoSize::StepBased(8, 64, 1));   // nothing fits: the smallest
+            Text("Merhaba", Modifier().size(400, 400), autoSize = TextAutoSize::StepBased(8, 64, 1));      // room for the largest
         });
     }, {400, 800});
     testing::RecordingCanvas canvas;
@@ -12881,7 +12931,7 @@ TEST(subcompose_layout_composes_slots_from_what_it_measured) {
     auto title = mutableStateOf(std::string("Başlık metni"));
     auto log = std::make_shared<std::vector<std::string>>();
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             // A slot that depends on another's size: a line as wide as the title (8 dp a character).
             SubcomposeLayout(Modifier(), [title](SubcomposeMeasureScope& s, const Constraints& c) {
                 float w = 0, h = 0;
@@ -12940,7 +12990,7 @@ TEST(subcompose_layout_is_not_composed_again_for_a_probe_measure) {
     // would take turns composing every frame).
     auto runs = std::make_shared<int>(0);
     ComposeTestRule rule([&] {
-        Column(Modifier().width(IntrinsicSize::Max), [&] {
+        Column(Modifier().width(IntrinsicSize::Max), [=] {
             SubcomposeLayout(Modifier(), [runs](SubcomposeMeasureScope& s, const Constraints& c) {
                 bool wide = c.maxWidth >= 500;  // a probe measure gets infinity: wide
                 Size size{c.hasBoundedWidth() ? c.maxWidth : 100, 0};
@@ -13058,7 +13108,7 @@ TEST(draggable2d_drags_any_way_from_the_slop_or_at_once) {
         auto reversed = rememberDraggable2DState(add(back));
         auto immediate = rememberDraggable2DState(add(now));
         dragged = source.collectIsDraggedAsState();
-        Column([&] {
+        Column([=, &source, &started, &stopped] {
             Box(Modifier().size(200).draggable2D(state, {.interactionSource = source,
                                                          .onDragStarted = [&](Offset p) { started = p; },
                                                          .onDragStopped = [&](Velocity v) { stopped = v; }}));
@@ -13104,7 +13154,7 @@ TEST(draggable2d_keeps_its_drag_from_the_scroll_around_it) {
     ComposeTestRule rule([&] {
         auto state = rememberDraggable2DState([at](Offset d) { at.set({at.peek().x + d.x, at.peek().y + d.y}); });
         auto immediate = rememberDraggable2DState([now](Offset d) { now.set({now.peek().x + d.x, now.peek().y + d.y}); });
-        Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll), [=] {
             Box(Modifier().size(200).draggable2D(state));
             Box(Modifier().size(200).draggable2D(immediate, {.startDragImmediately = true}));
             Box(Modifier().fillMaxWidth().height(2000));
@@ -13134,7 +13184,7 @@ TEST(scrollable2d_drags_flings_and_wheels_both_ways) {
             return Offset{to.x - p.x, to.y - p.y};
         });
         scrolled = state;
-        Column(Modifier().fillMaxSize().verticalScroll(page), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(page), [=] {
             Box(Modifier().size(300).scrollable2D(state));
             Box(Modifier().fillMaxWidth().height(2000));
         });
@@ -13188,7 +13238,7 @@ TEST(semantics_tree_merges_buttons_and_performs_actions) {
     auto dialog = mutableStateOf(false);
     ScrollState scroll;
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll), [=] {
             Text("Başlık", Modifier().semantics({.heading = true}));
             Button([clicks] { ++*clicks; }, [] {
                 Icon(Icons::Filled::Add, "Artı");
@@ -13324,9 +13374,9 @@ struct RecordingConnection : NestedScrollConnection {
 TEST(nested_scrollables_hand_over_at_the_edge) {
     ScrollState outer, inner;
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(outer), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(outer), [=, &inner] {
             Box(Modifier().height(100));
-            Column(Modifier().fillMaxWidth().height(300).verticalScroll(inner), [&] { Box(Modifier().height(600)); });
+            Column(Modifier().fillMaxWidth().height(300).verticalScroll(inner), [=] { Box(Modifier().height(600)); });
             Box(Modifier().height(1000));
         });
     }, {400, 800});
@@ -13351,9 +13401,9 @@ TEST(nested_scroll_connections_pre_outer_first_post_inner_first) {
     auto innerConnection = std::make_shared<RecordingConnection>(log, "B");
     ScrollState list;
     ComposeTestRule rule([&] {
-        Box(Modifier().fillMaxSize().nestedScroll(outer), [&] {
-            Box(Modifier().fillMaxSize().nestedScroll(innerConnection), [&] {
-                Column(Modifier().fillMaxSize().verticalScroll(list), [&] { Box(Modifier().height(5000)); });
+        Box(Modifier().fillMaxSize().nestedScroll(outer), [=, &list] {
+            Box(Modifier().fillMaxSize().nestedScroll(innerConnection), [=, &list] {
+                Column(Modifier().fillMaxSize().verticalScroll(list), [=] { Box(Modifier().height(5000)); });
             });
         });
     }, {400, 800});
@@ -13383,7 +13433,7 @@ TEST(a_scrollable_takes_its_drags_from_an_outer_drag_handler) {
                                                 ++*outerDrags;
                                             }});
         }),
-            [&] { Column(Modifier().fillMaxWidth().height(400).verticalScroll(list), [&] { Box(Modifier().height(2000)); }); });
+            [=, &list] { Column(Modifier().fillMaxWidth().height(400).verticalScroll(list), [=] { Box(Modifier().height(2000)); }); });
     }, {400, 800});
     slowDrag(rule, {200, 300}, {200, 100});
     CHECK(list.value() > 150 && *outerDrags == 0);
@@ -13467,7 +13517,7 @@ TEST(pager_turns_the_page_with_a_flick_past_a_row_on_it) {
             }});
             ComposeTestRule rule([&] {
                 CompositionLocalProvider({LocalLayoutDirection.provides(direction)}, [&] {
-                    Box(Modifier().nestedScroll(outer), [&] {
+                    Box(Modifier().nestedScroll(outer), [=] {
                         HorizontalPager(pages, Modifier().width(200).height(60), [&](int page) {
                             if (page == 0)
                                 LazyRow(Modifier().fillMaxSize(), {.state = row},
@@ -13529,7 +13579,7 @@ TEST(rtl_snapping_row_settles_on_with_what_an_inner_fling_left) {
 TEST(snapping_grid_settles_with_a_row_lined_up) {
     LazyGridState grid, free;
     ComposeTestRule rule([&] {
-        Row([&] {
+        Row([=, &free, &grid] {
             for (LazyGridState* s : {&grid, &free})
                 LazyVerticalGrid(GridCells::Fixed(2), Modifier().size(150, 450),
                                  {.state = *s, .flingBehavior = s == &grid ? std::optional(rememberSnapFlingBehavior(grid, SnapPosition::Start)) : std::nullopt},
@@ -13644,7 +13694,7 @@ TEST(a_collapsing_top_bar_moves_the_content_without_recomposing_it) {
                  [&](PaddingValues padding) {
                      ++composed;
                      seen = padding;
-                     Box(Modifier().fillMaxSize(), [&] {
+                     Box(Modifier().fillMaxSize(), [=, &list] {
                          LazyColumn(Modifier().fillMaxSize(), {.state = list, .contentPadding = padding}, [](LazyListScope& s) {
                              s.items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
                          });
@@ -13683,7 +13733,7 @@ TEST(what_lays_out_by_a_scaffolds_padding_follows_it_without_recomposing) {
                      ++composed;
                      auto pager = rememberPagerState(0, [] { return 3; });
                      auto carousel = rememberCarouselState(0, [] { return 5; });
-                     Column(Modifier().fillMaxSize(), [&] {
+                     Column(Modifier().fillMaxSize(), [=, &composed] {
                          LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxWidth().height(150).testTag("grid"),
                                                    {.contentPadding = padding}, [](LazyGridScope& g) {
                                                        g.items(10, [](int i) { Box(Modifier().fillMaxWidth().height(40).testTag("g" + std::to_string(i))); });
@@ -13727,7 +13777,7 @@ TEST(a_scaffolds_content_is_measured_with_the_padding_its_bars_give_it_then) {
     };
     ComposeTestRule rule([&] {
         Scaffold(Modifier().fillMaxSize(), {.topBar = [&] { Box(sized(bar)); }}, [&](PaddingValues padding) {
-            Box(Modifier().fillMaxSize().padding(padding), [&] {
+            Box(Modifier().fillMaxSize().padding(padding), [=, &told] {
                 Box(sized(tall).onGloballyPositioned([&](const LayoutCoordinates& at) {
                     told.push_back({at.positionInRoot().x, at.positionInRoot().y, at.size().width, at.size().height});
                 }));
@@ -13889,7 +13939,7 @@ TEST(navigation_items_animate_composing_nothing_around_them) {
     ComposeTestRule rule([&] {
         ++composed;
         int selected = tab.get();
-        Column([&] {
+        Column([=, &labels] {
             ShortNavigationBar(Modifier(), [&] {
                 for (int i = 0; i < 3; ++i)
                     ShortNavigationBarItem(selected == i, [&tab, i] { tab.set(i); }, [] { Icon(Icons::Filled::Home, ""); }, [&labels, i] {
@@ -13921,7 +13971,7 @@ TEST(nested_scroll_dispatcher_offers_a_custom_drag_to_the_parents) {
     auto moved = std::make_shared<float>(0);
     ComposeTestRule rule([&] {
         auto& dispatcher = remember([] { return NestedScrollDispatcher(); });
-        Box(Modifier().fillMaxSize().nestedScroll(parent), [&] {
+        Box(Modifier().fillMaxSize().nestedScroll(parent), [=] {
             Box(Modifier()
                     .size(200)
                     .nestedScroll(std::make_shared<NestedScrollConnection>(), dispatcher)
@@ -14077,7 +14127,7 @@ TEST(shapes_make_outlines_as_compose) {
         return Outline::Rounded({{0, 0, s.width, s.height}, CornerRadius(30, 10), CornerRadius(30, 10), CornerRadius(30, 10), CornerRadius(30, 10)});
     });
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &elliptical, &notch] {
             Box(Modifier().size(100, 40).dropShadow(elliptical, Shadow{colors::Black, {}, 4}).background(Color{1, 0, 0, 1}, elliptical)
                     .border(2, Color{0, 0, 1, 1}, elliptical).clip(elliptical));
             Box(Modifier().size(100, 40).background(Color{0, 1, 0, 1}, CircleShape).clip(CircleShape));
@@ -14168,7 +14218,7 @@ TEST(media_queries_follow_the_device_and_window) {
     std::string pointer, keyboard, devices;
     bool wide = false;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &devices, &keyboard, &pointer, &pointerRuns, &wide, &wideRuns] {
             // Reads the pointer and keyboard only: not recomposed as the window is resized.
             composable(CallSite::current(), [&] {
                 ++pointerRuns;
@@ -14271,7 +14321,7 @@ TEST(flex_box_grows_shrinks_and_wraps_as_css) {
 TEST(flex_box_lines_and_shrinking) {
     auto config = mutableStateOf(FlexBoxConfig{.wrap = FlexWrap::Wrap, .rowGap = 5});
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             // Three 50s in 120: two lines.
             FlexBox(Modifier().width(120).testTag("satırlar"), config.get(), [] {
                 for (const char* tag : {"x", "y", "z"}) Box(Modifier().size(50, 20).testTag(tag));
@@ -14316,7 +14366,7 @@ TEST(flex_box_lines_and_shrinking) {
 
 TEST(flex_box_stretches_aligns_lines_and_baselines) {
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             // Stretch: a child without a height takes its line's.
             FlexBox(Modifier().width(200), {.alignItems = FlexAlignItems::Stretch}, [] {
                 Box(Modifier().size(50, 40));
@@ -14329,8 +14379,8 @@ TEST(flex_box_stretches_aligns_lines_and_baselines) {
             });
             // Texts of two sizes on one baseline.
             FlexBox(Modifier().width(300), {.alignItems = FlexAlignItems::Baseline}, [] {
-                Text("küçük", Modifier().testTag("k"), {.fontSize = 10});
-                Text("büyük", Modifier().testTag("b"), {.fontSize = 24});
+                Text("küçük", Modifier().testTag("k"), fontSize = 10);
+                Text("büyük", Modifier().testTag("b"), fontSize = 24);
             });
             // The config by the constraints: wraps only when narrow.
             FlexBox(Modifier().width(150).testTag("dar"),
@@ -14367,10 +14417,10 @@ TEST(layout_measures_again_only_what_changed) {
     auto width = mutableStateOf(50.f);
     auto shift = mutableStateOf(0.f);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &measuredA, &measuredB] {
             Layout(Modifier(), [] {}, [&](const std::vector<Measurable>&, const Constraints&) { return ++measuredA, Size{10, 10}; });
             composable(CallSite::current(), [&] { Box(Modifier().width(width.get()).height(10).testTag("b")); });
-            Box(Modifier().offset([shift] { return Offset{shift.get(), 0}; }), [&] {
+            Box(Modifier().offset([shift] { return Offset{shift.get(), 0}; }), [=, &measuredB] {
                 Layout(Modifier().testTag("içteki"), [] {}, [&](const std::vector<Measurable>&, const Constraints&) { return ++measuredB, Size{10, 10}; });
             });
         });
@@ -14392,7 +14442,7 @@ TEST(host_environment_changes_recompose_and_measure_only_their_readers) {
     int composed = 0, darkRuns = 0, measured = 0;
     ComposeTestRule rule([&] {
         ++composed;
-        Column([&] {
+        Column([=, &darkRuns, &measured] {
             Layout(Modifier(), [] {}, [&](const std::vector<Measurable>&, const Constraints&) { return ++measured, Size{10, 10}; });
             composable(CallSite::current(), [&] {
                 ++darkRuns;
@@ -14501,7 +14551,7 @@ TEST(an_endless_indicator_asks_only_for_drawing) {
 TEST(a_tooltip_following_the_mouse_tells_where_it_is) {
     std::vector<Offset> told;
     ComposeTestRule rule([&] {
-        Box(Modifier().padding(40), [&] {
+        Box(Modifier().padding(40), [=, &told] {
             TooltipArea([&] { Text("ipucu", Modifier().onGloballyPositioned([&](const LayoutCoordinates& c) { told.push_back(c.positionInRoot()); })); },
                         Modifier(), [] { Box(Modifier().size(120, 60)); });
         });
@@ -14525,7 +14575,7 @@ TEST(animated_states_are_read_where_they_are_needed) {
         ++composed;
         auto move = animateFloatAsState(on.get() ? 100.f : 0.f, tween(320, 0, LinearEasing));
         auto tint = animateColorAsState(on.get() ? colors::White : colors::Black, tween(320, 0, LinearEasing));
-        Column([&] {
+        Column([=, &composed, &drawn, &labels, &tints] {
             Box(Modifier().size(40).graphicsLayer([move, &drawn](GraphicsLayerScope& l) { drawn.push_back(l.translationX = move.value()); }));
             Box(Modifier().size(40).drawBehind([tint, &tints](DrawScope&) { tints.push_back(tint.value()); }));
             Box(Modifier().offset([move] { return Offset{move.value(), 0}; }).size(10).testTag("kayan"));
@@ -14667,7 +14717,7 @@ TEST(infinite_transition_states_are_read_where_they_are_needed) {
         auto t = rememberInfiniteTransition();
         auto angle = t.animateFloatState(0, 100000, tween(100000, 0, LinearEasing));  // a unit a millisecond, for long
         auto tint = t.animateColorState(colors::Black, colors::White, infiniteRepeatable(tween(1000, 0, LinearEasing)));  // (a quarter on: another)
-        Column([&] {
+        Column([=, &composed, &drawn, &labels, &tints] {
             Box(Modifier().size(40).graphicsLayer([angle, &drawn](GraphicsLayerScope& l) { drawn.push_back(l.rotationZ = angle.get()); }));
             Box(Modifier().size(40).drawBehind([tint, &tints](DrawScope&) { tints.push_back(tint.get()); }));
             Box(Modifier().offset([angle] { return Offset{angle.get() / 100, 0}; }).size(10).testTag("kayan"));
@@ -14711,7 +14761,7 @@ TEST(what_is_drawn_out_of_view_asks_for_no_frames) {
     std::vector<float> drawn;
     ComposeTestRule rule([&] {
         auto phase = rememberInfiniteTransition().animateFloatState(0, 1000, infiniteRepeatable(tween(1000, 0, LinearEasing)));
-        Column(Modifier().height(200).verticalScroll(scroll), [&] {
+        Column(Modifier().height(200).verticalScroll(scroll), [=, &drawn] {
             Box(Modifier().size(100, 300));
             Canvas(Modifier().size(40), [phase, &drawn](DrawScope& d) {  // at 300: out of view
                 drawn.push_back(phase.get());
@@ -14749,7 +14799,7 @@ TEST(what_is_drawn_out_of_view_asks_for_no_frames) {
     // What it draws past its bounds counts: a node of no size out of view, drawing into it.
     ComposeTestRule past([&] {
         auto phase = rememberInfiniteTransition().animateFloatState(0, 10, infiniteRepeatable(tween(1000, 0, LinearEasing)));
-        Column(Modifier().height(200).verticalScroll(rememberScrollState()), [&] {
+        Column(Modifier().height(200).verticalScroll(rememberScrollState()), [=] {
             Box(Modifier().size(100, 300));
             Canvas(Modifier().size(0), [phase](DrawScope& d) { d.drawCircle(Color{1, 0, 0, 1}, 10, Offset{20 + phase.get(), -150}); });
         });
@@ -14795,7 +14845,7 @@ TEST(a_size_probe_measures_afresh) {
 TEST(grid_sizes_tracks_as_compose) {
     using T = GridTrackSize;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             // Fixed, then two flexible columns sharing what's left after their min content.
             Grid(Modifier().width(300).testTag("g"), {.columns = {T::Fixed(50), T::Flex(1), T::Flex(2)}, .rows = {T::Fixed(40), T::Auto()}, .rowGap = 5, .columnGap = 10}, [] {
                 Box(Modifier().size(20, 20).testTag("a"));
@@ -14853,7 +14903,7 @@ TEST(grid_places_items_as_compose) {
     using T = GridTrackSize;
     std::vector<GridTrackSize> three(3, T::Fixed(10));
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &three] {
             Grid(Modifier().testTag("g"), {.columns = three}, [] {
                 Box(Modifier().size(10).gridItem(2, 3).testTag("a"));  // where asked
                 Box(Modifier().size(10).gridItem(0, 0, 1, 2).testTag("b"));  // the first free cells
@@ -15055,7 +15105,7 @@ TEST(cards_as_compose_1_4) {
     ColorScheme cs;
     ComposeTestRule rule([&] {
         cs = colorScheme();
-        Column([&] {
+        Column([=] {
             Card(Modifier().size(100, 40).testTag("dolu"), [] { Box(Modifier().size(200, 40)); });
             ElevatedCard(Modifier().size(100, 40).testTag("yüksek"), [] {});
             OutlinedCard(Modifier().size(100, 40).testTag("çizgili"), [] {});
@@ -15098,7 +15148,7 @@ TEST(buttons_as_compose_1_4) {
     auto rtl = mutableStateOf(false);
     ComposeTestRule rule([&] {
         cs = colorScheme();
-        Column([&] {
+        Column([=] {
             // 8 dp above and below (46 for a 30 dp label), at least 58 wide (a TextButton too).
             Button([] {}, Modifier().testTag("dolu"), [] { Box(Modifier().size(4, 30)); });
             TextButton([] {}, Modifier().testTag("metin"), {}, [] { Box(Modifier().size(4, 20)); });
@@ -15198,7 +15248,7 @@ TEST(chips_as_compose_1_4) {
                 Box(Modifier().size(width, 18).testTag(name));
             });
         };
-        Column([&] {
+        Column([=] {
             AssistChip([] {}, part("yardım", 40), {.trailingIcon = part("yardım-son", 18)}, Modifier().testTag("yardım-çip"));
             SuggestionChip([] {}, part("öneri", 40), {.leadingIcon = part("öneri-baş", 18)});
             InputChip(false, [] {}, part("giriş", 40), {}, Modifier().testTag("giriş-çip"));
@@ -15274,11 +15324,11 @@ TEST(chips_as_compose_1_4) {
 
 TEST(fabs_as_compose_1_4) {
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             FloatingActionButton([] {}, [] { Icon(Icons::Filled::Add, "Ekle"); }, Modifier().testTag("fab"));
             ExtendedFloatingActionButton([] {}, Icons::Filled::Add, "Yeni", Modifier().testTag("geniş"));
             ExtendedFloatingActionButton([] {}, Icons::Filled::Add, "", Modifier().testTag("kısa"));
-            Text("Yeni", Modifier().testTag("ölçü"), {.font = typography().labelLarge});
+            Text("Yeni", Modifier().testTag("ölçü"), style = typography().labelLarge);
         });
     });
     // 16 dp before the icon, 12 between, 20 after the label; at least 80 wide.
@@ -15443,7 +15493,7 @@ TEST(navigation_drawer_items_as_compose_1_4) {
     ComposeTestRule rule([&] {
         cs = colorScheme();
         ambient = LocalTextStyle.current();
-        Column(Modifier().width(300), [&] {
+        Column(Modifier().width(300), [=] {
             NavigationDrawerItem([] { Text("Gelen"); }, picked.get() == 0, [&] { picked.set(0); }, {}, {}, Modifier().testTag("gelen"));
             NavigationDrawerItem([] { Box(Modifier().size(10, 70)); }, picked.get() == 1, [&] { picked.set(1); }, {}, {}, Modifier().testTag("uzun"));
         });
@@ -15522,7 +15572,7 @@ TEST(bottom_app_bar_as_compose_1_4) {
 TEST(disabled_switch_and_checkbox_ignore_taps) {
     auto on = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Switch(on.get(), [on](bool v) { on.set(v); }, Modifier().testTag("switch"), false);
             Checkbox(on.get(), [on](bool v) { on.set(v); }, Modifier().testTag("box"), false);
         });
@@ -15563,7 +15613,7 @@ TEST(consumed_window_insets_are_told) {
                 .onConsumedWindowInsetsChanged([&](const WindowInsets& w) { first.push_back(w); })
                 .then(padded.get() ? Modifier().statusBarsPadding() : Modifier())
                 .onConsumedWindowInsetsChanged([&](const WindowInsets& w) { outer.push_back(w); }),
-            [&] {
+            [=, &inner] {
                 composable(CallSite::current(), [&inner, relaid] {  // skipped when its parent recomposes: the same element
                     Box(Modifier()
                             .layout([relaid](const MeasureNext& measure, const Constraints& c, Offset&) {
@@ -15597,7 +15647,7 @@ TEST(consumed_window_insets_are_told) {
 TEST(preferred_frame_rates_gather_the_fastest) {
     auto fast = mutableStateOf(true), high = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Box(Modifier().size(10).preferredFrameRate(90));
             Box(Modifier().size(10).preferredFrameRate(FrameRateCategory::Normal));
             if (fast.get()) Box(Modifier().size(10).preferredFrameRate(120));
@@ -15616,11 +15666,11 @@ TEST(preferred_frame_rates_gather_the_fastest) {
 TEST(selectable_groups_are_told_to_accessibility) {
     auto chosen = mutableStateOf(1);
     ComposeTestRule rule([&] {
-        Row(Modifier().selectableGroup().testTag("grup"), [&] {
+        Row(Modifier().selectableGroup().testTag("grup"), [=] {
             for (int i = 0; i < 3; ++i)
                 Box(Modifier().size(40).selectable(chosen.get() == i, [chosen, i] { chosen.set(i); }, SemanticsRole::RadioButton));
         });
-        Row(Modifier().testTag("düz"), [&] { Text("grup değil"); });
+        Row(Modifier().testTag("düz"), [=] { Text("grup değil"); });
     });
     std::vector<SemanticsNode> tree = rule.host().semanticsTree();
     auto group = std::find_if(tree.begin(), tree.end(), [](const SemanticsNode& n) { return n.selectableGroup; });
@@ -15680,7 +15730,7 @@ TEST(window_insets_kinds_and_arithmetic) {
     CHECK((more[5] == WindowInsets{16, 0, 16, 40} && more[6] == WindowInsets{0, 32, 0, 20} && more[7] == WindowInsets{16, 32, 16, 40}));
     // Their paddings.
     ComposeTestRule padded([&] {
-        Column([&] {
+        Column([=] {
             for (auto [tag, m] : {std::pair{"başlık", Modifier().captionBarPadding()}, std::pair{"şelale", Modifier().waterfallPadding()},
                                   std::pair{"hareket", Modifier().systemGesturesPadding()},
                                   std::pair{"zorunlu", Modifier().mandatorySystemGesturesPadding()},
@@ -15707,8 +15757,8 @@ TEST(visibility_is_told_as_nodes_come_and_go) {
     LayoutBoundsHolder box;
     auto note = [&](std::string name) { return [&log, name](bool v) { log.push_back(name + (v ? " +" : " -")); }; };
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
-            Row([&] {  // (taking the second one away moves nothing)
+        Column(Modifier().fillMaxSize().verticalScroll(scroll), [=, &box, &inner, &log] {
+            Row([=] {  // (taking the second one away moves nothing)
                 Box(Modifier().size(100).onVisibilityChanged(note("üst")));
                 if (shown.get()) Box(Modifier().size(50).onVisibilityChanged(note("gidecek")));
                 Layout(Modifier().size(50), [&] { Box(Modifier().size(50).onVisibilityChanged(note("yerleşik"))); },
@@ -15722,7 +15772,7 @@ TEST(visibility_is_told_as_nodes_come_and_go) {
             Box(Modifier().size(100).onVisibilityChanged(note("alt"), {.minFractionVisible = 0.5f}));  // at 1000
             Box(Modifier().size(100).onFirstVisible([&] { log.push_back("ilk"); }, {.minDurationMs = 500}));  // at 1100
             Box(Modifier().size(100).onVisibilityChanged(note("süreli"), {.minDurationMs = 300}));  // at 1200
-            Column(Modifier().height(200).layoutBounds(box).verticalScroll(inner), [&] {  // at 1300, a box of its own
+            Column(Modifier().height(200).layoutBounds(box).verticalScroll(inner), [=, &box] {  // at 1300, a box of its own
                 Box(Modifier().height(250));
                 Box(Modifier().size(50).onVisibilityChanged(note("kutuda"), {.viewport = box}));
                 Box(Modifier().height(300));
@@ -15780,10 +15830,10 @@ TEST(window_inset_sizes_make_spacers_under_the_bars) {
     auto rtl = mutableStateOf(false);
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(rtl.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
-            Column([&] {
+            Column([=] {
                 Spacer(Modifier().windowInsetsTopHeight(WindowInsets::statusBars()).testTag("üst"));
                 Spacer(Modifier().windowInsetsBottomHeight(WindowInsets::navigationBars()).testTag("alt"));
-                Row([&] {
+                Row([=] {
                     Spacer(Modifier().height(10).windowInsetsStartWidth(WindowInsets::displayCutout()).testTag("baş"));
                     Spacer(Modifier().height(10).windowInsetsEndWidth(WindowInsets::displayCutout()).testTag("son"));
                 });
@@ -15855,7 +15905,7 @@ TEST(tab_reaches_buttons_and_enter_or_space_clicks_them) {
     auto log = std::make_shared<std::vector<std::string>>();
     auto text = mutableStateOf(std::string());
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Button([log] { log->push_back("bir"); }, Modifier().testTag("one"), [] { Text("Bir"); });
             TextField(text.get(), [text](std::string v) { text.set(std::move(v)); }, Modifier().testTag("field"));
             Button([log] { log->push_back("iki"); }, Modifier().testTag("two"), [] { Text("İki"); });
@@ -15895,8 +15945,8 @@ TEST(key_events_preview_down_then_field_then_bubble_up) {
         };
     };
     ComposeTestRule rule([&] {
-        Box(Modifier().onPreviewKeyEvent(handler("outer.preview", false)).onKeyEvent(handler("outer", false)), [&] {
-            Box(Modifier().onPreviewKeyEvent(handler("inner.preview", true)).onKeyEvent(handler("inner", false)), [&] {
+        Box(Modifier().onPreviewKeyEvent(handler("outer.preview", false)).onKeyEvent(handler("outer", false)), [=, &r] {
+            Box(Modifier().onPreviewKeyEvent(handler("inner.preview", true)).onKeyEvent(handler("inner", false)), [=, &r] {
                 TextField(text.get(), [text](std::string v) { text.set(std::move(v)); }, Modifier().focusRequester(r));
             });
         });
@@ -15921,7 +15971,7 @@ TEST(arrow_keys_move_focus_to_the_nearest_one_that_way) {
     ComposeTestRule rule([] {
         Column([] {
             for (int row = 0; row < 3; ++row)
-                Row([&] {
+                Row([=] {
                     for (int col = 0; col < 3; ++col)
                         Box(Modifier().size(50).padding(5).clickable([] {}).testTag(std::format("{}{}", row, col)));
                 });
@@ -15944,12 +15994,12 @@ TEST(arrow_keys_move_focus_to_the_nearest_one_that_way) {
 TEST(focus_groups_keep_arrow_keys_inside_first) {
     // a1 and a2 in a 240 x 340 box (a group or not); b, d and c around it.
     auto button = [](float x, float y, const char* tag) {  // 40 dp, its top left at (x, y)
-        Box(Modifier().padding(x, y, 0, 0), [&] { Box(Modifier().size(40).clickable([] {}).testTag(tag)); });
+        Box(Modifier().padding(x, y, 0, 0), [=] { Box(Modifier().size(40).clickable([] {}).testTag(tag)); });
     };
     auto screen = [button](bool grouped) {
         return [grouped, button] {
-            Box(Modifier().size(400, 600), [&] {
-                Box(grouped ? Modifier().size(240, 340).focusGroup() : Modifier().size(240, 340), [&] {
+            Box(Modifier().size(400, 600), [=] {
+                Box(grouped ? Modifier().size(240, 340).focusGroup() : Modifier().size(240, 340), [=] {
                     button(0, 0, "a1");
                     button(200, 150, "a2");
                 });
@@ -16023,12 +16073,12 @@ TEST(arrow_keys_find_focusables_where_an_offset_put_them) {
 TEST(nested_focus_groups_count_as_their_outermost_from_outside) {
     // G holds e and the group H (holding h1) at its bottom right; c is under it all.
     auto button = [](float x, float y, const char* tag) {
-        Box(Modifier().padding(x, y, 0, 0), [&] { Box(Modifier().size(40).clickable([] {}).testTag(tag)); });
+        Box(Modifier().padding(x, y, 0, 0), [=] { Box(Modifier().size(40).clickable([] {}).testTag(tag)); });
     };
     ComposeTestRule rule([&] {
-        Box(Modifier().size(400, 600), [&] {
-            Box(Modifier().size(400, 340).focusGroup(), [&] {
-                Box(Modifier().padding(300, 240, 0, 0), [&] { Box(Modifier().size(100).focusGroup(), [&] { button(60, 0, "h1"); }); });
+        Box(Modifier().size(400, 600), [=] {
+            Box(Modifier().size(400, 340).focusGroup(), [=] {
+                Box(Modifier().padding(300, 240, 0, 0), [=] { Box(Modifier().size(100).focusGroup(), [=] { button(60, 0, "h1"); }); });
                 button(310, 300, "e");
             });
             button(330, 500, "c");
@@ -16045,8 +16095,8 @@ TEST(nested_focus_groups_count_as_their_outermost_from_outside) {
 TEST(focus_properties_skip_and_redirect_the_focus) {
     FocusRequester first, last, field;
     ComposeTestRule rule([&] {
-        Column([&] {
-            Row([&] {
+        Column([=, &field, &first, &last] {
+            Row([=, &first, &last] {
                 Box(Modifier().size(50).clickable([] {}).focusRequester(first)
                         .focusProperties({.next = last, .right = FocusRequester::cancel()}).testTag("bir"));
                 Box(Modifier().size(50).clickable([] {}).focusProperties({.canFocus = false}).testTag("iki"));
@@ -16089,20 +16139,20 @@ TEST(rtl_layout_mirrors_rows_alignment_padding_and_offset) {
     auto rtl = mutableStateOf(true);
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(rtl.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
-            Column(Modifier().width(200), [&] {
-                Row([&] {
+            Column(Modifier().width(200), [=] {
+                Row([=] {
                     Box(Modifier().size(10).testTag("a"));
                     Box(Modifier().size(20).testTag("b"));
                     Box(Modifier().size(30).testTag("c"));
                 });
-                Box(Modifier().fillMaxWidth().height(20), Alignment::TopStart, [&] { Box(Modifier().size(20).testTag("başta")); });
-                Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::End}, [&] { Box(Modifier().size(20).testTag("sonda")); });
-                Box(Modifier().fillMaxWidth().padding(16, 0, 4, 0), [&] { Box(Modifier().fillMaxWidth().height(10).testTag("dolgu")); });
-                Box(Modifier().fillMaxWidth().absolutePadding(16, 0, 4, 0), [&] { Box(Modifier().fillMaxWidth().height(10).testTag("mutlak dolgu")); });
-                Box(Modifier().size(20).offset(10, 0), [&] { Box(Modifier().fillMaxSize().testTag("kayık")); });
-                Box(Modifier().size(20).absoluteOffset(10, 0), [&] { Box(Modifier().fillMaxSize().testTag("mutlak kayık")); });
+                Box(Modifier().fillMaxWidth().height(20), Alignment::TopStart, [=] { Box(Modifier().size(20).testTag("başta")); });
+                Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::End, [=] { Box(Modifier().size(20).testTag("sonda")); });
+                Box(Modifier().fillMaxWidth().padding(16, 0, 4, 0), [=] { Box(Modifier().fillMaxWidth().height(10).testTag("dolgu")); });
+                Box(Modifier().fillMaxWidth().absolutePadding(16, 0, 4, 0), [=] { Box(Modifier().fillMaxWidth().height(10).testTag("mutlak dolgu")); });
+                Box(Modifier().size(20).offset(10, 0), [=] { Box(Modifier().fillMaxSize().testTag("kayık")); });
+                Box(Modifier().size(20).absoluteOffset(10, 0), [=] { Box(Modifier().fillMaxSize().testTag("mutlak kayık")); });
                 CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Ltr)}, [&] {
-                    Row(Modifier().fillMaxWidth(), [&] { Box(Modifier().size(10).testTag("içte soldan")); });
+                    Row(Modifier().fillMaxWidth(), [=] { Box(Modifier().size(10).testTag("içte soldan")); });
                 });
             });
         });
@@ -16127,8 +16177,8 @@ TEST(rtl_horizontal_scrolling_starts_at_the_right_and_follows_the_finger) {
     LazyListState list;
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] {
-            Column([&] {
-                Row(Modifier().width(200).height(40).horizontalScroll(scroll).testTag("kaydır"), [&] {
+            Column([=, &down, &list, &scroll] {
+                Row(Modifier().width(200).height(40).horizontalScroll(scroll).testTag("kaydır"), [=] {
                     for (int i = 0; i < 10; ++i) Box(Modifier().size(50, 40).clickable([] {}).testTag(std::format("k{}", i)));
                 });
                 LazyRow(Modifier().width(200).height(40).testTag("liste"), {.state = list}, [](LazyListScope& l) {
@@ -16189,7 +16239,7 @@ TEST(rtl_keeps_unplaced_children_and_the_insets_where_they_are) {
     auto tick = mutableStateOf(0);
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] {
-            Column(Modifier().fillMaxSize(), [&] {
+            Column(Modifier().fillMaxSize(), [=] {
                 tick.get();  // a recomposition: measured and placed again
                 Layout(Modifier().size(100, 50).testTag("düzen"),
                        [] {
@@ -16230,7 +16280,7 @@ TEST(rtl_drawer_and_swipe_to_dismiss_follow_the_mirror) {
             ModalNavigationDrawer([] { ModalDrawerSheet(Modifier().testTag("sheet"), [] { Text("Gelen kutusu"); }); }, state, [&] {
                 auto s = rememberSwipeToDismissBoxState();
                 swipe = s;
-                Column(Modifier().padding(0, 300, 0, 0), [&] {
+                Column(Modifier().padding(0, 300, 0, 0), [=] {
                     SwipeToDismissBox(s, [] { Box(Modifier().fillMaxSize()); }, [] { Box(Modifier().fillMaxWidth().height(60).testTag("satır")); });
                 });
             });
@@ -16258,9 +16308,9 @@ TEST(rtl_nested_horizontal_scrolls_hand_over_the_right_way) {
     std::optional<AnchoredDraggableState<Spot>> knob;
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] {
-            Column([&] {
+            Column([=, &inner, &knob, &onPage, &outer, &pages] {
                 // A lazy row inside a horizontal scroll: what the row can't take goes on to the scroll.
-                Row(Modifier().width(200).height(40).horizontalScroll(outer), [&] {
+                Row(Modifier().width(200).height(40).horizontalScroll(outer), [=, &inner] {
                     LazyRow(Modifier().width(200).height(40).testTag("iç"), {.state = inner},
                             [](LazyListScope& l) { l.items(3, [](int) { Box(Modifier().size(100, 40)); }); });
                     Box(Modifier().size(300, 40));
@@ -16274,7 +16324,9 @@ TEST(rtl_nested_horizontal_scrolls_hand_over_the_right_way) {
                 // anchoredDraggable keeps to the screen: the finger to the right is towards the end.
                 auto s = rememberAnchoredDraggableState(Spot::Start);
                 knob = s;
-                Box(Modifier().width(256).height(56).onSizeChanged([s](Size) { s.updateAnchors({{Spot::Start, 0}, {Spot::End, 200}}); }), [&] {
+                Box(Modifier().width(256).height(56).onSizeChanged([s](Size) {
+                    s.updateAnchors({{Spot::Start, 0}, {Spot::End, 200}});
+                }), [=] {
                     Box(Modifier().absoluteOffset([s] { return Offset{s.requireOffset(), 0}; }).anchoredDraggable(s, Orientation::Horizontal).size(56),
                         [] { Box(Modifier().fillMaxSize().testTag("tutamak")); });
                 });
@@ -16303,8 +16355,8 @@ TEST(rtl_mirrors_arrows_switches_and_sliders) {
     auto range = mutableStateOf(std::pair(20.f, 80.f));
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(rtl.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
-            Column(Modifier().width(220), [&] {
-                Row([&] {
+            Column(Modifier().width(220), [=] {
+                Row([=] {
                     Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri");
                     Icon(Icons::Filled::Star, "Yıldız");
                 });
@@ -16380,7 +16432,7 @@ TEST(rtl_tab_rows_keep_their_indicators_under_the_selected_tab) {
     auto selected = mutableStateOf(0);
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] {
-            Column([&] {
+            Column([=] {
                 PrimaryTabRow(selected.get(), Modifier().testTag("sekmeler"), [&] {
                     for (int i = 0; i < 3; ++i)
                         Tab(selected.get() == i, [selected, i] { selected.set(i); }, [i] { Text(std::format("S{}", i)); }, {},
@@ -16423,7 +16475,7 @@ TEST(circular_progress_keeps_a_gap_to_its_track_and_turns_in_six_seconds) {
     ComposeTestRule rule([&] {
         primary = colorScheme().primary;
         track = colorScheme().secondaryContainer;
-        Column([&] {
+        Column([=] {
             CircularProgressIndicator(0.25f);
             if (spinning.get()) CircularProgressIndicator();
         });
@@ -16460,7 +16512,7 @@ TEST(switch_colors_and_press_as_compose_1_4) {
     auto on = mutableStateOf(false);
     ComposeTestRule rule([&] {
         cs = colorScheme();
-        Column([&] {
+        Column([=] {
             Switch(on.get(), [on](bool v) { on.set(v); }, Modifier().testTag("anahtar"));
             Switch(true, {}, Modifier(), false);
             Switch(false, {}, Modifier(), false);
@@ -16497,7 +16549,7 @@ TEST(rtl_linear_progress_fills_from_the_right) {
     auto spinning = mutableStateOf(false);
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] {
-            Column(Modifier().width(200), [&] {
+            Column(Modifier().width(200), [=] {
                 LinearProgressIndicator(0.25f, Modifier().fillMaxWidth());
                 if (spinning.get()) LinearProgressIndicator(Modifier().fillMaxWidth());
             });
@@ -16523,13 +16575,13 @@ TEST(rtl_linear_progress_fills_from_the_right) {
 TEST(rtl_from_the_host_and_menus_under_the_anchors_end) {
     auto open = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize(), [&] {
-            Row([&] {
+        Column(Modifier().fillMaxSize(), [=] {
+            Row([=] {
                 Box(Modifier().size(20).testTag("ilk"));
                 Box(Modifier().size(20));
             });
-            Box(Modifier().fillMaxWidth(), Alignment::Center, [&] {
-                Box(Modifier().size(100, 40).testTag("çapa"), [&] {
+            Box(Modifier().fillMaxWidth(), Alignment::Center, [=] {
+                Box(Modifier().size(100, 40).testTag("çapa"), [=] {
                     DropdownMenu(open.get(), [open] { open.set(false); }, [&] {
                         DropdownMenuItem([] { Text("Kısa"); }, [] {});
                     }, Modifier().testTag("menü"));
@@ -16557,7 +16609,7 @@ TEST(lazy_grid_state_goes_by_item_and_tells_rows_and_columns) {
         auto s = rememberLazyGridState(10);  // opens at item 10's row
         state = s;
         scope = rememberCoroutineScope();
-        Column([&] {
+        Column([=, &sideways] {
             LazyVerticalGrid(GridCells::Fixed(3), Modifier().size(300, 400), {.state = s, .verticalSpacing = 10, .horizontalSpacing = 6},
                              [](LazyGridScope& g) {
                                  g.item([] { Box(Modifier().fillMaxWidth().height(50)); }, LazyGridScope::FullLine);  // item 0: a row of its own
@@ -16614,18 +16666,18 @@ TEST(text_sizes_in_em_are_shares_of_a_font_size) {
     CHECK(16_sp == TextUnit(16) && !TextUnit(16).isEm() && TextUnit::em(2).isEm() && 1.5_em == TextUnit::em(1.5f));
     CHECK(near(TextUnit::em(1.5f).resolve(20), 30) && near(TextUnit(12).resolve(20), 12));
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             ProvideTextStyle({.fontSize = 20}, [] {
-                Text("büyük", {.fontSize = 1.5_em});       // of the 20 around it
-                Text("aralıklı", {.letterSpacing = 0.1_em});  // of its own 20
+                Text("büyük", fontSize = 1.5_em);       // of the 20 around it
+                Text("aralıklı", letterSpacing = 0.1_em);  // of its own 20
             });
             Text(buildAnnotatedString([](AnnotatedString::Builder& b) {
                      b.append("ana");
                      b.withStyle({.fontSize = 0.5_em}, [&] { b.append("küçük"); });                     // of the text's 20
                      b.withStyle({.fontSize = 30, .letterSpacing = 0.1_em}, [&] { b.append("geniş"); });  // of its own 30
                  }),
-                 Modifier(), {.fontSize = 20});
-            Text("satır", {.fontSize = 10, .lineHeight = 1.5_em});
+                 Modifier(), fontSize = 20);
+            Text("satır", fontSize = 10, lineHeight = 1.5_em);
         });
     });
     testing::RecordingCanvas canvas;
@@ -16645,8 +16697,8 @@ TEST(font_feature_settings_reach_the_fonts_text_is_drawn_in) {
     CHECK(FontFeatures::id("") == 0 && FontFeatures::id("tnum") == tnum && tnum != smcp && tnum > 0);
     CHECK(FontFeatures::settings(FontFeatures::id("smcp, \"liga\" 0")) == "smcp, \"liga\" 0" && FontFeatures::settings(0).empty());
     ComposeTestRule rule([&] {
-        Column([&] {
-            Text("123", {.fontFeatureSettings = "tnum"});
+        Column([=, &frac, &smcp, &tnum] {
+            Text("123", style = TextStyle{.fontFeatureSettings = "tnum"});
             Text(buildAnnotatedString([](AnnotatedString::Builder& b) {
                 b.append("ab");
                 b.withStyle({.fontFeatureSettings = "smcp"}, [&] { b.append("cd"); });
@@ -16672,9 +16724,9 @@ TEST(line_break_strategies_pick_where_lines_break) {
     std::optional<TextLayoutMeasurer> measurer;
     ComposeTestRule rule([&] {
         measurer = rememberTextMeasurer();
-        Column([&] {
-            Text("aaa bb cc ddddd", Modifier().width(30), {.fontSize = 10, .lineBreak = strategy.get()});
-            Text("aaa bbb ccc ddd e", Modifier().width(60), {.fontSize = 10, .lineBreak = strategy.get()});
+        Column([=] {
+            Text("aaa bb cc ddddd", Modifier().width(30), fontSize = 10, style = TextStyle{.lineBreak = strategy.get()});
+            Text("aaa bbb ccc ddd e", Modifier().width(60), fontSize = 10, style = TextStyle{.lineBreak = strategy.get()});
         });
     });
     // Simple (the default): each line as full as it goes, leaving "cc" alone.
@@ -16709,7 +16761,7 @@ TEST(provide_text_style_and_text_without_a_direction_follow_the_layout) {
     auto rtl = mutableStateOf(true);
     std::optional<TextLayoutMeasurer> measurer;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &measurer] {
             ProvideTextStyle({.fontSize = 20, .color = Color::hex(0x336699)}, [&] {
                 Text("Başlık");
                 ProvideTextStyle({.fontWeight = FontWeight::Bold}, [&] { Text("Kalın"); });  // merged: still 20
@@ -16764,7 +16816,7 @@ TEST(multi_choice_segmented_buttons_toggle_each_and_tell_their_roles) {
     auto period = mutableStateOf(0);
     int carTaps = 0;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &carTaps] {
             MultiChoiceSegmentedButtonRow(Modifier().width(300), [&] {
                 SegmentedButton(walk.get(), [walk](bool on) { walk.set(on); }, [] { Text("Yürüyüş"); });
                 SegmentedButton(bike.get(), [bike](bool on) { bike.set(on); }, [] { Text("Bisiklet"); });
@@ -16815,7 +16867,7 @@ TEST(lazy_staggered_grid_state_goes_by_item_and_tells_lanes) {
         auto s = rememberLazyStaggeredGridState(30);  // opens at item 30
         state = s;
         scope = rememberCoroutineScope();
-        Column([&] {
+        Column([=] {
             Text(std::format("ilk {}", s.firstVisibleItemIndex()), Modifier().testTag("ilk"));
             LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().size(400, 600).testTag("ızgara"),
                                       {.state = s, .contentPadding = {0, 10, 0, 10}, .verticalItemSpacing = 8, .horizontalSpacing = 8},
@@ -16882,7 +16934,7 @@ TEST(list_detail_pane_scaffold_shows_one_pane_or_two) {
         ListDetailPaneScaffold<int>(
             n,
             [&] {
-                Column([&] {
+                Column([=] {
                     for (int i = 0; i < 5; ++i)
                         Text(std::format("Şehir {}", i),
                              Modifier().clickable([n, i] { n.navigateTo(ListDetailPaneScaffoldRole::Detail, i); }).testTag(std::format("liste{}", i)));
@@ -16942,7 +16994,7 @@ TEST(wavy_progress_waves_in_the_middle_and_keeps_a_gap_to_its_track) {
         primary = colorScheme().primary;
         track = colorScheme().secondaryContainer;
         CompositionLocalProvider({LocalLayoutDirection.provides(rtl.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
-            Column(Modifier().width(200), [&] {
+            Column(Modifier().width(200), [=] {
                 LinearWavyProgressIndicator(progress.get(), Modifier().fillMaxWidth());  // 200 x 10
                 CircularWavyProgressIndicator(progress.get());                         // 48 x 48 below
             });
@@ -17005,7 +17057,7 @@ TEST(wavy_progress_waves_in_the_middle_and_keeps_a_gap_to_its_track) {
     CHECK(mirrored.rects.size() == 1 && sameRect(mirrored.rects[0], {0, 3, 4, 4}));
 
     ComposeTestRule custom([&] {
-        Column([&] {
+        Column([=] {
             LinearWavyProgressIndicator(1.f, Modifier().width(200), {.amplitude = [](float) { return 0.5f; }, .wavelength = 20, .waveSpeed = 0});
             CircularWavyProgressIndicator(1.f, Modifier(), {.amplitude = [](float) { return 1.f; }, .waveSpeed = 0});
         });
@@ -17050,7 +17102,7 @@ TEST(indeterminate_wavy_progress_chases_with_its_track_in_the_gaps) {
         primary = colorScheme().primary;
         track = colorScheme().secondaryContainer;
         if (shown.get())
-            Column(Modifier().width(200), [&] {
+            Column(Modifier().width(200), [=] {
                 LinearWavyProgressIndicator(Modifier().fillMaxWidth());
                 CircularWavyProgressIndicator();
             });
@@ -17092,7 +17144,7 @@ TEST(toggle_buttons_morph_from_round_to_square_and_tell_they_are_checked) {
     auto clicks = std::make_shared<int>(0);
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             ToggleButton(bold.get(), [bold](bool on) { bold.set(on); }, Modifier().testTag("kalın"), {}, [] { Text("Kalın"); });
             OutlinedToggleButton(italic.get(), [italic](bool on) { italic.set(on); }, Modifier().testTag("italik"), {}, [] { Text("İtalik"); });
             Button([clicks] { ++*clicks; }, Modifier().testTag("düğme"), {.shapes = ButtonShapes{}}, [] { Text("Bas"); });
@@ -17176,7 +17228,7 @@ TEST(button_group_grows_the_held_button_and_squeezes_its_neighbours) {
     auto rtl = mutableStateOf(false);
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(rtl.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
-            Column([&] {
+            Column([=, &first, &second, &third] {
                 ButtonGroup([&](const ButtonGroupScope& group) {
                     Button([] {}, group.animateWidth(first).testTag("a"), {.interactionSource = first}, [] { Text("Önceki"); });
                     Button([] {}, group.animateWidth(second).testTag("b"), {.interactionSource = second}, [] { Text("Oynat"); });
@@ -17227,7 +17279,7 @@ TEST(button_group_grows_the_held_button_and_squeezes_its_neighbours) {
 
     MutableInteractionSource only, big, small;
     ComposeTestRule extreme([&] {
-        Column([&] {
+        Column([=, &big, &only, &small] {
             ButtonGroup([&](const ButtonGroupScope& group) {
                 Button([] {}, group.animateWidth(only).testTag("tek"), {.interactionSource = only}, [] { Text("Tek"); });
             });
@@ -17313,7 +17365,7 @@ TEST(shapes_with_corners_of_their_own_reach_the_canvas_mirrored_in_rtl) {
     MutableInteractionSource source;  // a graphicsLayer's clip and an indication's ripple
     ComposeTestRule other([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] {
-            Column([&] {
+            Column([=, &source, &tab] {
                 Box(Modifier().size(100, 40).graphicsLayer(GraphicsLayerScope{.alpha = 0.5f, .shape = tab, .clip = true}).background(Color{0, 0, 1, 1}));
                 Box(Modifier().size(100, 40).clickable([] {}, {.interactionSource = source, .indication = false}).background(Color{0, 1, 0, 1}, tab)
                         .indication(source, ripple()));
@@ -17343,7 +17395,7 @@ TEST(connected_button_group_rounds_the_outer_ends_and_the_checked_one) {
     CHECK(same(ButtonGroupDefaults::connectedTrailingButtonShapes().pressedShape.radiiFor(r), {4, 20, 20, 4}));
     auto picked = mutableStateOf(-1);
     ComposeTestRule rule([&] {
-        Row(Modifier().width(320), {.horizontalArrangement = Arrangement::spacedBy(ButtonGroupDefaults::ConnectedSpaceBetween)}, [&] {
+        Row(Modifier().width(320), horizontalArrangement = Arrangement::spacedBy(ButtonGroupDefaults::ConnectedSpaceBetween), [=] {
             const char* labels[] = {"Gün", "Hafta", "Ay"};
             for (int i = 0; i < 3; ++i)
                 ToggleButton(picked.get() == i, [picked, i](bool) { picked.set(i); }, Modifier().weight(1).testTag(labels[i]),
@@ -17390,7 +17442,7 @@ TEST(split_button_rounds_its_menu_button_when_checked_and_turns_the_arrow) {
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(rtl.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
-            Column([&] {
+            Column([=] {
                 SplitButtonLayout([&] { SplitButtonDefaults::LeadingButton([saves] { ++*saves; }, Modifier().testTag("kaydet"), {}, [] { Text("Kaydet"); }); },
                                   [&] {
                                       SplitButtonDefaults::TrailingButton(open.get(), [open](bool on) { open.set(on); }, Modifier().testTag("menü"), {},
@@ -17452,7 +17504,7 @@ TEST(fab_menu_opens_from_the_bottom_and_its_button_turns_round) {
     auto progress = std::make_shared<float>(-1);
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
-        Box(Modifier().size(400, 600), Alignment::BottomEnd, [&] {
+        Box(Modifier().size(400, 600), Alignment::BottomEnd, [=] {
             FloatingActionButtonMenu(open.get(), [&] {
                 ToggleFloatingActionButton(open.get(), [open](bool on) { open.set(on); }, [progress](const ToggleFloatingActionButtonScope& s) {
                     *progress = s.checkedProgress();
@@ -17521,7 +17573,7 @@ TEST(floating_toolbar_shows_its_side_actions_when_expanded_and_leaves_on_scroll)
     ColorScheme cs = lightColorScheme();
     auto action = [](const char* tag) { Box(Modifier().size(48).testTag(tag)); };
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             HorizontalFloatingToolbar(expanded.get(), [&] { action("orta"); }, Modifier().testTag("yatay"),
                                       {.leadingContent = [&] { action("baş"); }, .trailingContent = [&] { action("son"); }});
             VerticalFloatingToolbar(expanded.get(), [&] { action("dikey-orta"); }, Modifier().testTag("dikey"),
@@ -17563,7 +17615,7 @@ TEST(floating_toolbar_shows_its_side_actions_when_expanded_and_leaves_on_scroll)
         kept = FloatingToolbarDefaults::exitAlwaysScrollBehavior(FloatingToolbarExitDirection::Bottom);
         side = FloatingToolbarDefaults::exitAlwaysScrollBehavior(FloatingToolbarExitDirection::End);
         behavior = &kept;
-        Box(Modifier().size(400, 600).nestedScroll(kept.nestedScrollConnection).nestedScroll(side.nestedScrollConnection), [&] {
+        Box(Modifier().size(400, 600).nestedScroll(kept.nestedScrollConnection).nestedScroll(side.nestedScrollConnection), [=] {
             LazyColumn(Modifier().fillMaxSize(), {}, [](LazyListScope& list) { list.items(100, [](int) { Box(Modifier().fillMaxWidth().height(60)); }); });
             HorizontalFloatingToolbar(true, [&] { action("sayfa"); }, Modifier().align(Alignment::BottomCenter).offset(0, -16).testTag("araçlar"),
                                       {.scrollBehavior = kept});
@@ -17602,7 +17654,7 @@ TEST(loading_indicator_morphs_and_turns_and_grows_into_a_burst) {
     auto progress = mutableStateOf(0.f);
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             LoadingIndicator(progress.get(), Modifier().testTag("belirli"));         // 48 dp: a 38 dp shape in the middle
             ContainedLoadingIndicator(progress.get(), Modifier().testTag("kaplı"));  // in a circle
             if (shown.get()) {
@@ -17777,7 +17829,7 @@ TEST(layouts_that_measure_twice_probe_first_so_sizes_settle) {
     auto squeezed = mutableStateOf(0.f), item = mutableStateOf(0.f), label = mutableStateOf(0.f);
     auto reports = std::make_shared<int>(0);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &first, &second] {
             ButtonGroup([&](const ButtonGroupScope& group) {
                 Button([] {}, group.animateWidth(first).testTag("a"), {.interactionSource = first}, [] { Text("Önceki"); });
                 Button([] {}, group.animateWidth(second).onSizeChanged([squeezed, reports](Size s) {
@@ -17867,7 +17919,7 @@ TEST(supporting_pane_scaffold_puts_its_supporting_pane_at_the_end_or_slides_it_i
         SupportingPaneScaffold<int>(
             n,
             [&] {
-                Column([&] {
+                Column([=] {
                     Text("Makale", Modifier().testTag("ana"));
                     Text("İlgili", Modifier().clickable([n] { n.navigateTo(SupportingPaneScaffoldRole::Supporting, 7); }).testTag("aç"));
                 });
@@ -17914,7 +17966,7 @@ TEST(modal_wide_navigation_rail_opens_over_the_content_with_a_scrim) {
     auto hide = mutableStateOf(false);
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
-        Row(Modifier().fillMaxSize(), [&] {
+        Row(Modifier().fillMaxSize(), [=, &rail] {
             ModalWideNavigationRail(Modifier(), [&] {
                 for (int i = 0; i < 2; ++i)
                     WideNavigationRailItem(picked.get() == i, [picked, i] { picked.set(i); }, [] { Box(Modifier().size(24)); },
@@ -17970,7 +18022,7 @@ TEST(expressive_fabs_come_in_sizes_and_extended_ones_narrow_to_their_icon) {
     auto clicks = std::make_shared<int>(0);
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             MediumFloatingActionButton([clicks] { ++*clicks; }, [] { Box(Modifier().size(28)); }, Modifier().testTag("orta"));
             SmallExtendedFloatingActionButton([clicks] { ++*clicks; }, Icons::Filled::Add, "Yeni", expanded.get(), Modifier().testTag("küçük"));
             MediumExtendedFloatingActionButton([] {}, Icons::Filled::Edit, "Yaz", expanded.get(), Modifier().testTag("orta-uzun"));
@@ -18013,7 +18065,7 @@ TEST(expressive_fabs_come_in_sizes_and_extended_ones_narrow_to_their_icon) {
 
 TEST(flexible_top_app_bars_are_bigger_and_place_their_title_across) {
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             MediumFlexibleTopAppBar({.title = [] { Text("Notlar"); }, .windowInsets = WindowInsets{}},
                                     Modifier().testTag("orta-çubuk"));
             MediumFlexibleTopAppBar({.title = [] { Text("Notlar"); }, .subtitle = [] { Text("12 not"); }, .windowInsets = WindowInsets{}},
@@ -18055,7 +18107,7 @@ TEST(app_bar_rows_put_what_does_not_fit_in_a_menu) {
     const char* names[] = {"Bir", "İki", "Üç", "Dört", "Beş"};
     const ImageVector* icons[] = {&Icons::Filled::Add, &Icons::Filled::Edit, &Icons::Filled::Share, &Icons::Filled::Delete, &Icons::Filled::Star};
     ComposeTestRule rule([&] {
-        Box(Modifier().width(width.get()), [&] {
+        Box(Modifier().width(width.get()), [=, &clicked, &icons, &names, &starred] {
             AppBarRow([&](AppBarScope& s) {
                 for (int i = 0; i < 4; ++i)
                     s.clickableItem([&, i] { clicked.push_back(names[i]); }, [i, &names, &icons] { Icon(*icons[i], names[i]); },
@@ -18098,7 +18150,7 @@ TEST(app_bar_rows_put_what_does_not_fit_in_a_menu) {
 TEST(app_bar_columns_put_what_does_not_fit_in_a_menu_below) {
     int clicked = -1;
     ComposeTestRule rule([&] {
-        Box(Modifier().height(150), [&] {
+        Box(Modifier().height(150), [=, &clicked] {
             AppBarColumn([&](AppBarScope& s) {
                 s.clickableItem([&] { clicked = 0; }, [] { Icon(Icons::Filled::Add, "Ekle"); }, "Ekle öğesi");
                 s.clickableItem([&] { clicked = 1; }, [] { Icon(Icons::Filled::Edit, "Düzenle"); }, "Düzenle öğesi");
@@ -18125,7 +18177,7 @@ TEST(app_bar_columns_put_what_does_not_fit_in_a_menu_below) {
 TEST(top_app_bars_show_a_subtitle_under_the_title) {
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             TopAppBar({.title = [] { Text("Gelen kutusu", Modifier().testTag("başlık")); },
                        .subtitle = [] { Text("3 okunmamış", Modifier().testTag("alt")); }});
             CenterAlignedTopAppBar({.title = [] { Text("Takvim", Modifier().testTag("orta-başlık")); },
@@ -18221,7 +18273,7 @@ TEST(vertical_slider_grows_upwards_and_follows_a_vertical_drag) {
     auto value = mutableStateOf(0.25f), reversed = mutableStateOf(0.5f);
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
-        Row(Modifier().height(220), [&] {
+        Row(Modifier().height(220), [=] {
             VerticalSlider(value.get(), [value](float v) { value.set(v); }, Modifier().testTag("dikey"));
             VerticalSlider(reversed.get(), [reversed](float v) { reversed.set(v); }, Modifier().testTag("ters"), {.steps = 3}, true);
         });
@@ -18267,7 +18319,7 @@ TEST(button_group_puts_what_does_not_fit_into_a_menu) {
     auto cut = mutableStateOf(false);
     auto width = mutableStateOf(400.f);
     ComposeTestRule rule([&] {
-        Box(Modifier().width(width.get()), [&] {
+        Box(Modifier().width(width.get()), [=] {
             ButtonGroup({{.label = "Kopyala", .onClick = [log] { log->push_back("kopyala"); }},
                          {.label = "Yapıştır", .onClick = [log] { log->push_back("yapıştır"); }},
                          {.label = "Kes", .checked = cut.get(), .onCheckedChange = [cut](bool on) { cut.set(on); }},
@@ -18351,7 +18403,7 @@ TEST(switch_shows_an_icon_in_its_thumb_and_grows_it_while_held) {
     MutableInteractionSource source;
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &source] {
             Switch(on.get(), [on](bool v) { on.set(v); }, Modifier().testTag("simgeli"),
                    {.interactionSource = source, .thumbContent = [iconColor] {
                         *iconColor = LocalContentColor.current();
@@ -18399,7 +18451,7 @@ TEST(secure_text_field_shows_the_character_just_typed_for_a_moment) {
     ComposeTestRule rule([&] {
         auto s = rememberTextFieldState();
         secret = s;
-        Column([&] {
+        Column([=, &other, &submitted] {
             SecureTextField(s, Modifier().testTag("şifre"), {.label = "Parola", .textObfuscationMode = mode.get(), .onSubmit = [&] { ++submitted; }});
             other = rememberTextFieldState("gizli");
             OutlinedSecureTextField(*other, Modifier().testTag("diğer"),
@@ -18513,7 +18565,7 @@ TEST(a_tap_on_a_text_fields_icon_focuses_it) {
     int eyes = 0;
     auto value = mutableStateOf(std::string());
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &eyes] {
             OutlinedTextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("alan"),
                               {.label = "Şifre", .leadingIcon = [] { Icon(Icons::Filled::Lock, "kilit"); },
                                .trailingIcon = [&] { IconButton([&] { ++eyes; }, [] { Icon(Icons::Filled::Visibility, "göz"); }); }});
@@ -18557,7 +18609,7 @@ TEST(elevated_chips_cast_a_shadow_and_leading_icon_tabs_sit_side_by_side) {
     int assists = 0;
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &assists] {
             ElevatedAssistChip([&] { ++assists; }, [] { Text("Yol tarifi"); }, {.enabled = enabled.get()}, Modifier().testTag("assist"));
             ElevatedFilterChip(on.get(), [&] { on.set(!on.get()); }, [] { Text("Açık"); }, {}, Modifier().testTag("filter"));
             ElevatedSuggestionChip([] {}, [] { Text("Öneri"); }, {}, Modifier().testTag("suggestion"));
@@ -18785,7 +18837,7 @@ TEST(expressive_menu_groups_and_checked_and_selected_items) {
     int settings = 0;
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
-        Box(Modifier().padding(20), [&] {
+        Box(Modifier().padding(20), [=, &settings] {
             Box(Modifier().size(40));
             DropdownMenuPopup(open.get(), [&] { open.set(false); }, [&] {
                 DropdownMenuGroup(MenuDefaults::groupShape(0, 3), [&] {
@@ -18879,7 +18931,7 @@ TEST(search_bar_state_expands_full_screen_or_docked) {
         auto t = rememberTextFieldState();
         text = t;
         auto scope = rememberCoroutineScope();
-        auto field = [&] {
+        auto field = [=, &searched] {
             SearchBarDefaults::InputField(s, t,
                                           {.onSearch = [&, s, scope](std::string q) {
                                                searched.push_back(q);
@@ -18887,11 +18939,11 @@ TEST(search_bar_state_expands_full_screen_or_docked) {
                                            },
                                            .placeholder = "Şehir ara"});
         };
-        auto results = [&] {
+        auto results = [=] {
             for (const char* city : {"Ankara", "Antalya", "Bursa"})
                 if (std::string(city).starts_with(t.text())) Text(city, Modifier().fillMaxWidth().height(48));
         };
-        Column(Modifier().padding(16, 100, 16, 0), [&] {
+        Column(Modifier().padding(16, 100, 16, 0), [=] {
             SearchBar(s, field, Modifier().fillMaxWidth().testTag("bar"));
             Text("Sayfa");
         });
@@ -18967,11 +19019,11 @@ TEST(full_screen_search_grows_out_of_its_bar_and_follows_the_back_gesture) {
         state = s;
         scope = rememberCoroutineScope();
         auto t = rememberTextFieldState();
-        auto field = [&] { SearchBarDefaults::InputField(s, t, {.placeholder = "Ara"}); };
-        auto open = [&] { SearchBarDefaults::InputField(s, t, {.placeholder = "Ara"}, Modifier().testTag("açık")); };
+        auto field = [=] { SearchBarDefaults::InputField(s, t, {.placeholder = "Ara"}); };
+        auto open = [=] { SearchBarDefaults::InputField(s, t, {.placeholder = "Ara"}, Modifier().testTag("açık")); };
         // The bar at 40, 100, 320 x 56; wide: at 16, 10, 368 x 56.
         Column(wide.get() ? Modifier().padding(16, 10, 16, 0) : Modifier().padding(40, 100, 40, 0),
-               [&] { SearchBar(s, field, Modifier().fillMaxWidth()); });
+               [=] { SearchBar(s, field, Modifier().fillMaxWidth()); });
         ExpandedFullScreenSearchBar(s, open, [] { Text("Sonuç", Modifier().testTag("sonuç")); });
     }, {400, 800});
     SearchBarState s = *state;
@@ -19062,8 +19114,8 @@ TEST(top_search_bar_sits_alone_and_slides_away) {
         bottom = b;
         auto exit = BottomAppBarDefaults::exitAlwaysScrollBehavior(b);  // the caller's state
         auto text = rememberTextFieldState();
-        auto field = [&] { SearchBarDefaults::InputField(s, text, {.placeholder = "Ara"}, Modifier().testTag("hap")); };
-        Box(Modifier().width(wide.get() ? 1000.f : 400.f).fillMaxHeight(), [&] {
+        auto field = [=] { SearchBarDefaults::InputField(s, text, {.placeholder = "Ara"}, Modifier().testTag("hap")); };
+        Box(Modifier().width(wide.get() ? 1000.f : 400.f).fillMaxHeight(), [=, &list] {
             Scaffold(Modifier().fillMaxSize().nestedScroll(scroll.nestedScrollConnection).nestedScroll(exit.nestedScrollConnection),
                      {.topBar = [&] { TopSearchBar(s, field, Modifier(), scroll); },
                       .bottomBar = [&] { BottomAppBar({.actions = [] { Text("Alt"); }, .scrollBehavior = exit}); }},
@@ -19114,7 +19166,7 @@ TEST(app_bar_with_search_slides_away_with_the_content) {
         auto s = rememberSearchBarState();
         search = s;
         auto text = rememberTextFieldState();
-        auto field = [&] { SearchBarDefaults::InputField(s, text, {.placeholder = "Postalarda ara"}); };
+        auto field = [=] { SearchBarDefaults::InputField(s, text, {.placeholder = "Postalarda ara"}); };
         Scaffold(Modifier().fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
                  {.topBar = [&] {
                      AppBarWithSearch(s, field, Modifier().testTag("çubuk"),
@@ -19172,7 +19224,7 @@ TEST(outline_shapes_fill_stroke_clip_shadow_and_ripple) {
     MutableInteractionSource source;
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(rtl.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
-            Column(Modifier().padding(20), [&] {
+            Column(Modifier().padding(20), [=, &source, &taps] {
                 Box(Modifier()
                         .size(100, 50)
                         .shadow(4, OutlineShape(triangle), false)
@@ -19343,19 +19395,19 @@ TEST(scrollbars_show_where_the_content_is_and_move_it) {
     auto contentHeight = mutableStateOf(1000.f);
     ScrollbarStyle style;
     ComposeTestRule rule([&] {
-        Column([&] {
-            Box(Modifier().size(300, 200).testTag("kutu"), [&] {
-                Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] { Box(Modifier().fillMaxWidth().height(contentHeight.get())); });
+        Column([=, &list, &scroll, &wide] {
+            Box(Modifier().size(300, 200).testTag("kutu"), [=, &scroll] {
+                Column(Modifier().fillMaxSize().verticalScroll(scroll), [=] { Box(Modifier().fillMaxWidth().height(contentHeight.get())); });
                 VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier().align(Alignment::CenterEnd).fillMaxHeight().testTag("dikey"));
             });
-            Box(Modifier().size(300, 300), [&] {
+            Box(Modifier().size(300, 300), [=, &list] {
                 LazyColumn(Modifier().fillMaxSize(), {.state = list}, [](LazyListScope& l) {
                     l.items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
                 });
                 VerticalScrollbar(rememberScrollbarAdapter(list), Modifier().align(Alignment::CenterEnd).fillMaxHeight().testTag("liste"));
             });
-            Box(Modifier().size(200, 60), [&] {
-                Row(Modifier().fillMaxSize().horizontalScroll(wide), [&] { Box(Modifier().width(800).fillMaxHeight()); });
+            Box(Modifier().size(200, 60), [=, &wide] {
+                Row(Modifier().fillMaxSize().horizontalScroll(wide), [=] { Box(Modifier().width(800).fillMaxHeight()); });
                 HorizontalScrollbar(rememberScrollbarAdapter(wide), Modifier().align(Alignment::BottomCenter).fillMaxWidth().testTag("yatay"));
             });
         });
@@ -19464,7 +19516,7 @@ TEST(right_click_opens_context_menus) {
     std::string clipboard = "pano";
     std::vector<std::string> picked;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &picked] {
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().width(300).testTag("alan"), {.singleLine = true});
             ContextMenuArea(
                 [&] {
@@ -19559,7 +19611,7 @@ TEST(menu_bar_opens_menus_and_runs_shortcuts) {
     auto shown = mutableStateOf(true);
     auto value = mutableStateOf(std::string("abc"));
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &ran] {
             if (shown.get())
                 MenuBar({{"Dosya",
                           {{.text = "Aç", .onClick = [&] { ran.push_back("Aç"); }, .shortcut = KeyShortcut{Key::O, true}},
@@ -19653,7 +19705,7 @@ TEST(focus_moved_by_keys_scrolls_into_view_and_so_does_the_keyboard) {
     ScrollState scroll;
     auto text = mutableStateOf(std::string());
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().imePadding().verticalScroll(scroll), [&] {
+        Column(Modifier().fillMaxSize().imePadding().verticalScroll(scroll), [=] {
             for (int i = 0; i < 20; ++i)
                 Button([] {}, Modifier().height(60).testTag(std::format("b{}", i)), [&] { Text(std::format("Düğme {}", i)); });
             TextField(text.get(), [text](std::string v) { text.set(std::move(v)); }, Modifier().height(60).testTag("field"));
@@ -19747,7 +19799,7 @@ TEST(tapping_a_multi_line_field_puts_the_caret_on_that_line) {
     auto value = mutableStateOf(std::string("abc\ndefgh\nij"));
     std::optional<ImeOptions> shown;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("f"));
             TextField("", nullptr, Modifier().testTag("single"), {.singleLine = true});
         });
@@ -19782,7 +19834,7 @@ TEST(text_field_state_holds_the_text) {
     ComposeTestRule rule([&] {
         auto s = rememberTextFieldState("merhaba");
         state = s;
-        Column([&] {
+        Column([=] {
             OutlinedTextField(s, Modifier().testTag("f"), {.label = "Not"});
             Text("[" + s.text() + "]", Modifier().testTag("echo"));
         });
@@ -19831,7 +19883,7 @@ TEST(text_field_state_keeps_its_selection) {
     ComposeTestRule rule([&] {
         auto s = rememberTextFieldState("merhaba");
         state = s;
-        Column([&] {
+        Column([=] {
             TextField(s, Modifier().testTag("f"), {.singleLine = true});
             Text(std::format("{}-{}", s.selection().start, s.selection().end), Modifier().testTag("seçim"));
         });
@@ -19880,7 +19932,7 @@ TEST(text_field_state_keeps_its_selection) {
 TEST(output_transformation_formats_what_is_shown) {
     std::optional<TextFieldState> phone, amount;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &amount, &phone] {
             auto p = rememberTextFieldState("5551234567");
             phone = p;
             TextField(p, Modifier().testTag("tel"), {.singleLine = true, .outputTransformation = OutputTransformation{[](TextFieldBuffer& b) {
@@ -19975,7 +20027,7 @@ TEST(text_field_state_undoes_a_word_at_a_time) {
     ComposeTestRule rule([&] {
         auto s = rememberTextFieldState();
         state = s;
-        Column([&] {
+        Column([=] {
             TextField(s, Modifier());
             Text(std::format("{} {}", s.undoState().canUndo(), s.undoState().canRedo()), Modifier().testTag("durum"));
             UndoStatus(s);
@@ -20064,7 +20116,7 @@ TEST(input_transformations_change_or_refuse_what_is_typed) {
     TextEditState ime;
     int told = 0;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &digits, &name] {
             TextField(code.get(), [&](std::string v) { code.set(std::move(v)); }, Modifier(),
                       {.singleLine = true, .inputTransformation = InputTransformation::maxLength(4)});
             auto n = rememberTextFieldState();
@@ -20237,7 +20289,7 @@ TEST(transformable_pinches_but_leaves_one_finger_to_the_scroll) {
             scale.set(std::clamp(scale.peek() * zoom, 1.f, 5.f));
             offset.set({offset.peek().x + pan.x, offset.peek().y + pan.y});
         });
-        Column(Modifier().fillMaxSize().verticalScroll(scroll).testTag("sayfa"), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll).testTag("sayfa"), [=] {
             Box(Modifier().fillMaxWidth().height(400).transformable(state, [&](Offset) { return scale.peek() > 1; }));
             Box(Modifier().height(2000));
         });
@@ -20298,7 +20350,7 @@ TEST(two_finger_tap_is_no_click_and_the_next_finger_leads) {
     auto clicks = std::make_shared<int>(0);
     auto pans = std::make_shared<std::vector<Offset>>();
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Box(Modifier().size(200).clickable([clicks] { ++*clicks; }).testTag("button"));
             Box(Modifier().size(300).pointerInput(0, [pans](PointerInputScope& s) -> Task {
                 co_await detectTransformGestures(s, [pans](Offset, Offset pan, float, float) { pans->push_back(pan); });
@@ -20411,7 +20463,7 @@ TEST(pull_to_refresh_modifier_slows_past_the_threshold_and_can_be_turned_off) {
         Box(Modifier().fillMaxSize().pullToRefresh(refreshing.get(), state, [&] {
             ++*refreshes;
             refreshing.set(true);
-        }, enabled.get(), 100), [&] {
+        }, enabled.get(), 100), [=, &list, &state] {
             LazyColumn(Modifier().fillMaxSize(), {.state = list}, [](LazyListScope& l) {
                 l.items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
             });
@@ -20469,7 +20521,7 @@ TEST(pull_to_refresh_modifier_slows_past_the_threshold_and_can_be_turned_off) {
 TEST(pull_to_refresh_ignores_pulls_while_its_state_animates) {
     PullToRefreshState state;
     ComposeTestRule rule([&] {
-        Box(Modifier().fillMaxSize().pullToRefresh(false, state, [] {}), [&] {
+        Box(Modifier().fillMaxSize().pullToRefresh(false, state, [] {}), [=] {
             LazyColumn(Modifier().fillMaxSize(), {}, [](LazyListScope& l) {
                 l.items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
             });
@@ -20497,7 +20549,7 @@ TEST(pull_to_refresh_lets_an_animation_the_app_starts_win_over_the_finger) {
     std::optional<CoroutineScope> scope;
     ComposeTestRule rule([&] {
         scope = rememberCoroutineScope();
-        Box(Modifier().fillMaxSize().pullToRefresh(false, state, [] {}), [&] {
+        Box(Modifier().fillMaxSize().pullToRefresh(false, state, [] {}), [=, &list] {
             LazyColumn(Modifier().fillMaxSize(), {.state = list}, [](LazyListScope& l) {
                 l.items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
             });
@@ -20523,7 +20575,7 @@ TEST(pull_to_refresh_lets_an_animation_the_app_starts_win_over_the_finger) {
 TEST(pull_to_refresh_keeps_a_fling_down_from_the_list) {
     PullToRefreshState state;
     ComposeTestRule rule([&] {
-        Box(Modifier().fillMaxSize().pullToRefresh(false, state, [] {}), [&] {
+        Box(Modifier().fillMaxSize().pullToRefresh(false, state, [] {}), [=] {
             LazyColumn(Modifier().fillMaxSize().testTag("list"), {}, [](LazyListScope& l) {
                 l.items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
             });
@@ -20579,7 +20631,7 @@ TEST(pull_to_refresh_indicator_comes_out_from_under_the_top_edge) {
     auto refreshing = mutableStateOf(false);
     PullToRefreshState state;
     ComposeTestRule rule([&] {
-        Box(Modifier().fillMaxSize().padding(0, 50, 0, 0), [&] {
+        Box(Modifier().fillMaxSize().padding(0, 50, 0, 0), [=, &state] {
             PullToRefreshDefaults::Indicator(state, refreshing.get(), Modifier().align(Alignment::TopCenter));
         });
     }, {400, 800});
@@ -20679,7 +20731,7 @@ TEST(search_bar_expands_searches_and_closes) {
     auto searched = std::make_shared<std::vector<std::string>>();
     const std::vector<std::string> cities = {"Ankara", "Antalya", "Bursa", "İstanbul", "İzmir"};
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &cities] {
             SearchBar(
                 [&] {
                     SearchBarDefaults::InputField({.query = query.get(),
@@ -20770,7 +20822,7 @@ TEST(docked_search_bar_opens_in_place) {
     auto expanded = mutableStateOf(false);
     const std::vector<std::string> cities = {"Ankara", "Antalya", "Bursa", "İstanbul", "İzmir"};
     ComposeTestRule rule([&] {
-        Column(Modifier().padding(20), [&] {
+        Column(Modifier().padding(20), [=, &cities] {
             Text("Üstte", Modifier().height(100));
             DockedSearchBar(
                 [&] {
@@ -20823,8 +20875,8 @@ TEST(tooltip_box_goes_on_the_side_its_position_says) {
     std::optional<TooltipState> state;
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(rtl.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
-            Box(Modifier().fillMaxSize(), [&] {
-                Box(Modifier().offset(anchorX.get(), 300), [&] {  // from the start edge
+            Box(Modifier().fillMaxSize(), [=, &state] {
+                Box(Modifier().offset(anchorX.get(), 300), [=, &state] {  // from the start edge
                     auto s = rememberTooltipState(true, true);
                     state = s;
                     TooltipBox(TooltipDefaults::rememberTooltipPositionProvider(side.get(), spacing.get()),
@@ -20885,7 +20937,7 @@ TEST(tooltip_box_shows_on_long_press_and_hover) {
     int clicks = 0;
     std::optional<TooltipState> state;
     ComposeTestRule rule([&] {
-        Row(Modifier().padding(150, 300, 0, 0), [&] {
+        Row(Modifier().padding(150, 300, 0, 0), [=, &clicks, &state] {
             auto s = rememberTooltipState();
             state = s;
             TooltipBox([] { PlainTooltip([] { Text("Favorilere ekle"); }); }, s, Modifier(), [&] {
@@ -20978,12 +21030,12 @@ TEST(a_scrolled_lists_places_are_worked_out_where_they_are_asked_for) {
     Color yellow = Color::hex(0xffff00);
     ComposeTestRule rule([&] {
         SharedTransitionLayout(Modifier().fillMaxSize(), [&](const SharedTransitionScope& shared) {
-            Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+            Column(Modifier().fillMaxSize().verticalScroll(scroll), [=, &yellow] {
                 Box(Modifier().height(100));
-                Box(Modifier().padding(10), [&] {  // (nested: what is in it is placed from it)
+                Box(Modifier().padding(10), [=, &yellow] {  // (nested: what is in it is placed from it)
                     Box(Modifier().size(20).renderInSharedTransitionScopeOverlay(shared, [] { return true; }).background(yellow).testTag("üstte"));
                 });
-                Box(Modifier().padding(5).size(30).testTag("çapa"), [&] {
+                Box(Modifier().padding(5).size(30).testTag("çapa"), [=] {
                     Popup({.position = [](const Rect& anchor, Size, Size) { return Offset{anchor.right(), anchor.y}; }, .focusable = false},
                           [] { Box(Modifier().size(10).testTag("açılır")); });
                 });
@@ -21025,10 +21077,10 @@ TEST(a_dragged_item_of_a_scrolled_list_is_drawn_from_where_it_is) {
     ScrollState scroll;
     Color green = Color::hex(0x00a000);
     ComposeTestRule rule([&] {
-        Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll), [=, &green] {
             Box(Modifier().height(200));
-            Box(Modifier().padding(2), [&] {  // (nested twice: placed from what is placed from what scrolls)
-                Box(Modifier().padding(2), [&] {
+            Box(Modifier().padding(2), [=, &green] {  // (nested twice: placed from what is placed from what scrolls)
+                Box(Modifier().padding(2), [=, &green] {
                     Box(Modifier().size(80, 40).background(green).dragAndDropSource([](Offset) -> std::optional<DragAndDropTransferData> {
                         return DragAndDropTransferData{.text = "elma"};
                     }));
@@ -21116,7 +21168,7 @@ TEST(a_lifted_finger_hovers_nothing) {
     // isn't hovered, however many frames are drawn after (and none of them hit tests for hover).
     std::optional<TooltipState> state;
     ComposeTestRule rule([&] {
-        Row(Modifier().padding(150, 300, 0, 0), [&] {
+        Row(Modifier().padding(150, 300, 0, 0), [=, &state] {
             auto s = rememberTooltipState();
             state = s;
             TooltipBox([] { PlainTooltip([] { Text("Favorilere ekle"); }); }, s, Modifier(), [&] {
@@ -21143,7 +21195,7 @@ TEST(a_lifted_finger_hovers_nothing) {
 TEST(rich_tooltip_stays_until_a_tap_outside) {
     std::optional<TooltipState> state;
     ComposeTestRule rule([&] {
-        Column(Modifier().padding(0, 20, 0, 0), [&] {  // no room above: it opens below
+        Column(Modifier().padding(0, 20, 0, 0), [=, &state] {  // no room above: it opens below
             auto s = rememberTooltipState(false, true);
             state = s;
             TooltipBox(
@@ -21174,7 +21226,7 @@ TEST(rich_tooltip_stays_until_a_tap_outside) {
 TEST(tooltips_as_compose_1_4) {
     std::optional<TooltipState> state;
     ComposeTestRule rule([&] {
-        Column(Modifier().padding(0, 300, 0, 0), [&] {
+        Column(Modifier().padding(0, 300, 0, 0), [=, &state] {
             auto s = rememberTooltipState(false, true);
             state = s;
             TooltipBox(
@@ -21228,7 +21280,7 @@ TEST(basic_tooltip_box_shows_at_its_position_at_once) {
         first = a, second = b, quiet = c;
         // Right of the anchor, its top lined up with it.
         TooltipPosition right = [](const Rect& anchor, Size, Size) { return Offset{anchor.right() + 10, anchor.y}; };
-        Column(Modifier().padding(0, 100, 0, 0), [&] {
+        Column(Modifier().padding(0, 100, 0, 0), [=] {
             BasicTooltipBox(right, [] { Box(Modifier().size(50, 20).testTag("ipucu1")); }, a, Modifier(), [] { Box(Modifier().size(40).testTag("çapa1")); });
             BasicTooltipBox(right, [] { Box(Modifier().size(50, 20).background(colors::Black).testTag("ipucu2")); }, b, Modifier(), [] { Box(Modifier().size(40).testTag("çapa2")); });
             BasicTooltipBox(right, [] { Box(Modifier().size(50, 20).testTag("ipucu3")); }, c, Modifier(), [] { Box(Modifier().size(40).testTag("çapa3")); },
@@ -21280,7 +21332,7 @@ TEST(tooltip_caret_points_at_the_anchor) {
     ComposeTestRule rule([&] {
         inverse = colorScheme().inverseSurface;
         container = colorScheme().surfaceContainer;
-        Row(Modifier().padding(left.get(), top.get(), 0, 0), [&] {
+        Row(Modifier().padding(left.get(), top.get(), 0, 0), [=, &state] {
             auto s = rememberTooltipState(true, true);
             state = s;
             Size caret = withCaret.get() ? TooltipDefaults::caretSize : Size{};
@@ -21378,7 +21430,7 @@ TEST(exposed_dropdown_menu_picks_an_option) {
     for (int i = 0; i < 30; ++i) cities.push_back("Şehir " + std::to_string(i));
     cities[1] = "Bursa";
     ComposeTestRule rule([&] {
-        Column(Modifier().padding(20), [&] {
+        Column(Modifier().padding(20), [=, &cities] {
             ExposedDropdownMenuBox(open.get(), [&](bool v) { open.set(v); }, Modifier().testTag("box"), [&] {
                 TextField(choice.get(), [&](std::string v) { choice.set(std::move(v)); }, Modifier().fillMaxWidth(),
                           {.label = "Şehir", .trailingIcon = [&] { ExposedDropdownMenuDefaults::TrailingIcon(open.get()); },
@@ -21719,7 +21771,7 @@ TEST(library_strings_follow_the_hosts_language_and_local_overrides) {
     Strings mine = Strings::english();
     mine.open = "Unfold";
     ComposeTestRule rule([&] {
-        Column(Modifier(), [&] {
+        Column(Modifier(), [=, &mine] {
             ExposedDropdownMenuDefaults::TrailingIcon(false);
             CompositionLocalProvider({LocalStrings.provides(mine)}, [] { ExposedDropdownMenuDefaults::TrailingIcon(false); });
         });
@@ -21738,7 +21790,7 @@ TEST(pickers_take_their_texts_from_local_strings_unless_given) {
     auto turkish = mutableStateOf(false);
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalStrings.provides(turkish.get() ? Strings::turkish() : Strings::english())}, [&] {
-            Column(Modifier(), [&] {
+            Column(Modifier(), [=] {
                 DatePicker(rememberDatePickerState(year{2026} / August / 17, year{2026} / August), Modifier(),
                            {.today = year{2026} / August / 4});
                 TimePicker(rememberTimePickerState(21, 5, false), Modifier(),
@@ -22024,7 +22076,7 @@ TEST(interaction_source_hears_presses_releases_cancels_and_keyboard_clicks) {
     auto shown = mutableStateOf(true);
     ComposeTestRule rule([&] {
         LogInteractions(source, log);
-        Column([&] {
+        Column([=, &clicks, &source] {
             if (shown.get())
                 Button([&] { ++clicks; }, Modifier().testTag("düğme"), {.interactionSource = source},
                        [&] { Text(source.collectIsPressedAsState() ? "basılı" : "serbest"); });
@@ -22081,8 +22133,8 @@ TEST(interaction_source_hears_presses_releases_cancels_and_keyboard_clicks) {
 TEST(hover_interactions_follow_the_mouse_only) {
     MutableInteractionSource box, button;
     ComposeTestRule rule([&] {
-        Column([&] {
-            Box(Modifier().size(200).hoverable(box).testTag("kutu"), [&] {
+        Column([=, &box, &button] {
+            Box(Modifier().size(200).hoverable(box).testTag("kutu"), [=, &button] {
                 Button([] {}, Modifier().testTag("düğme"), {.interactionSource = button}, [] { Text("bas"); });
             });
             Box(Modifier().size(100).testTag("dışarı"));
@@ -22121,8 +22173,8 @@ TEST(a_press_in_a_scrollable_shows_after_the_tap_timeout) {
     ComposeTestRule rule([&] {
         LogInteractions(inList, listLog);
         LogInteractions(outside, outsideLog);
-        Column([&] {
-            Column(Modifier().height(300).verticalScroll(rememberScrollState()), [&] {
+        Column([=, &clicks, &inList, &outside] {
+            Column(Modifier().height(300).verticalScroll(rememberScrollState()), [=, &clicks, &inList] {
                 Box(Modifier().size(200, 60).testTag("içeride").clickable([&] { ++clicks; }, {.interactionSource = inList}));
                 Box(Modifier().height(1000));
             });
@@ -22179,7 +22231,7 @@ TEST(scrollable_states_hear_the_users_drags) {
         LogInteractions(list.interactionSource(), listLog);
         LogInteractions(item, itemLog);
         LogInteractions(own, ownLog);
-        Column([&] {
+        Column([=, &item, &list, &own] {
             Text(std::format("liste {} sayfa {}", list.interactionSource().collectIsDraggedAsState(), p.interactionSource().collectIsDraggedAsState()));
             LazyColumn(Modifier().fillMaxWidth().height(300).testTag("liste"), {.state = list}, [&](LazyListScope& l) {
                 l.item([&] { Button([] {}, Modifier().testTag("öğe"), {.interactionSource = item}, [] { Text("öğe"); }); });
@@ -22223,7 +22275,7 @@ TEST(text_field_interaction_source_tells_presses_and_focus) {
                 if (i.type == Interaction::Type::Release) open.set(true);
             });
         });
-        Column([&] {
+        Column([=, &source] {
             OutlinedTextField("05.10.2026", [](std::string) {}, Modifier().testTag("tarih"),
                               {.label = "Tarih", .readOnly = true, .interactionSource = source});
             if (open.get()) Text("seçici açık");
@@ -22248,7 +22300,7 @@ TEST(slider_tells_its_interaction_source_presses_drags_and_hovers) {
     ComposeTestRule rule([&] {
         LogInteractions(source, log);
         LogInteractions(off, offLog);
-        Column([&] {
+        Column([=, &off, &source] {
             if (shown.get())
                 Slider(value.get(), [value](float v) { value.set(v); }, Modifier().width(220).testTag("kaydırıcı"),
                        {.valueFrom = 0, .valueTo = 100, .interactionSource = source});
@@ -22310,9 +22362,9 @@ TEST(slider_takes_only_touches_not_taken_and_keeps_those_it_takes) {
     int outerClicks = 0;
     ComposeTestRule rule([&] {
         LogInteractions(source, log);
-        Column(Modifier().fillMaxSize().verticalScroll(down), [&] {
-            Row(Modifier().fillMaxWidth().horizontalScroll(across), [&] {
-                Box(Modifier().clickable([&] { ++outerClicks; }), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(down), [=, &across, &outerClicks, &source] {
+            Row(Modifier().fillMaxWidth().horizontalScroll(across), [=, &outerClicks, &source] {
+                Box(Modifier().clickable([&] { ++outerClicks; }), [=, &source] {
                     Slider(value.get(), [value](float v) { value.set(v); }, Modifier().width(220),
                            {.valueFrom = 0, .valueTo = 100, .interactionSource = source, .thumb = [&](const SliderState& st) {
                                 int takes = thumbTakes.get();
@@ -22433,7 +22485,7 @@ TEST(draggable_tells_its_drags_and_clickable_can_leave_out_the_indication) {
     ComposeTestRule rule([&] {
         LogInteractions(source, log);
         auto drag = rememberDraggableState([&](float d) { moved += d; });
-        Column([&] {
+        Column([=, &source] {
             Box(Modifier().size(100).draggable(drag, Orientation::Horizontal, true, source).testTag("sürgü"));
             Box(Modifier().size(60).clickable([] {}, {.indication = false}).testTag("sade"));
             Box(Modifier().size(60).clickable([] {}).testTag("normal"));
@@ -22496,10 +22548,10 @@ TEST(anchored_draggable_follows_the_finger_and_settles_on_an_anchor) {
         auto s = rememberAnchoredDraggableState(Spot::Start, {.confirmValueChange = [](const Spot& v) { return v != Spot::End; }});
         state = s;
         scope = rememberCoroutineScope();
-        Column([&] {
+        Column([=] {
             Box(Modifier().width(width.get()).height(56).onSizeChanged([s](Size size) {
                 s.updateAnchors({{Spot::Start, 0}, {Spot::Middle, (size.width - 56) / 2}, {Spot::End, size.width - 56}});
-            }), [&] {
+            }), [=] {
                 Box(Modifier().offset([s] { return Offset{s.requireOffset(), 0}; }).anchoredDraggable(s, Orientation::Horizontal).size(56),
                     [] { Box(Modifier().fillMaxSize().testTag("tutamak")); });
             });
@@ -22562,8 +22614,8 @@ TEST(anchored_draggable_keeps_its_drag_from_the_scrollables_around_it) {
     ComposeTestRule rule([&] {
         auto s = rememberAnchoredDraggableState(0);
         state = s;
-        Row(Modifier().fillMaxWidth().horizontalScroll(scroll), [&] {
-            Box(Modifier().width(200).height(56), [&] {
+        Row(Modifier().fillMaxWidth().horizontalScroll(scroll), [=] {
+            Box(Modifier().width(200).height(56), [=] {
                 Box(Modifier().offset([s] { return Offset{s.requireOffset(), 0}; }).anchoredDraggable(s, Orientation::Horizontal).size(56),
                     [] { Box(Modifier().fillMaxSize().testTag("tutamak")); });
             });
@@ -22583,7 +22635,7 @@ TEST(anchored_draggable_keeps_its_drag_from_the_scrollables_around_it) {
 
 TEST(ripple_spreads_from_the_press_and_fades_once_let_go) {
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Box(Modifier().size(200, 100).clickable([] {}).testTag("kutu"));
             Box(Modifier().size(100).clickable([] {}, {.indication = ripple(false, 30)}).testTag("sınırsız"));
             Box(Modifier().size(100).clickable([] {}, {.indication = Indication::Kind::StateLayer}).testTag("düz"));
@@ -22690,7 +22742,7 @@ TEST(lazy_list_layout_info_tells_what_is_in_view) {
     LazyListState state, headed;
     int compositions = 0;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &compositions, &headed, &state] {
             auto info = state.layoutInfo();
             ++compositions;
             int last = info.visibleItemsInfo.empty() ? -1 : info.visibleItemsInfo.back().index;
@@ -22787,10 +22839,10 @@ TEST(text_tells_how_it_was_laid_out) {
     auto cut = mutableStateOf(false);
     auto other = mutableStateOf(0);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &calls, &last] {
             other.get();
             Text("bir iki üç dört beş altı yedi sekiz dokuz on", Modifier().width(width.get()),
-                 {.fontSize = 10, .maxLines = 2, .overflow = TextOverflow::Ellipsis}, [&, cut](const TextLayoutResult& r) {
+                 fontSize = 10, maxLines = 2, overflow = TextOverflow::Ellipsis, onTextLayout = [&, cut](const TextLayoutResult& r) {
                      ++calls;
                      last = r;
                      cut.set(r.hasVisualOverflow());
@@ -22909,7 +22961,7 @@ TEST(draggable_tells_the_velocity_it_was_let_go_with) {
     float velocity = -1;
     int plain = 0;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &plain, &velocity] {
             Box(Modifier().size(300, 60).draggable(rememberDraggableState([](float) {}, [&](float v) { velocity = v; }), Orientation::Horizontal)
                     .testTag("hızlı"));
             Box(Modifier().size(300, 60).draggable(rememberDraggableState([](float) {}, [&] { ++plain; }), Orientation::Vertical).testTag("düz"));
@@ -23000,7 +23052,7 @@ TEST(animated_content_picks_its_transition_from_the_states_and_animates_its_size
     auto big = mutableStateOf(false);
     auto sized = mutableStateOf(true);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             // Up: faded in from 0.2; down: from 0.6 (to tell them apart).
             AnimatedContent<int>(n.get(), [](const int& v) { Text(std::format("sayı {}", v)); }, Modifier().testTag("sayaç"),
                                  [](const int& from, const int& to) {
@@ -23059,7 +23111,7 @@ TEST(animated_content_aligns_its_contents_and_keeps_same_key_content) {
     auto screen = mutableStateOf(Screen{0, 0});
     auto composedLoaded = std::make_shared<int>(0);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             AnimatedContent<bool>(big.get(), [](const bool& b) { Box(Modifier().size(b ? 200.f : 100.f, b ? 80.f : 40.f).testTag(b ? "büyük" : "küçük")); },
                                   Modifier().testTag("ortalı"),
                                   togetherWith(fadeIn(0, tween(300)), fadeOut(0, tween(300))).withSizeTransform(SizeTransform{.clip = false, .spec = tween(300)}),
@@ -23119,8 +23171,8 @@ TEST(transitions_compose_their_caller_as_they_start_and_end) {
     auto shown = mutableStateOf(true);
     int composed = 0;
     ComposeTestRule rule([&] {
-        ++composed;
-        Column([&] {
+        Column([=, &composed] {  // (the caller: this block, a scope of its own)
+            ++composed;
             AnimatedContent(page.get(), [](const int& p) { Box(Modifier().size(100, 40).testTag("sayfa" + std::to_string(p))); }, Modifier(),
                             togetherWith(fadeIn(0, tween(320)), fadeOut(0, tween(200))));
             AnimatedVisibility(shown.get(), Modifier(), fadeIn(0, tween(300)) + expandVertically(tween(300)),
@@ -23168,9 +23220,9 @@ TEST(animate_enter_exit_gives_children_their_own_transitions) {
     auto open = mutableStateOf(false);
     auto later = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             AnimatedVisibility(open.get(), Modifier(), EnterTransition::None, ExitTransition::None, [&](const AnimatedVisibilityScope& s) {
-                Column([&] {
+                Column([=] {
                     Box(Modifier().size(100, 40).then(s.animateEnterExit(fadeIn(0, tween(300)), fadeOut(0, tween(300)))).testTag("perde"));
                     Box(s.animateEnterExit(slideInVertically(1, tween(600)), slideOutVertically(1, tween(600))).size(100, 40),
                         [] { Box(Modifier().fillMaxSize().testTag("sayfa")); });
@@ -23238,7 +23290,7 @@ TEST(animated_content_waits_for_its_childrens_exits) {
     ComposeTestRule rule([&] {
         AnimatedContent<int>(page.get(), [](const AnimatedContentScope& s, const int& p) {
             Box(s.animateEnterExit(slideInHorizontally(1, tween(500)), slideOutHorizontally(-1, tween(500))).size(100, 40),
-                [&] { Box(Modifier().fillMaxSize().testTag(std::format("sayfa {}", p))); });
+                [=] { Box(Modifier().fillMaxSize().testTag(std::format("sayfa {}", p))); });
         }, Modifier(), togetherWith(fadeIn(0, tween(100)), fadeOut(0, tween(100))));
     });
     float rest = rule.onNodeWithTag("sayfa 0").bounds().x;
@@ -23265,7 +23317,7 @@ TEST(semantics_ranges_live_regions_custom_actions_and_order) {
     auto said = std::make_shared<std::vector<std::string>>();
     auto round = mutableStateOf(0);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Slider(value.get(), [&](float v) { value.set(v); }, Modifier().testTag("ayar"),
                    {.valueFrom = 0, .valueTo = 100, .steps = 3, .onValueChangeFinished = [finished] { ++*finished; }});
             Slider(0.5f, [](float) {}, Modifier().testTag("kapalı"), {.enabled = false});
@@ -23366,7 +23418,7 @@ TEST(on_layout_rect_changed_debounces_and_throttles) {
         auto report = [told](char who) {
             return [told, who](const RelativeLayoutBounds& b) { told->push_back({who, b.positionInWindow().y, b.fractionVisibleInWindow()}); };
         };
-        Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+        Column(Modifier().fillMaxSize().verticalScroll(scroll), [=] {
             Box(Modifier().fillMaxWidth().height(200));
             if (shown.get()) Box(Modifier().fillMaxWidth().height(100).onLayoutRectChanged(report('a')));       // at 200: debounced 64 ms
             Box(Modifier().fillMaxWidth().height(100).onLayoutRectChanged(report('b'), 100, 0));                // at 300: throttled
@@ -23411,7 +23463,7 @@ TEST(system_gesture_exclusion_keeps_the_rects_in_view) {
     auto shown = mutableStateOf(true);
     ScrollState scroll;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &scroll] {
             if (shown.get()) Box(Modifier().size(100, 50).systemGestureExclusion());  // 0..50, all of it
             // Only its first 30 dp across (a slider's edge, say).
             Box(Modifier().size(200, 60).systemGestureExclusion([](const LayoutCoordinates& c) { return Rect{0, 0, 30, c.size().height}; }));
@@ -23617,7 +23669,7 @@ TEST(keep_screen_on_while_laid_out) {
     auto video = mutableStateOf(false);
     auto popup = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Text("Tarif");
             if (video.get()) Box(Modifier().size(100).keepScreenOn());
             if (popup.get()) Popup({}, [] { Box(Modifier().size(10).keepScreenOn()); });
@@ -23644,7 +23696,7 @@ TEST(sensitive_content_while_laid_out) {
     auto taken = mutableStateOf(false);
     auto popup = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Text("Ödeme");
             if (card.get()) TextField("4111", [](std::string) {}, Modifier().sensitiveContent());
             if (taken.get()) Box(Modifier().size(10).sensitiveContent(false));  // taken back: no hint
@@ -23678,7 +23730,7 @@ TEST(sensitive_content_while_laid_out) {
 TEST(keyboard_insets_follow_its_slide) {
     ComposeTestRule rule([&] {
         WindowInsets ime = WindowInsets::ime(), from = WindowInsets::imeAnimationSource(), to = WindowInsets::imeAnimationTarget();
-        Column(Modifier().fillMaxSize().imePadding(), [&] {
+        Column(Modifier().fillMaxSize().imePadding(), [=] {
             Text(std::format("{} {} {} {}", ime.bottom, from.bottom, to.bottom, WindowInsets::isImeVisible()));
             Box(Modifier().fillMaxWidth().weight(1).testTag("içerik"));
         });
@@ -23711,7 +23763,7 @@ TEST(autofill_hears_of_text_fields_and_fills_them) {
         password = rememberTextFieldState();
         code = rememberTextFieldState();
         if (form.get())
-            Column([&] {
+            Column([=, &code, &password] {
                 TextField(user.get(), [&](std::string v) { user.set(std::move(v)); },
                           Modifier().semantics({.contentType = ContentType::Username + ContentType::EmailAddress}).testTag("kullanıcı"),
                           {.label = "E-posta"});
@@ -23792,10 +23844,10 @@ TEST(on_focus_event_and_progress_semantics) {
     FocusRequester a, b, far;
     auto name = [](FocusState s) { return std::string(s.isFocused ? "focused" : s.hasFocus ? "inside" : "none"); };
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &a, &b, &far] {
             Column(Modifier().onFocusEvent([events, name](FocusState s) { events->push_back(name(s)); })
                        .onFocusChanged([changes, name](FocusState s) { changes->push_back(name(s)); }),
-                   [&] {
+                   [=, &a, &b] {
                        Box(Modifier().size(20).focusRequester(a).focusable());
                        Box(Modifier().size(20).focusRequester(b).focusable());
                    });
@@ -23834,7 +23886,7 @@ TEST(on_focus_event_and_progress_semantics) {
 
 TEST(scroll_containers_clip_along_their_axis_and_leave_room_across) {
     ComposeTestRule rule([&] {
-        Column(Modifier().padding(40), [&] {
+        Column(Modifier().padding(40), [=] {
             Column(Modifier().size(200, 100).verticalScroll(rememberScrollState()), [] { Box(Modifier().size(200, 300)); });
             LazyRow(Modifier().size(200, 100), {}, [](LazyListScope& l) { l.items(10, [](int) { Box(Modifier().size(80, 100)); }); });
         });
@@ -23853,14 +23905,14 @@ TEST(bring_into_view_spec_puts_the_focused_item_where_it_says) {
     bool sameWith = true, sameWithout = false;  // a scroll modifier with a spec of its own is never taken as the same
     BringIntoViewSpec at100{[](float offset, float, float) { return offset - 100; }};  // its start 100 dp in
     ComposeTestRule rule([&] {
-        Row(Modifier().fillMaxSize(), [&] {
+        Row(Modifier().fillMaxSize(), [=, &at100, &big, &items, &plain, &row, &sameWith, &sameWithout, &scrolled] {
             CompositionLocalProvider({LocalBringIntoViewSpec.provides(at100)}, [&] {
                 LazyColumn(Modifier().width(100).fillMaxHeight().testTag("liste"), {}, [&](LazyListScope& l) {
                     l.items(30, [&](int i) { Box(Modifier().fillMaxWidth().height(50).focusRequester(items[size_t(i)]).focusable().testTag(std::format("ö{}", i))); });
                 });
                 ScrollState st;
                 sameWith = Modifier().verticalScroll(st) == Modifier().verticalScroll(st);
-                Column(Modifier().width(100).fillMaxHeight().verticalScroll(rememberScrollState()), [&] {
+                Column(Modifier().width(100).fillMaxHeight().verticalScroll(rememberScrollState()), [=, &scrolled] {
                     for (int i = 0; i < 20; ++i)
                         Box(Modifier().fillMaxWidth().height(50).focusRequester(scrolled[size_t(i)]).focusable().testTag(std::format("s{}", i)));
                 });
@@ -23868,7 +23920,7 @@ TEST(bring_into_view_spec_puts_the_focused_item_where_it_says) {
             ScrollState st;
             sameWithout = Modifier().verticalScroll(st) == Modifier().verticalScroll(st);
             // Not under it: just far enough.
-            Column(Modifier().width(100).fillMaxHeight().verticalScroll(rememberScrollState()), [&] {
+            Column(Modifier().width(100).fillMaxHeight().verticalScroll(rememberScrollState()), [=, &big, &plain] {
                 for (int i = 0; i < 20; ++i)
                     Box(Modifier().fillMaxWidth().height(50).focusRequester(plain[size_t(i)]).focusable().testTag(std::format("d{}", i)));
                 Box(Modifier().fillMaxWidth().height(700).focusRequester(big).focusable().testTag("büyük"));  // taller than the column
@@ -23973,7 +24025,7 @@ TEST(nodes_are_drawn_again_when_what_they_draw_from_changes) {
     auto tint = mutableStateOf(Color::hex(0xff0000));
     ComposeTestRule rule([&] {
         auto layer = rememberGraphicsLayer();
-        Column([&] {
+        Column([=, &shared] {
             Box(Modifier().size(100, 50).clickable([] {}, {.indication = Indication::Kind::StateLayer}).testTag("düz"));
             // Pressed through another's source: only its indication hears of it.
             Box(Modifier().size(100, 50).clickable([] {}, {.interactionSource = shared, .indication = Indication(mark)}));
@@ -23982,8 +24034,8 @@ TEST(nodes_are_drawn_again_when_what_they_draw_from_changes) {
             Box(Modifier().size(100, 50).drawWithContent([layer](ContentDrawScope& d) {
                 d.record(layer, [&](DrawScope&) { d.drawContent(); });
                 d.drawLayer(layer);
-            }), [&] {
-                Box(Modifier().padding(4), [&] {  // (read while drawing: nothing measured again)
+            }), [=] {
+                Box(Modifier().padding(4), [=] {  // (read while drawing: nothing measured again)
                     Box(Modifier().size(20).drawBehind([tint](DrawScope& d) { d.drawRect(tint.get()); }));
                 });
             });
@@ -24026,7 +24078,7 @@ TEST(custom_indication_hears_its_component_and_draws_around_it) {
     MutableInteractionSource own;
     ComposeTestRule rule([&] {
         (void)tick.get();  // recomposed: the same factory keeps its node
-        Column([&] {
+        Column([=, &own] {
             Box(Modifier().size(100, 50).clickable([] {}, {.enabled = enabled.get(), .indication = Indication(useBlue.get() ? blue : red)}).testTag("tık"));
             // A component of one's own: its source, drawn by Modifier.indication.
             Box(Modifier().size(100, 50).indication(own, Indication(blue)).testTag("kendi"));
@@ -24117,7 +24169,7 @@ TEST(text_toolbar_of_ones_own_is_told_instead_of_kompoz_drawing_one) {
     std::string clipboard;
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalTextToolbar.provides(std::shared_ptr<TextToolbar>(toolbar))}, [&] {
-            Column(Modifier().fillMaxSize(), [&] {
+            Column(Modifier().fillMaxSize(), [=] {
                 Box(Modifier().height(200));
                 TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().fillMaxWidth().testTag("field"),
                           {.singleLine = true, .readOnly = locked.get()});
@@ -24772,21 +24824,21 @@ TEST(animated_vectors_play_their_animations) {
 
 TEST(text_draw_style_strokes_its_glyphs) {
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Text("dolu");
-            Text("çizgi", {.drawStyle = Stroke(2, 4, StrokeCap::Butt, StrokeJoin::Round)});
+            Text("çizgi", style = TextStyle{.drawStyle = Stroke(2, 4, StrokeCap::Butt, StrokeJoin::Round)});
             Text(buildAnnotatedString([&](AnnotatedString::Builder& b) {
                      b.append("bir ");
                      b.withStyle({.drawStyle = Stroke(3, 4, StrokeCap::Butt, StrokeJoin::Round)}, [&] { b.append("hat"); });
                  }),
-                 Modifier(), {});
+                 Modifier());
             // Inherited through LocalTextStyle, a span's Fill filling again.
             ProvideTextStyle({.drawStyle = Stroke(1, 4, StrokeCap::Butt, StrokeJoin::Bevel)}, [&] {
                 Text(buildAnnotatedString([&](AnnotatedString::Builder& b) {
                          b.append("miras ");
                          b.withStyle({.drawStyle = Fill}, [&] { b.append("dolu"); });
                      }),
-                     Modifier(), {});
+                     Modifier());
             });
         });
     });
@@ -24810,14 +24862,14 @@ TEST(text_draw_style_strokes_its_glyphs) {
 
 TEST(text_geometric_transform_stretches_and_slants) {
     ComposeTestRule rule([&] {
-        Column([&] {
-            Text("abcd", Modifier().testTag("düz"), {.fontSize = 20});
-            Text("abcd", Modifier().testTag("geniş"), {.fontSize = 20, .textGeometricTransform = TextGeometricTransform{2, 0.25f}});
+        Column([=] {
+            Text("abcd", Modifier().testTag("düz"), fontSize = 20);
+            Text("abcd", Modifier().testTag("geniş"), fontSize = 20, style = TextStyle{.textGeometricTransform = TextGeometricTransform{2, 0.25f}});
             Text(buildAnnotatedString([&](AnnotatedString::Builder& b) {
                      b.append("ab");
                      b.withStyle({.textGeometricTransform = TextGeometricTransform{0.5f, -0.5f}}, [&] { b.append("cd"); });
                  }),
-                 Modifier().testTag("parça"), {.fontSize = 20});
+                 Modifier().testTag("parça"), fontSize = 20);
         });
     });
     // Its advances stretched: twice as wide; a span half as wide.
@@ -24876,7 +24928,7 @@ TEST(image_vector_builder_draws_paths_in_their_own_paints) {
           !(ImageVector::Builder(48, 48, 24, 20).build() == ImageVector::Builder(48, 48, 24, 24).build()));
     auto rtl = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &arrow, &blue, &fills, &green, &two] {
             Image(VectorPainter(two), "iki", Modifier().testTag("resim"));  // its default size, its own paints
             Icon(two, "ton", Modifier().size(24).testTag("ton"), green);     // tinted, its stroke too
             Icon(fills, "dolgu", Modifier().size(24).testTag("dolgu"), green);  // one color: its alpha alone, in the tint
@@ -24974,9 +25026,9 @@ TEST(image_vector_builder_draws_paths_in_their_own_paints) {
 TEST(clip_scrollable_container_clips_along_its_axis) {
     int clicks = 0;
     ComposeTestRule rule([&] {
-        Column(Modifier().padding(40), [&] {
+        Column(Modifier().padding(40), [=, &clicks] {
             Box(Modifier().size(200, 100).clipScrollableContainer(Orientation::Vertical), [] { Box(Modifier().size(300, 300)); });
-            Box(Modifier().size(200, 100).clipScrollableContainer(Orientation::Horizontal), [&] {
+            Box(Modifier().size(200, 100).clipScrollableContainer(Orientation::Horizontal), [=, &clicks] {
                 Box(Modifier().offset(0, 100).size(80, 40).clickable([&] { ++clicks; }));  // 10 dp in its 30 below, 30 past
             });
         });
@@ -25013,20 +25065,20 @@ TEST(what_shows_past_a_scroll_container_across_counts_as_shown) {
     Rect shown;
     int clicks = 0;
     ComposeTestRule rule([&] {
-        Column(Modifier().padding(40), [&] {
+        Column(Modifier().padding(40), [=, &clicks, &shown, &visible] {
             // 20 dp out of the column's side, in its 30: all of it shows.
-            Column(Modifier().size(200, 100).verticalScroll(rememberScrollState()), [&] {
+            Column(Modifier().size(200, 100).verticalScroll(rememberScrollState()), [=, &shown, &visible] {
                 Box(Modifier().size(50).offset(-20, 0).onVisibilityChanged([&](bool v) { visible = v; }).onGloballyPositioned([&](const LayoutCoordinates& c) {
                     shown = c.boundsInWindow();
                 }));
             });
             // Hanging 10 dp under a row: still clicked there (in its 30).
             LazyRow(Modifier().size(200, 100), {}, [&](LazyListScope& l) {
-                l.item([&] { Box(Modifier().size(80, 100), [&] { Box(Modifier().offset(0, 100).size(80, 20).clickable([&] { ++clicks; })); }); });
+                l.item([&] { Box(Modifier().size(80, 100), [=, &clicks] { Box(Modifier().offset(0, 100).size(80, 20).clickable([&] { ++clicks; })); }); });
             });
             Spacer(Modifier().height(40));
             // A box cutting off a row 10 dp under it: the row is drawn (its 30 dp across reach into the box).
-            Box(Modifier().size(200, 100).clipToBounds(), [&] {
+            Box(Modifier().size(200, 100).clipToBounds(), [=] {
                 LazyRow(Modifier().offset(0, 110).size(200, 100), {}, [](LazyListScope& l) { l.items(3, [](int) { Box(Modifier().size(80, 100)); }); });
             });
         });
@@ -25045,23 +25097,23 @@ TEST(what_shows_past_a_scroll_container_across_counts_as_shown) {
 
 TEST(semantics_merge_clear_and_hide) {
     ComposeTestRule rule([&] {
-        Column([&] {
-            Row(Modifier().semantics({.mergeDescendants = true}), [&] {  // read as one
+        Column([=] {
+            Row(Modifier().semantics({.mergeDescendants = true}), [=] {  // read as one
                 Icon(Icons::Filled::Star, "Yıldızlı");
                 Text("Favoriler");
                 Text("gizli", Modifier().hideFromAccessibility());  // not part of it
                 Box(Modifier().clearAndSetSemantics({.contentDescription = "3 yorum"}), [] { Text("üç"); });  // its own words only
                 Button([] {}, [] { Text("Aç"); });  // interactive: on its own
             });
-            Box(Modifier().clearAndSetSemantics({.contentDescription = "Puan: 4 / 5"}), [&] {
-                Row([&] {
+            Box(Modifier().clearAndSetSemantics({.contentDescription = "Puan: 4 / 5"}), [=] {
+                Row([=] {
                     for (int i = 0; i < 4; ++i) Icon(Icons::Filled::Star, "yıldız");
                     Text("4/5");
                     Button([] {}, [] { Text("İç düğme"); });
                 });
             });
             Text("Süs", Modifier().hideFromAccessibility());
-            Box(Modifier().hideFromAccessibility(), [&] { Button([] {}, [] { Text("Gizli düğme"); }); });
+            Box(Modifier().hideFromAccessibility(), [=] { Button([] {}, [] { Text("Gizli düğme"); }); });
             // Two semantics modifiers on one node: the toggle's role and state, the description after.
             Box(Modifier().size(40).toggleable(true, [](bool) {}, SemanticsRole::Switch).semantics({.contentDescription = "Wi-Fi"}).testTag("anahtar"));
             Text("Düz metin");
@@ -25107,12 +25159,12 @@ TEST(on_globally_positioned_tells_where_a_node_ended_up) {
     ScrollState scroll;
     ComposeTestRule rule([&] {
         other.get();
-        Column(Modifier().padding(20), [&] {
+        Column(Modifier().padding(20), [=, &clipped, &inner, &moved, &placed, &scroll] {
             Box(Modifier().size(wide.get() ? 150.f : 100.f, 50).onGloballyPositioned([&](const LayoutCoordinates& c) { moved.push_back(c); }));
-            Box(Modifier().size(50).clip(RoundedCornerShape(8)), [&] {  // a child bigger than a clip: only the clip's part shows
+            Box(Modifier().size(50).clip(RoundedCornerShape(8)), [=, &clipped] {  // a child bigger than a clip: only the clip's part shows
                 Box(Modifier().requiredSize(100).onGloballyPositioned([&](const LayoutCoordinates& c) { clipped.push_back(c); }));
             });
-            Column(Modifier().height(200).fillMaxWidth().verticalScroll(scroll), [&] {
+            Column(Modifier().height(200).fillMaxWidth().verticalScroll(scroll), [=, &inner, &placed] {
                 Box(Modifier().height(300));
                 Box(Modifier().size(80, 40).padding(10)
                         .onGloballyPositioned([&](const LayoutCoordinates& c) { inner.push_back(c); })
@@ -25151,16 +25203,16 @@ TEST(selectable_and_toggleable_rows_take_the_tap_for_their_controls) {
     auto on = mutableStateOf(false);
     auto tri = mutableStateOf(ToggleableState::Off);
     ComposeTestRule rule([&] {
-        Column(Modifier().selectableGroup().testTag("grup"), [&] {
+        Column(Modifier().selectableGroup().testTag("grup"), [=] {
             for (int i = 0; i < 3; ++i)
                 Row(Modifier().fillMaxWidth().height(56).selectable(choice.get() == i, [choice, i] { choice.set(i); }, SemanticsRole::RadioButton)
                         .testTag(std::format("satır {}", i)),
-                    {.verticalAlignment = Alignment::CenterVertically}, [&] {
+                    verticalAlignment = Alignment::CenterVertically, [=] {
                         RadioButton(choice.get() == i, {}, Modifier().testTag(std::format("düğme {}", i)));
                         Text(std::format("seçenek {}", i));
                     });
             Row(Modifier().fillMaxWidth().height(56).toggleable(on.get(), [on](bool v) { on.set(v); }, SemanticsRole::Switch).testTag("anahtar satırı"),
-                {.verticalAlignment = Alignment::CenterVertically}, [&] {
+                verticalAlignment = Alignment::CenterVertically, [=] {
                     Text("Bildirimler");
                     Switch(on.get(), {}, Modifier().testTag("anahtar"));
                 });
@@ -25170,7 +25222,7 @@ TEST(selectable_and_toggleable_rows_take_the_tap_for_their_controls) {
                                                                                                                   : ToggleableState::Off); },
                                         SemanticsRole::Checkbox)
                     .testTag("üç"),
-                [&] { TriStateCheckbox(tri.get(), {}, Modifier().testTag("kutu")); });
+                [=] { TriStateCheckbox(tri.get(), {}, Modifier().testTag("kutu")); });
         });
     });
     rule.onNodeWithTag("satır 0").assertIsSelected();
@@ -25197,8 +25249,8 @@ TEST(selectable_and_toggleable_rows_take_the_tap_for_their_controls) {
 
 TEST(match_parent_size_and_fill_parent_max) {
     ComposeTestRule rule([&] {
-        Column([&] {
-            Box(Modifier().testTag("kutu"), [&] {
+        Column([=] {
+            Box(Modifier().testTag("kutu"), [=] {
                 Box(Modifier().size(120, 60));
                 Box(Modifier().matchParentSize().testTag("arka"), [] { Box(Modifier().size(300)); });  // as big as the others made it, no bigger
             });
@@ -25218,13 +25270,13 @@ TEST(match_parent_size_and_fill_parent_max) {
 
 TEST(snackbars_lay_out_as_compose_and_host_your_own) {
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Snackbar([] { Text("Kaydedildi"); }, Modifier().testTag("tek"),
                      {.action = [] { TextButton([] {}, [] { Text("Geri al"); }); }});
             Snackbar([] { Text("Uzun bir ileti iki satıra iner çünkü sığmaz bu genişliğe"); }, Modifier().width(300).testTag("çift"),
                      {.action = [] { TextButton([] {}, [] { Text("Tamam"); }); }});
             Snackbar([] { Text("Yalnız"); }, Modifier().testTag("yalnız"));  // nothing else: still 48
-            Snackbar([] { Text("Büyük eylemli"); }, Modifier().testTag("büyük"), {.action = [] { Text("EYLEM", {.fontSize = 28}); }});
+            Snackbar([] { Text("Büyük eylemli"); }, Modifier().testTag("büyük"), {.action = [] { Text("EYLEM", fontSize = 28); }});
             Snackbar([] { Text("İki satıra inen bir ileti"); }, Modifier().width(240).testTag("iki"),
                      {.action = [] { TextButton([] {}, [] { Text("Tamam"); }); }});
             Snackbar([] { Text("Alt satırda eylem"); }, Modifier().testTag("alt"),
@@ -25259,7 +25311,7 @@ TEST(snackbars_lay_out_as_compose_and_host_your_own) {
 TEST(filled_and_tonal_icon_buttons_as_compose_1_4) {
     const ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
-        Row([&] {
+        Row([=] {
             FilledTonalIconButton([] {}, Modifier(), {}, [] { Icon(Icons::Filled::Add, "Tonal"); });
             FilledIconButton([] {}, Modifier(), {.enabled = false}, [] { Icon(Icons::Filled::Add, "Dolu"); });
             FilledTonalIconButton([] {}, Modifier(), {.enabled = false}, [] { Icon(Icons::Filled::Add, "Kapalı"); });
@@ -25275,7 +25327,7 @@ TEST(icon_buttons_take_the_content_color_around_them) {
     Color red{0.8f, 0.1f, 0.1f, 1};
     ComposeTestRule rule([&] {
         MaterialTheme(lightColorScheme(), [&] {
-            Column([&] {
+            Column([=, &red] {
                 CompositionLocalProvider({LocalContentColor.provides(red)}, [] {
                     IconButton([] {}, [] { Icon(Icons::Filled::Add, "Ekle"); });
                     IconButton([] {}, Modifier(), {.enabled = false}, [] { Icon(Icons::Filled::Add, "Ekleme"); });
@@ -25299,7 +25351,7 @@ TEST(snackbar_hosts_hand_their_data_to_a_snackbar_of_your_own) {
     ComposeTestRule rule([&] {
         scope = rememberCoroutineScope();
         SnackbarHost(state, Modifier(), [](const SnackbarData& data) {
-            Row(Modifier().testTag("kendi"), [&] {
+            Row(Modifier().testTag("kendi"), [=] {
                 Text("» " + data.message);
                 TextButton([data] { data.performAction(); }, [&] { Text(data.actionLabel); });
                 TextButton([data] { data.dismiss(); }, [] { Text("Kapat"); });
@@ -25471,7 +25523,7 @@ TEST(modal_bottom_sheet_follows_the_back_gesture) {
         if (open.get())
             ModalBottomSheet([&] { ++dismissed, open.set(keep); }, s, [&] {
                 BackHandler(inner.get(), [&] { ++innerBacks; });  // one in the sheet comes first
-                Box(Modifier().fillMaxWidth().height(tall.get() ? 600.f : 200.f), [&] {
+                Box(Modifier().fillMaxWidth().height(tall.get() ? 600.f : 200.f), [=, &field] {
                     Box(Modifier().size(40).focusRequester(field).focusable());
                     DropdownMenu(menu.get(), [&] { menu.set(false); }, [] { Text("seçenek"); });
                 });
@@ -25633,7 +25685,7 @@ TEST(half_open_sheet_expands_before_its_list_scrolls) {
 TEST(pointer_hover_icon_picks_the_innermost_say) {
     MutableInteractionSource box, toggle, radio;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &box, &radio, &toggle] {
             Box(Modifier().size(200, 60).pointerHoverIcon(PointerIcon::Crosshair).testTag("tuval"),
                 [] { Box(Modifier().size(40).clickable([] {}).testTag("düğme")); });  // a hand of its own inside
             Box(Modifier().size(200, 60).pointerHoverIcon(Cursor::Move, true),
@@ -25654,7 +25706,7 @@ TEST(pointer_hover_icon_picks_the_innermost_say) {
                      b.withLink([] {}, [&] { b.append("cdefgh ijklm"); });
                  }),
                  Modifier().width(80).testTag("bağ"));
-            Row([&] {
+            Row([=, &box, &radio, &toggle] {
                 Checkbox(false, [](bool) {}, Modifier().testTag("kutu"), true, box);
                 Switch(false, [](bool) {}, Modifier().testTag("anahtar"), true, toggle);
                 RadioButton(false, [] {}, Modifier().testTag("radyo"), false, radio);  // disabled
@@ -25698,7 +25750,7 @@ TEST(center_aligned_bar_clickable_cards_fab_sizes_and_positions) {
     ComposeTestRule rule([&] {
         Scaffold(Modifier().fillMaxSize(),
                  {.topBar = [&] {
-                      CenterAlignedTopAppBar({.title = [&] { Text(title.get(), Modifier().testTag("başlık"), {.maxLines = 1, .overflow = TextOverflow::Ellipsis}); },
+                      CenterAlignedTopAppBar({.title = [&] { Text(title.get(), Modifier().testTag("başlık"), maxLines = 1, overflow = TextOverflow::Ellipsis); },
                                               .navigationIcon = [] { IconButton([] {}, [] { Icon(Icons::Filled::Menu, "Menü"); }); },
                                               .actions = [] {
                                                   IconButton([] {}, [] { Icon(Icons::Filled::Search, "Ara"); });
@@ -25709,7 +25761,7 @@ TEST(center_aligned_bar_clickable_cards_fab_sizes_and_positions) {
                   .floatingActionButton = [] { FloatingActionButton([] {}, [] { Icon(Icons::Filled::Add, "Ekle"); }, Modifier().testTag("fab")); },
                   .floatingActionButtonPosition = position.get()},
                  [&](PaddingValues padding) {
-                     Column(Modifier().padding(padding), [&] {
+                     Column(Modifier().padding(padding), [=, &clicks] {
                          Card([&] { ++clicks; }, Modifier().testTag("kart"), [] { Text("Kart", Modifier().padding(16)); });
                          Row([] {
                              SmallFloatingActionButton([] {}, [] { Icon(Icons::Filled::Add, "Küçük"); }, Modifier().testTag("küçük"));
@@ -25744,7 +25796,7 @@ TEST(center_aligned_bar_clickable_cards_fab_sizes_and_positions) {
 TEST(snap_fling_behavior_settles_on_an_item) {
     LazyListState start, center;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &center, &start] {
             LazyRow(Modifier().width(300).height(60).testTag("baş"),
                     {.state = start, .spacing = 10, .flingBehavior = rememberSnapFlingBehavior(start, SnapPosition::Start)}, [](LazyListScope& l) {
                         l.items(30, [](int i) { Box(Modifier().size(100, 60).testTag(std::format("b{}", i))); });
@@ -25796,7 +25848,7 @@ TEST(indication_shows_a_sources_ripple_on_another_node) {
     MutableInteractionSource source;
     ComposeTestRule rule([&] {
         Box(Modifier().size(200, 100).clickable([] {}, {.interactionSource = source, .indication = false}).testTag("alan"), Alignment::Center,
-            [&] { Box(Modifier().size(48).clip(CircleShape).indication(source, ripple(true, 0, Color::hex(0xFF0000))).testTag("simge")); });
+            [=, &source] { Box(Modifier().size(48).clip(CircleShape).indication(source, ripple(true, 0, Color::hex(0xFF0000))).testTag("simge")); });
     });
     Rect area = rule.onNodeWithTag("alan").bounds(), icon = rule.onNodeWithTag("simge").bounds();
     std::vector<std::pair<Rect, float>> last;  // squares drawn (the ripple's circles, the state layer) and their alpha
@@ -25849,9 +25901,9 @@ TEST(basic_marquee_scrolls_what_doesnt_fit_and_its_copy_follows) {
     int clicks = 0;
     auto shown = mutableStateOf(false);  // composed later, at a known time
     ComposeTestRule rule([&] {
-        Column(Modifier().padding(10, 0), [&] {
+        Column(Modifier().padding(10, 0), [=, &clicks] {
             if (shown.get())
-                Box(Modifier().width(100).basicMarquee().testTag("kayan"), [&] {
+                Box(Modifier().width(100).basicMarquee().testTag("kayan"), [=, &clicks] {
                     Box(Modifier().size(300, 20).background(Color{1, 0, 0, 1}).clickable([&] { ++clicks; }).testTag("içerik"));
                 });
             Box(Modifier().padding(0, 20).size(50, 20).background(Color{0, 1, 0, 1}));  // drawn after it, below: not in its clip
@@ -25906,10 +25958,10 @@ TEST(a_marquee_out_of_view_leaves_only_its_timers) {
     ScrollState scroll;
     auto on = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        Column(Modifier().height(200).verticalScroll(scroll), [&] {
+        Column(Modifier().height(200).verticalScroll(scroll), [=] {
             Box(Modifier().size(100, 300));
             Box(Modifier().width(100).basicMarquee({.iterations = on.get() ? MarqueeDefaults::Forever : 0, .initialDelayMillis = 0}),
-                [&] { Box(Modifier().size(200, 20).background(Color{1, 0, 0, 1})); });
+                [=] { Box(Modifier().size(200, 20).background(Color{1, 0, 0, 1})); });
         });
     }, {400, 800});
     DisplayList list(rule.host().textMeasurer());
@@ -25935,7 +25987,7 @@ TEST(basic_marquee_leaves_alone_what_fits_and_starts_again_when_it_grows) {
     auto rtl = mutableStateOf(false);
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(rtl.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
-            Box(Modifier().width(100).basicMarquee({.iterations = MarqueeDefaults::Forever, .spacing = 20, .velocity = 50}), [&] {
+            Box(Modifier().width(100).basicMarquee({.iterations = MarqueeDefaults::Forever, .spacing = 20, .velocity = 50}), [=] {
                 Box(Modifier().size(width.get(), 20).background(Color{1, 0, 0, 1}));
             });
         });
@@ -25963,8 +26015,8 @@ TEST(basic_marquee_measures_probes_without_writing) {
     // A width taken from the content's natural one probes it first, unlimited: that pass mustn't
     // tell the marquee its room, or every layout would change it twice (and never settle).
     ComposeTestRule rule([&] {
-        Box(Modifier().widthIn(0, 100).width(IntrinsicSize::Max), [&] {
-            Box(Modifier().fillMaxWidth().basicMarquee({.iterations = 0}).testTag("kayan"), [&] {
+        Box(Modifier().widthIn(0, 100).width(IntrinsicSize::Max), [=] {
+            Box(Modifier().fillMaxWidth().basicMarquee({.iterations = 0}).testTag("kayan"), [=] {
                 Box(Modifier().size(300, 20).background(Color{1, 0, 0, 1}));
             });
         });
@@ -25976,9 +26028,9 @@ TEST(basic_marquee_backwards_and_while_focused) {
     FocusRequester requester;
     auto shown = mutableStateOf(false);  // composed later: waiting for idle would run it to its end
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &requester] {
             if (shown.get())
-                Box(Modifier().width(100).basicMarquee({.initialDelayMillis = 0, .spacing = 50, .velocity = -40}), [&] {
+                Box(Modifier().width(100).basicMarquee({.initialDelayMillis = 0, .spacing = 50, .velocity = -40}), [=] {
                     Box(Modifier().size(150, 20).background(Color{1, 0, 0, 1}));
                 });
             Box(Modifier()
@@ -25986,7 +26038,7 @@ TEST(basic_marquee_backwards_and_while_focused) {
                     .basicMarquee({.animationMode = MarqueeAnimationMode::WhileFocused, .spacing = 10})
                     .focusRequester(requester)
                     .focusable(),
-                [&] { Box(Modifier().size(150, 20).background(Color{0, 0, 1, 1}).testTag("mavi")); });
+                [=] { Box(Modifier().size(150, 20).background(Color{0, 0, 1, 1}).testTag("mavi")); });
         });
     });
     auto blue = [&] {
@@ -26025,7 +26077,7 @@ TEST(translations_move_drawn_content_and_are_replayed) {
                 d.drawContent();  // the content moves too
                 moved.drawRect(Color{0, 1, 0, 1}, {0, 0}, Size{4, 4});
             });
-        }), [&] { Box(Modifier().size(30).background(Color{1, 0, 0, 1})); });
+        }), [=] { Box(Modifier().size(30).background(Color{1, 0, 0, 1})); });
     });
     testing::RecordingCanvas canvas;
     auto red = redRects(rule, &canvas);
@@ -26055,15 +26107,15 @@ TEST(letter_spacing_widens_text_and_where_its_carets_are) {
     std::optional<TextLayoutResult> result;
     auto value = mutableStateOf(std::string("xy"));
     ComposeTestRule rule([&] {
-        Column([&] {
-            Text("abc", Modifier().testTag("düz"), {.fontSize = 10, .letterSpacing = 2});  // 3 × (5 + 2)
+        Column([=, &result] {
+            Text("abc", Modifier().testTag("düz"), fontSize = 10, letterSpacing = 2);  // 3 × (5 + 2)
             Text(buildAnnotatedString([](AnnotatedString::Builder& b) {
                      b.append("a");
                      b.withStyle({.letterSpacing = 4}, [&] { b.append("b"); });
                      b.append("c");
                  }),
-                 Modifier().testTag("parça"), {.fontSize = 10});  // 5 + 9 + 5
-            ProvideTextStyle({.letterSpacing = 1}, [&] { Text("ab", Modifier().testTag("yerel"), {.fontSize = 10}); });  // 2 × 6
+                 Modifier().testTag("parça"), fontSize = 10);  // 5 + 9 + 5
+            ProvideTextStyle({.letterSpacing = 1}, [&] { Text("ab", Modifier().testTag("yerel"), fontSize = 10); });  // 2 × 6
             auto measurer = rememberTextMeasurer();
             result = measurer.measure("abcd", {.fontSize = 10, .letterSpacing = 3});
             TextField(value.get(), [value](std::string v) { value.set(std::move(v)); }, Modifier(),
@@ -26085,10 +26137,10 @@ TEST(letter_spacing_widens_text_and_where_its_carets_are) {
 TEST(line_height_spaces_lines_but_not_above_the_first_or_below_the_last) {
     std::optional<TextLayoutResult> result, tightResult;
     ComposeTestRule rule([&] {
-        Column([&] {
-            Text("a\nb\nc", Modifier().testTag("üç"), {.fontSize = 10, .lineHeight = 30});
-            Text("tek", Modifier().testTag("tek"), {.fontSize = 10, .lineHeight = 30});
-            Text("d\ne", Modifier().testTag("sık"), {.fontSize = 10, .lineHeight = 8});
+        Column([=, &result, &tightResult] {
+            Text("a\nb\nc", Modifier().testTag("üç"), fontSize = 10, lineHeight = 30);
+            Text("tek", Modifier().testTag("tek"), fontSize = 10, lineHeight = 30);
+            Text("d\ne", Modifier().testTag("sık"), fontSize = 10, lineHeight = 8);
             ProvideTextStyle({.fontSize = 10, .lineHeight = 20}, [&] { Text("f\ng", Modifier().testTag("yerel")); });
             auto measurer = rememberTextMeasurer();
             result = measurer.measure("a\nb\nc", {.fontSize = 10, .lineHeight = 30});
@@ -26128,14 +26180,14 @@ TEST(line_height_style_aligns_and_trims_lines) {
     using LHS = LineHeightStyle;
     auto style = [](float lineHeight, LHS lines) { return TextStyle{.fontSize = 10, .lineHeight = lineHeight, .lineHeightStyle = lines}; };
     ComposeTestRule rule([&] {
-        Column([&] {
-            Text("a\nb", Modifier().testTag("üst"), style(30, {.alignment = LHS::Alignment::Top, .trim = LHS::Trim::None}));
-            Text("c\nd", Modifier().testTag("orta"), style(30, {.alignment = LHS::Alignment::Center, .trim = LHS::Trim::None}));
-            Text("e\nf", Modifier().testTag("alt"), style(30, {.alignment = LHS::Alignment::Bottom, .trim = LHS::Trim::None}));
-            Text("g\nh", Modifier().testTag("ilk"), style(30, {.alignment = LHS::Alignment::Center, .trim = LHS::Trim::FirstLineTop}));
-            Text("i\nj", Modifier().testTag("son"), style(30, {.alignment = LHS::Alignment::Center, .trim = LHS::Trim::LastLineBottom}));
-            Text("k", Modifier().testTag("sabit"), style(4, {.trim = LHS::Trim::None}));
-            Text("l", Modifier().testTag("asgari"), style(4, {.trim = LHS::Trim::None, .mode = LHS::Mode::Minimum}));
+        Column([=] {
+            Text("a\nb", Modifier().testTag("üst"), kompoz::style = style(30, {.alignment = LHS::Alignment::Top, .trim = LHS::Trim::None}));
+            Text("c\nd", Modifier().testTag("orta"), kompoz::style = style(30, {.alignment = LHS::Alignment::Center, .trim = LHS::Trim::None}));
+            Text("e\nf", Modifier().testTag("alt"), kompoz::style = style(30, {.alignment = LHS::Alignment::Bottom, .trim = LHS::Trim::None}));
+            Text("g\nh", Modifier().testTag("ilk"), kompoz::style = style(30, {.alignment = LHS::Alignment::Center, .trim = LHS::Trim::FirstLineTop}));
+            Text("i\nj", Modifier().testTag("son"), kompoz::style = style(30, {.alignment = LHS::Alignment::Center, .trim = LHS::Trim::LastLineBottom}));
+            Text("k", Modifier().testTag("sabit"), kompoz::style = style(4, {.trim = LHS::Trim::None}));
+            Text("l", Modifier().testTag("asgari"), kompoz::style = style(4, {.trim = LHS::Trim::None, .mode = LHS::Mode::Minimum}));
             ProvideTextStyle(style(30, {.alignment = LHS::Alignment::Bottom, .trim = LHS::Trim::None}), [&] { Text("m", Modifier().testTag("yerel")); });
         });
     });
@@ -26200,11 +26252,11 @@ TEST(material_type_styles_carry_line_heights_and_letter_spacing) {
     std::string notes = "a\nb";
     ComposeTestRule rule([&] {
         MaterialTheme(lightColorScheme(), [&] {
-            Column([&] {
+            Column([=, &notes] {
                 Text("bir", Modifier().testTag("gövde"));  // bodyLarge: 16 sp, 24 sp lines, 0.5 sp apart
                 Text("iki\nsatır", Modifier().testTag("iki"));
-                Text("başlık", Modifier().testTag("başlık"), {.font = typography().headlineSmall});  // 32 sp lines
-                Text("etiket", Modifier().testTag("etiket"), {.font = typography().labelSmall});      // 11 sp in 16
+                Text("başlık", Modifier().testTag("başlık"), style = typography().headlineSmall);  // 32 sp lines
+                Text("etiket", Modifier().testTag("etiket"), style = typography().labelSmall);      // 11 sp in 16
                 BasicTextField(notes, [&](std::string s) { notes = std::move(s); }, Modifier().width(200).testTag("alan"),
                                {.minLines = 3});
             });
@@ -26238,14 +26290,14 @@ std::map<std::string, float> textXs(ComposeTestRule& rule) {
 TEST(justified_lines_stretch_at_their_spaces) {
     std::optional<TextLayoutResult> result;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &result] {
             // 5 dp a letter: "aa bb cc" (40) fills the first line, 2 dp short of 42.
-            Text("aa bb cc dd ee", Modifier().width(42).testTag("sol"), {.fontSize = 10, .textAlign = TextAlign::Justify});
+            Text("aa bb cc dd ee", Modifier().width(42).testTag("sol"), fontSize = 10, textAlign = TextAlign::Justify);
             Text("אא בב גג דד הה", Modifier().width(42),
-                 {.fontSize = 10, .textAlign = TextAlign::Justify});
-            Text("ff וו gg hh ii", Modifier().width(42), {.fontSize = 10, .textAlign = TextAlign::Justify});  // mixed: as it is
-            Text("jj kk ll mm", Modifier().width(42), {.fontSize = 10, .textAlign = TextAlign::Justify, .softWrap = false});
-            Text("qq ww  ee rr", Modifier().width(42), {.fontSize = 10, .textAlign = TextAlign::Justify});  // ends in a space: it hangs
+                 fontSize = 10, textAlign = TextAlign::Justify);
+            Text("ff וו gg hh ii", Modifier().width(42), fontSize = 10, textAlign = TextAlign::Justify);  // mixed: as it is
+            Text("jj kk ll mm", Modifier().width(42), fontSize = 10, textAlign = TextAlign::Justify, softWrap = false);
+            Text("qq ww  ee rr", Modifier().width(42), fontSize = 10, textAlign = TextAlign::Justify);  // ends in a space: it hangs
             auto measurer = rememberTextMeasurer();
             result = measurer.measure("aa bb cc dd ee", {.fontSize = 10, .textAlign = TextAlign::Justify}, 42);
         });
@@ -26265,16 +26317,15 @@ TEST(justified_lines_stretch_at_their_spaces) {
 TEST(text_indent_moves_first_and_other_lines_in) {
     std::optional<TextLayoutResult> measured;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &measured] {
             // 40 dp of text wraps once 10 dp in: its paragraph is the whole 42 wide, as it would be unwrapped.
             measured = rememberTextMeasurer().measure("aa bb cc", {.fontSize = 10, .textAlign = TextAlign::End, .textIndent = {10, 0}}, 42);
-            Text("aa bb cc dd", Modifier().width(42), {.fontSize = 10, .textIndent = {10, 5}});  // the first line has 32 dp
-            Text("pp rr ss tt", Modifier().width(42), {.fontSize = 10, .textIndent = {10, 0}});  // "pp rr ss" (40) only fits later lines
-            Text("ee\nff", Modifier(), {.fontSize = 10, .textIndent = {6, 0}});                 // every paragraph's first line
-            Text("אא בב", Modifier().width(42), {.fontSize = 10, .textIndent = {10, 0}});
-            Text("gg", Modifier().testTag("geniş"), {.fontSize = 10, .textIndent = {10, 0}});  // as wide as its indent and text
-            Text("hhhhhhhhhh", Modifier().width(42), {.fontSize = 10, .overflow = TextOverflow::Ellipsis, .softWrap = false,
-                                                    .textIndent = {10, 0}});  // cut where the indented line ends
+            Text("aa bb cc dd", Modifier().width(42), fontSize = 10, style = TextStyle{.textIndent = {10, 5}});  // the first line has 32 dp
+            Text("pp rr ss tt", Modifier().width(42), fontSize = 10, style = TextStyle{.textIndent = {10, 0}});  // "pp rr ss" (40) only fits later lines
+            Text("ee\nff", Modifier(), fontSize = 10, style = TextStyle{.textIndent = {6, 0}});                 // every paragraph's first line
+            Text("אא בב", Modifier().width(42), fontSize = 10, style = TextStyle{.textIndent = {10, 0}});
+            Text("gg", Modifier().testTag("geniş"), fontSize = 10, style = TextStyle{.textIndent = {10, 0}});  // as wide as its indent and text
+            Text("hhhhhhhhhh", Modifier().width(42), fontSize = 10, overflow = TextOverflow::Ellipsis, softWrap = false, style = TextStyle{.textIndent = {10, 0}});  // cut where the indented line ends
         });
     });
     auto at = textXs(rule);
@@ -26295,16 +26346,16 @@ TEST(text_shadows_go_under_and_brushes_spread_over_the_text) {
     Shadow soft{Color{0, 0, 0, 0.5f}, {2, 3}, 4};
     Brush redToBlue = Brush::horizontalGradient({Color{1, 0, 0, 1}, Color{0, 0, 1, 1}});
     ComposeTestRule rule([&] {
-        Column([&] {
-            Text("gölge", Modifier(), {.fontSize = 10, .shadow = soft});
-            Text("degrade", Modifier().testTag("degrade"), {.fontSize = 10, .textDecoration = TextDecoration::Underline, .brush = redToBlue});
+        Column([=, &redToBlue, &soft] {
+            Text("gölge", Modifier(), fontSize = 10, style = TextStyle{.shadow = soft});
+            Text("degrade", Modifier().testTag("degrade"), fontSize = 10, textDecoration = TextDecoration::Underline, style = TextStyle{.brush = redToBlue});
             Text(buildAnnotatedString([&](AnnotatedString::Builder& b) {
                      b.append("düz ");
                      b.withStyle({.shadow = Shadow{Color{1, 0, 0, 1}, {1, 1}, 0}}, [&] { b.append("kırmızı"); });
                      b.withStyle({.color = Color{0, 1, 0, 1}}, [&] { b.append(" yeşil"); });
                      b.withStyle({.brush = Brush::verticalGradient({Color{0, 1, 0, 1}, Color{0, 0, 0, 1}})}, [&] { b.append(" fırça"); });
                  }),
-                 Modifier(), {.fontSize = 10, .brush = redToBlue});
+                 Modifier(), fontSize = 10, style = TextStyle{.brush = redToBlue});
             TextLayoutResult brushed = rememberTextMeasurer().measure("boya", {.fontSize = 10, .brush = redToBlue});
             Canvas(Modifier().size(40, 20), [brushed](DrawScope& d) { d.drawText(brushed, Color{0, 1, 0, 1}); });  // a color given wins
         });
@@ -26569,7 +26620,7 @@ TEST(draw_scopes_know_the_density_and_direction) {
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(rtl.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
             auto layer = rememberGraphicsLayer();
-            Column([&] {
+            Column([=, &behind, &cachedModifier, &canvas, &content, &own, &recorded] {
                 Box(Modifier().size(10).drawBehind([&](DrawScope& d) { behind = {d.density(), d.layoutDirection()}; }));
                 Box(Modifier().size(10).drawWithContent([&, layer](ContentDrawScope& d) {
                     content = {d.density(), d.layoutDirection()};
@@ -27792,7 +27843,7 @@ TEST(pointer_events_enter_move_exit_press_release_and_scroll) {
     ScrollState scroll;
     auto takeWheel = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &scroll] {
             auto record = [log](const char* name) {
                 return [log, name](PointerEvent& e) {
                     std::string entry = std::format("{} {:g},{:g}", name, e.change.position.x, e.change.position.y);
@@ -27810,7 +27861,7 @@ TEST(pointer_events_enter_move_exit_press_release_and_scroll) {
                     .onPointerEvent(PointerEventType::Move, record("move"))
                     .onPointerEvent(PointerEventType::Press, record("press"))
                     .onPointerEvent(PointerEventType::Release, record("release")));
-            Column(Modifier().height(100).verticalScroll(scroll), [&] {
+            Column(Modifier().height(100).verticalScroll(scroll), [=, &scroll] {
                 Box(Modifier().size(100, 400).onPointerEvent(PointerEventType::Scroll, [log, &takeWheel](PointerEvent& e) {
                     log->push_back(std::format("scroll d{:g}", e.change.scrollDelta.y));
                     if (takeWheel.peek()) e.change.consume();
@@ -27849,7 +27900,7 @@ TEST(pointer_events_enter_move_exit_press_release_and_scroll) {
 TEST(on_click_matches_buttons_pointers_and_keys) {
     int primary = 0, secondary = 0, withCtrl = 0, mouseOnly = 0, doubles = 0, longs = 0;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &doubles, &longs, &mouseOnly, &primary, &secondary, &withCtrl] {
             Box(Modifier().size(100, 40).onClick([&] { ++primary; }));
             Box(Modifier().size(100, 40).onClick([&] { ++secondary; }, {.matcher = PointerMatcher::mouse(PointerButton::Secondary)}));
             Box(Modifier().size(100, 40).onClick([&] { ++withCtrl; }, {.keyboardModifiers = [](const KeyModifiers& m) { return m.ctrl; }}));
@@ -27908,12 +27959,12 @@ TEST(on_click_matches_buttons_pointers_and_keys) {
 
 TEST(tooltip_area_shows_by_the_mouse_after_a_moment) {
     ComposeTestRule rule([&] {
-        Box(Modifier().fillMaxSize(), [&] {
-            Box(Modifier().padding(40), [&] {
+        Box(Modifier().fillMaxSize(), [=] {
+            Box(Modifier().padding(40), [=] {
                 TooltipArea([] { Text("ipucu", Modifier().testTag("ipucu")); }, Modifier().testTag("alan"),
                             [] { Box(Modifier().size(120, 60)); });
             });
-            Box(Modifier().padding(200, 400, 0, 0), [&] {
+            Box(Modifier().padding(200, 400, 0, 0), [=] {
                 TooltipArea([] { Box(Modifier().size(30, 10).testTag("altında")); }, Modifier(),
                             {.delayMillis = 100, .tooltipPlacement = TooltipPlacement::ComponentRect()}, [] { Box(Modifier().size(80, 40)); });
             });
@@ -28582,7 +28633,7 @@ TEST(images_draw_through_a_color_filter) {
     auto filter = mutableStateOf(std::optional<ColorFilter>(ColorFilter::tint(Color{0, 0, 1, 1})));
     auto tick = mutableStateOf(0);
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &photo] {
             (void)tick.get();
             Image(photo, "resim", Modifier().size(20, 10), ContentScale::FillBounds, 1, filter.get());
             Canvas(Modifier().size(20, 10), [&](DrawScope& d) { d.drawImage(photo, IntOffset{}, std::nullopt, {}, Size{20, 10}, 1, Fill, ColorFilter::lighting(Color{0, 0, 0, 1}, Color{})); });
@@ -28617,7 +28668,7 @@ TEST(images_draw_through_a_color_filter) {
 TEST(drop_and_inner_shadows_of_shapes) {
     Shadow soft{Color{0, 0, 0, 0.4f}, {0, 6}, 10, 2};
     ComposeTestRule rule([&] {
-        Column(Modifier().padding(20), [&] {
+        Column(Modifier().padding(20), [=, &soft] {
             Box(Modifier().size(80, 40).dropShadow(RoundedCornerShape(12), soft).background(Color{1, 0, 0, 1}, 12));
             Box(Modifier().size(80, 40).background(Color{0, 1, 0, 1}).innerShadow(CircleShape, Shadow{Color{0, 0, 0, 1}, {1, 2}, 4}),
                 [] { Box(Modifier().size(10).background(Color{0, 0, 1, 1})); });
@@ -28735,7 +28786,7 @@ TEST(link_annotations_open_urls_call_listeners_and_restyle_on_hover_and_press) {
                  b.withLink(LinkAnnotation::Clickable("etiket", {}, [&](const LinkAnnotation& l) { tags.push_back(l.tag); }),
                             [&] { b.append("tık"); });
              }),
-             Modifier(), {.fontSize = 10});
+             Modifier(), fontSize = 10);
     });
     rule.host().setCallbacks({.openUri = [&](const std::string& uri) { opened.push_back(uri); }});
     auto colorOf = [&](const std::string& text) {
@@ -28780,7 +28831,7 @@ TEST(links_take_the_keyboard_focus_and_accessibility_clicks) {
     std::vector<std::string> opened, tags;
     Color red{1, 0, 0, 1}, yellow{1, 1, 0, 1};
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &red, &tags, &yellow] {
             Text(buildAnnotatedString([&](AnnotatedString::Builder& b) {
                      b.append("aa ");
                      b.withLink(LinkAnnotation::Url("https://kompoz.dev", TextLinkStyles{.style = SpanStyle{.color = red},
@@ -28791,13 +28842,13 @@ TEST(links_take_the_keyboard_focus_and_accessibility_clicks) {
                                                           [&](const LinkAnnotation& l) { tags.push_back(l.tag); }),
                                 [&] { b.append("tık"); });
                  }),
-                 Modifier(), {.fontSize = 10});
+                 Modifier(), fontSize = 10);
             // A link over two lines (30 dp wide): its node over the first.
             Text(buildAnnotatedString([&](AnnotatedString::Builder& b) {
                      b.withLink(LinkAnnotation::Clickable("uzun", {}, [&](const LinkAnnotation& l) { tags.push_back(l.tag); }),
                                 [&] { b.append("abc def"); });
                  }),
-                 Modifier().width(30).testTag("uzun"), {.fontSize = 10});
+                 Modifier().width(30).testTag("uzun"), fontSize = 10);
         });
     });
     rule.host().setCallbacks({.openUri = [&](const std::string& uri) { opened.push_back(uri); }});
@@ -28847,19 +28898,19 @@ TEST(links_take_the_keyboard_focus_and_accessibility_clicks) {
 
 TEST(min_lines_start_and_middle_ellipsis_and_baseline_shift) {
     ComposeTestRule rule([&] {
-        Column([&] {
-            Text("a", Modifier().testTag("üç"), {.fontSize = 10, .minLines = 3});
-            Text("a\nb\nc\nd", Modifier().testTag("dört"), {.fontSize = 10, .minLines = 3});
-            Text("abcdefghij", Modifier().width(30), {.fontSize = 10, .maxLines = 1, .overflow = TextOverflow::StartEllipsis});
-            Text("klmnopqrst", Modifier().width(30), {.fontSize = 10, .overflow = TextOverflow::MiddleEllipsis, .softWrap = false});
-            Text("uvw xyz uvw", Modifier().width(30).testTag("çok"), {.fontSize = 10, .overflow = TextOverflow::MiddleEllipsis});  // wraps: clipped
+        Column([=] {
+            Text("a", Modifier().testTag("üç"), fontSize = 10, minLines = 3);
+            Text("a\nb\nc\nd", Modifier().testTag("dört"), fontSize = 10, minLines = 3);
+            Text("abcdefghij", Modifier().width(30), fontSize = 10, maxLines = 1, overflow = TextOverflow::StartEllipsis);
+            Text("klmnopqrst", Modifier().width(30), fontSize = 10, overflow = TextOverflow::MiddleEllipsis, softWrap = false);
+            Text("uvw xyz uvw", Modifier().width(30).testTag("çok"), fontSize = 10, overflow = TextOverflow::MiddleEllipsis);  // wraps: clipped
             Text(buildAnnotatedString([](AnnotatedString::Builder& b) {
                      b.append("x");
                      b.withStyle({.baselineShift = BaselineShift::Superscript}, [&] { b.append("2"); });
                      b.append("H");
                      b.withStyle({.baselineShift = BaselineShift::Subscript}, [&] { b.append("o"); });
                  }),
-                 Modifier().testTag("simge"), {.fontSize = 10});
+                 Modifier().testTag("simge"), fontSize = 10);
         });
     });
     CHECK(rule.onNodeWithTag("üç").bounds().height == 38);   // three lines of 12.5
@@ -28881,7 +28932,7 @@ TEST(slider_thumbs_and_tracks_are_slots_given_its_state) {
     auto value = mutableStateOf(25.f);
     std::optional<SliderState> seen;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &seen] {
             Slider(value.get(), [value](float v) { value.set(v); }, Modifier().width(200).testTag("kaydırıcı"),
                    {.valueFrom = 0, .valueTo = 100,
                     .thumb = [&](const SliderState& s) {
@@ -28927,7 +28978,7 @@ TEST(remembered_slider_state_keeps_its_value_and_steps) {
 
 TEST(material3_slider_track_keeps_apart_from_its_bar_thumb) {
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Slider(0.5f, [](float) {}, Modifier().width(204).testTag("m3"),
                    {.thumb = [](const SliderState& s) { SliderDefaults::Thumb(s); }, .track = [](const SliderState& s) { SliderDefaults::Track(s); }});
             Slider(1, [](float) {}, Modifier().width(204).testTag("adımlı"),
@@ -28980,7 +29031,7 @@ TEST(range_slider_thumbs_and_track_are_slots) {
     std::optional<RangeSliderState> seen;
     std::vector<std::pair<float, bool>> thumbs;  // what each thumb was given: its value, held
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &seen, &thumbs] {
             thumbs.clear();
             RangeSlider(range.get(), [range](std::pair<float, float> v) { range.set(v); }, Modifier().width(210).testTag("aralık"),
                         {.valueFrom = 0, .valueTo = 100,
@@ -29058,11 +29109,11 @@ TEST(animate_bounds_glides_to_a_new_place_and_size) {
     ScrollState scroll;
     std::vector<float> widths;  // what the content inside was told it is
     ComposeTestRule rule([&] {
-        Column(Modifier().verticalScroll(scroll), [&] {
+        Column(Modifier().verticalScroll(scroll), [=, &widths] {
             LookaheadScope(Modifier().size(300, 200), [&] {
-                Box(Modifier().fillMaxSize(), right.get() ? Alignment::BottomEnd : Alignment::TopStart, [&] {
+                Box(Modifier().fillMaxSize(), right.get() ? Alignment::BottomEnd : Alignment::TopStart, [=, &widths] {
                     Box(Modifier().animateBounds(tween(400, 0, LinearEasing)).size(wide.get() ? 100 : 40, 40).background(Color{1, 0, 0, 1}).testTag("kutu"),
-                        [&] { Box(Modifier().fillMaxSize().onSizeChanged([&](Size s) { widths.push_back(s.width); })); });
+                        [=, &widths] { Box(Modifier().fillMaxSize().onSizeChanged([&](Size s) { widths.push_back(s.width); })); });
                 });
             });
             Box(Modifier().size(10, 1000));
@@ -29110,7 +29161,7 @@ TEST(animate_bounds_glides_to_a_new_place_and_size) {
 
 TEST(minimum_interactive_component_size_keeps_room_to_touch) {
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=] {
             Box(Modifier().minimumInteractiveComponentSize().testTag("dış"), [] { Box(Modifier().size(20).testTag("iç")); });
             Box(Modifier().minimumInteractiveComponentSize().testTag("büyük"), [] { Box(Modifier().size(60, 30)); });
             CompositionLocalProvider({LocalMinimumInteractiveComponentSize.provides(0.f)}, [] {
@@ -29134,7 +29185,7 @@ TEST(controls_keep_48_dp_of_room_and_take_taps_anywhere_in_it) {
     ComposeTestRule rule([&] {
         LogInteractions(buttonSource, log);
         CompositionLocalProvider({LocalMinimumInteractiveComponentSize.provides(room.get())}, [&] {
-            Column([&] {
+            Column([=, &buttonSource] {
                 IconButton([clicks] { ++*clicks; }, Modifier().testTag("düğme"), {.interactionSource = buttonSource},
                            [] { Icon(Icons::Filled::Add, "Ekle"); });
                 Checkbox(checked.get(), [checked](bool v) { checked.set(v); }, Modifier().testTag("kutu"));
@@ -29193,7 +29244,7 @@ TEST(buttons_and_chips_keep_48_dp_of_room_to_touch_them) {
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalMinimumInteractiveComponentSize.provides(room.get())}, [&] {
-            Column([&] {
+            Column([=] {
                 Button([taps] { taps->push_back("düğme"); }, Modifier().testTag("düğme"), [] { Text("Kaydet"); });
                 TextButton([taps] { taps->push_back("metin"); }, Modifier().testTag("metin"), {}, [] { Text("İptal"); });
                 ToggleButton(on.get(), [on](bool v) { on.set(v); }, Modifier().testTag("aç"), {}, [] { Text("Aç"); });
@@ -29272,7 +29323,7 @@ TEST(top_app_bar_colors_heights_and_insets_can_be_set) {
     ComposeTestRule rule([&, red, green, blue, magenta] {
         auto behavior = TopAppBarDefaults::exitUntilCollapsedScrollBehavior();
         state = behavior.state;
-        Column([&] {
+        Column([=, &blue, &green, &magenta, &red] {
             TopAppBarSlots slots{.title = [] { Text("Başlık"); },
                                  .subtitle = [] { Text("Alt"); },
                                  .navigationIcon = [] { Icon(Icons::Filled::Menu, "Menü"); },
@@ -29330,19 +29381,19 @@ TEST(top_app_bar_colors_heights_and_insets_can_be_set) {
 
 TEST(rows_and_columns_with_weights_that_dont_fill_are_as_big_as_their_children) {
     ComposeTestRule rule([&] {
-        Box(Modifier().size(300, 500), [&] {
-            Row([&] {
+        Box(Modifier().size(300, 500), [=] {
+            Row([=] {
                 // Not filling: each takes what it needs out of its share.
-                Column(Modifier().testTag("sütun"), [&] {
+                Column(Modifier().testTag("sütun"), [=] {
                     Box(Modifier().size(40, 60));
                     Box(Modifier().weight(1, false).size(40, 50).testTag("ağır"));
                 });
                 // Filling: all of the room.
-                Column(Modifier().testTag("dolu"), [&] {
+                Column(Modifier().testTag("dolu"), [=] {
                     Box(Modifier().size(40, 60));
                     Box(Modifier().weight(1).width(40).testTag("dolan"));
                 });
-                Row(Modifier().testTag("satır"), [&] { Box(Modifier().weight(1, false).size(30, 20)); });
+                Row(Modifier().testTag("satır"), [=] { Box(Modifier().weight(1, false).size(30, 20)); });
             });
         });
     });
@@ -29467,7 +29518,7 @@ TEST(pointer_event_passes_reach_parents_before_and_after_their_children) {
                 e = co_await s.awaitPointerEvent(PointerEventPass::Final);
                 log.push_back(std::string("ebeveyn sonra ") + name(e.type) + (e.change.isConsumed() ? " (tüketilmiş)" : ""));
             }
-        }), [&] {
+        }), [=, &clicks, &log, &taps] {
             // The handler inside the clickable: it sees each event before the click does.
             Box(Modifier().size(100).testTag("iç").clickable([&] { ++clicks; }).pointerInput(0, [&](PointerInputScope& s) -> Task {
                 while (true) {
@@ -29529,12 +29580,12 @@ TEST(movable_content_with_parameters_keeps_its_state_where_it_goes) {
     ComposeTestRule rule([&] {
         Card inRow{"satır"}, inColumn{"sütun"};
         if (wide.get())
-            Row([&] {
+            Row([=, &card]() mutable {
                 card(title.get(), 2);
                 framed(inRow, 2);
             });
         else
-            Column([&] {
+            Column([=, &card]() mutable {
                 card(title.get(), 1);
                 framed(inColumn, 1);
             });
@@ -29568,18 +29619,18 @@ TEST(movable_content_keeps_its_state_wherever_it_goes) {
     ComposeTestRule rule([&] {
         if (!card) card = remember([&] { return movableContentOf(counter("kart")); });
         if (!chip) chip = remember([&] { return movableContentOf(counter("çip")); });
-        Column([&] {
+        Column([=, &card, &chip] {
             // A Row or a Column: the content goes from one to the other.
             if (wide.get())
-                Row(Modifier().testTag("satır"), [&] { if (shown.get()) (*card)(); });
+                Row(Modifier().testTag("satır"), [=, &card] { if (shown.get()) (*card)(); });
             else
-                Column(Modifier().testTag("sütun"), [&] {
+                Column(Modifier().testTag("sütun"), [=, &card] {
                     if (shown.get()) (*card)();
                     if (twice.get()) (*card)();  // a second instance
                 });
             // From the first box (composed first) to the second.
-            Box(Modifier().testTag("bir"), [&] { if (inFirst.get()) (*chip)(); });
-            Box(Modifier().testTag("iki"), [&] { if (!inFirst.get()) (*chip)(); });
+            Box(Modifier().testTag("bir"), [=, &chip] { if (inFirst.get()) (*chip)(); });
+            Box(Modifier().testTag("iki"), [=, &chip] { if (!inFirst.get()) (*chip)(); });
         });
     });
     auto click = [&](const char* tag) { rule.onNodeWithTag(tag).performClick(); rule.waitForIdle(); };
@@ -29633,7 +29684,7 @@ TEST(blend_modes_fade_an_offscreen_layer) {
                     d.drawPath(corner, colors::Black, 1, Fill, {}, BlendMode::Clear);
                     d.drawCircle(colors::Black, 5, Offset{50, 50}, 1, Fill, {}, BlendMode::DstOut);
                 }),
-            [&] { Box(Modifier().fillMaxSize().background(cs.primary)); });
+            [=, &cs] { Box(Modifier().fillMaxSize().background(cs.primary)); });
     });
     auto draw = [&] {
         testing::RecordingCanvas c;
@@ -29863,11 +29914,11 @@ TEST(blur_types_blur_the_node_what_it_draws_or_what_is_behind) {
     auto type = mutableStateOf(BlurType::Self);
     auto edges = mutableStateOf(BlurredEdgeTreatment::Rectangle);
     ComposeTestRule rule([&] {
-        Box(Modifier().offset(20, 20).size(100), [&] {
+        Box(Modifier().offset(20, 20).size(100), [=, &blue, &green, &red] {
             Box(Modifier().background(green).size(100));  // behind
             Box(Modifier().size(80).blur(6, edges.get(), type.get()).padding(10).clip(RoundedCornerShape(8))
                     .graphicsLayer({.alpha = 0.5f}).background(red),
-                [&] { Box(Modifier().size(20).background(blue)); });
+                [=, &blue] { Box(Modifier().size(20).background(blue)); });
         });
     });
     auto draw = [&] {
@@ -29921,10 +29972,10 @@ TEST(blur_types_blur_the_node_what_it_draws_or_what_is_behind) {
 TEST(display_list_backdrops_are_drawn_anew_with_what_is_behind) {
     auto behind = mutableStateOf(0.f), over = mutableStateOf(0.f), far = mutableStateOf(0.f);
     ComposeTestRule rule([&] {
-        Box(Modifier().fillMaxSize(), [&] {
+        Box(Modifier().fillMaxSize(), [=] {
             Box(Modifier().offset(100, 100).size(10).background(Color{behind.get(), 0, 1, 1}));  // near the glass: what it reads
             Box(Modifier().offset(300, 300).size(10).background(Color{far.get(), 0, 1, 1}));   // far from it
-            Box(Modifier().offset(120, 120).size(100).blur(10, BlurredEdgeTreatment::Rectangle, BlurType::Morph), [&] {
+            Box(Modifier().offset(120, 120).size(100).blur(10, BlurredEdgeTreatment::Rectangle, BlurType::Morph), [=] {
                 Box(Modifier().size(10).background(Color{over.get(), 1, 0, 1}));  // on the glass
             });
         });
@@ -30213,7 +30264,7 @@ TEST(graphics_layer_render_effect_draws_through_an_effect_layer) {
 TEST(display_list_effect_layers_change_as_a_whole) {
     auto tint = mutableStateOf(0.f);
     ComposeTestRule rule([&] {
-        Box(Modifier().offset(-50, 100).size(100).blur(10, BlurredEdgeTreatment::Unbounded), [&] {
+        Box(Modifier().offset(-50, 100).size(100).blur(10, BlurredEdgeTreatment::Unbounded), [=] {
             Box(Modifier().size(10).background(Color{tint.get(), 0, 1, 1}));  // off the screen: still blurred into it
             Box(Modifier().offset(60, 60).size(10).background(Color{0, 1, 0, 1}));
         });
@@ -30282,7 +30333,7 @@ TEST(bidi_isolates_keep_their_direction_inside_and_stay_out_of_the_way) {
 TEST(checkboxes_and_radio_buttons_ripple_and_hover_in_a_40_dp_circle) {
     MutableInteractionSource source, radioSource;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &radioSource, &source] {
             Checkbox(false, [](bool) {}, Modifier().testTag("kutu"), true, source);
             RadioButton(false, [] {}, Modifier().testTag("radyo"), true, radioSource);
         });
@@ -30330,7 +30381,7 @@ TEST(checkboxes_and_radio_buttons_ripple_and_hover_in_a_40_dp_circle) {
 TEST(unbounded_indications_hover_in_a_circle_of_their_radius) {
     MutableInteractionSource source;
     ComposeTestRule rule([&] {
-        Column([&] {
+        Column([=, &source] {
             // Shown by indication() on another node, as wide as its radius.
             Box(Modifier().size(24).hoverable(source).indication(source, ripple(false, 20)).testTag("simge"));
             // Unbounded with no radius: over its own bounds.
@@ -30360,7 +30411,7 @@ TEST(unbounded_indications_hover_in_a_circle_of_their_radius) {
 TEST(labels_show_over_their_content_while_held_or_always) {
     MutableInteractionSource source;
     ComposeTestRule rule([&] {
-        Column(Modifier().padding(0, 100), [&] {
+        Column(Modifier().padding(0, 100), [=, &source] {
             Label([] { Box(Modifier().size(40, 20).testTag("etiket")); }, Modifier().testTag("içerik"), source, false,
                   [] { Box(Modifier().size(100, 30)); });
             Label([] { Box(Modifier().size(10, 10).testTag("hep")); }, Modifier(), std::nullopt, true, [] { Box(Modifier().size(30)); });

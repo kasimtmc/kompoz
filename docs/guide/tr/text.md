@@ -8,19 +8,19 @@ Metni göstermek, stillendirmek, kullanıcının seçmesine izin vermek ve metin
 
 ```cpp body
 Text("Hello, world");
-Text("A title", {.font = typography().titleLarge});
-Text("A note", Modifier().padding(8), {.color = colorScheme().onSurfaceVariant});
+Text("A title", style = typography().titleLarge);
+Text("A note", Modifier().padding(8), color = colorScheme().onSurfaceVariant);
 ```
 
-Aşırı yüklemeleri önce metni, sonra isteğe bağlı olarak bir `Modifier`'ı, ardından bir `TextStyle`'ı alır. Metin boyutları sp cinsindendir ve sistemin font boyutuna göre ölçeklenir.
+Önce metni, sonra Compose'un parametrelerini, yerine göre ya da adıyla alır: `modifier`, `color`, `fontSize`, `fontStyle`, `fontWeight`, `fontFamily`, `letterSpacing`, `textDecoration`, `textAlign`, `lineHeight`, `overflow`, `softWrap`, `maxLines`, `minLines`, `onTextLayout`, `style`, `autoSize`. Metin boyutları sp cinsindendir ve sistemin font boyutuna göre ölçeklenir.
 
 ## Metni stillendirmek
 
-`TextStyle`'ın alanları, yazılma sırasıyla:
+Bir `TextStyle` bir metnin görünüşünü tutar: `style = …` bütün bir stil verir (bir temanın yazı stili, `typography().titleLarge` de olur), adıyla verilenler onun üstüne gelir. Alanları; aksi söylenmedikçe Text bunları adıyla da alır:
 
 | Alan | Ne yapar |
 |---|---|
-| `font` | Bütün bir `Font`: Material'ın yazı stilleri (`typography().bodyLarge`) birer fonttur. |
+| `font` | Bütün bir `Font`: Material'ın yazı stilleri (`typography().bodyLarge`) birer fonttur (yalnızca bir `TextStyle`'da). |
 | `fontSize` | Boyut: sp cinsinden bir sayı ya da geçerli boyuta göre `TextUnit::em(1.2f)`. |
 | `fontWeight` | `FontWeight::Normal`, `Medium`, `Bold` ya da `W100` … `W900`. |
 | `color` | Renk; verilmezse `LocalContentColor`. |
@@ -30,18 +30,17 @@ Aşırı yüklemeleri önce metni, sonra isteğe bağlı olarak bir `Modifier`'�
 | `fontStyle` | `FontStyle::Italic`. |
 | `fontFamily` | `FontFamily::Serif`, `Monospace` ya da dosyalardan yapılmış bir aile. |
 | `letterSpacing` | Her karakterden sonraki ek boşluk. |
-| `fontFeatureSettings` | CSS'in yazdığı gibi OpenType özellikleri: `"tnum"`, `"smcp"`. |
+| `fontFeatureSettings` | CSS'in yazdığı gibi OpenType özellikleri: `"tnum"`, `"smcp"` (yalnızca bir `TextStyle`'da). |
 | `overflow` | Kesildiğinde son satırın ne gösterdiği: `TextOverflow::Clip`, `Ellipsis`, `StartEllipsis`, `MiddleEllipsis`. |
 | `softWrap` | `false`: her paragraf tek satır. |
 | `autoSize` | Alana sığan font boyutu: `TextAutoSize::StepBased(12, 48)`. |
 | `lineHeight` | Bir taban çizgisinden ötekine sp. |
 
-Designated initializer'lar bu sırayla yazılır; ihtiyacınız olmayanları atlayın.
+Yalnızca gerekenleri, istediğiniz sırayla verin:
 
 ```cpp body
 #! std::string article;
-Text(article, Modifier().fillMaxWidth(), {.fontWeight = FontWeight::Medium, .textAlign = TextAlign::Justify,
-                                          .maxLines = 3, .overflow = TextOverflow::Ellipsis});
+Text(article, Modifier().fillMaxWidth(), fontWeight = FontWeight::Medium, textAlign = TextAlign::Justify, maxLines = 3, overflow = TextOverflow::Ellipsis);
 ```
 
 ## Tek metinde birkaç stil
@@ -77,7 +76,7 @@ Kendi fontlarınız varlık dosyalarıdır:
 void Quote(const std::string& text) {
     static const FontFamily lora = FontFamily::fromFiles({{"fonts/Lora-Regular.ttf"},
                                                           {"fonts/Lora-Bold.ttf", FontWeight::Bold}});
-    Text(text, {.fontSize = 20, .fontStyle = FontStyle::Italic, .fontFamily = lora});
+    Text(text, fontSize = 20, fontStyle = FontStyle::Italic, fontFamily = lora);
 }
 ```
 
@@ -89,11 +88,11 @@ Metin varsayılan olarak seçilemez. Bir `SelectionContainer`'ın içinde seçil
 
 ```cpp body
 SelectionContainer(Modifier(), [&] {
-    Column([&] {
+    Column() {
         Text("Order number");
-        Text("KMP-2026-0042", {.fontWeight = FontWeight::Bold});
+        Text("KMP-2026-0042", fontWeight = FontWeight::Bold);
         DisableSelection([] { Text("(not selectable)"); });
-    });
+    };
 });
 ```
 
@@ -122,10 +121,10 @@ Bir `TextFieldState`, metni ve seçimini, bir de geri alma geçmişini tutar:
 #! void send(const std::string&) {}
 void Composer() {
     auto message = rememberTextFieldState();
-    Row(Modifier().fillMaxWidth(), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+    Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
         OutlinedTextField(message, Modifier().weight(1), {.maxLines = 4, .placeholder = "Message"});
         IconButton([message] { send(message.text()); message.clearText(); }, [] { Icon(Icons::AutoMirrored::Filled::Send, "Send"); });
-    });
+    };
 }
 ```
 
@@ -185,11 +184,10 @@ void Gauge(int percent) {
 ```cpp
 void Excerpt(const std::string& article) {
     auto cut = remember([] { return mutableStateOf(false); });
-    Column([&] {
-        Text(article, Modifier(), {.maxLines = 3, .overflow = TextOverflow::Ellipsis},
-             [cut](const TextLayoutResult& r) { cut.set(r.hasVisualOverflow()); });
+    Column() {
+        Text(article, Modifier(), maxLines = 3, overflow = TextOverflow::Ellipsis, onTextLayout = [cut](const TextLayoutResult& r) { cut.set(r.hasVisualOverflow()); });
         if (cut.get()) TextButton([] {}, [] { Text("Read more"); });
-    });
+    };
 }
 ```
 

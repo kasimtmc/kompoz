@@ -22,17 +22,17 @@ The three basic layouts:
 
 ```cpp
 void ProfileHeader(const std::string& name, const std::string& handle) {
-    Row(Modifier().padding(16), {.verticalAlignment = Alignment::CenterVertically}, [&] {
-        Box([&] {
+    Row(Modifier().padding(16), verticalAlignment = Alignment::CenterVertically) {
+        Box() {
             Icon(Icons::Filled::AccountCircle, "", Modifier().size(56));
-            Box(Modifier().size(14).align(Alignment::BottomEnd).background(Color::hex(0x2E7D32), CircleShape));
-        });
+            Box(Modifier().size(14).align(Alignment::BottomEnd).background(Color::hex(0x2E7D32), CircleShape)) {};
+        };
         Spacer(Modifier().width(12));
-        Column([&] {
-            Text(name, {.font = typography().titleMedium});
-            Text(handle, {.font = typography().bodyMedium, .color = colorScheme().onSurfaceVariant});
-        });
-    });
+        Column() {
+            Text(name, style = typography().titleMedium);
+            Text(handle, color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
+        };
+    };
 }
 ```
 
@@ -41,12 +41,11 @@ void ProfileHeader(const std::string& name, const std::string& handle) {
 A `Column`'s style arranges children along its height and aligns them across its width; a `Row`'s does the opposite:
 
 ```cpp body
-Column(Modifier().fillMaxSize(), {.verticalArrangement = Arrangement::SpaceBetween,
-                                  .horizontalAlignment = Alignment::CenterHorizontally}, [&] {
+Column(Modifier().fillMaxSize(), verticalArrangement = Arrangement::SpaceBetween, horizontalAlignment = Alignment::CenterHorizontally) {
     Text("Top");
     Text("Middle");
     Text("Bottom");
-});
+};
 ```
 
 | Arrangement | Children are |
@@ -66,10 +65,10 @@ A single child can override its alignment: `Modifier().align(Alignment::End)` in
 `weight` shares the space a `Row` or `Column` has left, after the unweighted children are measured, among the weighted ones in proportion:
 
 ```cpp body
-Row(Modifier().fillMaxWidth().height(48), [&] {
-    Box(Modifier().weight(2).fillMaxHeight().background(colorScheme().primary));    // two thirds
-    Box(Modifier().weight(1).fillMaxHeight().background(colorScheme().secondary));  // one third
-});
+Row(Modifier().fillMaxWidth().height(48)) {
+    Box(Modifier().weight(2).fillMaxHeight().background(colorScheme().primary)) {};    // two thirds
+    Box(Modifier().weight(1).fillMaxHeight().background(colorScheme().secondary)) {};  // one third
+};
 ```
 
 `weight(w, false)` lets the child be smaller than its share.
@@ -125,9 +124,9 @@ Track sizes: `Fixed(dp)`, `Percentage(fraction)`, `Flex(weight)` (a share of the
 A layout doesn't scroll by itself. `verticalScroll` and `horizontalScroll` make a `Column` or `Row` scroll when its content is bigger than the space it has:
 
 ```cpp body
-Column(Modifier().fillMaxSize().verticalScroll(rememberScrollState()), [&] {
+Column(Modifier().fillMaxSize().verticalScroll(rememberScrollState())) {
     for (int i = 0; i < 50; ++i) Text("Line " + std::to_string(i));
-});
+};
 ```
 
 This composes every child. For long or endless content, use a lazy list instead: see [Lists and grids](lists.md).
@@ -144,10 +143,10 @@ Lay out by the window's size class rather than by exact sizes. `currentWindowAda
 void MailScreen() {
     WindowAdaptiveInfo info = currentWindowAdaptiveInfo();
     if (info.windowSizeClass.windowWidthSizeClass == WindowWidthSizeClass::Expanded) {
-        Row(Modifier().fillMaxSize(), [&] {
-            Box(Modifier().weight(1), [] { ListPane(); });
-            Box(Modifier().weight(2), [] { DetailPane(); });
-        });
+        Row(Modifier().fillMaxSize()) {
+            (Box)(Modifier().weight(1), [] { ListPane(); });
+            (Box)(Modifier().weight(2), [] { DetailPane(); });
+        };
     } else {
         ListPane();
     }
@@ -197,9 +196,9 @@ Insets paddings don't add up: an inner one pads only by what outer ones didn't a
 
 ```cpp body
 Scaffold(Modifier(), {}, [&](PaddingValues padding) {
-    Column(Modifier().padding(padding).consumeWindowInsets(padding).imePadding(), [&] {
+    Column(Modifier().padding(padding).consumeWindowInsets(padding).imePadding()) {
         OutlinedTextField("", [](std::string) {});
-    });
+    };
 });
 ```
 

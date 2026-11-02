@@ -37,31 +37,37 @@ void Greeting(const std::string& name, CallSite site = CallSite::current()) {
 - The arguments before the lambda decide skipping: when they compare equal (`==`) to last time and nothing the body read has changed, the body doesn't run.
 - The body captures by value (`[=]`), because it can run again later on its own, without its caller.
 
-Composables that take a content lambda, like `Column` and `Card`, are Compose's *inline* composables: they use `ComposableScope scope(site);` for an identity without a scope, and the state read in their content belongs to the caller. See [Lifecycle and identity](lifecycle.md).
+A composable's block runs in a scope of its own, as a Compose lambda does: when only what the block read changes, the block alone runs again. See [Lifecycle and identity](lifecycle.md).
 
 ## Parameters
 
-Kotlin's named and default parameters become C++ *options structs* with designated initializers:
+Kotlin's named and default parameters are named arguments here too: `name = value`, after the arguments given without a name, in any order, and only those you need:
 
 ```kotlin
 Text("Title", fontSize = 24.sp, maxLines = 1)
-OutlinedTextField(value, onValueChange, label = { Text("Email") }, singleLine = true)
+Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { … }
 ```
+
+```cpp body
+Text("Title", fontSize = 24, maxLines = 1);
+Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
+    Text("…");
+};
+```
+
+Arguments without a name fill the parameters in Compose's order (`Text(text, modifier, color, fontSize, …)`, `Box(modifier, contentAlignment)`). A name the composable doesn't take, one given twice, or a value it can't take is a compile error, never ignored. The names (`modifier`, `color`, `fontSize`, …) are constants of `kompoz`: a variable of yours called the same hides the name, which then is a compile error too; write `kompoz::color = …` there.
+
+`Box`, `Column`, `Row`, `Spacer` and `Text` take named arguments so far. The other components still take an *options struct* with designated initializers, in the order its fields are declared, until their turn comes:
 
 ```cpp body
 #! std::string value;
 #! std::function<void(std::string)> onValueChange;
-Text("Title", Modifier(), {.fontSize = 24, .maxLines = 1});
 OutlinedTextField(value, onValueChange, Modifier(), {.singleLine = true, .label = "Email"});
 ```
 
-Designated initializers must follow the order the fields are declared in the struct. The headers list them in a sensible order, and your compiler tells you when you mix them up.
-
-Most components take, in this order: the required arguments, the `Modifier`, the options struct, then the content lambda. Overloads leave out what you don't need: `Button(onClick, content)` and `Button(onClick, modifier, style, content)` both exist.
-
 ## Trailing lambdas
 
-Kotlin's trailing lambda goes inside the parentheses as the last argument:
+With `<kompoz/blocks.hpp>` included (last, after the other headers), Kotlin's trailing lambda goes after the call, in braces, with a semicolon after the closing one:
 
 ```kotlin
 Column(Modifier.padding(16.dp)) {
@@ -71,20 +77,24 @@ Column(Modifier.padding(16.dp)) {
 ```
 
 ```cpp body
-Column(Modifier().padding(16), [&] {
+Column(Modifier().padding(16)) {
     Text("One");
     Text("Two");
-});
+};
 ```
 
-Content lambdas run right away, during the call, so `[&]` is safe for them. Callbacks such as `onClick` run later, after composition, when the function that created them has returned: capture what they use **by value**.
+The header makes macros of the names of the composables that take a block, so `Column(…) { … };` is the call with the braces as its block, a lambda that captures by value (`[=]`). Without it, or for a block that has to capture something by reference, the block is the last argument, and with the header included the name goes in parentheses so the macro leaves it alone: `(Column)(Modifier(), [=, &log] { … })`. A `Box` with no content has an empty block: `Box(Modifier().size(24)) {};`.
+
+A block runs in a scope of its own: it can run again later, alone, when the function that made it has returned. So, as callbacks such as `onClick`, it captures what it uses **by value**; a reference must be to something that outlives the composable, never to one of its locals:
 
 ```cpp
 void LikeButton() {
     auto likes = remember([] { return mutableStateOf(0); });
-    Button([likes] { likes.set(likes.get() + 1); }, [&] {   // the callback: by value
-        Text(std::to_string(likes.get()) + " likes");        // the content: [&] is fine
-    });
+    Column() {                                                      // a block: by value
+        Button([likes] { likes.set(likes.get() + 1); }, [=] {        // the callback: by value
+            Text(std::to_string(likes.get()) + " likes");
+        });
+    };
 }
 ```
 
@@ -118,7 +128,7 @@ Modifier.fillMaxWidth().padding(16.dp).background(Color.Red, RoundedCornerShape(
 ```
 
 ```cpp body
-Box(Modifier().fillMaxWidth().padding(16).background(Color::hex(0xE53935), RoundedCornerShape(8)));
+Box(Modifier().fillMaxWidth().padding(16).background(Color::hex(0xE53935), RoundedCornerShape(8))) {};
 ```
 
 A chain starts from `Modifier()`. Order matters as in Compose. See [Modifiers](modifiers.md).
@@ -179,7 +189,7 @@ CompositionLocalProvider({LocalContentColor.provides(Color::hex(0xE53935))}, [&]
 | `var v by mutableStateOf(0)` | `auto v = mutableStateOf(0);` `v.get()`, `v.set(1)` |
 | `key(id) { … }` | `key(id, [&] { … })` |
 | `Modifier.padding(8.dp)` | `Modifier().padding(8)` |
-| Named arguments | Designated initializers: `{.maxLines = 1}` |
+| Named arguments | Named arguments: `Text("…", maxLines = 1)` (options structs for the components not yet converted) |
 | `LaunchedEffect(k) { … }` | `LaunchedEffect(k, [=]() -> Task { … })` |
 | `scope.launch { … }` | `scope.launch([=]() -> Task { … })` |
 | `DisposableEffect(k) { onDispose { … } }` | `DisposableEffect(k, [=] { return [=] { … }; })` |

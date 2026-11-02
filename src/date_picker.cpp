@@ -134,8 +134,8 @@ void DayCell(std::function<void()> onClick, year_month_day date, bool selected, 
                  : band == Band::Inside ? cs.onSecondaryContainer
                  : today                ? cs.primary
                                         : cs.onSurface;
-    Box(cell, Alignment::Center, [&] {
-        Box(circle, Alignment::Center, [&] { Text(std::to_string(unsigned(date.day())), {.fontSize = 14, .color = text}); });
+    detail::Box(cell, Alignment::Center, [&] {
+        detail::Box(circle, Alignment::Center, [&] { detail::Text(std::to_string(unsigned(date.day())), {.fontSize = 14, .color = text}); });
     });
 }
 
@@ -164,13 +164,13 @@ void MonthGrid(year_month month, year_month_day today, const DatePickerStrings& 
                CallSite site = CallSite::current()) {
     ComposableScope scope(site);
     auto [offset, count] = monthLayout(month, strings);
-    Column(Modifier().fillMaxWidth().padding(12, 0), [&] {
+    detail::Column(Modifier().fillMaxWidth().padding(12, 0), [&] {
         for (int week = 0; week < 6; ++week)
-            Row(Modifier().fillMaxWidth(), [&] {
+            detail::Row(Modifier().fillMaxWidth(), [&] {
                 for (int k = 0; k < 7; ++k) {
                     int d = week * 7 + k - offset + 1;
                     if (d < 1 || d > count) {
-                        Box(Modifier().weight(1).height(48));
+                        detail::Box(Modifier().weight(1).height(48));
                         continue;
                     }
                     year_month_day date = month / day{unsigned(d)};
@@ -185,10 +185,10 @@ void MonthGrid(year_month month, year_month_day today, const DatePickerStrings& 
 
 void WeekdayLabels(const DatePickerStrings& strings, CallSite site = CallSite::current()) {
     ComposableScope scope(site);
-    Row(Modifier().fillMaxWidth().padding(12, 0), [&] {
+    detail::Row(Modifier().fillMaxWidth().padding(12, 0), [&] {
         for (int k = 0; k < 7; ++k)
-            Box(Modifier().weight(1).height(48), Alignment::Center, [&] {
-                Text(strings.weekdays[(strings.firstDayOfWeek + unsigned(k)) % 7], {.fontSize = 14, .color = colorScheme().onSurface});
+            detail::Box(Modifier().weight(1).height(48), Alignment::Center, [&] {
+                detail::Text(strings.weekdays[(strings.firstDayOfWeek + unsigned(k)) % 7], {.fontSize = 14, .color = colorScheme().onSurface});
             });
     });
 }
@@ -229,14 +229,14 @@ void Calendar(std::shared_ptr<MonthRange> d, year_month_day today, const DatePic
 
     // The month and the arrows in the navigation content color (Compose's navigationContentColor).
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
-    Row(Modifier().fillMaxWidth().height(56).padding(12, 0), {.verticalAlignment = Alignment::CenterVertically}, [&] {
-        Row(Modifier().clip(RoundedCornerShape(20)).clickable([yearPicking] { yearPicking.set(!yearPicking.get()); }).padding(12, 8),
+    detail::Row(Modifier().fillMaxWidth().height(56).padding(12, 0), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+        detail::Row(Modifier().clip(RoundedCornerShape(20)).clickable([yearPicking] { yearPicking.set(!yearPicking.get()); }).padding(12, 8),
             {.horizontalArrangement = Arrangement::spacedBy(4), .verticalAlignment = Alignment::CenterVertically}, [&] {
-                Text(std::format("{} {}", strings.months[unsigned(shown.month()) - 1], int(shown.year())),
+                detail::Text(std::format("{} {}", strings.months[unsigned(shown.month()) - 1], int(shown.year())),
                      {.font = t.labelLarge, .color = cs.onSurfaceVariant});
                 Icon(yearPicking.get() ? Icons::Filled::KeyboardArrowUp : Icons::Filled::KeyboardArrowDown, strings.selectYear, Modifier().size(18));
             });
-        Spacer(Modifier().weight(1));
+        detail::Spacer(Modifier().weight(1));
         if (!yearPicking.get()) {
             IconButton([go, shown] { go(shown - months{1}); }, Modifier(), {.enabled = index > 0},
                        [&] { Icon(Icons::AutoMirrored::Filled::KeyboardArrowLeft, strings.previousMonth); });
@@ -258,8 +258,8 @@ void Calendar(std::shared_ptr<MonthRange> d, year_month_day today, const DatePic
                              cells.items(years, [&, go, shown, yearPicking](int i) {
                                  int y = d->years.first + i;
                                  bool picked = y == shownYear;
-                                 Box(Modifier().fillMaxWidth().height(52), Alignment::Center, [&] {
-                                     Box(Modifier()
+                                 detail::Box(Modifier().fillMaxWidth().height(52), Alignment::Center, [&] {
+                                     detail::Box(Modifier()
                                              .size(72, 36)
                                              .background(picked ? cs.primary : colors::Transparent, 18)
                                              .clip(RoundedCornerShape(18))
@@ -268,7 +268,7 @@ void Calendar(std::shared_ptr<MonthRange> d, year_month_day today, const DatePic
                                                  yearPicking.set(false);
                                              }),
                                          Alignment::Center, [&] {
-                                             Text(std::to_string(y), {.fontSize = 16, .color = picked ? cs.onPrimary : cs.onSurfaceVariant});
+                                             detail::Text(std::to_string(y), {.fontSize = 16, .color = picked ? cs.onPrimary : cs.onSurfaceVariant});
                                          });
                                  });
                              });
@@ -445,7 +445,7 @@ void DateRangeInputFields(const DateRangePickerState& state, const DatePickerStr
     ComposableScope scope(site);
     auto typed = remember([&] { return std::make_shared<std::pair<std::optional<year_month_day>, std::optional<year_month_day>>>(
                                     state.selectedStartDate(), state.selectedEndDate()); });
-    Row(Modifier().fillMaxWidth().padding(24, 10, 24, 0), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+    detail::Row(Modifier().fillMaxWidth().padding(24, 10, 24, 0), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
         DateTextField(typed->first, strings.startDate, strings, state.yearRange(),
                       [typed, strings](year_month_day d) { return typed->second && d > *typed->second ? strings.invalidRange : std::string(); },
                       [state, typed](std::optional<year_month_day> d) {
@@ -477,12 +477,12 @@ void DatePicker(const DatePickerState& state, const Modifier& modifier, DatePick
                       }};
     bool typing = state.displayMode() == DisplayMode::Input;
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
-        Column(modifier.widthIn(0, 360).fillMaxWidth(), [&] {
-            Column(Modifier().fillMaxWidth().padding(24, 16, 12, 12), [&] {
-                Text(strings.title, {.font = typography().labelLarge, .color = cs.onSurfaceVariant});
-                Spacer(Modifier().height(36));
-                Row(Modifier().fillMaxWidth(), {.verticalAlignment = Alignment::CenterVertically}, [&] {
-                    Text(selected ? headline(strings, *selected) : typing ? strings.inputNoSelection : strings.noSelection, Modifier().weight(1),
+        detail::Column(modifier.widthIn(0, 360).fillMaxWidth(), [&] {
+            detail::Column(Modifier().fillMaxWidth().padding(24, 16, 12, 12), [&] {
+                detail::Text(strings.title, {.font = typography().labelLarge, .color = cs.onSurfaceVariant});
+                detail::Spacer(Modifier().height(36));
+                detail::Row(Modifier().fillMaxWidth(), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+                    detail::Text(selected ? headline(strings, *selected) : typing ? strings.inputNoSelection : strings.noSelection, Modifier().weight(1),
                          {.fontSize = 32, .color = cs.onSurface, .maxLines = 1, .overflow = TextOverflow::Ellipsis});
                     if (options.showModeToggle)  // the pencil to type the date, the calendar to pick it
                         CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
@@ -585,13 +585,13 @@ void DateRangePicker(const DateRangePickerState& state, const Modifier& modifier
     // Start and end in the headline, each a tab that shows its month.
     auto tab = [&](bool isEnd, std::optional<year_month_day> date, const std::string& placeholder) {
         if (typing) {  // typed in the fields below: the headline only shows them
-            Text(date ? headline(strings, *date) : placeholder, Modifier().padding(8, 4),
+            detail::Text(date ? headline(strings, *date) : placeholder, Modifier().padding(8, 4),
                  {.fontSize = 22, .color = cs.onSurface, .maxLines = 1, .overflow = TextOverflow::Ellipsis});
             return;
         }
         bool active = isEnd == pickingEnd;
         bool enabled = !isEnd || start;
-        Box(Modifier()
+        detail::Box(Modifier()
                 .clip(RoundedCornerShape(8))
                 .background(active ? cs.secondaryContainer : colors::Transparent)
                 .clickable([editingEnd, d, isEnd, date] {
@@ -601,21 +601,21 @@ void DateRangePicker(const DateRangePickerState& state, const Modifier& modifier
                 .semantics({.contentDescription = placeholder, .role = SemanticsRole::Tab, .checked = active})
                 .padding(8, 4),
             [&] {
-                Text(date ? headline(strings, *date) : placeholder,
+                detail::Text(date ? headline(strings, *date) : placeholder,
                      {.fontSize = 22, .color = active ? cs.onSecondaryContainer : enabled ? cs.onSurface : cs.onSurface.copy(0.38f),
                       .maxLines = 1, .overflow = TextOverflow::Ellipsis});
             });
     };
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
-        Column(modifier.widthIn(0, 360).fillMaxWidth(), [&] {
-            Column(Modifier().fillMaxWidth().padding(16, 16, 12, 8), [&] {
-                Text(strings.rangeTitle, Modifier().padding(8, 0, 0, 0), {.font = typography().labelLarge, .color = cs.onSurfaceVariant});
-                Spacer(Modifier().height(28));
-                Row(Modifier().fillMaxWidth(), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+        detail::Column(modifier.widthIn(0, 360).fillMaxWidth(), [&] {
+            detail::Column(Modifier().fillMaxWidth().padding(16, 16, 12, 8), [&] {
+                detail::Text(strings.rangeTitle, Modifier().padding(8, 0, 0, 0), {.font = typography().labelLarge, .color = cs.onSurfaceVariant});
+                detail::Spacer(Modifier().height(28));
+                detail::Row(Modifier().fillMaxWidth(), {.verticalAlignment = Alignment::CenterVertically}, [&] {
                     // The button stays at the end, all of it: two long dates give way, the end's cut off first.
-                    Row(Modifier().weight(1), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+                    detail::Row(Modifier().weight(1), {.verticalAlignment = Alignment::CenterVertically}, [&] {
                         tab(false, start, strings.startDate);
-                        Text("–", Modifier().padding(4, 0), {.fontSize = 22, .color = cs.onSurface});
+                        detail::Text("–", Modifier().padding(4, 0), {.fontSize = 22, .color = cs.onSurface});
                         tab(true, end, strings.endDate);
                     });
                     if (options.showModeToggle)
@@ -639,9 +639,9 @@ void DatePickerDialog(std::function<void()> onDismissRequest, const Content& con
     const ColorScheme& cs = colorScheme();
     // 360 dp wide, as Compose's (not the platform's dialog width, 48 dp in from each side).
     Dialog(std::move(onDismissRequest), [&] {
-        Column(Modifier().widthIn(0, 360).fillMaxWidth().background(cs.surfaceContainerHigh, 28).padding(0, 0, 0, 12), [&] {
+        detail::Column(Modifier().widthIn(0, 360).fillMaxWidth().background(cs.surfaceContainerHigh, 28).padding(0, 0, 0, 12), [&] {
             content();
-            Row(Modifier().fillMaxWidth().padding(12, 8, 12, 0), {.horizontalArrangement = Arrangement::spacedBy(8, Arrangement::Kind::End)},
+            detail::Row(Modifier().fillMaxWidth().padding(12, 8, 12, 0), {.horizontalArrangement = Arrangement::spacedBy(8, Arrangement::Kind::End)},
                 [&] {
                     if (dismissButton) dismissButton();
                     if (confirmButton) confirmButton();

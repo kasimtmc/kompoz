@@ -224,7 +224,7 @@ void buttonImpl(ButtonKind kind, std::function<void()> onClick, const Modifier& 
 
     CompositionLocalProvider(
         {LocalContentColor.provides(contentColor), LocalTextStyle.provides(typography().labelLarge)}, [&] {
-            Row(buttonPadding(m.semantics({.role = SemanticsRole::Button})
+            detail::Row(buttonPadding(m.semantics({.role = SemanticsRole::Button})
                                   .clickable(std::move(onClick), {.enabled = style.enabled, .interactionSource = source}),
                               style.contentPadding.value_or(kind == ButtonKind::Text ? ButtonDefaults::TextButtonContentPadding : ButtonDefaults::ContentPadding)),
                 {.horizontalArrangement = Arrangement::spacedBy(8, Arrangement::Kind::Center),
@@ -266,7 +266,7 @@ void toggleButtonImpl(ToggleKind kind, bool checked, std::function<void(bool)> o
 
     CompositionLocalProvider(
         {LocalContentColor.provides(contentState), LocalTextStyle.provides(typography().labelLarge)}, [&] {
-            Row(buttonPadding(m.toggleable(checked, std::move(onCheckedChange), SemanticsRole::Checkbox,
+            detail::Row(buttonPadding(m.toggleable(checked, std::move(onCheckedChange), SemanticsRole::Checkbox,
                                            {.enabled = style.enabled, .interactionSource = source}),
                               16, 10),
                 {.horizontalArrangement = Arrangement::spacedBy(8, Arrangement::Kind::Center),
@@ -318,30 +318,30 @@ Shape detail::morphingShape(const Shape& target, CallSite site) {
     return shape;
 }
 
-void Box(const Content& content, CallSite site) { Box(Modifier{}, Alignment::TopStart, content, site); }
+void detail::Box(const Content& content, CallSite site) { detail::Box(Modifier{}, Alignment::TopStart, content, site); }
 void LookaheadScope(const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
-    Box(modifier.then(std::make_shared<LookaheadScopeElement>()), content);
+    detail::Box(modifier.then(std::make_shared<LookaheadScopeElement>()), content);
 }
 
-void Box(const Modifier& modifier, const Content& content, CallSite site) {
-    Box(modifier, Alignment::TopStart, content, site);
+void detail::Box(const Modifier& modifier, const Content& content, CallSite site) {
+    detail::Box(modifier, Alignment::TopStart, content, site);
 }
-void Box(const Modifier& modifier, Alignment contentAlignment, const Content& content, CallSite site) {
+void detail::Box(const Modifier& modifier, Alignment contentAlignment, const Content& content, CallSite site) {
     layoutNode(site, modifier, boxPolicy(contentAlignment), content);
 }
 
-void Column(const Content& content, CallSite site) { Column(Modifier{}, ColumnStyle{}, content, site); }
-void Column(const Modifier& modifier, const Content& content, CallSite site) {
-    Column(modifier, ColumnStyle{}, content, site);
+void detail::Column(const Content& content, CallSite site) { detail::Column(Modifier{}, detail::ColumnStyle{}, content, site); }
+void detail::Column(const Modifier& modifier, const Content& content, CallSite site) {
+    detail::Column(modifier, detail::ColumnStyle{}, content, site);
 }
-void Column(const Modifier& modifier, ColumnStyle style, const Content& content, CallSite site) {
+void detail::Column(const Modifier& modifier, detail::ColumnStyle style, const Content& content, CallSite site) {
     layoutNode(site, modifier, linearPolicy(false, style.verticalArrangement, style.horizontalAlignment.bias), content);
 }
 
-void Row(const Content& content, CallSite site) { Row(Modifier{}, RowStyle{}, content, site); }
-void Row(const Modifier& modifier, const Content& content, CallSite site) { Row(modifier, RowStyle{}, content, site); }
-void Row(const Modifier& modifier, RowStyle style, const Content& content, CallSite site) {
+void detail::Row(const Content& content, CallSite site) { detail::Row(Modifier{}, detail::RowStyle{}, content, site); }
+void detail::Row(const Modifier& modifier, const Content& content, CallSite site) { detail::Row(modifier, detail::RowStyle{}, content, site); }
+void detail::Row(const Modifier& modifier, detail::RowStyle style, const Content& content, CallSite site) {
     layoutNode(site, modifier, linearPolicy(true, style.horizontalArrangement, style.verticalAlignment.bias), content);
 }
 
@@ -567,7 +567,7 @@ void PredictiveBackHandler(bool enabled, std::function<Task(Flow<BackEventCompat
     DisposableEffect(0, [run]() -> std::function<void()> { return [run] { run->cancel(); }; });
 }
 
-void Spacer(const Modifier& modifier, CallSite site) {
+void detail::Spacer(const Modifier& modifier, CallSite site) {
     layoutNode(site, modifier, [](LayoutNode&, const Constraints& c) { return Size{c.minWidth, c.minHeight}; }, {});
 }
 
@@ -589,35 +589,36 @@ void withDefaultTextStyle(const Content& content) {
 
 void BasicText(std::string text, const Modifier& modifier, const TextStyle& style, CallSite site) {
     ComposableScope scope(site);
-    withDefaultTextStyle([&] { Text(std::move(text), modifier, style); });
+    withDefaultTextStyle([&] { detail::Text(std::move(text), modifier, style); });
 }
 void BasicText(const AnnotatedString& text, const Modifier& modifier, const TextStyle& style, CallSite site) {
     ComposableScope scope(site);
-    withDefaultTextStyle([&] { Text(text, modifier, style); });
+    withDefaultTextStyle([&] { detail::Text(text, modifier, style); });
 }
 
-void Text(std::string text, CallSite site) { Text(std::move(text), Modifier{}, TextStyle{}, site); }
-void Text(std::string text, const TextStyle& style, CallSite site) { Text(std::move(text), Modifier{}, style, site); }
+void detail::Text(std::string text, CallSite site) { detail::Text(std::move(text), Modifier{}, TextStyle{}, site); }
+void detail::Text(std::string text, const TextStyle& style, CallSite site) { detail::Text(std::move(text), Modifier{}, style, site); }
 // Text is a restartable, skippable scope: called again with the same text, modifier and style
 // it doesn't run (unless the theme values it read changed).
-void Text(std::string text, const Modifier& modifier, const TextStyle& style, CallSite site) {
+void detail::Text(std::string text, const Modifier& modifier, const TextStyle& style, CallSite site) {
     composable(site, text, modifier, style, [text, modifier, style] { emitText(text, modifier, style); });
 }
-void Text(const AnnotatedString& text, const Modifier& modifier, const TextStyle& style, CallSite site) {
+void detail::Text(const AnnotatedString& text, const Modifier& modifier, const TextStyle& style, CallSite site) {
     composable(site, text, modifier, style, [text, modifier, style] { emitStyledText(text, modifier, style); });
 }
-void Text(const AnnotatedString& text, const Modifier& modifier, const TextStyle& style,
-          const std::map<std::string, InlineTextContent>& inlineContent, CallSite site) {
+void detail::Text(const AnnotatedString& text, const Modifier& modifier, const TextStyle& style, const InlineContents& inlineContent, OnTextLayout onTextLayout, CallSite site) {
+    if (inlineContent.empty()) return detail::Text(text, modifier, style, std::move(onTextLayout), site);
     ComposableScope scope(site);  // (the contents' callbacks can't be compared: run each time)
-    emitStyledText(text, modifier, style, {}, &inlineContent);
+    emitStyledText(text, modifier, style, std::move(onTextLayout), &inlineContent);
 }
-void Text(std::string text, const Modifier& modifier, const TextStyle& style, std::function<void(const TextLayoutResult&)> onTextLayout,
-          CallSite site) {
+// (onTextLayout isn't compared: told with the latest one when it runs.)
+void detail::Text(std::string text, const Modifier& modifier, const TextStyle& style, OnTextLayout onTextLayout, CallSite site) {
+    if (!onTextLayout) return detail::Text(std::move(text), modifier, style, site);
     composable(site, text, modifier, style,
                [text, modifier, style, onTextLayout] { emitStyledText(AnnotatedString(text), modifier, style, onTextLayout); });
 }
-void Text(const AnnotatedString& text, const Modifier& modifier, const TextStyle& style,
-          std::function<void(const TextLayoutResult&)> onTextLayout, CallSite site) {
+void detail::Text(const AnnotatedString& text, const Modifier& modifier, const TextStyle& style, OnTextLayout onTextLayout, CallSite site) {
+    if (!onTextLayout) return detail::Text(text, modifier, style, site);
     composable(site, text, modifier, style, [text, modifier, style, onTextLayout] { emitStyledText(text, modifier, style, onTextLayout); });
 }
 
@@ -825,7 +826,7 @@ void selectionHandle(bool start, Color color, ComposeHost* host, MutableState<bo
            .focusable = false,
            .touchable = true},
           [&] {
-              Box(Modifier()
+              detail::Box(Modifier()
                       .size(kHandleSize)
                       .drawBehind([start, color](DrawScope& d) {
                           d.drawCircle(color, kHandleSize / 2, Offset{kHandleSize / 2, kHandleSize / 2});
@@ -936,12 +937,12 @@ void textSelectionPopups(std::shared_ptr<SelectionRegistry> registry) {
            .focusable = false,
            .touchable = true},
           [&] {
-              Row(Modifier().shadow(3, 8).background(cs.surfaceContainer, 8), [&] {
+              detail::Row(Modifier().shadow(3, 8).background(cs.surfaceContainer, 8), [&] {
                   TextButton([registry] {
                       registry->host->setClipboardText(registry->selectedText());
                       registry->clear();
-                  }, [] { Text(LocalStrings.current().copy); });
-                  TextButton([registry] { registry->selectAll(true); }, [] { Text(LocalStrings.current().selectAll); });
+                  }, [] { detail::Text(LocalStrings.current().copy); });
+                  TextButton([registry] { registry->selectAll(true); }, [] { detail::Text(LocalStrings.current().selectAll); });
               });
           });
 }
@@ -1161,7 +1162,7 @@ void emitStyledText(const AnnotatedString& text, const Modifier& modifier, const
             for (size_t i = 0; i < text.links().size(); ++i) {
                 const auto& link = text.links()[i];
                 std::string label = text.text().substr(size_t(link.start), size_t(link.end - link.start));
-                Box(Modifier()
+                detail::Box(Modifier()
                         .clickable([activate, i] { activate(int(i)); }, {.interactionSource = (*linkSources)[i], .indication = false})
                         .semantics({.contentDescription = label})
                         .pointerHoverIcon(Cursor::Pointer));
@@ -1173,7 +1174,7 @@ void emitStyledText(const AnnotatedString& text, const Modifier& modifier, const
         children = [&] {
             if (linkNodes) linkNodes();
             for (const auto& [content, alternate] : inlines)
-                Box(Modifier(), [&, content = content, alternate = alternate] {
+                detail::Box(Modifier(), [&, content = content, alternate = alternate] {
                     if (content->children) content->children(alternate);
                 });
         };
@@ -1381,7 +1382,7 @@ void OutlinedToggleButton(bool checked, std::function<void(bool)> onCheckedChang
 
 void SplitButtonLayout(const Content& leadingButton, const Content& trailingButton, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
-    Row(modifier, {.horizontalArrangement = Arrangement::spacedBy(SplitButtonDefaults::Spacing), .verticalAlignment = Alignment::CenterVertically},
+    detail::Row(modifier, {.horizontalArrangement = Arrangement::spacedBy(SplitButtonDefaults::Spacing), .verticalAlignment = Alignment::CenterVertically},
         [&] {
             leadingButton();
             trailingButton();
@@ -1827,7 +1828,7 @@ void AsyncImage(std::string model, std::string contentDescription, const Modifie
     };
     layoutNode(site, modifier, measure, [&] {
         const Content& slot = state.status == Status::Error ? options.error : options.placeholder;
-        if (shown < 1 && slot) Box(Modifier(), Alignment::Center, slot);
+        if (shown < 1 && slot) detail::Box(Modifier(), Alignment::Center, slot);
         if (loaded) Image(state.image, contentDescription, Modifier(), options.contentScale, options.alpha * shown, options.colorFilter);
     });
 }
@@ -1845,7 +1846,7 @@ void iconButtonBox(const Modifier& modifier, Color container, Color contentColor
     Modifier m = modifier.minimumInteractiveComponentSize().size(40).background(container, 20);
     if (border) m = m.border(1, *border, 20);
     CompositionLocalProvider({LocalContentColor.provides(contentColor)},
-                             [&] { Box(click(m), Alignment::Center, content); });
+                             [&] { detail::Box(click(m), Alignment::Center, content); });
 }
 
 void iconButtonImpl(IconButtonKind kind, std::function<void()> onClick, const Modifier& modifier,
@@ -2111,7 +2112,7 @@ void card(CardKind kind, std::function<void()> onClick, const Modifier& modifier
                                               : modifier.background(cs.surfaceContainerHighest, kCardShape);
     m = m.clip(kCardShape);
     if (onClick) m = m.clickable(std::move(onClick));
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] { Column(m, content); });
+    CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] { detail::Column(m, content); });
 }
 } // namespace
 
@@ -2147,7 +2148,7 @@ void Surface(const Modifier& modifier, const Content& content, CallSite site) {
 void Surface(const Modifier& modifier, Color color, Color contentColor, const Content& content, CallSite site) {
     ComposableScope scope(site);
     CompositionLocalProvider({LocalContentColor.provides(contentColor)},
-                             [&] { Box(modifier.background(color), content); });
+                             [&] { detail::Box(modifier.background(color), content); });
 }
 
 void HorizontalDivider(const Modifier& modifier, CallSite site) {
@@ -2313,7 +2314,7 @@ void contextMenuPopup(Offset at, const std::vector<ContextMenuItem>& items, cons
                      [&] {
                          for (const ContextMenuItem& item : items) {
                              Color color = item.enabled ? cs.onSurface : cs.onSurface.copy(0.38f);
-                             Box(Modifier()
+                             detail::Box(Modifier()
                                      .heightIn(40)
                                      .clickable(
                                          [close, run = item.onClick] {
@@ -2322,7 +2323,7 @@ void contextMenuPopup(Offset at, const std::vector<ContextMenuItem>& items, cons
                                          },
                                          item.enabled)
                                      .padding(12, 0),
-                                 Alignment::CenterStart, [&] { Text(item.label, {.font = t.bodyLarge, .color = color}); });
+                                 Alignment::CenterStart, [&] { detail::Text(item.label, {.font = t.bodyLarge, .color = color}); });
                          }
                      },
                      detail::menuRows(280));
@@ -2967,7 +2968,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                .focusable = false,
                .touchable = true},
               [&] {
-                  Box(Modifier()
+                  detail::Box(Modifier()
                           .size(kSize)
                           .drawBehind([handleColor](DrawScope& d) {  // a teardrop pointing up at the caret
                               Path tip;
@@ -3044,9 +3045,9 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                   bool selected = ime->selectionStart != ime->selectionEnd;
                   bool canCopy = selected && focusable->allowCopy, canEdit = !o.readOnly;
                   const Strings& strings = LocalStrings.current();
-                  Row(Modifier().shadow(3, 8).background(cs.surfaceContainer, 8), [&] {
+                  detail::Row(Modifier().shadow(3, 8).background(cs.surfaceContainer, 8), [&] {
                       auto action = [&](const std::string& label, ComposeHost::TextAction a) {
-                          TextButton([host, a] { host->textAction(a); }, [label] { Text(label); });
+                          TextButton([host, a] { host->textAction(a); }, [label] { detail::Text(label); });
                       };
                       if (canCopy && canEdit) action(strings.cut, ComposeHost::TextAction::Cut);
                       if (canCopy) action(strings.copy, ComposeHost::TextAction::Copy);
@@ -3121,7 +3122,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     layoutNode(CallSite::current(), outer, container, [&] {
         if (labelAbove) {  // over the field, outside it (Compose's AboveLabel paddings)
             float bias = o.labelPosition.alignment.bias;
-            Text(o.label, Modifier().fillMaxWidth().padding(4, 0, 4, 4),
+            detail::Text(o.label, Modifier().fillMaxWidth().padding(4, 0, 4, 4),
                  {.font = type.bodySmall, .color = labelColor, .textAlign = bias < 0 ? TextAlign::Start : bias > 0 ? TextAlign::End : TextAlign::Center});
         }
         // The text itself (Compose's innerTextField): between the icons, or where a decorator puts it.
@@ -3167,9 +3168,9 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                        drawText, shown);
         };
         if (plain && o.decorator) {
-            Box(Modifier().then(std::make_shared<TextFieldDecorationElement>()), [&] { o.decorator(innerTextField); });
+            detail::Box(Modifier().then(std::make_shared<TextFieldDecorationElement>()), [&] { o.decorator(innerTextField); });
         } else {
-            Row((plain ? Modifier()
+            detail::Row((plain ? Modifier()
                         : Modifier()
                               .heightIn(56)
                               .then(containerColor.alpha() > 0 ? Modifier().background(containerColor, shape) : Modifier())
@@ -3177,18 +3178,18 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                 {.verticalAlignment = Alignment::CenterVertically},
                 [&] {
                 if (o.leadingIcon)
-                    Box(Modifier().padding(12, 0, 16, 0), [&] {
+                    detail::Box(Modifier().padding(12, 0, 16, 0), [&] {
                         CompositionLocalProvider({LocalContentColor.provides(leadingIconColor)}, o.leadingIcon);
                     });
                 innerTextField();
                 if (o.trailingIcon)
-                    Box(Modifier().padding(16, 0, 12, 0), [&] {
+                    detail::Box(Modifier().padding(16, 0, 12, 0), [&] {
                         CompositionLocalProvider({LocalContentColor.provides(trailingIconColor)}, o.trailingIcon);
                     });
             });
         }
         if (!o.supportingText.empty())
-            Text(o.supportingText, Modifier().padding(16, 4, 16, 0),
+            detail::Text(o.supportingText, Modifier().padding(16, 4, 16, 0),
                  {.font = type.bodySmall, .color = supportingColor});
     });
 }
@@ -3573,7 +3574,7 @@ void ContextMenuArea(std::function<std::vector<ContextMenuItem>()> items, const 
     auto at = remember([] { return mutableStateOf(std::optional<Offset>()); });
     auto element = std::make_shared<ContextMenuElement>();
     if (enabled) element->onOpen = [at](Offset p) { at.set(p); };
-    Box(modifier.then(element), content);
+    detail::Box(modifier.then(element), content);
     if (auto p = at.get(); p && enabled && items) contextMenuPopup(*p, items(), [at] { at.set(std::nullopt); });
 }
 

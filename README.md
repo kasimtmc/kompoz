@@ -26,10 +26,10 @@ using namespace kompoz;
 void Counter() {
     auto count = remember([] { return mutableStateOf(0); });
 
-    Column(Modifier().padding(16), {.verticalArrangement = Arrangement::spacedBy(8)}, [&] {
-        Text("Count: " + std::to_string(count.get()), {.font = typography().titleLarge});
+    Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
+        Text("Count: " + std::to_string(count.get()), style = typography().titleLarge);
         Button([count] { count.set(count.get() + 1); }, [] { Text("Increment"); });
-    });
+    };
 }
 
 kompoz::Application kompoz::createApplication(int, char**) {
@@ -168,7 +168,7 @@ The full list, with the status of each Compose API, is in [docs/components.md](d
 | `Modifier.transformable(state)`, `detectTransformGestures` | `auto t = rememberTransformableState([=](float zoom, Offset pan, float rotation) { ... }); Modifier().transformable(t)`; `PointerEvent::changes` carries every finger |
 | `pointerInput(key) { detectTapGestures(...) }` | `pointerInput(key, [=](PointerInputScope& s) -> Task { co_await detectTapGestures(s, {.onTap = ...}); })` |
 | `Modifier.padding(..).background(..)` | `Modifier().padding(..).background(..)` (the order matters, as in Compose) |
-| Named arguments | Designated initializers: `{.fontSize = 24, .color = ...}` |
+| Named arguments | Named arguments: `Text("Title", fontSize = 24, color = ...)` (options structs for the components not yet converted) |
 | `@Preview` | `KOMPOZ_PREVIEW(Name, .width = 360, .height = 200) { ... }`, shown with `KOMPOZ_PREVIEW=Name` (see [Development](#development)) |
 | `createComposeRule()`, `onNodeWithText(..).assertIsDisplayed()` | `kompoz::testing::ComposeTestRule` (UI tests without a window): `rule.onNodeWithText("OK").assertIsDisplayed().performClick()`; a failure throws `testing::AssertionError` |
 | `Modifier.recomposeHighlighter()` (snippets) | `Modifier().recomposeHighlighter()`: a border showing how many times the composable that made the node ran |
@@ -204,10 +204,11 @@ Rules:
 - To be skipped, the arguments must compare with `==`. A `MutableState` compares by identity, a `Modifier` by its
   elements' values. An argument that can't be compared (`std::function`, ...) makes the composable restartable but
   never skipped.
-- `Text` is skippable. Components that take a content lambda (`Column`, `Button`, `Card`...) are like Compose's
+- `Text` is skippable. A block (`Column(…) { … };`, `Box`, `Row`) runs in a scope of its own: when only what it read
+  changes, it alone runs again. Components still taking a content lambda (`Button`, `Card`...) are like Compose's
   inline functions: state read inside them belongs to the enclosing scope.
-- Event callbacks (`onClick`, ...) run after composition, so capture local variables **by value**, not with `[&]`.
-  Content lambdas (`Column(..., [&]{...})`) run right away, so `[&]` is safe there.
+- Blocks and event callbacks (`onClick`, ...) can run after the function that made them returned, so they capture
+  local variables **by value**: a block written `Column(…) { … };` does (`[=]`).
 
 Layout is incremental as well: a node keeps its size and its children's places when it is measured with the
 same constraints and nothing in or below it changed; only what was composed again, or read a state that

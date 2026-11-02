@@ -68,7 +68,7 @@ void ShowcaseApp() {
     // event handlers capture by value.
     auto drawerContent = [&] {
         ModalDrawerSheet(Modifier(), [&] {
-            Text("Kompoz", Modifier().padding(16, 8, 16, 16), {.font = typography().titleLarge});
+            Text("Kompoz", Modifier().padding(16, 8, 16, 16), style = typography().titleLarge);
             for (int i = 0; i < 4; ++i) {
                 const Destination& dest = destinations[i];
                 NavigationDrawerItem([&] { Text(dest.label); }, tab == i,
@@ -110,7 +110,7 @@ void ShowcaseApp() {
                              Icon(Icons::Filled::Visibility, "Recomposition'ları göster", {},
                                   showRecompositions.get() ? std::optional(colorScheme().primary) : std::nullopt);
                          });
-                     Box([&] {  // the menu opens below its anchor, this Box
+                     Box() {  // the menu opens below its anchor, this Box
                          IconButton([overflow] { overflow.set(true); },
                                     [] { Icon(Icons::Filled::MoreVert, "Diğer seçenekler"); });
                          DropdownMenu(overflow.get(), [overflow] { overflow.set(false); }, [&] {
@@ -134,7 +134,7 @@ void ShowcaseApp() {
                                               },
                                               {.leadingIcon = [] { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Yön"); }});
                          });
-                     });
+                     };
                  },
              .scrollBehavior = barScroll});
     };
@@ -238,7 +238,7 @@ void ShowcaseApp() {
             app();
 #else
             // On a desktop (and the web), the window's menus and their shortcuts above the app.
-            Column(Modifier().fillMaxSize(), [&] {
+            Column(Modifier().fillMaxSize()) {
                 std::vector<MenuBarItem> go;
                 for (int i = 0; i < 4; ++i)
                     go.push_back({.text = destinations[i].label, .onClick = [goTab, i] { goTab(i); },
@@ -264,8 +264,8 @@ void ShowcaseApp() {
                            {.text = "Yeniden çizimleri göster", .onClick = [showRecompositions] { showRecompositions.set(!showRecompositions.get()); },
                             .checked = showRecompositions.get()}}},
                          {"Git", std::move(go)}});
-                Box(Modifier().fillMaxWidth().weight(1), [&] { app(); });
-            });
+                Box(Modifier().fillMaxWidth().weight(1)) { app(); };
+            };
 #endif
         });
     });

@@ -601,6 +601,14 @@
   `takeSnapshot`, `takeMutableSnapshot` (nested ones apply to their parent), read and write observers,
   `registerApplyObserver`. Another thread may now write states (a race before) and reads them in a snapshot. Records
   no snapshot reads are dropped between frames.
+- **Named arguments and blocks**, as Kotlin's: `Text("Merhaba", fontSize = 22, color = cs.primary)`,
+  `Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8), [=] { … })`. Arguments without a name
+  fill the parameters in Compose's order, then named ones come in any order, then the block; anything else (a name the
+  composable doesn't take, one given twice, a value of the wrong type) is a compile error. A block runs in a scope of
+  its own: when only what it read changes, it alone runs again, so it captures by value. `<kompoz/blocks.hpp>` adds the
+  block form Compose writes, `Column(modifier) { … };`, which the showcase and the guide use. `Box`, `Column`, `Row`,
+  `Spacer` and `Text` take them now (`ColumnStyle` and `RowStyle` are gone; Text's `style` takes a theme's text style,
+  `typography().bodyMedium`, as it is); the other composables follow.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

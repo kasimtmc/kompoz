@@ -33,7 +33,7 @@ void TabsSection(CallSite site) {
             });
             AnimatedContent<int>(tab.get(), [&](const int& t) {
                 const char* texts[] = {"3 yeni ileti var.", "Yıldızlı ileti yok.", "Bildirimler ve hesap ayarları."};
-                Text(texts[t], Modifier().padding(4, 8), {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                Text(texts[t], Modifier().padding(4, 8), color = cs.onSurfaceVariant, style = typography().bodyMedium);
             });
             static const char* cities[] = {"İstanbul", "Ankara", "İzmir", "Bursa", "Antalya", "Konya", "Adana", "Gaziantep",
                                            "Kayseri", "Trabzon", "Eskişehir", "Samsun"};
@@ -41,7 +41,7 @@ void TabsSection(CallSite site) {
                 for (int i = 0; i < 12; ++i) Tab(city.get() == i, [city, i] { city.set(i); }, [i] { Text(cities[i]); });
             }, {.edgePadding = 16});
             Text(std::string("PrimaryScrollableTabRow: ") + cities[city.get()] + " — seçilen sekme ortaya kayar.",
-                 Modifier().padding(4, 8), {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 Modifier().padding(4, 8), color = cs.onSurfaceVariant, style = typography().bodyMedium);
         });
     });
 }
@@ -54,9 +54,9 @@ void FabMenuSection(CallSite site) {
             auto fabOpen = remember([] { return mutableStateOf(false); });
             auto fabPicked = remember([] { return mutableStateOf(std::string("yok")); });
             BackHandler(fabOpen.get(), [fabOpen] { fabOpen.set(false); });
-            Box(Modifier().fillMaxWidth().height(280), Alignment::BottomEnd, [&] {
+            Box(Modifier().fillMaxWidth().height(280), Alignment::BottomEnd) {
                 Text("Seçilen: " + fabPicked.get(), Modifier().align(Alignment::BottomStart),
-                     {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                     color = cs.onSurfaceVariant, style = typography().bodyMedium);
                 FloatingActionButtonMenu(fabOpen.get(), [&] {
                     ToggleFloatingActionButton(fabOpen.get(), [fabOpen](bool on) { fabOpen.set(on); },
                                                [](const ToggleFloatingActionButtonScope& s) {  // (turned as it is drawn)
@@ -75,7 +75,7 @@ void FabMenuSection(CallSite site) {
                             fabOpen.set(false);
                         }, [a] { Text(a.label); }, [a] { Icon(*a.icon, ""); });
                 });
-            });
+            };
         });
     });
 }
@@ -93,7 +93,7 @@ void ShortNavigationBarSection(CallSite site) {
             const Tab tabs[] = {{"Ana sayfa", &Icons::Filled::Home}, {"Ara", &Icons::Filled::Search}, {"Profil", &Icons::Filled::Person}};
             for (ShortNavigationBarArrangement arrangement : {ShortNavigationBarArrangement::EqualWeight, ShortNavigationBarArrangement::Centered}) {
                 Text(arrangement == ShortNavigationBarArrangement::EqualWeight ? "Eşit paylaşım" : "Ortada",
-                     {.font = typography().labelLarge, .color = cs.onSurfaceVariant});
+                     color = cs.onSurfaceVariant, style = typography().labelLarge);
                 ShortNavigationBar(Modifier().clip(RoundedCornerShape(16)), [&] {
                     for (int i = 0; i < 3; ++i)
                         ShortNavigationBarItem(page.get() == i, [page, i] { page.set(i); },
@@ -118,14 +118,14 @@ void WideNavigationRailSection(CallSite site) {
             const Box_ boxes[] = {{"Gelen", &Icons::Filled::Email}, {"Yıldızlı", &Icons::Filled::Star}, {"Ayarlar", &Icons::Filled::Settings}};
             // Modal: it opens over everything from the window's start edge, above a scrim.
             auto modal = remember([] { return mutableStateOf(false); });
-            Row(Modifier(), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+            Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
                 Switch(modal.get(), [modal, rail](bool on) {
                     rail.collapse();
                     modal.set(on);
                 });
-                Text("  Modal (ModalWideNavigationRail)", {.font = typography().bodyMedium});
-            });
-            Row(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16)).background(cs.surfaceContainerHigh), [&] {
+                Text("  Modal (ModalWideNavigationRail)", style = typography().bodyMedium);
+            };
+            Row(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16)).background(cs.surfaceContainerHigh)) {
                 auto items = [&] {
                     for (int i = 0; i < 3; ++i)
                         WideNavigationRailItem(box.get() == i, [box, i, rail, modal] {
@@ -141,9 +141,8 @@ void WideNavigationRailSection(CallSite site) {
                     ModalWideNavigationRail(Modifier(), items, {.state = rail, .header = header});
                 else
                     WideNavigationRail(Modifier(), items, {.state = rail, .header = header, .windowInsets = WindowInsets{}});
-                Box(Modifier().weight(1).fillMaxHeight(), Alignment::Center,
-                    [&] { Text(boxes[box.get()].label, {.font = typography().headlineSmall}); });
-            });
+                Box(Modifier().weight(1).fillMaxHeight(), Alignment::Center) { Text(boxes[box.get()].label, style = typography().headlineSmall); };
+            };
         });
     });
 }
@@ -163,8 +162,7 @@ void FloatingToolbarsSection(CallSite site) {
                     .clip(RoundedCornerShape(16))
                     .background(cs.surfaceContainerHigh)
                     .nestedScroll(below.nestedScrollConnection)
-                    .nestedScroll(aside.nestedScrollConnection),
-                [&] {
+                    .nestedScroll(aside.nestedScrollConnection)) {
                     LazyColumn(Modifier().fillMaxSize(), {}, [](LazyListScope& list) {
                         list.items(40, [](int i) { Text(std::format("Satır {}", i + 1), Modifier().fillMaxWidth().padding(16, 12)); });
                     });
@@ -186,7 +184,7 @@ void FloatingToolbarsSection(CallSite site) {
                         IconButton([] {}, [] { Icon(Icons::Filled::Email, "E-posta"); });
                     }, Modifier().align(Alignment::TopEnd).offset(-FloatingToolbarDefaults::ScreenOffset, FloatingToolbarDefaults::ScreenOffset),
                         {.colors = FloatingToolbarDefaults::vibrantFloatingToolbarColors(), .scrollBehavior = aside});
-                });
+                };
         });
     });
 }

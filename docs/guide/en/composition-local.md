@@ -8,8 +8,8 @@ Every local has a value at every point in the tree: what the nearest provider ab
 
 ```cpp
 void Caption(const std::string& text) {
-    Color color = LocalContentColor.current();          // the color text and icons use here
-    Text(text, {.font = typography().labelSmall, .color = color});
+    Color tint = LocalContentColor.current();          // the color text and icons use here
+    Text(text, color = tint, style = typography().labelSmall);
 }
 ```
 
@@ -24,10 +24,10 @@ The theme accessors are locals underneath: `colorScheme()` is `LocalColorScheme.
 ```cpp
 void Warning(const std::string& message) {
     CompositionLocalProvider({LocalContentColor.provides(colorScheme().error)}, [&] {
-        Row([&] {
+        Row() {
             Icon(Icons::Filled::Info, "");   // tinted with the error color
             Text(message);                        // so is the text
-        });
+        };
     });
 }
 ```
@@ -49,7 +49,7 @@ struct Spacing {
 inline const CompositionLocal<Spacing> LocalSpacing{Spacing{}};
 
 void Card1(const std::string& title) {
-    Column(Modifier().padding(LocalSpacing.current().large), [&] { Text(title); });
+    Column(Modifier().padding(LocalSpacing.current().large)) { Text(title); };
 }
 
 void Compact(const Content& content) {

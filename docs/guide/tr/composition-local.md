@@ -8,8 +8,8 @@ Her local'in ağacın her noktasında bir değeri vardır: yukarıdaki en yakın
 
 ```cpp
 void Caption(const std::string& text) {
-    Color color = LocalContentColor.current();          // burada metin ve ikonların kullandığı renk
-    Text(text, {.font = typography().labelSmall, .color = color});
+    Color tint = LocalContentColor.current();          // burada metin ve ikonların kullandığı renk
+    Text(text, color = tint, style = typography().labelSmall);
 }
 ```
 
@@ -24,10 +24,10 @@ Tema erişimcilerinin altında da local'ler vardır: `colorScheme()`, `LocalColo
 ```cpp
 void Warning(const std::string& message) {
     CompositionLocalProvider({LocalContentColor.provides(colorScheme().error)}, [&] {
-        Row([&] {
+        Row() {
             Icon(Icons::Filled::Info, "");   // hata rengiyle boyanır
             Text(message);                        // metin de öyle
-        });
+        };
     });
 }
 ```
@@ -49,7 +49,7 @@ struct Spacing {
 inline const CompositionLocal<Spacing> LocalSpacing{Spacing{}};
 
 void Card1(const std::string& title) {
-    Column(Modifier().padding(LocalSpacing.current().large), [&] { Text(title); });
+    Column(Modifier().padding(LocalSpacing.current().large)) { Text(title); };
 }
 
 void Compact(const Content& content) {

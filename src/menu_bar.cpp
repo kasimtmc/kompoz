@@ -146,13 +146,13 @@ void MenuBar(const std::vector<MenuBarMenu>& menus, const Modifier& modifier, Ca
                     open.set(isOpen ? -1 : index);
                     sub.set(-1);
                 });
-                Box(m.padding(12, 0), Alignment::Center, [&] {
-                    Text(menus[i].text, {.font = t.labelLarge, .color = isOpen ? cs.onSecondaryContainer : cs.onSurface});
+                detail::Box(m.padding(12, 0), Alignment::Center, [&] {
+                    detail::Text(menus[i].text, {.font = t.labelLarge, .color = isOpen ? cs.onSecondaryContainer : cs.onSurface});
                 });
             });
         }
     };
-    Row(modifier.fillMaxWidth()
+    detail::Row(modifier.fillMaxWidth()
             .height(kBarHeight)
             .background(cs.surfaceContainer)
             .onGloballyPositioned([places](const LayoutCoordinates& c) { places->bar = windowRect(c); })
@@ -171,7 +171,7 @@ void MenuBar(const std::vector<MenuBarMenu>& menus, const Modifier& modifier, Ca
         for (size_t j = 0; j < list.size(); ++j) {
             const MenuBarItem& item = list[j];
             if (item.separator) {
-                Box(Modifier().padding(0, 4), [&] { HorizontalDivider(); });
+                detail::Box(Modifier().padding(0, 4), [&] { HorizontalDivider(); });
                 continue;
             }
             key(int(j), [&] {
@@ -198,14 +198,14 @@ void MenuBar(const std::vector<MenuBarMenu>& menus, const Modifier& modifier, Ca
                     item.enabled);
                 Layout(m.padding(12, 0), [&] {
                     if (checks)
-                        Box(Modifier().size(20), Alignment::Center, [&] {
+                        detail::Box(Modifier().size(20), Alignment::Center, [&] {
                             if (item.checked.value_or(false)) Icon(Icons::Filled::Check, LocalStrings.current().checked, Modifier().size(18), quiet);
                         });
-                    Text(item.text, {.font = t.bodyMedium, .color = text});
+                    detail::Text(item.text, {.font = t.bodyMedium, .color = text});
                     if (hasSub)
                         Icon(Icons::AutoMirrored::Filled::KeyboardArrowRight, LocalStrings.current().submenu, Modifier().size(18), quiet);
                     else if (item.shortcut)
-                        Text(item.shortcut->text(), {.font = t.labelMedium, .color = quiet});
+                        detail::Text(item.shortcut->text(), {.font = t.labelMedium, .color = quiet});
                 }, [trailing = hasSub || item.shortcut.has_value()](const std::vector<Measurable>& children, const Constraints& c) {
                     return itemRow(children, c, trailing);
                 });
@@ -220,8 +220,8 @@ void MenuBar(const std::vector<MenuBarMenu>& menus, const Modifier& modifier, Ca
     Size window = LocalWindowSize.current();
     Popup({.fullScreen = true, .onDismissRequest = close}, [&] {
         // Over everything: a click outside the menus closes them.
-        Box(Modifier().fillMaxSize().clickable(close, ClickableOptions{.indication = false}), [&] {
-            Row(Modifier()
+        detail::Box(Modifier().fillMaxSize().clickable(close, ClickableOptions{.indication = false}), [&] {
+            detail::Row(Modifier()
                     .offset([places] { return Offset{places->bar.x + 4, places->bar.y + 4}; })
                     .size(std::max(0.f, places->bar.width - 8), kBarHeight - 8),
                 {.horizontalArrangement = Arrangement::spacedBy(2), .verticalAlignment = Alignment::CenterVertically},

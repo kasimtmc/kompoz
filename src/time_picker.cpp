@@ -211,14 +211,13 @@ void ClockFace(const TimePickerState& state, CallSite site = CallSite::current()
         }
     };
 
-    Box(Modifier().size(kDial).background(cs.surfaceContainerHighest, CircleShape).drawBehind(drawTrack).pointerInput(0, input),
+    detail::Box(Modifier().size(kDial).background(cs.surfaceContainerHighest, CircleShape).drawBehind(drawTrack).pointerInput(0, input),
         [&] {
             Layout(
                 Modifier().fillMaxSize(),
                 [&] {
                     for (const Label& l : labels)
-                        Box(Modifier().size(2 * kHandleRadius), Alignment::Center,
-                            [&] { Text(l.text, {.font = font, .color = cs.onSurface}); });
+                        detail::Box(Modifier().size(2 * kHandleRadius), Alignment::Center, [&] { detail::Text(l.text, {.font = font, .color = cs.onSurface}); });
                 },
                 [labels, centerOf](const std::vector<Measurable>& children, const Constraints& c) {
                     for (size_t i = 0; i < children.size() && i < labels.size(); ++i) {
@@ -230,7 +229,7 @@ void ClockFace(const TimePickerState& state, CallSite site = CallSite::current()
                 });
             // The handle is drawn as a circle (anti-aliased wherever it is); the clip only cuts
             // the numbers in it.
-            Box(Modifier()
+            detail::Box(Modifier()
                     .offset(handle.x - kHandleRadius, handle.y - kHandleRadius)
                     .size(2 * kHandleRadius)
                     .drawBehind([primary](DrawScope& d) { d.drawCircle(primary, kHandleRadius, Offset{kHandleRadius, kHandleRadius}); })
@@ -245,21 +244,20 @@ void TimeSelector(const TimePickerState& state, TimePickerSelectionMode mode, co
     const ColorScheme& cs = colorScheme();
     bool selected = state.selection() == mode;
     int value = mode == TimePickerSelectionMode::Hour ? hourForDisplay(state) : state.minute();
-    Box(Modifier()
+    detail::Box(Modifier()
             .size(96, 80)
             .background(selected ? cs.primaryContainer : cs.surfaceContainerHighest, 8)
             .clip(RoundedCornerShape(8))
             .clickable([state, mode] { state.setSelection(mode); })
             .semantics({.contentDescription = label, .role = SemanticsRole::Tab, .checked = selected}),
         Alignment::Center, [&] {
-            Text(twoDigits(value), {.font = typography().displayLarge, .color = selected ? cs.onPrimaryContainer : cs.onSurface});
+            detail::Text(twoDigits(value), {.font = typography().displayLarge, .color = selected ? cs.onPrimaryContainer : cs.onSurface});
         });
 }
 
 void Separator(float height, CallSite site = CallSite::current()) {
     ComposableScope scope(site);
-    Box(Modifier().size(24, height), Alignment::Center,
-        [&] { Text(":", {.font = typography().displayLarge, .color = colorScheme().onSurface}); });
+    detail::Box(Modifier().size(24, height), Alignment::Center, [&] { detail::Text(":", {.font = typography().displayLarge, .color = colorScheme().onSurface}); });
 }
 
 // AM / PM, stacked beside the time or in a row below it.
@@ -270,28 +268,28 @@ void PeriodToggle(const TimePickerState& state, const TimePickerOptions& o, bool
     auto item = [&](bool pm) {
         bool selected = state.isAfternoon() == pm;
         Modifier m = vertical ? Modifier().fillMaxWidth().weight(1) : Modifier().fillMaxHeight().weight(1);
-        Box(m.background(selected ? cs.tertiaryContainer : colors::Transparent)
+        detail::Box(m.background(selected ? cs.tertiaryContainer : colors::Transparent)
                 .clickable([state, pm] {
                     if (state.isAfternoon() != pm) state.setHour(state.hour() + 12);
                 })
                 .semantics({.role = SemanticsRole::RadioButton, .checked = selected}),
             Alignment::Center, [&] {
-                Text(pm ? o.pm.value_or(LocalStrings.current().pm) : o.am.value_or(LocalStrings.current().am),
+                detail::Text(pm ? o.pm.value_or(LocalStrings.current().pm) : o.am.value_or(LocalStrings.current().am),
                      {.font = typography().titleMedium, .color = selected ? cs.onTertiaryContainer : cs.onSurfaceVariant});
             });
     };
     // The outline goes over the clipped halves.
     Modifier box = Modifier().size(size.width, size.height).border(1, cs.outline, 8).clip(RoundedCornerShape(8));
     if (vertical)
-        Column(box, [&] {
+        detail::Column(box, [&] {
             item(false);
-            Box(Modifier().fillMaxWidth().height(1).background(cs.outline));
+            detail::Box(Modifier().fillMaxWidth().height(1).background(cs.outline));
             item(true);
         });
     else
-        Row(box, [&] {
+        detail::Row(box, [&] {
             item(false);
-            Box(Modifier().fillMaxHeight().width(1).background(cs.outline));
+            detail::Box(Modifier().fillMaxHeight().width(1).background(cs.outline));
             item(true);
         });
 }
@@ -304,18 +302,18 @@ void ClockDisplay(const TimePickerState& state, const TimePickerOptions& o, bool
         TimeSelector(state, TimePickerSelectionMode::Minute, o.minuteLabel.value_or(LocalStrings.current().minute));
     };
     if (horizontal) {
-        Column([&] {
-            Row(time);
+        detail::Column([&] {
+            detail::Row(time);
             if (!state.is24hour()) {
-                Spacer(Modifier().height(12));
+                detail::Spacer(Modifier().height(12));
                 PeriodToggle(state, o, false, {216, 38});
             }
         });
     } else {
-        Row([&] {
+        detail::Row([&] {
             time();
             if (!state.is24hour()) {
-                Spacer(Modifier().width(12));
+                detail::Spacer(Modifier().width(12));
                 PeriodToggle(state, o, true, {52, 80});
             }
         });
@@ -330,7 +328,7 @@ void TimeField(MutableState<std::string> text, std::function<int()> current, std
     const Typography& t = typography();
     auto focused = remember([] { return mutableStateOf(false); });
     bool isFocused = focused.get();
-    Column([&] {
+    detail::Column([&] {
         Modifier box = Modifier()
                            .size(96, 72)
                            .background(isFocused ? cs.primaryContainer : cs.surfaceContainerHighest, 8)
@@ -339,7 +337,7 @@ void TimeField(MutableState<std::string> text, std::function<int()> current, std
                                focused.set(s.hasFocus);
                            });
         if (isFocused) box = box.border(2, cs.primary, 8);
-        Box(box.padding(8, 0), Alignment::Center, [&] {
+        detail::Box(box.padding(8, 0), Alignment::Center, [&] {
             BasicTextField(
                 text.get(),
                 [text, accept](std::string v) {
@@ -367,7 +365,7 @@ void TimeField(MutableState<std::string> text, std::function<int()> current, std
                                .color = isFocused ? cs.onPrimaryContainer : cs.onSurface,
                                .textAlign = TextAlign::Center}});
         });
-        Text(label, Modifier().padding(0, 7, 0, 0), {.font = t.bodySmall, .color = cs.onSurfaceVariant});
+        detail::Text(label, Modifier().padding(0, 7, 0, 0), {.font = t.bodySmall, .color = cs.onSurfaceVariant});
     });
 }
 
@@ -379,17 +377,17 @@ void TimePicker(const TimePickerState& state, const Modifier& modifier, TimePick
     TimePickerLayoutType layout = options.layoutType.value_or(window.width > window.height ? TimePickerLayoutType::Horizontal
                                                                                            : TimePickerLayoutType::Vertical);
     if (layout == TimePickerLayoutType::Horizontal) {
-        Row(modifier, {.verticalAlignment = Alignment::CenterVertically}, [&] {
+        detail::Row(modifier, {.verticalAlignment = Alignment::CenterVertically}, [&] {
             ClockDisplay(state, options, true);
-            Spacer(Modifier().width(52));
+            detail::Spacer(Modifier().width(52));
             ClockFace(state);
         });
     } else {
-        Column(modifier, {.horizontalAlignment = Alignment::CenterHorizontally}, [&] {
+        detail::Column(modifier, {.horizontalAlignment = Alignment::CenterHorizontally}, [&] {
             ClockDisplay(state, options, false);
-            Spacer(Modifier().height(36));
+            detail::Spacer(Modifier().height(36));
             ClockFace(state);
-            Spacer(Modifier().height(24));
+            detail::Spacer(Modifier().height(24));
         });
     }
 }
@@ -398,7 +396,7 @@ void TimeInput(const TimePickerState& state, const Modifier& modifier, TimePicke
     ComposableScope scope(site);
     auto hourText = remember([&] { return mutableStateOf(twoDigits(hourForDisplay(state))); });
     auto minuteText = remember([&] { return mutableStateOf(twoDigits(state.minute())); });
-    Row(modifier.padding(0, 0, 0, 24), [&] {
+    detail::Row(modifier.padding(0, 0, 0, 24), [&] {
         TimeField(
             hourText, [state] { return hourForDisplay(state); },
             [state](int h) {
@@ -417,7 +415,7 @@ void TimeInput(const TimePickerState& state, const Modifier& modifier, TimePicke
             },
             options.minuteLabel.value_or(LocalStrings.current().minute), ImeAction::Done);
         if (!state.is24hour()) {
-            Spacer(Modifier().width(12));
+            detail::Spacer(Modifier().width(12));
             PeriodToggle(state, options, true, {52, 72});
         }
     });
@@ -428,19 +426,19 @@ void TimePickerDialog(std::function<void()> onDismissRequest, const TimePickerDi
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     Dialog(std::move(onDismissRequest), [&] {
-        Column(Modifier().background(cs.surfaceContainerHigh, 28).padding(24), {.horizontalAlignment = Alignment::CenterHorizontally},
+        detail::Column(Modifier().background(cs.surfaceContainerHigh, 28).padding(24), {.horizontalAlignment = Alignment::CenterHorizontally},
                [&] {
                    if (slots.title)
-                       Box(Modifier().fillMaxWidth().padding(0, 0, 0, 20), [&] {
+                       detail::Box(Modifier().fillMaxWidth().padding(0, 0, 0, 20), [&] {
                            CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant),
                                                      LocalTextStyle.provides(typography().labelMedium)},
                                                     slots.title);
                        });
                    content();
-                   Row(Modifier().fillMaxWidth().height(40), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+                   detail::Row(Modifier().fillMaxWidth().height(40), {.verticalAlignment = Alignment::CenterVertically}, [&] {
                        if (slots.modeToggleButton) slots.modeToggleButton();
-                       Spacer(Modifier().weight(1));
-                       Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+                       detail::Spacer(Modifier().weight(1));
+                       detail::Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
                            if (slots.dismissButton) slots.dismissButton();
                            if (slots.confirmButton) slots.confirmButton();
                        });

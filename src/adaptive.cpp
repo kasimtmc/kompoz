@@ -160,9 +160,9 @@ void NavigationSuite(NavigationSuiteType navigationSuiteType, const Modifier& mo
     ComposableScope scope(site);
     // The items at the top, in the middle or at the bottom of a rail or drawer.
     auto arranged = [&] {
-        if (verticalArrangement != Arrangement::Kind::Start) Spacer(Modifier().weight(1));
+        if (verticalArrangement != Arrangement::Kind::Start) detail::Spacer(Modifier().weight(1));
         content();
-        if (verticalArrangement == Arrangement::Kind::Center) Spacer(Modifier().weight(1));
+        if (verticalArrangement == Arrangement::Kind::Center) detail::Spacer(Modifier().weight(1));
     };
     switch (navigationSuiteType) {
     case NavigationSuiteType::ShortNavigationBarCompact:
@@ -244,9 +244,9 @@ void suiteScaffold(NavigationSuiteType type, const Modifier& modifier, const Nav
     const ColorScheme& cs = colorScheme();
     NavigationSuiteScaffoldState state = options.state ? *options.state : rememberNavigationSuiteScaffoldState();
     WindowInsets taken = suiteInsets(type, state);
-    Box(modifier.background(options.containerColor.value_or(cs.background)), [&] {
+    detail::Box(modifier.background(options.containerColor.value_or(cs.background)), [&] {
         CompositionLocalProvider({LocalContentColor.provides(options.contentColor.value_or(cs.onBackground))}, [&] {
-            NavigationSuiteScaffoldLayout(suite, type, [&] { Box(Modifier().fillMaxSize().consumeWindowInsets(taken), content); }, state,
+            NavigationSuiteScaffoldLayout(suite, type, [&] { detail::Box(Modifier().fillMaxSize().consumeWindowInsets(taken), content); }, state,
                                           options.primaryActionContent, options.primaryActionContentHorizontalAlignment);
         });
     });
@@ -271,7 +271,7 @@ void NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& n
             NavigationRail(Modifier(), options.railHeader ? options.railHeader : options.primaryActionContent, [&] {
                 for (const auto& item : nav.items()) {
                     ImageVector icon = item.icon;
-                    NavigationRailItem(item.selected, item.onClick, [icon] { Icon(icon, ""); }, [label = item.label] { Text(label); }, Modifier(),
+                    NavigationRailItem(item.selected, item.onClick, [icon] { Icon(icon, ""); }, [label = item.label] { detail::Text(label); }, Modifier(),
                                        {.enabled = item.enabled});
                 }
             });
@@ -282,7 +282,7 @@ void NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& n
                 for (const auto& item : nav.items()) {
                     ImageVector icon = item.icon;
                     std::string label = item.label;
-                    NavigationDrawerItem([label] { Text(label); }, item.selected, item.onClick, [icon, label] { Icon(icon, label); }, item.badge);
+                    NavigationDrawerItem([label] { detail::Text(label); }, item.selected, item.onClick, [icon, label] { Icon(icon, label); }, item.badge);
                 }
             });
             break;
@@ -292,7 +292,7 @@ void NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& n
                 for (const auto& item : nav.items()) {
                     ImageVector icon = item.icon;
                     std::string label = item.label;
-                    NavigationSuiteItem(item.selected, item.onClick, [icon] { Icon(icon, ""); }, [label] { Text(label); }, Modifier(),
+                    NavigationSuiteItem(item.selected, item.onClick, [icon] { Icon(icon, ""); }, [label] { detail::Text(label); }, Modifier(),
                                         {.navigationSuiteType = type, .enabled = item.enabled, .badge = item.badge});
                 }
             }, options.primaryActionContent, options.navigationItemVerticalArrangement);
@@ -420,11 +420,11 @@ void detail::twoPanes(const Content& first, const Content& second, bool firstFix
     Layout(
         modifier.fillMaxSize(),
         [&] {
-            Box(Modifier(), first);
-            Box(Modifier(), Alignment::Center, [&] {
+            detail::Box(Modifier(), first);
+            detail::Box(Modifier(), Alignment::Center, [&] {
                 if (handle && expansion) handle(*expansion);
             });
-            Box(Modifier(), second);
+            detail::Box(Modifier(), second);
         },
         [d, firstFixed, fixedWidth, spacerSize](const std::vector<Measurable>& children, const Constraints& c) {
             float w = c.hasBoundedWidth() ? c.maxWidth : c.minWidth, h = c.hasBoundedHeight() ? c.maxHeight : c.minHeight;

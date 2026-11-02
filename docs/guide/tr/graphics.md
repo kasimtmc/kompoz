@@ -70,7 +70,7 @@ void Faded(const Content& content) {
     Box(Modifier().drawWithContent([](ContentDrawScope& d) {
         d.drawContent();
         d.drawRect(Brush::verticalGradient({colors::Transparent, colors::White}));   // alt kısımda bir solma
-    }), content);
+    })) { content(); };
 }
 ```
 
@@ -82,9 +82,9 @@ Bir `Color` Compose'unkidir: 64 bit; sRGB'de kanal başına 8 bit, Compose'un ba
 Color p3(0.1f, 0.75f, 0.45f, 1, ColorSpaces::DisplayP3);  // Display P3'te
 Color lab(55, 60, -40, 1, ColorSpaces::CieLab);           // L*, a*, b*
 Color between = lerp(colors::Red, colors::Blue, 0.5f);    // Oklab'da karıştırılır
-Row(Modifier().height(40), {}, [&] {
-    for (Color c : {p3, lab, between}) Box(Modifier().size(40).background(c));
-});
+Row(Modifier().height(40)) {
+    for (Color c : {p3, lab, between}) Box(Modifier().size(40).background(c)) {};
+};
 ```
 
 `lerp`, Compose'unki gibi iki rengi Oklab'da karıştırır: kırmızıdan maviye yarı yol, sRGB sayılarının verdiği koyu mor değil, ikisi kadar açık bir menekşedir. Canlandırılan bir renk de böyle gider (`animateColorAsState`). Bir gradyan renklerini Skia'nınki gibi sRGB'de karıştırır.
@@ -95,7 +95,7 @@ Bir `Brush`, bir rengin gidebileceği her yerde düz bir renkle ya da bir gradya
 
 ```cpp body
 Box(Modifier().fillMaxWidth().height(120).background(
-    Brush::linearGradient({Color::hex(0x6750A4), Color::hex(0xB58392)}), RoundedCornerShape(16)));
+    Brush::linearGradient({Color::hex(0x6750A4), Color::hex(0xB58392)}), RoundedCornerShape(16))) {};
 ```
 
 Renk durakları ve döşeme modlarıyla `Brush::solid`, `linearGradient`, `horizontalGradient`, `verticalGradient`, `radialGradient` ve `sweepGradient` mevcuttur.
@@ -106,7 +106,7 @@ Kendi fırçanız, Compose'un `ShaderBrush`'ı gibi, boyadığı boyut için yap
 Box(Modifier().size(120, 72).background(Brush::shader([](Size size) {
     return CompositeShader(LinearGradientShader({0, 0}, {size.width, 0}, {Color::hex(0x6750A4), Color::hex(0xB58392)}),
                            RadialGradientShader({24, 20}, 48, {colors::White.copy(0.9f), colors::Transparent}), BlendMode::Screen);
-})));
+}))) {};
 ```
 
 `Brush::composite` aynısını iki fırçayla yapar, `withTransform` bir degradenin ya da shader'ın boyadığını taşır, `lerp` de bir animasyonun yaptığı gibi bir fırçadan ötekine geçer.
@@ -153,7 +153,7 @@ void Heart() {
     Box(Modifier().size(64).drawWithCache([red](CacheDrawScope& cache) {
         Path path = heart(cache.size());   // boyut başına bir kez kurulur
         return cache.onDrawBehind([path, red](DrawScope& d) { d.drawPath(path, red); });
-    }));
+    })) {};
 }
 ```
 
@@ -177,8 +177,8 @@ Path'in çizildiği yerde, çizildiği piksellerde uygulanır; böylece bir eğr
 Bir `Shape`, arka planların, çerçevelerin, kırpmaların ve gölgelerin kullandığı dış hattır: `RectangleShape`, `CircleShape`, `RoundedCornerShape(16)` (ya da köşe başına bir yarıçap), `CutCornerShape(8)` ve Material 3 Expressive'in şekilleri (`MaterialShapes::Cookie9Sided()` ve diğerleri, `toShape` ile).
 
 ```cpp body
-Box(Modifier().size(96).clip(CircleShape).background(colorScheme().tertiaryContainer));
-Box(Modifier().size(96).border(2, colorScheme().outline, RoundedCornerShape(12, 12, 0, 0)));
+Box(Modifier().size(96).clip(CircleShape).background(colorScheme().tertiaryContainer)) {};
+Box(Modifier().size(96).border(2, colorScheme().outline, RoundedCornerShape(12, 12, 0, 0))) {};
 ```
 
 Compose'daki gibi bir şekil, bir boyutta ve yerleşim yönünde dış hattını yapar (`createOutline`): bir dikdörtgen, yuvarlak bir dikdörtgen (köşeleri eliptik de olabilen `Outline::Rounded(RoundRect{…})`) ya da herhangi bir yol. `GenericShape` birini bir yoldan kurar:
@@ -192,7 +192,7 @@ Shape ticket = GenericShape([](Path& p, Size size, LayoutDirection) {
     p.lineTo(0, size.height);
     p.close();
 });
-Box(Modifier().size(120, 72).clip(ticket).background(colorScheme().primaryContainer));
+Box(Modifier().size(120, 72).clip(ticket).background(colorScheme().primaryContainer)) {};
 ```
 
 `clip(shape)` içeriği şekle göre, kenarı yumuşatılmış olarak ve katmansız kırpar.
@@ -204,7 +204,7 @@ Box(Modifier().size(120, 72).clip(ticket).background(colorScheme().primaryContai
 ```cpp body
 Box(Modifier().size(120)
         .dropShadow(RoundedCornerShape(24), Shadow{.color = Color::hex(0x6750A4, 0.4f), .offset = {0, 8}, .blurRadius = 24})
-        .background(colorScheme().surface, RoundedCornerShape(24)));
+        .background(colorScheme().surface, RoundedCornerShape(24))) {};
 ```
 
 ## graphicsLayer
@@ -213,7 +213,7 @@ Box(Modifier().size(120)
 
 ```cpp body
 Box(Modifier().size(80).graphicsLayer({.scaleX = 1.2f, .scaleY = 1.2f, .alpha = 0.8f, .rotationZ = 15})
-        .background(colorScheme().primary, RoundedCornerShape(16)));
+        .background(colorScheme().primary, RoundedCornerShape(16))) {};
 ```
 
 Lambda alan biçimi çizim sırasında değerlendirilir; bu yüzden orada okunan animasyonlu değerler yeniden kompoze etmeden ya da yeniden yerleştirmeden değişir. Her karede değişen her şey için onu kullanın (bkz. [Aşamalar](phases.md#durum-okumalarını-ertelemek)):
@@ -240,7 +240,7 @@ Bu, render effect'i olan bir `graphicsLayer`'dır; bir katmana render effect'i k
 
 ```cpp body
 Box(Modifier().size(96).graphicsLayer({.renderEffect = OffsetEffect(BlurEffect(6, 6, TileMode::Decal), {0, 4})})
-        .background(colorScheme().primary, CircleShape));
+        .background(colorScheme().primary, CircleShape)) {};
 ```
 
 Katmanın sınırları içinde çizilen, effect'in içinden geçer; `clip` açıksa effect'in yaptığı sonra katmanın şekline göre kesilir.
@@ -252,13 +252,13 @@ Image(imageResource("images/cover.jpg"), "Album cover",
       Modifier().size(160).blur(BlurRadiusSpec::verticalGradient(0, 16)), ContentScale::Crop);  // sharp at the top
 Box(Modifier().size(120).blur([](BlurScope& b) {
     b.blurRadiusSpec = BlurRadiusSpec::radialGradient(0, 12);  // sharp in the middle
-}).background(colorScheme().primary, CircleShape));
+}).background(colorScheme().primary, CircleShape)) {};
 ```
 
 Kompoz'un `blur`'u neyin bulanıklaşacağını da alır (`BlurType`). Varsayılan `Family`, Compose'unki gibi düğümü ve çocuklarını bulanıklaştırır. `Morph` düğümün arkasında çizileni şekli içinde bulanıklaştırır ve düğümü üstüne keskin çizer: buzlu cam. `Self` yalnızca düğümün kendi çizdiğini (arka planı, kenarlığı, resmi) bulanıklaştırır ve çocuklarını üstüne keskin çizer:
 
 ```cpp body
-Box(Modifier().size(200, 72)
+(Box)(Modifier().size(200, 72)
         .blur(16, BlurredEdgeTreatment{RoundedCornerShape(16)}, BlurType::Morph)
         .background(colors::White.copy(0.2f), RoundedCornerShape(16)),
     Alignment::Center, [] { Text("Frosted glass"); });

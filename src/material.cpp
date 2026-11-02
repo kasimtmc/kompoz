@@ -286,7 +286,7 @@ AnimatedState<Color> appBarContainer(const TopAppBarSlots& slots) {
 void titles(const TopAppBarSlots& slots, const Content& title, const Content& subtitle, HorizontalAlignment alignment,
             const Font& titleFont, const Font& subtitleFont) {
     AppBarColors colors = appBarColors(slots);
-    Column(Modifier(), {.horizontalAlignment = alignment}, [&] {
+    detail::Column(Modifier(), {.horizontalAlignment = alignment}, [&] {
         CompositionLocalProvider({LocalTextStyle.provides(titleFont)}, [&] { tinted(colors.title, title); });
         if (subtitle)
             CompositionLocalProvider({LocalTextStyle.provides(subtitleFont), LocalContentColor.provides(colors.subtitle)}, subtitle);
@@ -300,10 +300,10 @@ void centeredAppBarRow(const TopAppBarSlots& slots, const Modifier& modifier, co
     auto [titleFont, subtitleFont] = fonts.value_or(std::pair{typography().titleLarge, typography().labelMedium});
     Layout(modifier.fillMaxWidth().height(height).padding(4, 0),
            [&] {
-               Box([&] { tinted(colors.navigationIcon, slots.navigationIcon); });
-               Box(Modifier().padding(12, 0),
+               detail::Box([&] { tinted(colors.navigationIcon, slots.navigationIcon); });
+               detail::Box(Modifier().padding(12, 0),
                    [&] { titles(slots, title, subtitle, Alignment::CenterHorizontally, titleFont, subtitleFont); });
-               Row(Modifier(), {.verticalAlignment = Alignment::CenterVertically}, [&] { tinted(colors.actions, slots.actions); });
+               detail::Row(Modifier(), {.verticalAlignment = Alignment::CenterVertically}, [&] { tinted(colors.actions, slots.actions); });
            },
            [height](const std::vector<Measurable>& m, const Constraints& c) {
                float w = c.hasBoundedWidth() ? c.maxWidth : c.minWidth, h = c.hasBoundedHeight() ? c.maxHeight : height;
@@ -322,13 +322,13 @@ void appBarRow(const TopAppBarSlots& slots, const Modifier& modifier, const Cont
                std::optional<std::pair<Font, Font>> fonts = {}) {
     AppBarColors colors = appBarColors(slots);
     auto [titleFont, subtitleFont] = fonts.value_or(std::pair{typography().titleLarge, typography().labelMedium});
-    Row(modifier.fillMaxWidth().height(height).padding(4, 0), {.verticalAlignment = Alignment::CenterVertically},
+    detail::Row(modifier.fillMaxWidth().height(height).padding(4, 0), {.verticalAlignment = Alignment::CenterVertically},
         [&] {
             tinted(colors.navigationIcon, slots.navigationIcon);
-            Box(Modifier().weight(1).padding(slots.navigationIcon ? 4.f : 12.f, 0), Alignment::CenterStart,
+            detail::Box(Modifier().weight(1).padding(slots.navigationIcon ? 4.f : 12.f, 0), Alignment::CenterStart,
                 [&] { titles(slots, title, subtitle, Alignment::Start, titleFont, subtitleFont); });
             if (slots.actions)
-                Row(Modifier(), {.verticalAlignment = Alignment::CenterVertically}, [&] { tinted(colors.actions, slots.actions); });
+                detail::Row(Modifier(), {.verticalAlignment = Alignment::CenterVertically}, [&] { tinted(colors.actions, slots.actions); });
         });
 }
 
@@ -371,11 +371,11 @@ void twoRowsTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, flo
         });
     };
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
-        Column(detail::animatedBackground(modifier.fillMaxWidth(), container).padding(insets.start, insets.top, insets.end, 0), [&] {
+        detail::Column(detail::animatedBackground(modifier.fillMaxWidth(), container).padding(insets.start, insets.top, insets.end, 0), [&] {
             Content smallSubtitle;
-            if (slots.subtitle) smallSubtitle = [&] { Box(fade(true), slots.subtitle); };
+            if (slots.subtitle) smallSubtitle = [&] { detail::Box(fade(true), slots.subtitle); };
             Content smallTitle = [&] {
-                if (slots.title) Box(fade(true), slots.title);
+                if (slots.title) detail::Box(fade(true), slots.title);
             };
             bool centered = slots.titleHorizontalAlignment.bias == 0;
             std::optional<std::pair<Font, Font>> smallFonts;
@@ -386,8 +386,8 @@ void twoRowsTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, flo
             bottom = state ? collapsing(bottom, *state, expandedHeight - collapsedHeight, false)
                            : bottom.height(expandedHeight - collapsedHeight);
             float below = titleBottom.value_or(expandedHeight > 120 && !slots.subtitle ? 28.f : 24.f);
-            Box(bottom, Alignment{slots.titleHorizontalAlignment.bias, 1}, [&] {
-                Box(fade(false).padding(16, 0, 16, below), [&] {
+            detail::Box(bottom, Alignment{slots.titleHorizontalAlignment.bias, 1}, [&] {
+                detail::Box(fade(false).padding(16, 0, 16, below), [&] {
                     titles(slots, large ? large->title : slots.title, large ? large->subtitle : slots.subtitle, slots.titleHorizontalAlignment,
                            titleFont, subtitleFont);
                 });
@@ -412,9 +412,9 @@ void singleRowTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, b
             appBarRow(slots, Modifier(), slots.title, slots.subtitle, height);
     };
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
-        Box(detail::animatedBackground(modifier.fillMaxWidth(), container).padding(insets.start, insets.top, insets.end, 0), [&] {
+        detail::Box(detail::animatedBackground(modifier.fillMaxWidth(), container).padding(insets.start, insets.top, insets.end, 0), [&] {
             if (behavior && !behavior->isPinned)
-                Box(collapsing(Modifier().fillMaxWidth(), behavior->state, height, true), row);
+                detail::Box(collapsing(Modifier().fillMaxWidth(), behavior->state, height, true), row);
             else
                 row();
         });
@@ -437,17 +437,17 @@ void AppBarWithSearch(const SearchBarState& state, const Content& inputField, co
     const auto& behavior = slots.scrollBehavior;
     if (behavior) behavior->state.setHeightOffsetLimit(-kHeight);
     auto row = [&] {
-        Row(Modifier().fillMaxWidth().height(kHeight).padding(slots.navigationIcon ? 4.f : 16.f, 0, slots.actions ? 4.f : 16.f, 0),
+        detail::Row(Modifier().fillMaxWidth().height(kHeight).padding(slots.navigationIcon ? 4.f : 16.f, 0, slots.actions ? 4.f : 16.f, 0),
             {.horizontalArrangement = Arrangement::spacedBy(4), .verticalAlignment = Alignment::CenterVertically}, [&] {
                 if (slots.navigationIcon) slots.navigationIcon();
                 SearchBar(state, inputField, Modifier().weight(1));
-                if (slots.actions) Row(Modifier(), {.verticalAlignment = Alignment::CenterVertically}, slots.actions);
+                if (slots.actions) detail::Row(Modifier(), {.verticalAlignment = Alignment::CenterVertically}, slots.actions);
             });
     };
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
-        Box(modifier.fillMaxWidth().background(cs.surface).padding(insets.start, insets.top, insets.end, 0), [&] {
+        detail::Box(modifier.fillMaxWidth().background(cs.surface).padding(insets.start, insets.top, insets.end, 0), [&] {
             if (behavior && !behavior->isPinned)
-                Box(collapsing(Modifier().fillMaxWidth(), behavior->state, kHeight, false), row);  // slides up, under the status bar
+                detail::Box(collapsing(Modifier().fillMaxWidth(), behavior->state, kHeight, false), row);  // slides up, under the status bar
             else
                 row();
         });
@@ -461,12 +461,12 @@ void TopSearchBar(const SearchBarState& state, const Content& inputField, const 
     PaddingValues insets = WindowInsets::safeDrawing().only(WindowInsetsSides::Horizontal | WindowInsetsSides::Top).asPaddingValues();
     if (scrollBehavior) scrollBehavior->state.setHeightOffsetLimit(-kHeight);
     auto bar = [&] {
-        Box(Modifier().fillMaxWidth().padding(kPadding), Alignment::TopCenter,
+        detail::Box(Modifier().fillMaxWidth().padding(kPadding), Alignment::TopCenter,
             [&] { SearchBar(state, inputField, Modifier().widthIn(0, 720).fillMaxWidth()); });
     };
-    Box(modifier.fillMaxWidth().padding(insets.start, insets.top, insets.end, 0), [&] {
+    detail::Box(modifier.fillMaxWidth().padding(insets.start, insets.top, insets.end, 0), [&] {
         if (scrollBehavior && !scrollBehavior->isPinned)
-            Box(collapsing(Modifier().fillMaxWidth(), scrollBehavior->state, kHeight, false), bar);  // slides up, under the status bar
+            detail::Box(collapsing(Modifier().fillMaxWidth(), scrollBehavior->state, kHeight, false), bar);  // slides up, under the status bar
         else
             bar();
     });
@@ -517,7 +517,7 @@ void NavigationBar(const Modifier& modifier, const Content& content, CallSite si
     const ColorScheme& cs = colorScheme();
     // The keyboard covers it rather than lifting it.
     PaddingValues insets = detail::systemBarsForVisualComponents().only(WindowInsetsSides::Horizontal | WindowInsetsSides::Bottom).asPaddingValues();
-    Row(modifier.fillMaxWidth().background(cs.surfaceContainer).padding(insets.start, 0, insets.end, insets.bottom),
+    detail::Row(modifier.fillMaxWidth().background(cs.surfaceContainer).padding(insets.start, 0, insets.end, insets.bottom),
         {.horizontalArrangement = Arrangement::spacedBy(8)}, content);
 }
 
@@ -552,18 +552,18 @@ void detail::indicatorNavigationItem(bool selected, std::function<void()> onClic
     auto shift = remember([] { return std::make_shared<Offset>(); });
     MutableInteractionSource pill = mappedInteractionSource(source, shift);
     Modifier m = item.onSizeChanged([shift, indicatorWidth, top](Size s) { *shift = {(s.width - indicatorWidth) / 2, top}; });
-    Box(m.selectable(selected, std::move(onClick), SemanticsRole::Tab, {.enabled = enabled, .interactionSource = source, .indication = false}),
+    detail::Box(m.selectable(selected, std::move(onClick), SemanticsRole::Tab, {.enabled = enabled, .interactionSource = source, .indication = false}),
         Alignment::TopCenter, [&] {
-            Box(Modifier().offset(0, top).size(indicatorWidth, 32).clip(CircleShape).indication(pill, ripple()));
+            detail::Box(Modifier().offset(0, top).size(indicatorWidth, 32).clip(CircleShape).indication(pill, ripple()));
             Modifier grows = Modifier().offset(0, top).layout([grown, indicatorWidth](const MeasureNext& next, const Constraints& c, Offset& at) {
                 at = {};  // (as size(indicatorWidth * grown, 32))
                 float w = std::clamp(indicatorWidth * std::max(0.f, grown.value()), c.minWidth, c.maxWidth), h = std::clamp(32.f, c.minHeight, c.maxHeight);
                 next({w, w, h, h});
                 return Size{w, h};
             });
-            Box(detail::animatedAlpha(grows, alpha).background(cs.secondaryContainer, CircleShape));
-            Box(Modifier().offset(0, top + 4), [&] { CompositionLocalProvider({tinted(iconColor)}, icon); });
-            Box(Modifier().offset(0, top + 32 + 4), [&] {
+            detail::Box(detail::animatedAlpha(grows, alpha).background(cs.secondaryContainer, CircleShape));
+            detail::Box(Modifier().offset(0, top + 4), [&] { CompositionLocalProvider({tinted(iconColor)}, icon); });
+            detail::Box(Modifier().offset(0, top + 32 + 4), [&] {
                 CompositionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelMedium)}, label);
             });
         });
@@ -573,7 +573,7 @@ void NavigationBarItem(bool selected, std::function<void()> onClick, const Image
                        CallSite site) {
     ComposableScope scope(site);
     // Compose 1.4's: 80 dp tall, the 64 dp wide indicator 12 dp down.
-    detail::indicatorNavigationItem(selected, std::move(onClick), [icon] { Icon(icon, ""); }, [label] { Text(label); },  // (the label says it)
+    detail::indicatorNavigationItem(selected, std::move(onClick), [icon] { Icon(icon, ""); }, [label] { detail::Text(label); },  // (the label says it)
                                     Modifier().weight(1).height(80), 64, 12, true, std::nullopt);
 }
 
@@ -593,7 +593,7 @@ void SmallFloatingActionButton(std::function<void()> onClick, const Content& con
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
-        Box(fab(modifier.minimumInteractiveComponentSize().size(40), RoundedCornerShape(12), std::move(onClick)), Alignment::Center, content);
+        detail::Box(fab(modifier.minimumInteractiveComponentSize().size(40), RoundedCornerShape(12), std::move(onClick)), Alignment::Center, content);
     });
 }
 
@@ -601,7 +601,7 @@ void LargeFloatingActionButton(std::function<void()> onClick, const Content& con
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
-        Box(fab(modifier.size(96), RoundedCornerShape(28), std::move(onClick)), Alignment::Center, content);
+        detail::Box(fab(modifier.size(96), RoundedCornerShape(28), std::move(onClick)), Alignment::Center, content);
     });
 }
 
@@ -610,7 +610,7 @@ void FloatingActionButton(std::function<void()> onClick, const Content& content,
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
-        Box(fab(modifier.size(56), RoundedCornerShape(16), std::move(onClick)), Alignment::Center, content);
+        detail::Box(fab(modifier.size(56), RoundedCornerShape(16), std::move(onClick)), Alignment::Center, content);
     });
 }
 
@@ -620,11 +620,11 @@ void ExtendedFloatingActionButton(std::function<void()> onClick, const ImageVect
     const ColorScheme& cs = colorScheme();
     // 16 dp before the icon, 12 between, 20 after the label; at least 80 wide.
     CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
-        Row(fab(modifier.heightIn(56).widthIn(80), RoundedCornerShape(16), std::move(onClick)).padding(16, 0, 20, 0),
+        detail::Row(fab(modifier.heightIn(56).widthIn(80), RoundedCornerShape(16), std::move(onClick)).padding(16, 0, 20, 0),
             {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
             [&] {
                 Icon(icon, text);
-                Text(text, {.font = typography().labelLarge});
+                detail::Text(text, {.font = typography().labelLarge});
             });
     });
 }
@@ -657,9 +657,9 @@ void ToggleFloatingActionButton(bool checked, std::function<void(bool)> onChecke
         return Size{w, h};
     });
     float outer = std::max(options.containerSize, options.checkedContainerSize);
-    Box(modifier.size(outer), options.contentAlignment, [&] {
+    detail::Box(modifier.size(outer), options.contentAlignment, [&] {
         CompositionLocalProvider({LocalContentColor.provides(ContentColor{progress, cs.onPrimaryContainer, cs.onPrimary})}, [&] {
-            Box(detail::animatedBackground(sized.shadow(6, shape), container, shape).toggleable(checked, std::move(onCheckedChange)),
+            detail::Box(detail::animatedBackground(sized.shadow(6, shape), container, shape).toggleable(checked, std::move(onCheckedChange)),
                 Alignment::Center, [&] { content(ToggleFloatingActionButtonScope(progress)); });
         });
     });
@@ -677,8 +677,8 @@ void FloatingActionButtonMenu(bool expanded, const Content& button, const std::f
     auto data = remember([] { return std::make_shared<FloatingActionButtonMenuScope::Data>(); });
     data->expanded = expanded;
     data->index = 0;
-    Column(modifier, {.horizontalAlignment = horizontalAlignment}, [&] {
-        Column(Modifier().padding(0, 0, 0, 8), {.verticalArrangement = Arrangement::spacedBy(4), .horizontalAlignment = horizontalAlignment},
+    detail::Column(modifier, {.horizontalAlignment = horizontalAlignment}, [&] {
+        detail::Column(Modifier().padding(0, 0, 0, 8), {.verticalArrangement = Arrangement::spacedBy(4), .horizontalAlignment = horizontalAlignment},
                [&] { content(FloatingActionButtonMenuScope(data)); });
         button();
     });
@@ -697,7 +697,7 @@ void FloatingActionButtonMenuItem(const FloatingActionButtonMenuScope& menu, std
     AnimatedVisibility(d.expanded, Modifier(), fadeIn(0, tween(200, opening)) + expandVertically(tween(200, opening)),
                        fadeOut(0, tween(150, closing)) + shrinkVertically(tween(150, closing)), [&] {
                            CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
-                               Row(modifier.height(56).background(cs.primaryContainer, CircleShape).clickable(std::move(onClick)).padding(24, 0),
+                               detail::Row(modifier.height(56).background(cs.primaryContainer, CircleShape).clickable(std::move(onClick)).padding(24, 0),
                                    {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically}, [&] {
                                        icon();
                                        CompositionLocalProvider({LocalTextStyle.provides(typography().titleMedium)}, text);
@@ -710,7 +710,7 @@ void MediumFloatingActionButton(std::function<void()> onClick, const Content& co
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
-        Box(fab(modifier.size(80), RoundedCornerShape(20), std::move(onClick)), Alignment::Center, content);
+        detail::Box(fab(modifier.size(80), RoundedCornerShape(20), std::move(onClick)), Alignment::Center, content);
     });
 }
 
@@ -733,7 +733,7 @@ void extendedFab(const ExtendedFabSize& size, std::function<void()> onClick, con
                    .clipToBounds(),
                [&] {
                    Icon(icon, "", Modifier().size(size.icon));
-                   Text(text, Modifier().graphicsLayer([p](GraphicsLayerScope& l) { l.alpha = std::clamp(p.value(), 0.f, 1.f); }),
+                   detail::Text(text, Modifier().graphicsLayer([p](GraphicsLayerScope& l) { l.alpha = std::clamp(p.value(), 0.f, 1.f); }),
                         {.font = size.label, .maxLines = 1});
                },
                [size, state = p](const std::vector<Measurable>& m, const Constraints& c) {
@@ -848,7 +848,7 @@ void SnackbarHostState::dismiss(uint64_t id, SnackbarResult result) const {
 void AppBarScope::clickableItem(std::function<void()> onClick, Content icon, std::string label, bool enabled) {
     items.push_back({[onClick, icon, enabled] { IconButton(onClick, Modifier(), {.enabled = enabled}, icon); },
                      [onClick, label, enabled](const AppBarMenuState& menu) {
-                         DropdownMenuItem([label] { Text(label); }, [onClick, menu] {
+                         DropdownMenuItem([label] { detail::Text(label); }, [onClick, menu] {
                              onClick();
                              menu.dismiss();
                          }, {.enabled = enabled});
@@ -858,7 +858,7 @@ void AppBarScope::clickableItem(std::function<void()> onClick, Content icon, std
 void AppBarScope::toggleableItem(bool checked, std::function<void(bool)> onCheckedChange, Content icon, std::string label, bool enabled) {
     items.push_back({[checked, onCheckedChange, icon, enabled] { IconToggleButton(checked, onCheckedChange, Modifier(), {.enabled = enabled}, icon); },
                      [checked, onCheckedChange, label, enabled](const AppBarMenuState& menu) {
-                         DropdownMenuItem([label] { Text(label); }, [checked, onCheckedChange, menu] {
+                         DropdownMenuItem([label] { detail::Text(label); }, [checked, onCheckedChange, menu] {
                              onCheckedChange(!checked);
                              menu.dismiss();
                          }, {.enabled = enabled});
@@ -880,7 +880,7 @@ void appBarItems(bool vertical, std::function<void(AppBarScope&)> content, const
     int count = int(row.items.size()), maxItems = std::max(1, o.maxItemCount);
     Layout(modifier, [&] {
         for (const auto& item : row.items) item.appBar();
-        Box([&] {
+        detail::Box([&] {
             if (o.overflowIndicator) o.overflowIndicator(menu);
             else IconButton([menu] { menu.show(); }, [] { Icon(Icons::Filled::MoreVert, LocalStrings.current().moreOptions); });
             DropdownMenu(menu.isShowing(), [menu] { menu.dismiss(); }, [&] {
@@ -1019,13 +1019,13 @@ void Snackbar(const Content& content, const Modifier& modifier, const SnackbarOp
         CompositionLocalProvider({LocalContentColor.provides(actionColor), LocalTextStyle.provides(typography().labelLarge)}, o.action);
     };
     auto dismiss = [&] { CompositionLocalProvider({LocalContentColor.provides(dismissColor)}, o.dismissAction); };
-    Box(modifier.shadow(6, shape).background(container, shape).clip(shape), [&] {
+    detail::Box(modifier.shadow(6, shape).background(container, shape).clip(shape), [&] {
         CompositionLocalProvider({LocalContentColor.provides(contentColor), LocalTextStyle.provides(typography().bodyMedium)}, [&] {
             if (o.actionOnNewLine && o.action) {  // the text, then the buttons under it at the end
-                Column(Modifier().widthIn(0, kSnackbarMaxWidth).fillMaxWidth().padding(kSnackbarStart, 0, 0, 2), [&] {
-                    Box(Modifier().paddingFromBaseline(30, 12).padding(0, 0, kSnackbarButtonSide, 0), content);
-                    Box(Modifier().align(Alignment::End).padding(0, 0, o.dismissAction ? 0.f : kSnackbarButtonSide, 0), [&] {
-                        Row([&] {
+                detail::Column(Modifier().widthIn(0, kSnackbarMaxWidth).fillMaxWidth().padding(kSnackbarStart, 0, 0, 2), [&] {
+                    detail::Box(Modifier().paddingFromBaseline(30, 12).padding(0, 0, kSnackbarButtonSide, 0), content);
+                    detail::Box(Modifier().align(Alignment::End).padding(0, 0, o.dismissAction ? 0.f : kSnackbarButtonSide, 0), [&] {
+                        detail::Row([&] {
                             action();
                             if (o.dismissAction) dismiss();
                         });
@@ -1034,9 +1034,9 @@ void Snackbar(const Content& content, const Modifier& modifier, const SnackbarOp
                 return;
             }
             Layout(Modifier().padding(kSnackbarStart, 0, o.dismissAction ? 0.f : kSnackbarButtonSide, 0), [&] {
-                Box(Modifier().padding(0, 6), content);
-                if (o.action) Box(Modifier().layoutId("action"), action);
-                if (o.dismissAction) Box(Modifier().layoutId("dismiss"), dismiss);
+                detail::Box(Modifier().padding(0, 6), content);
+                if (o.action) detail::Box(Modifier().layoutId("action"), action);
+                if (o.dismissAction) detail::Box(Modifier().layoutId("dismiss"), dismiss);
             }, oneRowSnackbar);
         });
     });
@@ -1047,11 +1047,11 @@ void Snackbar(const SnackbarData& data, const Modifier& modifier, SnackbarOption
     const ColorScheme& cs = colorScheme();
     if (!data.actionLabel.empty())
         o.action = [&data, color = o.actionColor.value_or(cs.inversePrimary)] {
-            TextButton([data] { data.performAction(); }, Modifier(), {.contentColor = color}, [&] { Text(data.actionLabel); });
+            TextButton([data] { data.performAction(); }, Modifier(), {.contentColor = color}, [&] { detail::Text(data.actionLabel); });
         };
     if (data.withDismissAction)
         o.dismissAction = [&data] { IconButton([data] { data.dismiss(); }, [] { Icon(Icons::Filled::Close, LocalStrings.current().dismiss); }); };
-    Snackbar([&] { Text(data.message); }, modifier.padding(12), o);
+    Snackbar([&] { detail::Text(data.message); }, modifier.padding(12), o);
 }
 
 } // namespace kompoz

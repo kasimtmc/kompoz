@@ -66,7 +66,7 @@ void Badge(int count, CallSite site = CallSite::current()) {
 
 ```cpp
 void Header(const std::string& title) {      // düz bir fonksiyon
-    Text(title, {.font = typography().headlineSmall});
+    Text(title, style = typography().headlineSmall);
     HorizontalDivider();
 }
 ```
@@ -82,15 +82,15 @@ Düz bir fonksiyonun sahip olmadığı şey bir *scope*'tur: okuduğu durumlar o
 
 Gövde daha sonra tek başına çalışabileceği için değerle yakalamalıdır: `[=]`.
 
-`ComposableScope scope(site);` bir composable'a scope yapmadan bir kimlik verir. İçerik lambdası alan bileşenler bunu kullanır; tıpkı Compose'da `Column` ve `Row`'un inline fonksiyonlar olması gibi: içerik lambdaları referansla yakalar ve tek başına yeniden çalıştırılamaz, bu yüzden okudukları durum çağırana aittir.
+`ComposableScope scope(site);` bir composable'a scope yapmadan bir kimlik verir. Hâlâ içerik lambdası alan bileşenler bunu kullanır (`Button`, `Card`, …): içerik lambdaları referansla yakalayabilir ve tek başına yeniden çalıştırılmaz, bu yüzden okudukları durum çağırana aittir. `Box`, `Column` ve `Row`'un blokları ise Compose'un lambdaları gibi kendilerine ait kapsamlarda çalışır: değerle yakalarlar.
 
 ```cpp
 void Section(const std::string& title, const Content& content, CallSite site = CallSite::current()) {
     ComposableScope scope(site);
-    Column(Modifier().padding(16), [&] {
-        Text(title, {.font = typography().titleMedium});
+    Column(Modifier().padding(16)) {
+        Text(title, style = typography().titleMedium);
         content();
-    });
+    };
 }
 ```
 
@@ -113,7 +113,7 @@ struct Todo {
 
 void TodoRow(const Todo& todo, MutableState<std::vector<Todo>> todos, CallSite site = CallSite::current()) {
     composable(site, todo, todos, [=] {   // todo ve todos aynı kaldıkça atlanır
-        Row([&] {
+        Row() {
             Checkbox(todo.done, [todos, id = todo.id](bool done) {
                 todos.update([&](std::vector<Todo>& list) {
                     for (Todo& t : list)
@@ -121,7 +121,7 @@ void TodoRow(const Todo& todo, MutableState<std::vector<Todo>> todos, CallSite s
                 });
             });
             Text(todo.title);
-        });
+        };
     });
 }
 ```
@@ -146,11 +146,11 @@ for (const Todo& todo : todos.get()) {
 #! struct Todo { int id = 0; std::string title; bool done = false; friend bool operator==(const Todo&, const Todo&) = default; };
 #! void TodoRow(const Todo&, MutableState<std::vector<Todo>>, CallSite site = CallSite::current()) {}
 void TodoList(MutableState<std::vector<Todo>> todos) {
-    Column([&] {
+    Column() {
         for (const Todo& todo : todos.get()) {
             key(todo.id, [&] { TodoRow(todo, todos); });
         }
-    });
+    };
 }
 ```
 
@@ -168,9 +168,9 @@ void Player(bool wide) {
     }); });
 
     if (wide) {
-        Row([&] { video(); Text("Comments"); });
+        Row() { video(); Text("Comments"); };
     } else {
-        Column([&] { video(); Text("Comments"); });
+        Column() { video(); Text("Comments"); };
     }
 }
 ```

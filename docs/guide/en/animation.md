@@ -57,12 +57,12 @@ Material components use `motionScheme()`'s springs, so they move the way Materia
 ```cpp
 void Details() {
     auto open = remember([] { return mutableStateOf(false); });
-    Column([&] {
+    Column() {
         TextButton([open] { open.set(!open.get()); }, [&] { Text(open.get() ? "Less" : "More"); });
         AnimatedVisibility(open.get(), Modifier(), fadeIn() + expandVertically(), fadeOut() + shrinkVertically(), [] {
             Text("Here are the details.", Modifier().padding(16));
         });
-    });
+    };
 }
 ```
 
@@ -77,16 +77,16 @@ As in Compose, a transition is read as its content is laid out and drawn: the co
 ```cpp
 void Counter() {
     auto count = remember([] { return mutableStateOf(0); });
-    Row(Modifier(), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+    Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
         IconButton([count] { count.set(count.get() - 1); }, [] { Icon(Icons::Filled::Remove, "Less"); });
         AnimatedContent<int>(count.get(), [](const int& n) {
-            Text(std::to_string(n), {.font = typography().headlineMedium});
+            Text(std::to_string(n), style = typography().headlineMedium);
         }, Modifier(), [](const int& from, const int& to) {
             // up when counting up, down when counting down
             return togetherWith(slideInVertically(to > from ? 1 : -1), slideOutVertically(to > from ? -1 : 1));
         });
         IconButton([count] { count.set(count.get() + 1); }, [] { Icon(Icons::Filled::Add, "More"); });
-    });
+    };
 }
 ```
 
@@ -112,7 +112,7 @@ void PageContent(Page page) {
 void Expandable(const std::string& text) {
     auto expanded = remember([] { return mutableStateOf(false); });
     Text(text, Modifier().clickable([expanded] { expanded.set(!expanded.get()); }).animateContentSize(),
-         {.maxLines = expanded.get() ? 0 : 2, .overflow = TextOverflow::Ellipsis});
+         maxLines = expanded.get() ? 0 : 2, overflow = TextOverflow::Ellipsis);
 }
 ```
 
@@ -134,7 +134,7 @@ void TransitionBox() {
     });
     Box(Modifier().size(size).background(color, 16).clickable([state] {
         state.set(state.get() == BoxState::Expanded ? BoxState::Collapsed : BoxState::Expanded);
-    }));
+    })) {};
 }
 ```
 
@@ -149,7 +149,7 @@ void Pulse() {
     auto pulse = rememberInfiniteTransition().animateFloatState(0.85f, 1.f, infiniteRepeatable(tween(800), RepeatMode::Reverse));
     Box(Modifier().size(64)
             .graphicsLayer([pulse](GraphicsLayerScope& l) { l.scaleX = l.scaleY = pulse.get(); })
-            .background(colorScheme().primary, CircleShape));
+            .background(colorScheme().primary, CircleShape)) {};
 }
 ```
 
@@ -167,7 +167,7 @@ void Shake(bool error) {
         for (float x : {-12.f, 12.f, -8.f, 8.f, 0.f}) co_await offset.animateTo(x, tween(50));
     });
     Text("Wrong password", Modifier().offset([offset] { return Offset{offset.value(), 0}; }),
-         {.color = colorScheme().error});
+         color = colorScheme().error);
 }
 ```
 
@@ -191,7 +191,7 @@ void Gallery() {
                     .size(open ? 280 : 72)
                     .sharedElement(shared.rememberSharedContentState("photo"), scope)
                     .background(colorScheme().tertiary, 16)
-                    .clickable([details] { details.set(!details.get()); }));
+                    .clickable([details] { details.set(!details.get()); })) {};
         });
     });
 }

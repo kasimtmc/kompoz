@@ -41,7 +41,7 @@ void ShortNavigationBar(const Modifier& modifier, const Content& content, const 
                      .padding(insets.start, 0, insets.end, insets.bottom);
     CompositionLocalProvider({LocalShortNavigationBarArrangement.provides(arrangement)}, [&] {
         if (arrangement == ShortNavigationBarArrangement::EqualWeight) {
-            Row(m.height(kBarHeight), {.verticalAlignment = Alignment::CenterVertically}, content);
+            detail::Row(m.height(kBarHeight), {.verticalAlignment = Alignment::CenterVertically}, content);
             return;
         }
         // Centered: as wide as the widest, together in the middle.
@@ -95,17 +95,17 @@ void ShortNavigationBarItem(bool selected, std::function<void()> onClick, const 
     auto text = [&] { CompositionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelMedium)}, label); };
     auto picture = [&] { CompositionLocalProvider({tinted(iconColor)}, icon); };
     if (start) {
-        Box(item, Alignment::Center, [&] {
-            Row(pill(Modifier().height(40)).padding(16, 0), {.horizontalArrangement = Arrangement::spacedBy(4), .verticalAlignment = Alignment::CenterVertically},
+        detail::Box(item, Alignment::Center, [&] {
+            detail::Row(pill(Modifier().height(40)).padding(16, 0), {.horizontalArrangement = Arrangement::spacedBy(4), .verticalAlignment = Alignment::CenterVertically},
                 [&] {
                     picture();
                     text();
                 });
         });
     } else {
-        Column(item, {.verticalArrangement = Arrangement::spacedBy(4, Arrangement::Kind::Center), .horizontalAlignment = Alignment::CenterHorizontally},
+        detail::Column(item, {.verticalArrangement = Arrangement::spacedBy(4, Arrangement::Kind::Center), .horizontalAlignment = Alignment::CenterHorizontally},
                [&] {
-                   Box(pill(Modifier().size(56, 32)), Alignment::Center, picture);
+                   detail::Box(pill(Modifier().size(56, 32)), Alignment::Center, picture);
                    text();
                });
     }
@@ -152,7 +152,7 @@ void railColumn(bool expanded, const detail::Live<float>& width, Color container
     const ColorScheme& cs = colorScheme();
     float spacing = expanded ? 0.f : 4.f;
     CompositionLocalProvider({LocalWideNavigationRailExpanded.provides(expanded), LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
-        Column(modifier.fillMaxHeight()
+        detail::Column(modifier.fillMaxHeight()
                    .background(container, shape)
                    .padding(insets.start, insets.top, 0, insets.bottom)
                    .layout([width, start = insets.start](const MeasureNext& next, const Constraints& c, Offset& at) {
@@ -165,10 +165,10 @@ void railColumn(bool expanded, const detail::Live<float>& width, Color container
                {.verticalArrangement = Arrangement::spacedBy(spacing),
                 .horizontalAlignment = expanded ? Alignment::Start : Alignment::CenterHorizontally},
                [&] {
-                   if (header) Box(Modifier().padding(expanded ? 20.f : 0.f, 0, 0, 40 - spacing), header);  // 40 dp above the items
-                   if (arrangement != Arrangement::Kind::Start) Spacer(Modifier().weight(1));  // the items in the middle or at the bottom
+                   if (header) detail::Box(Modifier().padding(expanded ? 20.f : 0.f, 0, 0, 40 - spacing), header);  // 40 dp above the items
+                   if (arrangement != Arrangement::Kind::Start) detail::Spacer(Modifier().weight(1));  // the items in the middle or at the bottom
                    content();
-                   if (arrangement == Arrangement::Kind::Center) Spacer(Modifier().weight(1));
+                   if (arrangement == Arrangement::Kind::Center) detail::Spacer(Modifier().weight(1));
                });
     });
 }
@@ -212,13 +212,13 @@ void ModalWideNavigationRail(const Modifier& modifier, const Content& content, c
     // Expanded: over everything, sliding in from the start above a scrim; a tap on the scrim or
     // Back collapses it.
     Popup({.fullScreen = true, .onDismissRequest = [state] { state.collapse(); }, .dismissOnOutsideClick = false}, [&] {
-        Box(detail::animatedBackground(Modifier().fillMaxSize(),
+        detail::Box(detail::animatedBackground(Modifier().fillMaxSize(),
                                        {[p, scrim = colorScheme().scrim] { return scrim.copy(scrim.alpha() * 0.32f * std::clamp(p(), 0.f, 1.f)); }})
                 .pointerInput(0, [state](PointerInputScope& s) -> Task {
                     co_await detectTapGestures(s, {.onTap = [state](Offset) { state.collapse(); }});
                 }),
             Alignment::TopStart, [&] {
-                Box(Modifier()
+                detail::Box(Modifier()
                         .fillMaxHeight()
                         .offset([p, across = options.expandedWidth + insets.start] { return Offset{-(1 - p()) * across, 0}; })
                         .pointerInput(0, [](PointerInputScope& s) -> Task {  // taps on the rail stay on it
@@ -252,17 +252,17 @@ void WideNavigationRailItem(bool selected, std::function<void()> onClick, const 
     auto pill = [&](const Modifier& m) { return indicator(m, cs.secondaryContainer, shown).clip(CircleShape).indication(source, ripple()); };
     auto picture = [&] { CompositionLocalProvider({tinted(iconColor)}, icon); };
     if (expanded) {  // the label after the icon, the indicator round both
-        Box(item.height(56).padding(20, 0, 20, 0), Alignment::CenterStart, [&] {
-            Row(pill(Modifier().height(56)).padding(16, 0), {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically},
+        detail::Box(item.height(56).padding(20, 0, 20, 0), Alignment::CenterStart, [&] {
+            detail::Row(pill(Modifier().height(56)).padding(16, 0), {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically},
                 [&] {
                     picture();
                     CompositionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelLarge)}, label);
                 });
         });
     } else {
-        Column(item.height(64), {.verticalArrangement = Arrangement::spacedBy(4, Arrangement::Kind::Center), .horizontalAlignment = Alignment::CenterHorizontally},
+        detail::Column(item.height(64), {.verticalArrangement = Arrangement::spacedBy(4, Arrangement::Kind::Center), .horizontalAlignment = Alignment::CenterHorizontally},
                [&] {
-                   Box(pill(Modifier().size(56, 32)), Alignment::Center, picture);
+                   detail::Box(pill(Modifier().size(56, 32)), Alignment::Center, picture);
                    CompositionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelMedium)}, label);
                });
     }

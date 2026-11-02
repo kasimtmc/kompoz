@@ -10,18 +10,18 @@ void SelectableTextSection(CallSite site) {
         const ColorScheme& cs = colorScheme();
         Section("SelectionContainer · DisableSelection", [&] {
             SelectionContainer(Modifier().fillMaxWidth(), [&] {
-                Column(Modifier(), {.verticalArrangement = Arrangement::spacedBy(8)}, [&] {
+                Column(Modifier(), verticalArrangement = Arrangement::spacedBy(8)) {
                     Text("Bu paragraftaki bir kelimeye uzun basın: seçilir, tutamaçları bir metinden ötekine "
                          "sürükleyip kopyalayabilirsiniz. Fareyle sürükleyerek de seçilir, Ctrl+C kopyalar.",
-                         {.font = typography().bodyLarge});
+                         style = typography().bodyLarge);
                     Text("Kompoz, Jetpack Compose'un C++20 karşılığıdır: seçim bu metne de uzanır.",
-                         {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                         color = cs.onSurfaceVariant, style = typography().bodyMedium);
                     DisableSelection([&] {
-                        Text("DisableSelection içindeki bu satır seçilmez.", {.font = typography().labelLarge, .color = cs.outline});
+                        Text("DisableSelection içindeki bu satır seçilmez.", color = cs.outline, style = typography().labelLarge);
                     });
                     Text("Tümünü seç, seçilebilen her metni alır; çift tıklama bir kelimeyi.",
-                         {.font = typography().bodyMedium});
-                });
+                         style = typography().bodyMedium);
+                };
             });
         });
     });
@@ -36,7 +36,7 @@ void ContextMenuSection(CallSite site) {
         Section("ContextMenuArea (sağ tık)", [&] {
             Text("Masaüstünde karta sağ tıklayınca menüsü tıklanan yerde açılır; metin alanlarının kendi menüsü var (Kes, Kopyala, "
                  "Yapıştır, Tümünü seç).",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
             ContextMenuArea(
                 [last] {
                     return std::vector<ContextMenuItem>{{"Yenile", [last] { last.set("Yenile"); }},
@@ -44,8 +44,7 @@ void ContextMenuSection(CallSite site) {
                                                         {"Sil (kapalı)", [] {}, false}};
                 },
                 [&] {
-                    Box(Modifier().fillMaxWidth().height(88).background(cs.secondaryContainer, 16), Alignment::Center,
-                        [&] { Text("Buraya sağ tıklayın — son seçim: " + last.get(), {.color = cs.onSecondaryContainer}); });
+                    Box(Modifier().fillMaxWidth().height(88).background(cs.secondaryContainer, 16), Alignment::Center) { Text("Buraya sağ tıklayın — son seçim: " + last.get(), color = cs.onSecondaryContainer); };
                 });
             OutlinedTextField(note.get(), [note](std::string v) { note.set(std::move(v)); }, Modifier().fillMaxWidth(), {.singleLine = true});
         });
@@ -64,7 +63,7 @@ void PointerSection(CallSite site) {
         auto clicks = remember([] { return mutableStateOf(std::array<int, 3>{}); });
         Section("onPointerEvent · onClick · TooltipArea (fare)", [&] {
             Text("Masaüstünde: fareyi kutunun üstünde gezdirin, tekerleği çevirin (sayfa kaymaz, sayaç değişir), tuşlara basın.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
             auto bump = [clicks](int i) {
                 return [clicks, i] {
                     auto c = clicks.peek();
@@ -90,36 +89,37 @@ void PointerSection(CallSite site) {
                                         wheel.set(wheel.peek() + e.change.scrollDelta.y);
                                         e.change.consume();  // the page doesn't scroll
                                     }),
-                Alignment::Center, [&] {
+                Alignment::Center) {
                     Text(std::format("{} · {:.0f}, {:.0f} · tekerlek {:+.0f} · son tuş: {}", inside.get() ? "içeride" : "dışarıda", at.get().x,
                                      at.get().y, wheel.get(), button.get()),
-                         {.color = inside.get() ? cs.onTertiaryContainer : cs.onSurface});
-                });
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+                         color = inside.get() ? cs.onTertiaryContainer : cs.onSurface);
+                };
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 auto chip = [&](const std::string& label, int i, OnClickOptions o) {
-                    Box(Modifier().weight(1).height(48).background(cs.secondaryContainer, 12).onClick(bump(i), std::move(o)), Alignment::Center,
-                        [&] { Text(std::format("{}: {}", label, clicks.get()[size_t(i)]), {.font = typography().labelLarge}); });
+                    Box(Modifier().weight(1).height(48).background(cs.secondaryContainer, 12).onClick(bump(i), std::move(o)), Alignment::Center) {
+                        Text(std::format("{}: {}", label, clicks.get()[size_t(i)]), style = typography().labelLarge);
+                    };
                 };
                 chip("Sağ tık", 0, {.matcher = PointerMatcher::mouse(PointerButton::Secondary)});
                 chip("Orta tık", 1, {.matcher = PointerMatcher::mouse(PointerButton::Tertiary)});
                 chip("Ctrl+tık", 2, {.keyboardModifiers = [](const KeyModifiers& m) { return m.ctrl; }});
-            });
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+            };
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 TooltipArea(
                     [&] {
                         Text("İmlecin altında çıkan ipucu", Modifier().shadow(4, 4).background(cs.inverseSurface, 4).padding(8, 4),
-                             {.font = typography().bodySmall, .color = cs.inverseOnSurface});
+                             color = cs.inverseOnSurface, style = typography().bodySmall);
                     },
                     Modifier().weight(1),
                     [&] { OutlinedButton([] {}, Modifier().fillMaxWidth(), {}, [] { Text("Üstünde bekleyin"); }); });
                 TooltipArea(
                     [&] {
                         Text("Düğmenin altında, ortada", Modifier().shadow(4, 4).background(cs.inverseSurface, 4).padding(8, 4),
-                             {.font = typography().bodySmall, .color = cs.inverseOnSurface});
+                             color = cs.inverseOnSurface, style = typography().bodySmall);
                     },
                     Modifier().weight(1), {.delayMillis = 300, .tooltipPlacement = TooltipPlacement::ComponentRect(Alignment::BottomCenter, Alignment::BottomCenter, {0, 4})},
                     [&] { OutlinedButton([] {}, Modifier().fillMaxWidth(), {}, [] { Text("ComponentRect"); }); });
-            });
+            };
         });
     });
 }
@@ -183,13 +183,12 @@ void CustomIndicationSection(CallSite site) {
         Section("IndicationNodeFactory · özel göstergeler", [&] {
             // The indication draws what comes after the clickable: put it before the background
             // to shrink the whole button (a Material button's clickable comes after its background).
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                 for (auto [label, bg, fg] : {std::tuple{"Küçülür", cs.primary, cs.onPrimary}, std::tuple{"Bu da", cs.secondaryContainer, cs.onSecondaryContainer}})
-                    Box(Modifier().clickable([taps] { taps.set(taps.peek() + 1); }, {.indication = shrink}).background(bg, 20).padding(20, 10),
-                        Alignment::Center, [label, fg] { Text(label, {.font = typography().labelLarge, .color = fg}); });
-                Text(std::format("{} dokunuş", taps.get()), {.font = typography().bodyMedium});
-            });
-            Box(Modifier()
+                    (Box)(Modifier().clickable([taps] { taps.set(taps.peek() + 1); }, {.indication = shrink}).background(bg, 20).padding(20, 10), Alignment::Center, [label, fg] { Text(label, color = fg, style = typography().labelLarge); });
+                Text(std::format("{} dokunuş", taps.get()), style = typography().bodyMedium);
+            };
+            (Box)(Modifier()
                     .fillMaxWidth()
                     .height(64)
                     .background(cs.surfaceContainerHigh, 12)
@@ -197,7 +196,7 @@ void CustomIndicationSection(CallSite site) {
                     .padding(16, 0),
                 Alignment::Center, [] { Text("Basınca (fareyle üzerine gelince, odaklanınca) çerçevesi yanar"); });
             Text("clickable'ın indication'ı (ya da LocalIndication): kendi IndicationNode'u etkileşimleri dinler, ondan sonrasını sarıp çizer.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
         });
     });
 }
@@ -251,16 +250,15 @@ void TextToolbarSection(CallSite site) {
                        .focusable = false,
                        .touchable = true},
                       [&] {
-                          Row(Modifier().shadow(4, 24).background(cs.tertiaryContainer, 24).padding(4), {.horizontalArrangement = Arrangement::spacedBy(2)}, [&] {
+                          Row(Modifier().shadow(4, 24).background(cs.tertiaryContainer, 24).padding(4), horizontalArrangement = Arrangement::spacedBy(2)) {
                               for (const auto& [label, action] : pill->actions_)
                                   if (action)
-                                      Box(Modifier().clickable(action).padding(12, 8), Alignment::Center,
-                                          [label, c = cs.onTertiaryContainer] { Text(label, {.font = typography().labelLarge, .color = c}); });
-                          });
+                                      (Box)(Modifier().clickable(action).padding(12, 8), Alignment::Center, [label, c = cs.onTertiaryContainer] { Text(label, color = c, style = typography().labelLarge); });
+                          };
                       });
             }
             Text("Seçim çubuğu Kompoz'unki değil: LocalTextToolbar'a seçimin yeri ve yapılabilecekler bildirilir, o kendisininkini gösterir.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
         });
     });
 }
@@ -303,7 +301,7 @@ void MultiTouchSection(CallSite site) {
         ImageBitmap photo = imageResource("images/landscape.png");
         Section("Çoklu dokunma (transformable)", [&] {
             Text("İki parmakla yakınlaştırın ve döndürün; yakınken tek parmakla kaydırın, çift dokunuş sıfırlar.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
             Box(Modifier()
                     .fillMaxWidth()
                     .height(220)
@@ -317,7 +315,7 @@ void MultiTouchSection(CallSite site) {
                                                            offset.set({});
                                                        }});
                     }),
-                Alignment::Center, [&] {
+                Alignment::Center) {
                     // Read while drawing: the gesture doesn't recompose the image.
                     Image(photo, "Manzara",
                           Modifier().fillMaxSize().graphicsLayer([scale, rotation, offset](GraphicsLayerScope& l) {
@@ -327,9 +325,9 @@ void MultiTouchSection(CallSite site) {
                               l.translationY = offset.get().y;
                           }),
                           ContentScale::Crop);
-                });
+                };
             Text(std::format("Ölçek ×{:.2f} · açı {:.0f}°", scale.get(), rotation.get()),
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
         });
     });
 }
@@ -345,9 +343,9 @@ void KeyboardSection(CallSite site) {
         Section("Klavye ve odak (focusable, onKeyEvent)", [&] {
             DesktopNote("Masaüstü için: telefonda yalnızca bir donanım klavyesi (Bluetooth ya da USB) bağlıyken çalışır.");
             Text("Tab / Shift+Tab ve oklarla gezin, Enter ya da Space ile tıklayın (masaüstü, donanım klavyesi).",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
             for (int row = 0; row < 3; ++row)
-                Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+                Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
                     for (int col = 0; col < 3; ++col) {
                         int i = row * 3 + col;
                         Box(Modifier().weight(1).height(48).background(cs.secondaryContainer, 12).clickable([clicks, i] {
@@ -355,11 +353,11 @@ void KeyboardSection(CallSite site) {
                                 ++v[size_t(i)];
                                 clicks.set(v);
                             }),
-                            Alignment::Center, [&] {
-                                Text(std::format("{} · {}", i + 1, clicks.get()[size_t(i)]), {.color = cs.onSecondaryContainer});
-                            });
+                            Alignment::Center) {
+                                Text(std::format("{} · {}", i + 1, clicks.get()[size_t(i)]), color = cs.onSecondaryContainer);
+                            };
                     }
-                });
+                };
             Box(Modifier()
                     .fillMaxWidth()
                     .height(56)
@@ -373,10 +371,10 @@ void KeyboardSection(CallSite site) {
                     })
                     .focusable()
                     .padding(16, 0),
-                Alignment::CenterStart, [&] {
+                Alignment::CenterStart) {
                     Text(boxFocused.get() ? "Son tuş: " + lastKey.get() : "Tab ile bu kutuya gelin, sonra bir tuşa basın",
-                         {.color = boxFocused.get() ? cs.onSurface : cs.onSurfaceVariant});
-                });
+                         color = boxFocused.get() ? cs.onSurface : cs.onSurfaceVariant);
+                };
         });
     });
 }
@@ -391,11 +389,11 @@ void SelectableCard(int index, MutableState<int> selected, CallSite site) {
         float lift = t.animateFloat([](const bool& on) { return on ? 1.f : 0.f; }, spring(Spring::DampingRatioMediumBouncy));
         Column(Modifier().weight(1).height(84).graphicsLayer({.scaleX = 1 + 0.05f * lift, .scaleY = 1 + 0.05f * lift})
                    .background(container, 16).clickable([selected, index] { selected.set(index); }).padding(12),
-               {.verticalArrangement = Arrangement::SpaceBetween}, [&] {
+               verticalArrangement = Arrangement::SpaceBetween) {
                    Icon(index == 0 ? Icons::Filled::Home : index == 1 ? Icons::Filled::Star : Icons::Filled::Favorite, "Kart", {}, content);
                    Text(t.currentState() ? "Seçili" : t.isRunning() ? "…" : std::format("Kart {}", index + 1),
-                        {.font = typography().labelLarge, .color = content});
-               });
+                        color = content, style = typography().labelLarge);
+               };
     });
 }
 
@@ -422,9 +420,9 @@ void DragAndDropSection(CallSite site) {
         Section("Sürükle-bırak (dragAndDropSource / dragAndDropTarget)", [&] {
             Text("Bir kartı basılı tutup öbür sütuna sürükleyin (fareyle doğrudan sürükleyin); Escape vazgeçer. Masaüstünde "
                  "dosya yöneticisinden ya da tarayıcıdan aşağıdaki alana dosya / metin de bırakabilirsiniz.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
             std::vector<Card> all = cards.get();
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 for (int column = 0; column < 2; ++column) {
                     Color tint = over.get() == column ? cs.primaryContainer : taking.get() == column ? cs.secondaryContainer : cs.surfaceContainerHigh;
                     Column(Modifier()
@@ -453,8 +451,8 @@ void DragAndDropSection(CallSite site) {
                                             over.set(-1);
                                         }})
                                .padding(10),
-                           {.verticalArrangement = Arrangement::spacedBy(8)}, [&] {
-                               Text(column == 0 ? "Yapılacak" : "Bitti", {.font = typography().titleSmall});
+                           verticalArrangement = Arrangement::spacedBy(8)) {
+                               Text(column == 0 ? "Yapılacak" : "Bitti", style = typography().titleSmall);
                                for (const Card& card : all) {
                                    if (card.column != column) continue;
                                    key(card.id, [&] {
@@ -465,13 +463,12 @@ void DragAndDropSection(CallSite site) {
                                                .dragAndDropSource([card](Offset) -> std::optional<DragAndDropTransferData> {
                                                    return DragAndDropTransferData{.text = card.text, .localState = card};
                                                })
-                                               .padding(12, 10),
-                                           [&] { Text(card.text, {.font = typography().bodyMedium}); });
+                                               .padding(12, 10)) { Text(card.text, style = typography().bodyMedium); };
                                    });
                                }
-                           });
+                           };
                 }
-            });
+            };
             // Anything with text: a card, files from a file manager (their paths), text from a browser.
             Box(Modifier()
                     .fillMaxWidth()
@@ -498,10 +495,10 @@ void DragAndDropSection(CallSite site) {
                                         .onExited = [overDrop](const DragAndDropEvent&) { overDrop.set(false); },
                                         .onEnded = [overDrop](const DragAndDropEvent&) { overDrop.set(false); }})
                     .padding(14, 10),
-                Alignment::CenterStart, [&] {
+                Alignment::CenterStart) {
                     Text(dropped.get().empty() ? std::string("Buraya bırakın") : "Bırakılan: " + dropped.get(),
-                         {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-                });
+                         color = cs.onSurfaceVariant, style = typography().bodyMedium);
+                };
         });
     });
 }

@@ -21,7 +21,7 @@ void Uptime(CallSite site = CallSite::current()) {
             }
         });
         Text(std::format("{} sn önce açıldı", seconds.get()), traced(),
-             {.font = typography().bodyMedium, .color = colorScheme().onSurfaceVariant});
+             color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
     });
 }
 
@@ -32,19 +32,19 @@ void CounterCard(CallSite site = CallSite::current()) {
         const ColorScheme& cs = colorScheme();
 
         Card(traced(Modifier().fillMaxWidth()), [&] {
-            Column(Modifier().padding(20), {.verticalArrangement = Arrangement::spacedBy(12)}, [&] {
-                Text("Sayaç", {.font = typography().titleMedium});
-                Text(std::to_string(count.get()), {.fontSize = 48, .fontWeight = FontWeight::Bold, .color = cs.primary});
-                Box(Modifier().fillMaxWidth().height(8).background(cs.outlineVariant, 4), [&] {
-                    Box(Modifier().fillMaxWidth(progress).fillMaxHeight().background(cs.primary, 4));
-                });
-                Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+            Column(Modifier().padding(20), verticalArrangement = Arrangement::spacedBy(12)) {
+                Text("Sayaç", style = typography().titleMedium);
+                Text(std::to_string(count.get()), fontSize = 48, fontWeight = FontWeight::Bold, color = cs.primary);
+                Box(Modifier().fillMaxWidth().height(8).background(cs.outlineVariant, 4)) {
+                    Box(Modifier().fillMaxWidth(progress).fillMaxHeight().background(cs.primary, 4)) {};
+                };
+                Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
                     OutlinedButton([count] { count.set(count.get() - 1); }, Modifier(), {.enabled = count.get() > 0},
                                    [] { Text("−"); });
                     Button([count] { count.set(count.get() + 1); }, [] { Text("+ Arttır"); });
                     TextButton([count] { count.set(0); }, [] { Text("Sıfırla"); });
-                });
-            });
+                };
+            };
         });
     });
 }
@@ -66,13 +66,12 @@ void TodoRow(const Todo& todo, MutableState<std::vector<Todo>> todos, CallSite s
         Row(traced(Modifier().fillMaxWidth().background(colors::Transparent, 12).clickable([setDone, done = todo.done] {
                 setDone(!done);
             })),
-            {.verticalAlignment = Alignment::CenterVertically}, [&] {
+            verticalAlignment = Alignment::CenterVertically) {
                 Checkbox(todo.done, setDone);
                 Text(todo.title, Modifier().weight(1),
-                     {.color = todo.done ? std::optional(colorScheme().onSurfaceVariant) : std::nullopt,
-                      .textDecoration = todo.done ? TextDecoration::LineThrough : TextDecoration::None});
+                     color = todo.done ? std::optional(colorScheme().onSurfaceVariant) : std::nullopt, textDecoration = todo.done ? TextDecoration::LineThrough : TextDecoration::None);
                 TextButton(remove, [] { Text("Sil"); });
-            });
+            };
     });
 }
 
@@ -94,26 +93,25 @@ void TodoCard(CallSite site = CallSite::current()) {
         auto remaining = std::ranges::count_if(todos.get(), [](const Todo& t) { return !t.done; });
 
         Card(traced(Modifier().fillMaxWidth()), [&] {
-            Column(Modifier().padding(20), {.verticalArrangement = Arrangement::spacedBy(8)}, [&] {
-                Row(Modifier().fillMaxWidth(), {.verticalAlignment = Alignment::CenterVertically}, [&] {
-                    Text("Yapılacaklar", Modifier().weight(1), {.font = typography().titleMedium});
+            Column(Modifier().padding(20), verticalArrangement = Arrangement::spacedBy(8)) {
+                Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
+                    Text("Yapılacaklar", Modifier().weight(1), style = typography().titleMedium);
                     Text(std::format("{} / {} kaldı", remaining, todos->size()),
-                         {.font = typography().bodyMedium, .color = colorScheme().onSurfaceVariant});
-                });
+                         color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
+                };
                 Row(Modifier().fillMaxWidth(),
-                    {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically},
-                    [&] {
+                    horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                         OutlinedTextField(input.get(), [input](std::string v) { input.set(std::move(v)); },
                                           Modifier().weight(1).testTag("todo-input"),
                                           {.singleLine = true, .placeholder = "örn. Slot table yaz", .onSubmit = add, .label = "Yeni görev",
                                            .keyboardOptions = {.capitalization = KeyboardCapitalization::Sentences}});
                         Button(add, [] { Text("Ekle"); });
-                    });
+                    };
                 for (const Todo& todo : todos.get()) key(todo.id, [&] { TodoRow(todo, todos); });
                 if (todos->empty())
                     Text("Hepsi bitti!", Modifier().fillMaxWidth().padding(8),
-                         {.color = colorScheme().onSurfaceVariant, .textAlign = TextAlign::Center});
-            });
+                         color = colorScheme().onSurfaceVariant, textAlign = TextAlign::Center);
+            };
         });
     });
 }
@@ -133,37 +131,34 @@ void ScrollToTopButton(LazyListState state, CallSite site) {
 void HomeScreen(Modifier modifier, CallSite site) {
     composable(site, modifier, [=] {
         auto scroll = rememberScrollState();
-        Column(modifier.verticalScroll(scroll).padding(20, 8, 20, 96), {.verticalArrangement = Arrangement::spacedBy(16)},
-               [&] {
+        Column(modifier.verticalScroll(scroll).padding(20, 8, 20, 96), verticalArrangement = Arrangement::spacedBy(16)) {
                    Card(Modifier().fillMaxWidth(), [&] {
-                       Row(Modifier().padding(20, 16), {.horizontalArrangement = Arrangement::spacedBy(16),
-                                                        .verticalAlignment = Alignment::CenterVertically},
-                           [&] {
+                       Row(Modifier().padding(20, 16), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                                Icon(Icons::Filled::Info, "Bilgi", Modifier().size(32), colorScheme().primary);
-                               Column(Modifier().weight(1), [&] {
-                                   Text("C++20 ile Compose tarzı arayüz", {.font = typography().titleMedium});
+                               Column(Modifier().weight(1)) {
+                                   Text("C++20 ile Compose tarzı arayüz", style = typography().titleMedium);
                                    Uptime();
                                    WindowClassLine();
                                    MediaLine();
-                               });
-                           });
+                               };
+                           };
                    });
                    CounterCard();
                    TodoCard();
                    Text("Kompoz · C++20", Modifier().fillMaxWidth(),
-                        {.fontSize = 12, .color = colorScheme().onSurfaceVariant, .textAlign = TextAlign::Center});
-               });
+                        fontSize = 12, color = colorScheme().onSurfaceVariant, textAlign = TextAlign::Center);
+               };
     });
 }
 
 // Previews (KOMPOZ_PREVIEW=CounterCardPreview ./build/showcase, or =* for all of them).
 KOMPOZ_PREVIEW(CounterCardPreview, .width = 400, .height = 220) {
     MaterialTheme(isSystemInDarkTheme() ? darkColorScheme() : lightColorScheme(), [] {
-        Surface(Modifier().fillMaxSize(), [] { Box(Modifier().padding(16), [] { CounterCard(); }); });
+        Surface(Modifier().fillMaxSize(), [] { (Box)(Modifier().padding(16), [] { CounterCard(); }); });
     });
 }
 KOMPOZ_PREVIEW(TodoCardDarkPreview, .width = 400, .height = 360, .darkTheme = true) {
     MaterialTheme(isSystemInDarkTheme() ? darkColorScheme() : lightColorScheme(), [] {
-        Surface(Modifier().fillMaxSize(), [] { Box(Modifier().padding(16), [] { TodoCard(); }); });
+        Surface(Modifier().fillMaxSize(), [] { (Box)(Modifier().padding(16), [] { TodoCard(); }); });
     });
 }

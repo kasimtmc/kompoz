@@ -107,22 +107,22 @@ void toolbar(bool vertical, bool expanded, const Content& content, const Modifie
         if (!part) return;
         if (vertical)
             AnimatedVisibility(expanded, Modifier(), fadeIn() + expandVertically(), fadeOut() + shrinkVertically(), [&] {
-                Column(Modifier(), {.horizontalAlignment = Alignment::CenterHorizontally}, part);
+                detail::Column(Modifier(), {.horizontalAlignment = Alignment::CenterHorizontally}, part);
             });
         else
             AnimatedVisibility(expanded, Modifier(), fadeIn() + expandHorizontally(), fadeOut() + shrinkHorizontally(), [&] {
-                Row(Modifier(), {.verticalAlignment = Alignment::CenterVertically}, part);
+                detail::Row(Modifier(), {.verticalAlignment = Alignment::CenterVertically}, part);
             });
     };
     CompositionLocalProvider({LocalContentColor.provides(colors.toolbarContentColor)}, [&] {
         if (vertical)
-            Column(m, {.horizontalAlignment = Alignment::CenterHorizontally}, [&] {
+            detail::Column(m, {.horizontalAlignment = Alignment::CenterHorizontally}, [&] {
                 side(options.leadingContent);
                 content();
                 side(options.trailingContent);
             });
         else
-            Row(m, {.verticalAlignment = Alignment::CenterVertically}, [&] {
+            detail::Row(m, {.verticalAlignment = Alignment::CenterVertically}, [&] {
                 side(options.leadingContent);
                 content();
                 side(options.trailingContent);
@@ -143,12 +143,12 @@ void toolbarWithFab(bool vertical, bool expanded, const Content& fab, const Cont
                                [&] { toolbar(false, true, content, Modifier().padding(0, 0, gap, 0), options); });
     };
     if (vertical)
-        Column(scrolled(modifier, options.scrollBehavior), {.horizontalAlignment = Alignment::CenterHorizontally}, [&] {
+        detail::Column(scrolled(modifier, options.scrollBehavior), {.horizontalAlignment = Alignment::CenterHorizontally}, [&] {
             bar();
             fab();
         });
     else
-        Row(scrolled(modifier, options.scrollBehavior), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+        detail::Row(scrolled(modifier, options.scrollBehavior), {.verticalAlignment = Alignment::CenterVertically}, [&] {
             bar();
             fab();
         });
@@ -156,7 +156,7 @@ void toolbarWithFab(bool vertical, bool expanded, const Content& fab, const Cont
 
 void toolbarFab(Color container, Color content, std::function<void()> onClick, const Content& icon, const Modifier& modifier) {
     CompositionLocalProvider({LocalContentColor.provides(content)}, [&] {
-        Box(modifier.size(56).shadow(6, 16).background(container, 16).clickable(std::move(onClick)), Alignment::Center, icon);
+        detail::Box(modifier.size(56).shadow(6, 16).background(container, 16).clickable(std::move(onClick)), Alignment::Center, icon);
     });
 }
 

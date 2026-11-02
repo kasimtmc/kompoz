@@ -1,4 +1,5 @@
 #include <kompoz/host.hpp>
+#include <kompoz/named.hpp>
 #include <kompoz/runtime.hpp>
 
 #include <charconv>
@@ -77,6 +78,13 @@ void recordRead(const void* key) {
 }
 
 Scope::~Scope() { composer.forget(*this); }
+
+Content scopedBlock(Content block) {
+    if (!block) return {};
+    // In a scope of its own: what it reads runs it alone again. (A block can't be compared: when its
+    // composable runs, it runs.)
+    return [block = std::move(block)] { Composer::require().restartable(keyOf(CallSite::current()), std::tuple<Content>(block), block); };
+}
 
 void forgetLater(std::function<void()> forgotten) {
     if (gForgets) gForgets->push_back(std::move(forgotten));

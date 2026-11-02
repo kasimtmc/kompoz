@@ -57,7 +57,7 @@ Policy çocuklarını sırayla görür. Onları rollerine göre ayırt etmek iç
 void LabeledValue(const std::string& label, const std::string& value) {
     Layout(Modifier().fillMaxWidth(), [&] {
         Text(label, Modifier().layoutId("label"));
-        Text(value, Modifier().layoutId("value"), {.fontWeight = FontWeight::Bold});
+        Text(value, Modifier().layoutId("value"), fontWeight = FontWeight::Bold);
     }, [](const std::vector<Measurable>& children, const Constraints& c) {
         float height = 0;
         for (const Measurable& child : children) {
@@ -98,11 +98,11 @@ Yerleşim her çocuğu bir kez ölçer, bu yüzden bir ebeveyn bir çocuğun han
 Tipik kullanımı kardeşleri en uzunları kadar uzun yapmaktır:
 
 ```cpp body
-Row(Modifier().height(IntrinsicSize::Min), [&] {
+Row(Modifier().height(IntrinsicSize::Min)) {
     Text("A short label", Modifier().weight(1));
     VerticalDivider(Modifier().fillMaxHeight());   // uzun olan metin kadar uzun
     Text("A label that wraps onto more than one line", Modifier().weight(1));
-});
+};
 ```
 
 `height(IntrinsicSize::Min)` ve `width(IntrinsicSize::Min)` (ya da `Max`) düğümü içeriğinin intrinsic boyutuna göre boyutlandırır; onu dolduran çocuklar da bu boyutu doldurur.
@@ -126,7 +126,7 @@ void Underlined(const Content& content) {
         }
         // Eşleşmesi gereken genişlikle kompoze edilir; o değişince yeniden kompoze edilir.
         for (const Measurable& m : s.subcompose(std::string("line"), width, [width] {
-                 Box(Modifier().size(width, 2).background(colorScheme().primary));
+                 Box(Modifier().size(width, 2).background(colorScheme().primary)) {};
              })) {
             Placeable line = m.measure(c.loosen());
             line.place(0, height);

@@ -308,7 +308,7 @@ void carousel(const CarouselState& state, float itemWidth, Kind kind, const Modi
                             };
                             item.drawContent = {};
                         },
-                        [&] { Box(Modifier(), [&] { content(CarouselItemScope{i, CarouselItemInfo(info)}); }); });
+                        [&] { detail::Box(Modifier(), [&] { content(CarouselItemScope{i, CarouselItemInfo(info)}); }); });
                 });
         });
 }

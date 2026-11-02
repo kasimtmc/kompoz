@@ -21,7 +21,7 @@ Components read the theme through composition locals. Read it yourself with `col
 ```cpp
 void Tag(const std::string& text) {
     Text(text, Modifier().background(colorScheme().secondaryContainer, 8).padding(8, 4),
-         {.font = typography().labelMedium, .color = colorScheme().onSecondaryContainer});
+         color = colorScheme().onSecondaryContainer, style = typography().labelMedium);
 }
 ```
 
@@ -157,8 +157,8 @@ Each `animateColorAsState` call inside `map` runs in the same order every time, 
 `Typography` holds Material 3's type scale: `displayLarge`, `displayMedium`, `displaySmall`, `headlineLarge` … `headlineSmall`, `titleLarge` … `titleSmall`, `bodyLarge` … `bodySmall` and `labelLarge` … `labelSmall`. Each is a `Font`: a size in sp, a weight, a letter spacing and a line height. Use them through `typography()`:
 
 ```cpp body
-Text("Settings", {.font = typography().headlineSmall});
-Text("Notifications are on", {.font = typography().bodyMedium});
+Text("Settings", style = typography().headlineSmall);
+Text("Notifications are on", style = typography().bodyMedium);
 ```
 
 To change the type scale, provide your own `Typography` through `LocalTypography`:
@@ -201,9 +201,9 @@ void BrandTheme(BrandColors colors, const Content& content) {
 }
 
 void BrandButton(const std::string& label, std::function<void()> onClick) {
-    Box(Modifier().clickable(std::move(onClick)).background(brandColors().accent, 8).padding(16, 10), [&] {
-        Text(label, {.color = brandColors().background});
-    });
+    Box(Modifier().clickable(std::move(onClick)).background(brandColors().accent, 8).padding(16, 10)) {
+        Text(label, color = brandColors().background);
+    };
 }
 ```
 

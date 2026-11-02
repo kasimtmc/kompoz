@@ -81,10 +81,5 @@ private:
 
 TextLayoutMeasurer rememberTextMeasurer(CallSite site = CallSite::current());
 
-// Text that tells how it was laid out (each time that changes).
-void Text(std::string text, const Modifier& modifier, const TextStyle& style, std::function<void(const TextLayoutResult&)> onTextLayout,
-          CallSite site = CallSite::current());
-void Text(const AnnotatedString& text, const Modifier& modifier, const TextStyle& style,
-          std::function<void(const TextLayoutResult&)> onTextLayout, CallSite site = CallSite::current());
 
 } // namespace kompoz

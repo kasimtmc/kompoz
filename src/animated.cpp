@@ -336,7 +336,7 @@ void animatedVisibility(bool visible, bool initiallyVisible, const std::shared_p
     state->running = visible ? !done : true;
     if (!done) composer.requestFrameAt(clock->end);  // composed again when it gets there
     Modifier m = done ? parts.apply(modifier, progress) : parts.apply(modifier, detail::live(clock));
-    Box(visible ? m : detail::ignoringInput(m), [&] { content(AnimatedVisibilityScope(state)); });
+    detail::Box(visible ? m : detail::ignoringInput(m), [&] { content(AnimatedVisibilityScope(state)); });
 }
 
 } // namespace

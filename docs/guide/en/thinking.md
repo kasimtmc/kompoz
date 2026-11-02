@@ -13,7 +13,7 @@ void Inbox(int unread) {
     if (unread == 0) {
         Text("No new messages");
     } else {
-        Text(std::to_string(unread) + " new messages", {.fontWeight = FontWeight::Bold});
+        Text(std::to_string(unread) + " new messages", fontWeight = FontWeight::Bold);
     }
 }
 ```
@@ -34,12 +34,12 @@ struct Contact {
 };
 
 void ContactList(const std::vector<Contact>& contacts) {
-    Column([&] {
+    Column() {
         for (const Contact& c : contacts) {
-            Text(c.name, {.font = typography().bodyLarge});
-            Text(c.phone, {.color = colorScheme().onSurfaceVariant});
+            Text(c.name, style = typography().bodyLarge);
+            Text(c.phone, color = colorScheme().onSurfaceVariant);
         }
-    });
+    };
 }
 ```
 
@@ -61,11 +61,11 @@ void NameTag(const std::string& name, CallSite site = CallSite::current()) {
 
 void Screen() {
     auto clicks = remember([] { return mutableStateOf(0); });
-    Column([&] {
+    Column() {
         NameTag("Ada");                                   // not run again when clicks change
         Text("Clicks: " + std::to_string(clicks.get()));  // Screen read clicks
         Button([clicks] { clicks.set(clicks.get() + 1); }, [] { Text("Click"); });
-    });
+    };
 }
 ```
 
@@ -107,10 +107,10 @@ Since the UI is a function of data, changing the UI means changing data. Kompoz 
 ```cpp
 void Toggle() {
     auto on = remember([] { return mutableStateOf(false); });
-    Row(Modifier(), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+    Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
         Switch(on.get(), [on](bool v) { on.set(v); });
         Text(on.get() ? "On" : "Off");
-    });
+    };
 }
 ```
 

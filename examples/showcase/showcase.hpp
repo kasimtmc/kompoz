@@ -4,6 +4,7 @@
 // sections in files of their own, so that an edit rebuilds only its file. What the parts share.
 
 #include <kompoz/kompoz.hpp>
+#include <kompoz/blocks.hpp>  // (last: the block form, Column(…) { … };)
 
 #include <algorithm>
 #include <array>

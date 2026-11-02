@@ -297,7 +297,7 @@ void paneScaffold(int panes, bool showingSecond, const std::optional<T>& key, co
     AnimatedContent<Shown>(
         Shown{showingSecond, key},
         [&](const Shown& s) {
-            Box(Modifier().fillMaxSize(), [&] {
+            detail::Box(Modifier().fillMaxSize(), [&] {
                 if (s.second)
                     second(s.key);
                 else

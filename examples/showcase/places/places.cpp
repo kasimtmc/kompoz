@@ -13,16 +13,16 @@ void PlacesScreen(Modifier modifier, CallSite site) {
         const char* names[] = {"Kadıköy İskelesi", "Moda Sahili", "Yeldeğirmeni", "Fenerbahçe Parkı", "Bağdat Caddesi", "Haydarpaşa Garı",
                                "Kalamış Marina", "Süreyya Operası", "Kuşdili Çayırı", "Fikirtepe"};
         auto sheetContent = [&] {
-            Column(Modifier().fillMaxWidth().padding(20, 0), [&] {
-                Text("Yakındaki yerler", {.font = typography().titleLarge});
+            Column(Modifier().fillMaxWidth().padding(20, 0)) {
+                Text("Yakındaki yerler", style = typography().titleLarge);
                 Text("Yukarı sürükleyin: önce sayfa açılır, sonra liste kayar.",
-                     {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-                Row(Modifier().padding(0, 12), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+                     color = cs.onSurfaceVariant, style = typography().bodyMedium);
+                Row(Modifier().padding(0, 12), horizontalArrangement = Arrangement::spacedBy(8)) {
                     FilledTonalButton([scope, sheet] { scope.launch([sheet]() -> Task { co_await sheet.expand(); }); }, [] { Text("Aç"); });
                     OutlinedButton([scope, sheet] { scope.launch([sheet]() -> Task { co_await sheet.partialExpand(); }); },
                                    [] { Text("Daralt"); });
-                });
-            });
+                };
+            };
             LazyColumn(Modifier().fillMaxWidth().height(420), {.contentPadding = {8, 0, 8, 8}}, [&](LazyListScope& list) {
                 list.items(30, [&](int i) {
                     ListItem({.headline = [&] { Text(names[i % 10]); },
@@ -33,7 +33,7 @@ void PlacesScreen(Modifier modifier, CallSite site) {
             });
         };
         BottomSheetScaffold(sheetContent, Modifier().fillMaxSize(), {.scaffoldState = state, .sheetPeekHeight = 128}, [&](PaddingValues padding) {
-            Box(Modifier().fillMaxSize(), [&] {
+            Box(Modifier().fillMaxSize()) {
                 Canvas(Modifier().fillMaxSize(), [cs](DrawScope& d) {  // streets, a park and the sea
                     Size s = d.size();
                     d.drawRect(cs.surfaceContainerHighest);
@@ -49,9 +49,8 @@ void PlacesScreen(Modifier modifier, CallSite site) {
                     }
                 });
                 const char* where = sheet.currentValue() == SheetValue::Expanded ? "açık" : "kısmen açık";
-                Box(Modifier().padding(padding).padding(16).background(cs.surface.copy(0.9f), 16).padding(12, 8),
-                    [&] { Text(std::format("Sayfa: {}", where), {.font = typography().labelLarge}); });
-            });
+                Box(Modifier().padding(padding).padding(16).background(cs.surface.copy(0.9f), 16).padding(12, 8)) { Text(std::format("Sayfa: {}", where), style = typography().labelLarge); };
+            };
         });
     });
 }

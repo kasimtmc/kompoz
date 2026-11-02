@@ -22,7 +22,7 @@ void ExposedDropdownMenuBox(bool expanded, std::function<void(bool)> onExpandedC
     auto latest = rememberUpdatedState(std::pair(expanded, std::move(onExpandedChange)));
     // A tap on the field (not one an icon button in it took) opens or closes the menu; the
     // field still takes the focus as usual.
-    Box(modifier.onSizeChanged([width](Size s) { width.set(s.width); }).pointerInput(0, [latest](PointerInputScope& s) -> Task {
+    detail::Box(modifier.onSizeChanged([width](Size s) { width.set(s.width); }).pointerInput(0, [latest](PointerInputScope& s) -> Task {
         co_await detectTapGestures(s, {.onTap = [latest](Offset) {
                                            const auto& [open, change] = latest.get();
                                            if (change) change(!open);

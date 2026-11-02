@@ -29,7 +29,7 @@ void Pulse() {
     auto pulse = rememberInfiniteTransition().animateFloatState(0.8f, 1.f, infiniteRepeatable(tween(600), RepeatMode::Reverse));
     // read while drawing: only drawn again each frame, never recomposed or measured
     Box(Modifier().size(48).graphicsLayer([pulse](GraphicsLayerScope& l) { l.scaleX = l.scaleY = pulse.get(); })
-            .background(colorScheme().primary, CircleShape));
+            .background(colorScheme().primary, CircleShape)) {};
 }
 ```
 
@@ -43,7 +43,7 @@ void DraggableBall() {
     Box(Modifier().offset([x] { return Offset{x.get(), 0}; })        // read during layout
             .draggable(rememberDraggableState([x](float delta) { x.set(x.get() + delta); }), Orientation::Horizontal)
             .size(56)
-            .background(colorScheme().tertiary, CircleShape));
+            .background(colorScheme().tertiary, CircleShape)) {};
 }
 ```
 

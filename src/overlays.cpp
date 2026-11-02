@@ -77,14 +77,14 @@ void Dialog(std::function<void()> onDismissRequest, const Content& content, Dial
         };
     Popup(std::move(spec), [&] {
         // The fade-in is read while drawing: no recomposition per frame.
-        Box(onTap(Modifier().fillMaxSize().drawBehind([appear, scrim = colorScheme().scrim](DrawScope& d) {
+        detail::Box(onTap(Modifier().fillMaxSize().drawBehind([appear, scrim = colorScheme().scrim](DrawScope& d) {
                       d.drawRect(scrim.copy(scrim.alpha() * kScrimAlpha * appear.value()));
                   }),
                   outside)
                 .safeDrawingPadding()
                 .padding(properties.usePlatformDefaultWidth ? 48.f : 0.f, properties.usePlatformDefaultWidth ? 24.f : 0.f),
             Alignment::Center, [&] {
-                Box(swallowPresses(Modifier().graphicsLayer([appear](GraphicsLayerScope& l) {
+                detail::Box(swallowPresses(Modifier().graphicsLayer([appear](GraphicsLayerScope& l) {
                         float v = appear.value();
                         l.alpha = v;
                         l.scaleX = l.scaleY = 0.92f + 0.08f * v;
@@ -151,19 +151,19 @@ void AlertDialog(std::function<void()> onDismissRequest, const AlertDialogSlots&
             const ColorScheme& cs = colorScheme();
             const Typography& t = typography();
             Shape shape = slots.shape.value_or(RoundedCornerShape(AlertDialogDefaults::cornerRadius));
-            Column(modifier.widthIn(kDialogMinWidth, kDialogMaxWidth)
+            detail::Column(modifier.widthIn(kDialogMinWidth, kDialogMaxWidth)
                        .background(slots.containerColor.value_or(AlertDialogDefaults::containerColor()), shape)
                        .padding(24),
                    {.horizontalAlignment = slots.icon ? Alignment::CenterHorizontally : Alignment::Start}, [&] {
                        if (slots.icon)
-                           Box(Modifier().padding(0, 0, 0, 16),
+                           detail::Box(Modifier().padding(0, 0, 0, 16),
                                [&] { provide(slots.iconContentColor.value_or(AlertDialogDefaults::iconContentColor()), t.bodyMedium, slots.icon); });
                        if (slots.title)
-                           Box(Modifier().padding(0, 0, 0, 16), [&] {
+                           detail::Box(Modifier().padding(0, 0, 0, 16), [&] {
                                provide(slots.titleContentColor.value_or(AlertDialogDefaults::titleContentColor()), t.headlineSmall, slots.title);
                            });
                        if (slots.text)  // gives way to the buttons in a short window
-                           Box(Modifier().fillMaxWidth().weight(1, false).padding(0, 0, 0, 24), [&] {
+                           detail::Box(Modifier().fillMaxWidth().weight(1, false).padding(0, 0, 0, 24), [&] {
                                provide(slots.textContentColor.value_or(AlertDialogDefaults::textContentColor()), t.bodyMedium, slots.text);
                            });
                        provide(cs.primary, t.labelLarge, [&] {
@@ -262,10 +262,10 @@ void menuItem(const Modifier& modifier, Color textColor, Color iconColor, const 
     const ColorScheme& cs = colorScheme();
     const Typography& t = typography();
     float vertical = options.supportingText ? 8.f : 0.f;
-    Row(modifier.heightIn(48).padding(12, vertical), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
+    detail::Row(modifier.heightIn(48).padding(12, vertical), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
         [&] {
             provide(iconColor, t.labelLarge, leading);
-            Column(Modifier().weight(1), [&] {
+            detail::Column(Modifier().weight(1), [&] {
                 // Compose's (1.4 and the expressive ones): the text labelLarge, supporting text bodyMedium.
                 provide(textColor, t.labelLarge, text);
                 if (options.supportingText) provide(options.enabled ? cs.onSurfaceVariant : cs.onSurface.copy(0.38f), t.bodyMedium, options.supportingText);
@@ -304,7 +304,7 @@ void DropdownMenuPopup(bool expanded, std::function<void()> onDismissRequest, co
 void DropdownMenuGroup(const Shape& shape, const Content& content, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
-    Column(modifier.fillMaxWidth().shadow(3, shape).background(cs.surfaceContainerLow, shape).padding(0, 4), content);
+    detail::Column(modifier.fillMaxWidth().shadow(3, shape).background(cs.surfaceContainerLow, shape).padding(0, 4), content);
 }
 
 namespace MenuDefaults {
@@ -509,7 +509,7 @@ void ModalBottomSheet(std::function<void()> onDismissRequest, const ModalBottomS
             .enabled = anchored.targetValue() != SheetValue::Hidden,
         });
         // Stays clear of the status bar: a tall sheet leaves some scrim to tap.
-        Box(onTap(detail::animatedBackground(Modifier().fillMaxSize(),
+        detail::Box(onTap(detail::animatedBackground(Modifier().fillMaxSize(),
                                              detail::Live<Color>{[scrim, color = cs.scrim] { return color.copy(color.alpha() * scrim.value()); }}),
                   close)
                 .padding(0, insets.top + 48, 0, 0)
@@ -538,15 +538,15 @@ void ModalBottomSheet(std::function<void()> onDismissRequest, const ModalBottomS
                                      .background(cs.surfaceContainerLow, 28);
                 sheet = swallowPresses(sheet).anchoredDraggable(anchored, Orientation::Vertical).nestedScroll(connection);
                 CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
-                    Column(sheet.padding(0, 0, 0, insets.bottom + kHiddenCorner), [&] {
-                        Column(Modifier().fillMaxWidth().graphicsLayer([shrink](GraphicsLayerScope& layer) {
+                    detail::Column(sheet.padding(0, 0, 0, insets.bottom + kHiddenCorner), [&] {
+                        detail::Column(Modifier().fillMaxWidth().graphicsLayer([shrink](GraphicsLayerScope& layer) {
                                    auto [sx, sy] = shrink();
                                    layer.scaleY = sx / sy;
                                    layer.transformOrigin = {0.5f, 0};
                                }),
                                {.horizontalAlignment = Alignment::CenterHorizontally}, [&] {
                                    BottomSheetDefaults::DragHandle();
-                                   Column(Modifier().fillMaxWidth(), content);
+                                   detail::Column(Modifier().fillMaxWidth(), content);
                                });
                     });
                 });

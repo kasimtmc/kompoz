@@ -112,7 +112,7 @@ void PullToRefreshBox(bool isRefreshing, std::function<void()> onRefresh, const 
                       PullToRefreshOptions options, CallSite site) {
     ComposableScope scope(site);
     PullToRefreshState state = options.state ? *options.state : rememberPullToRefreshState();
-    Box(modifier.pullToRefresh(isRefreshing, state, std::move(onRefresh), options.enabled, options.threshold),
+    detail::Box(modifier.pullToRefresh(isRefreshing, state, std::move(onRefresh), options.enabled, options.threshold),
         options.contentAlignment, [&] {
             content();
             if (options.indicator)
@@ -141,7 +141,7 @@ void IndicatorBox(const PullToRefreshState& state, bool isRefreshing, const Modi
                      .shadow(fraction > 0 || isRefreshing ? elevation : 0, shape)
                      .clip(shape);
     if (containerColor) m = m.background(*containerColor, shape);
-    Box(m, Alignment::Center, content);
+    detail::Box(m, Alignment::Center, content);
 }
 
 namespace {

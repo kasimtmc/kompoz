@@ -365,7 +365,7 @@ void AnimatedContent(const T& targetState,
                 const detail::TransitionParts& parts = it.exiting ? it.exit : seeking && !it.seeking ? s.seekExit : it.enter;
                 Modifier m = it.clock ? parts.apply(Modifier().zIndex(it.zIndex), detail::live(it.clock))
                                       : parts.apply(Modifier().zIndex(it.zIndex), it.progress);
-                Box(it.exiting ? detail::ignoringInput(m) : m, [&] { content(AnimatedContentScope(it.visibility), it.state); });
+                detail::Box(it.exiting ? detail::ignoringInput(m) : m, [&] { content(AnimatedContentScope(it.visibility), it.state); });
             });
         }
     });

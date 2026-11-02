@@ -151,7 +151,7 @@ void scrollbar(bool vertical, const std::shared_ptr<ScrollbarAdapter>& adapter, 
                          else
                              co_await detectHorizontalDragGestures(scope, std::move(h));
                      });
-    Box(m);
+    detail::Box(m);
 }
 
 } // namespace

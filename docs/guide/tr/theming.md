@@ -21,7 +21,7 @@ Bileşenler temayı composition local'ler üzerinden okur. Siz de `colorScheme()
 ```cpp
 void Tag(const std::string& text) {
     Text(text, Modifier().background(colorScheme().secondaryContainer, 8).padding(8, 4),
-         {.font = typography().labelMedium, .color = colorScheme().onSecondaryContainer});
+         color = colorScheme().onSecondaryContainer, style = typography().labelMedium);
 }
 ```
 
@@ -157,8 +157,8 @@ void Root(bool dark) {
 `Typography`, Material 3'ün yazı ölçeğini tutar: `displayLarge`, `displayMedium`, `displaySmall`, `headlineLarge` … `headlineSmall`, `titleLarge` … `titleSmall`, `bodyLarge` … `bodySmall` ve `labelLarge` … `labelSmall`. Her biri bir `Font`'tur: sp cinsinden bir boyut, bir kalınlık, bir harf aralığı ve bir satır yüksekliği. Bunları `typography()` üzerinden kullanın:
 
 ```cpp body
-Text("Settings", {.font = typography().headlineSmall});
-Text("Notifications are on", {.font = typography().bodyMedium});
+Text("Settings", style = typography().headlineSmall);
+Text("Notifications are on", style = typography().bodyMedium);
 ```
 
 Yazı ölçeğini değiştirmek için kendi `Typography`'nizi `LocalTypography` üzerinden sağlayın:
@@ -201,9 +201,9 @@ void BrandTheme(BrandColors colors, const Content& content) {
 }
 
 void BrandButton(const std::string& label, std::function<void()> onClick) {
-    Box(Modifier().clickable(std::move(onClick)).background(brandColors().accent, 8).padding(16, 10), [&] {
-        Text(label, {.color = brandColors().background});
-    });
+    Box(Modifier().clickable(std::move(onClick)).background(brandColors().accent, 8).padding(16, 10)) {
+        Text(label, color = brandColors().background);
+    };
 }
 ```
 

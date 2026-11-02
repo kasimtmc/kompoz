@@ -25,12 +25,12 @@ void Button(WindowButton button, bool maximized, const Act& act) {
     const ImageVector& icon = button == WindowButton::Close ? Icons::Filled::Close
                             : button == WindowButton::Minimize ? kMinimize : maximized ? kRestore : kMaximize;
     std::string label = button == WindowButton::Close ? s.close : button == WindowButton::Minimize ? s.minimize : maximized ? s.restore : s.maximize;
-    Box(Modifier().size(kButton).clip(CircleShape).background(cs.surfaceContainerHighest).clickable([act, action] { act(action, {}); }),
+    detail::Box(Modifier().size(kButton).clip(CircleShape).background(cs.surfaceContainerHighest).clickable([act, action] { act(action, {}); }),
         Alignment::Center, [&] { Icon(icon, label, Modifier().size(16), cs.onSurface); });
 }
 
 void Buttons(const std::vector<WindowButton>& buttons, bool maximized, const Act& act, Alignment side) {
-    Row(Modifier().align(side).padding(kGap, 0), {.horizontalArrangement = Arrangement::spacedBy(kGap), .verticalAlignment = Alignment::CenterVertically},
+    detail::Row(Modifier().align(side).padding(kGap, 0), {.horizontalArrangement = Arrangement::spacedBy(kGap), .verticalAlignment = Alignment::CenterVertically},
         [&] {
             for (WindowButton b : buttons) key(int(b), [&] { Button(b, maximized, act); });
         });
@@ -42,7 +42,7 @@ void Bar(const TitleBar& bar, const std::string& title, const Act& act) {
     // The title in the middle of the window, clear of the buttons on either side.
     size_t most = std::max(bar.start.size(), bar.end.size());
     float side = kGap + float(most) * (kButton + kGap);
-    Box(Modifier()
+    detail::Box(Modifier()
             .layoutId("titleBar")
             .fillMaxWidth()
             .height(kHeight)
@@ -56,7 +56,7 @@ void Bar(const TitleBar& bar, const std::string& title, const Act& act) {
                                 if (e.button == PointerButton::Secondary) act(WindowAction::Menu, e.change.position);
                             }),
         [&] {
-            Text(title, Modifier().align(Alignment::Center).padding(side, 0),
+            detail::Text(title, Modifier().align(Alignment::Center).padding(side, 0),
                  {.font = typography().titleSmall, .color = focused ? cs.onSurface : cs.onSurfaceVariant, .maxLines = 1,
                   .overflow = TextOverflow::Ellipsis});
             Buttons(bar.start, bar.maximized, act, Alignment::CenterStart);

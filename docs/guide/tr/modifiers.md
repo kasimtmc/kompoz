@@ -11,12 +11,11 @@ void ArtistCard(const std::string& name) {
     Row(Modifier()
             .fillMaxWidth()
             .clickable([] { /* sanatçıyı aç */ })
-            .padding(16),
-        [&] {
+            .padding(16)) {
             Icon(Icons::Filled::Person, "", Modifier().size(40));
             Spacer(Modifier().width(12));
-            Text(name, {.font = typography().titleMedium});
-        });
+            Text(name, style = typography().titleMedium);
+        };
 }
 ```
 
@@ -25,7 +24,7 @@ Modifier'lar düz değerlerdir: onları değişkenlerde saklayabilir, bir yerden
 ```cpp body
 #! bool selected = false;
 Modifier base = Modifier().fillMaxWidth().padding(8);
-Box(selected ? base.background(colorScheme().secondaryContainer, 12) : base);
+Box(selected ? base.background(colorScheme().secondaryContainer, 12) : base) {};
 ```
 
 ## Sıra önemlidir
@@ -34,17 +33,17 @@ Her öğe, zincirde kendinden sonra gelen her şeyi sarar. İlk öğe en dışta
 
 ```cpp body
 // 72 dp'lik alanın tamamı tıklanabilir ve iç boşluk tıklama alanının içindedir.
-Box(Modifier().clickable([] {}).padding(16).size(40));
+Box(Modifier().clickable([] {}).padding(16).size(40)) {};
 
 // Yalnız 40 dp'lik kutu tıklanabilir; iç boşluk onun dışındadır.
-Box(Modifier().padding(16).clickable([] {}).size(40));
+Box(Modifier().padding(16).clickable([] {}).size(40)) {};
 ```
 
 Arka planlar için de aynısı geçerli:
 
 ```cpp body
-Box(Modifier().background(colorScheme().primaryContainer).padding(16).size(40));   // iç boşluk boyanır
-Box(Modifier().padding(16).background(colorScheme().primaryContainer).size(40));   // iç boşluk boyanmaz
+Box(Modifier().background(colorScheme().primaryContainer).padding(16).size(40)) {};   // iç boşluk boyanır
+Box(Modifier().padding(16).background(colorScheme().primaryContainer).size(40)) {};   // iç boşluk boyanmaz
 ```
 
 Bir zinciri soldan sağa, "dıştan içe" diye okuyun.
@@ -133,10 +132,10 @@ Bazı modifier'lar, Compose'un scope'a bağlı modifier'ları (`RowScope.weight`
 C++'ta bunlar sıradan `Modifier` metotlarıdır: derleyici `weight`'i bir `Row` ya da `Column` dışında kullanmanıza engel olmaz, yalnızca orada bir etkisi olmaz.
 
 ```cpp body
-Row(Modifier().fillMaxWidth(), [&] {
+Row(Modifier().fillMaxWidth()) {
     Text("Left", Modifier().weight(1));
     Text("Right");
-});
+};
 ```
 
 ## Kendi modifier'ınızı yazmak
@@ -151,7 +150,7 @@ Modifier cardSurface() {
 }
 
 void Note(const std::string& text) {
-    Box(Modifier().fillMaxWidth().then(cardSurface()), [&] { Text(text); });
+    Box(Modifier().fillMaxWidth().then(cardSurface())) { Text(text); };
 }
 ```
 

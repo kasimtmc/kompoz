@@ -45,8 +45,7 @@ void ListItemSection(CallSite site) {
                 ListItem({.headline = [] { Text("Ayşe Yılmaz"); },
                           .supporting = [] { Text("Toplantı saat 15:00'te"); },
                           .leading = [&] {
-                              Box(Modifier().size(40).background(cs.primaryContainer, CircleShape), Alignment::Center,
-                                  [&] { Text("AY", {.font = typography().titleMedium, .color = cs.onPrimaryContainer}); });
+                              Box(Modifier().size(40).background(cs.primaryContainer, CircleShape), Alignment::Center) { Text("AY", color = cs.onPrimaryContainer, style = typography().titleMedium); };
                           },
                           .trailing = [] { Text("10:42"); }},
                          Modifier().clickable([] {}));
@@ -64,18 +63,18 @@ void ListItemSection(CallSite site) {
             });
             // M3 Expressive: items that make one card, the row taking the tap, rounder when picked.
             Text("SegmentedListItem: tek kart gibi duran, seçilince yuvarlaklaşan satırlar",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
             auto& plan = remember([] { return mutableStateOf(1); });
             const char* plans[] = {"Ücretsiz", "Standart", "Aile"};
             const char* details[] = {"Reklamlı, tek cihaz", "Reklamsız, iki cihaz", "Reklamsız, altı kişi"};
             Column(Modifier().fillMaxWidth().background(cs.surfaceContainer, 20).padding(8),
-                   {.verticalArrangement = Arrangement::spacedBy(ListItemDefaults::SegmentedGap)}, [&] {
+                   verticalArrangement = Arrangement::spacedBy(ListItemDefaults::SegmentedGap)) {
                        for (int i = 0; i < 3; ++i)
                            SegmentedListItem(plan.get() == i, [&plan, i] { plan.set(i); }, ListItemDefaults::segmentedShapes(i, 3),
                                              {.headline = [&plans, i] { Text(plans[i]); },
                                               .supporting = [&details, i] { Text(details[i]); },
                                               .leading = [] { Icon(Icons::Filled::Star, ""); }});
-                   });
+                   };
         });
     });
 }
@@ -101,7 +100,7 @@ void DialogsSection(NavController nav, CallSite site) {
                 FilledTonalButton([sheet] { sheet.set(true); }, [] { Text("Alt sayfa"); });
                 FilledTonalButton([longSheet] { longSheet.set(true); }, [] { Text("Uzun liste"); });
                 FilledTonalButton([nav] { nav.navigate(routes::Places{}); }, [] { Text("Harita (BottomSheetScaffold)"); });
-                Box([&] {
+                Box() {
                     OutlinedButton([menu] { menu.set(true); }, [] {
                         Text("Menü");
                         Icon(Icons::Filled::KeyboardArrowDown, "Aç", Modifier().size(18));
@@ -117,9 +116,9 @@ void DialogsSection(NavController nav, CallSite site) {
                                           .trailingIcon = [] { Text("Del"); }});
                         DropdownMenuItem([] { Text("Kapalı seçenek"); }, [] {}, {.enabled = false});
                     });
-                });
+                };
                 // An expressive menu: groups as cards, checked and selected items.
-                Box([&] {
+                Box() {
                     OutlinedButton([formatMenu] { formatMenu.set(true); }, [] {
                         Text("Biçim");
                         Icon(Icons::Filled::KeyboardArrowDown, "Aç", Modifier().size(18));
@@ -151,9 +150,9 @@ void DialogsSection(NavController nav, CallSite site) {
                                               .shape = MenuDefaults::itemShape(0, 1)});
                         });
                     });
-                });
+                };
             });
-            Text("Son seçim: " + choice.get(), {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+            Text("Son seçim: " + choice.get(), color = cs.onSurfaceVariant, style = typography().bodyMedium);
             if (dialog.get())
                 AlertDialog([dialog] { dialog.set(false); },
                             {.confirmButton = [dialog, choice] {
@@ -165,17 +164,17 @@ void DialogsSection(NavController nav, CallSite site) {
                              .text = [] { Text("Bu işlem geri alınamaz. Scrim'e dokunmak ya da geri tuşu da dialog'u kapatır."); }});
             if (basicDialog.get())  // content of its own, at least 280 dp wide
                 BasicAlertDialog([basicDialog] { basicDialog.set(false); }, Modifier(), [&] {
-                    Column(Modifier().background(cs.surfaceContainerHigh, 28).padding(24), {.horizontalAlignment = Alignment::CenterHorizontally}, [&] {
+                    Column(Modifier().background(cs.surfaceContainerHigh, 28).padding(24), horizontalAlignment = Alignment::CenterHorizontally) {
                         LoadingIndicator(Modifier().size(48));
-                        Text("Eşitleniyor…", Modifier().padding(0, 16), {.font = typography().titleMedium});
+                        Text("Eşitleniyor…", Modifier().padding(0, 16), style = typography().titleMedium);
                         Text("BasicAlertDialog: içeriği bizim; en az 280 dp genişlik ona da geçer.",
-                             {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                             color = cs.onSurfaceVariant, style = typography().bodyMedium);
                         TextButton([basicDialog] { basicDialog.set(false); }, Modifier().padding(0, 16, 0, 0), {}, [] { Text("Kapat"); });
-                    });
+                    };
                 });
             if (sheet.get())
                 ModalBottomSheet([sheet] { sheet.set(false); }, sheetState, [&] {
-                    Text("Paylaş", Modifier().padding(24, 0, 24, 8), {.font = typography().titleMedium});
+                    Text("Paylaş", Modifier().padding(24, 0, 24, 8), style = typography().titleMedium);
                     const std::pair<const ImageVector*, const char*> actions[] = {
                         {&Icons::Filled::Share, "Bağlantıyı paylaş"}, {&Icons::Filled::Email, "E-posta ile gönder"},
                         {&Icons::Filled::Edit, "Düzenle"}};
@@ -190,14 +189,14 @@ void DialogsSection(NavController nav, CallSite site) {
                                      });
                                  }));
                     Text("Aşağı sürükleyin, scrim'e dokunun ya da geri tuşuna basın.", Modifier().padding(24, 8, 24, 16),
-                         {.font = typography().bodySmall, .color = cs.onSurfaceVariant});
+                         color = cs.onSurfaceVariant, style = typography().bodySmall);
                 });
             // A list in a sheet: it scrolls first; pulled down at its top it moves the sheet.
             if (longSheet.get())
                 ModalBottomSheet([longSheet] { longSheet.set(false); }, [&] {
                     Text("Uzun liste: sayfa yarıya kadar açılır; yukarı itince önce sayfa tam açılır, sonra liste kayar; "
                          "en üstte aşağı çekince sayfa iner",
-                         Modifier().padding(24, 0, 24, 8), {.font = typography().titleSmall});
+                         Modifier().padding(24, 0, 24, 8), style = typography().titleSmall);
                     LazyColumn(Modifier().fillMaxWidth().height(420), [&](LazyListScope& list) {
                         list.items(40, [longSheet, choice](int i) {
                             std::string label = std::format("Seçenek {}", i + 1);
@@ -216,32 +215,31 @@ void CardsSection(CallSite site) {
         auto cardTaps = remember([] { return mutableStateOf(0); });
         Section("Kartlar ve BottomAppBar", [&] {
             // Card(onClick): the ripple keeps to the card's corners.
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 Card([cardTaps] { cardTaps.set(cardTaps.peek() + 1); }, Modifier().weight(1).height(72),
                      [&] { Text(std::format("Card · {}", cardTaps.get()), Modifier().padding(12)); });
                 ElevatedCard([cardTaps] { cardTaps.set(cardTaps.peek() + 1); }, Modifier().weight(1).height(72),
                              [] { Text("Elevated", Modifier().padding(12)); });
                 OutlinedCard([cardTaps] { cardTaps.set(cardTaps.peek() + 1); }, Modifier().weight(1).height(72),
                              [] { Text("Outlined", Modifier().padding(12)); });
-            });
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(16), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+            };
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                     SmallFloatingActionButton([] {}, [] { Icon(Icons::Filled::Edit, "Küçük FAB"); });
                     FloatingActionButton([] {}, [] { Icon(Icons::Filled::Edit, "FAB"); });
                     MediumFloatingActionButton([] {}, [] { Icon(Icons::Filled::Edit, "Orta FAB", Modifier().size(28)); });
                     LargeFloatingActionButton([] {}, [] { Icon(Icons::Filled::Edit, "Büyük FAB", Modifier().size(36)); });
-                });
+                };
             // M3 Expressive's extended FABs: switched off, they narrow to their icon.
             auto fabsOpen = remember([] { return mutableStateOf(true); });
-            Row(Modifier(), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+            Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
                 Switch(fabsOpen.get(), [fabsOpen](bool on) { fabsOpen.set(on); });
-                Text("  Genişletilmiş", {.font = typography().bodyMedium});
-            });
-            Column(Modifier(), {.verticalArrangement = Arrangement::spacedBy(12)}, [&] {
+                Text("  Genişletilmiş", style = typography().bodyMedium);
+            };
+            Column(Modifier(), verticalArrangement = Arrangement::spacedBy(12)) {
                 SmallExtendedFloatingActionButton([] {}, Icons::Filled::Add, "Yeni", fabsOpen.get());
                 MediumExtendedFloatingActionButton([] {}, Icons::Filled::Edit, "Yaz", fabsOpen.get());
                 LargeExtendedFloatingActionButton([] {}, Icons::Filled::Email, "Gönder", fabsOpen.get());
-            });
+            };
             BottomAppBar({.actions = [] {
                               IconButton([] {}, [] { Icon(Icons::Filled::Check, "Tamam"); });
                               IconButton([] {}, [] { Icon(Icons::Filled::Edit, "Düzenle"); });

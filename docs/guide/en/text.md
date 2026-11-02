@@ -8,19 +8,19 @@ Showing text, styling it, letting the user select it, and taking text input. Kom
 
 ```cpp body
 Text("Hello, world");
-Text("A title", {.font = typography().titleLarge});
-Text("A note", Modifier().padding(8), {.color = colorScheme().onSurfaceVariant});
+Text("A title", style = typography().titleLarge);
+Text("A note", Modifier().padding(8), color = colorScheme().onSurfaceVariant);
 ```
 
-Its overloads take the text, then optionally a `Modifier`, then a `TextStyle`. Text sizes are in sp, scaled by the system's font size.
+It takes the text, then Compose's parameters, by place or by name: `modifier`, `color`, `fontSize`, `fontStyle`, `fontWeight`, `fontFamily`, `letterSpacing`, `textDecoration`, `textAlign`, `lineHeight`, `overflow`, `softWrap`, `maxLines`, `minLines`, `onTextLayout`, `style`, `autoSize`. Text sizes are in sp, scaled by the system's font size.
 
 ## Styling text
 
-`TextStyle`'s fields, in the order you write them:
+A `TextStyle` holds a text's look: `style = …` gives a whole one (a theme's type style, `typography().titleLarge`, too), and what is given by name goes over it. Its fields, which Text also takes by name unless said otherwise:
 
 | Field | What it does |
 |---|---|
-| `font` | A whole `Font`: Material's type styles (`typography().bodyLarge`) are fonts. |
+| `font` | A whole `Font`: Material's type styles (`typography().bodyLarge`) are fonts (only in a `TextStyle`). |
 | `fontSize` | The size: a number of sp, or `TextUnit::em(1.2f)` relative to the current size. |
 | `fontWeight` | `FontWeight::Normal`, `Medium`, `Bold`, or `W100` … `W900`. |
 | `color` | The color; unset, `LocalContentColor`. |
@@ -30,18 +30,17 @@ Its overloads take the text, then optionally a `Modifier`, then a `TextStyle`. T
 | `fontStyle` | `FontStyle::Italic`. |
 | `fontFamily` | `FontFamily::Serif`, `Monospace`, or one made from files. |
 | `letterSpacing` | Extra space after each character. |
-| `fontFeatureSettings` | OpenType features as CSS writes them: `"tnum"`, `"smcp"`. |
+| `fontFeatureSettings` | OpenType features as CSS writes them: `"tnum"`, `"smcp"` (only in a `TextStyle`). |
 | `overflow` | What the last line shows when cut off: `TextOverflow::Clip`, `Ellipsis`, `StartEllipsis`, `MiddleEllipsis`. |
 | `softWrap` | `false`: one line per paragraph. |
 | `autoSize` | The font size that fits the space: `TextAutoSize::StepBased(12, 48)`. |
 | `lineHeight` | sp from one baseline to the next. |
 
-Designated initializers go in this order; skip the ones you don't need.
+Give only the ones you need, in any order:
 
 ```cpp body
 #! std::string article;
-Text(article, Modifier().fillMaxWidth(), {.fontWeight = FontWeight::Medium, .textAlign = TextAlign::Justify,
-                                          .maxLines = 3, .overflow = TextOverflow::Ellipsis});
+Text(article, Modifier().fillMaxWidth(), fontWeight = FontWeight::Medium, textAlign = TextAlign::Justify, maxLines = 3, overflow = TextOverflow::Ellipsis);
 ```
 
 ## Several styles in one text
@@ -77,7 +76,7 @@ Your own fonts are asset files:
 void Quote(const std::string& text) {
     static const FontFamily lora = FontFamily::fromFiles({{"fonts/Lora-Regular.ttf"},
                                                           {"fonts/Lora-Bold.ttf", FontWeight::Bold}});
-    Text(text, {.fontSize = 20, .fontStyle = FontStyle::Italic, .fontFamily = lora});
+    Text(text, fontSize = 20, fontStyle = FontStyle::Italic, fontFamily = lora);
 }
 ```
 
@@ -89,11 +88,11 @@ Text isn't selectable by default. Inside a `SelectionContainer`, it is: one sele
 
 ```cpp body
 SelectionContainer(Modifier(), [&] {
-    Column([&] {
+    Column() {
         Text("Order number");
-        Text("KMP-2026-0042", {.fontWeight = FontWeight::Bold});
+        Text("KMP-2026-0042", fontWeight = FontWeight::Bold);
         DisableSelection([] { Text("(not selectable)"); });
-    });
+    };
 });
 ```
 
@@ -122,10 +121,10 @@ A `TextFieldState` keeps the text and its selection, and an undo history:
 #! void send(const std::string&) {}
 void Composer() {
     auto message = rememberTextFieldState();
-    Row(Modifier().fillMaxWidth(), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+    Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
         OutlinedTextField(message, Modifier().weight(1), {.maxLines = 4, .placeholder = "Message"});
         IconButton([message] { send(message.text()); message.clearText(); }, [] { Icon(Icons::AutoMirrored::Filled::Send, "Send"); });
-    });
+    };
 }
 ```
 
@@ -185,11 +184,10 @@ void Gauge(int percent) {
 ```cpp
 void Excerpt(const std::string& article) {
     auto cut = remember([] { return mutableStateOf(false); });
-    Column([&] {
-        Text(article, Modifier(), {.maxLines = 3, .overflow = TextOverflow::Ellipsis},
-             [cut](const TextLayoutResult& r) { cut.set(r.hasVisualOverflow()); });
+    Column() {
+        Text(article, Modifier(), maxLines = 3, overflow = TextOverflow::Ellipsis, onTextLayout = [cut](const TextLayoutResult& r) { cut.set(r.hasVisualOverflow()); });
         if (cut.get()) TextButton([] {}, [] { Text("Read more"); });
-    });
+    };
 }
 ```
 

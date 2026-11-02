@@ -66,7 +66,7 @@ A plain C++ function that calls composables, without `composable` or `Composable
 
 ```cpp
 void Header(const std::string& title) {      // a plain function
-    Text(title, {.font = typography().headlineSmall});
+    Text(title, style = typography().headlineSmall);
     HorizontalDivider();
 }
 ```
@@ -82,15 +82,15 @@ What a plain function doesn't get is a *scope*: the states it reads belong to th
 
 Because the body can run on its own later, it must capture by value: `[=]`.
 
-`ComposableScope scope(site);` gives a composable an identity without making it a scope. Components that take a content lambda use it, the way `Column` and `Row` are inline functions in Compose: their content lambdas capture by reference and can't be run again on their own, so the state they read belongs to the caller.
+`ComposableScope scope(site);` gives a composable an identity without making it a scope. Components that still take a content lambda use it (`Button`, `Card`, …): their content lambdas may capture by reference and aren't run again on their own, so the state they read belongs to the caller. The blocks of `Box`, `Column` and `Row` run in scopes of their own instead, as Compose's lambdas do: they capture by value.
 
 ```cpp
 void Section(const std::string& title, const Content& content, CallSite site = CallSite::current()) {
     ComposableScope scope(site);
-    Column(Modifier().padding(16), [&] {
-        Text(title, {.font = typography().titleMedium});
+    Column(Modifier().padding(16)) {
+        Text(title, style = typography().titleMedium);
         content();
-    });
+    };
 }
 ```
 
@@ -113,7 +113,7 @@ struct Todo {
 
 void TodoRow(const Todo& todo, MutableState<std::vector<Todo>> todos, CallSite site = CallSite::current()) {
     composable(site, todo, todos, [=] {   // skipped while todo and todos are the same
-        Row([&] {
+        Row() {
             Checkbox(todo.done, [todos, id = todo.id](bool done) {
                 todos.update([&](std::vector<Todo>& list) {
                     for (Todo& t : list)
@@ -121,7 +121,7 @@ void TodoRow(const Todo& todo, MutableState<std::vector<Todo>> todos, CallSite s
                 });
             });
             Text(todo.title);
-        });
+        };
     });
 }
 ```
@@ -146,11 +146,11 @@ for (const Todo& todo : todos.get()) {
 #! struct Todo { int id = 0; std::string title; bool done = false; friend bool operator==(const Todo&, const Todo&) = default; };
 #! void TodoRow(const Todo&, MutableState<std::vector<Todo>>, CallSite site = CallSite::current()) {}
 void TodoList(MutableState<std::vector<Todo>> todos) {
-    Column([&] {
+    Column() {
         for (const Todo& todo : todos.get()) {
             key(todo.id, [&] { TodoRow(todo, todos); });
         }
-    });
+    };
 }
 ```
 
@@ -168,9 +168,9 @@ void Player(bool wide) {
     }); });
 
     if (wide) {
-        Row([&] { video(); Text("Comments"); });
+        Row() { video(); Text("Comments"); };
     } else {
-        Column([&] { video(); Text("Comments"); });
+        Column() { video(); Text("Comments"); };
     }
 }
 ```

@@ -132,7 +132,7 @@ BottomSheetScaffoldState rememberBottomSheetScaffoldState(SheetState bottomSheet
 void BottomSheetDefaults::DragHandle(CallSite site) {
     ComposableScope scope(site);
     // Compose 1.4's: onSurfaceVariant (no longer faded), 32 × 4 with 22 dp above and below.
-    Box(Modifier().padding(0, 22).semantics(LocalStrings.current().dragHandle).size(32, 4).background(colorScheme().onSurfaceVariant, 2));
+    detail::Box(Modifier().padding(0, 22).semantics(LocalStrings.current().dragHandle).size(32, 4).background(colorScheme().onSurfaceVariant, 2));
 }
 
 void BottomSheetScaffold(const Content& sheetContent, const Modifier& modifier, const BottomSheetScaffoldOptions& options,
@@ -266,10 +266,10 @@ void BottomSheetScaffold(const Content& sheetContent, const Modifier& modifier, 
                     });
                 sheet = sheet.nestedScroll(connection);
                 CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
-                    Column(sheet.padding(0, 0, 0, sheetBottom.get() + kCorner), {.horizontalAlignment = Alignment::CenterHorizontally}, [&] {
+                    detail::Column(sheet.padding(0, 0, 0, sheetBottom.get() + kCorner), {.horizontalAlignment = Alignment::CenterHorizontally}, [&] {
                         if (!options.sheetDragHandle) BottomSheetDefaults::DragHandle();
                         else if (*options.sheetDragHandle) (*options.sheetDragHandle)();
-                        Column(Modifier().fillMaxWidth(), sheetContent);
+                        detail::Column(Modifier().fillMaxWidth(), sheetContent);
                     });
                 });
                 detail::stackSlot(options.snackbarHost);

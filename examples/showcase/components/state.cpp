@@ -16,15 +16,14 @@ void IconGallery(CallSite site) {
             {"AccountCircle", &AccountCircle}, {"KeyboardArrowUp", &KeyboardArrowUp}};
         Section("Icon", [&] {
             for (size_t row = 0; row < icons.size(); row += 5) {
-                Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::SpaceBetween}, [&] {
+                Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::SpaceBetween) {
                     for (size_t i = row; i < std::min(icons.size(), row + 5); ++i) {
-                        Column(Modifier().width(60), {.horizontalAlignment = Alignment::CenterHorizontally}, [&] {
+                        Column(Modifier().width(60), horizontalAlignment = Alignment::CenterHorizontally) {
                             Icon(*icons[i].second, icons[i].first);
-                            Text(icons[i].first, {.fontSize = 9, .color = colorScheme().onSurfaceVariant, .maxLines = 1,
-                                                  .overflow = TextOverflow::Ellipsis});
-                        });
+                            Text(icons[i].first, fontSize = 9, color = colorScheme().onSurfaceVariant, maxLines = 1, overflow = TextOverflow::Ellipsis);
+                        };
                     }
-                });
+                };
             }
         });
     });
@@ -34,8 +33,7 @@ void IconButtons(CallSite site) {
     composable(site, [=] {
         auto liked = remember([] { return mutableStateOf(false); });
         Section("IconButton", [&] {
-            Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                     IconButton([liked] { liked.set(!liked.get()); }, [&] {
                         Icon(liked.get() ? Icons::Filled::Favorite : Icons::Filled::FavoriteBorder, "Beğen", {},
                              liked.get() ? std::optional(colorScheme().error) : std::nullopt);
@@ -45,14 +43,13 @@ void IconButtons(CallSite site) {
                     IconButton([] {}, Modifier(), {.enabled = false}, [] { Icon(Icons::Filled::Delete, "Sil"); });
                     OutlinedIconButton([] {}, [] { Icon(Icons::Filled::Share, "Paylaş"); });
                     Icon(Icons::Filled::Star, "Büyük yıldız", Modifier().size(40), colorScheme().primary);
-                });
+                };
             // The toggles: each keeps its own on/off; `checked` picks the colors.
             auto starred = remember([] { return mutableStateOf(false); });
             auto bell = remember([] { return mutableStateOf(true); });
             auto pinned = remember([] { return mutableStateOf(false); });
             auto locked = remember([] { return mutableStateOf(false); });
-            Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                     IconToggleButton(starred.get(), [starred](bool on) { starred.set(on); }, [] { Icon(Icons::Filled::Star, "Yıldızla"); });
                     FilledIconToggleButton(bell.get(), [bell](bool on) { bell.set(on); },
                                            [] { Icon(Icons::Filled::Notifications, "Bildirimler"); });
@@ -61,10 +58,10 @@ void IconButtons(CallSite site) {
                     OutlinedIconToggleButton(locked.get(), [locked](bool on) { locked.set(on); },
                                              [] { Icon(Icons::Filled::Lock, "Kilitle"); });
                     FilledIconToggleButton(true, {}, Modifier(), {.enabled = false}, [] { Icon(Icons::Filled::Check, "Seçili"); });
-                });
+                };
             // Under the toggles: beside them (48 dp of room each) it would be squeezed on a phone.
             Text(std::string(bell.get() ? "Bildirim açık" : "Bildirim kapalı") + (locked.get() ? ", kilitli" : ""),
-                 {.font = typography().bodySmall});
+                 style = typography().bodySmall);
         });
     });
 }
@@ -129,14 +126,13 @@ void StateFlowSection(CallSite site) {
         Section("StateFlow · collectAsState · viewModel()", [&] {
             Text("İş bir iş parçacığında yürür ve StateFlow'ları günceller; ekran onları collectAsState() ile okur. "
                  "ViewModel bu ekranın gezinme girdisine ait: başka sekmeye geçip dönünce indirme sürmüş olur.",
-                 {.font = typography().bodyMedium, .color = colorScheme().onSurfaceVariant});
+                 color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
             LinearProgressIndicator(progress, Modifier().fillMaxWidth().padding(0, 12));
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                     Button([vm] { vm->start(); }, [] { Text("İndir"); });
                     OutlinedButton([vm] { vm->cancel(); }, Modifier(), {}, [] { Text("İptal"); });
-                    Text(status, Modifier().weight(1), {.font = typography().bodyMedium, .textAlign = TextAlign::End});
-                });
+                    Text(status, Modifier().weight(1), textAlign = TextAlign::End, style = typography().bodyMedium);
+                };
         });
     });
 }
@@ -209,17 +205,17 @@ void FlowSearchSection(CallSite site) {
             Text("Yazmayı bırakınca (300 ms) aranır; yeni bir sorgu süren aramayı iptal eder. Sonuçlar ViewModel'de "
                  "bir StateFlow (WhileSubscribed: yalnızca ekran dinlerken aranır); biten arama bir SharedFlow olayı yayınlar. "
                  "Sorgu SavedStateHandle'da: uygulama arka planda kapatılıp geri gelince yazılı kalır.",
-                 {.font = typography().bodyMedium, .color = colorScheme().onSurfaceVariant});
+                 color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
             OutlinedTextField(query, [vm](std::string v) { vm->setQuery(std::move(v)); }, Modifier().fillMaxWidth(),
                               {.singleLine = true, .placeholder = "örn. an", .label = "Şehir ara"});
-            if (results.searching) Text("aranıyor…", {.font = typography().bodyMedium, .color = colorScheme().primary});
-            else if (!query.empty() && results.cities.empty()) Text("bulunamadı", {.font = typography().bodyMedium});
+            if (results.searching) Text("aranıyor…", color = colorScheme().primary, style = typography().bodyMedium);
+            else if (!query.empty() && results.cities.empty()) Text("bulunamadı", style = typography().bodyMedium);
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8},
                     [&] {
                         for (const std::string& city : results.cities) SuggestionChip([] {}, [&] { Text(city); });
                     });
             if (!lastEvent.get().empty())
-                Text("Son olay (SharedFlow): " + lastEvent.get(), {.font = typography().bodySmall, .color = colorScheme().onSurfaceVariant});
+                Text("Son olay (SharedFlow): " + lastEvent.get(), color = colorScheme().onSurfaceVariant, style = typography().bodySmall);
         });
     });
 }
@@ -241,26 +237,26 @@ void MovableContentSection(CallSite site) {
                         seconds.set(seconds.peek() + 1);
                     }
                 });
-                Column(Modifier().background(cs.primaryContainer, 12).clickable([taps] { taps.set(taps.peek() + 1); }).padding(12), [&] {
-                    Text(std::format("Dokunuş: {}", taps.get()), {.font = typography().titleMedium, .color = cs.onPrimaryContainer});
-                    Text(std::format("{} sn önce başladı", seconds.get()), {.font = typography().bodySmall, .color = cs.onPrimaryContainer});
-                });
+                Column(Modifier().background(cs.primaryContainer, 12).clickable([taps] { taps.set(taps.peek() + 1); }).padding(12)) {
+                    Text(std::format("Dokunuş: {}", taps.get()), color = cs.onPrimaryContainer, style = typography().titleMedium);
+                    Text(std::format("{} sn önce başladı", seconds.get()), color = cs.onPrimaryContainer, style = typography().bodySmall);
+                };
             });
         });
         auto other = [&] {
-            Box(Modifier().background(cs.surfaceContainerHighest, 12).padding(12), [&] {
-                Text("Öbür içerik", {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-            });
+            Box(Modifier().background(cs.surfaceContainerHighest, 12).padding(12)) {
+                Text("Öbür içerik", color = cs.onSurfaceVariant, style = typography().bodyMedium);
+            };
         };
         Section("movableContentOf", [&] {
             Text("Kart Row ile Column arasında taşınır: dokunuş sayısı ve çalışan zamanlayıcısı baştan başlamaz.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
             FilledTonalButton([sideBySide] { sideBySide.set(!sideBySide.peek()); },
                               [&] { Text(sideBySide.get() ? "Alt alta diz" : "Yan yana diz"); });
             if (sideBySide.get())
-                Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] { card(); other(); });
+                Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) { card(); other(); };
             else
-                Column(Modifier(), {.verticalArrangement = Arrangement::spacedBy(8)}, [&] { other(); card(); });
+                Column(Modifier(), verticalArrangement = Arrangement::spacedBy(8)) { other(); card(); };
         });
     });
 }
@@ -288,8 +284,8 @@ void ChannelSection(CallSite site) {
         });
         Section("Channel · trySend · receive · produce", [&] {
             Text("Mutfak siparişleri sırayla ve birer kez hazırlar; kanalda en çok 3 sipariş bekler, dolunca trySend reddeder.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-            Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically}, [&] {
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
+            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                 Button([orders, next, waiting, refused] {
                     bool taken = orders.trySend(next.peek());
                     refused.set(!taken);
@@ -299,10 +295,10 @@ void ChannelSection(CallSite site) {
                     }
                 }, [] { Text("Sipariş ver"); });
                 Text(std::format("Bekleyen: {}", waiting.get()));
-            });
-            Text(kitchen.get(), {.font = typography().titleMedium});
-            if (refused.get()) Text("Kanal dolu: sipariş alınmadı", {.font = typography().bodySmall, .color = cs.error});
-            Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically}, [&] {
+            };
+            Text(kitchen.get(), style = typography().titleMedium);
+            if (refused.get()) Text("Kanal dolu: sipariş alınmadı", color = cs.error, style = typography().bodySmall);
+            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                 OutlinedButton([scope, countdown] {
                     scope.launch([scope, countdown]() -> Task {
                         Channel<int> numbers = produce<int>(scope, [](Channel<int> out) -> Task {
@@ -315,8 +311,8 @@ void ChannelSection(CallSite site) {
                         countdown.set("Başla!");
                     });
                 }, [] { Text("Geri say (produce)"); });
-                Text(countdown.get(), {.font = typography().titleLarge, .color = cs.primary});
-            });
+                Text(countdown.get(), color = cs.primary, style = typography().titleLarge);
+            };
         });
     });
 }
@@ -383,22 +379,20 @@ void LifecycleSection(CallSite site) {
             static const char* const names[] = {"DESTROYED", "INITIALIZED", "CREATED", "STARTED", "RESUMED"};
             Text("Masaüstünde pencere odağı kaybedince STARTED, simge durumuna küçültülünce CREATED olur; Android'de uygulama "
                  "arka plana geçince. Başka sekmeye geçince bu ekranın girdisi CREATED'a iner.",
-                 {.font = typography().bodyMedium, .color = colorScheme().onSurfaceVariant});
+                 color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
             Text(std::format("Bu ekran: {} · öne gelme: {}", names[int(state)], resumes),
-                 Modifier().padding(0, 8, 0, 0), {.font = typography().titleSmall});
+                 Modifier().padding(0, 8, 0, 0), style = typography().titleSmall);
             Row(Modifier().fillMaxWidth().padding(0, 8).onVisibilityChanged([inView](bool visible) { inView.set(visible); }, {.minFractionVisible = 0}),
-                {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+                horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                     Icon(playing.get() ? Icons::Filled::PlayArrow : Icons::Filled::Pause, playing.get() ? "Oynatılıyor" : "Duraklatıldı");
                     LinearProgressIndicator(position.get(), Modifier().weight(1));
-                    Text(playing.get() ? "oynatılıyor" : "duraklatıldı", {.font = typography().bodyMedium});
-                });
+                    Text(playing.get() ? "oynatılıyor" : "duraklatıldı", style = typography().bodyMedium);
+                };
             Text(std::format("Saat akışı: {} sn (akış {} kez başladı; arka plandayken toplanmaz, dönünce yeniden başlar)", seconds, starts),
-                 {.font = typography().bodyMedium});
-            Column(Modifier().fillMaxWidth().padding(0, 8, 0, 0).background(colorScheme().surfaceContainerHigh, RoundedCornerShape(12)).padding(12),
-                   [&] {
-                       for (const std::string& e : events) Text(e, {.font = typography().bodySmall, .fontFamily = FontFamily::Monospace});
-                   });
+                 style = typography().bodyMedium);
+            Column(Modifier().fillMaxWidth().padding(0, 8, 0, 0).background(colorScheme().surfaceContainerHigh, RoundedCornerShape(12)).padding(12)) {
+                       for (const std::string& e : events) Text(e, fontFamily = FontFamily::Monospace, style = typography().bodySmall);
+                   };
         });
     });
 }
@@ -443,27 +437,26 @@ void ChatSection(CallSite site) {
         };
         Section("Sohbet · reverseLayout · animateScrollToItem", [&] {
             Text("İlk öğe altta durur, yenisi oraya gelir; yukarı kaydırılmışsa liste kayarak en yeniye döner.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
             std::vector<Message> shown = messages->get();
             LazyColumn(Modifier().fillMaxWidth().height(240).background(cs.surfaceContainerLow, 12),
                        {.state = list, .contentPadding = {12, 8, 12, 8}, .spacing = 6, .reverseLayout = true},
                        [&](LazyListScope& items) {
                            items.items(shown, [](const Message& m) { return m.id; }, [cs](const Message& m) {
-                               Box(Modifier().fillMaxWidth().animateItem(), m.mine ? Alignment::CenterEnd : Alignment::CenterStart, [&] {
+                               Box(Modifier().fillMaxWidth().animateItem(), m.mine ? Alignment::CenterEnd : Alignment::CenterStart) {
                                    Box(Modifier()
                                            .widthIn(0, 260)
                                            .background(m.mine ? cs.primary : cs.surfaceContainerHighest, 16)
-                                           .padding(12, 8),
-                                       [&] { Text(m.text, {.color = m.mine ? cs.onPrimary : cs.onSurface}); });
-                               });
+                                           .padding(12, 8)) { Text(m.text, color = m.mine ? cs.onPrimary : cs.onSurface); };
+                               };
                            });
                        });
-            Row(Modifier().fillMaxWidth(), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+            Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
                 OutlinedTextField(draft.get(), [draft](std::string v) { draft.set(std::move(v)); }, Modifier().weight(1),
                                   {.singleLine = true, .placeholder = "Mesaj", .keyboardOptions = {.imeAction = ImeAction::Send},
                                    .keyboardActions = {.onSend = send}});
                 IconButton(send, [] { Icon(Icons::AutoMirrored::Filled::Send, "Gönder"); });
-            });
+            };
         });
     });
 }
@@ -510,7 +503,7 @@ void PlatformServicesSection(CallSite site) {
                  "LocalUriHandler & co. kompoz:// adresini uygulamanın kendi NavHost'u tanıdığı için doğrudan içeride açar. "
                  "Titreşim Android'de sistemin dokunma geri bildirimi ayarına uyar; uzun basışlar ve seçim tutamaçları "
                  "kendileri titreşir.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 OutlinedButton([links] { links.openUri("https://developer.android.com/compose"); }, [] { Text("Compose belgeleri"); });
                 OutlinedButton([links] { links.openUri("kompoz://item/7"); }, [] { Text("kompoz://item/7"); });
@@ -524,29 +517,29 @@ void PlatformServicesSection(CallSite site) {
                 TextButton([keyboard] { keyboard.show(); }, [] { Text("Klavyeyi göster"); });
             });
             // keepScreenOn: the screen stays on while the switch is on (a Box with it is laid out).
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                 Switch(screenOn.get(), [screenOn](bool on) { screenOn.set(on); });
                 Text("Ekranı açık tut (keepScreenOn)", Modifier().weight(1));
-                if (screenOn.get()) Box(Modifier().size(1).keepScreenOn());
-            });
+                if (screenOn.get()) Box(Modifier().size(1).keepScreenOn()) {};
+            };
             // sensitiveContent: while the switch is on, the card field hides the window from screen
             // shares and recordings (Android 15+: they show it blank).
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                 Switch(sensitive.get(), [sensitive](bool on) { sensitive.set(on); });
                 Text("Hassas içerik (sensitiveContent)", Modifier().weight(1));
-            });
+            };
             OutlinedTextField(card.get(), [card](std::string v) { card.set(std::move(v)); },
                               Modifier().fillMaxWidth().sensitiveContent(sensitive.get()),
                               {.singleLine = true, .label = sensitive.get() ? "Kart numarası (paylaşımda gizli)" : "Kart numarası"});
             // Autofill: a password manager fills the fields marked with a contentType, and offers to
             // keep them when the form is sent (commit).
             Text("Giriş formu (autofill): parola yöneticisi doldurur, Giriş'te kaydetmeyi önerir.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
             OutlinedTextField(email.get(), [email](std::string v) { email.set(std::move(v)); },
                               Modifier().fillMaxWidth().semantics({.contentType = ContentType::Username + ContentType::EmailAddress}),
                               {.singleLine = true, .label = "E-posta", .keyboardOptions = {.keyboardType = KeyboardType::Email}});
             OutlinedSecureTextField(password, Modifier().fillMaxWidth().semantics({.contentType = ContentType::Password}), {.label = "Parola"});
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                 Button([autofill, email, password, signedIn] {
                     autofill.commit();
                     signedIn.set(email.peek().empty() ? "" : "Giriş: " + email.peek());
@@ -557,13 +550,13 @@ void PlatformServicesSection(CallSite site) {
                     password.setTextAndPlaceCursorAtEnd("");
                     signedIn.set("");
                 }, [] { Text("Temizle"); });
-                Text(signedIn.get(), Modifier().weight(1), {.font = typography().bodyMedium});
-            });
+                Text(signedIn.get(), Modifier().weight(1), style = typography().bodyMedium);
+            };
             // LocalViewConfiguration: the platform's gesture thresholds (Android's own there).
             const ViewConfiguration& gestures = LocalViewConfiguration.current();
             Text(std::format("ViewConfiguration: uzun basma {} ms · çift dokunma {} ms · eşik {:.1f} dp · en hızlı fırlatma {:.0f} dp/s",
                              gestures.longPressTimeout.count(), gestures.doubleTapTimeout.count(), gestures.touchSlop, gestures.maximumFlingVelocity),
-                 {.font = typography().bodySmall, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodySmall);
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 using H = HapticFeedbackType;
                 for (auto [type, label] : {std::pair{H::LongPress, "Uzun basma"}, std::pair{H::Confirm, "Onay"},
@@ -583,12 +576,12 @@ void PlatformServicesSection(CallSite site) {
                     });
                 }, [] { Text("Notun yerine yapıştır"); });
             });
-            if (!pasted.get().empty()) Text("Panoda: " + pasted.get(), {.font = typography().bodySmall, .color = cs.onSurfaceVariant});
+            if (!pasted.get().empty()) Text("Panoda: " + pasted.get(), color = cs.onSurfaceVariant, style = typography().bodySmall);
             // withBackground (Compose's withContext(Dispatchers.Default)) in a TaskOf: the primes
             // below thirty million counted on a worker thread; the spinner keeps turning meanwhile.
             auto primes = remember([] { return mutableStateOf(std::string("—")); });
             auto counting = remember([] { return mutableStateOf(false); });
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                 FilledTonalButton([scope, primes, counting] {
                     if (counting.peek()) return;
                     counting.set(true);
@@ -600,8 +593,8 @@ void PlatformServicesSection(CallSite site) {
                     });
                 }, [] { Text("Arkada hesapla"); });
                 if (counting.get()) CircularProgressIndicator(Modifier().size(24));
-                Text(primes.get(), {.font = typography().bodyMedium});
-            });
+                Text(primes.get(), style = typography().bodyMedium);
+            };
         });
     });
 }

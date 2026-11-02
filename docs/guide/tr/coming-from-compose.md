@@ -37,31 +37,37 @@ void Greeting(const std::string& name, CallSite site = CallSite::current()) {
 - Lambdadan önceki argümanlar atlamaya karar verir: geçen seferkilere eşit (`==`) olduklarında ve gövdenin okuduğu hiçbir şey değişmediğinde gövde çalışmaz.
 - Gövde değerle yakalar (`[=]`), çünkü daha sonra, çağıranı olmadan, kendi başına yeniden çalışabilir.
 
-`Column` ve `Card` gibi içerik lambdası alan composable'lar, Compose'un *inline* composable'larıdır: scope'suz bir kimlik için `ComposableScope scope(site);` kullanırlar ve içeriklerinde okunan durum çağırana aittir. [Yaşam döngüsü ve kimlik](lifecycle.md) sayfasına bakın.
+Bir composable'ın bloğu, bir Compose lambdası gibi, kendine ait bir kapsamda çalışır: yalnızca bloğun okuduğu değişince yalnızca blok yeniden çalışır. [Yaşam döngüsü ve kimlik](lifecycle.md) sayfasına bakın.
 
 ## Parametreler
 
-Kotlin'in isimli ve varsayılan parametreleri, C++'ta designated initializer'larla doldurulan *seçenek struct'larına* dönüşür:
+Kotlin'in adlı ve varsayılan parametreleri burada da adlı argümanlardır: `ad = değer`, adsız verilen argümanlardan sonra, istenen sırayla ve yalnızca gerekenler:
 
 ```kotlin
 Text("Title", fontSize = 24.sp, maxLines = 1)
-OutlinedTextField(value, onValueChange, label = { Text("Email") }, singleLine = true)
+Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { … }
 ```
+
+```cpp body
+Text("Title", fontSize = 24, maxLines = 1);
+Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
+    Text("…");
+};
+```
+
+Adsız argümanlar parametreleri Compose'un sırasıyla doldurur (`Text(text, modifier, color, fontSize, …)`, `Box(modifier, contentAlignment)`). Composable'ın almadığı bir ad, iki kez verilen bir ad ya da alamayacağı bir değer derleme hatasıdır, hiçbir zaman yok sayılmaz. Adlar (`modifier`, `color`, `fontSize`, …) `kompoz`'un sabitleridir: sizin aynı adlı bir değişkeniniz adı gizler, bu da yine derleme hatası verir; orada `kompoz::color = …` yazın.
+
+Şimdilik `Box`, `Column`, `Row`, `Spacer` ve `Text` adlı argüman alıyor. Diğer bileşenler sıraları gelene kadar, alanların bildirildiği sırayla tasarlanmış ilklendiricilerle bir *seçenek yapısı* almaya devam ediyor:
 
 ```cpp body
 #! std::string value;
 #! std::function<void(std::string)> onValueChange;
-Text("Title", Modifier(), {.fontSize = 24, .maxLines = 1});
 OutlinedTextField(value, onValueChange, Modifier(), {.singleLine = true, .label = "Email"});
 ```
 
-Designated initializer'lar, alanların struct'ta tanımlandığı sırayı izlemek zorundadır. Başlık dosyaları onları mantıklı bir sırayla listeler, karıştırdığınızda da derleyiciniz söyler.
-
-Bileşenlerin çoğu şu sırayla alır: zorunlu argümanlar, `Modifier`, seçenek struct'ı, sonra içerik lambdası. Overload'lar ihtiyacınız olmayanı dışarıda bırakır: hem `Button(onClick, content)` hem `Button(onClick, modifier, style, content)` vardır.
-
 ## Sondaki lambdalar
 
-Kotlin'in sondaki lambdası, son argüman olarak parantezin içine girer:
+`<kompoz/blocks.hpp>` eklendiğinde (diğer başlıklardan sonra, en sona), Kotlin'in sondaki lambdası çağrıdan sonra, küme parantezlerinde gelir; kapanan parantezden sonra noktalı virgül konur:
 
 ```kotlin
 Column(Modifier.padding(16.dp)) {
@@ -71,20 +77,24 @@ Column(Modifier.padding(16.dp)) {
 ```
 
 ```cpp body
-Column(Modifier().padding(16), [&] {
+Column(Modifier().padding(16)) {
     Text("One");
     Text("Two");
-});
+};
 ```
 
-İçerik lambdaları çağrı sırasında hemen çalışır, bu yüzden onlar için `[&]` güvenlidir. `onClick` gibi callback'ler daha sonra, kompozisyondan sonra, onları oluşturan fonksiyon dönmüşken çalışır: kullandıklarını **değerle** yakalayın.
+Başlık, blok alan composable'ların adlarını makro yapar; böylece `Column(…) { … };`, parantezleri bloğu olan çağrıdır: değerle yakalayan (`[=]`) bir lambda. Başlık olmadan ya da bir şeyi başvuruyla yakalaması gereken bir blok için blok son argümandır; başlık ekliyse ad, makro dokunmasın diye parantez içinde yazılır: `(Column)(Modifier(), [=, &log] { … })`. İçeriği olmayan bir `Box`'ın bloğu boştur: `Box(Modifier().size(24)) {};`.
+
+Bir blok kendine ait bir kapsamda çalışır: onu yapan işlev döndükten sonra, tek başına yeniden çalışabilir. Bu yüzden `onClick` gibi geri çağrılar gibi kullandığını **değerle** yakalar; bir başvuru, composable'dan uzun yaşayan bir şeye olmalıdır, asla onun yerel değişkenlerinden birine değil:
 
 ```cpp
 void LikeButton() {
     auto likes = remember([] { return mutableStateOf(0); });
-    Button([likes] { likes.set(likes.get() + 1); }, [&] {   // callback: değerle
-        Text(std::to_string(likes.get()) + " likes");        // içerik: [&] sorun değil
-    });
+    Column() {                                                      // bir blok: değerle
+        Button([likes] { likes.set(likes.get() + 1); }, [=] {        // geri çağrı: değerle
+            Text(std::to_string(likes.get()) + " likes");
+        });
+    };
 }
 ```
 
@@ -118,7 +128,7 @@ Modifier.fillMaxWidth().padding(16.dp).background(Color.Red, RoundedCornerShape(
 ```
 
 ```cpp body
-Box(Modifier().fillMaxWidth().padding(16).background(Color::hex(0xE53935), RoundedCornerShape(8)));
+Box(Modifier().fillMaxWidth().padding(16).background(Color::hex(0xE53935), RoundedCornerShape(8))) {};
 ```
 
 Zincir `Modifier()`'dan başlar. Sıra Compose'daki gibi önemlidir. [Modifier'lar](modifiers.md) sayfasına bakın.
@@ -179,7 +189,7 @@ CompositionLocalProvider({LocalContentColor.provides(Color::hex(0xE53935))}, [&]
 | `var v by mutableStateOf(0)` | `auto v = mutableStateOf(0);` `v.get()`, `v.set(1)` |
 | `key(id) { … }` | `key(id, [&] { … })` |
 | `Modifier.padding(8.dp)` | `Modifier().padding(8)` |
-| İsimli argümanlar | Designated initializer'lar: `{.maxLines = 1}` |
+| İsimli argümanlar | Adlı argümanlar: `Text("…", maxLines = 1)` (henüz çevrilmemiş bileşenler için seçenek yapıları) |
 | `LaunchedEffect(k) { … }` | `LaunchedEffect(k, [=]() -> Task { … })` |
 | `scope.launch { … }` | `scope.launch([=]() -> Task { … })` |
 | `DisposableEffect(k) { onDispose { … } }` | `DisposableEffect(k, [=] { return [=] { … }; })` |

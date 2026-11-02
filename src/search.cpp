@@ -28,9 +28,9 @@ void inputField(const SearchBarDefaults::InputFieldOptions& o, const std::option
                  })
                   .semantics({.contentDescription = o.query.empty() ? o.placeholder : o.query, .role = SemanticsRole::Button});
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
-        Row(row, {.verticalAlignment = Alignment::CenterVertically}, [&] {
-            if (o.leadingIcon) Box(Modifier().padding(16, 0, 0, 0), o.leadingIcon);
-            Box(Modifier().weight(1).padding(16, 0), Alignment::CenterStart, [&] {
+        detail::Row(row, {.verticalAlignment = Alignment::CenterVertically}, [&] {
+            if (o.leadingIcon) detail::Box(Modifier().padding(16, 0, 0, 0), o.leadingIcon);
+            detail::Box(Modifier().weight(1).padding(16, 0), Alignment::CenterStart, [&] {
                 if (o.expanded) {
                     auto search = [onSearch = o.onSearch, query = o.query] {
                         if (onSearch) onSearch(query);
@@ -45,12 +45,12 @@ void inputField(const SearchBarDefaults::InputFieldOptions& o, const std::option
                     else
                         BasicTextField(o.query, o.onQueryChange, field, std::move(options));
                 } else {
-                    Text(o.query.empty() ? o.placeholder : o.query,
+                    detail::Text(o.query.empty() ? o.placeholder : o.query,
                          {.font = t.bodyLarge, .color = o.query.empty() ? cs.onSurfaceVariant : cs.onSurface, .maxLines = 1,
                           .overflow = TextOverflow::Ellipsis});
                 }
             });
-            if (o.trailingIcon) Box(Modifier().padding(0, 0, 16, 0), o.trailingIcon);
+            if (o.trailingIcon) detail::Box(Modifier().padding(0, 0, 16, 0), o.trailingIcon);
         });
     });
 }
@@ -145,7 +145,7 @@ void SearchBar(const SearchBarState& state, const Content& inputField, const Mod
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     auto d = state.data_;
-    Box(modifier.heightIn(56)
+    detail::Box(modifier.heightIn(56)
             .onGloballyPositioned([d](const LayoutCoordinates& c) {
                 Offset at = c.positionInWindow();
                 d->collapsed = {at.x, at.y, c.size().width, c.size().height};
@@ -202,12 +202,12 @@ void ExpandedFullScreenSearchBar(const SearchBarState& state, const Content& inp
         Layout(
             Modifier().fillMaxSize(),
             [&] {
-                Box(Modifier().drawBehind([d, back, surface](DrawScope& draw) {  // round as the bar, square once grown
+                detail::Box(Modifier().drawBehind([d, back, surface](DrawScope& draw) {  // round as the bar, square once grown
                     back->last.get();
                     draw.drawRoundRect(surface, {}, {}, CornerRadius(28 * std::max(1 - d->progress.value(), back->progress())));
                 }));
-                Box(Modifier().padding(insets.start, 0, insets.end, 0), Alignment::CenterStart, inputField);
-                Column(Modifier().padding(insets.start, 0, insets.end, insets.bottom).graphicsLayer([d](GraphicsLayerScope& l) {
+                detail::Box(Modifier().padding(insets.start, 0, insets.end, 0), Alignment::CenterStart, inputField);
+                detail::Column(Modifier().padding(insets.start, 0, insets.end, insets.bottom).graphicsLayer([d](GraphicsLayerScope& l) {
                     l.alpha = d->progress.value();
                 }),
                        [&] {
@@ -255,16 +255,16 @@ void ExpandedDockedSearchBar(const SearchBarState& state, const Content& inputFi
            },
            .onDismissRequest = collapser(state, coroutines)},
           [&] {
-              Column(Modifier()
+              detail::Column(Modifier()
                          .width(d->collapsed.width)
                          .graphicsLayer([d](GraphicsLayerScope& l) { l.alpha = d->progress.value(); })
                          .shadow(3, 28)
                          .background(cs.surfaceContainerHigh, 28)
                          .clip(RoundedCornerShape(28)),
                      [&] {
-                         Box(Modifier().fillMaxWidth().heightIn(56), Alignment::CenterStart, inputField);
+                         detail::Box(Modifier().fillMaxWidth().heightIn(56), Alignment::CenterStart, inputField);
                          HorizontalDivider();
-                         Column(Modifier().fillMaxWidth().heightIn(240, maxHeight), content);
+                         detail::Column(Modifier().fillMaxWidth().heightIn(240, maxHeight), content);
                      });
           });
 }
@@ -275,7 +275,7 @@ void SearchBar(const Content& inputField, bool expanded, std::function<void(bool
     const ColorScheme& cs = colorScheme();
     auto change = rememberUpdatedState(std::move(onExpandedChange));
     // The pill keeps its place in the layout while the search view is open over everything.
-    Box(modifier.heightIn(56).background(cs.surfaceContainerHigh, 28), Alignment::CenterStart, [&] {
+    detail::Box(modifier.heightIn(56).background(cs.surfaceContainerHigh, 28), Alignment::CenterStart, [&] {
         if (!expanded) inputField();
     });
     if (!expanded) return;
@@ -284,15 +284,15 @@ void SearchBar(const Content& inputField, bool expanded, std::function<void(bool
     Popup({.fullScreen = true, .onDismissRequest = [change] { if (change.get()) change.get()(false); },
            .dismissOnOutsideClick = false},
           [&] {
-              Column(Modifier()
+              detail::Column(Modifier()
                          .fillMaxSize()
                          .graphicsLayer([appear](GraphicsLayerScope& l) { l.alpha = appear.value(); })
                          .background(cs.surfaceContainerHigh)
                          .safeDrawingPadding(),  // under the status bar, above the keyboard
                      [&] {
-                         Box(Modifier().fillMaxWidth().heightIn(72), Alignment::CenterStart, inputField);
+                         detail::Box(Modifier().fillMaxWidth().heightIn(72), Alignment::CenterStart, inputField);
                          HorizontalDivider();
-                         Column(Modifier().fillMaxWidth().weight(1), content);
+                         detail::Column(Modifier().fillMaxWidth().weight(1), content);
                      });
           });
 }
@@ -312,7 +312,9 @@ void DockedSearchBar(const Content& inputField, bool expanded, std::function<voi
     });
     float maxHeight = std::max(240.f, LocalWindowSize.current().height * 2 / 3);
     // The pill keeps its place; open, the same field heads a card over the page, at its width.
-    Box(modifier.heightIn(56).onSizeChanged([width](Size s) { width.set(s.width); }).background(cs.surfaceContainerHigh, 28),
+    detail::Box(modifier.heightIn(56).onSizeChanged([width](Size s) {
+        width.set(s.width);
+    }).background(cs.surfaceContainerHigh, 28),
         Alignment::CenterStart, [&] {
             if (!expanded) return inputField();
             Popup({.position = [](const Rect& pill, Size size, Size viewport) {
@@ -321,11 +323,11 @@ void DockedSearchBar(const Content& inputField, bool expanded, std::function<voi
                    },
                    .onDismissRequest = [change] { if (change.get()) change.get()(false); }},
                   [&] {
-                      Column(Modifier().width(width.get()).shadow(3, 28).background(cs.surfaceContainerHigh, 28).clip(RoundedCornerShape(28)),
+                      detail::Column(Modifier().width(width.get()).shadow(3, 28).background(cs.surfaceContainerHigh, 28).clip(RoundedCornerShape(28)),
                              [&] {
-                                 Box(Modifier().fillMaxWidth().heightIn(56), Alignment::CenterStart, inputField);
+                                 detail::Box(Modifier().fillMaxWidth().heightIn(56), Alignment::CenterStart, inputField);
                                  HorizontalDivider();
-                                 Column(Modifier()
+                                 detail::Column(Modifier()
                                             .fillMaxWidth()
                                             .heightIn(240, maxHeight)
                                             .graphicsLayer([appear](GraphicsLayerScope& l) { l.alpha = appear.value(); }),

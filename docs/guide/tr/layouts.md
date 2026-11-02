@@ -22,17 +22,17 @@ Her düğüm bir geçişte bir kez ölçülür, bu yüzden ağaç ne kadar derin
 
 ```cpp
 void ProfileHeader(const std::string& name, const std::string& handle) {
-    Row(Modifier().padding(16), {.verticalAlignment = Alignment::CenterVertically}, [&] {
-        Box([&] {
+    Row(Modifier().padding(16), verticalAlignment = Alignment::CenterVertically) {
+        Box() {
             Icon(Icons::Filled::AccountCircle, "", Modifier().size(56));
-            Box(Modifier().size(14).align(Alignment::BottomEnd).background(Color::hex(0x2E7D32), CircleShape));
-        });
+            Box(Modifier().size(14).align(Alignment::BottomEnd).background(Color::hex(0x2E7D32), CircleShape)) {};
+        };
         Spacer(Modifier().width(12));
-        Column([&] {
-            Text(name, {.font = typography().titleMedium});
-            Text(handle, {.font = typography().bodyMedium, .color = colorScheme().onSurfaceVariant});
-        });
-    });
+        Column() {
+            Text(name, style = typography().titleMedium);
+            Text(handle, color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
+        };
+    };
 }
 ```
 
@@ -41,12 +41,11 @@ void ProfileHeader(const std::string& name, const std::string& handle) {
 Bir `Column`'un stili çocukları yüksekliği boyunca dizer ve genişliği boyunca hizalar; bir `Row`'unki bunun tersini yapar:
 
 ```cpp body
-Column(Modifier().fillMaxSize(), {.verticalArrangement = Arrangement::SpaceBetween,
-                                  .horizontalAlignment = Alignment::CenterHorizontally}, [&] {
+Column(Modifier().fillMaxSize(), verticalArrangement = Arrangement::SpaceBetween, horizontalAlignment = Alignment::CenterHorizontally) {
     Text("Top");
     Text("Middle");
     Text("Bottom");
-});
+};
 ```
 
 | Dizilim | Çocuklar |
@@ -66,10 +65,10 @@ Tek bir çocuk kendi hizasını değiştirebilir: bir `Column`'da `Modifier().al
 `weight`, bir `Row`'un ya da `Column`'un ağırlıksız çocuklar ölçüldükten sonra kalan alanını ağırlıklı çocuklar arasında orantılı olarak paylaştırır:
 
 ```cpp body
-Row(Modifier().fillMaxWidth().height(48), [&] {
-    Box(Modifier().weight(2).fillMaxHeight().background(colorScheme().primary));    // üçte iki
-    Box(Modifier().weight(1).fillMaxHeight().background(colorScheme().secondary));  // üçte bir
-});
+Row(Modifier().fillMaxWidth().height(48)) {
+    Box(Modifier().weight(2).fillMaxHeight().background(colorScheme().primary)) {};    // üçte iki
+    Box(Modifier().weight(1).fillMaxHeight().background(colorScheme().secondary)) {};  // üçte bir
+};
 ```
 
 `weight(w, false)` çocuğun kendi payından küçük olmasına izin verir.
@@ -125,9 +124,9 @@ Grid(Modifier().fillMaxWidth(), {.columns = {GridTrackSize::Fixed(96), GridTrack
 Bir yerleşim kendiliğinden kaymaz. `verticalScroll` ve `horizontalScroll`, içeriği elindeki alandan büyük olduğunda bir `Column`'u ya da `Row`'u kaydırılabilir yapar:
 
 ```cpp body
-Column(Modifier().fillMaxSize().verticalScroll(rememberScrollState()), [&] {
+Column(Modifier().fillMaxSize().verticalScroll(rememberScrollState())) {
     for (int i = 0; i < 50; ++i) Text("Line " + std::to_string(i));
-});
+};
 ```
 
 Bu, her çocuğu kompoze eder. Uzun ya da sonu olmayan içerik için onun yerine tembel bir liste kullanın: bkz. [Listeler ve ızgaralar](lists.md).
@@ -144,10 +143,10 @@ Kesin boyutlara göre değil, pencerenin boyut sınıfına göre yerleşim yapı
 void MailScreen() {
     WindowAdaptiveInfo info = currentWindowAdaptiveInfo();
     if (info.windowSizeClass.windowWidthSizeClass == WindowWidthSizeClass::Expanded) {
-        Row(Modifier().fillMaxSize(), [&] {
-            Box(Modifier().weight(1), [] { ListPane(); });
-            Box(Modifier().weight(2), [] { DetailPane(); });
-        });
+        Row(Modifier().fillMaxSize()) {
+            (Box)(Modifier().weight(1), [] { ListPane(); });
+            (Box)(Modifier().weight(2), [] { DetailPane(); });
+        };
     } else {
         ListPane();
     }
@@ -197,9 +196,9 @@ Insets iç boşlukları toplanmaz: içteki, yalnızca dıştakilerin henüz alma
 
 ```cpp body
 Scaffold(Modifier(), {}, [&](PaddingValues padding) {
-    Column(Modifier().padding(padding).consumeWindowInsets(padding).imePadding(), [&] {
+    Column(Modifier().padding(padding).consumeWindowInsets(padding).imePadding()) {
         OutlinedTextField("", [](std::string) {});
-    });
+    };
 });
 ```
 

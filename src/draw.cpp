@@ -1437,7 +1437,7 @@ Modifier Modifier::paint(const Painter& painter, bool sizeToIntrinsics, Alignmen
 }
 
 void Canvas(const Modifier& modifier, std::function<void(DrawScope&)> onDraw, CallSite site) {
-    Spacer(modifier.drawBehind(std::move(onDraw)), site);
+    detail::Spacer(modifier.drawBehind(std::move(onDraw)), site);
 }
 
 } // namespace kompoz

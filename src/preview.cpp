@@ -18,7 +18,7 @@ void PreviewFrame(const Preview& preview) {
     CompositionLocalProvider({LocalSystemDarkTheme.provides(spec.darkTheme.value_or(isSystemInDarkTheme()))}, [&] {
         Modifier frame = Modifier().size(spec.width, spec.height);
         if (spec.background) frame = frame.background(*spec.background);
-        Box(frame.clipToBounds(), [&] { preview.content(); });
+        detail::Box(frame.clipToBounds(), [&] { preview.content(); });
     });
 }
 
@@ -45,15 +45,15 @@ void showPreview(Application& app, std::string_view wanted) {
     app.title += " · previews";
     app.width = std::max(app.width, int(widest) + 32);
     app.content = [all] {
-        Column(Modifier().fillMaxSize().verticalScroll(rememberScrollState()).padding(16), [&] {
-            if (all.empty()) Text("No previews (KOMPOZ_PREVIEW(name, ...) { ... } in the app's sources)");
+        detail::Column(Modifier().fillMaxSize().verticalScroll(rememberScrollState()).padding(16), [&] {
+            if (all.empty()) detail::Text("No previews (KOMPOZ_PREVIEW(name, ...) { ... } in the app's sources)");
             for (size_t i = 0; i < all.size(); ++i)
                 key(i, [&] {
                     const Preview& p = all[i];
-                    Text(std::format("{}  {:g} × {:g}", p.name, p.spec.width, p.spec.height), Modifier().padding(0, 0, 0, 4),
+                    detail::Text(std::format("{}  {:g} × {:g}", p.name, p.spec.width, p.spec.height), Modifier().padding(0, 0, 0, 4),
                          {.fontSize = 12, .color = Color::hex(0x5F5F5F)});
-                    Box(Modifier().border(1, Color::hex(0xBDBDBD)).padding(1), [&] { PreviewFrame(p); });
-                    Spacer(Modifier().height(24));
+                    detail::Box(Modifier().border(1, Color::hex(0xBDBDBD)).padding(1), [&] { PreviewFrame(p); });
+                    detail::Spacer(Modifier().height(24));
                 });
         });
     };

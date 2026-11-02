@@ -28,7 +28,7 @@ void chipIcon(const Content& icon, Color color, bool animated, CallSite site = C
     if (!animated) return provide(color, typography().labelLarge, icon);
     const MotionScheme& motion = motionScheme();
     auto alpha = animateFloatAsState(icon ? 1.f : 0.f, icon ? motion.slowEffectsSpec : snap());  // (read as it is drawn)
-    Box(detail::animatedAlpha(Modifier().animateContentSize(icon ? motion.fastSpatialSpec : motion.defaultEffectsSpec), alpha), Alignment::Center,
+    detail::Box(detail::animatedAlpha(Modifier().animateContentSize(icon ? motion.fastSpatialSpec : motion.defaultEffectsSpec), alpha), Alignment::Center,
         [&] { provide(color, typography().labelLarge, icon); });
 }
 
@@ -51,7 +51,7 @@ void chip(ChipKind kind, bool selected, std::function<void()> onClick, const Con
     if (!on) labelColor = leadingColor = trailingColor = cs.onSurface.copy(0.38f);
     Content leading = o.leadingIcon;
     bool avatar = kind == ChipKind::Input && o.avatar;
-    if (avatar) leading = [&] { Box(Modifier().clip(CircleShape).alpha(on ? 1.f : 0.38f), o.avatar); };
+    if (avatar) leading = [&] { detail::Box(Modifier().clip(CircleShape).alpha(on ? 1.f : 0.38f), o.avatar); };
     float start = kind == ChipKind::Input && (avatar || !o.leadingIcon) ? 4.f : 8.f;
     float end = kind == ChipKind::Input && !o.trailingIcon ? 4.f : 8.f;
 
@@ -59,9 +59,9 @@ void chip(ChipKind kind, bool selected, std::function<void()> onClick, const Con
     if (selectable) m = m.semantics({.role = SemanticsRole::Checkbox, .checked = selected});
     if (elevated && on) m = m.shadow(1, 8);
     m = m.background(container, 8).border(1, border, 8).clickable(std::move(onClick), on);
-    Row(m.padding(start, 0, end, 0), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+    detail::Row(m.padding(start, 0, end, 0), {.verticalAlignment = Alignment::CenterVertically}, [&] {
         chipIcon(leading, avatar ? labelColor : leadingColor, selectable);  // (an avatar keeps the label's)
-        Box(Modifier().padding(8, 0), [&] { provide(labelColor, typography().labelLarge, label); });
+        detail::Box(Modifier().padding(8, 0), [&] { provide(labelColor, typography().labelLarge, label); });
         chipIcon(o.trailingIcon, trailingColor, selectable);
     });
 }
@@ -110,11 +110,11 @@ void ListItem(const ListItemSlots& slots, const Modifier& modifier, CallSite sit
     Color container = slots.containerColor.value_or(cs.surface);
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
         Layout(modifier.semantics({.mergeDescendants = true}).fillMaxWidth().background(container), [&] {
-            if (leading) Box(Modifier().padding(0, 0, 16, 0), [&] { provide(cs.onSurfaceVariant, LocalTextStyle.current(), slots.leading); });
-            if (overline) Box(Modifier(), [&] { provide(cs.onSurfaceVariant, t.labelSmall, slots.overline); });
-            Box(Modifier(), [&] { provide(cs.onSurface, t.bodyLarge, slots.headline); });
-            if (supporting) Box(Modifier(), [&] { provide(cs.onSurfaceVariant, t.bodyMedium, slots.supporting); });
-            if (trailing) Box(Modifier().padding(16, 0, 0, 0), [&] { provide(cs.onSurfaceVariant, t.labelSmall, slots.trailing); });
+            if (leading) detail::Box(Modifier().padding(0, 0, 16, 0), [&] { provide(cs.onSurfaceVariant, LocalTextStyle.current(), slots.leading); });
+            if (overline) detail::Box(Modifier(), [&] { provide(cs.onSurfaceVariant, t.labelSmall, slots.overline); });
+            detail::Box(Modifier(), [&] { provide(cs.onSurface, t.bodyLarge, slots.headline); });
+            if (supporting) detail::Box(Modifier(), [&] { provide(cs.onSurfaceVariant, t.bodyMedium, slots.supporting); });
+            if (trailing) detail::Box(Modifier().padding(16, 0, 0, 0), [&] { provide(cs.onSurfaceVariant, t.labelSmall, slots.trailing); });
         }, policy);
     });
 }
@@ -158,11 +158,11 @@ void interactiveListItem(ListItemKind kind, bool selected, std::function<void()>
         : kind == ListItemKind::Select ? m.selectable(selected, onClick, SemanticsRole::None, click)
                                        : m.clickable(onClick, click);
     int lines = 1 + (slots.overline ? 1 : 0) + (slots.supporting ? 1 : 0);
-    Row(m.padding(16, 10, 16, 10),
+    detail::Row(m.padding(16, 10, 16, 10),
         {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = lines == 3 ? Alignment::Top : Alignment::CenterVertically},
         [&] {
             provide(quiet(c.leadingContentColor), t.bodyLarge, slots.leading);
-            Column(Modifier().weight(1), {.verticalArrangement = Arrangement::Center}, [&] {
+            detail::Column(Modifier().weight(1), {.verticalArrangement = Arrangement::Center}, [&] {
                 provide(quiet(std::nullopt), t.labelSmall, slots.overline);
                 provide(content, t.bodyLarge, slots.headline);
                 provide(quiet(c.supportingContentColor), t.bodyMedium, slots.supporting);
@@ -239,7 +239,7 @@ void RadioButton(bool selected, std::function<void()> onClick, const Modifier& m
     if (onClick)
         m = m.minimumInteractiveComponentSize().clickable(
             std::move(onClick), {.enabled = enabled, .interactionSource = std::move(interactionSource), .indication = ripple(false, 20)});
-    Box(m.size(24)
+    detail::Box(m.size(24)
             .drawBehind([ring, dot](DrawScope& d) {
                 Color color = ring();
                 float radius = dot.value();
@@ -438,11 +438,11 @@ void slider(bool vertical, bool flipped, std::shared_ptr<SliderState::Data> data
         return c.constrain({length, across});
     };
     Layout(m, [&] {
-        Box(Modifier(), [&] {
+        detail::Box(Modifier(), [&] {
             if (options.track) options.track(state);
             else SliderDefaults::ClassicTrack(state);
         });
-        Box(Modifier(), [&] {
+        detail::Box(Modifier(), [&] {
             if (options.thumb) options.thumb(state);
             else SliderDefaults::CircleThumb(state);
         });
@@ -517,7 +517,7 @@ void CircleThumb(const SliderState& state, float radius, CallSite site) {
     ComposableScope scope(site);
     Color c = state.colors().value_or(classicColors()).thumb(state.enabled());
     bool halo = state.isPressed();
-    Box(Modifier().size(2 * radius).drawBehind([c, halo, radius](DrawScope& d) {
+    detail::Box(Modifier().size(2 * radius).drawBehind([c, halo, radius](DrawScope& d) {
         if (halo) d.drawCircle(c.copy(0.12f), 2 * radius);
         d.drawCircle(c, radius);
     }));
@@ -527,21 +527,21 @@ void Thumb(const SliderState& state, Size size, CallSite site) {
     ComposableScope scope(site);
     Color c = state.colors().value_or(colors()).thumb(state.enabled());
     float thick = state.isPressed() ? size.width / 2 : size.width;  // across the bar
-    Box(state.vertical() ? Modifier().size(size.height, thick).background(c, CircleShape) : Modifier().size(thick, size.height).background(c, CircleShape));
+    detail::Box(state.vertical() ? Modifier().size(size.height, thick).background(c, CircleShape) : Modifier().size(thick, size.height).background(c, CircleShape));
 }
 
 void ShapeThumb(const SliderState& state, Shape shape, Size size, CallSite site) {
     ComposableScope scope(site);
     Color c = state.colors().value_or(colors()).thumb(state.enabled());
     auto grow = animateFloatAsState(state.isPressed() ? 1.15f : 1.f, 120);  // (read as it is drawn)
-    Box(detail::animatedScale(Modifier().size(size.width, size.height), grow).background(c, shape));
+    detail::Box(detail::animatedScale(Modifier().size(size.width, size.height), grow).background(c, shape));
 }
 
 void IconThumb(const SliderState& state, const ImageVector& icon, float size, CallSite site) {
     ComposableScope scope(site);
     Color c = state.colors().value_or(colors()).thumb(state.enabled());
     auto grow = animateFloatAsState(state.isPressed() ? 1.1f : 1.f, 120);
-    Box(detail::animatedScale(Modifier().size(size), grow).background(c, CircleShape), Alignment::Center,
+    detail::Box(detail::animatedScale(Modifier().size(size), grow).background(c, CircleShape), Alignment::Center,
         [&] { Icon(icon, "", Modifier().size(size * 0.6f), colorScheme().onPrimary); });
 }
 
@@ -550,8 +550,7 @@ void ValueThumb(const SliderState& state, std::function<std::string(float)> labe
     Color c = state.colors().value_or(colors()).thumb(state.enabled());
     std::string text = label ? label(state.value()) : std::format("{:.0f}", state.value());
     auto grow = animateFloatAsState(state.isPressed() ? 1.1f : 1.f, 120);
-    Box(detail::animatedScale(Modifier().heightIn(28).widthIn(40), grow).background(c, RoundedCornerShape(14)).padding(8, 4), Alignment::Center,
-        [&] { Text(text, {.font = typography().labelMedium, .color = colorScheme().onPrimary}); });
+    detail::Box(detail::animatedScale(Modifier().heightIn(28).widthIn(40), grow).background(c, RoundedCornerShape(14)).padding(8, 4), Alignment::Center, [&] { detail::Text(text, {.font = typography().labelMedium, .color = colorScheme().onPrimary}); });
 }
 
 void ClassicTrack(const SliderState& state, CallSite site) {
@@ -561,7 +560,7 @@ void ClassicTrack(const SliderState& state, CallSite site) {
     float fraction = state.valueAsFraction();
     std::vector<float> ticks = state.tickFractions();
     state.data_->tickInset = 0;
-    Box((vertical ? Modifier().width(4).fillMaxHeight() : Modifier().fillMaxWidth().height(4))
+    detail::Box((vertical ? Modifier().width(4).fillMaxHeight() : Modifier().fillMaxWidth().height(4))
             .drawBehind([=](DrawScope& d) {
                 float length = vertical ? d.size().height : d.size().width;
                 auto at = [&](float f) { return flipped ? length * (1 - f) : length * f; };
@@ -586,7 +585,7 @@ void Track(const SliderState& state, bool drawStopIndicator, float thumbTrackGap
     std::vector<float> ticks = state.tickFractions();
     auto data = state.data_;
     data->tickInset = TrackHeight / 2;
-    Box((vertical ? Modifier().width(TrackHeight).fillMaxHeight() : Modifier().fillMaxWidth().height(TrackHeight))
+    detail::Box((vertical ? Modifier().width(TrackHeight).fillMaxHeight() : Modifier().fillMaxWidth().height(TrackHeight))
             .drawBehind([=](DrawScope& d) {
                 // Along the track from its start (flipped: from the other end), as Compose's drawTrack.
                 float length = vertical ? d.size().height : d.size().width, corner = TrackHeight / 2, inside = trackInsideCornerSize;
@@ -798,12 +797,12 @@ void rangeSlider(bool flipped, std::shared_ptr<RangeSliderState::Data> data, con
     };
     SliderState startThumb = state.startThumb(), endThumb = state.endThumb();
     Layout(m, [&] {
-        Box(Modifier(), [&] {
+        detail::Box(Modifier(), [&] {
             if (options.rangeTrack) options.rangeTrack(state);
             else SliderDefaults::ClassicTrack(state);
         });
         auto thumb = [&](const std::function<void(const SliderState&)>& own, const SliderState& s) {
-            Box(Modifier(), [&] {
+            detail::Box(Modifier(), [&] {
                 if (own) own(s);
                 else if (options.thumb) options.thumb(s);
                 else SliderDefaults::CircleThumb(s);
@@ -867,7 +866,7 @@ void ClassicTrack(const RangeSliderState& state, CallSite site) {
     float from = state.startFraction(), to = state.endFraction();
     std::vector<float> ticks = state.tickFractions();
     state.data_->tickInset = 0;
-    Box(Modifier().fillMaxWidth().height(4).drawBehind([=](DrawScope& d) {
+    detail::Box(Modifier().fillMaxWidth().height(4).drawBehind([=](DrawScope& d) {
         float length = d.size().width;
         auto at = [&](float f) { return flipped ? length * (1 - f) : length * f; };
         d.drawRoundRect(colors.track(enabled, false), {}, Size{length, 4}, CornerRadius(2));
@@ -885,7 +884,7 @@ void Track(const RangeSliderState& state, bool drawStopIndicator, float thumbTra
     std::vector<float> ticks = state.tickFractions();
     auto data = state.data_;
     data->tickInset = TrackHeight / 2;
-    Box(Modifier().fillMaxWidth().height(TrackHeight).drawBehind([=](DrawScope& d) {
+    detail::Box(Modifier().fillMaxWidth().height(TrackHeight).drawBehind([=](DrawScope& d) {
         // As Compose's drawTrack for a range: inactive on both sides, each apart from its thumb.
         float length = d.size().width, corner = TrackHeight / 2, inside = trackInsideCornerSize;
         auto valueAt = [&](float f) { return !ticks.empty() && f > 0 && f < 1 ? corner + (length - 2 * corner) * f : length * f; };
@@ -937,7 +936,7 @@ Rect segmentBand(Size size) {
 void segmentedRow(const Modifier& modifier, const Content& content) {
     float room = std::max(kSegmentHeight, LocalMinimumInteractiveComponentSize.current());
     Color outline = colorScheme().outline;
-    Row(modifier.height(room).drawWithContent([outline](ContentDrawScope& d) {
+    detail::Row(modifier.height(room).drawWithContent([outline](ContentDrawScope& d) {
         Rect band = segmentBand(d.size()), b = d.bounds();
         band = {b.x + band.x, b.y + band.y, band.width, band.height};
         d.context().pushClipRoundRect(band, band.height / 2);
@@ -974,7 +973,7 @@ void segment(bool selected, const std::function<Modifier(const Modifier&)>& clic
         text.place(18 + 8 + offset, (h - text.height) / 2);
         return Size{std::max(18.f, iw) + 8 + text.width, h};
     };
-    Box(click(modifier.weight(1).fillMaxHeight().drawBehind([container, separator](DrawScope& d) {
+    detail::Box(click(modifier.weight(1).fillMaxHeight().drawBehind([container, separator](DrawScope& d) {
             Rect band = segmentBand(d.size());
             d.drawRect(container, {0, band.y}, Size{band.width, band.height});
             d.drawRect(separator, {band.width - 1, band.y}, Size{1, band.height});
@@ -1084,7 +1083,7 @@ void groupButton(const GroupItems& items, size_t i, const Modifier& modifier, st
     const ButtonGroupItem& item = (*items)[i];
     Content content = [icon = item.icon, label = item.label] {
         if (icon) Icon(*icon, "", Modifier().size(18));
-        Text(label);
+        detail::Text(label);
     };
     if (item.checked)
         ToggleButton(*item.checked, [items, i](bool on) {
@@ -1098,7 +1097,7 @@ void groupButton(const GroupItems& items, size_t i, const Modifier& modifier, st
 
 // The ⋮ button and its menu of the items from `first` on.
 void groupOverflow(const GroupItems& items, size_t first, const MutableState<bool>& open) {
-    Box([&] {
+    detail::Box([&] {
         IconButton([open] { open.set(true); }, [] { Icon(Icons::Filled::MoreVert, LocalStrings.current().moreOptions); });
         DropdownMenu(open.get(), [open] { open.set(false); }, [&] {
             for (size_t i = first; i < items->size(); ++i) {
@@ -1106,7 +1105,7 @@ void groupOverflow(const GroupItems& items, size_t first, const MutableState<boo
                 Content leading;
                 if (item.checked && *item.checked) leading = [] { Icon(Icons::Filled::Check, LocalStrings.current().selected); };
                 else if (item.icon) leading = [icon = item.icon] { Icon(*icon, ""); };
-                DropdownMenuItem([label = item.label] { Text(label); }, [items, i, open] {
+                DropdownMenuItem([label = item.label] { detail::Text(label); }, [items, i, open] {
                     open.set(false);
                     if (i >= items->size()) return;
                     const ButtonGroupItem& it = (*items)[i];
@@ -1305,7 +1304,7 @@ void tabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs,
             scroll.scrollTo(from + (to - from) * FastOutSlowInEasing(p));
         }
     });
-    Box(modifier.fillMaxWidth()
+    detail::Box(modifier.fillMaxWidth()
             .background(cs.surface)
             .onSizeChanged([viewport](Size size) { viewport.set(size.width); })
             .drawBehind([divider](DrawScope& d) { d.drawRect(divider, {0, d.size().height - 1}, Size{d.size().width, 1}); }),
@@ -1378,15 +1377,15 @@ void Tab(bool selected, std::function<void()> onClick, const Content& text, cons
         }
         return Size{width, height};
     };
-    Column(tabTap(modifier, selected, std::move(onClick), options).fillMaxWidth(),
+    detail::Column(tabTap(modifier, selected, std::move(onClick), options).fillMaxWidth(),
            {.verticalArrangement = Arrangement::Center, .horizontalAlignment = Alignment::CenterHorizontally}, [&] {
                CompositionLocalProvider({LocalContentColor.provides(content)}, [&] {
                    Layout(Modifier(), [&] {
                        if (text)
-                           Box(Modifier().padding(16, 0), [&] {
+                           detail::Box(Modifier().padding(16, 0), [&] {
                                CompositionLocalProvider({LocalTextStyle.provides(typography().titleSmall)}, text);
                            });
-                       if (icon) Box(Modifier(), icon);
+                       if (icon) detail::Box(Modifier(), icon);
                    }, policy);
                });
            });
@@ -1401,11 +1400,11 @@ void LeadingIconTab(bool selected, std::function<void()> onClick, const Content&
                     const TabOptions& options, CallSite site) {
     ComposableScope scope(site);
     auto content = tabColor(selected, options);
-    Row(tabTap(modifier.height(48), selected, std::move(onClick), options).padding(16, 0).fillMaxWidth(),
+    detail::Row(tabTap(modifier.height(48), selected, std::move(onClick), options).padding(16, 0).fillMaxWidth(),
         {.horizontalArrangement = Arrangement::Center, .verticalAlignment = Alignment::CenterVertically}, [&] {
             CompositionLocalProvider({LocalContentColor.provides(content), LocalTextStyle.provides(typography().titleSmall)}, [&] {
                 if (icon) icon();
-                Spacer(Modifier().width(8));
+                detail::Spacer(Modifier().width(8));
                 if (text) text();
             });
         });
@@ -1427,7 +1426,7 @@ void VerticalDragHandle(const Modifier& modifier, std::optional<MutableInteracti
         next({w, w, h, h});
         return Size{w, h};
     });
-    Box(modifier, Alignment::Center, [&] { Box(detail::animatedBackground(sized, color, RoundedCornerShapePercent(50))); });
+    detail::Box(modifier, Alignment::Center, [&] { detail::Box(detail::animatedBackground(sized, color, RoundedCornerShapePercent(50))); });
 }
 
 struct SwipeToDismissBoxState::Data {
@@ -1538,8 +1537,8 @@ void SwipeToDismissBox(SwipeToDismissBoxState state, const Content& backgroundCo
     bool showBackground = state.dismissDirection() != SwipeToDismissBoxValue::Settled ||
                           state.currentValue() != SwipeToDismissBoxValue::Settled;
     Layout(modifier.clipToBounds(), [&] {
-        if (showBackground) Box(Modifier(), backgroundContent);
-        Box(dragged, content);
+        if (showBackground) detail::Box(Modifier(), backgroundContent);
+        detail::Box(dragged, content);
     }, [d](const std::vector<Measurable>& children, const Constraints& c) {
         if (children.empty()) return Size{};
         Placeable front = children.back().measure(c);
@@ -1560,11 +1559,11 @@ void Badge(const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     if (!content) {
-        Box(modifier.size(6).background(cs.error, CircleShape));
+        detail::Box(modifier.size(6).background(cs.error, CircleShape));
         return;
     }
     CompositionLocalProvider({LocalContentColor.provides(cs.onError), LocalTextStyle.provides(typography().labelSmall)}, [&] {
-        Row(modifier.heightIn(16).widthIn(16).background(cs.error, 8).padding(4, 0),
+        detail::Row(modifier.heightIn(16).widthIn(16).background(cs.error, 8).padding(4, 0),
             {.horizontalArrangement = Arrangement::Center, .verticalAlignment = Alignment::CenterVertically}, content);
     });
 }
@@ -1591,8 +1590,8 @@ void BadgedBox(const Content& badge, const Modifier& modifier, const Content& co
             node.drawContent = {};
         },
         [&] {
-            Box(Modifier(), content);
-            Box(Modifier(), badge);
+            detail::Box(Modifier(), content);
+            detail::Box(Modifier(), badge);
         });
 }
 
@@ -1623,7 +1622,7 @@ void FlexibleBottomAppBar(const Modifier& modifier, const Content& content, cons
     const ColorScheme& cs = colorScheme();
     PaddingValues insets = bottomBarInsets(options.windowInsets);
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
-        Row(exiting(modifier.fillMaxWidth(), options.scrollBehavior)
+        detail::Row(exiting(modifier.fillMaxWidth(), options.scrollBehavior)
                 .background(options.containerColor.value_or(cs.surfaceContainer))
                 .padding(insets.start, 0, insets.end, insets.bottom)
                 .height(options.expandedHeight)
@@ -1637,18 +1636,18 @@ void BottomAppBar(const BottomAppBarSlots& slots, const Modifier& modifier, Call
     const ColorScheme& cs = colorScheme();
     PaddingValues insets = bottomBarInsets(slots.windowInsets);
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
-        Row(exiting(modifier.fillMaxWidth(), slots.scrollBehavior)
+        detail::Row(exiting(modifier.fillMaxWidth(), slots.scrollBehavior)
                 .background(slots.containerColor.value_or(cs.surfaceContainer))
                 .padding(insets.start, 0, insets.end, insets.bottom)
                 .height(80)
                 .padding(4, 4, 4, 0),  // Compose 1.4's ContentPadding
             {.verticalAlignment = Alignment::CenterVertically}, [&] {
-                Row(Modifier().weight(1), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+                detail::Row(Modifier().weight(1), {.verticalAlignment = Alignment::CenterVertically}, [&] {
                     if (slots.actions) slots.actions();
                 });
                 // 8 dp below the padding's top, 12 in from its end (16 from the bar's).
                 if (slots.floatingActionButton)
-                    Box(Modifier().fillMaxHeight().padding(0, 8, 12, 0), Alignment::TopStart, slots.floatingActionButton);
+                    detail::Box(Modifier().fillMaxHeight().padding(0, 8, 12, 0), Alignment::TopStart, slots.floatingActionButton);
             });
     });
 }

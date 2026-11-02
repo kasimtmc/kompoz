@@ -32,19 +32,19 @@ struct Message {
 };
 
 void MessageCard(const Message& msg) {
-    Row(Modifier().padding(8), [&] {
+    Row(Modifier().padding(8)) {
         Icon(Icons::Filled::AccountCircle, "Profile picture", Modifier().size(40));
         Spacer(Modifier().width(8));
-        Column([&] {
-            Text(msg.author, {.font = typography().titleSmall});
+        Column() {
+            Text(msg.author, style = typography().titleSmall);
             Spacer(Modifier().height(4));
-            Text(msg.body, {.font = typography().bodyMedium});
-        });
-    });
+            Text(msg.body, style = typography().bodyMedium);
+        };
+    };
 }
 ```
 
-The children go in a lambda, the last argument, like Compose's trailing lambda. Content lambdas run right away, while the parent is being composed, so capturing with `[&]` is safe there.
+The children go in a block after the call, in braces, like Compose's trailing lambda (with `<kompoz/blocks.hpp>` included; mind the semicolon after it). A block runs in a scope of its own and can run again later on its own, so it captures what it uses by value.
 
 `Modifier` decorates a composable: size, padding, background, clicks and much more. Modifiers chain, and their order matters (`padding` then `background` is not the same as `background` then `padding`). See [Modifiers](modifiers.md).
 
@@ -56,10 +56,10 @@ A UI that never changes is not much of an app. Kompoz redraws a composable when 
 void Counter() {
     auto count = remember([] { return mutableStateOf(0); });
 
-    Column(Modifier().padding(16), {.verticalArrangement = Arrangement::spacedBy(8)}, [&] {
+    Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
         Text("You clicked " + std::to_string(count.get()) + " times");
         Button([count] { count.set(count.get() + 1); }, [] { Text("Click me"); });
-    });
+    };
 }
 ```
 
@@ -67,7 +67,7 @@ void Counter() {
 - `count.set(...)` writes it, here from the button's `onClick`.
 - `MutableState<T>` is a small handle you can copy. The click callback runs later, after composition, so it captures `count` **by value** (`[count]`), never by reference.
 
-The second argument of `Column` is a style struct with designated initializers: C++'s answer to Compose's named parameters. See [State](state.md) for more.
+`verticalArrangement = …` is a named argument, as in Kotlin: after the ones given without a name, in any order. See [State](state.md) for more.
 
 ## Step 4: a scrolling list
 
@@ -108,7 +108,7 @@ Kompoz implements Material 3, as Compose Material 3 does. `MaterialTheme` gives 
 void ConversationScreen(const std::vector<Message>& messages) {
     Scaffold(Modifier(), {.topBar = [] { TopAppBar({.title = [] { Text("Messages"); }}); }},
              [&](PaddingValues padding) {
-                 Box(Modifier().padding(padding), [&] { Conversation(messages); });
+                 Box(Modifier().padding(padding)) { Conversation(messages); };
              });
 }
 
@@ -133,12 +133,11 @@ void MessageCard(const Message& msg) {
     auto expanded = remember([] { return mutableStateOf(false); });
 
     Card([expanded] { expanded.set(!expanded.get()); }, Modifier().fillMaxWidth().padding(8, 4), [&] {
-        Column(Modifier().padding(16).animateContentSize(), [&] {
-            Text(msg.author, {.font = typography().titleSmall, .color = colorScheme().primary});
+        Column(Modifier().padding(16).animateContentSize()) {
+            Text(msg.author, color = colorScheme().primary, style = typography().titleSmall);
             Spacer(Modifier().height(4));
-            Text(msg.body, {.font = typography().bodyMedium, .maxLines = expanded.get() ? 0 : 1,
-                            .overflow = TextOverflow::Ellipsis});
-        });
+            Text(msg.body, maxLines = expanded.get() ? 0 : 1, overflow = TextOverflow::Ellipsis, style = typography().bodyMedium);
+        };
     });
 }
 ```

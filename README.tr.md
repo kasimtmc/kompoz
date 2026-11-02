@@ -25,10 +25,10 @@ using namespace kompoz;
 void Counter() {
     auto count = remember([] { return mutableStateOf(0); });
 
-    Column(Modifier().padding(16), {.verticalArrangement = Arrangement::spacedBy(8)}, [&] {
-        Text("Sayaç: " + std::to_string(count.get()), {.font = typography().titleLarge});
+    Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
+        Text("Sayaç: " + std::to_string(count.get()), style = typography().titleLarge);
         Button([count] { count.set(count.get() + 1); }, [] { Text("Arttır"); });
-    });
+    };
 }
 
 kompoz::Application kompoz::createApplication(int, char**) {
@@ -167,7 +167,7 @@ Her Compose API'sinin durumuyla tam liste [docs/components.tr.md](docs/component
 | `Modifier.transformable(state)`, `detectTransformGestures` | `auto t = rememberTransformableState([=](float zoom, Offset pan, float rotation) { ... }); Modifier().transformable(t)`; `PointerEvent::changes` her parmağı taşır |
 | `pointerInput(key) { detectTapGestures(...) }` | `pointerInput(key, [=](PointerInputScope& s) -> Task { co_await detectTapGestures(s, {.onTap = ...}); })` |
 | `Modifier.padding(..).background(..)` | `Modifier().padding(..).background(..)` (sıra önemli, Compose'daki gibi) |
-| İsimli parametreler | Designated initializer: `{.fontSize = 24, .color = ...}` |
+| İsimli parametreler | Adlı argümanlar: `Text("Başlık", fontSize = 24, color = ...)` (henüz çevrilmemiş bileşenler için seçenek yapıları) |
 | `@Preview` | `KOMPOZ_PREVIEW(Ad, .width = 360, .height = 200) { ... }`, `KOMPOZ_PREVIEW=Ad` ile gösterilir (bkz. [Geliştirme](#geliştirme)) |
 | `createComposeRule()`, `onNodeWithText(..).assertIsDisplayed()` | `kompoz::testing::ComposeTestRule` (pencere açmadan UI testi): `rule.onNodeWithText("Tamam").assertIsDisplayed().performClick()`; başarısızlıkta `testing::AssertionError` |
 | `Modifier.recomposeHighlighter()` (snippets) | `Modifier().recomposeHighlighter()`: node'u üreten composable'ın kaç kez çalıştığını kenarlıkla gösterir |
@@ -203,10 +203,11 @@ Kurallar:
 - Atlama için argümanlar `==` ile karşılaştırılabilir olmalı. `MutableState` kimliğiyle, `Modifier` elemanlarının
   değerleriyle karşılaştırılır. `std::function` gibi karşılaştırılamayan bir argüman composable'ı yeniden
   başlatılabilir ama hiç atlanmaz yapar.
-- `Text` atlanabilir. İçerik lambdası alan bileşenler (`Column`, `Button`, `Card`...) Compose'daki inline fonksiyonlar
-  gibidir: içlerinde okunan durum, çevreleyen scope'a yazılır.
-- Olay geri çağrıları (`onClick`...) kompozisyondan sonra çalışır, bu yüzden yerel değişkenleri `[&]` ile değil
-  **değerle** yakalayın. İçerik lambdaları (`Column(..., [&]{...})`) hemen çalıştığı için orada `[&]` güvenlidir.
+- `Text` atlanabilir. Bir blok (`Column(…) { … };`, `Box`, `Row`) kendine ait bir kapsamda çalışır: yalnızca okuduğu
+  değişince yalnızca o yeniden çalışır. Hâlâ içerik lambdası alan bileşenler (`Button`, `Card`...) Compose'daki inline
+  fonksiyonlar gibidir: içlerinde okunan durum, çevreleyen scope'a yazılır.
+- Bloklar ve olay geri çağrıları (`onClick`...) onları yapan işlev döndükten sonra çalışabilir, bu yüzden yerel
+  değişkenleri **değerle** yakalarlar: `Column(…) { … };` diye yazılan bir blok öyle yakalar (`[=]`).
 
 Yerleşim de artımlıdır: son ölçüldüğü kısıtlarla yeniden ölçülen ve içinde ya da altında hiçbir şey değişmeyen düğüm
 boyunu ve çocuklarının yerini korur; yalnız yeniden kompoze edilenler ya da ölçülürken okudukları durum değişenler

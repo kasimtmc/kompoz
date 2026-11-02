@@ -167,8 +167,8 @@ void standardSheet(const std::shared_ptr<DrawerState::Data>& d, const Modifier& 
     auto& size = remember([] { return std::make_shared<Size>(); });
     Stretch stretch = backStretch(d, size, 0, LocalLayoutDirection.current() == LayoutDirection::Rtl);
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
-        Column(modifier.fillMaxHeight().widthIn(240, 360).then(stretch.container).background(cs.surface), [&] {
-            Column(Modifier()
+        detail::Column(modifier.fillMaxHeight().widthIn(240, 360).then(stretch.container).background(cs.surface), [&] {
+            detail::Column(Modifier()
                        .fillMaxSize()
                        .then(stretch.content)
                        .windowInsetsPadding(detail::systemBarsForVisualComponents().only(WindowInsetsSides::Vertical | WindowInsetsSides::Start))
@@ -186,7 +186,7 @@ void modalSheet(const std::shared_ptr<DrawerState::Data>& d, const Modifier& mod
     Stretch stretch = backStretch(d, size, 16 / (width + 16), LocalLayoutDirection.current() == LayoutDirection::Rtl);
     // Reaches 16 dp past the start edge so only the end corners show rounded.
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
-        Column(modifier.fillMaxHeight()
+        detail::Column(modifier.fillMaxHeight()
                    .width(width + 16)
                    .offset(-16, 0)
                    .then(stretch.container)
@@ -198,7 +198,7 @@ void modalSheet(const std::shared_ptr<DrawerState::Data>& d, const Modifier& mod
                        }
                    }),
                [&] {
-                   Column(Modifier().fillMaxSize().then(stretch.content).padding(16 + 12 + insets.start, insets.top + 12, 12, insets.bottom + 12),
+                   detail::Column(Modifier().fillMaxSize().then(stretch.content).padding(16 + 12 + insets.start, insets.top + 12, 12, insets.bottom + 12),
                           content);
                });
     });
@@ -217,10 +217,10 @@ void ModalNavigationDrawer(const Content& drawerContent, DrawerState state, cons
     auto drag = drawerDrag(state, coroutines, rtl);
     Modifier root = Modifier().fillMaxSize();
     if (options.gesturesEnabled) root = root.pointerInput(rtl, drag);
-    Box(root, [&] {
+    detail::Box(root, [&] {
         content();
         if (!visible) return;  // closed: nothing above the content
-        Box(Modifier()
+        detail::Box(Modifier()
                 .fillMaxSize()
                 .drawBehind([d, scrim = colorScheme().scrim](DrawScope& draw) { draw.drawRect(scrim.copy(scrim.alpha() * 0.32f * d->fraction.value())); })
                 .pointerInput(0, [state, coroutines](PointerInputScope& s) -> Task {
@@ -228,7 +228,7 @@ void ModalNavigationDrawer(const Content& drawerContent, DrawerState state, cons
                                                    coroutines.launch([state]() -> Task { co_await state.close(); });
                                                }});
                 }));
-        Box(Modifier()
+        detail::Box(Modifier()
                 .fillMaxHeight()
                 .offset([d] { return Offset{-(d->width.get() + 16) * (1 - d->fraction.value()), 0}; })
                 .onSizeChanged([d](Size s) { d->width.set(s.width); }),
@@ -260,8 +260,8 @@ void DismissibleNavigationDrawer(const Content& drawerContent, DrawerState state
     Layout(
         root,
         [&] {
-            if (visible) Box(Modifier().fillMaxHeight(), [&] { CompositionLocalProvider({LocalDrawer.provides(d)}, drawerContent); });
-            Box(Modifier().fillMaxSize(), content);
+            if (visible) detail::Box(Modifier().fillMaxHeight(), [&] { CompositionLocalProvider({LocalDrawer.provides(d)}, drawerContent); });
+            detail::Box(Modifier().fillMaxSize(), content);
         },
         [d, visible](const std::vector<Measurable>& children, const Constraints& c) {
             float f = d->fraction.value(), shown = 0;
@@ -290,9 +290,9 @@ void DismissibleDrawerSheet(DrawerState drawerState, const Modifier& modifier, c
 
 void PermanentNavigationDrawer(const Content& drawerContent, const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
-    Row(modifier.fillMaxSize(), [&] {
+    detail::Row(modifier.fillMaxSize(), [&] {
         drawerContent();
-        Box(Modifier().weight(1).fillMaxHeight(), content);
+        detail::Box(Modifier().weight(1).fillMaxHeight(), content);
     });
 }
 
@@ -310,11 +310,11 @@ void NavigationDrawerItem(const Content& label, bool selected, std::function<voi
     Color container = selected ? cs.secondaryContainer : colors::Transparent;
     Color content = selected ? cs.onSecondaryContainer : cs.onSurfaceVariant;
     CompositionLocalProvider({LocalContentColor.provides(content)}, [&] {
-        Row(modifier.fillMaxWidth().heightIn(56).background(container, 28).selectable(selected, std::move(onClick), SemanticsRole::Tab)
+        detail::Row(modifier.fillMaxWidth().heightIn(56).background(container, 28).selectable(selected, std::move(onClick), SemanticsRole::Tab)
                 .padding(16, 0, 24, 0),
             {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically}, [&] {
                 if (icon) icon();
-                Box(Modifier().weight(1), label);
+                detail::Box(Modifier().weight(1), label);
                 if (badge) badge();
             });
     });
@@ -326,13 +326,13 @@ void NavigationRail(const Modifier& modifier, const Content& header, const Conte
     PaddingValues insets = detail::systemBarsForVisualComponents().only(WindowInsetsSides::Vertical | WindowInsetsSides::Start).asPaddingValues();
     // Compose 1.4's: at least 80 dp wide, 4 dp above, below and between the items, 8 under the header.
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
-        Column(modifier.fillMaxHeight().background(cs.surface).padding(insets.start, insets.top, 0, insets.bottom).widthIn(80)
+        detail::Column(modifier.fillMaxHeight().background(cs.surface).padding(insets.start, insets.top, 0, insets.bottom).widthIn(80)
                    .padding(0, 4),
                {.verticalArrangement = Arrangement::spacedBy(4), .horizontalAlignment = Alignment::CenterHorizontally},
                [&] {
                    if (header) {
                        header();
-                       Spacer(Modifier().height(8));
+                       detail::Spacer(Modifier().height(8));
                    }
                    content();
                });
@@ -341,7 +341,7 @@ void NavigationRail(const Modifier& modifier, const Content& header, const Conte
 
 void NavigationRailItem(bool selected, std::function<void()> onClick, const ImageVector& icon, std::string label,
                         CallSite site) {
-    NavigationRailItem(selected, std::move(onClick), [icon] { Icon(icon, ""); }, [label] { Text(label); }, Modifier(), {}, site);  // (the label says it)
+    NavigationRailItem(selected, std::move(onClick), [icon] { Icon(icon, ""); }, [label] { detail::Text(label); }, Modifier(), {}, site);  // (the label says it)
 }
 
 void NavigationRailItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier,

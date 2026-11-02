@@ -16,7 +16,7 @@ void FlingSection(CallSite site) {
             Box(Modifier().fillMaxWidth().padding(0, 12, 0, 0).height(56).background(cs.surfaceContainerHigh, 28).onSizeChanged([a, decays](Size s) {
                     if (decays) a.updateBounds(0.f, std::max(0.f, s.width - 56));
                 }),
-                decays ? Alignment::CenterStart : Alignment::Center, [&] {
+                decays ? Alignment::CenterStart : Alignment::Center) {
                     Box(Modifier().offset([a, decays] { return Offset{a.value() + (decays ? 4.f : 0.f), 0}; }).size(48)
                             .background(decays ? cs.primary : cs.tertiary, 24)
                             .pointerInput(0, [a, decays, scope, released](PointerInputScope& s) -> Task {
@@ -41,16 +41,16 @@ void FlingSection(CallSite site) {
                                                 else co_await a.animateTo(0.f, spring(Spring::DampingRatioMediumBouncy, Spring::StiffnessLow), v);
                                             });
                                         }});
-                            }));
-                });
+                            })) {};
+                };
         };
         Section("animateDecay · VelocityTracker · spring(initialVelocity)", [&] {
             Text("Mor topu fırlatın: bırakış hızıyla kayar, yavaşlar, kenarda durur. Diğerini çekip bırakın: hızını taşıyarak "
                  "yaylanır ve ortaya döner.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
             track(slide, true);
             track(bounce, false);
-            Text(std::format("Bırakış hızı: {:.0f} dp/s", released.get()), Modifier().padding(0, 8, 0, 0), {.font = typography().bodyMedium});
+            Text(std::format("Bırakış hızı: {:.0f} dp/s", released.get()), Modifier().padding(0, 8, 0, 0), style = typography().bodyMedium);
         });
     });
 }
@@ -73,22 +73,22 @@ void DrawersSection(CallSite site) {
         auto frame = Modifier().fillMaxWidth().height(200).border(1, cs.outlineVariant, 12).clip(RoundedCornerShape(12));
         Section("PermanentNavigationDrawer · DismissibleNavigationDrawer", [&] {
             PermanentNavigationDrawer([&] { PermanentDrawerSheet(Modifier().width(170), [&] { items(false); }); }, frame, [&] {
-                Box(Modifier().fillMaxSize().background(cs.surfaceContainer), Alignment::Center, [&] { Text(pages[page.get()]); });
+                Box(Modifier().fillMaxSize().background(cs.surfaceContainer), Alignment::Center) { Text(pages[page.get()]); };
             });
-            Box(frame, [&] {
+            Box(frame) {
                 DismissibleNavigationDrawer([&] { DismissibleDrawerSheet(Modifier().width(170), [&] { items(true); }); }, drawer, [&] {
-                    Column(Modifier().fillMaxSize().background(cs.surfaceContainer), [&] {
-                        Row(Modifier().fillMaxWidth(), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+                    Column(Modifier().fillMaxSize().background(cs.surfaceContainer)) {
+                        Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
                             IconButton([drawer, coroutines] {
                                 coroutines.launch([drawer]() -> Task { co_await (drawer.isOpen() ? drawer.close() : drawer.open()); });
                             }, [] { Icon(Icons::Filled::Menu, "Menü"); });
-                            Text(pages[page.get()], {.font = typography().titleMedium});
-                        });
+                            Text(pages[page.get()], style = typography().titleMedium);
+                        };
                         Text("Menüye dokunun ya da sağa sürükleyin: çekmece sayfayı iter.", Modifier().padding(16, 8),
-                             {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-                    });
+                             color = cs.onSurfaceVariant, style = typography().bodyMedium);
+                    };
                 });
-            });
+            };
         });
     });
 }
@@ -104,40 +104,39 @@ void ScrollbarSection(CallSite site) {
         Section("VerticalScrollbar · HorizontalScrollbar", [&] {
             Text("Başparmağı sürükleyin, raya tıklayınca bir sayfa kayar; fare üzerindeyken koyulaşır. Liste 1000 satır: "
                  "boyu görünen satırlardan tahmin edilir.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
             // BringIntoViewRequester: a paragraph and a box scrolled into view on the scrollables' spring.
             auto& paragraph = remember([] { return BringIntoViewRequester(); });
             auto& box = remember([] { return BringIntoViewRequester(); });
             CoroutineScope scope = rememberCoroutineScope();
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 OutlinedButton([scope, paragraph] { scope.launch([paragraph]() -> Task { co_await paragraph.bringIntoView(); }); },
                                [] { Text("Paragraf 25'i göster"); });
                 OutlinedButton([scope, box] { scope.launch([box]() -> Task { co_await box.bringIntoView(); }); }, [] { Text("18'i göster"); });
-            });
-            Row(Modifier().fillMaxWidth().height(200), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
-                Box(Modifier().weight(1).fillMaxHeight().background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12)), [&] {
-                    Column(Modifier().fillMaxSize().verticalScroll(column).padding(12, 8), [&] {
+            };
+            Row(Modifier().fillMaxWidth().height(200), horizontalArrangement = Arrangement::spacedBy(12)) {
+                Box(Modifier().weight(1).fillMaxHeight().background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12))) {
+                    Column(Modifier().fillMaxSize().verticalScroll(column).padding(12, 8)) {
                         for (int i = 1; i <= 30; ++i)
                             Text(std::format("Paragraf {}", i),
                                  (i == 25 ? Modifier().bringIntoViewRequester(paragraph) : Modifier()).padding(0, 4));
-                    });
+                    };
                     VerticalScrollbar(rememberScrollbarAdapter(column), Modifier().align(Alignment::CenterEnd).fillMaxHeight().padding(0, 4, 2, 4));
-                });
-                Box(Modifier().weight(1).fillMaxHeight().background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12)), [&] {
+                };
+                Box(Modifier().weight(1).fillMaxHeight().background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12))) {
                     LazyColumn(Modifier().fillMaxSize(), {.state = list}, [](LazyListScope& l) {
                         l.items(1000, [](int i) { Text(std::format("Satır {}", i + 1), Modifier().padding(12, 6)); });
                     });
                     VerticalScrollbar(rememberScrollbarAdapter(list), Modifier().align(Alignment::CenterEnd).fillMaxHeight().padding(0, 4, 2, 4));
-                });
-            });
-            Box(Modifier().fillMaxWidth().height(64).background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12)), [&] {
-                Row(Modifier().fillMaxSize().horizontalScroll(row).padding(8, 8, 8, 14), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+                };
+            };
+            Box(Modifier().fillMaxWidth().height(64).background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12))) {
+                Row(Modifier().fillMaxSize().horizontalScroll(row).padding(8, 8, 8, 14), horizontalArrangement = Arrangement::spacedBy(8)) {
                     for (int i = 1; i <= 24; ++i)
-                        Box((i == 18 ? Modifier().bringIntoViewRequester(box) : Modifier()).size(72, 40).background(hueColor(i * 900), 8),
-                            Alignment::Center, [i] { Text(std::to_string(i), {.color = colors::White}); });
-                });
+                        (Box)((i == 18 ? Modifier().bringIntoViewRequester(box) : Modifier()).size(72, 40).background(hueColor(i * 900), 8), Alignment::Center, [i] { Text(std::to_string(i), color = colors::White); });
+                };
                 HorizontalScrollbar(rememberScrollbarAdapter(row), Modifier().align(Alignment::BottomCenter).fillMaxWidth().padding(4, 0, 4, 2));
-            });
+            };
         });
     });
 }
@@ -168,13 +167,13 @@ void PredictiveBackSection(CallSite site) {
         Section("PredictiveBackHandler", [&] {
             Text("Paneli açın, sonra ekranın kenarından geri hareketini yapın: panel parmağı izler, bırakınca kapanır, "
                  "vazgeçince yerine döner (Android 14+). Panel kapalıyken geri hareketi uygulamadan çıkar.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically}, [&] {
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                 Button([open, last] { open.set(true), last.set("açık"); }, Modifier(), {.enabled = !open.get()}, [] { Text("Paneli aç"); });
                 Text(open.get() && progress.get() > 0 ? std::format("geri: %{:.0f} · {}", progress.get() * 100, fromRight.get() ? "sağdan" : "soldan")
                                                       : last.get(),
-                     {.font = typography().bodyMedium});
-            });
+                     style = typography().bodyMedium);
+            };
             AnimatedVisibility(open.get(), Modifier().fillMaxWidth(), fadeIn() + expandVertically(), fadeOut() + shrinkVertically(), [&] {
                 Box(Modifier()
                         .fillMaxWidth()
@@ -186,12 +185,12 @@ void PredictiveBackSection(CallSite site) {
                         })
                         .background(cs.primaryContainer, RoundedCornerShape(24))
                         .padding(20),
-                    Alignment::CenterStart, [&] {
-                        Column(Modifier(), {.verticalArrangement = Arrangement::spacedBy(6)}, [&] {
+                    Alignment::CenterStart) {
+                        Column(Modifier(), verticalArrangement = Arrangement::spacedBy(6)) {
                             Icon(Icons::AutoMirrored::Filled::ArrowBack, "", Modifier(), cs.onPrimaryContainer);
-                            Text("Geri hareketiyle kapatın", {.font = typography().titleMedium, .color = cs.onPrimaryContainer});
-                        });
-                    });
+                            Text("Geri hareketiyle kapatın", color = cs.onPrimaryContainer, style = typography().titleMedium);
+                        };
+                    };
             });
         });
     });
@@ -208,11 +207,11 @@ void PointerPassSection(CallSite site) {
         Section("PointerEventPass (Initial · Main · Final)", [&] {
             Text("Kilitliyken dış kutu basışı Initial geçişinde, içtekilerden önce tüketir: düğme tepki vermez. "
                  "Final geçişinde basışı bir şeyin alıp almadığını görür.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-            Row(Modifier(), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
+            Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
                 Switch(locked.get(), [locked](bool v) { locked.set(v); });
                 Text("Kilitli", Modifier().padding(12, 0, 0, 0));
-            });
+            };
             Box(Modifier().fillMaxWidth().height(96).background(cs.surfaceContainerHigh, 12)
                     .pointerInput(0, [locked, seen](PointerInputScope& scope) -> Task {
                         while (true) {
@@ -223,10 +222,10 @@ void PointerPassSection(CallSite site) {
                                 seen.set(e.change.isConsumed() ? "basış alındı (düğme ya da kilit)" : "basışı kimse almadı");
                         }
                     }),
-                Alignment::Center, [&] {
+                Alignment::Center) {
                     Button([clicks] { clicks.set(clicks.peek() + 1); }, [&] { Text(std::format("Bas ({})", clicks.get())); });
-                });
-            Text("Final: " + seen.get(), {.font = typography().bodySmall, .color = cs.primary});
+                };
+            Text("Final: " + seen.get(), color = cs.primary, style = typography().bodySmall);
         });
     });
 }
@@ -241,13 +240,12 @@ void ScrollableSection(CallSite site) {
         });
         Section("Modifier.scrollable · rotate · scale", [&] {
             Row(Modifier().fillMaxWidth().height(96).scrollable(knob, Orientation::Horizontal),
-                {.horizontalArrangement = Arrangement::spacedBy(24), .verticalAlignment = Alignment::CenterVertically}, [&] {
-                    Box(Modifier().size(72).rotate(angle.get() - 135).background(cs.secondaryContainer, CircleShape), Alignment::TopCenter,
-                        [&] { Box(Modifier().padding(0, 6, 0, 0).size(6, 18).background(cs.primary, 3)); });
-                    Box(Modifier().size(40).scale(0.5f + angle.get() / 270.f).background(cs.tertiary, 8));
-                    Text(std::format("{:.0f}°", angle.get()), {.font = typography().titleLarge});
-                });
-            Text("Satırı yana sürükleyin: düğme döner, kare büyür.", {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                horizontalArrangement = Arrangement::spacedBy(24), verticalAlignment = Alignment::CenterVertically) {
+                    Box(Modifier().size(72).rotate(angle.get() - 135).background(cs.secondaryContainer, CircleShape), Alignment::TopCenter) { Box(Modifier().padding(0, 6, 0, 0).size(6, 18).background(cs.primary, 3)) {}; };
+                    Box(Modifier().size(40).scale(0.5f + angle.get() / 270.f).background(cs.tertiary, 8)) {};
+                    Text(std::format("{:.0f}°", angle.get()), style = typography().titleLarge);
+                };
+            Text("Satırı yana sürükleyin: düğme döner, kare büyür.", color = cs.onSurfaceVariant, style = typography().bodyMedium);
             // scrollableArea: a ruler that draws itself from where it is scrolled to (0..100 cm,
             // 4 dp a millimetre), clipped, stretching past its ends.
             auto rulerAt = remember([] { return mutableFloatStateOf(0); });
@@ -267,7 +265,7 @@ void ScrollableSection(CallSite site) {
                        }
                    });
             Text("Modifier.scrollableArea: cetvel kendini kaydırıldığı yerden çizer; kırpılır, uçlarında esner.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
         });
     });
 }
@@ -309,11 +307,11 @@ void OverscrollSection(CallSite site) {
         auto& offset = remember([] { return std::shared_ptr<OverscrollEffect>(std::make_shared<OffsetOverscroll>()); });
         Section("OverscrollEffect · rememberOverscrollEffect", [&] {
             auto row = [&](const char* title, std::optional<std::shared_ptr<OverscrollEffect>> effect) {
-                Text(title, {.font = typography().labelLarge});
+                Text(title, style = typography().labelLarge);
                 LazyRow(Modifier().fillMaxWidth().height(48).background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12)),
                         {.contentPadding = {6, 6, 6, 6}, .spacing = 6, .overscrollEffect = effect}, [tile = cs.secondaryContainer](LazyListScope& l) {
                             l.items(12, [tile](int i) {
-                                Box(Modifier().size(48, 36).background(tile, 8), Alignment::Center, [i] { Text(std::to_string(i + 1)); });
+                                (Box)(Modifier().size(48, 36).background(tile, 8), Alignment::Center, [i] { Text(std::to_string(i + 1)); });
                             });
                         });
             };
@@ -321,7 +319,7 @@ void OverscrollSection(CallSite site) {
             row("Kayma (kendi efektimiz)", offset);
             row("Yok (nullptr)", nullptr);
             Text("Satırları uçlarından öteye çekin: Android 12'nin esnemesi; içeriğin parmağın onda biri kadar kaydığı kendi efektimiz; hiçbiri.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
         });
     });
 }
@@ -350,18 +348,18 @@ void BringIntoViewSection(CallSite site) {
                                         })
                                         .focusable()
                                         .background(current ? on : off, 12),
-                                    Alignment::Center, [=] { Text(std::format("Kart {}", i + 1), {.color = current ? onText : offText}); });
+                                    Alignment::Center) { Text(std::format("Kart {}", i + 1), color = current ? onText : offText); };
                             });
                         });
             });
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                 OutlinedButton([reqs = requesters, focused] { reqs[size_t(std::max(0, focused.peek() - 1))].requestFocus(); }, [] { Text("‹ Önceki"); });
                 Button([reqs = requesters, focused] { reqs[size_t(std::min(19, focused.peek() + 1))].requestFocus(); }, [] { Text("Sonraki ›"); });
                 Switch(pinned.get(), [pinned](bool v) { pinned.set(v); });
-                Text("Üçte birde", Modifier().weight(1), {.font = typography().bodyMedium});
-            });
+                Text("Üçte birde", Modifier().weight(1), style = typography().bodyMedium);
+            };
             Text("Odak (Sonraki/Önceki, Tab ya da ok tuşları) kartı satırın üçte birine getirir; anahtar kapalıyken varsayılan: yalnızca görünecek kadar.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
         });
     });
 }
@@ -380,28 +378,27 @@ void NestedScrollSection(CallSite site) {
         auto searchScroll = SearchBarDefaults::enterAlwaysSearchBarScrollBehavior();
         auto mailSearch = rememberSearchBarState();
         auto mailQuery = rememberTextFieldState();
-        auto caption = [&](const char* text) { Text(text, {.font = typography().bodyMedium, .color = cs.onSurfaceVariant}); };
+        auto caption = [&](const char* text) { Text(text, color = cs.onSurfaceVariant, style = typography().bodyMedium); };
         Section("İç içe kaydırma (nestedScroll)", [&] {
             caption("İçteki liste sonuna gelince sayfa kaymaya devam eder:");
-            Column(Modifier().fillMaxWidth().height(150).background(cs.surfaceContainerHighest, 12).verticalScroll(inner).padding(16, 6),
-                   [&] {
+            Column(Modifier().fillMaxWidth().height(150).background(cs.surfaceContainerHighest, 12).verticalScroll(inner).padding(16, 6)) {
                        for (int i = 1; i <= 12; ++i) Text(std::format("İç satır {}", i), Modifier().padding(0, 6));
-                   });
+                   };
             caption("Sayfadaki satır sona gelince pager sayfayı çevirir:");
             HorizontalPager(pager, Modifier().fillMaxWidth().height(72), [](int page) {
                 LazyRow(Modifier().fillMaxSize(), {.spacing = 8}, [page](LazyListScope& row) {
                     row.items(8, [page](int i) {
-                        Box(Modifier().size(72).background(hueColor(page * 2300 + i * 140), 16), Alignment::Center, [&] {
-                            Text(std::format("{}·{}", page + 1, i + 1), {.fontWeight = FontWeight::Bold, .color = colors::White});
-                        });
+                        Box(Modifier().size(72).background(hueColor(page * 2300 + i * 140), 16), Alignment::Center) {
+                            Text(std::format("{}·{}", page + 1, i + 1), fontWeight = FontWeight::Bold, color = colors::White);
+                        };
                     });
                 });
             }, {.pageSpacing = 16});
             caption("VerticalPager (son sayfadan sonra sayfa kayar):");
             VerticalPager(vertical, Modifier().fillMaxWidth().height(96).clip(RoundedCornerShape(16)), [](int page) {
-                Box(Modifier().fillMaxSize().background(hueColor(page * 1500 + 200)), Alignment::Center, [&] {
-                    Text(std::format("Dikey sayfa {}", page + 1), {.fontSize = 20, .fontWeight = FontWeight::Bold, .color = colors::White});
-                });
+                Box(Modifier().fillMaxSize().background(hueColor(page * 1500 + 200)), Alignment::Center) {
+                    Text(std::format("Dikey sayfa {}", page + 1), fontSize = 20, fontWeight = FontWeight::Bold, color = colors::White);
+                };
             });
             caption("TopAppBar: kendi renkleri, 56 dp yükseklik, windowInsets yok (sayfanın ortasında):");
             TopAppBar({.title = [] { Text("Renkli çubuk"); },
@@ -431,7 +428,7 @@ void NestedScrollSection(CallSite site) {
                        .windowInsets = WindowInsets{}},
                       Modifier().clip(RoundedCornerShape(16)));
             caption("AppBarColumn: 150 dp yükseklikte iki eylem ve ⋮ (bir ray ya da dikey araç çubuğu için).");
-            Box(Modifier().height(150).background(cs.surfaceContainerHigh, 16), [] {
+            (Box)(Modifier().height(150).background(cs.surfaceContainerHigh, 16), [] {
                 AppBarColumn([](AppBarScope& s) {
                     s.clickableItem([] {}, [] { Icon(Icons::Filled::Home, "Ana sayfa"); }, "Ana sayfa");
                     s.clickableItem([] {}, [] { Icon(Icons::Filled::Search, "Ara"); }, "Ara");
@@ -449,7 +446,7 @@ void NestedScrollSection(CallSite site) {
                                      .titleHorizontalAlignment = Alignment::CenterHorizontally},
                                     Modifier().clip(RoundedCornerShape(16)));
             caption("LargeTopAppBar + exitUntilCollapsed (alt başlıklı): önce başlık küçülür, sonra liste kayar.");
-            Box(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16)), [&] {
+            Box(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16))) {
                 CompositionLocalProvider({LocalSystemInsets.provides(SystemInsets{})}, [&] {  // not at the window's edge
                     Scaffold(Modifier().fillMaxSize().nestedScroll(appBar.nestedScrollConnection),
                              {.topBar = [&] {
@@ -472,16 +469,16 @@ void NestedScrollSection(CallSite site) {
                                  });
                              });
                 });
-            });
+            };
             caption("TwoRowsTopAppBar: başlık iki satırda da kendi biçimini seçer — açıkken büyük ve iki satır, kapanınca kısa.");
-            Box(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16)), [&] {
+            Box(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16))) {
                 CompositionLocalProvider({LocalSystemInsets.provides(SystemInsets{})}, [&] {  // not at the window's edge
                     Scaffold(Modifier().fillMaxSize().nestedScroll(twoRows.nestedScrollConnection),
                              {.topBar = [&] {
                                   TwoRowsTopAppBar(
                                       [](bool expanded) {
-                                          if (expanded) Text("Haftalık\nözet", {.font = typography().headlineMedium, .fontWeight = FontWeight::Bold});
-                                          else Text("Özet", {.font = typography().titleLarge});
+                                          if (expanded) Text("Haftalık\nözet", fontWeight = FontWeight::Bold, style = typography().headlineMedium);
+                                          else Text("Özet", style = typography().titleLarge);
                                       },
                                       {.navigationIcon = [] { IconButton([] {}, [] { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); }); },
                                        .actions = [] { IconButton([] {}, [] { Icon(Icons::Filled::DateRange, "Tarih"); }); },
@@ -491,7 +488,7 @@ void NestedScrollSection(CallSite site) {
                                       Modifier(),
                                       [&](bool expanded) {
                                           Text(expanded ? "6–12 Ekim · 14 etkinlik" : "6–12 Ekim",
-                                               {.font = expanded ? typography().titleMedium : typography().labelMedium, .color = cs.onSurfaceVariant});
+                                               color = cs.onSurfaceVariant, style = expanded ? typography().titleMedium : typography().labelMedium);
                                       });
                               },
                               .containerColor = cs.surfaceContainerLow},
@@ -506,9 +503,9 @@ void NestedScrollSection(CallSite site) {
                                  });
                              });
                 });
-            });
+            };
             caption("FlexibleBottomAppBar + exitAlways: liste ilerledikçe alt çubuk aşağı kayıp gider, geri kaydırınca döner.");
-            Box(Modifier().fillMaxWidth().height(300).clip(RoundedCornerShape(16)), [&] {
+            Box(Modifier().fillMaxWidth().height(300).clip(RoundedCornerShape(16))) {
                 Scaffold(Modifier().fillMaxSize().nestedScroll(bottomBar.nestedScrollConnection),
                          {.bottomBar = [&] {
                               FlexibleBottomAppBar(Modifier(), [] {
@@ -526,14 +523,14 @@ void NestedScrollSection(CallSite site) {
                                  });
                              });
                          });
-            });
+            };
             caption("AppBarWithSearch + enterAlways: liste ilerledikçe arama çubuğu yukarı kayar, geri kaydırınca önce o gelir; dokununca "
                     "tam ekran arama açılır.");
             auto mailField = [&] {
                 SearchBarDefaults::InputField(mailSearch, mailQuery,
                                               {.placeholder = "Postalarda ara", .leadingIcon = [] { Icon(Icons::Filled::Search, "Ara"); }});
             };
-            Box(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16)), [&] {
+            Box(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16))) {
                 CompositionLocalProvider({LocalSystemInsets.provides(SystemInsets{})}, [&] {  // not at the window's edge
                     Scaffold(Modifier().fillMaxSize().nestedScroll(searchScroll.nestedScrollConnection),
                              {.topBar = [&] {
@@ -553,7 +550,7 @@ void NestedScrollSection(CallSite site) {
                                  });
                              });
                 });
-            });
+            };
             ExpandedFullScreenSearchBar(mailSearch, mailField, [&] {
                 std::string typed = mailQuery.text();
                 for (int i = 1; i <= 30; ++i) {
@@ -587,17 +584,16 @@ void PullToRefreshSection(CallSite site) {
         };
         Section("Modifier.pullToRefresh · IndicatorBox", [&] {
             Text("Listeyi en üstteyken aşağı çekin: eşikten sonra gösterge yavaşlar, eşiği geçip bırakınca yenilenir.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8}, [&] {
                 FilterChip(enabled.get(), [enabled] { enabled.set(!enabled.peek()); }, [] { Text("Açık (enabled)"); });
                 FilterChip(custom.get(), [custom] { custom.set(!custom.peek()); }, [] { Text("Kendi göstergemiz"); });
             });
             Text(std::format("{} kez yenilendi · distanceFraction {:.2f}", refreshes.get(), state.distanceFraction()),
-                 {.font = typography().bodySmall, .color = cs.primary});
+                 color = cs.primary, style = typography().bodySmall);
             int round = refreshes.get();
             Box(Modifier().fillMaxWidth().height(260).clip(RoundedCornerShape(16)).background(cs.surfaceContainerHighest)
-                    .pullToRefresh(refreshing.get(), state, refresh, enabled.get()),
-                [&] {
+                    .pullToRefresh(refreshing.get(), state, refresh, enabled.get())) {
                     LazyColumn(Modifier().fillMaxSize(), {.contentPadding = {16, 8, 16, 8}}, [round](LazyListScope& list) {
                         list.items(20, [round](int i) {
                             Text(std::format("Haber {} (tur {})", i + 1, round + 1), Modifier().padding(0, 10));
@@ -616,7 +612,7 @@ void PullToRefreshSection(CallSite site) {
                     } else {
                         PullToRefreshDefaults::Indicator(state, refreshing.get(), Modifier().align(Alignment::TopCenter));
                     }
-                });
+                };
         });
     });
 }

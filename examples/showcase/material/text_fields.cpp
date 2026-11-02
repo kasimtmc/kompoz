@@ -56,7 +56,7 @@ void TextFieldsSection(CallSite site) {
                            focus.clearFocus();
                        }}});
             if (!searched.get().empty())
-                Text("Arandı: " + searched.get(), {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                Text("Arandı: " + searched.get(), color = cs.onSurfaceVariant, style = typography().bodyMedium);
             // Its own colors (TextFieldColors) and shape: tertiary, the selection too, round
             // without the indicator line (a common Compose look).
             TextField(motto.get(), [motto](std::string v) { motto.set(std::move(v)); }, Modifier().fillMaxWidth(),
@@ -84,7 +84,7 @@ void TextFieldsSection(CallSite site) {
                                .enabled = false,
                                .labelPosition = TextFieldLabelPosition::Above()});
             // Prefix and suffix: shown once the label floats; digits only.
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 auto digits = [](MutableState<std::string> to) {
                     return [to](std::string v) {
                         std::erase_if(v, [](char c) { return c < '0' || c > '9'; });
@@ -99,7 +99,7 @@ void TextFieldsSection(CallSite site) {
                                   {.singleLine = true, .placeholder = "0", .label = "Ağırlık", .suffix = "kg",
                                    .keyboardOptions = {.keyboardType = KeyboardType::Number},
                                    .labelPosition = TextFieldLabelPosition::Attached(true)});
-            });
+            };
             // A TextFieldState with an InputTransformation: what is typed comes in as
             // capitals and stops at 10 characters; the state keeps the selection too.
             std::string plateText = plate.text();
@@ -110,12 +110,12 @@ void TextFieldsSection(CallSite site) {
                               {.singleLine = true, .label = "Plaka (büyük harf, en çok 10)",
                                .supportingText = std::format("{} / 10 · seçim {}–{}", plateChars, plateSelection.start, plateSelection.end),
                                .inputTransformation = InputTransformation::allCaps("tr").then(InputTransformation::maxLength(10))});
-            Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 TextButton([plate] { plate.edit([](TextFieldBuffer& b) { b.selectAll(); }); }, [] { Text("Tümünü seç"); });
                 TextButton([plate] { plate.edit([](TextFieldBuffer& b) { b.placeCursorBeforeCharAt(0); }); },
                            [] { Text("İmleci başa al"); });
                 TextButton([plate] { plate.clearText(); }, [] { Text("Temizle"); });
-            });
+            };
             // OutputTransformation: the state keeps the digits, the field shows them in
             // groups (the caret and taps step over the spaces); digits only, at most 10.
             OutlinedTextField(phoneNumber, Modifier().fillMaxWidth(),
@@ -139,28 +139,28 @@ void TextFieldsSection(CallSite site) {
                                .supportingText = std::format("{} karakter · rememberTextFieldState", noteChars),
                                .keyboardOptions = {.capitalization = KeyboardCapitalization::Sentences}});
             // Its undo history: a word at a time (Ctrl+Z / Ctrl+Shift+Z on a keyboard too).
-            Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 UndoState undo = notes.undoState();
                 TextButton([undo] { undo.undo(); }, Modifier(), {.enabled = undo.canUndo()}, [] { Text("Geri al"); });
                 TextButton([undo] { undo.redo(); }, Modifier(), {.enabled = undo.canRedo()}, [] { Text("Yinele"); });
-            });
+            };
             // BasicTextField's decorator (Compose's decorationBox): its own look around the text — a
             // rounded box with an icon and a clear button; a tap anywhere on it types into the field.
             BasicTextField(tagQuery, Modifier().fillMaxWidth(),
                            {.lineLimits = TextFieldLineLimits::SingleLine, .placeholder = "Etiket ara (decorator)",
                             .decorator = [&](const Content& innerTextField) {
                                 Row(Modifier().fillMaxWidth().heightIn(48).background(cs.surfaceContainerHigh, CircleShape).padding(16, 4, 4, 4),
-                                    {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically}, [&] {
+                                    horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                                         Icon(Icons::Filled::Search, "", {}, cs.onSurfaceVariant);
-                                        Box(Modifier().weight(1), innerTextField);
+                                        Box(Modifier().weight(1)) { innerTextField(); };
                                         if (!tagQuery.text().empty())
                                             IconButton([tagQuery] { tagQuery.clearText(); }, [] { Icon(Icons::Filled::Close, "Temizle"); });
-                                    });
+                                    };
                             }});
-            Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 FilledTonalButton([emailFocus] { emailFocus.requestFocus(); }, [] { Text("E-postaya odaklan"); });
                 OutlinedButton([focus] { focus.clearFocus(); }, [] { Text("Odağı temizle"); });
-            });
+            };
             FocusPropertiesDemo();
         });
     });

@@ -5,8 +5,7 @@
 void MaterialScreen(Modifier modifier, MutableState<ColorSource> colorSource, NavController nav, CallSite site) {
     composable(site, modifier, colorSource, nav, [=] {
         auto scroll = rememberScrollState();
-        Column(modifier.verticalScroll(scroll).padding(20, 8, 20, 20), {.verticalArrangement = Arrangement::spacedBy(16)},
-               [&] {
+        Column(modifier.verticalScroll(scroll).padding(20, 8, 20, 20), verticalArrangement = Arrangement::spacedBy(16)) {
                    SearchSection();
                    TooltipSection();
                    DropdownSection();
@@ -34,6 +33,6 @@ void MaterialScreen(Modifier modifier, MutableState<ColorSource> colorSource, Na
                    WideNavigationRailSection();
                    FloatingToolbarsSection();
                    CardsSection();
-               });
+               };
     });
 }

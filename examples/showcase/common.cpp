@@ -27,10 +27,10 @@ Color hueColor(int i) {
 void Section(const char* title, const Content& content, CallSite site) {
     ComposableScope scope(site);
     Card(Modifier().fillMaxWidth(), [&] {
-        Column(Modifier().padding(16), {.verticalArrangement = Arrangement::spacedBy(12)}, [&] {
-            Text(title, {.font = typography().titleMedium});
+        Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(12)) {
+            Text(title, style = typography().titleMedium);
             content();
-        });
+        };
     });
 }
 
@@ -40,10 +40,10 @@ void DesktopNote(const char* text, CallSite site) {
 #ifdef __ANDROID__
     const ColorScheme& cs = colorScheme();
     Row(Modifier().fillMaxWidth().background(cs.tertiaryContainer, 12).padding(12, 8),
-        {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically}, [&] {
+        horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
             Icon(Icons::Filled::Info, "Uyarı", Modifier().size(18), cs.onTertiaryContainer);
-            Text(text, Modifier().weight(1), {.font = typography().bodySmall, .color = cs.onTertiaryContainer});
-        });
+            Text(text, Modifier().weight(1), color = cs.onTertiaryContainer, style = typography().bodySmall);
+        };
 #else
     (void)text;
 #endif

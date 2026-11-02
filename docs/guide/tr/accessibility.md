@@ -38,7 +38,7 @@ Metin etiketi de olan bir butonun içindeki ikon onu tekrarlamamalıdır: ikona 
 | `traversalIndex` | Kardeşler arasındaki okuma sırası, küçük olan önce. |
 
 ```cpp body
-Text("Settings", Modifier().semantics({.heading = true}), {.font = typography().headlineSmall});
+Text("Settings", Modifier().semantics({.heading = true}), style = typography().headlineSmall);
 ```
 
 `Modifier().semantics("description")`, yalnızca bir içerik açıklaması için kısa yoldur.
@@ -48,21 +48,21 @@ Text("Settings", Modifier().semantics({.heading = true}), {.font = typography().
 Bir ekran okuyucu öğeden öğeye geçer. Bir ikon ve iki metinden oluşan bir satır üç değil, birlikte okunan tek bir öğe olmalıdır. Tıklanabilirler içeriklerini zaten birleştirir; diğer gruplar için `mergeDescendants`'ı ayarlayın:
 
 ```cpp body
-Row(Modifier().semantics({.mergeDescendants = true}).padding(16), [&] {
+Row(Modifier().semantics({.mergeDescendants = true}).padding(16)) {
     Icon(Icons::Filled::Person, "");
-    Column([&] {
+    Column() {
         Text("Ada Lovelace");
         Text("Online");
-    });
-});   // "Ada Lovelace, Online" olarak okunur
+    };
+};   // "Ada Lovelace, Online" olarak okunur
 ```
 
 `Modifier().clearAndSetSemantics({…})` içindekileri sizin belirlediğinizle değiştirir: beş yıldız olarak çizilen bir puan "Puan: 5'te 4" olur. `Modifier().hideFromAccessibility()` bir düğümü ve içindekileri gizler.
 
 ```cpp body
-Row(Modifier().clearAndSetSemantics({.contentDescription = "Rating: 4 of 5"}), [&] {
+Row(Modifier().clearAndSetSemantics({.contentDescription = "Rating: 4 of 5"})) {
     for (int i = 0; i < 5; ++i) Icon(i < 4 ? Icons::Filled::Star : Icons::Filled::FavoriteBorder, "");
-});
+};
 ```
 
 ## Özel kontroller
@@ -83,10 +83,10 @@ Tek bir kontrol gibi davranan bir satırda modifier'ı satıra koyun ve içindek
 void WifiRow() {
     auto on = remember([] { return mutableStateOf(true); });
     Row(Modifier().fillMaxWidth().toggleable(on.get(), [on](bool v) { on.set(v); }, SemanticsRole::Switch).padding(16),
-        {.verticalAlignment = Alignment::CenterVertically}, [&] {
+        verticalAlignment = Alignment::CenterVertically) {
             Text("Wi-Fi", Modifier().weight(1));
             Switch(on.get(), {});
-        });
+        };
 }
 ```
 
@@ -99,7 +99,7 @@ Kaydırarak silme, uzun basma menüleri ve sürükleme tutamaçlarını bir ekra
 ```cpp body
 #! std::function<void()> archive, deleteItem;
 Box(Modifier().semantics({.customActions = {{"Archive", [archive] { archive(); return true; }},
-                                            {"Delete", [deleteItem] { deleteItem(); return true; }}}}));
+                                            {"Delete", [deleteItem] { deleteItem(); return true; }}}})) {};
 ```
 
 ### Bir aralıktaki değerler
@@ -110,7 +110,7 @@ Box(Modifier().semantics({.customActions = {{"Archive", [archive] { archive(); r
 #! auto level = mutableStateOf(0.5f);
 Box(Modifier().semantics({.contentDescription = "Brightness", .role = SemanticsRole::Slider,
                           .progressBarRangeInfo = ProgressBarRangeInfo{level.get(), 0, 1},
-                          .setProgress = [level](float v) { level.set(v); return true; }}));
+                          .setProgress = [level](float v) { level.set(v); return true; }})) {};
 ```
 
 ## Değişiklikleri seslendirmek

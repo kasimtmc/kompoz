@@ -12,10 +12,10 @@ using namespace kompoz::testing;
 
 void Counter() {
     auto count = remember([] { return mutableStateOf(0); });
-    Column([&] {
+    Column() {
         Text("Count: " + std::to_string(count.get()));
         Button([count] { count.set(count.get() + 1); }, [] { Text("Add"); });
-    });
+    };
 }
 
 void counterIncrements() {

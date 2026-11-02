@@ -57,7 +57,7 @@ A policy sees its children in order. To tell them apart by role, tag them with `
 void LabeledValue(const std::string& label, const std::string& value) {
     Layout(Modifier().fillMaxWidth(), [&] {
         Text(label, Modifier().layoutId("label"));
-        Text(value, Modifier().layoutId("value"), {.fontWeight = FontWeight::Bold});
+        Text(value, Modifier().layoutId("value"), fontWeight = FontWeight::Bold);
     }, [](const std::vector<Measurable>& children, const Constraints& c) {
         float height = 0;
         for (const Measurable& child : children) {
@@ -98,11 +98,11 @@ Layout measures each child once, so a parent can't measure a child twice to find
 The typical use is making siblings as tall as the tallest one:
 
 ```cpp body
-Row(Modifier().height(IntrinsicSize::Min), [&] {
+Row(Modifier().height(IntrinsicSize::Min)) {
     Text("A short label", Modifier().weight(1));
     VerticalDivider(Modifier().fillMaxHeight());   // as tall as the taller text
     Text("A label that wraps onto more than one line", Modifier().weight(1));
-});
+};
 ```
 
 `height(IntrinsicSize::Min)` and `width(IntrinsicSize::Min)` (or `Max`) size the node to its content's intrinsic size, and children that fill it then fill that.
@@ -126,7 +126,7 @@ void Underlined(const Content& content) {
         }
         // Composed with the width it has to match; composed again when that changes.
         for (const Measurable& m : s.subcompose(std::string("line"), width, [width] {
-                 Box(Modifier().size(width, 2).background(colorScheme().primary));
+                 Box(Modifier().size(width, 2).background(colorScheme().primary)) {};
              })) {
             Placeable line = m.measure(c.loosen());
             line.place(0, height);

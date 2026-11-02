@@ -25,8 +25,7 @@ void DrawingSection(CallSite site) {
 
         Section("Çizim ve hareket", [&] {
             Row(Modifier().fillMaxWidth(),
-                {.horizontalArrangement = Arrangement::spacedBy(16), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+                horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                     // A donut chart: pie slices (filled arcs) with a hole on top.
                     Canvas(Modifier().size(96), [hole = cs.surfaceContainer, primary = cs.primary](DrawScope& d) {
                         const float parts[] = {0.45f, 0.30f, 0.25f};
@@ -61,7 +60,7 @@ void DrawingSection(CallSite site) {
                                d.drawPath(curve, line, 1, Stroke(3, 4, StrokeCap::Round, StrokeJoin::Round));
                                d.drawText("sin(x)", {10, 6}, Font{11}, axis);
                            });
-                });
+                };
             // PathEffect (dashes, rounded corners), drawPoints, and a wave drawn bit by bit through
             // PathMeasure (getSegment up to a share of its length, getPosition for its tip).
             // (The phases are read while drawing: the Canvas is drawn again, nothing composed again.)
@@ -139,7 +138,7 @@ void DrawingSection(CallSite site) {
                             d.drawText(names[i], {cell * float(i) + 8, 72}, Font{11}, o);
                         }
                     });
-                }));
+                })) {};
             // Path.addArc slices of a pie, drawOval, a gradient clipped to a star (clipPath: any path,
             // its edge smooth) and withTransform (moved, then turned).
             Canvas(Modifier().fillMaxWidth().height(96).background(cs.surfaceContainerHigh, 12),
@@ -173,16 +172,15 @@ void DrawingSection(CallSite site) {
                    });
             // Brushes: sweep, radial and linear gradients; a star Path built once per size.
             Row(Modifier().fillMaxWidth(),
-                {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+                horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                     Box(Modifier().size(56).background(
                         Brush::sweepGradient({Color::hex(0xF44336), Color::hex(0xFFEB3B), Color::hex(0x4CAF50),
                                               Color::hex(0x00BCD4), Color::hex(0x3F51B5), Color::hex(0xE91E63),
                                               Color::hex(0xF44336)}),
-                        CircleShape));
+                        CircleShape)) {};
                     Box(Modifier().size(56).background(
                         Brush::radialGradient({Color::hex(0xFFF59D), Color::hex(0xFFB300), Color::hex(0xFFB300, 0)}),
-                        CircleShape));
+                        CircleShape)) {};
                     Box(Modifier().size(56).drawWithCache([](CacheDrawScope& cache) {
                         Size s = cache.size();
                         Path star;
@@ -201,15 +199,14 @@ void DrawingSection(CallSite site) {
                             d.drawPath(star, fill);
                             d.drawPath(star, Color::hex(0xBF360C), 1, Stroke(2, 4, StrokeCap::Round, StrokeJoin::Round));
                         });
-                    }));
-                    Box(Modifier().weight(1).height(56).background(
+                    })) {};
+                    (Box)(Modifier().weight(1).height(56).background(
                             Brush::horizontalGradient({Color::hex(0x6750A4), Color::hex(0x7D5260)}), RoundedCornerShape(16)),
                         Alignment::Center,
-                        [] { Text("Brush · Path", {.font = typography().titleMedium, .color = colors::White}); });
-                });
+                        [] { Text("Brush · Path", color = colors::White, style = typography().titleMedium); });
+                };
             Row(Modifier().fillMaxWidth(),
-                {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+                horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                     // Rotated while drawing: the angle never recomposes this section.
                     Icon(Icons::Filled::Settings, "Dönen çark",
                          Modifier()
@@ -220,13 +217,13 @@ void DrawingSection(CallSite site) {
                     OutlinedButton([spinning] { spinning.set(!spinning.get()); }, Modifier(), {},
                                    [&] { Text(spinning.get() ? "Durdur" : "Döndür"); });
                     Button([starShown] { starShown.set(!starShown.get()); }, [] { Text("scaleIn"); });
-                    Box(Modifier().size(40), Alignment::Center, [&] {
+                    Box(Modifier().size(40), Alignment::Center) {
                         AnimatedVisibility(starShown.get(), Modifier(), scaleIn() + fadeIn(), scaleOut() + fadeOut(),
                                            [&] { Icon(Icons::Filled::Star, "Yıldız", Modifier().size(40), cs.error); });
-                    });
-                });
+                    };
+                };
             // Corners of their own (topStart, topEnd, bottomEnd, bottomStart): mirrored right to left.
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12)) {
                 struct Look {
                     const char* label;
                     Shape shape;
@@ -235,8 +232,8 @@ void DrawingSection(CallSite site) {
                                          Look{"Yaprak", RoundedCornerShape(24, 0, 24, 0)},
                                          Look{"Hap ucu", RoundedCornerShape(CornerPercent(50), {6}, {6}, CornerPercent(50))}})
                     Box(Modifier().weight(1).height(48).background(cs.tertiaryContainer, look.shape).border(1, cs.tertiary, look.shape),
-                        Alignment::Center, [&] { Text(look.label, {.font = typography().labelLarge, .color = cs.onTertiaryContainer}); });
-            });
+                        Alignment::Center) { Text(look.label, color = cs.onTertiaryContainer, style = typography().labelLarge); };
+            };
             // Drag the ball: Modifier.draggable2D (from the press: startDragImmediately) moving an
             // offset { } (layout only, no recomposition).
             auto ballDrag = rememberDraggable2DState([ball, padWidth](Offset amount) {
@@ -255,17 +252,16 @@ void DrawingSection(CallSite site) {
                         *padWidth = d.size().width;
                         for (float y = 12; y < d.size().height; y += 24)
                             for (float x = 12; x < d.size().width; x += 24) d.drawCircle(dot, 1.5f, Offset{x, y});
-                    }),
-                [&] {
+                    })) {
                     Text("Sürükle", Modifier().align(Alignment::TopEnd).padding(12),
-                         {.fontSize = 12, .color = cs.onSurfaceVariant});
+                         fontSize = 12, color = cs.onSurfaceVariant);
                     Box(Modifier()
                             .offset([ball] { return ball.get(); })
                             .size(56)
                             .shadow(4, 28)
                             .background(cs.primary, CircleShape)
                             .draggable2D(ballDrag, {.startDragImmediately = true}),
-                        Alignment::Center, [&] { Icon(Icons::Filled::Place, "Top", {}, cs.onPrimary); });
+                        Alignment::Center) { Icon(Icons::Filled::Place, "Top", {}, cs.onPrimary); };
                     // detectDragGesturesAfterLongPress: the card moves only once held (and grows while it is).
                     auto card = remember([] { return mutableStateOf(Offset{160, 90}); });
                     auto held = remember([] { return mutableStateOf(false); });
@@ -288,8 +284,8 @@ void DrawingSection(CallSite site) {
                                     .onDragCancel = [held] { held.set(false); },
                                 });
                             }),
-                        Alignment::Center, [&] { Text("Uzun bas", {.font = typography().labelMedium, .color = cs.onTertiaryContainer}); });
-                });
+                        Alignment::Center) { Text("Uzun bas", color = cs.onTertiaryContainer, style = typography().labelMedium); };
+                };
             // Modifier.scrollable2D: a 900 x 600 grid panned both ways at once, flung and wheeled.
             auto pan = remember([] { return mutableStateOf(Offset{}); });
             auto panState = rememberScrollable2DState([pan, padWidth](Offset d) {
@@ -313,16 +309,15 @@ void DrawingSection(CallSite site) {
                                 d.drawRoundRect(hueColor(row * 15 + col), at, Size{52, 52}, CornerRadius(10));
                             }
                     }),
-                Alignment::TopEnd, [&] {
+                Alignment::TopEnd) {
                     Text("scrollable2D: iki yöne kaydır", Modifier().padding(8).background(cs.surface.copy(0.8f), 8).padding(6, 2),
-                         {.fontSize = 12, .color = cs.onSurface});
-                });
+                         fontSize = 12, color = cs.onSurface);
+                };
             // rememberGraphicsLayer: the card recorded once a frame, drawn as it is and again upside
             // down, faded (a reflection); "Yakala" turns the recording into pixels (toImageBitmap).
             auto layer = rememberGraphicsLayer();
             auto shot = remember([] { return mutableStateOf(ImageBitmap{}); });
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                     Box(Modifier().size(150, 110).drawWithContent([layer](ContentDrawScope& d) {
                             d.record(layer, [&](DrawScope&) { d.drawContent(); }, Size{150, 55});
                             d.drawLayer(layer);
@@ -332,17 +327,16 @@ void DrawingSection(CallSite site) {
                             p.alpha = 0.35f;
                             d.drawLayer(layer);
                             p = {};
-                        }),
-                        [&] {
+                        })) {
                             Box(Modifier().size(150, 55).background(Brush::horizontalGradient(std::vector<Color>{cs.primary, cs.tertiary}), RoundedCornerShape(12)),
-                                Alignment::Center, [&] { Text("GraphicsLayer", {.font = typography().titleMedium, .color = cs.onPrimary}); });
-                        });
-                    Column(Modifier(), {.verticalArrangement = Arrangement::spacedBy(8)}, [&] {
+                                Alignment::Center) { Text("GraphicsLayer", color = cs.onPrimary, style = typography().titleMedium); };
+                        };
+                    Column(Modifier(), verticalArrangement = Arrangement::spacedBy(8)) {
                         FilledTonalButton([layer, shot] { shot.set(layer.toImageBitmap()); }, [] { Text("Yakala"); });
                         if (!shot.get().empty())
                             Image(shot.get(), "Yakalanan kart", Modifier().size(120, 44).border(1, cs.outline), ContentScale::Fit);
-                    });
-                });
+                    };
+                };
             // Taps: detectTapGestures with the press point drawn by drawBehind.
             Box(Modifier()
                     .fillMaxWidth()
@@ -366,8 +360,7 @@ void DrawingSection(CallSite site) {
                                                      .onLongPress = [gesture](Offset) { gesture.set("Uzun basıldı"); },
                                                  });
                                   }),
-                Alignment::Center,
-                [&] { Text(gesture.get(), {.font = typography().bodyLarge, .color = cs.onSecondaryContainer}); });
+                Alignment::Center) { Text(gesture.get(), color = cs.onSecondaryContainer, style = typography().bodyLarge); };
             // combinedClickable: click, double click and long click on one surface.
             std::array<int, 3> n = clicks.get();
             Row(Modifier()
@@ -377,16 +370,15 @@ void DrawingSection(CallSite site) {
                                        [clicks] { clicks.update([](auto& c) { ++c[1]; }); },
                                        [clicks] { clicks.update([](auto& c) { ++c[2]; }); })
                     .padding(16),
-                {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+                horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                     Icon(Icons::Filled::Info, "combinedClickable", {}, cs.primary);
-                    Column(Modifier().weight(1), {.verticalArrangement = Arrangement::spacedBy(2)}, [&] {
-                        Text("combinedClickable", {.font = typography().titleMedium});
+                    Column(Modifier().weight(1), verticalArrangement = Arrangement::spacedBy(2)) {
+                        Text("combinedClickable", style = typography().titleMedium);
                         Text("Tık: " + std::to_string(n[0]) + " · Uzun: " + std::to_string(n[1]) +
                                  " · Çift: " + std::to_string(n[2]),
-                             {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-                    });
-                });
+                             color = cs.onSurfaceVariant, style = typography().bodyMedium);
+                    };
+                };
         });
     });
 }

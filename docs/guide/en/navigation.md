@@ -13,10 +13,10 @@ void App() {
         });
         graph.composable("detail/{id}", [nav](const NavBackStackEntry& entry) {
             int id = entry.arguments().getInt("id").value_or(0);
-            Column([&] {
+            Column() {
                 Text("Item " + std::to_string(id));
                 TextButton([nav] { nav.popBackStack(); }, [] { Text("Back"); });
-            });
+            };
         });
     });
 }

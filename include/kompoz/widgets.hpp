@@ -7,6 +7,7 @@
 #include "animation.hpp"
 #include "layout.hpp"
 #include "text.hpp"
+#include "named.hpp"
 #include "runtime.hpp"
 
 #include <functional>
@@ -14,6 +15,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <variant>
 
 namespace kompoz {
 
@@ -202,13 +204,16 @@ inline const Typography& typography() { return LocalTypography.current(); }
 
 // ---- Layouts ---------------------------------------------------------------------------
 
-void Box(const Content& content, CallSite site = CallSite::current());
 // A Box whose content's animateBounds measure their places from it (Compose's LookaheadScope).
 void LookaheadScope(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
+
+namespace detail {
+// What the composables below make. The library's own composables call these, with content of
+// theirs that isn't run in a scope of its own (it may refer to what is theirs).
+void Box(const Content& content, CallSite site = CallSite::current());
 void Box(const Modifier& modifier, const Content& content = {}, CallSite site = CallSite::current());
 void Box(const Modifier& modifier, Alignment contentAlignment, const Content& content,
          CallSite site = CallSite::current());
-
 struct ColumnStyle {
     Arrangement verticalArrangement = Arrangement::Top;
     HorizontalAlignment horizontalAlignment = Alignment::Start;
@@ -216,7 +221,6 @@ struct ColumnStyle {
 void Column(const Content& content, CallSite site = CallSite::current());
 void Column(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 void Column(const Modifier& modifier, ColumnStyle style, const Content& content, CallSite site = CallSite::current());
-
 struct RowStyle {
     Arrangement horizontalArrangement = Arrangement::Start;
     VerticalAlignment verticalAlignment = Alignment::Top;
@@ -224,8 +228,50 @@ struct RowStyle {
 void Row(const Content& content, CallSite site = CallSite::current());
 void Row(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 void Row(const Modifier& modifier, RowStyle style, const Content& content, CallSite site = CallSite::current());
-
 void Spacer(const Modifier& modifier, CallSite site = CallSite::current());
+
+struct BoxImpl {
+    using P = Params<names::Modifier, names::ContentAlignment, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        detail::Box(P::get<names::Modifier>(Modifier{}, args...), P::get<names::ContentAlignment>(Alignment{Alignment::TopStart}, args...), P::block(std::forward<A>(args)...), site);
+    }
+};
+struct ColumnImpl {
+    using P = Params<names::Modifier, names::VerticalArrangement, names::HorizontalAlignment, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        detail::Column(P::get<names::Modifier>(Modifier{}, args...), {P::get<names::VerticalArrangement>(Arrangement{Arrangement::Top}, args...), P::get<names::HorizontalAlignment>(HorizontalAlignment{Alignment::Start}, args...)}, P::block(std::forward<A>(args)...), site);
+    }
+};
+struct RowImpl {
+    using P = Params<names::Modifier, names::HorizontalArrangement, names::VerticalAlignment, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        detail::Row(P::get<names::Modifier>(Modifier{}, args...), {P::get<names::HorizontalArrangement>(Arrangement{Arrangement::Start}, args...), P::get<names::VerticalAlignment>(VerticalAlignment{Alignment::Top}, args...)}, P::block(std::forward<A>(args)...), site);
+    }
+};
+struct SpacerImpl {
+    using P = Params<names::Modifier>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        detail::Spacer(P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+
+// Its children on top of each other (Compose's Box): Box(modifier, contentAlignment) { … }.
+inline constexpr Composable<detail::BoxImpl> Box;
+// Its children one under the other: Column(modifier, verticalArrangement, horizontalAlignment) { … }.
+inline constexpr Composable<detail::ColumnImpl> Column;
+// Its children side by side: Row(modifier, horizontalArrangement, verticalAlignment) { … }.
+inline constexpr Composable<detail::RowImpl> Row;
+// Room taken by its modifier alone: Spacer(Modifier().height(8)).
+inline constexpr Composable<detail::SpacerImpl> Spacer;
 
 // ---- Custom layouts ------------------------------------------------------------------------
 //
@@ -515,9 +561,6 @@ void BasicText(std::string text, const Modifier& modifier = {}, const TextStyle&
 void BasicText(const AnnotatedString& text, const Modifier& modifier = {}, const TextStyle& style = {},
                CallSite site = CallSite::current());
 
-void Text(std::string text, CallSite site = CallSite::current());
-void Text(std::string text, const TextStyle& style, CallSite site = CallSite::current());
-void Text(std::string text, const Modifier& modifier, const TextStyle& style = {}, CallSite site = CallSite::current());
 // Texts inside can be selected and copied, one selection across them all: a finger's long press
 // selects a word, with handles to drag (from text to text) and a toolbar (copy, select all);
 // the mouse drags a selection or double clicks a word, and Ctrl+C copies it. A press elsewhere
@@ -548,21 +591,83 @@ void customTextToolbar(const std::shared_ptr<TextToolbar>& toolbar, std::functio
 } // namespace detail
 // Texts inside it aren't selectable, in a SelectionContainer (labels, buttons).
 void DisableSelection(const Content& content, CallSite site = CallSite::current());
-// Several styles in one text (see text.hpp); links are clickable.
-void Text(const AnnotatedString& text, const Modifier& modifier = {}, const TextStyle& style = {},
-          CallSite site = CallSite::current());
 // A composable in a text (Compose's InlineTextContent): the room the text keeps for it, and what
 // goes there (told the alternate text).
 struct InlineTextContent {
     Placeholder placeholder;
     std::function<void(const std::string& alternateText)> children;
 };
-// With inline content: each appendInlineContent(id) of the text gets inlineContent[id] in a
-// room of its placeholder's size, on its line as it says.
-//   Text(buildAnnotatedString([](auto& b) { b.append("Hava "); b.appendInlineContent("güneş", "[güneş]"); b.append(" açık"); }),
-//        Modifier(), {}, {{"güneş", {{.width = 1.2f, .height = 1.2f}, [](auto&) { Icon(Icons::Filled::Star, ""); }}}});
+// Text's inlineContent: the contents by their ids.
+using InlineContents = std::map<std::string, InlineTextContent>;
+
+class TextLayoutResult;
+namespace detail {
+using OnTextLayout = std::function<void(const TextLayoutResult&)>;
+using InlineContents = kompoz::InlineContents;
+// What Text makes; the library's own composables call these.
+void Text(std::string text, CallSite site = CallSite::current());
+void Text(std::string text, const TextStyle& style, CallSite site = CallSite::current());
+void Text(std::string text, const Modifier& modifier, const TextStyle& style = {}, CallSite site = CallSite::current());
+void Text(std::string text, const Modifier& modifier, const TextStyle& style, OnTextLayout onTextLayout, CallSite site = CallSite::current());
+void Text(const AnnotatedString& text, const Modifier& modifier = {}, const TextStyle& style = {}, CallSite site = CallSite::current());
+void Text(const AnnotatedString& text, const Modifier& modifier, const TextStyle& style, OnTextLayout onTextLayout, CallSite site = CallSite::current());
 void Text(const AnnotatedString& text, const Modifier& modifier, const TextStyle& style,
-          const std::map<std::string, InlineTextContent>& inlineContent, CallSite site = CallSite::current());
+          const InlineContents& inlineContent, OnTextLayout onTextLayout = {}, CallSite site = CallSite::current());
+
+// Text's style: `style`, with what was given by name over it (as Compose's Text merges them; an
+// empty optional leaves the style's).
+template <class P, class... A>
+TextStyle textStyleOf(A&&... args) {
+    // (A theme's text style, typography().bodyMedium, is a Font: given as the style's font.)
+    TextStyle s = std::visit([](const auto& v) {
+        if constexpr (std::is_same_v<std::decay_t<decltype(v)>, Font>) return TextStyle{.font = v};
+        else return TextStyle(v);
+    }, P::template get<names::Style>(std::variant<TextStyle, Font>{}, args...));
+    auto over = [](auto& field, const auto& value) {
+        if (value) field = value;
+    };
+    if constexpr (P::template given<names::Color, A...>()) over(s.color, P::template get<names::Color>(std::optional<Color>{}, args...));
+    if constexpr (P::template given<names::FontSize, A...>()) over(s.fontSize, P::template get<names::FontSize>(std::optional<TextUnit>{}, args...));
+    if constexpr (P::template given<names::FontStyle, A...>()) over(s.fontStyle, P::template get<names::FontStyle>(std::optional<FontStyle>{}, args...));
+    if constexpr (P::template given<names::FontWeight, A...>()) over(s.fontWeight, P::template get<names::FontWeight>(std::optional<FontWeight>{}, args...));
+    if constexpr (P::template given<names::FontFamily, A...>()) over(s.fontFamily, P::template get<names::FontFamily>(std::optional<FontFamily>{}, args...));
+    if constexpr (P::template given<names::LetterSpacing, A...>()) over(s.letterSpacing, P::template get<names::LetterSpacing>(std::optional<TextUnit>{}, args...));
+    if constexpr (P::template given<names::TextDecoration, A...>())
+        s.textDecoration = P::template get<names::TextDecoration>(TextDecoration::None, args...);
+    if constexpr (P::template given<names::TextAlign, A...>()) s.textAlign = P::template get<names::TextAlign>(TextAlign::Start, args...);
+    if constexpr (P::template given<names::LineHeight, A...>()) over(s.lineHeight, P::template get<names::LineHeight>(std::optional<TextUnit>{}, args...));
+    if constexpr (P::template given<names::Overflow, A...>()) s.overflow = P::template get<names::Overflow>(TextOverflow::Clip, args...);
+    if constexpr (P::template given<names::SoftWrap, A...>()) s.softWrap = P::template get<names::SoftWrap>(true, args...);
+    if constexpr (P::template given<names::MaxLines, A...>()) s.maxLines = P::template get<names::MaxLines>(0, args...);
+    if constexpr (P::template given<names::MinLines, A...>()) s.minLines = P::template get<names::MinLines>(1, args...);
+    if constexpr (P::template given<names::AutoSize, A...>()) over(s.autoSize, P::template get<names::AutoSize>(std::optional<TextAutoSize>{}, args...));
+    return s;
+}
+
+struct TextImpl {
+    using Plain = Params<names::Modifier, names::Color, names::FontSize, names::FontStyle, names::FontWeight, names::FontFamily, names::LetterSpacing, names::TextDecoration, names::TextAlign, names::LineHeight, names::Overflow, names::SoftWrap, names::MaxLines, names::MinLines, names::OnTextLayout, names::Style, names::AutoSize>;
+    using Styled = Params<names::Modifier, names::Color, names::FontSize, names::FontStyle, names::FontWeight, names::FontFamily, names::LetterSpacing, names::TextDecoration, names::TextAlign, names::LineHeight, names::Overflow, names::SoftWrap, names::MaxLines, names::MinLines, names::InlineContent, names::OnTextLayout, names::Style, names::AutoSize>;
+    template <class S, class... A>
+        requires std::is_convertible_v<S, std::string>
+    static void call(CallSite site, S&& value, A&&... args) {
+        static_assert(Plain::check<A...>());
+        detail::Text(std::string(std::forward<S>(value)), Plain::get<names::Modifier>(Modifier{}, args...), textStyleOf<Plain>(args...), Plain::get<names::OnTextLayout>(OnTextLayout{}, args...), site);
+    }
+    template <class... A>
+    static void call(CallSite site, const AnnotatedString& value, A&&... args) {
+        static_assert(Styled::check<A...>());
+        detail::Text(value, Styled::get<names::Modifier>(Modifier{}, args...), textStyleOf<Styled>(args...), Styled::get<names::InlineContent>(InlineContents{}, args...), Styled::get<names::OnTextLayout>(OnTextLayout{}, args...), site);
+    }
+};
+} // namespace detail
+
+// Text (Compose's Text): Text("Merhaba", modifier, color, fontSize, …, style). An AnnotatedString
+// has several styles in it (see text.hpp; its links are clickable), and an inlineContent: each
+// appendInlineContent(id) of the text gets inlineContent[id] in a room of its placeholder's size,
+// on its line as it says.
+//   Text(buildAnnotatedString([](auto& b) { b.append("Hava "); b.appendInlineContent("güneş", "[güneş]"); b.append(" açık"); }),
+//        inlineContent = InlineContents{{"güneş", {{.width = 1.2f, .height = 1.2f}, [](auto&) { Icon(Icons::Filled::Star, ""); }}}});
+inline constexpr Composable<detail::TextImpl> Text;
 
 // ---- Components ------------------------------------------------------------------------
 

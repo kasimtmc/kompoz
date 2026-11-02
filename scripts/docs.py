@@ -5,7 +5,7 @@
   scripts/docs.py --check [page.md]  compiles every C++ snippet (all pages, or the ones named)
 
 Pages are Markdown (the subset below), listed in docs/guide/nav.txt. A ```cpp block is compiled on
-its own after `#include <kompoz/kompoz.hpp>`, `<kompoz/testing.hpp>` and `using namespace kompoz;`:
+its own after `#include <kompoz/kompoz.hpp>`, `<kompoz/testing.hpp>`, `<kompoz/blocks.hpp>` and `using namespace kompoz;`:
   ```cpp            at namespace scope (functions, types)
   ```cpp body       inside a function: statements, as in a composable's body
   ```cpp continued  appended to the block before it (and that one's), as one translation unit
@@ -30,7 +30,7 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GUIDE = os.path.join(ROOT, 'docs', 'guide')
 LANGS = ['en', 'tr']
-PRELUDE = '#include <kompoz/kompoz.hpp>\n#include <kompoz/testing.hpp>\nusing namespace kompoz;\n'
+PRELUDE = '#include <kompoz/kompoz.hpp>\n#include <kompoz/testing.hpp>\n#include <kompoz/blocks.hpp>\nusing namespace kompoz;\n'
 
 
 def read_nav():

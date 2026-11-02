@@ -38,7 +38,7 @@ An icon inside a button that also has a text label shouldn't repeat it: give the
 | `traversalIndex` | The reading order among siblings, lower first. |
 
 ```cpp body
-Text("Settings", Modifier().semantics({.heading = true}), {.font = typography().headlineSmall});
+Text("Settings", Modifier().semantics({.heading = true}), style = typography().headlineSmall);
 ```
 
 `Modifier().semantics("description")` is a shorthand for a content description alone.
@@ -48,21 +48,21 @@ Text("Settings", Modifier().semantics({.heading = true}), {.font = typography().
 A screen reader moves from item to item. A row of an icon and two texts should be one item, read together, not three. Clickables merge their content already; for other groups, set `mergeDescendants`:
 
 ```cpp body
-Row(Modifier().semantics({.mergeDescendants = true}).padding(16), [&] {
+Row(Modifier().semantics({.mergeDescendants = true}).padding(16)) {
     Icon(Icons::Filled::Person, "");
-    Column([&] {
+    Column() {
         Text("Ada Lovelace");
         Text("Online");
-    });
-});   // read as "Ada Lovelace, Online"
+    };
+};   // read as "Ada Lovelace, Online"
 ```
 
 `Modifier().clearAndSetSemantics({…})` replaces what is inside with what you set: a rating drawn as five stars becomes "Rating: 4 of 5". `Modifier().hideFromAccessibility()` hides a node and what is inside it.
 
 ```cpp body
-Row(Modifier().clearAndSetSemantics({.contentDescription = "Rating: 4 of 5"}), [&] {
+Row(Modifier().clearAndSetSemantics({.contentDescription = "Rating: 4 of 5"})) {
     for (int i = 0; i < 5; ++i) Icon(i < 4 ? Icons::Filled::Star : Icons::Filled::FavoriteBorder, "");
-});
+};
 ```
 
 ## Custom controls
@@ -83,10 +83,10 @@ For a row that acts as one control, put the modifier on the row and pass an empt
 void WifiRow() {
     auto on = remember([] { return mutableStateOf(true); });
     Row(Modifier().fillMaxWidth().toggleable(on.get(), [on](bool v) { on.set(v); }, SemanticsRole::Switch).padding(16),
-        {.verticalAlignment = Alignment::CenterVertically}, [&] {
+        verticalAlignment = Alignment::CenterVertically) {
             Text("Wi-Fi", Modifier().weight(1));
             Switch(on.get(), {});
-        });
+        };
 }
 ```
 
@@ -99,7 +99,7 @@ Swipe-to-delete, long press menus and drag handles are hard to use with a screen
 ```cpp body
 #! std::function<void()> archive, deleteItem;
 Box(Modifier().semantics({.customActions = {{"Archive", [archive] { archive(); return true; }},
-                                            {"Delete", [deleteItem] { deleteItem(); return true; }}}}));
+                                            {"Delete", [deleteItem] { deleteItem(); return true; }}}})) {};
 ```
 
 ### Values in a range
@@ -110,7 +110,7 @@ A custom slider reports its value and lets services set it:
 #! auto level = mutableStateOf(0.5f);
 Box(Modifier().semantics({.contentDescription = "Brightness", .role = SemanticsRole::Slider,
                           .progressBarRangeInfo = ProgressBarRangeInfo{level.get(), 0, 1},
-                          .setProgress = [level](float v) { level.set(v); return true; }}));
+                          .setProgress = [level](float v) { level.set(v); return true; }})) {};
 ```
 
 ## Announcing changes

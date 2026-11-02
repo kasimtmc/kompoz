@@ -70,7 +70,7 @@ void Faded(const Content& content) {
     Box(Modifier().drawWithContent([](ContentDrawScope& d) {
         d.drawContent();
         d.drawRect(Brush::verticalGradient({colors::Transparent, colors::White}));   // a fade over the bottom
-    }), content);
+    })) { content(); };
 }
 ```
 
@@ -82,9 +82,9 @@ A `Color` is Compose's: 64 bits, in sRGB 8 bits a channel, or in another of Comp
 Color p3(0.1f, 0.75f, 0.45f, 1, ColorSpaces::DisplayP3);  // in Display P3
 Color lab(55, 60, -40, 1, ColorSpaces::CieLab);           // L*, a*, b*
 Color between = lerp(colors::Red, colors::Blue, 0.5f);    // mixed in Oklab
-Row(Modifier().height(40), {}, [&] {
-    for (Color c : {p3, lab, between}) Box(Modifier().size(40).background(c));
-});
+Row(Modifier().height(40)) {
+    for (Color c : {p3, lab, between}) Box(Modifier().size(40).background(c)) {};
+};
 ```
 
 `lerp` mixes two colors in Oklab, as Compose's does: halfway from red to blue is a violet as light as both, not the dark purple their sRGB numbers make. An animated color goes the same way (`animateColorAsState`). A gradient mixes its colors in sRGB, as Skia's.
@@ -95,7 +95,7 @@ A `Brush` paints with a solid color or a gradient, wherever a color would go: dr
 
 ```cpp body
 Box(Modifier().fillMaxWidth().height(120).background(
-    Brush::linearGradient({Color::hex(0x6750A4), Color::hex(0xB58392)}), RoundedCornerShape(16)));
+    Brush::linearGradient({Color::hex(0x6750A4), Color::hex(0xB58392)}), RoundedCornerShape(16))) {};
 ```
 
 `Brush::solid`, `linearGradient`, `horizontalGradient`, `verticalGradient`, `radialGradient` and `sweepGradient` are there, with color stops and tile modes.
@@ -106,7 +106,7 @@ A brush of your own is a shader made for the size it paints, as Compose's `Shade
 Box(Modifier().size(120, 72).background(Brush::shader([](Size size) {
     return CompositeShader(LinearGradientShader({0, 0}, {size.width, 0}, {Color::hex(0x6750A4), Color::hex(0xB58392)}),
                            RadialGradientShader({24, 20}, 48, {colors::White.copy(0.9f), colors::Transparent}), BlendMode::Screen);
-})));
+}))) {};
 ```
 
 `Brush::composite` does the same with two brushes, `withTransform` moves what a gradient or a shader paints, and `lerp` goes from one brush to another as an animation does.
@@ -153,7 +153,7 @@ void Heart() {
     Box(Modifier().size(64).drawWithCache([red](CacheDrawScope& cache) {
         Path path = heart(cache.size());   // built once per size
         return cache.onDrawBehind([path, red](DrawScope& d) { d.drawPath(path, red); });
-    }));
+    })) {};
 }
 ```
 
@@ -177,8 +177,8 @@ It is applied where the path is drawn, at the pixels it is drawn at, so a dash o
 A `Shape` is the outline used by backgrounds, borders, clips and shadows: `RectangleShape`, `CircleShape`, `RoundedCornerShape(16)` (or one radius per corner), `CutCornerShape(8)`, and Material 3 Expressive's shapes (`MaterialShapes::Cookie9Sided()` and others, with `toShape`).
 
 ```cpp body
-Box(Modifier().size(96).clip(CircleShape).background(colorScheme().tertiaryContainer));
-Box(Modifier().size(96).border(2, colorScheme().outline, RoundedCornerShape(12, 12, 0, 0)));
+Box(Modifier().size(96).clip(CircleShape).background(colorScheme().tertiaryContainer)) {};
+Box(Modifier().size(96).border(2, colorScheme().outline, RoundedCornerShape(12, 12, 0, 0))) {};
 ```
 
 As in Compose, a shape makes its outline in a size and layout direction (`createOutline`): a rect, a rounded rect (`Outline::Rounded(RoundRect{…})`, whose corners may be elliptical) or any path. `GenericShape` builds one from a path:
@@ -192,7 +192,7 @@ Shape ticket = GenericShape([](Path& p, Size size, LayoutDirection) {
     p.lineTo(0, size.height);
     p.close();
 });
-Box(Modifier().size(120, 72).clip(ticket).background(colorScheme().primaryContainer));
+Box(Modifier().size(120, 72).clip(ticket).background(colorScheme().primaryContainer)) {};
 ```
 
 `clip(shape)` clips the content to the shape, its edge anti-aliased, without a layer.
@@ -204,7 +204,7 @@ Box(Modifier().size(120, 72).clip(ticket).background(colorScheme().primaryContai
 ```cpp body
 Box(Modifier().size(120)
         .dropShadow(RoundedCornerShape(24), Shadow{.color = Color::hex(0x6750A4, 0.4f), .offset = {0, 8}, .blurRadius = 24})
-        .background(colorScheme().surface, RoundedCornerShape(24)));
+        .background(colorScheme().surface, RoundedCornerShape(24))) {};
 ```
 
 ## graphicsLayer
@@ -213,7 +213,7 @@ Box(Modifier().size(120)
 
 ```cpp body
 Box(Modifier().size(80).graphicsLayer({.scaleX = 1.2f, .scaleY = 1.2f, .alpha = 0.8f, .rotationZ = 15})
-        .background(colorScheme().primary, RoundedCornerShape(16)));
+        .background(colorScheme().primary, RoundedCornerShape(16))) {};
 ```
 
 The form that takes a lambda is evaluated while drawing, so animated values read there change without recomposing or laying out again. Use it for anything that changes every frame (see [Phases](phases.md#deferring-state-reads)):
@@ -240,7 +240,7 @@ It is a `graphicsLayer` with a render effect, and you can give one a render effe
 
 ```cpp body
 Box(Modifier().size(96).graphicsLayer({.renderEffect = OffsetEffect(BlurEffect(6, 6, TileMode::Decal), {0, 4})})
-        .background(colorScheme().primary, CircleShape));
+        .background(colorScheme().primary, CircleShape)) {};
 ```
 
 What is drawn within the layer's bounds goes through the effect; with `clip` set, what the effect makes is then cut to the layer's shape.
@@ -252,13 +252,13 @@ Image(imageResource("images/cover.jpg"), "Album cover",
       Modifier().size(160).blur(BlurRadiusSpec::verticalGradient(0, 16)), ContentScale::Crop);  // sharp at the top
 Box(Modifier().size(120).blur([](BlurScope& b) {
     b.blurRadiusSpec = BlurRadiusSpec::radialGradient(0, 12);  // sharp in the middle
-}).background(colorScheme().primary, CircleShape));
+}).background(colorScheme().primary, CircleShape)) {};
 ```
 
 Kompoz's `blur` also takes what to blur (`BlurType`). `Family`, the default, blurs the node and its children, as Compose's does. `Morph` blurs what is drawn behind the node, within its shape, and draws the node over it sharp: frosted glass. `Self` blurs only what the node draws itself (its background, border, image) and draws its children over it sharp:
 
 ```cpp body
-Box(Modifier().size(200, 72)
+(Box)(Modifier().size(200, 72)
         .blur(16, BlurredEdgeTreatment{RoundedCornerShape(16)}, BlurType::Morph)
         .background(colors::White.copy(0.2f), RoundedCornerShape(16)),
     Alignment::Center, [] { Text("Frosted glass"); });

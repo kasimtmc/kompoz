@@ -7,9 +7,9 @@ Tembel listeler ve ızgaralar yalnızca görünen öğeleri kompoze eder, bu yü
 Bir avuç öğe için `verticalScroll`'lu bir `Column` yeter:
 
 ```cpp body
-Column(Modifier().fillMaxSize().verticalScroll(rememberScrollState()).padding(16), [&] {
+Column(Modifier().fillMaxSize().verticalScroll(rememberScrollState()).padding(16)) {
     for (int i = 0; i < 20; ++i) Text("Paragraph " + std::to_string(i));
-});
+};
 ```
 
 Bu, ekranda olsun olmasın her çocuğu kompoze eder ve yerleştirir. Uzun listeler ve uzunluğunu bilmediğiniz listeler için tembel bir liste kullanın.
@@ -26,7 +26,7 @@ struct Message {
 
 void Conversation(const std::vector<Message>& messages) {
     LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-        list.item([] { Text("Today", {.font = typography().labelLarge}); });
+        list.item([] { Text("Today", style = typography().labelLarge); });
         list.items(messages, [](const Message& m) { return m.id; }, [](const Message& m) {
             ListItem({.headline = [&] { Text(m.author); }, .supporting = [&] { Text(m.body); }});
         });
@@ -58,7 +58,7 @@ LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
     list.items(messages, [](const Message& m) { return m.id; }, [](const Message& m) {
         auto expanded = remember([] { return mutableStateOf(false); });   // mesajla birlikte kalır
         Text(m.body, Modifier().clickable([expanded] { expanded.set(!expanded.get()); }),
-             {.maxLines = expanded.get() ? 0 : 1});
+             maxLines = expanded.get() ? 0 : 1);
     });
 });
 ```
@@ -109,7 +109,7 @@ void Messages(const std::vector<std::string>& messages) {
     auto scope = rememberCoroutineScope();
     auto showTop = remember([list] { return derivedStateOf([list] { return list.firstVisibleItemIndex() > 3; }); });
 
-    Box(Modifier().fillMaxSize(), [&] {
+    Box(Modifier().fillMaxSize()) {
         LazyColumn(Modifier().fillMaxSize(), {.state = list}, [&](LazyListScope& l) {
             l.items(messages, [](const std::string& m) { Text(m, Modifier().padding(16)); });
         });
@@ -118,7 +118,7 @@ void Messages(const std::vector<std::string>& messages) {
                                       [] { Icon(Icons::Filled::KeyboardArrowUp, "Back to top"); },
                                       Modifier().align(Alignment::BottomEnd).padding(16));
         }
-    });
+    };
 }
 ```
 
@@ -150,7 +150,7 @@ LaunchedEffect(nearEnd.get(), [nearEnd, loadMore]() -> Task {
 LazyVerticalGrid(GridCells::Adaptive(120), Modifier().fillMaxSize(),
                  {.contentPadding = PaddingValues(8), .verticalSpacing = 8, .horizontalSpacing = 8},
                  [&](LazyGridScope& grid) {
-                     grid.item([] { Text("Photos", {.font = typography().titleLarge}); }, LazyGridScope::FullLine);
+                     grid.item([] { Text("Photos", style = typography().titleLarge); }, LazyGridScope::FullLine);
                      grid.items(photos, [](const Photo& p) { return p.id; }, [](const Photo& p) {
                          AsyncImage(p.url, "", Modifier().aspectRatio(1), {.contentScale = ContentScale::Crop});
                      });
@@ -181,13 +181,13 @@ LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxSize()
 void Onboarding() {
     auto pager = rememberPagerState(0, [] { return 3; });
     auto scope = rememberCoroutineScope();
-    Column(Modifier().fillMaxSize(), [&] {
+    Column(Modifier().fillMaxSize()) {
         HorizontalPager(pager, Modifier().weight(1), [](int page) {
-            Box(Modifier().fillMaxSize(), Alignment::Center, [&] { Text("Page " + std::to_string(page + 1)); });
+            Box(Modifier().fillMaxSize(), Alignment::Center) { Text("Page " + std::to_string(page + 1)); };
         });
         Button([scope, pager] { scope.launch([pager]() -> Task { co_await pager.animateScrollToPage(pager.currentPage() + 1); }); },
                [] { Text("Next"); });
-    });
+    };
 }
 ```
 
@@ -211,12 +211,12 @@ Masaüstünde, kaydırılan bir kabın yanında `VerticalScrollbar` ya da `Horiz
 
 ```cpp body
 auto scroll = rememberScrollState();
-Box(Modifier().fillMaxSize(), [&] {
-    Column(Modifier().fillMaxSize().verticalScroll(scroll), [&] {
+Box(Modifier().fillMaxSize()) {
+    Column(Modifier().fillMaxSize().verticalScroll(scroll)) {
         for (int i = 0; i < 100; ++i) Text("Line " + std::to_string(i));
-    });
+    };
     VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier().align(Alignment::CenterEnd).fillMaxHeight());
-});
+};
 ```
 
 `rememberScrollbarAdapter` bir `ScrollState` ya da bir `LazyListState` alır. Tutamaç sürüklenebilir; iz üzerine tıklamak sayfa sayfa oraya gider.
@@ -247,12 +247,12 @@ void CollapsingHeader() {
         height.set(next);
         return Offset{0, used};
     }});
-    Column(Modifier().fillMaxSize().nestedScroll(connection), [&] {
-        Box(Modifier().fillMaxWidth().height(height.get()).background(colorScheme().primaryContainer));
+    Column(Modifier().fillMaxSize().nestedScroll(connection)) {
+        Box(Modifier().fillMaxWidth().height(height.get()).background(colorScheme().primaryContainer)) {};
         LazyColumn(Modifier().fillMaxSize(), [](LazyListScope& l) {
             l.items(50, [](int i) { Text("Row " + std::to_string(i), Modifier().padding(16)); });
         });
-    });
+    };
 }
 ```
 

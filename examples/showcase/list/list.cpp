@@ -12,16 +12,16 @@ void ListRow(int index, NavController nav, CallSite site = CallSite::current()) 
                        .background(cs.surfaceContainer)
                        .clickable([nav, index] { nav.navigate(routes::Item{index}); })
                        .padding(12)),
-            {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically}, [&] {
-                Box(Modifier().size(40).background(hueColor(index), 20), Alignment::Center, [&] {
-                    Text(std::to_string(index % 100), {.fontWeight = FontWeight::Bold, .color = colors::White});
-                });
-                Column(Modifier().weight(1), [&] {
-                    Text(std::format("Öğe {}", index), {.font = typography().titleMedium});
+            horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
+                Box(Modifier().size(40).background(hueColor(index), 20), Alignment::Center) {
+                    Text(std::to_string(index % 100), fontWeight = FontWeight::Bold, color = colors::White);
+                };
+                Column(Modifier().weight(1)) {
+                    Text(std::format("Öğe {}", index), style = typography().titleMedium);
                     Text("Sadece ekrandakiler kompoze edilir",
-                         {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-                });
-            });
+                         color = cs.onSurfaceVariant, style = typography().bodyMedium);
+                };
+            };
     });
 }
 
@@ -34,7 +34,7 @@ void WindowClassLine(CallSite site) {
         const char* widths[] = {"Compact", "Medium", "Expanded"};
         Text(std::format("Pencere: {} × {} ({:.0f} × {:.0f} dp)", widths[int(c.windowWidthSizeClass)], widths[int(c.windowHeightSizeClass)],
                          window.width, window.height),
-             {.font = typography().bodySmall, .color = colorScheme().onSurfaceVariant});
+             color = colorScheme().onSurfaceVariant, style = typography().bodySmall);
     });
 }
 
@@ -50,7 +50,7 @@ void MediaLine(CallSite site) {
                                keyboards[int(m.keyboardKind())], m.hasMicrophone() ? "var" : "yok", m.hasCamera() ? "var" : "yok",
                                distances[int(m.viewingDistance())]);
         });
-        Text(line, {.font = typography().bodySmall, .color = colorScheme().onSurfaceVariant});
+        Text(line, color = colorScheme().onSurfaceVariant, style = typography().bodySmall);
     });
 }
 
@@ -65,22 +65,21 @@ void ListStatus(LazyListState state, CallSite site = CallSite::current()) {
                 sections.set(sections.peek() + 1);
             });
         });
-        Row(Modifier().fillMaxWidth().padding(16, 4), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+        Row(Modifier().fillMaxWidth().padding(16, 4), verticalAlignment = Alignment::CenterVertically) {
             // isScrollInProgress: while dragged, flung or animated.
             Text(std::format("İlk görünen öğe: {} · bölüm değişimi: {}{}", first, sections.get() - 1, state.isScrollInProgress() ? " · kayıyor" : ""),
-                 traced(Modifier().weight(1)), {.font = typography().bodyMedium, .color = colorScheme().onSurfaceVariant});
+                 traced(Modifier().weight(1)), color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
             // Animated: from far down it jumps close first, then glides (animateScrollToItem).
             TextButton([state, scope] { scope.launch([state]() -> Task { co_await state.animateScrollToItem(0); }); }, Modifier(),
                        {.enabled = first > 0}, [] { Text("Başa dön"); });
-        });
+        };
     });
 }
 
 // A square grid tile (aspectRatio keeps it square whatever the column width).
 void GridTile(int index, CallSite site = CallSite::current()) {
     composable(site, index, [=] {
-        Box(Modifier().fillMaxWidth().aspectRatio(1).background(hueColor(index), 16), Alignment::Center,
-            [&] { Text(std::to_string(index), {.fontWeight = FontWeight::Bold, .color = colors::White}); });
+        Box(Modifier().fillMaxWidth().aspectRatio(1).background(hueColor(index), 16), Alignment::Center) { Text(std::to_string(index), fontWeight = FontWeight::Bold, color = colors::White); };
     });
 }
 
@@ -88,9 +87,9 @@ void GridTile(int index, CallSite site = CallSite::current()) {
 void StaggeredTile(int index, CallSite site = CallSite::current()) {
     composable(site, index, [=] {
         float height = float(72 + (index * 53) % 140);
-        Box(Modifier().fillMaxWidth().height(height).background(hueColor(index), 16).padding(12), Alignment::BottomStart, [&] {
-            Text(std::format("#{} · {:.0f} dp", index, height), {.fontWeight = FontWeight::Bold, .color = colors::White});
-        });
+        Box(Modifier().fillMaxWidth().height(height).background(hueColor(index), 16).padding(12), Alignment::BottomStart) {
+            Text(std::format("#{} · {:.0f} dp", index, height), fontWeight = FontWeight::Bold, color = colors::White);
+        };
     });
 }
 
@@ -118,14 +117,14 @@ void ListScreen(Modifier modifier, LazyListState state, NavController nav, std::
             return v;
         });
         const ColorScheme& cs = colorScheme();
-        Column(modifier, [&] {
+        Column(modifier) {
             LazyRow(Modifier().fillMaxWidth(), {.contentPadding = {16, 4, 16, 4}, .spacing = 8},
                     [&](LazyListScope& row) {
                         row.items(40, [&](int i) {
-                            Box(Modifier().background(cs.primaryContainer, 16).padding(14, 8), [&] {
+                            Box(Modifier().background(cs.primaryContainer, 16).padding(14, 8)) {
                                 Text(std::format("Etiket {}", i + 1),
-                                     {.font = typography().labelLarge, .color = cs.onPrimaryContainer});
-                            });
+                                     color = cs.onPrimaryContainer, style = typography().labelLarge);
+                            };
                         });
                     });
             SingleChoiceSegmentedButtonRow(Modifier().fillMaxWidth().padding(16, 4), [&] {
@@ -134,13 +133,13 @@ void ListScreen(Modifier modifier, LazyListState state, NavController nav, std::
             });
             Text(refreshes.get() ? std::format("Aşağı çekip yenileyin · {} kez yenilendi", refreshes.get())
                                  : std::string("Aşağı çekip yenileyin (PullToRefreshBox)"),
-                 Modifier().padding(16, 0), {.font = typography().bodySmall, .color = cs.onSurfaceVariant});
+                 Modifier().padding(16, 0), color = cs.onSurfaceVariant, style = typography().bodySmall);
             std::map<int, int> liked = likes->likes.collectAsState();
             int total = 0;
             for (const auto& [item, n] : liked) total += n;
             Text(liked.empty() ? std::string("Bir satıra girip beğenin: beğeniler liste grafiğinin ViewModel'inde")
                                : std::format("{} öğede {} beğeni (liste grafiğinin ViewModel'i)", liked.size(), total),
-                 Modifier().padding(16, 0), {.font = typography().bodySmall, .color = cs.primary});
+                 Modifier().padding(16, 0), color = cs.primary, style = typography().bodySmall);
             if (mode.get() == 0) {
                 ListStatus(state);
                 PullToRefreshBox(refreshing.get(), refresh, Modifier().fillMaxWidth().weight(1), [&] {
@@ -150,10 +149,10 @@ void ListScreen(Modifier modifier, LazyListState state, NavController nav, std::
                                [&](LazyListScope& list) {
                                    for (int g = 0; g < int(rows.size()); g += 50) {
                                        list.stickyHeader(std::format("section{}", g), [g, headerColor, headerText] {
-                                           Box(Modifier().fillMaxWidth().background(headerColor).padding(4, 10), [&] {
+                                           Box(Modifier().fillMaxWidth().background(headerColor).padding(4, 10)) {
                                                Text(std::format("{} – {}", g, g + 49),
-                                                    {.font = typography().labelLarge, .color = headerText});
-                                           });
+                                                    color = headerText, style = typography().labelLarge);
+                                           };
                                        });
                                        list.items(50, [g](int i) { return size_t(g + i); }, [g, nav](int i) { ListRow(g + i, nav); });
                                    }
@@ -161,7 +160,7 @@ void ListScreen(Modifier modifier, LazyListState state, NavController nav, std::
                 });
             } else if (mode.get() == 1) {
                 // LazyGridState: the tiles in view (layoutInfo) and scrolls to an item.
-                Row(Modifier().fillMaxWidth().padding(16, 0), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+                Row(Modifier().fillMaxWidth().padding(16, 0), verticalAlignment = Alignment::CenterVertically) {
                     LazyGridLayoutInfo info = gridState.layoutInfo();
                     // Item 0 is the title row: tile n is item n + 1.
                     std::string seen = info.visibleItemsInfo.empty()
@@ -169,11 +168,11 @@ void ListScreen(Modifier modifier, LazyListState state, NavController nav, std::
                                            : std::format("{}–{}", std::max(0, info.visibleItemsInfo.front().index - 1),
                                                          std::max(0, info.visibleItemsInfo.back().index - 1));
                     Text(std::format("Görünen kareler: {} · {} sütun", seen, info.maxSpan), Modifier().weight(1),
-                         {.font = typography().bodySmall, .color = cs.onSurfaceVariant});
+                         color = cs.onSurfaceVariant, style = typography().bodySmall);
                     TextButton([gridState, scope] { scope.launch([gridState]() -> Task { co_await gridState.animateScrollToItem(0); }); },
                                [] { Text("Başa"); });
                     TextButton([gridState] { gridState.scrollToItem(5001); }, [] { Text("Kare 5000"); });
-                });
+                };
                 // 10,000 tiles, as many columns of at least 88 dp as fit; only rows in view are composed.
                 PullToRefreshBox(refreshing.get(), refresh, Modifier().fillMaxWidth().weight(1), [&] {
                     LazyVerticalGrid(GridCells::Adaptive(88), Modifier().fillMaxSize(),
@@ -181,38 +180,38 @@ void ListScreen(Modifier modifier, LazyListState state, NavController nav, std::
                                       .horizontalSpacing = 8},
                                      [&](LazyGridScope& cells) {
                                          cells.item([&] { Text("10.000 kare", Modifier().padding(4, 0, 0, 4),
-                                                               {.font = typography().titleMedium}); },
+                                                               style = typography().titleMedium); },
                                                     LazyGridScope::FullLine);
                                          cells.items(rows, [](int v) { return v; }, [](int v) { GridTile(v); });
                                      });
                 });
             } else {
                 // LazyStaggeredGridState: the cards in view and scrolls to one (item 0 is the title).
-                Row(Modifier().fillMaxWidth().padding(16, 0), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+                Row(Modifier().fillMaxWidth().padding(16, 0), verticalAlignment = Alignment::CenterVertically) {
                     LazyStaggeredGridLayoutInfo info = staggeredScroll.layoutInfo();
                     std::string seen = info.visibleItemsInfo.empty()
                                            ? "—"
                                            : std::format("{}–{}", std::max(0, info.visibleItemsInfo.front().index - 1),
                                                          std::max(0, info.visibleItemsInfo.back().index - 1));
                     Text(std::format("Görünen kartlar: {} · {} şerit", seen, info.lanes), Modifier().weight(1),
-                         {.font = typography().bodySmall, .color = cs.onSurfaceVariant});
+                         color = cs.onSurfaceVariant, style = typography().bodySmall);
                     TextButton([staggeredScroll, scope] {
                         scope.launch([staggeredScroll]() -> Task { co_await staggeredScroll.animateScrollToItem(0); });
                     }, [] { Text("Başa"); });
                     TextButton([staggeredScroll] { staggeredScroll.scrollToItem(3001); }, [] { Text("Kart 3000"); });
-                });
+                };
                 // Cards of their own heights, each under the shorter lane (LazyVerticalStaggeredGrid).
                 LazyVerticalStaggeredGrid(StaggeredGridCells::Adaptive(150), Modifier().fillMaxWidth().weight(1),
                                           {.state = staggeredScroll, .contentPadding = {16, 8, 16, 88}, .verticalItemSpacing = 8,
                                            .horizontalSpacing = 8},
                                           [&](LazyGridScope& cells) {
                                               cells.item([&] { Text("10.000 kart, kendi yükseklikleriyle", Modifier().padding(4, 0, 0, 4),
-                                                                    {.font = typography().titleMedium}); },
+                                                                    style = typography().titleMedium); },
                                                          LazyGridScope::FullLine);
                                               cells.items(rows, [](int v) { return v; }, [](int v) { StaggeredTile(v); });
                                           });
             }
-        });
+        };
     });
 }
 
@@ -224,22 +223,22 @@ void ItemScreen(int index, NavController nav, std::shared_ptr<LikesViewModel> vm
         std::map<int, int> liked = vm->likes.collectAsState();
         int likes = liked.contains(index) ? liked.at(index) : 0;
         Column(Modifier().fillMaxSize().verticalScroll(rememberScrollState()).padding(20),
-               {.verticalArrangement = Arrangement::spacedBy(16), .horizontalAlignment = Alignment::CenterHorizontally}, [&] {
-                   Box(Modifier().size(120).background(hueColor(index), 60), Alignment::Center, [&] {
-                       Text(std::to_string(index % 100), {.font = typography().displaySmall, .color = colors::White});
-                   });
-                   Text(std::format("Öğe {}", index), {.font = typography().headlineSmall});
+               verticalArrangement = Arrangement::spacedBy(16), horizontalAlignment = Alignment::CenterHorizontally) {
+                   Box(Modifier().size(120).background(hueColor(index), 60), Alignment::Center) {
+                       Text(std::to_string(index % 100), color = colors::White, style = typography().displaySmall);
+                   };
+                   Text(std::format("Öğe {}", index), style = typography().headlineSmall);
                    Text("NavHost'taki \"list\" grafiğinin \"item/{n}\" rotası; n argümanı yoldan okunur. Beğeniler "
                         "grafiğin ViewModel'inde, liste ekranı da gösterir. Başka sekmeye geçip Liste'ye dönünce "
                         "grafik, bu ekran ve beğeniler yerinde durur (saveState / restoreState). kompoz://item/" +
                             std::to_string(index) + " bağlantısı da bu ekranı açar (geri: liste, sonra ana sayfa).",
-                        {.font = typography().bodyMedium, .color = cs.onSurfaceVariant, .textAlign = TextAlign::Center});
-                   Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically}, [&] {
+                        color = cs.onSurfaceVariant, textAlign = TextAlign::Center, style = typography().bodyMedium);
+                   Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                        FilledTonalButton([vm, index] { vm->like(index); }, Modifier(), {}, [&] {
                            Text(std::format("Beğen · {}", likes));
                        });
                        TextButton([nav] { nav.popBackStack(); }, [] { Text("Listeye dön"); });
-                   });
-               });
+                   };
+               };
     });
 }

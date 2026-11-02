@@ -12,36 +12,34 @@ void ProgressSection(CallSite site) {
                                       spring(Spring::DampingRatioHighBouncy, Spring::StiffnessLow));
         Section("İlerleme ve animasyon", [&] {
             Row(Modifier().fillMaxWidth(),
-                {.horizontalArrangement = Arrangement::spacedBy(16), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+                horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                     CircularProgressIndicator();
                     CircularProgressIndicator(progress.value());
-                    Column(Modifier().weight(1), {.verticalArrangement = Arrangement::spacedBy(14)}, [&] {
+                    Column(Modifier().weight(1), verticalArrangement = Arrangement::spacedBy(14)) {
                         LinearProgressIndicator(Modifier().fillMaxWidth());
                         LinearProgressIndicator(progress.value(), Modifier().fillMaxWidth());
-                    });
-                });
+                    };
+                };
             // M3 Expressive: the indicator waves while it moves (flat near the start and the end).
-            Text("Dalgalı", {.font = typography().labelLarge});
+            Text("Dalgalı", style = typography().labelLarge);
             Row(Modifier().fillMaxWidth(),
-                {.horizontalArrangement = Arrangement::spacedBy(16), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+                horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                     CircularWavyProgressIndicator();
                     CircularWavyProgressIndicator(progress.value());
-                    Column(Modifier().weight(1), {.verticalArrangement = Arrangement::spacedBy(10)}, [&] {
+                    Column(Modifier().weight(1), verticalArrangement = Arrangement::spacedBy(10)) {
                         LinearWavyProgressIndicator(Modifier().fillMaxWidth());
                         LinearWavyProgressIndicator(progress.value(), Modifier().fillMaxWidth());
-                    });
-                });
+                    };
+                };
             // M3 Expressive's loading indicator: a shape that turns and morphs (the determinate one into a burst).
-            Text("Yükleme göstergesi", {.font = typography().labelLarge});
-            Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(16), .verticalAlignment = Alignment::CenterVertically}, [&] {
+            Text("Yükleme göstergesi", style = typography().labelLarge);
+            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                 LoadingIndicator();
                 ContainedLoadingIndicator();
                 LoadingIndicator(progress.value());
                 ContainedLoadingIndicator(progress.value());
-            });
-            Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+            };
+            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 Button(
                     [scope, progress] {
                         scope.launch([progress]() -> Task {
@@ -51,10 +49,10 @@ void ProgressSection(CallSite site) {
                     },
                     [] { Text("Yükle (Animatable)"); });
                 OutlinedButton([right] { right.set(!right.get()); }, Modifier(), {}, [] { Text("Yay (spring)"); });
-            });
-            Box(Modifier().fillMaxWidth().height(40), [&] {
-                Box(Modifier().offset(x * 220, 0).size(40).background(colorScheme().primary, 20));
-            });
+            };
+            Box(Modifier().fillMaxWidth().height(40)) {
+                Box(Modifier().offset(x * 220, 0).size(40).background(colorScheme().primary, 20)) {};
+            };
         });
     });
 }
@@ -79,8 +77,7 @@ void AnimationsSection(CallSite site) {
         const ColorScheme& cs = colorScheme();
         Section("AnimatedVisibility · AnimatedContent · Crossfade", [&] {
             Row(Modifier().fillMaxWidth(),
-                {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+                horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                     Button([expanded] { expanded.set(!expanded.get()); },
                            [&] { Text(expanded.get() ? "Gizle" : "Detaylar"); });
                     FilledTonalIconButton([count] { count.set(count.get() - 1); },
@@ -90,8 +87,7 @@ void AnimationsSection(CallSite site) {
                         count.get(),
                         [&](const int& n) {
                             Text(std::to_string(n), Modifier().width(48),
-                                 {.fontSize = 28, .fontWeight = FontWeight::Bold, .color = cs.primary,
-                                  .textAlign = TextAlign::Center});
+                                 fontSize = 28, fontWeight = FontWeight::Bold, color = cs.primary, textAlign = TextAlign::Center);
                         },
                         Modifier(), [](const int& from, const int& to) {
                             float way = to > from ? 1.f : -1.f;
@@ -108,31 +104,32 @@ void AnimationsSection(CallSite site) {
                                  on ? std::optional(cs.error) : std::nullopt);
                         });
                     });
-                });
+                };
             AnimatedVisibility(expanded.get(), [&] {
                 Column(Modifier().fillMaxWidth().background(cs.primaryContainer, 12).padding(16),
-                       {.verticalArrangement = Arrangement::spacedBy(6)}, [&] {
-                           Text("AnimatedVisibility", {.font = typography().titleMedium, .color = cs.onPrimaryContainer});
+                       verticalArrangement = Arrangement::spacedBy(6)) {
+                           Text("AnimatedVisibility", color = cs.onPrimaryContainer, style = typography().titleMedium);
                            Text("Bu kart fadeIn + expandVertically ile açılır, fadeOut + shrinkVertically ile kapanır. "
                                 "Kapanınca içeriği kompozisyondan çıkar.",
-                                {.font = typography().bodyMedium, .color = cs.onPrimaryContainer});
-                       });
+                                color = cs.onPrimaryContainer, style = typography().bodyMedium);
+                       };
             });
             // SizeTransform: AnimatedContent grows and shrinks between its contents' sizes.
             AnimatedContent<bool>(
                 details.get(),
                 [&](const bool& open) {
                     if (!open) {
-                        Box(Modifier().padding(0, 8, 0, 0).background(cs.secondaryContainer, 20).clickable([details] { details.set(true); }).padding(16, 10),
-                            [&] { Text("Özeti aç (SizeTransform)", {.font = typography().labelLarge, .color = cs.onSecondaryContainer}); });
+                        Box(Modifier().padding(0, 8, 0, 0).background(cs.secondaryContainer, 20).clickable([details] { details.set(true); }).padding(16, 10)) {
+                                                                          Text("Özeti aç (SizeTransform)", color = cs.onSecondaryContainer, style = typography().labelLarge);
+                                                                      };
                     } else {
                         Column(Modifier().padding(0, 8, 0, 0).fillMaxWidth().background(cs.secondaryContainer, 16).clickable([details] { details.set(false); })
                                    .padding(16),
-                               {.verticalArrangement = Arrangement::spacedBy(6)}, [&] {
-                                   Text("AnimatedContent · SizeTransform", {.font = typography().titleMedium, .color = cs.onSecondaryContainer});
+                               verticalArrangement = Arrangement::spacedBy(6)) {
+                                   Text("AnimatedContent · SizeTransform", color = cs.onSecondaryContainer, style = typography().titleMedium);
                                    Text("Kutu, eski içeriğin boyutundan yenisininkine yayla büyür; içerik o boyuta kırpılır. Kapatmak için dokunun.",
-                                        {.font = typography().bodyMedium, .color = cs.onSecondaryContainer});
-                               });
+                                        color = cs.onSecondaryContainer, style = typography().bodyMedium);
+                               };
                     }
                 },
                 Modifier().fillMaxWidth(), togetherWith(fadeIn(0, tween(220, 90)), fadeOut(0, tween(90))).withSizeTransform(SizeTransform{}),
@@ -143,25 +140,24 @@ void AnimationsSection(CallSite site) {
                 co_await delay(std::chrono::milliseconds(1500));
                 feed.set({true, feed.peek().posts});
             });
-            Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 OutlinedButton([feed] { feed.set({false, feed.get().posts}); }, Modifier(), {.enabled = feed.get().loaded},
                                [] { Text("Yeniden yükle"); });
                 OutlinedButton([feed] { feed.set({true, feed.get().posts + 1}); }, Modifier(), {.enabled = feed.get().loaded},
                                [] { Text("Yeni gönderi"); });
-            });
+            };
             AnimatedContent<Feed>(
                 feed.get(),
                 [&](const Feed& f) {
-                    Row(Modifier().fillMaxWidth().height(40), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
-                        [&] {
+                    Row(Modifier().fillMaxWidth().height(40), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                             if (!f.loaded) {
                                 CircularProgressIndicator(Modifier().size(20));
-                                Text("Yükleniyor…", {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                                Text("Yükleniyor…", color = cs.onSurfaceVariant, style = typography().bodyMedium);
                             } else {
                                 Icon(Icons::Filled::CheckCircle, "Yüklendi", {}, cs.primary);
-                                Text(std::format("{} gönderi (contentKey: yeni veri geçişsiz)", f.posts), {.font = typography().bodyMedium});
+                                Text(std::format("{} gönderi (contentKey: yeni veri geçişsiz)", f.posts), style = typography().bodyMedium);
                             }
-                        });
+                        };
                 },
                 Modifier().fillMaxWidth(), togetherWith(slideInVertically(1) + fadeIn(), slideOutVertically(-1) + fadeOut()),
                 {.contentKey = [](const Feed& f) { return uint64_t(f.loaded); }});
@@ -171,32 +167,31 @@ void AnimationsSection(CallSite site) {
                            [&] { Text(panel.get() ? "Paneli kapat" : "Panel (animateEnterExit)"); });
             AnimatedVisibility(panel.get(), Modifier().fillMaxWidth(), EnterTransition::None, ExitTransition::None,
                                [&](const AnimatedVisibilityScope& s) {
-                Box(Modifier().fillMaxWidth().height(140).clip(RoundedCornerShape(16)), [&] {
-                    Box(Modifier().matchParentSize().background(cs.onSurface.copy(0.2f)).then(s.animateEnterExit(fadeIn(0, tween(300)), fadeOut(0, tween(300)))));
+                Box(Modifier().fillMaxWidth().height(140).clip(RoundedCornerShape(16))) {
+                    Box(Modifier().matchParentSize().background(cs.onSurface.copy(0.2f)).then(s.animateEnterExit(fadeIn(0, tween(300)), fadeOut(0, tween(300))))) {};
                     Box(s.animateEnterExit(slideInVertically(1, tween(450)), slideOutVertically(1, tween(450)))
                             .align(Alignment::BottomCenter)
                             .fillMaxWidth()
                             .height(90)
                             .background(cs.primaryContainer, 16)
-                            .padding(16),
-                        [&] {
+                            .padding(16)) {
                             Text("Panel aşağıdan kayar, arka plan ayrıca solar; kapanırken ikisi de bitene dek kalır.",
-                                 {.font = typography().bodyMedium, .color = cs.onPrimaryContainer});
-                        });
-                });
+                                 color = cs.onPrimaryContainer, style = typography().bodyMedium);
+                        };
+                };
             });
             // MutableTransitionState: a row made hidden with a visible target comes in as it first
             // shows (each one added); its currentState and isIdle say where it is, and a row taken
             // away is removed from the list once it is all gone.
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                 OutlinedButton([rows, nextRow] {
                     auto list = rows.get();
                     list.push_back(nextRow.get());
                     rows.set(list);
                     nextRow.set(nextRow.get() + 1);
                 }, Modifier(), {}, [] { Text("Satır ekle"); });
-                Text("MutableTransitionState", {.font = typography().labelLarge, .color = cs.onSurfaceVariant});
-            });
+                Text("MutableTransitionState", color = cs.onSurfaceVariant, style = typography().labelLarge);
+            };
             for (int row : rows.get())
                 key(row, [&] {
                     auto shown = remember([] {
@@ -213,11 +208,11 @@ void AnimationsSection(CallSite site) {
                     AnimatedVisibility(shown, Modifier().fillMaxWidth(), fadeIn(0, tween(500)) + expandVertically(tween(500)),
                                        fadeOut(0, tween(500)) + shrinkVertically(tween(500)), [&] {
                         Row(Modifier().fillMaxWidth().padding(0, 4).background(cs.surfaceContainerHigh, 12).padding(16, 6, 4, 6),
-                            {.verticalAlignment = Alignment::CenterVertically}, [&] {
+                            verticalAlignment = Alignment::CenterVertically) {
                                 const char* where = shown.isIdle() ? "duruyor" : shown.targetState() ? "beliriyor" : "kayboluyor";
-                                Text(std::format("Satır {} · {}", row, where), Modifier().weight(1), {.font = typography().bodyMedium});
+                                Text(std::format("Satır {} · {}", row, where), Modifier().weight(1), style = typography().bodyMedium);
                                 IconButton([shown] { shown.setTargetState(false); }, [] { Icon(Icons::Filled::Close, "Kaldır"); });
-                            });
+                            };
                     });
                 });
         });
@@ -235,7 +230,7 @@ void AsyncImageSection(CallSite site) {
         auto requested = remember([] { return mutableStateOf(std::string()); });
         auto decoded = remember([] { return mutableStateOf(std::string()); });
         Content placeholder = [cs] {
-            Box(Modifier().fillMaxSize().background(cs.surfaceContainerHighest), Alignment::Center,
+            (Box)(Modifier().fillMaxSize().background(cs.surfaceContainerHighest), Alignment::Center,
                 [] { CircularProgressIndicator(Modifier().size(24)); });
         };
         AsyncImageOptions options{.placeholder = placeholder, .contentScale = ContentScale::Crop, .crossfadeMillis = 300};
@@ -244,26 +239,25 @@ void AsyncImageSection(CallSite site) {
                  "BitmapFactory, web'de tarayıcı, Windows'ta WIC. Gelene kadar yer tutucu, sonra geçişle belirir. "
                  "Büyük resim kutusunun boyutunda çözülür; yüklenenler bellekte, indirilenler diskte kalır "
                  "(uygulama yeniden açılınca ağsız gelir).",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 AsyncImage("images/mountains.jpg", "Dağlar (JPEG)", Modifier().weight(1).height(110).clip(RoundedCornerShape(12)), options);
                 AsyncImage("images/lake.webp", "Göl (WebP)", Modifier().weight(1).height(110).clip(RoundedCornerShape(12)), options);
-            });
+            };
             OutlinedTextField(url.get(), [url](std::string v) { url.set(std::move(v)); }, Modifier().fillMaxWidth(),
                               {.singleLine = true, .label = "Adres"});
             Button([url, requested] { requested.set(url.peek()); }, [] { Text("Ağdan yükle"); });
             if (!requested.get().empty()) {
                 AsyncImageOptions network = options;
                 network.error = [cs] {
-                    Box(Modifier().fillMaxSize().background(cs.surfaceContainerHighest), Alignment::Center,
-                        [cs] { Text("Yüklenemedi", {.color = cs.error}); });
+                    (Box)(Modifier().fillMaxSize().background(cs.surfaceContainerHighest), Alignment::Center, [cs] { Text("Yüklenemedi", color = cs.error); });
                 };
                 network.onState = [decoded](const AsyncImageState& s) {
                     if (s.status == AsyncImageState::Status::Success)
                         decoded.set(std::format("Çözülen boyut: {}×{} piksel", s.image.width(), s.image.height()));
                 };
                 AsyncImage(requested.get(), "Ağdan bir resim", Modifier().fillMaxWidth().height(170).clip(RoundedCornerShape(12)), network);
-                if (!decoded.get().empty()) Text(decoded.get(), {.font = typography().bodySmall, .color = cs.onSurfaceVariant});
+                if (!decoded.get().empty()) Text(decoded.get(), color = cs.onSurfaceVariant, style = typography().bodySmall);
             }
         });
     });
@@ -289,24 +283,22 @@ void ImagesSection(CallSite site) {
         Section("Image, Shape, clip · Painter", [&] {
             Image(photo, "Manzara", Modifier().fillMaxWidth().height(150).clip(RoundedCornerShape(16)),
                   ContentScale::Crop);
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::SpaceBetween}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::SpaceBetween) {
                 const std::pair<ContentScale, const char*> scales[] = {{ContentScale::Fit, "Fit"},
                                                                        {ContentScale::Crop, "Crop"},
                                                                        {ContentScale::FillBounds, "FillBounds"},
                                                                        {ContentScale::None, "None"}};
                 for (const auto& [scale, name] : scales) {
-                    Column(Modifier(), {.verticalArrangement = Arrangement::spacedBy(4),
-                                        .horizontalAlignment = Alignment::CenterHorizontally},
-                           [&] {
+                    Column(Modifier(), verticalArrangement = Arrangement::spacedBy(4), horizontalAlignment = Alignment::CenterHorizontally) {
                                Image(photo, name, Modifier().size(72, 56).background(cs.outlineVariant).border(1, cs.outline),
                                      scale);
-                               Text(name, {.fontSize = 10, .color = cs.onSurfaceVariant});
-                           });
+                               Text(name, fontSize = 10, color = cs.onSurfaceVariant);
+                           };
                 }
-            });
+            };
             // ColorFilter: gray (saturation 0), sepia (a color matrix), a tint (SrcIn: the shape in
             // one color, SrcAtop: a wash over it) and a light that multiplies and adds.
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::SpaceBetween}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::SpaceBetween) {
                 ColorMatrix gray, sepia;
                 gray.setToSaturation(0);
                 sepia.values = {0.393f, 0.769f, 0.189f, 0, 0, 0.349f, 0.686f, 0.168f, 0, 0, 0.272f, 0.534f, 0.131f, 0, 0, 0, 0, 0, 1, 0};
@@ -317,32 +309,27 @@ void ImagesSection(CallSite site) {
                     {ColorFilter::tint(cs.primary.copy(0.45f), BlendMode::SrcAtop), "SrcAtop"},
                     {ColorFilter::lighting(Color{1, 0.7f, 0.7f, 1}, Color{0.15f, 0, 0, 0}), "lighting"}};
                 for (const auto& [filter, name] : filters)
-                    Column(Modifier(), {.verticalArrangement = Arrangement::spacedBy(4), .horizontalAlignment = Alignment::CenterHorizontally},
-                           [&] {
+                    Column(Modifier(), verticalArrangement = Arrangement::spacedBy(4), horizontalAlignment = Alignment::CenterHorizontally) {
                                Image(photo, name, Modifier().size(56).clip(RoundedCornerShape(12)), ContentScale::Crop, 1, filter);
-                               Text(name, {.fontSize = 10, .color = cs.onSurfaceVariant});
-                           });
-            });
-            Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(16), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+                               Text(name, fontSize = 10, color = cs.onSurfaceVariant);
+                           };
+            };
+            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                     Image(photo, "Avatar", Modifier().size(64).clip(CircleShape).border(2, cs.primary, CircleShape),
                           ContentScale::Crop);
                     Image(generated, "Kodla üretilmiş", Modifier().size(64).clip(RoundedCornerShape(12)),
                           ContentScale::FillBounds);
-                    Box(Modifier().size(64).alpha(0.5f).background(cs.primary, CircleShape), Alignment::Center,
-                        [&] { Icon(Icons::Filled::Star, "Yarı saydam", Modifier().size(32), cs.onPrimary); });
+                    Box(Modifier().size(64).alpha(0.5f).background(cs.primary, CircleShape), Alignment::Center) { Icon(Icons::Filled::Star, "Yarı saydam", Modifier().size(32), cs.onPrimary); };
                     Text("CircleShape, RoundedCornerShape, alpha(0.5)", Modifier().weight(1),
-                         {.fontSize = 12, .color = cs.onSurfaceVariant});
-                });
+                         fontSize = 12, color = cs.onSurfaceVariant);
+                };
             // Corners cut straight (CutCornerShape), and a ticket with its start corners cut further.
-            Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(16), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                     Image(photo, "Kesik köşeli", Modifier().size(64).clip(CutCornerShape(16)).border(2, cs.tertiary, CutCornerShape(16)),
                           ContentScale::Crop);
-                    Box(Modifier().height(48).width(120).background(cs.tertiaryContainer, CutCornerShape(20, 6, 6, 20)), Alignment::Center,
-                        [&] { Text("Bilet", {.color = cs.onTertiaryContainer}); });
-                    Text("CutCornerShape", Modifier().weight(1), {.fontSize = 12, .color = cs.onSurfaceVariant});
-                });
+                    Box(Modifier().height(48).width(120).background(cs.tertiaryContainer, CutCornerShape(20, 6, 6, 20)), Alignment::Center) { Text("Bilet", color = cs.onTertiaryContainer); };
+                    Text("CutCornerShape", Modifier().weight(1), fontSize = 12, color = cs.onSurfaceVariant);
+                };
             // Modifier.magnifier: a finger on the photo shows what is under it, bigger, above it.
             auto lens = remember([] { return mutableStateOf(Offset{std::nanf(""), 0}); });
             Box(Modifier()
@@ -356,22 +343,20 @@ void ImagesSection(CallSite site) {
                                                                           .onDrag = [lens](PointerInputChange& c, Offset) { lens.set(c.position); },
                                                                           .onDragEnd = [lens] { lens.set({std::nanf(""), 0}); },
                                                                           .onDragCancel = [lens] { lens.set({std::nanf(""), 0}); }});
-                                  }),
-                [&] {
+                                  })) {
                     Image(photo, "Büyüteçle bakın", Modifier().fillMaxSize(), ContentScale::Crop);
                     Text("Modifier.magnifier: parmağınızı sürükleyin", Modifier().align(Alignment::BottomStart).padding(8),
-                         {.fontSize = 12, .color = colors::White, .shadow = Shadow{Color{0, 0, 0, 0.8f}, {1, 1}, 3}});
-                });
+                         fontSize = 12, color = colors::White, style = TextStyle{.shadow = Shadow{Color{0, 0, 0, 0.8f}, {1, 1}, 3}});
+                };
             // Painter: an asset (painterResource), a vector, a brush and drawing of your own, as
             // an Image, an Icon or Modifier.paint behind content.
-            Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                     Image(painterResource("images/landscape.png"), "painterResource", Modifier().size(64).clip(RoundedCornerShape(12)),
                           Alignment::Center, ContentScale::Crop);
                     Icon(rememberVectorPainter(Icons::Filled::Favorite), "VectorPainter", Modifier().size(40), cs.tertiary);
                     Box(Modifier().size(64, 40).clip(RoundedCornerShape(8))
                             .paint(BrushPainter(Brush::horizontalGradient(std::vector<Color>{cs.primary, cs.tertiary})), false),
-                        Alignment::Center, [&] { Text("paint", {.font = typography().labelLarge, .color = cs.onPrimary}); });
+                        Alignment::Center) { Text("paint", color = cs.onPrimary, style = typography().labelLarge); };
                     Image(Painter::custom(
                               [](DrawScope& d) {
                                   Size s = d.size();
@@ -380,7 +365,7 @@ void ImagesSection(CallSite site) {
                               },
                               Size{56, 56}),
                           "Painter::custom", Modifier(), Alignment::Center, ContentScale::Fit, 0.8f);
-                });
+                };
         });
     });
 }
@@ -419,9 +404,8 @@ void MaterialShapesSection(CallSite site) {
         });
         Section("MaterialShapes · Morph", [&] {
             Text("Material 3 Expressive'in 35 şekli; birine dokunun, adı görünsün. Büyük şekle dokununca sıradakine dönüşür (Morph).",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(16), .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                     Box(Modifier()
                             .size(96)
                             .background(cs.tertiaryContainer, morph->toShape(progress.value()))
@@ -432,17 +416,16 @@ void MaterialShapesSection(CallSite site) {
                                     co_await progress.animateTo(1, spring(0.6f, Spring::StiffnessLow));
                                 });
                             }),
-                        Alignment::Center,
-                        [&] { Text(cycle[size_t(i) % cycle.size()] == cycle[0] ? "Dokun" : "", {.color = cs.onTertiaryContainer}); });
-                    Text("Seçilen: " + picked.get(), Modifier().weight(1), {.font = typography().titleMedium});
-                });
+                        Alignment::Center) { Text(cycle[size_t(i) % cycle.size()] == cycle[0] ? "Dokun" : "", color = cs.onTertiaryContainer); };
+                    Text("Seçilen: " + picked.get(), Modifier().weight(1), style = typography().titleMedium);
+                };
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 10, .verticalSpacing = 10}, [&] {
                 for (const auto& shape : all()) {
                     Box(Modifier()
                             .size(44)
                             .background(picked.get() == shape.name ? cs.primary : cs.secondary, toShape(shape.outline()))
                             .clickable([picked, name = std::string(shape.name)] { picked.set(name); })
-                            .semantics(shape.name));
+                            .semantics(shape.name)) {};
                 }
             });
         });
@@ -457,54 +440,53 @@ void ShapesSection(CallSite site) {
         Section("Şekiller (OutlineShape)", [&] {
             // dropShadow / innerShadow: a soft shadow under a card, a glow (spread) in a gradient
             // (a brush), and a shadow inside a well, as if its edge cast it.
-            Row(Modifier().fillMaxWidth().padding(0, 8), {.horizontalArrangement = Arrangement::SpaceEvenly}, [&] {
+            Row(Modifier().fillMaxWidth().padding(0, 8), horizontalArrangement = Arrangement::SpaceEvenly) {
                 Box(Modifier()
                         .size(88, 64)
                         .dropShadow(RoundedCornerShape(16), Shadow{Color{0, 0, 0, 0.35f}, {0, 6}, 10})
                         .background(cs.surface, 16),
-                    Alignment::Center, [&] { Text("dropShadow", {.font = typography().labelSmall}); });
+                    Alignment::Center) { Text("dropShadow", style = typography().labelSmall); };
                 Box(Modifier()
                         .size(88, 64)
                         .dropShadow(CircleShape, Shadow{.blurRadius = 12, .spread = 4,
                                                         .brush = Brush::horizontalGradient({cs.primary, cs.tertiary}), .alpha = 0.7f})
                         .background(cs.primary, CircleShape),
-                    Alignment::Center, [&] { Text("parıltı", {.font = typography().labelSmall, .color = cs.onPrimary}); });
+                    Alignment::Center) { Text("parıltı", color = cs.onPrimary, style = typography().labelSmall); };
                 Box(Modifier()
                         .size(88, 64)
                         .background(cs.surfaceContainerHigh, 16)
                         .innerShadow(RoundedCornerShape(16), Shadow{Color{0, 0, 0, 0.45f}, {2, 4}, 6}),
-                    Alignment::Center, [&] { Text("innerShadow", {.font = typography().labelSmall}); });
-            });
+                    Alignment::Center) { Text("innerShadow", style = typography().labelSmall); };
+            };
             // The same shadows following an outline shape: a glow round a heart, a well in a cookie.
-            Row(Modifier().fillMaxWidth().padding(0, 8), {.horizontalArrangement = Arrangement::SpaceEvenly}, [&] {
+            Row(Modifier().fillMaxWidth().padding(0, 8), horizontalArrangement = Arrangement::SpaceEvenly) {
                 Box(Modifier()
                         .size(72)
                         .dropShadow(OutlineShape(MaterialShapes::Heart()), Shadow{cs.tertiary.copy(0.7f), {}, 10, 3})
-                        .background(cs.tertiary, OutlineShape(MaterialShapes::Heart())));
+                        .background(cs.tertiary, OutlineShape(MaterialShapes::Heart()))) {};
                 Box(Modifier()
                         .size(72)
                         .dropShadow(OutlineShape(MaterialShapes::Cookie9Sided()), Shadow{Color{0, 0, 0, 0.4f}, {0, 6}, 8})
-                        .background(cs.surface, OutlineShape(MaterialShapes::Cookie9Sided())));
+                        .background(cs.surface, OutlineShape(MaterialShapes::Cookie9Sided()))) {};
                 Box(Modifier()
                         .size(72)
                         .background(cs.surfaceContainerHigh, OutlineShape(MaterialShapes::Cookie9Sided()))
-                        .innerShadow(OutlineShape(MaterialShapes::Cookie9Sided()), Shadow{Color{0, 0, 0, 0.5f}, {2, 4}, 6}));
-            });
+                        .innerShadow(OutlineShape(MaterialShapes::Cookie9Sided()), Shadow{Color{0, 0, 0, 0.5f}, {2, 4}, 6})) {};
+            };
             // shadow(elevation, shape, clip, ambientColor, spotColor): a tinted shadow, the content
             // clipped to the shape; BorderStroke with a brush: a gradient border.
-            Row(Modifier().fillMaxWidth().padding(0, 8), {.horizontalArrangement = Arrangement::SpaceEvenly}, [&] {
+            Row(Modifier().fillMaxWidth().padding(0, 8), horizontalArrangement = Arrangement::SpaceEvenly) {
                 Box(Modifier().size(120, 64).shadow(12, RoundedCornerShape(20), true, cs.primary, cs.primary).background(cs.surface),
-                    Alignment::Center, [&] { Text("renkli gölge", {.font = typography().labelSmall}); });
+                    Alignment::Center) { Text("renkli gölge", style = typography().labelSmall); };
                 Box(Modifier()
                         .size(120, 64)
                         .border(BorderStroke(3, Brush::linearGradient({cs.primary, cs.tertiary, Color::hex(0xFFB300)})), RoundedCornerShape(20)),
-                    Alignment::Center, [&] { Text("BorderStroke", {.font = typography().labelSmall}); });
-            });
+                    Alignment::Center) { Text("BorderStroke", style = typography().labelSmall); };
+            };
             Text("Köşeleri yuvarlak dikdörtgen olmayan şekiller: resim yıldıza kırpılır; düğmenin arka planı, gölgesi ve dalgası "
                  "şeklin içinde kalır; çerçeve şekli izler.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::SpaceEvenly, .verticalAlignment = Alignment::CenterVertically},
-                [&] {
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::SpaceEvenly, verticalAlignment = Alignment::CenterVertically) {
                     AsyncImage("images/mountains.jpg", "Yıldız dağlar", Modifier().size(96).clip(OutlineShape(starOutline())),
                                {.contentScale = ContentScale::Crop});
                     Box(Modifier()
@@ -512,9 +494,9 @@ void ShapesSection(CallSite site) {
                             .shadow(6, OutlineShape(starOutline()))
                             .background(cs.primaryContainer, OutlineShape(starOutline()))
                             .clickable([taps] { taps.set(taps.get() + 1); }),
-                        Alignment::Center, [&] { Text(std::to_string(taps.get()), {.font = typography().titleLarge, .color = cs.onPrimaryContainer}); });
-                    Box(Modifier().size(80, 70).border(3, cs.tertiary, OutlineShape(triangle)));
-                });
+                        Alignment::Center) { Text(std::to_string(taps.get()), color = cs.onPrimaryContainer, style = typography().titleLarge); };
+                    Box(Modifier().size(80, 70).border(3, cs.tertiary, OutlineShape(triangle))) {};
+                };
         });
     });
 }
@@ -532,26 +514,25 @@ void SharedElementSection(CallSite site) {
                     auto photo = [&](int i) { return shared.rememberSharedContentState("photo" + std::to_string(i)); };
                     auto title = [&](int i) { return shared.rememberSharedContentState("title" + std::to_string(i)); };
                     if (item < 0) {
-                        Column(Modifier().fillMaxWidth(), {.verticalArrangement = Arrangement::spacedBy(4)}, [&] {
+                        Column(Modifier().fillMaxWidth(), verticalArrangement = Arrangement::spacedBy(4)) {
                             for (int i = 0; i < 3; ++i)
                                 key(i, [&] {
                                     Row(Modifier().fillMaxWidth().clickable([selected, i] { selected.set(i); }).padding(8),
-                                        {.horizontalArrangement = Arrangement::spacedBy(14), .verticalAlignment = Alignment::CenterVertically},
-                                        [&] {
-                                            Box(Modifier().size(64).sharedElement(photo(i), scope).background(palette[i], 14));
-                                            Text(names[i], Modifier().sharedBounds(title(i), scope), {.font = typography().titleMedium});
-                                        });
+                                        horizontalArrangement = Arrangement::spacedBy(14), verticalAlignment = Alignment::CenterVertically) {
+                                            Box(Modifier().size(64).sharedElement(photo(i), scope).background(palette[i], 14)) {};
+                                            Text(names[i], Modifier().sharedBounds(title(i), scope), style = typography().titleMedium);
+                                        };
                                 });
                             Text("Bir satıra dokunun: resim ve başlık ayrıntıdaki yerlerine taşınır.",
-                                 Modifier().padding(8, 4), {.font = typography().bodyMedium, .color = colorScheme().onSurfaceVariant});
-                        });
+                                 Modifier().padding(8, 4), color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
+                        };
                     } else {
-                        Column(Modifier().fillMaxWidth(), {.verticalArrangement = Arrangement::spacedBy(10)}, [&] {
-                            Box(Modifier().fillMaxWidth().height(170).sharedElement(photo(item), scope).background(palette[item], 24));
-                            Text(names[item], Modifier().sharedBounds(title(item), scope), {.font = typography().headlineSmall});
-                            Text("Geri dönünce ikisi listedeki yerlerine uçar.", {.font = typography().bodyMedium});
+                        Column(Modifier().fillMaxWidth(), verticalArrangement = Arrangement::spacedBy(10)) {
+                            Box(Modifier().fillMaxWidth().height(170).sharedElement(photo(item), scope).background(palette[item], 24)) {};
+                            Text(names[item], Modifier().sharedBounds(title(item), scope), style = typography().headlineSmall);
+                            Text("Geri dönünce ikisi listedeki yerlerine uçar.", style = typography().bodyMedium);
                             TextButton([selected] { selected.set(-1); }, [] { Text("Geri"); });
-                        });
+                        };
                     }
                 });
             });
@@ -567,21 +548,20 @@ void BlendModeSection(CallSite site) {
         const ColorScheme& cs = colorScheme();
         Section("BlendMode · CompositingStrategy.Offscreen", [&] {
             Text("Liste kendi katmanında: üstte ve altta bir degradeyle (DstIn) kaybolur. Sağdaki kartta DstOut bir delik açar.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-            Row(Modifier().fillMaxWidth().height(180), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
+            Row(Modifier().fillMaxWidth().height(180), horizontalArrangement = Arrangement::spacedBy(12)) {
                 Box(Modifier().weight(1).fillMaxHeight()
                         .graphicsLayer([](GraphicsLayerScope& l) { l.compositingStrategy = CompositingStrategy::Offscreen; })
                         .drawWithContent([](ContentDrawScope& d) {
                             d.drawContent();
                             d.drawRect(Brush::verticalGradient({colors::Transparent, colors::Black, colors::Black, colors::Transparent}), {}, std::nullopt, 1, Fill, {}, BlendMode::DstIn);
-                        }),
-                    [&] {
+                        })) {
                         LazyColumn(Modifier().fillMaxSize(), {.contentPadding = {0, 16, 0, 16}}, [&](LazyListScope& list) {
                             list.items(40, [&](int i) {
-                                Text(std::format("Satır {}", i + 1), Modifier().fillMaxWidth().padding(8, 6), {.font = typography().bodyLarge});
+                                Text(std::format("Satır {}", i + 1), Modifier().fillMaxWidth().padding(8, 6), style = typography().bodyLarge);
                             });
                         });
-                    });
+                    };
                 Box(Modifier().weight(1).fillMaxHeight()
                         .graphicsLayer([](GraphicsLayerScope& l) { l.compositingStrategy = CompositingStrategy::Offscreen; })
                         .drawWithContent([](ContentDrawScope& d) {
@@ -589,10 +569,10 @@ void BlendModeSection(CallSite site) {
                             d.drawCircle(colors::Black, 36, std::nullopt, 1, Fill, {}, BlendMode::DstOut);
                         })
                         .background(Brush::linearGradient({cs.primary, cs.tertiary}), RoundedCornerShape(16)),
-                    Alignment::BottomCenter, [&] {
-                        Text("DstOut", Modifier().padding(12), {.font = typography().titleMedium, .color = cs.onPrimary});
-                    });
-            });
+                    Alignment::BottomCenter) {
+                        Text("DstOut", Modifier().padding(12), color = cs.onPrimary, style = typography().titleMedium);
+                    };
+            };
         });
     });
 }
@@ -612,23 +592,23 @@ void TileModeSection(CallSite site) {
             const std::pair<TileMode, const char*> modes[] = {
                 {TileMode::Clamp, "Clamp"}, {TileMode::Repeated, "Repeated"}, {TileMode::Mirror, "Mirror"}, {TileMode::Decal, "Decal"}};
             for (const auto& [mode, name] : modes)
-                Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically}, [&] {
-                    Text(name, Modifier().width(76), {.font = typography().labelLarge});
+                Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
+                    Text(name, Modifier().width(76), style = typography().labelLarge);
                     Box(Modifier()
                             .weight(1)
                             .height(32)
                             .border(1, cs.outlineVariant, 8)
-                            .background(Brush::horizontalGradient({cs.primary, cs.tertiaryContainer}, 0, 60, mode), RoundedCornerShape(8)));
-                });
-            Row(Modifier().fillMaxWidth().height(72), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
+                            .background(Brush::horizontalGradient({cs.primary, cs.tertiaryContainer}, 0, 60, mode), RoundedCornerShape(8))) {};
+                };
+            Row(Modifier().fillMaxWidth().height(72), horizontalArrangement = Arrangement::spacedBy(12)) {
                 Matrix small;
                 small.scale(0.1f, 0.1f);
                 Box(Modifier().weight(1).fillMaxHeight().background(
-                    Brush::shader(ImageShader(photo, TileMode::Mirror, TileMode::Mirror).transformed(small)), RoundedCornerShape(12)));
+                    Brush::shader(ImageShader(photo, TileMode::Mirror, TileMode::Mirror).transformed(small)), RoundedCornerShape(12))) {};
                 Box(Modifier().weight(1).fillMaxHeight().background(
                     Brush::composite(Brush::linearGradient({cs.primary, cs.tertiary}),
                                      Brush::radialGradient({colors::White.copy(0.9f), colors::Transparent}, Offset{24, 20}, 48), BlendMode::Screen),
-                    RoundedCornerShape(12)));
+                    RoundedCornerShape(12))) {};
                 Box(Modifier().weight(1).fillMaxHeight().background(
                     Brush::shader([cs](Size size) {
                         Matrix turn, center;
@@ -636,8 +616,8 @@ void TileModeSection(CallSite site) {
                         center.translate(size.width / 2, size.height / 2);
                         return SweepGradientShader({0, 0}, {cs.primary, Color::hex(0xFFB300), cs.tertiary, cs.primary}).transformed(turn).transformed(center);
                     }),
-                    RoundedCornerShape(12)));
-            });
+                    RoundedCornerShape(12))) {};
+            };
         });
     });
 }
@@ -653,12 +633,12 @@ void ColorSpaceSection(CallSite site) {
         Color animated = animateColorAsState(warm.get() ? Color::hex(0xFF6D00) : Color::hex(0x2962FF), tween(1200));
         Section("Color · ColorSpace · Oklab", [&] {
             auto strip = [&](const char* name, const std::function<Color(float)>& at) {
-                Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically}, [&] {
-                    Text(name, Modifier().width(104), {.font = typography().labelLarge});
-                    Row(Modifier().weight(1).height(32).clip(RoundedCornerShape(8)), {}, [&] {
-                        for (int i = 0; i <= 8; ++i) Box(Modifier().weight(1).fillMaxHeight().background(at(float(i) / 8)));
-                    });
-                });
+                Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
+                    Text(name, Modifier().width(104), style = typography().labelLarge);
+                    Row(Modifier().weight(1).height(32).clip(RoundedCornerShape(8))) {
+                        for (int i = 0; i <= 8; ++i) Box(Modifier().weight(1).fillMaxHeight().background(at(float(i) / 8))) {};
+                    };
+                };
             };
             strip("lerp (Oklab)", [](float t) { return lerp(colors::Red, colors::Blue, t); });
             strip("sRGB sayıları", [](float t) { return Color{1 - t, 0, t, 1}; });
@@ -667,18 +647,18 @@ void ColorSpaceSection(CallSite site) {
                 {Color(55, 60, -40, 1, ColorSpaces::CieLab), "CIE L*a*b*"},
                 {Color(0.7f, -0.1f, 0.15f, 1, ColorSpaces::Oklab), "Oklab"},
             };
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12)) {
                 for (const auto& [color, name] : made)
-                    Column(Modifier().weight(1), {.verticalArrangement = Arrangement::spacedBy(4)}, [&] {
-                        Box(Modifier().fillMaxWidth().height(40).background(color, RoundedCornerShape(8)));
-                        Text(name, {.font = typography().labelLarge});
-                        Text(std::format("sRGB #{:06X}", color.toArgb() & 0xFFFFFF), {.font = typography().bodySmall, .color = cs.onSurfaceVariant});
-                    });
-            });
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically}, [&] {
-                Box(Modifier().size(40).background(animated, CircleShape));
+                    Column(Modifier().weight(1), verticalArrangement = Arrangement::spacedBy(4)) {
+                        Box(Modifier().fillMaxWidth().height(40).background(color, RoundedCornerShape(8))) {};
+                        Text(name, style = typography().labelLarge);
+                        Text(std::format("sRGB #{:06X}", color.toArgb() & 0xFFFFFF), kompoz::color = cs.onSurfaceVariant, style = typography().bodySmall);
+                    };
+            };
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
+                Box(Modifier().size(40).background(animated, CircleShape)) {};
                 Button([warm] { warm.set(!warm.get()); }, [] { Text("Rengi canlandır (Oklab'da)"); });
-            });
+            };
         });
     });
 }
@@ -695,7 +675,7 @@ void CanvasSection(CallSite site) {
         const ColorScheme& cs = colorScheme();
         ImageBitmap photo = imageResource("images/landscape.png");
         Section("Canvas · Paint · drawVertices", [&] {
-            Row(Modifier().fillMaxWidth().height(96), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
+            Row(Modifier().fillMaxWidth().height(96), horizontalArrangement = Arrangement::spacedBy(12)) {
                 Canvas(Modifier().weight(1).fillMaxHeight(), [primary = cs.primary, tertiary = cs.tertiary](DrawScope& d) {
                     Size s = d.size();
                     d.drawIntoCanvas([&](graphics::Canvas& c) {
@@ -741,8 +721,8 @@ void CanvasSection(CallSite site) {
                                          .pathEffect = PathEffect::dashPathEffect({8, 5})});
                     });
                 });
-            });
-            Row(Modifier().fillMaxWidth().height(96), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
+            };
+            Row(Modifier().fillMaxWidth().height(96), horizontalArrangement = Arrangement::spacedBy(12)) {
                 Canvas(Modifier().size(96), [primary = cs.primary, tertiary = cs.tertiary](DrawScope& d) {
                     // A fan of 72 triangles, a little bigger than the circle it is cut to: a mesh isn't
                     // anti-aliased (as Skia's), a clip is.
@@ -783,7 +763,7 @@ void CanvasSection(CallSite site) {
                         c.drawVertices(strip, BlendMode::Multiply, Paint{.shader = ImageShader(photo)});
                     });
                 });
-            });
+            };
             // Bitmaps drawn into (Canvas(ImageBitmap)): a pattern drawn once and shown by Image;
             // an Alpha8 one (its alpha alone) drawn in the paint's color, twice.
             ImageBitmap pattern = remember([primary = cs.primary, tertiary = cs.tertiary] {
@@ -805,7 +785,7 @@ void CanvasSection(CallSite site) {
                 c.drawPath(star, Paint{.color = colors::Black.copy(0.9f)});
                 return b;
             });
-            Row(Modifier().fillMaxWidth().height(96), {.horizontalArrangement = Arrangement::spacedBy(12)}, [&] {
+            Row(Modifier().fillMaxWidth().height(96), horizontalArrangement = Arrangement::spacedBy(12)) {
                 Image(pattern, "Bitmap", Modifier().size(96));
                 // Not anti-aliased (isAntiAlias false) beside anti-aliased: a circle and a line.
                 Canvas(Modifier().size(72, 96), [tertiary = cs.tertiary](DrawScope& d) {
@@ -825,11 +805,11 @@ void CanvasSection(CallSite site) {
                         c.drawImage(stencil, {100, 0}, Paint{.color = Color::hex(0xFFB300)});
                     });
                 });
-            });
+            };
             Text("Renk yelpazesi: köşe renkli drawVertices (Skia gibi örgü yumuşatılmaz; daireye kırpıldı) · fotoğraf: doku "
                  "koordinatlı şerit · halkalar: bitmap'e çizildi · daire ve çizgi: üstte yumuşatmalı, altta isAntiAlias = false "
                  "(her piksel ya tam ya hiç, Skia gibi) · yıldızlar: Alpha8 maske, boyanın renginde",
-                 {.font = typography().bodySmall, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodySmall);
         });
     });
 }
@@ -841,33 +821,33 @@ void BlurSection(CallSite site) {
         auto unbounded = remember([] { return mutableStateOf(false); });
         ImageBitmap photo = imageResource("images/landscape.png");
         Section("Modifier.blur", [&] {
-            Text(std::format("Yarıçap: {:.0f} dp", radius.get()), {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+            Text(std::format("Yarıçap: {:.0f} dp", radius.get()), color = cs.onSurfaceVariant, style = typography().bodyMedium);
             Slider(radius.get(), [radius](float v) { radius.set(v); }, Modifier().fillMaxWidth(), {.valueFrom = 0, .valueTo = 32});
-            Row(Modifier(), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+            Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
                 Switch(unbounded.get(), [unbounded](bool v) { unbounded.set(v); });
                 Text("Unbounded (dışa taşar)", Modifier().padding(12, 0, 0, 0));
-            });
-            Box(Modifier().fillMaxWidth().height(160).padding(16), Alignment::Center, [&] {
+            };
+            Box(Modifier().fillMaxWidth().height(160).padding(16), Alignment::Center) {
                 Image(photo, "Manzara",
                       Modifier().fillMaxSize()
                           .blur(radius.get(), unbounded.get() ? BlurredEdgeTreatment::Unbounded : BlurredEdgeTreatment::Rectangle)
                           .clip(RoundedCornerShape(16)),
                       ContentScale::Crop);
-                Text("Buzlu cam", {.font = typography().headlineSmall, .color = colors::White});
-            });
+                Text("Buzlu cam", color = colors::White, style = typography().headlineSmall);
+            };
             // Progressive (Compose 1.13): sharp at the top, as blurred as the slider says at the bottom.
-            Text("Kademeli: üstte keskin, altta bulanık", {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-            Box(Modifier().fillMaxWidth().height(160).padding(16), [&] {
+            Text("Kademeli: üstte keskin, altta bulanık", color = cs.onSurfaceVariant, style = typography().bodyMedium);
+            Box(Modifier().fillMaxWidth().height(160).padding(16)) {
                 Image(photo, "Manzara",
                       Modifier().fillMaxSize()
                           .blur(BlurRadiusSpec::verticalGradient(0, radius.get()),
                                 unbounded.get() ? BlurredEdgeTreatment::Unbounded : BlurredEdgeTreatment::Rectangle)
                           .clip(RoundedCornerShape(16)),
                       ContentScale::Crop);
-            });
+            };
             // By a shader: sharp in the middle, as blurred as the slider says at the edges.
-            Text("Shader ile: ortası keskin, kenarları bulanık", {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-            Box(Modifier().fillMaxWidth().height(160).padding(16), [&] {
+            Text("Shader ile: ortası keskin, kenarları bulanık", color = cs.onSurfaceVariant, style = typography().bodyMedium);
+            Box(Modifier().fillMaxWidth().height(160).padding(16)) {
                 Image(photo, "Manzara",
                       Modifier().fillMaxSize()
                           .blur(BlurRadiusSpec::shader(radius.get(),
@@ -878,23 +858,23 @@ void BlurSection(CallSite site) {
                                 unbounded.get() ? BlurredEdgeTreatment::Unbounded : BlurredEdgeTreatment::Rectangle)
                           .clip(RoundedCornerShape(16)),
                       ContentScale::Crop);
-            });
+            };
             // Morph: what is behind a glass panel blurred, the panel's text sharp; Self: a card's
             // own picture blurred, its text sharp.
             Text("Morph: arkadaki bulanık, cam keskin · Self: kartın resmi bulanık, yazısı keskin",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
-            Box(Modifier().fillMaxWidth().height(160).padding(16), Alignment::Center, [&] {
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
+            Box(Modifier().fillMaxWidth().height(160).padding(16), Alignment::Center) {
                 Image(photo, "Manzara", Modifier().fillMaxSize().clip(RoundedCornerShape(16)), ContentScale::Crop);
                 Box(Modifier().size(200, 72)
                         .blur(radius.get(), BlurredEdgeTreatment{RoundedCornerShape(16)}, BlurType::Morph)
                         .background(colors::White.copy(0.18f), RoundedCornerShape(16))
                         .border(1, colors::White.copy(0.5f), RoundedCornerShape(16)),
-                    Alignment::Center, [&] { Text("Buzlu cam", {.font = typography().titleMedium, .color = colors::White}); });
-            });
+                    Alignment::Center) { Text("Buzlu cam", color = colors::White, style = typography().titleMedium); };
+            };
             Box(Modifier().fillMaxWidth().height(120).padding(16, 0, 16, 16)
                     .blur(radius.get(), BlurredEdgeTreatment{RoundedCornerShape(16)}, BlurType::Self)
                     .paint(BitmapPainter(photo), false, Alignment::Center, ContentScale::Crop),
-                Alignment::Center, [&] { Text("Yazı keskin kalır", {.font = typography().headlineSmall, .color = colors::White}); });
+                Alignment::Center) { Text("Yazı keskin kalır", color = colors::White, style = typography().headlineSmall); };
         });
     });
 }
@@ -934,21 +914,21 @@ void ColorVectorSection(CallSite site) {
             return b.build();
         }();
         Section("ImageVector::Builder · renkli vektörler", [&] {
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(16), .verticalAlignment = Alignment::CenterVertically}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                 Image(VectorPainter(badge), "Onaylı");
                 Image(VectorPainter(sun), "Güneş");
                 Image(VectorPainter(tile), "Degrade");
                 Image(VectorPainter(ball), "Çizgili top");
                 Icon(sun, "Tonlu güneş", Modifier().size(48), cs.primary);  // its rays (strokes) tinted too
-            });
+            };
             // An Android vector drawable from the assets (vectors/compass.xml), read once.
             ImageVector compass = vectorResource("vectors/compass.xml");
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(16), .verticalAlignment = Alignment::CenterVertically}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                 Image(VectorPainter(compass), "Pusula");
                 Image(VectorPainter(compass), "Büyük pusula", Modifier().size(96));
                 Text("vectorResource: Android'in vector drawable XML'i (yaylar, döndürülmüş grup, çizgiler, degradeler)", Modifier().weight(1),
-                     {.font = typography().bodyMedium});
-            });
+                     style = typography().bodyMedium);
+            };
             // Composable vector content (rememberVectorPainter { Path() }): a ring, then a tick, drawn
             // in (trimPathEnd) as it is switched on; the ball's stripes turned with it (its group
             // drawn by RenderVectorGroup with a config of its own).
@@ -975,21 +955,21 @@ void ColorVectorSection(CallSite site) {
             // An animated vector drawable from the assets: play turning into pause, and back.
             AnimatedImageVector playPause = animatedVectorResource("vectors/play_pause.xml");
             auto playing = remember([] { return mutableStateOf(false); });
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(16), .verticalAlignment = Alignment::CenterVertically}, [&] {
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                 Image(rememberAnimatedVectorPainter(playPause, playing.get()), playing.get() ? "Duraklat" : "Oynat",
                       Modifier().clip(CircleShape).clickable([playing] { playing.set(!playing.peek()); }));
                 Text("animatedVectorResource + rememberAnimatedVectorPainter: <animated-vector> (yol morfu, dönüş, renk); dokunun",
-                     Modifier().weight(1), {.font = typography().bodyMedium});
-            });
-            Row(Modifier().fillMaxWidth(), {.horizontalArrangement = Arrangement::spacedBy(16), .verticalAlignment = Alignment::CenterVertically}, [&] {
+                     Modifier().weight(1), style = typography().bodyMedium);
+            };
+            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                 Image(check, "Onay");
                 Image(turning, "Dönen çizgiler");
                 Switch(done.get(), [done](bool on) { done.set(on); });
                 Text("rememberVectorPainter { Path() }: trimPathEnd ile kendini çizen onay; RenderVectorGroup: grubu döndüren VectorConfig",
-                     Modifier().weight(1), {.font = typography().bodyMedium});
-            });
+                     Modifier().weight(1), style = typography().bodyMedium);
+            };
             Text("Image kendi renkleriyle çizer (dolgu, çizgi, degrade, döndürülüp daireye kırpılmış grup); Icon tek tonla boyar.",
-                 {.font = typography().bodyMedium, .color = cs.onSurfaceVariant});
+                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
         });
     });
 }

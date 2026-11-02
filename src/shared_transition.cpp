@@ -352,7 +352,7 @@ void SharedTransitionLayout(const Modifier& modifier, const std::function<void(c
     auto overlay = std::make_shared<SharedOverlayElement>();
     overlay->registry = registry;
     SharedTransitionScope shared(registry);
-    Box(modifier.then(std::move(overlay)), [&] { content(shared); });
+    detail::Box(modifier.then(std::move(overlay)), [&] { content(shared); });
 }
 
 Modifier Modifier::sharedElement(const SharedContentState& state, const AnimatedVisibilityScope& scope) const {

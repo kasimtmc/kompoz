@@ -23,14 +23,14 @@ For scrolling content, use the scroll modifiers or a lazy list (see [Lists and g
 ```cpp
 void Slider1D() {
     auto x = remember([] { return mutableStateOf(0.f); });
-    Box(Modifier().fillMaxWidth().height(56), [&] {
+    Box(Modifier().fillMaxWidth().height(56)) {
         Box(Modifier()
                 .offset([x] { return Offset{x.get(), 0}; })
                 .draggable(rememberDraggableState([x](float delta) { x.set(std::max(0.f, x.get() + delta)); }),
                            Orientation::Horizontal)
                 .size(56)
-                .background(colorScheme().primary, CircleShape));
-    });
+                .background(colorScheme().primary, CircleShape)) {};
+    };
 }
 ```
 
@@ -46,13 +46,13 @@ enum class DragValue { Start, End };
 void Toggle() {
     auto state = rememberAnchoredDraggableState(DragValue::Start);
     state.updateAnchors({{DragValue::Start, 0}, {DragValue::End, 120}});
-    Box(Modifier().width(176).height(56).background(colorScheme().surfaceContainerHigh, CircleShape), [&] {
+    Box(Modifier().width(176).height(56).background(colorScheme().surfaceContainerHigh, CircleShape)) {
         Box(Modifier()
                 .offset([state] { return Offset{state.requireOffset(), 0}; })
                 .anchoredDraggable(state, Orientation::Horizontal)
                 .size(56)
-                .background(colorScheme().primary, CircleShape));
-    });
+                .background(colorScheme().primary, CircleShape)) {};
+    };
 }
 ```
 
@@ -88,7 +88,7 @@ void TapTarget() {
                                                .onDoubleTap = [last](Offset) { last.set("Double tap"); },
                                                .onLongPress = [last](Offset) { last.set("Long press"); }});
             }),
-        Alignment::Center, [&] { Text(last.get()); });
+        Alignment::Center) { Text(last.get()); };
 }
 ```
 
@@ -131,7 +131,7 @@ Box(Modifier()
             }
             return false;
         })
-        .focusable());
+        .focusable()) {};
 ```
 
 ## Focus
@@ -181,7 +181,7 @@ void PressToRecord() {
 ```cpp
 void DropZone() {
     auto dropped = remember([] { return mutableStateOf(std::string("Drop text here")); });
-    Column([&] {
+    Column() {
         Text("Drag me", Modifier().padding(16).dragAndDropSource([](Offset) {
             return std::optional(DragAndDropTransferData{.text = "Hello"});
         }));
@@ -191,8 +191,8 @@ void DropZone() {
                                        dropped.set(e.text());
                                        return true;
                                    }}),
-            Alignment::Center, [&] { Text(dropped.get()); });
-    });
+            Alignment::Center) { Text(dropped.get()); };
+    };
 }
 ```
 

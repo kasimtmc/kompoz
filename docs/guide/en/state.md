@@ -136,12 +136,12 @@ void ScrollToTop() {
     auto list = rememberLazyListState();
     auto showButton = remember([list] { return derivedStateOf([list] { return list.firstVisibleItemIndex() > 0; }); });
 
-    Box(Modifier().fillMaxSize(), [&] {
+    Box(Modifier().fillMaxSize()) {
         LazyColumn(Modifier().fillMaxSize(), {.state = list}, [](LazyListScope& l) {
             l.items(100, [](int i) { Text("Row " + std::to_string(i)); });
         });
         if (showButton.get()) Text("Back to top");
-    });
+    };
 }
 ```
 
@@ -173,10 +173,10 @@ On the UI thread, states are read and written freely. Another thread may write t
 ```cpp
 void Tags() {
     auto tags = remember([] { return mutableStateListOf<std::string>({"red", "green"}); });
-    Column([&] {
+    Column() {
         for (const std::string& tag : tags) Text(tag);
         Button([tags] { tags.add("blue"); }, [] { Text("Add"); });
-    });
+    };
 }
 ```
 
@@ -203,10 +203,10 @@ void NameInput(const std::string& name, std::function<void(std::string)> onNameC
 // Stateful: owns the state and hands it down.
 void Profile() {
     auto name = rememberSaveable([] { return mutableStateOf(std::string()); });
-    Column([&] {
+    Column() {
         NameInput(name.get(), [name](std::string v) { name.set(std::move(v)); });
         Text("Hello, " + name.get());
-    });
+    };
 }
 ```
 

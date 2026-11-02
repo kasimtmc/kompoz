@@ -148,18 +148,18 @@ void tooltipBox(const TooltipPosition& position, const std::shared_ptr<Caret>& c
         trigger->onHoverChange = [hovering](bool h) { hovering.set(h); };
         anchor = anchor.then(trigger);
     }
-    Box(anchor, [&] {
+    detail::Box(anchor, [&] {
         content();
         if (!visible && faded) return;  // faded out
         Popup({.position = position, .onDismissRequest = [state] { state.dismiss(); }, .focusable = focusable}, [&] {
             auto shown = [&] {
                 if (animated && (!faded || !grown))
-                    Box(Modifier().graphicsLayer([fading = detail::live(fade), growing = detail::live(grow)](GraphicsLayerScope& l) {
+                    detail::Box(Modifier().graphicsLayer([fading = detail::live(fade), growing = detail::live(grow)](GraphicsLayerScope& l) {
                             l.scaleX = l.scaleY = growing(), l.alpha = fading();
                         }),
                         tooltip);
                 else if (animated)
-                    Box(Modifier().graphicsLayer({.scaleX = scale, .scaleY = scale, .alpha = alpha}), tooltip);
+                    detail::Box(Modifier().graphicsLayer({.scaleX = scale, .scaleY = scale, .alpha = alpha}), tooltip);
                 else tooltip();
             };
             if (caretInfo) CompositionLocalProvider({LocalTooltipCaret.provides(caretInfo)}, shown);
@@ -228,7 +228,7 @@ void PlainTooltip(const Content& content, const Modifier& modifier, CallSite sit
 void PlainTooltip(const Content& content, const Modifier& modifier, Size caretSize, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
-    Box(modifier.heightIn(24).widthIn(40, 200).then(caret(caretSize, cs.inverseSurface)).background(cs.inverseSurface, 4).padding(8, 4),
+    detail::Box(modifier.heightIn(24).widthIn(40, 200).then(caret(caretSize, cs.inverseSurface)).background(cs.inverseSurface, 4).padding(8, 4),
         Alignment::CenterStart, [&] {
         CompositionLocalProvider({LocalContentColor.provides(cs.inverseOnSurface), LocalTextStyle.provides(typography().bodySmall)},
                                  content);
@@ -246,19 +246,19 @@ void RichTooltip(const RichTooltipSlots& slots, const Modifier& modifier, Size c
     // the action at least 36 dp tall, 8 above the bottom.
     Modifier card = modifier.heightIn(24).widthIn(40, 320).shadow(3, RoundedCornerShape(12), false).then(caret(caretSize, cs.surfaceContainer, 3));  // (the caret past it)
     bool spaced = slots.title || slots.action;
-    Column(card.background(cs.surfaceContainer, 12).padding(16, 0), [&] {
+    detail::Column(card.background(cs.surfaceContainer, 12).padding(16, 0), [&] {
         if (slots.title)
-            Box(Modifier().paddingFromBaseline(28), [&] {
+            detail::Box(Modifier().paddingFromBaseline(28), [&] {
                 CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant), LocalTextStyle.provides(t.titleSmall)},
                                          slots.title);
             });
         if (slots.text)
-            Box(spaced ? Modifier().paddingFromBaseline(24).padding(0, 0, 0, 16) : Modifier().padding(0, 4), [&] {
+            detail::Box(spaced ? Modifier().paddingFromBaseline(24).padding(0, 0, 0, 16) : Modifier().padding(0, 4), [&] {
                 CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant), LocalTextStyle.provides(t.bodyMedium)},
                                          slots.text);
             });
         if (slots.action)
-            Box(Modifier().requiredHeightIn(36).padding(0, 0, 0, 8), [&] {
+            detail::Box(Modifier().requiredHeightIn(36).padding(0, 0, 0, 8), [&] {
                 CompositionLocalProvider({LocalContentColor.provides(cs.primary), LocalTextStyle.provides(t.labelLarge)}, slots.action);
             });
     });
@@ -294,7 +294,7 @@ void TooltipArea(const Content& tooltip, const Modifier& modifier, const Tooltip
         *waiting = 0;
         visible.set(false);
     };
-    Box(Modifier()
+    detail::Box(Modifier()
             .onPointerEvent(PointerEventType::Enter, show)
             .onPointerEvent(PointerEventType::Move, show)
             .onPointerEvent(PointerEventType::Exit, [hide](PointerEvent&) { hide(); })
@@ -331,7 +331,7 @@ namespace {
 // The label over its content, while `visible`: above it, centered, 4 dp apart (below if there is
 // no room above), kept 8 dp inside the window.
 void labelOver(bool visible, const Content& label, const Modifier& modifier, const Content& content) {
-    Box(modifier, [&] {
+    detail::Box(modifier, [&] {
         content();
         if (!visible) return;
         Popup({.position = [](const Rect& anchor, Size size, Size window) {
