@@ -26,12 +26,12 @@ Color hueColor(int i) {
 // A small titled section of the components screen.
 void Section(const char* title, const Content& content, CallSite site) {
     ComposableScope scope(site);
-    Card(Modifier().fillMaxWidth(), [&] {
+    Card(Modifier().fillMaxWidth()) {
         Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(12)) {
             Text(title, style = typography().titleMedium);
             content();
         };
-    });
+    };
 }
 
 // On a phone, above a section that needs what phones seldom have (a hardware keyboard): a warning.

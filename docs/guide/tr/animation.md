@@ -25,10 +25,10 @@ void LikeButton() {
     auto scale = animateFloatAsState(liked.get() ? 1.2f : 1.f, spring(Spring::DampingRatioMediumBouncy));
     Color tint = animateColorAsState(liked.get() ? Color::hex(0xE53935) : colorScheme().onSurfaceVariant, 300);
 
-    IconButton([liked] { liked.set(!liked.get()); }, [&] {
+    IconButton([liked] { liked.set(!liked.get()); }) {
         Icon(liked.get() ? Icons::Filled::Favorite : Icons::Filled::FavoriteBorder, "Like",
              Modifier().graphicsLayer([scale](GraphicsLayerScope& l) { l.scaleX = l.scaleY = scale.value(); }), tint);
-    });
+    };
 }
 ```
 
@@ -58,7 +58,7 @@ Material bileşenleri `motionScheme()`'in yaylarını kullanır; böylece Materi
 void Details() {
     auto open = remember([] { return mutableStateOf(false); });
     Column() {
-        TextButton([open] { open.set(!open.get()); }, [&] { Text(open.get() ? "Less" : "More"); });
+        TextButton([open] { open.set(!open.get()); }) { Text(open.get() ? "Less" : "More"); };
         AnimatedVisibility(open.get(), Modifier(), fadeIn() + expandVertically(), fadeOut() + shrinkVertically(), [] {
             Text("Here are the details.", Modifier().padding(16));
         });
@@ -78,14 +78,14 @@ Compose'taki gibi bir geçiş, içeriği yerleştirilip çizilirken okunur: çev
 void Counter() {
     auto count = remember([] { return mutableStateOf(0); });
     Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
-        IconButton([count] { count.set(count.get() - 1); }, [] { Icon(Icons::Filled::Remove, "Less"); });
+        IconButton([count] { count.set(count.get() - 1); }) { Icon(Icons::Filled::Remove, "Less"); };
         AnimatedContent<int>(count.get(), [](const int& n) {
             Text(std::to_string(n), style = typography().headlineMedium);
         }, Modifier(), [](const int& from, const int& to) {
             // yukarı sayarken yukarı, aşağı sayarken aşağı
             return togetherWith(slideInVertically(to > from ? 1 : -1), slideOutVertically(to > from ? -1 : 1));
         });
-        IconButton([count] { count.set(count.get() + 1); }, [] { Icon(Icons::Filled::Add, "More"); });
+        IconButton([count] { count.set(count.get() + 1); }) { Icon(Icons::Filled::Add, "More"); };
     };
 }
 ```

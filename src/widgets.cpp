@@ -938,11 +938,11 @@ void textSelectionPopups(std::shared_ptr<SelectionRegistry> registry) {
            .touchable = true},
           [&] {
               detail::Row(Modifier().shadow(3, 8).background(cs.surfaceContainer, 8), [&] {
-                  TextButton([registry] {
+                  detail::TextButton([registry] {
                       registry->host->setClipboardText(registry->selectedText());
                       registry->clear();
                   }, [] { detail::Text(LocalStrings.current().copy); });
-                  TextButton([registry] { registry->selectAll(true); }, [] { detail::Text(LocalStrings.current().selectAll); });
+                  detail::TextButton([registry] { registry->selectAll(true); }, [] { detail::Text(LocalStrings.current().selectAll); });
               });
           });
 }
@@ -1312,41 +1312,41 @@ void DisableSelection(const Content& content, CallSite site) {
     CompositionLocalProvider({LocalSelectionRegistry.provides(nullptr)}, content);
 }
 
-void Button(std::function<void()> onClick, const Content& content, CallSite site) {
+void detail::Button(std::function<void()> onClick, const Content& content, CallSite site) {
     buttonImpl(ButtonKind::Filled, std::move(onClick), Modifier{}, ButtonStyle{}, content, site);
 }
-void Button(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site) {
+void detail::Button(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site) {
     buttonImpl(ButtonKind::Filled, std::move(onClick), modifier, ButtonStyle{}, content, site);
 }
-void Button(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style, const Content& content,
+void detail::Button(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style, const Content& content,
             CallSite site) {
     buttonImpl(ButtonKind::Filled, std::move(onClick), modifier, style, content, site);
 }
-void OutlinedButton(std::function<void()> onClick, const Content& content, CallSite site) {
+void detail::OutlinedButton(std::function<void()> onClick, const Content& content, CallSite site) {
     buttonImpl(ButtonKind::Outlined, std::move(onClick), Modifier{}, ButtonStyle{}, content, site);
 }
-void OutlinedButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
+void detail::OutlinedButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                     const Content& content, CallSite site) {
     buttonImpl(ButtonKind::Outlined, std::move(onClick), modifier, style, content, site);
 }
-void FilledTonalButton(std::function<void()> onClick, const Content& content, CallSite site) {
+void detail::FilledTonalButton(std::function<void()> onClick, const Content& content, CallSite site) {
     buttonImpl(ButtonKind::Tonal, std::move(onClick), Modifier{}, ButtonStyle{}, content, site);
 }
-void FilledTonalButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
+void detail::FilledTonalButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                        const Content& content, CallSite site) {
     buttonImpl(ButtonKind::Tonal, std::move(onClick), modifier, style, content, site);
 }
-void ElevatedButton(std::function<void()> onClick, const Content& content, CallSite site) {
+void detail::ElevatedButton(std::function<void()> onClick, const Content& content, CallSite site) {
     buttonImpl(ButtonKind::Elevated, std::move(onClick), Modifier{}, ButtonStyle{}, content, site);
 }
-void ElevatedButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
+void detail::ElevatedButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                     const Content& content, CallSite site) {
     buttonImpl(ButtonKind::Elevated, std::move(onClick), modifier, style, content, site);
 }
-void TextButton(std::function<void()> onClick, const Content& content, CallSite site) {
+void detail::TextButton(std::function<void()> onClick, const Content& content, CallSite site) {
     buttonImpl(ButtonKind::Text, std::move(onClick), Modifier{}, ButtonStyle{}, content, site);
 }
-void TextButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
+void detail::TextButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                 const Content& content, CallSite site) {
     buttonImpl(ButtonKind::Text, std::move(onClick), modifier, style, content, site);
 }
@@ -1425,18 +1425,18 @@ void TrailingButton(bool checked, std::function<void(bool)> onCheckedChange, con
 void TrailingButtonIcon(bool checked, CallSite site) {
     ComposableScope scope(site);
     auto turn = animateFloatAsState(checked ? 180.f : 0.f, motionScheme().fastSpatialSpec);  // (read as it is drawn)
-    Icon(Icons::Filled::KeyboardArrowDown, checked ? LocalStrings.current().closeMenu : LocalStrings.current().openMenu,
+    detail::Icon(Icons::Filled::KeyboardArrowDown, checked ? LocalStrings.current().closeMenu : LocalStrings.current().openMenu,
          Modifier().size(18).graphicsLayer([turn](GraphicsLayerScope& l) { l.rotationZ = turn.value(); }));
 }
 
 } // namespace SplitButtonDefaults
 
-void Icon(const ImageVector& icon, std::string contentDescription, const Modifier& modifier, std::optional<Color> tint,
+void detail::Icon(const ImageVector& icon, std::string contentDescription, const Modifier& modifier, std::optional<Color> tint,
           CallSite site) {
-    composable(site, icon, contentDescription, modifier, tint, [=] { Icon(rememberVectorPainter(icon), contentDescription, modifier, tint); });
+    composable(site, icon, contentDescription, modifier, tint, [=] { detail::Icon(rememberVectorPainter(icon), contentDescription, modifier, tint); });
 }
 
-void Icon(const Painter& painter, std::string contentDescription, const Modifier& modifier, std::optional<Color> tint,
+void detail::Icon(const Painter& painter, std::string contentDescription, const Modifier& modifier, std::optional<Color> tint,
           CallSite site) {
     composable(site, painter, contentDescription, modifier, tint, [=] {
         Color color = tint.value_or(LocalContentColor.current());
@@ -1596,7 +1596,7 @@ AsyncImageState asyncImageState(const std::string& model, std::optional<ImageReq
 
 } // namespace
 
-void Image(const ImageBitmap& bitmap, std::string contentDescription, const Modifier& modifier,
+void detail::Image(const ImageBitmap& bitmap, std::string contentDescription, const Modifier& modifier,
            ContentScale contentScale, float alpha, std::optional<ColorFilter> colorFilter, CallSite site) {
     composable(site, bitmap, contentDescription, modifier, contentScale, alpha, colorFilter, [=] {
         float iw = float(bitmap.width()), ih = float(bitmap.height());
@@ -1753,7 +1753,7 @@ void vector::RenderVectorGroup(const VectorGroup& group, const std::map<std::str
     }
 }
 
-void Image(const Painter& painter, std::string contentDescription, const Modifier& modifier, Alignment alignment,
+void detail::Image(const Painter& painter, std::string contentDescription, const Modifier& modifier, Alignment alignment,
            ContentScale contentScale, float alpha, std::optional<ColorFilter> colorFilter, CallSite site) {
     composable(site, painter, contentDescription, modifier, alignment, contentScale, alpha, colorFilter, [=] {
         layoutNode(CallSite::current(), modifier.clipToBounds().paint(painter, true, alignment, contentScale, alpha, colorFilter),
@@ -1829,7 +1829,7 @@ void AsyncImage(std::string model, std::string contentDescription, const Modifie
     layoutNode(site, modifier, measure, [&] {
         const Content& slot = state.status == Status::Error ? options.error : options.placeholder;
         if (shown < 1 && slot) detail::Box(Modifier(), Alignment::Center, slot);
-        if (loaded) Image(state.image, contentDescription, Modifier(), options.contentScale, options.alpha * shown, options.colorFilter);
+        if (loaded) detail::Image(state.image, contentDescription, Modifier(), options.contentScale, options.alpha * shown, options.colorFilter);
     });
 }
 
@@ -1918,59 +1918,59 @@ void iconToggleButtonImpl(IconButtonKind kind, bool checked, std::function<void(
 
 } // namespace
 
-void IconButton(std::function<void()> onClick, const Content& content, CallSite site) {
+void detail::IconButton(std::function<void()> onClick, const Content& content, CallSite site) {
     iconButtonImpl(IconButtonKind::Standard, std::move(onClick), Modifier{}, {}, content, site);
 }
-void IconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
+void detail::IconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
                 const Content& content, CallSite site) {
     iconButtonImpl(IconButtonKind::Standard, std::move(onClick), modifier, style, content, site);
 }
-void FilledIconButton(std::function<void()> onClick, const Content& content, CallSite site) {
+void detail::FilledIconButton(std::function<void()> onClick, const Content& content, CallSite site) {
     iconButtonImpl(IconButtonKind::Filled, std::move(onClick), Modifier{}, {}, content, site);
 }
-void FilledIconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
+void detail::FilledIconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
                       const Content& content, CallSite site) {
     iconButtonImpl(IconButtonKind::Filled, std::move(onClick), modifier, style, content, site);
 }
-void FilledTonalIconButton(std::function<void()> onClick, const Content& content, CallSite site) {
+void detail::FilledTonalIconButton(std::function<void()> onClick, const Content& content, CallSite site) {
     iconButtonImpl(IconButtonKind::Tonal, std::move(onClick), Modifier{}, {}, content, site);
 }
-void FilledTonalIconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
+void detail::FilledTonalIconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
                            const Content& content, CallSite site) {
     iconButtonImpl(IconButtonKind::Tonal, std::move(onClick), modifier, style, content, site);
 }
-void OutlinedIconButton(std::function<void()> onClick, const Content& content, CallSite site) {
+void detail::OutlinedIconButton(std::function<void()> onClick, const Content& content, CallSite site) {
     iconButtonImpl(IconButtonKind::Outlined, std::move(onClick), Modifier{}, {}, content, site);
 }
-void OutlinedIconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
+void detail::OutlinedIconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
                         const Content& content, CallSite site) {
     iconButtonImpl(IconButtonKind::Outlined, std::move(onClick), modifier, style, content, site);
 }
-void IconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
+void detail::IconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
     iconToggleButtonImpl(IconButtonKind::Standard, checked, std::move(onCheckedChange), Modifier{}, {}, content, site);
 }
-void IconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
+void detail::IconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
             const IconToggleButtonStyle& style, const Content& content, CallSite site) {
     iconToggleButtonImpl(IconButtonKind::Standard, checked, std::move(onCheckedChange), modifier, style, content, site);
 }
-void FilledIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
+void detail::FilledIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
     iconToggleButtonImpl(IconButtonKind::Filled, checked, std::move(onCheckedChange), Modifier{}, {}, content, site);
 }
-void FilledIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
+void detail::FilledIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
             const IconToggleButtonStyle& style, const Content& content, CallSite site) {
     iconToggleButtonImpl(IconButtonKind::Filled, checked, std::move(onCheckedChange), modifier, style, content, site);
 }
-void FilledTonalIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
+void detail::FilledTonalIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
     iconToggleButtonImpl(IconButtonKind::Tonal, checked, std::move(onCheckedChange), Modifier{}, {}, content, site);
 }
-void FilledTonalIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
+void detail::FilledTonalIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
             const IconToggleButtonStyle& style, const Content& content, CallSite site) {
     iconToggleButtonImpl(IconButtonKind::Tonal, checked, std::move(onCheckedChange), modifier, style, content, site);
 }
-void OutlinedIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
+void detail::OutlinedIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
     iconToggleButtonImpl(IconButtonKind::Outlined, checked, std::move(onCheckedChange), Modifier{}, {}, content, site);
 }
-void OutlinedIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
+void detail::OutlinedIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
             const IconToggleButtonStyle& style, const Content& content, CallSite site) {
     iconToggleButtonImpl(IconButtonKind::Outlined, checked, std::move(onCheckedChange), modifier, style, content, site);
 }
@@ -2116,36 +2116,36 @@ void card(CardKind kind, std::function<void()> onClick, const Modifier& modifier
 }
 } // namespace
 
-void Card(const Modifier& modifier, const Content& content, CallSite site) {
+void detail::Card(const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     card(CardKind::Filled, {}, modifier, content);
 }
-void ElevatedCard(const Modifier& modifier, const Content& content, CallSite site) {
+void detail::ElevatedCard(const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     card(CardKind::Elevated, {}, modifier, content);
 }
-void OutlinedCard(const Modifier& modifier, const Content& content, CallSite site) {
+void detail::OutlinedCard(const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     card(CardKind::Outlined, {}, modifier, content);
 }
-void Card(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site) {
+void detail::Card(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     card(CardKind::Filled, std::move(onClick), modifier, content);
 }
-void ElevatedCard(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site) {
+void detail::ElevatedCard(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     card(CardKind::Elevated, std::move(onClick), modifier, content);
 }
-void OutlinedCard(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site) {
+void detail::OutlinedCard(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     card(CardKind::Outlined, std::move(onClick), modifier, content);
 }
 
-void Surface(const Modifier& modifier, const Content& content, CallSite site) {
+void detail::Surface(const Modifier& modifier, const Content& content, CallSite site) {
     const ColorScheme& cs = colorScheme();
-    Surface(modifier, cs.background, cs.onBackground, content, site);
+    detail::Surface(modifier, cs.background, cs.onBackground, content, site);
 }
-void Surface(const Modifier& modifier, Color color, Color contentColor, const Content& content, CallSite site) {
+void detail::Surface(const Modifier& modifier, Color color, Color contentColor, const Content& content, CallSite site) {
     ComposableScope scope(site);
     CompositionLocalProvider({LocalContentColor.provides(contentColor)},
                              [&] { detail::Box(modifier.background(color), content); });
@@ -2223,7 +2223,7 @@ void checkbox(ToggleableState state, std::function<void()> onClick, const Modifi
 }
 } // namespace
 
-void Checkbox(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, bool enabled,
+void detail::Checkbox(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, bool enabled,
               std::optional<MutableInteractionSource> interactionSource, CallSite site) {
     ComposableScope scope(site);
     std::function<void()> toggle;  // none: not clickable (the row around it takes the tap)
@@ -2231,18 +2231,18 @@ void Checkbox(bool checked, std::function<void(bool)> onCheckedChange, const Mod
     checkbox(checked ? ToggleableState::On : ToggleableState::Off, toggle, modifier, enabled, std::move(interactionSource));
 }
 
-void TriStateCheckbox(ToggleableState state, std::function<void()> onClick, const Modifier& modifier, bool enabled,
+void detail::TriStateCheckbox(ToggleableState state, std::function<void()> onClick, const Modifier& modifier, bool enabled,
                       std::optional<MutableInteractionSource> interactionSource, CallSite site) {
     ComposableScope scope(site);
     checkbox(state, std::move(onClick), modifier, enabled, std::move(interactionSource));
 }
 
-void Switch(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, bool enabled,
+void detail::Switch(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, bool enabled,
             std::optional<MutableInteractionSource> interactionSource, CallSite site) {
-    Switch(checked, std::move(onCheckedChange), modifier, SwitchOptions{enabled, std::move(interactionSource), {}}, site);
+    detail::Switch(checked, std::move(onCheckedChange), modifier, SwitchOptions{enabled, std::move(interactionSource), {}}, site);
 }
 
-void Switch(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, const SwitchOptions& options, CallSite site) {
+void detail::Switch(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, const SwitchOptions& options, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     bool enabled = options.enabled;
@@ -3047,7 +3047,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                   const Strings& strings = LocalStrings.current();
                   detail::Row(Modifier().shadow(3, 8).background(cs.surfaceContainer, 8), [&] {
                       auto action = [&](const std::string& label, ComposeHost::TextAction a) {
-                          TextButton([host, a] { host->textAction(a); }, [label] { detail::Text(label); });
+                          detail::TextButton([host, a] { host->textAction(a); }, [label] { detail::Text(label); });
                       };
                       if (canCopy && canEdit) action(strings.cut, ComposeHost::TextAction::Cut);
                       if (canCopy) action(strings.copy, ComposeHost::TextAction::Copy);

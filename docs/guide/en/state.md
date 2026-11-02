@@ -43,7 +43,7 @@ A composable's body runs on every recomposition, so a state created in it would 
 ```cpp
 void Counter() {
     auto count = remember([] { return mutableStateOf(0); });   // made once
-    Button([count] { count.set(count.get() + 1); }, [&] { Text(std::to_string(count.get())); });
+    Button([count] { count.set(count.get() + 1); }) { Text(std::to_string(count.get())); };
 }
 ```
 
@@ -161,7 +161,7 @@ Button([from, to] {
         from.set(from.peek() - 10);
         to.set(to.peek() + 10);
     });
-}, [] { Text("Move 10"); });
+}) { Text("Move 10"); };
 ```
 
 On the UI thread, states are read and written freely. Another thread may write them, and reads them inside a snapshot: `Snapshot::takeSnapshot()` gives a view of them as they are, read in its `enter(block)`, and `dispose()` lets it go. `takeMutableSnapshot()` gives one to write in too, applied with `apply()`; taken inside another, it is applied to that one. Snapshots take read and write observers, and `Snapshot::registerApplyObserver` hears what every applied snapshot changed.
@@ -175,7 +175,7 @@ void Tags() {
     auto tags = remember([] { return mutableStateListOf<std::string>({"red", "green"}); });
     Column() {
         for (const std::string& tag : tags) Text(tag);
-        Button([tags] { tags.add("blue"); }, [] { Text("Add"); });
+        Button([tags] { tags.add("blue"); }) { Text("Add"); };
     };
 }
 ```

@@ -14,15 +14,15 @@ void AnimateItemSection(CallSite site) {
                         std::mt19937 rng((*shuffles)++);
                         std::shuffle(v.begin(), v.end(), rng);
                     });
-                }, [] { Text("Karıştır"); });
-                FilledTonalButton([tasks, nextTask] { tasks.add(0, (*nextTask)++); }, [] { Text("Ekle"); });
+                }) { Text("Karıştır"); };
+                FilledTonalButton([tasks, nextTask] { tasks.add(0, (*nextTask)++); }) { Text("Ekle"); };
                 FilledTonalButton([tasks] {  // it fades out where it was, the others glide up
                     if (!tasks.items().empty()) tasks.removeAt(0);
-                }, [] { Text("İlkini sil"); });
+                }) { Text("İlkini sil"); };
                 OutlinedButton([tasks, nextTask] {
                     tasks.update([](std::vector<int>& v) { v = {1, 2, 3, 4, 5}; });
                     *nextTask = 6;
-                }, [] { Text("Sıfırla"); });
+                }) { Text("Sıfırla"); };
             });
             LazyColumn(Modifier().fillMaxWidth().height(330), {.spacing = 6}, [&](LazyListScope& list) {
                 list.items(tasks.items(), [](int id) { return id; }, [&](int id) { SwipeableTask(id, tasks); });
@@ -36,7 +36,7 @@ void ListItemSection(CallSite site) {
         const ColorScheme& cs = colorScheme();
         auto notifications = remember([] { return mutableStateOf(true); });
         Section("ListItem ve Badge", [&] {
-            OutlinedCard(Modifier().fillMaxWidth().clip(RoundedCornerShape(12)), [&] {
+            OutlinedCard(Modifier().fillMaxWidth().clip(RoundedCornerShape(12))) {
                 ListItem({.headline = [] { Text("Tek satır"); },
                           .trailing = [&] {
                               Switch(notifications.get(), [notifications](bool on) { notifications.set(on); });
@@ -60,7 +60,7 @@ void ListItemSection(CallSite site) {
                           .trailing = [] {
                               BadgedBox([] { Badge(); }, Modifier(), [] { Icon(Icons::Filled::Notifications, "Bildirim"); });
                           }});
-            });
+            };
             // M3 Expressive: items that make one card, the row taking the tap, rounder when picked.
             Text("SegmentedListItem: tek kart gibi duran, seçilince yuvarlaklaşan satırlar",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
@@ -95,16 +95,16 @@ void DialogsSection(NavController nav, CallSite site) {
         auto alignment = remember([] { return mutableStateOf(0); });
         Section("Dialog, menü ve alt sayfa", [&] {
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
-                FilledTonalButton([dialog] { dialog.set(true); }, [] { Text("Dialog"); });
-                FilledTonalButton([basicDialog] { basicDialog.set(true); }, [] { Text("BasicAlertDialog"); });
-                FilledTonalButton([sheet] { sheet.set(true); }, [] { Text("Alt sayfa"); });
-                FilledTonalButton([longSheet] { longSheet.set(true); }, [] { Text("Uzun liste"); });
-                FilledTonalButton([nav] { nav.navigate(routes::Places{}); }, [] { Text("Harita (BottomSheetScaffold)"); });
+                FilledTonalButton([dialog] { dialog.set(true); }) { Text("Dialog"); };
+                FilledTonalButton([basicDialog] { basicDialog.set(true); }) { Text("BasicAlertDialog"); };
+                FilledTonalButton([sheet] { sheet.set(true); }) { Text("Alt sayfa"); };
+                FilledTonalButton([longSheet] { longSheet.set(true); }) { Text("Uzun liste"); };
+                FilledTonalButton([nav] { nav.navigate(routes::Places{}); }) { Text("Harita (BottomSheetScaffold)"); };
                 Box() {
-                    OutlinedButton([menu] { menu.set(true); }, [] {
+                    OutlinedButton([menu] { menu.set(true); }) {
                         Text("Menü");
                         Icon(Icons::Filled::KeyboardArrowDown, "Aç", Modifier().size(18));
-                    });
+                    };
                     DropdownMenu(menu.get(), [menu] { menu.set(false); }, [&] {
                         DropdownMenuItem([] { Text("Düzenle"); }, [menu, choice] { choice.set("Düzenle"); menu.set(false); },
                                          {.leadingIcon = [] { Icon(Icons::Filled::Edit, "Düzenle"); }});
@@ -119,10 +119,10 @@ void DialogsSection(NavController nav, CallSite site) {
                 };
                 // An expressive menu: groups as cards, checked and selected items.
                 Box() {
-                    OutlinedButton([formatMenu] { formatMenu.set(true); }, [] {
+                    OutlinedButton([formatMenu] { formatMenu.set(true); }) {
                         Text("Biçim");
                         Icon(Icons::Filled::KeyboardArrowDown, "Aç", Modifier().size(18));
-                    });
+                    };
                     DropdownMenuPopup(formatMenu.get(), [formatMenu] { formatMenu.set(false); }, [&] {
                         DropdownMenuGroup(MenuDefaults::groupShape(0, 3), [&] {
                             const char* styles[] = {"Kalın", "İtalik"};
@@ -156,9 +156,9 @@ void DialogsSection(NavController nav, CallSite site) {
             if (dialog.get())
                 AlertDialog([dialog] { dialog.set(false); },
                             {.confirmButton = [dialog, choice] {
-                                 TextButton([dialog, choice] { choice.set("Dialog: Sil"); dialog.set(false); }, [] { Text("Sil"); });
+                                 TextButton([dialog, choice] { choice.set("Dialog: Sil"); dialog.set(false); }) { Text("Sil"); };
                              },
-                             .dismissButton = [dialog] { TextButton([dialog] { dialog.set(false); }, [] { Text("Vazgeç"); }); },
+                             .dismissButton = [dialog] { TextButton([dialog] { dialog.set(false); }) { Text("Vazgeç"); }; },
                              .icon = [] { Icon(Icons::Filled::Delete, "Sil"); },
                              .title = [] { Text("Taslak silinsin mi?"); },
                              .text = [] { Text("Bu işlem geri alınamaz. Scrim'e dokunmak ya da geri tuşu da dialog'u kapatır."); }});
@@ -169,7 +169,7 @@ void DialogsSection(NavController nav, CallSite site) {
                         Text("Eşitleniyor…", Modifier().padding(0, 16), style = typography().titleMedium);
                         Text("BasicAlertDialog: içeriği bizim; en az 280 dp genişlik ona da geçer.",
                              color = cs.onSurfaceVariant, style = typography().bodyMedium);
-                        TextButton([basicDialog] { basicDialog.set(false); }, Modifier().padding(0, 16, 0, 0), {}, [] { Text("Kapat"); });
+                        TextButton([basicDialog] { basicDialog.set(false); }, Modifier().padding(0, 16, 0, 0)) { Text("Kapat"); };
                     };
                 });
             if (sheet.get())
@@ -216,12 +216,9 @@ void CardsSection(CallSite site) {
         Section("Kartlar ve BottomAppBar", [&] {
             // Card(onClick): the ripple keeps to the card's corners.
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                Card([cardTaps] { cardTaps.set(cardTaps.peek() + 1); }, Modifier().weight(1).height(72),
-                     [&] { Text(std::format("Card · {}", cardTaps.get()), Modifier().padding(12)); });
-                ElevatedCard([cardTaps] { cardTaps.set(cardTaps.peek() + 1); }, Modifier().weight(1).height(72),
-                             [] { Text("Elevated", Modifier().padding(12)); });
-                OutlinedCard([cardTaps] { cardTaps.set(cardTaps.peek() + 1); }, Modifier().weight(1).height(72),
-                             [] { Text("Outlined", Modifier().padding(12)); });
+                Card([cardTaps] { cardTaps.set(cardTaps.peek() + 1); }, Modifier().weight(1).height(72)) { Text(std::format("Card · {}", cardTaps.get()), Modifier().padding(12)); };
+                ElevatedCard([cardTaps] { cardTaps.set(cardTaps.peek() + 1); }, Modifier().weight(1).height(72)) { Text("Elevated", Modifier().padding(12)); };
+                OutlinedCard([cardTaps] { cardTaps.set(cardTaps.peek() + 1); }, Modifier().weight(1).height(72)) { Text("Outlined", Modifier().padding(12)); };
             };
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                     SmallFloatingActionButton([] {}, [] { Icon(Icons::Filled::Edit, "Küçük FAB"); });
@@ -241,9 +238,9 @@ void CardsSection(CallSite site) {
                 LargeExtendedFloatingActionButton([] {}, Icons::Filled::Email, "Gönder", fabsOpen.get());
             };
             BottomAppBar({.actions = [] {
-                              IconButton([] {}, [] { Icon(Icons::Filled::Check, "Tamam"); });
-                              IconButton([] {}, [] { Icon(Icons::Filled::Edit, "Düzenle"); });
-                              IconButton([] {}, [] { Icon(Icons::Filled::Delete, "Sil"); });
+                              IconButton([] {}) { Icon(Icons::Filled::Check, "Tamam"); };
+                              IconButton([] {}) { Icon(Icons::Filled::Edit, "Düzenle"); };
+                              IconButton([] {}) { Icon(Icons::Filled::Delete, "Sil"); };
                           },
                           .floatingActionButton = [] {
                               FloatingActionButton([] {}, [] { Icon(Icons::Filled::Add, "Ekle"); });

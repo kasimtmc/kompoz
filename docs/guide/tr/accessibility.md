@@ -13,7 +13,7 @@ Anlamın ekranda metin olarak bulunmadığı yerlerde ona ekleme yapmanız gerek
 Anlam taşıyan her ikona ve resme bir içerik açıklaması verin, süs amaçlı olanları boş bırakın:
 
 ```cpp body
-IconButton([] {}, [] { Icon(Icons::Filled::Share, "Share"); });     // "Share, button" olarak seslendirilir
+IconButton([] {}) { Icon(Icons::Filled::Share, "Share"); };     // "Share, button" olarak seslendirilir
 Icon(Icons::Filled::Star, "");                                      // süs: seslendirilmez
 Image(imageResource("images/chart.png"), "Sales grew 20% in March", Modifier().size(200));
 ```
@@ -85,7 +85,7 @@ void WifiRow() {
     Row(Modifier().fillMaxWidth().toggleable(on.get(), [on](bool v) { on.set(v); }, SemanticsRole::Switch).padding(16),
         verticalAlignment = Alignment::CenterVertically) {
             Text("Wi-Fi", Modifier().weight(1));
-            Switch(on.get(), {});
+            Switch(on.get(), nullptr);
         };
 }
 ```

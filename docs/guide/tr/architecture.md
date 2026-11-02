@@ -23,7 +23,7 @@ void TodoList(const std::vector<TodoItem>& items, std::function<void(int id, boo
     LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
         list.items(items, [](const TodoItem& t) { return t.id; }, [onToggle](const TodoItem& t) {
             ListItem(t.done, [onToggle, id = t.id](bool done) { onToggle(id, done); },
-                     {.headline = [&] { Text(t.title); }, .leading = [&] { Checkbox(t.done, {}); }});
+                     {.headline = [&] { Text(t.title); }, .leading = [&] { Checkbox(t.done, nullptr); }});
         });
     });
 }

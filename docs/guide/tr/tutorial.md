@@ -58,7 +58,7 @@ void Counter() {
 
     Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
         Text("You clicked " + std::to_string(count.get()) + " times");
-        Button([count] { count.set(count.get() + 1); }, [] { Text("Click me"); });
+        Button([count] { count.set(count.get() + 1); }) { Text("Click me"); };
     };
 }
 ```
@@ -132,13 +132,13 @@ Her mesajı, tıklanınca metninin tamamını gösteren bir kart yapalım. Açı
 void MessageCard(const Message& msg) {
     auto expanded = remember([] { return mutableStateOf(false); });
 
-    Card([expanded] { expanded.set(!expanded.get()); }, Modifier().fillMaxWidth().padding(8, 4), [&] {
+    Card([expanded] { expanded.set(!expanded.get()); }, Modifier().fillMaxWidth().padding(8, 4)) {
         Column(Modifier().padding(16).animateContentSize()) {
             Text(msg.author, color = colorScheme().primary, style = typography().titleSmall);
             Spacer(Modifier().height(4));
             Text(msg.body, maxLines = expanded.get() ? 0 : 1, overflow = TextOverflow::Ellipsis, style = typography().bodyMedium);
         };
-    });
+    };
 }
 ```
 

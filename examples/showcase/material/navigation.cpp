@@ -134,8 +134,7 @@ void WideNavigationRailSection(CallSite site) {
                         }, [&, i] { Icon(*boxes[i].icon, ""); }, [&, i] { Text(boxes[i].label); });
                 };
                 Content header = [rail] {
-                    IconButton([rail] { rail.toggle(); },
-                               [rail] { Icon(rail.isExpanded() ? Icons::AutoMirrored::Filled::ArrowBack : Icons::Filled::Menu, "Rayı aç/kapat"); });
+                    IconButton([rail] { rail.toggle(); }) { Icon(rail.isExpanded() ? Icons::AutoMirrored::Filled::ArrowBack : Icons::Filled::Menu, "Rayı aç/kapat"); };
                 };
                 if (modal.get())
                     ModalWideNavigationRail(Modifier(), items, {.state = rail, .header = header});
@@ -168,20 +167,20 @@ void FloatingToolbarsSection(CallSite site) {
                     });
                     // The middle actions stay; ⋮ shows the ones on the sides.
                     HorizontalFloatingToolbar(more.get(), [&] {
-                        IconButton([] {}, [] { Icon(Icons::Filled::Edit, "Düzenle"); });
-                        IconButton([] {}, [] { Icon(Icons::Filled::Share, "Paylaş"); });
-                        IconButton([more] { more.set(!more.get()); }, [] { Icon(Icons::Filled::MoreVert, "Daha fazla"); });
+                        IconButton([] {}) { Icon(Icons::Filled::Edit, "Düzenle"); };
+                        IconButton([] {}) { Icon(Icons::Filled::Share, "Paylaş"); };
+                        IconButton([more] { more.set(!more.get()); }) { Icon(Icons::Filled::MoreVert, "Daha fazla"); };
                     }, Modifier().align(Alignment::BottomCenter).offset(0, -FloatingToolbarDefaults::ScreenOffset),
                         {.scrollBehavior = below,
-                         .leadingContent = [] { IconButton([] {}, [] { Icon(Icons::Filled::Favorite, "Beğen"); }); },
-                         .trailingContent = [] { IconButton([] {}, [] { Icon(Icons::Filled::Delete, "Sil"); }); }});
+                         .leadingContent = [] { IconButton([] {}) { Icon(Icons::Filled::Favorite, "Beğen"); }; },
+                         .trailingContent = [] { IconButton([] {}) { Icon(Icons::Filled::Delete, "Sil"); }; }});
                     // A vibrant one with a FAB: collapsed, only the FAB is left.
                     VerticalFloatingToolbar(tools.get(), [&] {
                         FloatingToolbarDefaults::VibrantFloatingActionButton([tools] { tools.set(!tools.get()); },
                                                                             [&] { Icon(tools.get() ? Icons::Filled::Close : Icons::Filled::Add, "Araçlar"); });
                     }, [&] {
-                        IconButton([] {}, [] { Icon(Icons::Filled::Place, "Konum"); });
-                        IconButton([] {}, [] { Icon(Icons::Filled::Email, "E-posta"); });
+                        IconButton([] {}) { Icon(Icons::Filled::Place, "Konum"); };
+                        IconButton([] {}) { Icon(Icons::Filled::Email, "E-posta"); };
                     }, Modifier().align(Alignment::TopEnd).offset(-FloatingToolbarDefaults::ScreenOffset, FloatingToolbarDefaults::ScreenOffset),
                         {.colors = FloatingToolbarDefaults::vibrantFloatingToolbarColors(), .scrollBehavior = aside});
                 };

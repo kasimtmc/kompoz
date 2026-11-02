@@ -283,7 +283,7 @@ void markedItem(bool marked, const std::function<Modifier(const Modifier&)>& int
     Shape shape = marked ? RoundedCornerShape(12) : o.shape.value_or(RoundedCornerShape(4));
     Content leading = !marked ? o.leadingIcon
                       : o.checkedLeadingIcon ? o.checkedLeadingIcon
-                                             : Content([] { Icon(Icons::Filled::Check, "", Modifier().size(24)); });
+                                             : Content([] { detail::Icon(Icons::Filled::Check, "", Modifier().size(24)); });
     menuItem(interact(detail::animatedBackground(Modifier().padding(4, 0), container, shape)), content, icon, text, leading, o);
 }
 

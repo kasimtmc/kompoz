@@ -168,7 +168,7 @@ LazyVerticalGrid(GridCells::Adaptive(120), Modifier().fillMaxSize(),
 LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxSize(), {.verticalItemSpacing = 8},
                           [&](LazyGridScope& grid) {
                               grid.items(notes, [](const std::string& note) {
-                                  OutlinedCard(Modifier().padding(4), [&] { Text(note, Modifier().padding(12)); });
+                                  OutlinedCard(Modifier().padding(4)) { Text(note, Modifier().padding(12)); };
                               });
                           });
 ```
@@ -185,8 +185,7 @@ void Onboarding() {
         HorizontalPager(pager, Modifier().weight(1), [](int page) {
             Box(Modifier().fillMaxSize(), Alignment::Center) { Text("Page " + std::to_string(page + 1)); };
         });
-        Button([scope, pager] { scope.launch([pager]() -> Task { co_await pager.animateScrollToPage(pager.currentPage() + 1); }); },
-               [] { Text("Next"); });
+        Button([scope, pager] { scope.launch([pager]() -> Task { co_await pager.animateScrollToPage(pager.currentPage() + 1); }); }) { Text("Next"); };
     };
 }
 ```

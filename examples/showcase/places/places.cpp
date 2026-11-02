@@ -18,9 +18,8 @@ void PlacesScreen(Modifier modifier, CallSite site) {
                 Text("Yukarı sürükleyin: önce sayfa açılır, sonra liste kayar.",
                      color = cs.onSurfaceVariant, style = typography().bodyMedium);
                 Row(Modifier().padding(0, 12), horizontalArrangement = Arrangement::spacedBy(8)) {
-                    FilledTonalButton([scope, sheet] { scope.launch([sheet]() -> Task { co_await sheet.expand(); }); }, [] { Text("Aç"); });
-                    OutlinedButton([scope, sheet] { scope.launch([sheet]() -> Task { co_await sheet.partialExpand(); }); },
-                                   [] { Text("Daralt"); });
+                    FilledTonalButton([scope, sheet] { scope.launch([sheet]() -> Task { co_await sheet.expand(); }); }) { Text("Aç"); };
+                    OutlinedButton([scope, sheet] { scope.launch([sheet]() -> Task { co_await sheet.partialExpand(); }); }) { Text("Daralt"); };
                 };
             };
             LazyColumn(Modifier().fillMaxWidth().height(420), {.contentPadding = {8, 0, 8, 8}}, [&](LazyListScope& list) {

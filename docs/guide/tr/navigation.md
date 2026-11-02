@@ -9,13 +9,13 @@ void App() {
     auto nav = rememberNavController();
     NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
         graph.composable("home", [nav](const NavBackStackEntry&) {
-            Button([nav] { nav.navigate("detail/42"); }, [] { Text("Open item 42"); });
+            Button([nav] { nav.navigate("detail/42"); }) { Text("Open item 42"); };
         });
         graph.composable("detail/{id}", [nav](const NavBackStackEntry& entry) {
             int id = entry.arguments().getInt("id").value_or(0);
             Column() {
                 Text("Item " + std::to_string(id));
-                TextButton([nav] { nav.popBackStack(); }, [] { Text("Back"); });
+                TextButton([nav] { nav.popBackStack(); }) { Text("Back"); };
             };
         });
     });
@@ -52,7 +52,7 @@ void TypedApp() {
     auto nav = rememberNavController();
     NavHost(nav, Home{}, Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
         graph.composable<Home>([nav](const NavBackStackEntry&) {
-            Button([nav] { nav.navigate(Profile{.id = "ada"}); }, [] { Text("Ada's profile"); });
+            Button([nav] { nav.navigate(Profile{.id = "ada"}); }) { Text("Ada's profile"); };
         });
         graph.composable<Profile>([](const NavBackStackEntry& e) {
             Profile p = e.toRoute<Profile>();
@@ -119,16 +119,16 @@ Birbirine ait ekranlar, örneğin bir oturum açma akışı, kendi rotası olan 
 void Graphs(NavController nav) {
     NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
         graph.composable("home", [nav](const NavBackStackEntry&) {
-            Button([nav] { nav.navigate("login"); }, [] { Text("Sign in"); });
+            Button([nav] { nav.navigate("login"); }) { Text("Sign in"); };
         });
         graph.navigation("username", "login", [&](NavGraphBuilder& login) {
             login.composable("username", [nav](const NavBackStackEntry& e) {
                 auto form = viewModel<LoginViewModel>(*e.parent());   // grafiğin ekranlarınca paylaşılır
-                Button([nav] { nav.navigate("password"); }, [] { Text("Next"); });
+                Button([nav] { nav.navigate("password"); }) { Text("Next"); };
             });
             login.composable("password", [nav](const NavBackStackEntry& e) {
                 auto form = viewModel<LoginViewModel>(*e.parent());   // aynısı
-                Button([nav] { nav.navigate("home", {.popUpTo = "login", .inclusive = true}); }, [] { Text("Done"); });
+                Button([nav] { nav.navigate("home", {.popUpTo = "login", .inclusive = true}); }) { Text("Done"); };
             });
         });
     });

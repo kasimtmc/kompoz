@@ -7,14 +7,14 @@ void ButtonsSection(CallSite site) {
         const ColorScheme& cs = colorScheme();
         Section("Butonlar", [&] {
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                Button([] {}, [] { Text("Button"); });
-                FilledTonalButton([] {}, [] { Text("Tonal"); });
-                ElevatedButton([] {}, [] { Text("Elevated"); });
+                Button([] {}) { Text("Button"); };
+                FilledTonalButton([] {}) { Text("Tonal"); };
+                ElevatedButton([] {}) { Text("Elevated"); };
             };
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                OutlinedButton([] {}, [] { Text("Outlined"); });
-                TextButton([] {}, [] { Text("Text"); });
-                Button([] {}, Modifier(), {.enabled = false}, [] { Text("Kapalı"); });
+                OutlinedButton([] {}) { Text("Outlined"); };
+                TextButton([] {}) { Text("Text"); };
+                Button([] {}, Modifier(), enabled = false) { Text("Kapalı"); };
             };
             // MotionScheme: the buttons below on Material 3's standard springs or the expressive ones
             // (MaterialExpressiveTheme's), which bounce as the corners morph and the held button grows.
@@ -25,16 +25,16 @@ void ButtonsSection(CallSite site) {
             };
             CompositionLocalProvider({LocalMotionScheme.provides(expressiveMotion.get() ? MotionScheme::expressive() : MotionScheme::standard())}, [&] {
                 // M3 Expressive: the corners morph, squarer while held; toggle buttons turn square when checked.
-                Button([] {}, Modifier(), {.shapes = ButtonShapes{}}, [] { Text("Basılı tut: köşeler"); });
+                Button([] {}, Modifier(), shapes = ButtonShapes{}) { Text("Basılı tut: köşeler"); };
                 // ButtonGroup: the button held grows and squeezes its neighbours.
                 ButtonGroup([&](const ButtonGroupScope& group) {
                     const char* labels[] = {"Önceki", "Oynat", "Sonraki"};
                     for (int i = 0; i < 3; ++i) {
                         auto source = remember([] { return MutableInteractionSource(); });
                         if (i == 1)
-                            Button([] {}, group.animateWidth(source), {.interactionSource = source}, [&] { Text(labels[i]); });
+                            Button([] {}, group.animateWidth(source), interactionSource = source) { Text(labels[i]); };
                         else
-                            FilledTonalButton([] {}, group.animateWidth(source), {.interactionSource = source}, [&] { Text(labels[i]); });
+                            FilledTonalButton([] {}, group.animateWidth(source), interactionSource = source) { Text(labels[i]); };
                     }
                 });
             });
@@ -116,7 +116,7 @@ void ChipsSection(CallSite site) {
                               {.trailingIcon = [people, person] {
                                   IconButton([people, person] {
                                       people.removeIf([&](const std::string& p) { return p == person; });
-                                  }, Modifier().size(24), {}, [] { Icon(Icons::Filled::Close, "Kaldır", Modifier().size(18)); });
+                                  }, Modifier().size(24)) { Icon(Icons::Filled::Close, "Kaldır", Modifier().size(18)); };
                               }});
             });
             std::string chosen;
@@ -182,7 +182,7 @@ void SelectionControlsSection(CallSite site) {
                 Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
                     Icon(Icons::Filled::Notifications, "Ses");
                     Slider(volume.get(), [volume](float v) { volume.set(v); }, Modifier().weight(1).padding(8, 0),
-                           {.valueFrom = 0, .valueTo = 100, .interactionSource = volumeSource});
+                           valueFrom = 0, valueTo = 100, interactionSource = volumeSource);
                     bool held = volumeSource.collectIsPressedAsState() || volumeSource.collectIsDraggedAsState();
                     Text(std::format("{:.0f}", volume.get()), Modifier().width(32),
                          fontWeight = held ? std::optional(FontWeight::Bold) : std::nullopt, color = held ? std::optional(cs.primary) : std::nullopt, textAlign = TextAlign::End);
@@ -190,7 +190,7 @@ void SelectionControlsSection(CallSite site) {
                 Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
                     Icon(Icons::Filled::Star, "Puan");
                     Slider(rating.get(), [rating](float v) { rating.set(v); }, Modifier().weight(1).padding(8, 0),
-                           {.valueFrom = 1, .valueTo = 5, .steps = 3});
+                           valueFrom = 1, valueTo = 5, steps = 3);
                     Text(std::format("{:.0f}", rating.get()), Modifier().width(32), textAlign = TextAlign::End);
                 };
                 // systemGestureExclusion: two sliders out to the window's edges; a drag
@@ -215,14 +215,13 @@ void SelectionControlsSection(CallSite site) {
                     Text(" ₺", color = cs.onSurfaceVariant, style = typography().bodyMedium);
                 };
                 RangeSlider(price.get(), [price](std::pair<float, float> v) { price.set(v); }, Modifier().fillMaxWidth(),
-                            {.valueFrom = 0, .valueTo = 1000, .steps = 19, .interactionSource = priceFrom,
-                             .endInteractionSource = priceTo});
+                            valueFrom = 0, valueTo = 1000, steps = 19, interactionSource = priceFrom, endInteractionSource = priceTo);
                 // M3 Expressive's vertical sliders: up for more (the second one in five steps).
                 auto volume = remember([] { return mutableStateOf(0.6f); });
                 auto light = remember([] { return mutableStateOf(0.5f); });
                 Row(Modifier().height(160), horizontalArrangement = Arrangement::spacedBy(24), verticalAlignment = Alignment::CenterVertically) {
                     VerticalSlider(volume.get(), [volume](float v) { volume.set(v); });
-                    VerticalSlider(light.get(), [light](float v) { light.set(v); }, Modifier(), {.steps = 3});
+                    VerticalSlider(light.get(), [light](float v) { light.set(v); }, Modifier(), steps = 3);
                     Text(std::format("Ses %{} · Işık %{}", int(std::lround(volume.get() * 100)), int(std::lround(light.get() * 100))),
                          color = cs.onSurfaceVariant, style = typography().bodyMedium);
                 };
@@ -266,32 +265,29 @@ void SelectionControlsSection(CallSite site) {
                         });
                     };
                 };
-                std::function<void(const SliderState&)> track;
-                if (thickTrack.get()) track = [](const SliderState& s) { SliderDefaults::Track(s); };
+                std::function<void(const SliderState&)> pickedTrack;
+                if (thickTrack.get()) pickedTrack = [](const SliderState& s) { SliderDefaults::Track(s); };
                 Slider(picked.get(), [picked](float v) { picked.set(v); }, Modifier().fillMaxWidth(),
-                       {.valueFrom = 0, .valueTo = 100, .steps = stepped.get() ? 9 : 0, .thumb = withBubble(thumbFor(thumbKind.get())), .track = track});
+                       valueFrom = 0, valueTo = 100, steps = stepped.get() ? 9 : 0, thumb = withBubble(thumbFor(thumbKind.get())), track = pickedTrack);
                 // The same thumbs on a range (each its own), the track picked alike.
                 auto pickedRange = remember([] { return mutableStateOf(std::pair{20.f, 70.f}); });
-                std::function<void(const RangeSliderState&)> rangeTrack;
-                if (thickTrack.get()) rangeTrack = [](const RangeSliderState& s) { SliderDefaults::Track(s); };
+                std::function<void(const RangeSliderState&)> pickedRangeTrack;
+                if (thickTrack.get()) pickedRangeTrack = [](const RangeSliderState& s) { SliderDefaults::Track(s); };
                 RangeSlider(pickedRange.get(), [pickedRange](std::pair<float, float> v) { pickedRange.set(v); }, Modifier().fillMaxWidth(),
-                            {.valueFrom = 0, .valueTo = 100, .steps = stepped.get() ? 9 : 0, .thumb = withBubble(thumbFor(thumbKind.get())),
-                             .rangeTrack = rangeTrack});
+                            valueFrom = 0, valueTo = 100, steps = stepped.get() ? 9 : 0, thumb = withBubble(thumbFor(thumbKind.get())), rangeTrack = pickedRangeTrack);
                 // States of their own (rememberSliderState, rememberRangeSliderState): Material 3's look, values shown.
                 auto hours = rememberRangeSliderState(9, 17, 23, 0, 24);
                 Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
                     Text(std::format("Saat: {:02.0f}–{:02.0f}", hours.activeRangeStart(), hours.activeRangeEnd()), Modifier().width(120),
                          style = typography().bodyMedium);
                     RangeSlider(hours, Modifier().weight(1),
-                                {.thumb = [](const SliderState& s) { SliderDefaults::ValueThumb(s); },
-                                 .rangeTrack = [](const RangeSliderState& s) { SliderDefaults::Track(s); }});
+                                thumb = [](const SliderState& s) { SliderDefaults::ValueThumb(s); }, rangeTrack = [](const RangeSliderState& s) { SliderDefaults::Track(s); });
                 };
                 auto stars = rememberSliderState(3, 3, 1, 5);
                 Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
                     Text(std::format("SliderState: {:.0f} ★", stars.value()), Modifier().width(120), style = typography().bodyMedium);
                     Slider(stars, Modifier().weight(1),
-                           {.thumb = [](const SliderState& s) { SliderDefaults::ValueThumb(s); },
-                            .track = [](const SliderState& s) { SliderDefaults::Track(s); }});
+                           thumb = [](const SliderState& s) { SliderDefaults::ValueThumb(s); }, track = [](const SliderState& s) { SliderDefaults::Track(s); });
                 };
                 SingleChoiceSegmentedButtonRow(Modifier().fillMaxWidth(), [&] {
                     const char* labels[] = {"Gün", "Hafta", "Ay"};

@@ -214,9 +214,8 @@ void DrawingSection(CallSite site) {
                              .onVisibilityChanged([inView](bool visible) { inView.set(visible); }, {.minFractionVisible = 0})
                              .graphicsLayer([spin](GraphicsLayerScope& l) { l.rotationZ = spin.value(); }),
                          cs.primary);
-                    OutlinedButton([spinning] { spinning.set(!spinning.get()); }, Modifier(), {},
-                                   [&] { Text(spinning.get() ? "Durdur" : "Döndür"); });
-                    Button([starShown] { starShown.set(!starShown.get()); }, [] { Text("scaleIn"); });
+                    OutlinedButton([spinning] { spinning.set(!spinning.get()); }, Modifier()) { Text(spinning.get() ? "Durdur" : "Döndür"); };
+                    Button([starShown] { starShown.set(!starShown.get()); }) { Text("scaleIn"); };
                     Box(Modifier().size(40), Alignment::Center) {
                         AnimatedVisibility(starShown.get(), Modifier(), scaleIn() + fadeIn(), scaleOut() + fadeOut(),
                                            [&] { Icon(Icons::Filled::Star, "Yıldız", Modifier().size(40), cs.error); });
@@ -261,7 +260,7 @@ void DrawingSection(CallSite site) {
                             .shadow(4, 28)
                             .background(cs.primary, CircleShape)
                             .draggable2D(ballDrag, {.startDragImmediately = true}),
-                        Alignment::Center) { Icon(Icons::Filled::Place, "Top", {}, cs.onPrimary); };
+                        Alignment::Center) { Icon(Icons::Filled::Place, "Top", tint = cs.onPrimary); };
                     // detectDragGesturesAfterLongPress: the card moves only once held (and grows while it is).
                     auto card = remember([] { return mutableStateOf(Offset{160, 90}); });
                     auto held = remember([] { return mutableStateOf(false); });
@@ -332,7 +331,7 @@ void DrawingSection(CallSite site) {
                                 Alignment::Center) { Text("GraphicsLayer", color = cs.onPrimary, style = typography().titleMedium); };
                         };
                     Column(Modifier(), verticalArrangement = Arrangement::spacedBy(8)) {
-                        FilledTonalButton([layer, shot] { shot.set(layer.toImageBitmap()); }, [] { Text("Yakala"); });
+                        FilledTonalButton([layer, shot] { shot.set(layer.toImageBitmap()); }) { Text("Yakala"); };
                         if (!shot.get().empty())
                             Image(shot.get(), "Yakalanan kart", Modifier().size(120, 44).border(1, cs.outline), ContentScale::Fit);
                     };
@@ -371,7 +370,7 @@ void DrawingSection(CallSite site) {
                                        [clicks] { clicks.update([](auto& c) { ++c[2]; }); })
                     .padding(16),
                 horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
-                    Icon(Icons::Filled::Info, "combinedClickable", {}, cs.primary);
+                    Icon(Icons::Filled::Info, "combinedClickable", tint = cs.primary);
                     Column(Modifier().weight(1), verticalArrangement = Arrangement::spacedBy(2)) {
                         Text("combinedClickable", style = typography().titleMedium);
                         Text("Tık: " + std::to_string(n[0]) + " · Uzun: " + std::to_string(n[1]) +

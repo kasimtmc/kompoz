@@ -341,7 +341,7 @@ void NavigationRail(const Modifier& modifier, const Content& header, const Conte
 
 void NavigationRailItem(bool selected, std::function<void()> onClick, const ImageVector& icon, std::string label,
                         CallSite site) {
-    NavigationRailItem(selected, std::move(onClick), [icon] { Icon(icon, ""); }, [label] { detail::Text(label); }, Modifier(), {}, site);  // (the label says it)
+    NavigationRailItem(selected, std::move(onClick), [icon] { detail::Icon(icon, ""); }, [label] { detail::Text(label); }, Modifier(), {}, site);  // (the label says it)
 }
 
 void NavigationRailItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier,

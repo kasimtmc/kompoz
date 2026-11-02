@@ -92,7 +92,7 @@ void Counter() {
 
     Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
         Text("Count: " + std::to_string(count.get()), style = typography().titleLarge);
-        Button([count] { count.set(count.get() + 1); }, [] { Text("Add"); });
+        Button([count] { count.set(count.get() + 1); }) { Text("Add"); };
     };
 }
 

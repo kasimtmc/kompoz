@@ -14,7 +14,7 @@ void Counter() {
     auto count = remember([] { return mutableStateOf(0); });
     Column() {
         Text("Count: " + std::to_string(count.get()));
-        Button([count] { count.set(count.get() + 1); }, [] { Text("Add"); });
+        Button([count] { count.set(count.get() + 1); }) { Text("Add"); };
     };
 }
 

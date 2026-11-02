@@ -98,7 +98,7 @@ FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8
 FlexBox(Modifier().fillMaxWidth(), {.wrap = FlexWrap::Wrap, .justifyContent = FlexJustifyContent::SpaceBetween,
                                     .alignItems = FlexAlignItems::Center, .rowGap = 8, .columnGap = 8}, [&] {
     OutlinedTextField("", [](std::string) {}, Modifier().flex({.grow = 1}), {.label = "Search"});
-    Button([] {}, [] { Text("Go"); });
+    Button([] {}) { Text("Go"); };
 });
 ```
 

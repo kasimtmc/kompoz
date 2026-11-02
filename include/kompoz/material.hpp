@@ -1042,8 +1042,20 @@ void ElevatedSuggestionChip(std::function<void()> onClick, const Content& label,
 void ElevatedFilterChip(bool selected, std::function<void()> onClick, const Content& label, const ChipOptions& options = {},
                         const Modifier& modifier = {}, CallSite site = CallSite::current());
 
+namespace detail {
 void RadioButton(bool selected, std::function<void()> onClick, const Modifier& modifier = {}, bool enabled = true,
                  std::optional<MutableInteractionSource> interactionSource = {}, CallSite site = CallSite::current());
+struct RadioButtonImpl {
+    using P = Params<names::Modifier, names::Enabled, names::InteractionSource>;
+    template <class... A>
+    static void call(CallSite site, bool selected, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        detail::RadioButton(selected, std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), P::get<names::Enabled>(true, args...),
+            P::get<names::InteractionSource>(std::optional<MutableInteractionSource>{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::RadioButtonImpl> RadioButton;
 
 // A slider's colors (Compose's SliderColors): its thumb, its track and the step ticks on either
 // side of the value, enabled and not.
@@ -1131,10 +1143,43 @@ public:
     std::shared_ptr<Data> data_;
 };
 // Tap or drag to set the value (dragging takes over from scrolling once it moves sideways).
+// With a state of its own (its value, range and steps; the options' are not used).
+namespace detail {
 void Slider(float value, std::function<void(float)> onValueChange, const Modifier& modifier = {},
             SliderOptions options = {}, CallSite site = CallSite::current());
-// With a state of its own (its value, range and steps; the options' are not used).
 void Slider(const SliderState& state, const Modifier& modifier = {}, SliderOptions options = {}, CallSite site = CallSite::current());
+struct SliderImpl {
+    template <class... A>
+    static void call(CallSite site, float value, std::function<void(float)> onValueChange, A&&... args) {
+        using P = Params<names::Modifier, names::Enabled, names::OnValueChangeFinished, names::SliderColors, names::InteractionSource, names::Steps, names::Thumb, names::Track, names::ValueFrom, names::ValueTo>;
+        static_assert(P::check<A...>());
+        SliderOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::OnValueChangeFinished>(options.onValueChangeFinished, args...);
+        P::set<names::SliderColors>(options.colors, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        P::set<names::Steps>(options.steps, args...);
+        P::set<names::Thumb>(options.thumb, args...);
+        P::set<names::Track>(options.track, args...);
+        P::set<names::ValueFrom>(options.valueFrom, args...);
+        P::set<names::ValueTo>(options.valueTo, args...);
+        detail::Slider(value, std::move(onValueChange), P::get<names::Modifier>(Modifier{}, args...), options, site);
+    }
+    template <class... A>
+    static void call(CallSite site, const SliderState& state, A&&... args) {  // (its range, steps and onValueChangeFinished: the state's)
+        using P = Params<names::Modifier, names::Enabled, names::SliderColors, names::InteractionSource, names::Thumb, names::Track>;
+        static_assert(P::check<A...>());
+        SliderOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::SliderColors>(options.colors, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        P::set<names::Thumb>(options.thumb, args...);
+        P::set<names::Track>(options.track, args...);
+        detail::Slider(state, P::get<names::Modifier>(Modifier{}, args...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::SliderImpl> Slider;
 SliderState rememberSliderState(float value = 0, int steps = 0, float valueFrom = 0, float valueTo = 1,
                                 std::function<void()> onValueChangeFinished = {}, CallSite site = CallSite::current());
 
@@ -1175,13 +1220,74 @@ void Track(const RangeSliderState& state, bool drawStopIndicator = true, float t
 // the way the drag goes decides), and they don't pass each other.
 // A slider standing up (M3 Expressive's VerticalSlider), as tall as it may be and 44 dp wide:
 // the value grows upwards, or downwards with reverseDirection; a vertical drag moves it.
+namespace detail {
 void VerticalSlider(float value, std::function<void(float)> onValueChange, const Modifier& modifier = {}, SliderOptions options = {},
                     bool reverseDirection = false, CallSite site = CallSite::current());
+struct VerticalSliderImpl {
+    template <class... A>
+    static void call(CallSite site, float value, std::function<void(float)> onValueChange, A&&... args) {
+        using P = Params<names::Modifier, names::Enabled, names::OnValueChangeFinished, names::SliderColors, names::InteractionSource, names::Steps, names::Thumb, names::Track, names::ValueFrom, names::ValueTo, names::ReverseDirection>;
+        static_assert(P::check<A...>());
+        SliderOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::OnValueChangeFinished>(options.onValueChangeFinished, args...);
+        P::set<names::SliderColors>(options.colors, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        P::set<names::Steps>(options.steps, args...);
+        P::set<names::Thumb>(options.thumb, args...);
+        P::set<names::Track>(options.track, args...);
+        P::set<names::ValueFrom>(options.valueFrom, args...);
+        P::set<names::ValueTo>(options.valueTo, args...);
+        detail::VerticalSlider(value, std::move(onValueChange), P::get<names::Modifier>(Modifier{}, args...), options,
+                       P::get<names::ReverseDirection>(false, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::VerticalSliderImpl> VerticalSlider;
+// With a state of its own (its range, ends and steps; the options' are not used).
+namespace detail {
 void RangeSlider(std::pair<float, float> value, std::function<void(std::pair<float, float>)> onValueChange,
                  const Modifier& modifier = {}, SliderOptions options = {}, CallSite site = CallSite::current());
-// With a state of its own (its range, ends and steps; the options' are not used).
 void RangeSlider(const RangeSliderState& state, const Modifier& modifier = {}, SliderOptions options = {},
                  CallSite site = CallSite::current());
+struct RangeSliderImpl {
+    template <class... A>
+    static void call(CallSite site, std::pair<float, float> value, std::function<void(std::pair<float, float>)> onValueChange, A&&... args) {
+        using P = Params<names::Modifier, names::Enabled, names::ValueFrom, names::ValueTo, names::Steps, names::OnValueChangeFinished, names::SliderColors, names::InteractionSource, names::EndInteractionSource, names::Thumb, names::StartThumb, names::EndThumb, names::RangeTrack>;
+        static_assert(P::check<A...>());
+        SliderOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::ValueFrom>(options.valueFrom, args...);
+        P::set<names::ValueTo>(options.valueTo, args...);
+        P::set<names::Steps>(options.steps, args...);
+        P::set<names::OnValueChangeFinished>(options.onValueChangeFinished, args...);
+        P::set<names::SliderColors>(options.colors, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        P::set<names::EndInteractionSource>(options.endInteractionSource, args...);
+        P::set<names::Thumb>(options.thumb, args...);
+        P::set<names::StartThumb>(options.startThumb, args...);
+        P::set<names::EndThumb>(options.endThumb, args...);
+        P::set<names::RangeTrack>(options.rangeTrack, args...);
+        detail::RangeSlider(value, std::move(onValueChange), P::get<names::Modifier>(Modifier{}, args...), options, site);
+    }
+    template <class... A>
+    static void call(CallSite site, const RangeSliderState& state, A&&... args) {
+        using P = Params<names::Modifier, names::Enabled, names::SliderColors, names::InteractionSource, names::EndInteractionSource, names::Thumb, names::StartThumb, names::EndThumb, names::RangeTrack>;
+        static_assert(P::check<A...>());
+        SliderOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::SliderColors>(options.colors, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        P::set<names::EndInteractionSource>(options.endInteractionSource, args...);
+        P::set<names::Thumb>(options.thumb, args...);
+        P::set<names::StartThumb>(options.startThumb, args...);
+        P::set<names::EndThumb>(options.endThumb, args...);
+        P::set<names::RangeTrack>(options.rangeTrack, args...);
+        detail::RangeSlider(state, P::get<names::Modifier>(Modifier{}, args...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::RangeSliderImpl> RangeSlider;
 RangeSliderState rememberRangeSliderState(float activeRangeStart = 0, float activeRangeEnd = 1, int steps = 0, float valueFrom = 0,
                                           float valueTo = 1, std::function<void()> onValueChangeFinished = {},
                                           CallSite site = CallSite::current());

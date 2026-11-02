@@ -81,7 +81,7 @@ void DrawersSection(CallSite site) {
                         Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
                             IconButton([drawer, coroutines] {
                                 coroutines.launch([drawer]() -> Task { co_await (drawer.isOpen() ? drawer.close() : drawer.open()); });
-                            }, [] { Icon(Icons::Filled::Menu, "Menü"); });
+                            }) { Icon(Icons::Filled::Menu, "Menü"); };
                             Text(pages[page.get()], style = typography().titleMedium);
                         };
                         Text("Menüye dokunun ya da sağa sürükleyin: çekmece sayfayı iter.", Modifier().padding(16, 8),
@@ -110,9 +110,8 @@ void ScrollbarSection(CallSite site) {
             auto& box = remember([] { return BringIntoViewRequester(); });
             CoroutineScope scope = rememberCoroutineScope();
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                OutlinedButton([scope, paragraph] { scope.launch([paragraph]() -> Task { co_await paragraph.bringIntoView(); }); },
-                               [] { Text("Paragraf 25'i göster"); });
-                OutlinedButton([scope, box] { scope.launch([box]() -> Task { co_await box.bringIntoView(); }); }, [] { Text("18'i göster"); });
+                OutlinedButton([scope, paragraph] { scope.launch([paragraph]() -> Task { co_await paragraph.bringIntoView(); }); }) { Text("Paragraf 25'i göster"); };
+                OutlinedButton([scope, box] { scope.launch([box]() -> Task { co_await box.bringIntoView(); }); }) { Text("18'i göster"); };
             };
             Row(Modifier().fillMaxWidth().height(200), horizontalArrangement = Arrangement::spacedBy(12)) {
                 Box(Modifier().weight(1).fillMaxHeight().background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12))) {
@@ -169,7 +168,7 @@ void PredictiveBackSection(CallSite site) {
                  "vazgeçince yerine döner (Android 14+). Panel kapalıyken geri hareketi uygulamadan çıkar.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
-                Button([open, last] { open.set(true), last.set("açık"); }, Modifier(), {.enabled = !open.get()}, [] { Text("Paneli aç"); });
+                Button([open, last] { open.set(true), last.set("açık"); }, Modifier(), enabled = !open.get()) { Text("Paneli aç"); };
                 Text(open.get() && progress.get() > 0 ? std::format("geri: %{:.0f} · {}", progress.get() * 100, fromRight.get() ? "sağdan" : "soldan")
                                                       : last.get(),
                      style = typography().bodyMedium);
@@ -223,7 +222,7 @@ void PointerPassSection(CallSite site) {
                         }
                     }),
                 Alignment::Center) {
-                    Button([clicks] { clicks.set(clicks.peek() + 1); }, [&] { Text(std::format("Bas ({})", clicks.get())); });
+                    Button([clicks] { clicks.set(clicks.peek() + 1); }) { Text(std::format("Bas ({})", clicks.get())); };
                 };
             Text("Final: " + seen.get(), color = cs.primary, style = typography().bodySmall);
         });
@@ -353,8 +352,8 @@ void BringIntoViewSection(CallSite site) {
                         });
             });
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                OutlinedButton([reqs = requesters, focused] { reqs[size_t(std::max(0, focused.peek() - 1))].requestFocus(); }, [] { Text("‹ Önceki"); });
-                Button([reqs = requesters, focused] { reqs[size_t(std::min(19, focused.peek() + 1))].requestFocus(); }, [] { Text("Sonraki ›"); });
+                OutlinedButton([reqs = requesters, focused] { reqs[size_t(std::max(0, focused.peek() - 1))].requestFocus(); }) { Text("‹ Önceki"); };
+                Button([reqs = requesters, focused] { reqs[size_t(std::min(19, focused.peek() + 1))].requestFocus(); }) { Text("Sonraki ›"); };
                 Switch(pinned.get(), [pinned](bool v) { pinned.set(v); });
                 Text("Üçte birde", Modifier().weight(1), style = typography().bodyMedium);
             };
@@ -402,8 +401,8 @@ void NestedScrollSection(CallSite site) {
             });
             caption("TopAppBar: kendi renkleri, 56 dp yükseklik, windowInsets yok (sayfanın ortasında):");
             TopAppBar({.title = [] { Text("Renkli çubuk"); },
-                       .navigationIcon = [] { IconButton([] {}, [] { Icon(Icons::Filled::Menu, "Menü"); }); },
-                       .actions = [] { IconButton([] {}, [] { Icon(Icons::Filled::Favorite, "Beğen"); }); },
+                       .navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menü"); }; },
+                       .actions = [] { IconButton([] {}) { Icon(Icons::Filled::Favorite, "Beğen"); }; },
                        .containerColor = cs.primaryContainer,
                        .navigationIconContentColor = cs.onPrimaryContainer,
                        .titleContentColor = cs.onPrimaryContainer,
@@ -439,8 +438,8 @@ void NestedScrollSection(CallSite site) {
             caption("MediumFlexibleTopAppBar: daha büyük başlık ve alt yazı, ortalanmış (titleHorizontalAlignment).");
             MediumFlexibleTopAppBar({.title = [] { Text("Takvim"); },
                                      .subtitle = [] { Text("Ekim 2026"); },
-                                     .navigationIcon = [] { IconButton([] {}, [] { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); }); },
-                                     .actions = [] { IconButton([] {}, [] { Icon(Icons::Filled::MoreVert, "Diğer"); }); },
+                                     .navigationIcon = [] { IconButton([] {}) { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); }; },
+                                     .actions = [] { IconButton([] {}) { Icon(Icons::Filled::MoreVert, "Diğer"); }; },
                                      .containerColor = cs.surfaceContainerLow,
                                      .windowInsets = WindowInsets{},
                                      .titleHorizontalAlignment = Alignment::CenterHorizontally},
@@ -452,8 +451,8 @@ void NestedScrollSection(CallSite site) {
                              {.topBar = [&] {
                                   LargeTopAppBar({.title = [] { Text("Gelen kutusu"); },
                                                   .subtitle = [] { Text("3 okunmamış ileti"); },
-                                                  .navigationIcon = [] { IconButton([] {}, [] { Icon(Icons::Filled::Menu, "Menü"); }); },
-                                                  .actions = [] { IconButton([] {}, [] { Icon(Icons::Filled::Search, "Ara"); }); },
+                                                  .navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menü"); }; },
+                                                  .actions = [] { IconButton([] {}) { Icon(Icons::Filled::Search, "Ara"); }; },
                                                   .containerColor = cs.surfaceContainerLow,
                                                   .scrollBehavior = appBar});
                               },
@@ -480,8 +479,8 @@ void NestedScrollSection(CallSite site) {
                                           if (expanded) Text("Haftalık\nözet", fontWeight = FontWeight::Bold, style = typography().headlineMedium);
                                           else Text("Özet", style = typography().titleLarge);
                                       },
-                                      {.navigationIcon = [] { IconButton([] {}, [] { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); }); },
-                                       .actions = [] { IconButton([] {}, [] { Icon(Icons::Filled::DateRange, "Tarih"); }); },
+                                      {.navigationIcon = [] { IconButton([] {}) { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); }; },
+                                       .actions = [] { IconButton([] {}) { Icon(Icons::Filled::DateRange, "Tarih"); }; },
                                        .containerColor = cs.surfaceContainerLow,
                                        .expandedHeight = 168,
                                        .scrollBehavior = twoRows},
@@ -509,10 +508,10 @@ void NestedScrollSection(CallSite site) {
                 Scaffold(Modifier().fillMaxSize().nestedScroll(bottomBar.nestedScrollConnection),
                          {.bottomBar = [&] {
                               FlexibleBottomAppBar(Modifier(), [] {
-                                  IconButton([] {}, [] { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); });
-                                  IconButton([] {}, [] { Icon(Icons::Filled::Edit, "Düzenle"); });
-                                  IconButton([] {}, [] { Icon(Icons::Filled::Share, "Paylaş"); });
-                                  IconButton([] {}, [] { Icon(Icons::Filled::Delete, "Sil"); });
+                                  IconButton([] {}) { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); };
+                                  IconButton([] {}) { Icon(Icons::Filled::Edit, "Düzenle"); };
+                                  IconButton([] {}) { Icon(Icons::Filled::Share, "Paylaş"); };
+                                  IconButton([] {}) { Icon(Icons::Filled::Delete, "Sil"); };
                               }, {.scrollBehavior = bottomBar, .windowInsets = false});
                           },
                           .containerColor = cs.surfaceContainerLow},
@@ -535,8 +534,8 @@ void NestedScrollSection(CallSite site) {
                     Scaffold(Modifier().fillMaxSize().nestedScroll(searchScroll.nestedScrollConnection),
                              {.topBar = [&] {
                                   AppBarWithSearch(mailSearch, mailField, Modifier(),
-                                                   {.navigationIcon = [] { IconButton([] {}, [] { Icon(Icons::Filled::Menu, "Menü"); }); },
-                                                    .actions = [] { IconButton([] {}, [] { Icon(Icons::Filled::Person, "Hesap"); }); },
+                                                   {.navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menü"); }; },
+                                                    .actions = [] { IconButton([] {}) { Icon(Icons::Filled::Person, "Hesap"); }; },
                                                     .scrollBehavior = searchScroll});
                               }},
                              [&](PaddingValues padding) {

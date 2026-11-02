@@ -271,7 +271,7 @@ void NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& n
             NavigationRail(Modifier(), options.railHeader ? options.railHeader : options.primaryActionContent, [&] {
                 for (const auto& item : nav.items()) {
                     ImageVector icon = item.icon;
-                    NavigationRailItem(item.selected, item.onClick, [icon] { Icon(icon, ""); }, [label = item.label] { detail::Text(label); }, Modifier(),
+                    NavigationRailItem(item.selected, item.onClick, [icon] { detail::Icon(icon, ""); }, [label = item.label] { detail::Text(label); }, Modifier(),
                                        {.enabled = item.enabled});
                 }
             });
@@ -282,7 +282,7 @@ void NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& n
                 for (const auto& item : nav.items()) {
                     ImageVector icon = item.icon;
                     std::string label = item.label;
-                    NavigationDrawerItem([label] { detail::Text(label); }, item.selected, item.onClick, [icon, label] { Icon(icon, label); }, item.badge);
+                    NavigationDrawerItem([label] { detail::Text(label); }, item.selected, item.onClick, [icon, label] { detail::Icon(icon, label); }, item.badge);
                 }
             });
             break;
@@ -292,7 +292,7 @@ void NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& n
                 for (const auto& item : nav.items()) {
                     ImageVector icon = item.icon;
                     std::string label = item.label;
-                    NavigationSuiteItem(item.selected, item.onClick, [icon] { Icon(icon, ""); }, [label] { detail::Text(label); }, Modifier(),
+                    NavigationSuiteItem(item.selected, item.onClick, [icon] { detail::Icon(icon, ""); }, [label] { detail::Text(label); }, Modifier(),
                                         {.navigationSuiteType = type, .enabled = item.enabled, .badge = item.badge});
                 }
             }, options.primaryActionContent, options.navigationItemVerticalArrangement);

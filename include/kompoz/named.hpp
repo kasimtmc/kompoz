@@ -69,6 +69,14 @@ constexpr bool lastIsBlock() {
     else return isBlock<std::tuple_element_t<sizeof...(A) - 1, std::tuple<A...>>>;
 }
 
+// Whether a call starts with a callable given without a name and still has a block after it: a
+// Card(onClick, …, block) that can be clicked.
+template <class... A>
+constexpr bool startsWithClick() {
+    if constexpr (sizeof...(A) < 2) return false;
+    else return isBlock<std::tuple_element_t<0, std::tuple<A...>>> && lastIsBlock<A...>();
+}
+
 // What a parameter list ends with when its composable takes a block last.
 struct Block {};
 
@@ -138,6 +146,11 @@ struct Params {
     static constexpr bool given() {
         return countOf<Tag, A...> > 0 || indexOf<Tag, P...> < positional<A...>();
     }
+    // `field` set from the argument for `Tag`, if one was given (an options struct filled so).
+    template <class Tag, class T, class... A>
+    static void set(T& field, A&&... args) {
+        if constexpr (given<Tag, A...>()) field = get<Tag>(T(field), args...);
+    }
     // The block given last, in a scope of its own; empty if none was.
     template <class... A>
     static Content block(A&&... args);
@@ -201,6 +214,32 @@ struct InlineContent {};
 struct OnTextLayout {};
 struct Style {};
 struct AutoSize {};
+struct Enabled {};
+struct ContainerColor {};
+struct ContentColor {};
+struct InteractionSource {};
+struct Shapes {};
+struct ContentPadding {};
+struct CheckedContainerColor {};
+struct CheckedContentColor {};
+struct Tint {};
+struct Alignment {};
+struct ContentScale {};
+struct Alpha {};
+struct ColorFilter {};
+struct ThumbContent {};
+struct OnValueChangeFinished {};
+struct SliderColors {};
+struct Steps {};
+struct ValueFrom {};
+struct ValueTo {};
+struct Thumb {};
+struct Track {};
+struct StartThumb {};
+struct EndThumb {};
+struct RangeTrack {};
+struct EndInteractionSource {};
+struct ReverseDirection {};
 } // namespace detail::names
 inline namespace args {
 inline constexpr Param<detail::names::Modifier> modifier;
@@ -226,6 +265,32 @@ inline constexpr Param<detail::names::InlineContent> inlineContent;
 inline constexpr Param<detail::names::OnTextLayout> onTextLayout;
 inline constexpr Param<detail::names::Style> style;
 inline constexpr Param<detail::names::AutoSize> autoSize;
+inline constexpr Param<detail::names::Enabled> enabled;
+inline constexpr Param<detail::names::ContainerColor> containerColor;
+inline constexpr Param<detail::names::ContentColor> contentColor;
+inline constexpr Param<detail::names::InteractionSource> interactionSource;
+inline constexpr Param<detail::names::Shapes> shapes;
+inline constexpr Param<detail::names::ContentPadding> contentPadding;
+inline constexpr Param<detail::names::CheckedContainerColor> checkedContainerColor;
+inline constexpr Param<detail::names::CheckedContentColor> checkedContentColor;
+inline constexpr Param<detail::names::Tint> tint;
+inline constexpr Param<detail::names::Alignment> alignment;
+inline constexpr Param<detail::names::ContentScale> contentScale;
+inline constexpr Param<detail::names::Alpha> alpha;
+inline constexpr Param<detail::names::ColorFilter> colorFilter;
+inline constexpr Param<detail::names::ThumbContent> thumbContent;
+inline constexpr Param<detail::names::OnValueChangeFinished> onValueChangeFinished;
+inline constexpr Param<detail::names::SliderColors> sliderColors;
+inline constexpr Param<detail::names::Steps> steps;
+inline constexpr Param<detail::names::ValueFrom> valueFrom;
+inline constexpr Param<detail::names::ValueTo> valueTo;
+inline constexpr Param<detail::names::Thumb> thumb;
+inline constexpr Param<detail::names::Track> track;
+inline constexpr Param<detail::names::StartThumb> startThumb;
+inline constexpr Param<detail::names::EndThumb> endThumb;
+inline constexpr Param<detail::names::RangeTrack> rangeTrack;
+inline constexpr Param<detail::names::EndInteractionSource> endInteractionSource;
+inline constexpr Param<detail::names::ReverseDirection> reverseDirection;
 } // namespace args
 
 // A composable taking named arguments: each call's arguments and call site go to Impl::call.

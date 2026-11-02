@@ -55,9 +55,9 @@ Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
 };
 ```
 
-Arguments without a name fill the parameters in Compose's order (`Text(text, modifier, color, fontSize, …)`, `Box(modifier, contentAlignment)`). A name the composable doesn't take, one given twice, or a value it can't take is a compile error, never ignored. The names (`modifier`, `color`, `fontSize`, …) are constants of `kompoz`: a variable of yours called the same hides the name, which then is a compile error too; write `kompoz::color = …` there.
+Arguments without a name fill the parameters in Compose's order (`Text(text, modifier, color, fontSize, …)`, `Box(modifier, contentAlignment)`). A name the composable doesn't take, one given twice, or a value it can't take is a compile error, never ignored. The names (`modifier`, `color`, `fontSize`, …) are constants of `kompoz`: a variable of yours called the same hides the name, which then is a compile error too; write `kompoz::color = …` there. An argument without a name needs a type of its own: a callback left out is `nullptr` (`Checkbox(checked, nullptr)`; `{}` has no type), a pair is `std::pair{1.f, 3.f}`.
 
-`Box`, `Column`, `Row`, `Spacer` and `Text` take named arguments so far. The other components still take an *options struct* with designated initializers, in the order its fields are declared, until their turn comes:
+`Box`, `Column`, `Row`, `Spacer`, `Text`, the buttons, icon buttons and icon toggle buttons, the cards, `Surface`, `Icon`, `Image`, `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch` and the sliders take named arguments so far. The other components still take an *options struct* with designated initializers, in the order its fields are declared, until their turn comes:
 
 ```cpp body
 #! std::string value;
@@ -91,9 +91,9 @@ A block runs in a scope of its own: it can run again later, alone, when the func
 void LikeButton() {
     auto likes = remember([] { return mutableStateOf(0); });
     Column() {                                                      // a block: by value
-        Button([likes] { likes.set(likes.get() + 1); }, [=] {        // the callback: by value
+        Button([likes] { likes.set(likes.get() + 1); }) {        // the callback: by value
             Text(std::to_string(likes.get()) + " likes");
-        });
+        };
     };
 }
 ```
@@ -160,8 +160,7 @@ LaunchedEffect(userId, [user, userId]() -> Task {
 });
 auto list = rememberLazyListState();
 auto scope = rememberCoroutineScope();
-Button([scope, list] { scope.launch([list]() -> Task { co_await list.animateScrollToItem(0); }); },
-       [] { Text("Top"); });
+Button([scope, list] { scope.launch([list]() -> Task { co_await list.animateScrollToItem(0); }); }) { Text("Top"); };
 ```
 
 `suspend` functions are coroutines you `co_await`. `Flow`, `StateFlow` and `SharedFlow` exist with their operators (`map`, `filter`, `debounce`, `flatMapLatest`, `stateIn`…), and `collectAsState()` reads one in composition. See [Side effects](side-effects.md) and [Architecture](architecture.md).

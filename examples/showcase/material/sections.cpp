@@ -19,7 +19,7 @@ void SwipeableTask(int id, SnapshotStateList<int> tasks, CallSite site) {
                                                                                           : Color::hex(0x2E7D32);
                 Box(Modifier().fillMaxSize().background(color, 12).padding(20, 0),
                     del ? Alignment::CenterEnd : Alignment::CenterStart) {
-                        Icon(del ? Icons::Filled::Delete : Icons::Filled::Check, del ? "Sil" : "Tamamla", {}, colors::White);
+                        Icon(del ? Icons::Filled::Delete : Icons::Filled::Check, del ? "Sil" : "Tamamla", tint = colors::White);
                     };
             },
             [&] {
@@ -81,13 +81,13 @@ void SearchSection(CallSite site) {
                                                .placeholder = docked ? "Şehir ara (yerinde)" : "Şehir ara",
                                                .leadingIcon = [&] {
                                                    if (expanded && !docked)
-                                                       IconButton(close, [] { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Kapat"); });
+                                                       IconButton(close) { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Kapat"); };
                                                    else
                                                        Icon(Icons::Filled::Search, "Ara");
                                                },
                                                .trailingIcon = [&] {
                                                    if (!query.text().empty())
-                                                       IconButton([query] { query.clearText(); }, [] { Icon(Icons::Filled::Close, "Temizle"); });
+                                                       IconButton([query] { query.clearText(); }) { Icon(Icons::Filled::Close, "Temizle"); };
                                                }});
             };
             auto suggestions = [&] {
@@ -139,22 +139,22 @@ void TooltipSection(CallSite site) {
         Section("TooltipBox · PlainTooltip · RichTooltip · TooltipAnchorPosition", [&] {
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                 TooltipBox([] { PlainTooltip([] { Text("Favorilere ekle"); }); }, rememberTooltipState(), Modifier(), [&] {
-                    IconButton([liked] { liked.set(!liked.get()); }, [liked] {
+                    IconButton([liked] { liked.set(!liked.get()); }) {
                         Icon(liked.get() ? Icons::Filled::Favorite : Icons::Filled::FavoriteBorder, "Favori");
-                    });
+                    };
                 });
                 TooltipBox(TooltipDefaults::rememberTooltipPositionProvider(sides[side.get()].first),
                            [] { PlainTooltip([] { Text("Paylaş"); }, Modifier(), TooltipDefaults::caretSize); }, rememberTooltipState(), Modifier(),
-                           [] { IconButton([] {}, [] { Icon(Icons::Filled::Share, "Paylaş"); }); });
+                           [] { IconButton([] {}) { Icon(Icons::Filled::Share, "Paylaş"); }; });
                 auto rich = rememberTooltipState(false, true);
                 TooltipBox(
                     [rich] {
                         RichTooltip({.title = [] { Text("Yedekleme"); },
                                      .text = [] { Text("Fotoğraflarınız her gece Wi-Fi'ye bağlıyken yedeklenir."); },
-                                     .action = [rich] { TextButton([rich] { rich.dismiss(); }, [] { Text("Anladım"); }); }},
+                                     .action = [rich] { TextButton([rich] { rich.dismiss(); }) { Text("Anladım"); }; }},
                                     Modifier(), TooltipDefaults::caretSize);
                     },
-                    rich, Modifier(), [rich] { IconButton([rich] { rich.show(); }, [] { Icon(Icons::Filled::Info, "Bilgi"); }); });
+                    rich, Modifier(), [rich] { IconButton([rich] { rich.show(); }) { Icon(Icons::Filled::Info, "Bilgi"); }; });
             };
             // TooltipAnchorPosition: the share tooltip's side.
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8}, [&] {
@@ -256,7 +256,7 @@ void InteractionSection(CallSite site) {
                  "ekran bunları durum olarak okur ya da tek tek dinler.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             Row(Modifier().fillMaxWidth().padding(0, 12, 0, 0), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
-                    Button([] {}, Modifier().scale(scale), {.interactionSource = button}, [&] { Text(pressed ? "Basılı tutuluyor" : "Basılı tut"); });
+                    Button([] {}, Modifier().scale(scale), interactionSource = button) { Text(pressed ? "Basılı tutuluyor" : "Basılı tut"); };
                     std::string events;
                     for (const std::string& e : log.get()) events += (events.empty() ? "" : " · ") + e;
                     Text(events.empty() ? "olay yok" : events, Modifier().weight(1), color = cs.onSurfaceVariant, style = typography().bodySmall);
@@ -285,9 +285,9 @@ void InteractionSection(CallSite site) {
                         TextButton([state, date, close] {
                             date.set(state.selectedDate());
                             close();
-                        }, [] { Text("Tamam"); });
+                        }) { Text("Tamam"); };
                     },
-                    [close] { TextButton(close, [] { Text("İptal"); }); },
+                    [close] { TextButton(close) { Text("İptal"); }; },
                     [&] { DatePicker(state); });
             }
             static const Color pages[] = {Color::hex(0x6750A4), Color::hex(0x7D5260), Color::hex(0x386A20), Color::hex(0x00639B)};
@@ -356,8 +356,7 @@ void AnchoredDraggableSection(CallSite site) {
                  Modifier().padding(0, 8, 0, 0), style = typography().bodyMedium);
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 for (Spot target : {Spot::Start, Spot::Middle, Spot::End})
-                    TextButton([scope, spot, target] { scope.launch([spot, target]() -> Task { co_await spot.animateTo(target); }); },
-                               [&] { Text(names[int(target)]); });
+                    TextButton([scope, spot, target] { scope.launch([spot, target]() -> Task { co_await spot.animateTo(target); }); }) { Text(names[int(target)]); };
             };
             Column(Modifier().fillMaxWidth().padding(0, 8, 0, 0), verticalArrangement = Arrangement::spacedBy(8)) {
                 for (const char* title : {"Fatura hatırlatması", "Toplantı notları"})
@@ -431,15 +430,15 @@ void SemanticsSection(CallSite site) {
         Section("Erişilebilirlik: merge · clearAndSet · hide · customActions · liveRegion", [&] {
             Row(Modifier().fillMaxWidth().semantics({.mergeDescendants = true}),
                 horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
-                    Icon(Icons::Filled::Place, "Konum", {}, cs.primary);
+                    Icon(Icons::Filled::Place, "Konum", tint = cs.primary);
                     Column(Modifier().weight(1)) {
                         Text("İstanbul", style = typography().titleSmall);
                         Text("Parçalı bulutlu, 18°", color = cs.onSurfaceVariant, style = typography().bodySmall);
                     };
-                    IconButton([] {}, [] { Icon(Icons::Filled::Refresh, "Yenile"); });  // still on its own
+                    IconButton([] {}) { Icon(Icons::Filled::Refresh, "Yenile"); };  // still on its own
                 };
             Row(Modifier().clearAndSetSemantics({.contentDescription = "Puan: 4 / 5"})) {
-                for (int i = 0; i < 5; ++i) Icon(Icons::Filled::Star, "yıldız", {}, i < 4 ? cs.primary : cs.outlineVariant);
+                for (int i = 0; i < 5; ++i) Icon(Icons::Filled::Star, "yıldız", tint = i < 4 ? cs.primary : cs.outlineVariant);
             };
             Text("• • •", Modifier().hideFromAccessibility(), color = cs.outlineVariant);
             // customActions: the row's own actions, in TalkBack's actions menu (no buttons for them).
@@ -457,7 +456,7 @@ void SemanticsSection(CallSite site) {
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                 Text(std::format("{} okunmamış ileti", unread.get()), Modifier().weight(1).semantics({.liveRegion = LiveRegionMode::Polite}),
                      style = typography().bodyLarge);
-                OutlinedButton([unread] { unread.set(unread.get() + 1); }, [] { Text("Yeni ileti"); });
+                OutlinedButton([unread] { unread.set(unread.get() + 1); }) { Text("Yeni ileti"); };
             };
             Text("TalkBack açıkken: ilk satır tek parça okunur (Yenile ayrı), yıldızlar \"Puan: 4 / 5\" diye, noktalar hiç okunmaz; "
                  "ileti satırının eylemler menüsünde \"Arşivle\" ve \"Okundu say\" var; \"Yeni ileti\"ye basınca sayı odak değişmeden okunur. "
@@ -489,8 +488,7 @@ void FocusPropertiesDemo(CallSite site) {
                                           .onFocusChanged([focused, last, i](FocusState s) {
                                               if (s.isFocused) focused.set(i), *last = i;
                                               else if (focused.peek() == i) focused.set(-1);
-                                          }),
-                               {}, [&, i] { Text(names[i]); });
+                                          })) { Text(names[i]); };
             }
         };
         Text(std::string("Odakta: ") + (focused.get() >= 0 ? names[focused.get()] : "—") + " · İki odak almaz, Bir'den Tab Dört'e gider",
@@ -505,9 +503,9 @@ void FocusPropertiesDemo(CallSite site) {
             };
         };
         Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
-            TextButton([requesters] { requesters[0].requestFocus(); }, [] { Text("Bir'e odaklan"); });
-            TextButton(move(FocusDirection::Previous), [] { Text("Önceki"); });
-            TextButton(move(FocusDirection::Next), [] { Text("Sonraki (Tab)"); });
+            TextButton([requesters] { requesters[0].requestFocus(); }) { Text("Bir'e odaklan"); };
+            TextButton(move(FocusDirection::Previous)) { Text("Önceki"); };
+            TextButton(move(FocusDirection::Next)) { Text("Sonraki (Tab)"); };
         };
     });
 }
@@ -524,7 +522,7 @@ void SelectableRowsSection(CallSite site) {
                     Row(Modifier().fillMaxWidth().height(52).selectable(choice.get() == i, [choice, i] { choice.set(i); }, SemanticsRole::RadioButton)
                             .padding(8, 0),
                         horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                            RadioButton(choice.get() == i, {});
+                            RadioButton(choice.get() == i, nullptr);
                             Text(options[i], style = typography().bodyLarge);
                         };
             };
@@ -533,7 +531,7 @@ void SelectableRowsSection(CallSite site) {
                     Text("Hatırlatmalar", Modifier().weight(1), style = typography().bodyLarge);
                     // An icon in the thumb (a tick on, a cross off); the thumb grows while held.
                     bool n = notify.get();
-                    Switch(n, {}, Modifier(), {.thumbContent = [n] { Icon(n ? Icons::Filled::Check : Icons::Filled::Close, "", Modifier().size(16)); }});
+                    Switch(n, nullptr, Modifier(), thumbContent = [n] { Icon(n ? Icons::Filled::Check : Icons::Filled::Close, "", Modifier().size(16)); });
                 };
             Box(Modifier().padding(0, 8, 0, 0)) {
                 Box(Modifier().matchParentSize().background(Brush::horizontalGradient({cs.primaryContainer, cs.tertiaryContainer}), RoundedCornerShape(12))) {};
@@ -559,11 +557,11 @@ void DatePickerSection(CallSite site) {
         };
         Section("DatePicker · DateRangePicker", [&] {
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(12)) {
-                Button([open] { open.set(true); }, [] {
+                Button([open] { open.set(true); }) {
                     Icon(Icons::Filled::DateRange, "", Modifier().size(18));
                     Text("Tarih seç");
-                });
-                OutlinedButton([rangeOpen] { rangeOpen.set(true); }, [] { Text("Aralık seç"); });
+                };
+                OutlinedButton([rangeOpen] { rangeOpen.set(true); }) { Text("Aralık seç"); };
             };
             std::string text = "Henüz tarih seçilmedi.";
             if (auto d = picked.get()) text = "Seçilen: " + format(*d);
@@ -580,9 +578,9 @@ void DatePickerSection(CallSite site) {
                         TextButton([state, range, close] {
                             range.set(std::pair(*state.selectedStartDate(), *state.selectedEndDate()));
                             close();
-                        }, Modifier(), {.enabled = start && end}, [] { Text("Tamam"); });
+                        }, Modifier(), enabled = start && end) { Text("Tamam"); };
                     },
-                    [close] { TextButton(close, [] { Text("İptal"); }); },
+                    [close] { TextButton(close) { Text("İptal"); }; },
                     [&] { DateRangePicker(state); });
             }
             if (open.get()) {
@@ -594,9 +592,9 @@ void DatePickerSection(CallSite site) {
                         TextButton([state, picked, close] {
                             picked.set(state.selectedDate());
                             close();
-                        }, [] { Text("Tamam"); });
+                        }) { Text("Tamam"); };
                     },
-                    [close] { TextButton(close, [] { Text("İptal"); }); },
+                    [close] { TextButton(close) { Text("İptal"); }; },
                     [&] { DatePicker(state); });
             }
         });
@@ -612,10 +610,10 @@ void TimePickerSection(CallSite site) {
         auto twelveHour = remember([] { return mutableStateOf(false); });
         Section("TimePicker", [&] {
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
-                Button([open] { open.set(true); }, [] {
+                Button([open] { open.set(true); }) {
                     Icon(Icons::Filled::Schedule, "", Modifier().size(18));
                     Text("Saat seç");
-                });
+                };
                 FilterChip(twelveHour.get(), [twelveHour] { twelveHour.set(!twelveHour.get()); }, [] { Text("12 saat"); });
             };
             std::string text = "Henüz saat seçilmedi.";
@@ -639,14 +637,14 @@ void TimePickerSection(CallSite site) {
                          TextButton([state, picked, close] {
                              picked.set(std::pair(state.hour(), state.minute()));
                              close();
-                         }, [] { Text("Tamam"); });
+                         }) { Text("Tamam"); };
                      },
-                     .dismissButton = [close] { TextButton(close, [] { Text("İptal"); }); },
+                     .dismissButton = [close] { TextButton(close) { Text("İptal"); }; },
                      .modeToggleButton = [typing] {
-                         IconButton([typing] { typing.set(!typing.get()); }, [typing] {
+                         IconButton([typing] { typing.set(!typing.get()); }) {
                              Icon(typing.get() ? Icons::Filled::Schedule : Icons::Filled::Keyboard,
                                   typing.get() ? "Saat kadranı" : "Klavyeyle gir");
-                         });
+                         };
                      }},
                     [&] {
                         if (typing.get())

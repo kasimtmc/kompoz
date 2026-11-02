@@ -112,7 +112,7 @@ void ScrollUpButton(LazyListState list) {
     auto scope = rememberCoroutineScope();
     Button([scope, list] {
         scope.launch([list]() -> Task { co_await list.animateScrollToItem(0); });
-    }, [] { Text("Top"); });
+    }) { Text("Top"); };
 }
 ```
 

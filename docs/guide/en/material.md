@@ -15,8 +15,8 @@ void Inbox() {
     auto snackbars = rememberSnackbarHostState();
     Scaffold(Modifier(),
              {.topBar = [] { TopAppBar({.title = [] { Text("Inbox"); },
-                                        .navigationIcon = [] { IconButton([] {}, [] { Icon(Icons::Filled::Menu, "Menu"); }); },
-                                        .actions = [] { IconButton([] {}, [] { Icon(Icons::Filled::Search, "Search"); }); }}); },
+                                        .navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menu"); }; },
+                                        .actions = [] { IconButton([] {}) { Icon(Icons::Filled::Search, "Search"); }; }}); },
               .floatingActionButton = [snackbars] {
                   FloatingActionButton([snackbars] { snackbars.showSnackbar("Draft saved"); }, [] { Icon(Icons::Filled::Edit, "Compose"); });
               },
@@ -76,9 +76,9 @@ For moving between screens with a back stack, see [Navigation](navigation.md).
 
 ```cpp body
 Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
-    Button([] {}, [] { Text("Save"); });
-    OutlinedButton([] {}, [] { Text("Cancel"); });
-    IconButton([] {}, [] { Icon(Icons::Filled::Favorite, "Like"); });
+    Button([] {}) { Text("Save"); };
+    OutlinedButton([] {}) { Text("Cancel"); };
+    IconButton([] {}) { Icon(Icons::Filled::Favorite, "Like"); };
 };
 ```
 
@@ -87,12 +87,12 @@ Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
 `Card`, `ElevatedCard` and `OutlinedCard` group related content; each also comes in a clickable form that takes `onClick` first. `ListItem` is a one-, two- or three-line row with optional leading and trailing content:
 
 ```cpp body
-OutlinedCard(Modifier().fillMaxWidth(), [&] {
+OutlinedCard(Modifier().fillMaxWidth()) {
     ListItem({.headline = [] { Text("Wi-Fi"); },
               .supporting = [] { Text("Connected"); },
               .leading = [] { Icon(Icons::Filled::Settings, ""); },
               .trailing = [] { Switch(true, [](bool) {}); }});
-});
+};
 ```
 
 ## Selection controls
@@ -107,7 +107,7 @@ void Volume() {
         Slider(volume.get(), [volume](float v) { volume.set(v); });
         Row(Modifier().toggleable(muted.get(), [muted](bool v) { muted.set(v); }, SemanticsRole::Checkbox),
             verticalAlignment = Alignment::CenterVertically) {
-                Checkbox(muted.get(), {});   // the whole row toggles it
+                Checkbox(muted.get(), nullptr);   // the whole row toggles it
                 Text("Mute");
             };
     };
@@ -136,11 +136,11 @@ These show above the rest of the UI. Each is composed where you call it, so it k
 ```cpp
 void DeleteButton(std::function<void()> onDelete) {
     auto open = remember([] { return mutableStateOf(false); });
-    TextButton([open] { open.set(true); }, [] { Text("Delete"); });
+    TextButton([open] { open.set(true); }) { Text("Delete"); };
     if (open.get()) {
         AlertDialog([open] { open.set(false); },
-                    {.confirmButton = [open, onDelete] { TextButton([open, onDelete] { open.set(false); onDelete(); }, [] { Text("Delete"); }); },
-                     .dismissButton = [open] { TextButton([open] { open.set(false); }, [] { Text("Cancel"); }); },
+                    {.confirmButton = [open, onDelete] { TextButton([open, onDelete] { open.set(false); onDelete(); }) { Text("Delete"); }; },
+                     .dismissButton = [open] { TextButton([open] { open.set(false); }) { Text("Cancel"); }; },
                      .title = [] { Text("Delete this message?"); },
                      .text = [] { Text("It will be gone for good."); }});
     }
@@ -168,7 +168,7 @@ Button([scope, snackbars, undo] {
     scope.launch([snackbars, undo]() -> Task {
         if (co_await snackbars.showSnackbarAsync("Message deleted", "Undo") == SnackbarResult::ActionPerformed) undo();
     });
-}, [] { Text("Delete"); });
+}) { Text("Delete"); };
 SnackbarHost(snackbars);
 ```
 

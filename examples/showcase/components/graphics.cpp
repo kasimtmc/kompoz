@@ -40,15 +40,13 @@ void ProgressSection(CallSite site) {
                 ContainedLoadingIndicator(progress.value());
             };
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                Button(
-                    [scope, progress] {
+                Button([scope, progress] {
                         scope.launch([progress]() -> Task {
                             progress.snapTo(0.f);
                             co_await progress.animateTo(1.f, tween(2000, 0, LinearEasing));
                         });
-                    },
-                    [] { Text("Yükle (Animatable)"); });
-                OutlinedButton([right] { right.set(!right.get()); }, Modifier(), {}, [] { Text("Yay (spring)"); });
+                    }) { Text("Yükle (Animatable)"); };
+                OutlinedButton([right] { right.set(!right.get()); }, Modifier()) { Text("Yay (spring)"); };
             };
             Box(Modifier().fillMaxWidth().height(40)) {
                 Box(Modifier().offset(x * 220, 0).size(40).background(colorScheme().primary, 20)) {};
@@ -78,10 +76,8 @@ void AnimationsSection(CallSite site) {
         Section("AnimatedVisibility · AnimatedContent · Crossfade", [&] {
             Row(Modifier().fillMaxWidth(),
                 horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                    Button([expanded] { expanded.set(!expanded.get()); },
-                           [&] { Text(expanded.get() ? "Gizle" : "Detaylar"); });
-                    FilledTonalIconButton([count] { count.set(count.get() - 1); },
-                                          [] { Icon(Icons::Filled::Remove, "Azalt"); });
+                    Button([expanded] { expanded.set(!expanded.get()); }) { Text(expanded.get() ? "Gizle" : "Detaylar"); };
+                    FilledTonalIconButton([count] { count.set(count.get() - 1); }) { Icon(Icons::Filled::Remove, "Azalt"); };
                     // The digits come in from below when it grows, from above when it shrinks.
                     AnimatedContent<int>(
                         count.get(),
@@ -93,16 +89,15 @@ void AnimationsSection(CallSite site) {
                             float way = to > from ? 1.f : -1.f;
                             return togetherWith(slideInVertically(way) + fadeIn(), slideOutVertically(-way) + fadeOut());
                         });
-                    FilledTonalIconButton([count] { count.set(count.get() + 1); },
-                                          [] { Icon(Icons::Filled::Add, "Artır"); });
+                    FilledTonalIconButton([count] { count.set(count.get() + 1); }) { Icon(Icons::Filled::Add, "Artır"); };
                     Crossfade<bool>(liked.get(), [&](const bool& on) {
                         IconButton([liked, pulse, scope] {
                             liked.set(!liked.get());
                             scope.launch([pulse]() -> Task { co_await pulse.animateTo(1.f, keyframes(420, {{110, 1.35f}, {260, 0.9f}})); });
-                        }, Modifier().graphicsLayer([pulse](GraphicsLayerScope& l) { l.scaleX = l.scaleY = pulse.value(); }), {}, [&] {
-                            Icon(on ? Icons::Filled::Favorite : Icons::Filled::FavoriteBorder, "Beğen", {},
-                                 on ? std::optional(cs.error) : std::nullopt);
-                        });
+                        }, Modifier().graphicsLayer([pulse](GraphicsLayerScope& l) { l.scaleX = l.scaleY = pulse.value(); })) {
+                            Icon(on ? Icons::Filled::Favorite : Icons::Filled::FavoriteBorder, "Beğen",
+                                 tint = on ? std::optional(cs.error) : std::nullopt);
+                        };
                     });
                 };
             AnimatedVisibility(expanded.get(), [&] {
@@ -141,10 +136,8 @@ void AnimationsSection(CallSite site) {
                 feed.set({true, feed.peek().posts});
             });
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                OutlinedButton([feed] { feed.set({false, feed.get().posts}); }, Modifier(), {.enabled = feed.get().loaded},
-                               [] { Text("Yeniden yükle"); });
-                OutlinedButton([feed] { feed.set({true, feed.get().posts + 1}); }, Modifier(), {.enabled = feed.get().loaded},
-                               [] { Text("Yeni gönderi"); });
+                OutlinedButton([feed] { feed.set({false, feed.get().posts}); }, Modifier(), enabled = feed.get().loaded) { Text("Yeniden yükle"); };
+                OutlinedButton([feed] { feed.set({true, feed.get().posts + 1}); }, Modifier(), enabled = feed.get().loaded) { Text("Yeni gönderi"); };
             };
             AnimatedContent<Feed>(
                 feed.get(),
@@ -154,7 +147,7 @@ void AnimationsSection(CallSite site) {
                                 CircularProgressIndicator(Modifier().size(20));
                                 Text("Yükleniyor…", color = cs.onSurfaceVariant, style = typography().bodyMedium);
                             } else {
-                                Icon(Icons::Filled::CheckCircle, "Yüklendi", {}, cs.primary);
+                                Icon(Icons::Filled::CheckCircle, "Yüklendi", tint = cs.primary);
                                 Text(std::format("{} gönderi (contentKey: yeni veri geçişsiz)", f.posts), style = typography().bodyMedium);
                             }
                         };
@@ -163,8 +156,7 @@ void AnimationsSection(CallSite site) {
                 {.contentKey = [](const Feed& f) { return uint64_t(f.loaded); }});
             // animateEnterExit: the content itself comes and goes at once; inside it the scrim
             // fades and the panel slides, each its own way, and it stays until both are out.
-            OutlinedButton([panel] { panel.set(!panel.get()); }, Modifier(), {},
-                           [&] { Text(panel.get() ? "Paneli kapat" : "Panel (animateEnterExit)"); });
+            OutlinedButton([panel] { panel.set(!panel.get()); }, Modifier()) { Text(panel.get() ? "Paneli kapat" : "Panel (animateEnterExit)"); };
             AnimatedVisibility(panel.get(), Modifier().fillMaxWidth(), EnterTransition::None, ExitTransition::None,
                                [&](const AnimatedVisibilityScope& s) {
                 Box(Modifier().fillMaxWidth().height(140).clip(RoundedCornerShape(16))) {
@@ -189,7 +181,7 @@ void AnimationsSection(CallSite site) {
                     list.push_back(nextRow.get());
                     rows.set(list);
                     nextRow.set(nextRow.get() + 1);
-                }, Modifier(), {}, [] { Text("Satır ekle"); });
+                }, Modifier()) { Text("Satır ekle"); };
                 Text("MutableTransitionState", color = cs.onSurfaceVariant, style = typography().labelLarge);
             };
             for (int row : rows.get())
@@ -211,7 +203,7 @@ void AnimationsSection(CallSite site) {
                             verticalAlignment = Alignment::CenterVertically) {
                                 const char* where = shown.isIdle() ? "duruyor" : shown.targetState() ? "beliriyor" : "kayboluyor";
                                 Text(std::format("Satır {} · {}", row, where), Modifier().weight(1), style = typography().bodyMedium);
-                                IconButton([shown] { shown.setTargetState(false); }, [] { Icon(Icons::Filled::Close, "Kaldır"); });
+                                IconButton([shown] { shown.setTargetState(false); }) { Icon(Icons::Filled::Close, "Kaldır"); };
                             };
                     });
                 });
@@ -246,7 +238,7 @@ void AsyncImageSection(CallSite site) {
             };
             OutlinedTextField(url.get(), [url](std::string v) { url.set(std::move(v)); }, Modifier().fillMaxWidth(),
                               {.singleLine = true, .label = "Adres"});
-            Button([url, requested] { requested.set(url.peek()); }, [] { Text("Ağdan yükle"); });
+            Button([url, requested] { requested.set(url.peek()); }) { Text("Ağdan yükle"); };
             if (!requested.get().empty()) {
                 AsyncImageOptions network = options;
                 network.error = [cs] {
@@ -531,7 +523,7 @@ void SharedElementSection(CallSite site) {
                             Box(Modifier().fillMaxWidth().height(170).sharedElement(photo(item), scope).background(palette[item], 24)) {};
                             Text(names[item], Modifier().sharedBounds(title(item), scope), style = typography().headlineSmall);
                             Text("Geri dönünce ikisi listedeki yerlerine uçar.", style = typography().bodyMedium);
-                            TextButton([selected] { selected.set(-1); }, [] { Text("Geri"); });
+                            TextButton([selected] { selected.set(-1); }) { Text("Geri"); };
                         };
                     }
                 });
@@ -657,7 +649,7 @@ void ColorSpaceSection(CallSite site) {
             };
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                 Box(Modifier().size(40).background(animated, CircleShape)) {};
-                Button([warm] { warm.set(!warm.get()); }, [] { Text("Rengi canlandır (Oklab'da)"); });
+                Button([warm] { warm.set(!warm.get()); }) { Text("Rengi canlandır (Oklab'da)"); };
             };
         });
     });
@@ -822,7 +814,7 @@ void BlurSection(CallSite site) {
         ImageBitmap photo = imageResource("images/landscape.png");
         Section("Modifier.blur", [&] {
             Text(std::format("Yarıçap: {:.0f} dp", radius.get()), color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            Slider(radius.get(), [radius](float v) { radius.set(v); }, Modifier().fillMaxWidth(), {.valueFrom = 0, .valueTo = 32});
+            Slider(radius.get(), [radius](float v) { radius.set(v); }, Modifier().fillMaxWidth(), valueFrom = 0, valueTo = 32);
             Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
                 Switch(unbounded.get(), [unbounded](bool v) { unbounded.set(v); });
                 Text("Unbounded (dışa taşar)", Modifier().padding(12, 0, 0, 0));

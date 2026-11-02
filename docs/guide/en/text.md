@@ -123,7 +123,7 @@ void Composer() {
     auto message = rememberTextFieldState();
     Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
         OutlinedTextField(message, Modifier().weight(1), {.maxLines = 4, .placeholder = "Message"});
-        IconButton([message] { send(message.text()); message.clearText(); }, [] { Icon(Icons::AutoMirrored::Filled::Send, "Send"); });
+        IconButton([message] { send(message.text()); message.clearText(); }) { Icon(Icons::AutoMirrored::Filled::Send, "Send"); };
     };
 }
 ```
@@ -186,7 +186,7 @@ void Excerpt(const std::string& article) {
     auto cut = remember([] { return mutableStateOf(false); });
     Column() {
         Text(article, Modifier(), maxLines = 3, overflow = TextOverflow::Ellipsis, onTextLayout = [cut](const TextLayoutResult& r) { cut.set(r.hasVisualOverflow()); });
-        if (cut.get()) TextButton([] {}, [] { Text("Read more"); });
+        if (cut.get()) TextButton([] {}) { Text("Read more"); };
     };
 }
 ```

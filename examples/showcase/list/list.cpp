@@ -71,7 +71,7 @@ void ListStatus(LazyListState state, CallSite site = CallSite::current()) {
                  traced(Modifier().weight(1)), color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
             // Animated: from far down it jumps close first, then glides (animateScrollToItem).
             TextButton([state, scope] { scope.launch([state]() -> Task { co_await state.animateScrollToItem(0); }); }, Modifier(),
-                       {.enabled = first > 0}, [] { Text("Başa dön"); });
+                       enabled = first > 0) { Text("Başa dön"); };
         };
     });
 }
@@ -169,9 +169,8 @@ void ListScreen(Modifier modifier, LazyListState state, NavController nav, std::
                                                          std::max(0, info.visibleItemsInfo.back().index - 1));
                     Text(std::format("Görünen kareler: {} · {} sütun", seen, info.maxSpan), Modifier().weight(1),
                          color = cs.onSurfaceVariant, style = typography().bodySmall);
-                    TextButton([gridState, scope] { scope.launch([gridState]() -> Task { co_await gridState.animateScrollToItem(0); }); },
-                               [] { Text("Başa"); });
-                    TextButton([gridState] { gridState.scrollToItem(5001); }, [] { Text("Kare 5000"); });
+                    TextButton([gridState, scope] { scope.launch([gridState]() -> Task { co_await gridState.animateScrollToItem(0); }); }) { Text("Başa"); };
+                    TextButton([gridState] { gridState.scrollToItem(5001); }) { Text("Kare 5000"); };
                 };
                 // 10,000 tiles, as many columns of at least 88 dp as fit; only rows in view are composed.
                 PullToRefreshBox(refreshing.get(), refresh, Modifier().fillMaxWidth().weight(1), [&] {
@@ -197,8 +196,8 @@ void ListScreen(Modifier modifier, LazyListState state, NavController nav, std::
                          color = cs.onSurfaceVariant, style = typography().bodySmall);
                     TextButton([staggeredScroll, scope] {
                         scope.launch([staggeredScroll]() -> Task { co_await staggeredScroll.animateScrollToItem(0); });
-                    }, [] { Text("Başa"); });
-                    TextButton([staggeredScroll] { staggeredScroll.scrollToItem(3001); }, [] { Text("Kart 3000"); });
+                    }) { Text("Başa"); };
+                    TextButton([staggeredScroll] { staggeredScroll.scrollToItem(3001); }) { Text("Kart 3000"); };
                 };
                 // Cards of their own heights, each under the shorter lane (LazyVerticalStaggeredGrid).
                 LazyVerticalStaggeredGrid(StaggeredGridCells::Adaptive(150), Modifier().fillMaxWidth().weight(1),
@@ -234,10 +233,10 @@ void ItemScreen(int index, NavController nav, std::shared_ptr<LikesViewModel> vm
                             std::to_string(index) + " bağlantısı da bu ekranı açar (geri: liste, sonra ana sayfa).",
                         color = cs.onSurfaceVariant, textAlign = TextAlign::Center, style = typography().bodyMedium);
                    Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                       FilledTonalButton([vm, index] { vm->like(index); }, Modifier(), {}, [&] {
+                       FilledTonalButton([vm, index] { vm->like(index); }, Modifier()) {
                            Text(std::format("Beğen · {}", likes));
-                       });
-                       TextButton([nav] { nav.popBackStack(); }, [] { Text("Listeye dön"); });
+                       };
+                       TextButton([nav] { nav.popBackStack(); }) { Text("Listeye dön"); };
                    };
                };
     });

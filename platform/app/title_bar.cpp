@@ -26,7 +26,7 @@ void Button(WindowButton button, bool maximized, const Act& act) {
                             : button == WindowButton::Minimize ? kMinimize : maximized ? kRestore : kMaximize;
     std::string label = button == WindowButton::Close ? s.close : button == WindowButton::Minimize ? s.minimize : maximized ? s.restore : s.maximize;
     detail::Box(Modifier().size(kButton).clip(CircleShape).background(cs.surfaceContainerHighest).clickable([act, action] { act(action, {}); }),
-        Alignment::Center, [&] { Icon(icon, label, Modifier().size(16), cs.onSurface); });
+        Alignment::Center, [&] { detail::Icon(icon, label, Modifier().size(16), cs.onSurface); });
 }
 
 void Buttons(const std::vector<WindowButton>& buttons, bool maximized, const Act& act, Alignment side) {

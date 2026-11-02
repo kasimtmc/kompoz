@@ -40,7 +40,7 @@ void ListDetailSection(CallSite site) {
                             }
                             Text(cities[*city], style = typography().headlineSmall);
                             Text(notes[*city], color = cs.onSurfaceVariant);
-                            TextButton([navigator] { navigator.navigateBack(); }, [] { Text("Geri"); });
+                            TextButton([navigator] { navigator.navigateBack(); }) { Text("Geri"); };
                         };
                     },
                     Modifier(),
@@ -70,14 +70,14 @@ void SupportingPaneSection(CallSite site) {
                         Column(Modifier().fillMaxSize().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
                             Text("Kapadokya", style = typography().headlineSmall);
                             Text("Peri bacaları, balonlar ve yer altı şehirleri.", color = cs.onSurfaceVariant);
-                            FilledTonalButton([navigator] { navigator.navigateTo(SupportingPaneScaffoldRole::Supporting, 1); }, [] { Text("İlgili"); });
+                            FilledTonalButton([navigator] { navigator.navigateTo(SupportingPaneScaffoldRole::Supporting, 1); }) { Text("İlgili"); };
                         };
                     },
                     [&](const std::optional<int>&) {
                         Column(Modifier().fillMaxSize().background(cs.surfaceContainerHighest).padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
                             Text("İlgili yerler", style = typography().titleMedium);
                             for (const char* place : {"Göreme", "Ürgüp", "Derinkuyu"}) Text(place);
-                            TextButton([navigator] { navigator.navigateBack(); }, [] { Text("Geri"); });
+                            TextButton([navigator] { navigator.navigateBack(); }) { Text("Geri"); };
                         };
                     },
                     Modifier(), {.supportingPaneWidth = 220});
@@ -174,7 +174,7 @@ void TextMeasureSection(CallSite site) {
                      if (!expanded.peek()) cut.set(r.hasVisualOverflow());
                  });
             if (cut.get())
-                TextButton([expanded] { expanded.set(!expanded.peek()); }, [&] { Text(expanded.get() ? "Daha az" : "Devamını oku"); });
+                TextButton([expanded] { expanded.set(!expanded.peek()); }) { Text(expanded.get() ? "Daha az" : "Devamını oku"); };
         });
     });
 }
@@ -330,14 +330,14 @@ void PagerSection(CallSite site) {
             Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
                 IconButton([pager, scope, current] {
                     scope.launch([pager, current]() -> Task { co_await pager.animateScrollToPage(current - 1); });
-                }, [] { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Önceki"); });
+                }) { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Önceki"); };
                 Row(Modifier().weight(1), horizontalArrangement = Arrangement::spacedBy(8, Arrangement::Kind::Center), verticalAlignment = Alignment::CenterVertically) {
                     for (int i = 0; i < 5; ++i)
                         Box(Modifier().size(i == current ? 10.f : 8.f).background(i == current ? cs.primary : cs.outlineVariant, CircleShape)) {};
                 };
                 IconButton([pager, scope, current] {
                     scope.launch([pager, current]() -> Task { co_await pager.animateScrollToPage(current + 1); });
-                }, [] { Icon(Icons::AutoMirrored::Filled::ArrowForward, "Sonraki"); });
+                }) { Icon(Icons::AutoMirrored::Filled::ArrowForward, "Sonraki"); };
             };
             // PageSize::Fixed pages in the middle (SnapPosition::Center; the side padding, half the
             // room the page leaves, lets the first and last ones get there too), shrinking and fading
@@ -372,7 +372,7 @@ void PagerSection(CallSite site) {
                     auto list = pageNumbers.get();
                     list.insert(list.begin(), *std::max_element(list.begin(), list.end()) + 1);
                     pageNumbers.set(list);
-                }, Modifier(), {}, [] { Text("Başa sayfa ekle"); });
+                }, Modifier()) { Text("Başa sayfa ekle"); };
                 Switch(fromEnd.get(), [fromEnd](bool on) { fromEnd.set(on); });
                 Text("reverseLayout", style = typography().bodyMedium);
             };
@@ -545,7 +545,7 @@ void LayoutSection(CallSite site) {
                 Text("₺249", Modifier().alignByBaseline(), color = colorScheme().primary, style = typography().displaySmall);
                 Text("/ay", Modifier().alignByBaseline(), style = typography().bodySmall);
                 Spacer(Modifier().weight(1));
-                OutlinedButton([] {}, Modifier().alignByBaseline(), {}, [] { Text("Seç"); });
+                OutlinedButton([] {}, Modifier().alignByBaseline()) { Text("Seç"); };
             };
             auto& city = remember([] { return mutableStateOf(std::string("Ankara")); });
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12)) {
@@ -572,7 +572,7 @@ void LayoutSection(CallSite site) {
             });
             // SubcomposeLayout: the title measured first, then a line composed as wide as it is.
             std::string word = std::string("Kompoz") + std::string(size_t(extra.get() * 2), '!');
-            TextButton([extra] { extra.set((extra.peek() + 1) % 6); }, [] { Text("Başlığı uzat"); });
+            TextButton([extra] { extra.set((extra.peek() + 1) % 6); }) { Text("Başlığı uzat"); };
             SubcomposeLayout(Modifier().fillMaxWidth(), [word, primary = cs.primary](SubcomposeMeasureScope& s, const Constraints& c) {
                 float w = 0, h = 0;
                 for (const Measurable& m : s.subcompose(std::string("başlık"), [word] { Text(word, style = typography().titleMedium); })) {
@@ -642,8 +642,8 @@ void LayoutSection(CallSite site) {
                     std::reverse(v.begin(), v.end());
                     std::rotate(v.begin(), v.begin() + 2, v.end());
                     order.set(v);
-                }, Modifier().weight(1), {}, [] { Text("Karıştır"); });
-                OutlinedButton([order] { order.set({0, 1, 2, 3, 4, 5, 6}); }, Modifier().weight(1), {}, [] { Text("Sırala"); });
+                }, Modifier().weight(1)) { Text("Karıştır"); };
+                OutlinedButton([order] { order.set({0, 1, 2, 3, 4, 5, 6}); }, Modifier().weight(1)) { Text("Sırala"); };
             };
             // skipToLookaheadSize: the first card's text is laid out at the width the card is
             // going to, so it doesn't reflow while the card grows or shrinks; the second's does.

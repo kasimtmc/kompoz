@@ -103,11 +103,11 @@ void ShareRow(const std::string& link) {
     ClipboardManager clip = clipboardManager();
     HapticFeedback haptics = hapticFeedback();
     Row() {
-        TextButton([links, link] { links.openUri(link); }, [] { Text("Open"); });
+        TextButton([links, link] { links.openUri(link); }) { Text("Open"); };
         TextButton([clip, haptics, link] {
             clip.setText(link);
             haptics.performHapticFeedback(HapticFeedbackType::Confirm);
-        }, [] { Text("Copy link"); });
+        }) { Text("Copy link"); };
     };
 }
 ```

@@ -13,7 +13,7 @@ You need to add to it where meaning isn't on the screen as text: icons, images, 
 Give every icon and image that carries meaning a content description, and leave decorative ones empty:
 
 ```cpp body
-IconButton([] {}, [] { Icon(Icons::Filled::Share, "Share"); });     // announced as "Share, button"
+IconButton([] {}) { Icon(Icons::Filled::Share, "Share"); };     // announced as "Share, button"
 Icon(Icons::Filled::Star, "");                                      // decorative: not announced
 Image(imageResource("images/chart.png"), "Sales grew 20% in March", Modifier().size(200));
 ```
@@ -85,7 +85,7 @@ void WifiRow() {
     Row(Modifier().fillMaxWidth().toggleable(on.get(), [on](bool v) { on.set(v); }, SemanticsRole::Switch).padding(16),
         verticalAlignment = Alignment::CenterVertically) {
             Text("Wi-Fi", Modifier().weight(1));
-            Switch(on.get(), {});
+            Switch(on.get(), nullptr);
         };
 }
 ```

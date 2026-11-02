@@ -34,14 +34,14 @@ void IconButtons(CallSite site) {
         auto liked = remember([] { return mutableStateOf(false); });
         Section("IconButton", [&] {
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                    IconButton([liked] { liked.set(!liked.get()); }, [&] {
-                        Icon(liked.get() ? Icons::Filled::Favorite : Icons::Filled::FavoriteBorder, "Beğen", {},
-                             liked.get() ? std::optional(colorScheme().error) : std::nullopt);
-                    });
-                    FilledIconButton([] {}, [] { Icon(Icons::Filled::Add, "Ekle"); });
-                    FilledTonalIconButton([] {}, [] { Icon(Icons::Filled::Edit, "Düzenle"); });
-                    IconButton([] {}, Modifier(), {.enabled = false}, [] { Icon(Icons::Filled::Delete, "Sil"); });
-                    OutlinedIconButton([] {}, [] { Icon(Icons::Filled::Share, "Paylaş"); });
+                    IconButton([liked] { liked.set(!liked.get()); }) {
+                        Icon(liked.get() ? Icons::Filled::Favorite : Icons::Filled::FavoriteBorder, "Beğen",
+                             tint = liked.get() ? std::optional(colorScheme().error) : std::nullopt);
+                    };
+                    FilledIconButton([] {}) { Icon(Icons::Filled::Add, "Ekle"); };
+                    FilledTonalIconButton([] {}) { Icon(Icons::Filled::Edit, "Düzenle"); };
+                    IconButton([] {}, Modifier(), enabled = false) { Icon(Icons::Filled::Delete, "Sil"); };
+                    OutlinedIconButton([] {}) { Icon(Icons::Filled::Share, "Paylaş"); };
                     Icon(Icons::Filled::Star, "Büyük yıldız", Modifier().size(40), colorScheme().primary);
                 };
             // The toggles: each keeps its own on/off; `checked` picks the colors.
@@ -50,14 +50,11 @@ void IconButtons(CallSite site) {
             auto pinned = remember([] { return mutableStateOf(false); });
             auto locked = remember([] { return mutableStateOf(false); });
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                    IconToggleButton(starred.get(), [starred](bool on) { starred.set(on); }, [] { Icon(Icons::Filled::Star, "Yıldızla"); });
-                    FilledIconToggleButton(bell.get(), [bell](bool on) { bell.set(on); },
-                                           [] { Icon(Icons::Filled::Notifications, "Bildirimler"); });
-                    FilledTonalIconToggleButton(pinned.get(), [pinned](bool on) { pinned.set(on); },
-                                                [] { Icon(Icons::Filled::Place, "Sabitle"); });
-                    OutlinedIconToggleButton(locked.get(), [locked](bool on) { locked.set(on); },
-                                             [] { Icon(Icons::Filled::Lock, "Kilitle"); });
-                    FilledIconToggleButton(true, {}, Modifier(), {.enabled = false}, [] { Icon(Icons::Filled::Check, "Seçili"); });
+                    IconToggleButton(starred.get(), [starred](bool on) { starred.set(on); }) { Icon(Icons::Filled::Star, "Yıldızla"); };
+                    FilledIconToggleButton(bell.get(), [bell](bool on) { bell.set(on); }) { Icon(Icons::Filled::Notifications, "Bildirimler"); };
+                    FilledTonalIconToggleButton(pinned.get(), [pinned](bool on) { pinned.set(on); }) { Icon(Icons::Filled::Place, "Sabitle"); };
+                    OutlinedIconToggleButton(locked.get(), [locked](bool on) { locked.set(on); }) { Icon(Icons::Filled::Lock, "Kilitle"); };
+                    FilledIconToggleButton(true, nullptr, Modifier(), enabled = false) { Icon(Icons::Filled::Check, "Seçili"); };
                 };
             // Under the toggles: beside them (48 dp of room each) it would be squeezed on a phone.
             Text(std::string(bell.get() ? "Bildirim açık" : "Bildirim kapalı") + (locked.get() ? ", kilitli" : ""),
@@ -129,8 +126,8 @@ void StateFlowSection(CallSite site) {
                  color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
             LinearProgressIndicator(progress, Modifier().fillMaxWidth().padding(0, 12));
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                    Button([vm] { vm->start(); }, [] { Text("İndir"); });
-                    OutlinedButton([vm] { vm->cancel(); }, Modifier(), {}, [] { Text("İptal"); });
+                    Button([vm] { vm->start(); }) { Text("İndir"); };
+                    OutlinedButton([vm] { vm->cancel(); }, Modifier()) { Text("İptal"); };
                     Text(status, Modifier().weight(1), textAlign = TextAlign::End, style = typography().bodyMedium);
                 };
         });
@@ -251,8 +248,7 @@ void MovableContentSection(CallSite site) {
         Section("movableContentOf", [&] {
             Text("Kart Row ile Column arasında taşınır: dokunuş sayısı ve çalışan zamanlayıcısı baştan başlamaz.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            FilledTonalButton([sideBySide] { sideBySide.set(!sideBySide.peek()); },
-                              [&] { Text(sideBySide.get() ? "Alt alta diz" : "Yan yana diz"); });
+            FilledTonalButton([sideBySide] { sideBySide.set(!sideBySide.peek()); }) { Text(sideBySide.get() ? "Alt alta diz" : "Yan yana diz"); };
             if (sideBySide.get())
                 Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) { card(); other(); };
             else
@@ -293,7 +289,7 @@ void ChannelSection(CallSite site) {
                         next.set(next.peek() + 1);
                         waiting.set(waiting.peek() + 1);
                     }
-                }, [] { Text("Sipariş ver"); });
+                }) { Text("Sipariş ver"); };
                 Text(std::format("Bekleyen: {}", waiting.get()));
             };
             Text(kitchen.get(), style = typography().titleMedium);
@@ -310,7 +306,7 @@ void ChannelSection(CallSite site) {
                         co_await numbers.consumeEach([countdown](int i) { countdown.set(std::to_string(i)); });
                         countdown.set("Başla!");
                     });
-                }, [] { Text("Geri say (produce)"); });
+                }) { Text("Geri say (produce)"); };
                 Text(countdown.get(), color = cs.primary, style = typography().titleLarge);
             };
         });
@@ -455,7 +451,7 @@ void ChatSection(CallSite site) {
                 OutlinedTextField(draft.get(), [draft](std::string v) { draft.set(std::move(v)); }, Modifier().weight(1),
                                   {.singleLine = true, .placeholder = "Mesaj", .keyboardOptions = {.imeAction = ImeAction::Send},
                                    .keyboardActions = {.onSend = send}});
-                IconButton(send, [] { Icon(Icons::AutoMirrored::Filled::Send, "Gönder"); });
+                IconButton(send) { Icon(Icons::AutoMirrored::Filled::Send, "Gönder"); };
             };
         });
     });
@@ -505,16 +501,16 @@ void PlatformServicesSection(CallSite site) {
                  "kendileri titreşir.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
-                OutlinedButton([links] { links.openUri("https://developer.android.com/compose"); }, [] { Text("Compose belgeleri"); });
-                OutlinedButton([links] { links.openUri("kompoz://item/7"); }, [] { Text("kompoz://item/7"); });
+                OutlinedButton([links] { links.openUri("https://developer.android.com/compose"); }) { Text("Compose belgeleri"); };
+                OutlinedButton([links] { links.openUri("kompoz://item/7"); }) { Text("kompoz://item/7"); };
             });
             OutlinedTextField(note.get(), [note](std::string v) { note.set(std::move(v)); }, Modifier().fillMaxWidth(),
                               {.singleLine = true,
                                .label = "Not (Bitti klavyeyi gizler)",
                                .keyboardActions = {.onDone = [keyboard] { keyboard.hide(); }}});
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
-                TextButton([keyboard] { keyboard.hide(); }, [] { Text("Klavyeyi gizle"); });
-                TextButton([keyboard] { keyboard.show(); }, [] { Text("Klavyeyi göster"); });
+                TextButton([keyboard] { keyboard.hide(); }) { Text("Klavyeyi gizle"); };
+                TextButton([keyboard] { keyboard.show(); }) { Text("Klavyeyi göster"); };
             });
             // keepScreenOn: the screen stays on while the switch is on (a Box with it is laid out).
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
@@ -543,13 +539,13 @@ void PlatformServicesSection(CallSite site) {
                 Button([autofill, email, password, signedIn] {
                     autofill.commit();
                     signedIn.set(email.peek().empty() ? "" : "Giriş: " + email.peek());
-                }, [] { Text("Giriş yap"); });
+                }) { Text("Giriş yap"); };
                 TextButton([autofill, email, password, signedIn] {
                     autofill.cancel();
                     email.set("");
                     password.setTextAndPlaceCursorAtEnd("");
                     signedIn.set("");
-                }, [] { Text("Temizle"); });
+                }) { Text("Temizle"); };
                 Text(signedIn.get(), Modifier().weight(1), style = typography().bodyMedium);
             };
             // LocalViewConfiguration: the platform's gesture thresholds (Android's own there).
@@ -561,12 +557,11 @@ void PlatformServicesSection(CallSite site) {
                 using H = HapticFeedbackType;
                 for (auto [type, label] : {std::pair{H::LongPress, "Uzun basma"}, std::pair{H::Confirm, "Onay"},
                                            std::pair{H::Reject, "Ret"}, std::pair{H::SegmentTick, "Tık"}, std::pair{H::ToggleOn, "Açma"}})
-                    FilledTonalButton([haptics, type] { haptics.performHapticFeedback(type); }, [label] { Text(label); });
+                    FilledTonalButton([haptics, type] { haptics.performHapticFeedback(type); }) { Text(label); };
             });
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
-                Button([clipboard, note] { clipboard.setText(note.peek()); }, [] { Text("Notu kopyala"); });
-                OutlinedButton([clipboard, pasted] { pasted.set(clipboard.hasText() ? clipboard.getText() : "(boş)"); },
-                               [] { Text("Panoda ne var?"); });
+                Button([clipboard, note] { clipboard.setText(note.peek()); }) { Text("Notu kopyala"); };
+                OutlinedButton([clipboard, pasted] { pasted.set(clipboard.hasText() ? clipboard.getText() : "(boş)"); }) { Text("Panoda ne var?"); };
                 // Clipboard / ClipEntry, in a coroutine: the entry into the note.
                 OutlinedButton([board, scope, note, pasted] {
                     scope.launch([board, note, pasted]() -> Task {
@@ -574,7 +569,7 @@ void PlatformServicesSection(CallSite site) {
                         if (entry) note.set(entry->getPlainText());
                         pasted.set(entry ? "getClipEntry: " + entry->getPlainText() : "getClipEntry: boş");
                     });
-                }, [] { Text("Notun yerine yapıştır"); });
+                }) { Text("Notun yerine yapıştır"); };
             });
             if (!pasted.get().empty()) Text("Panoda: " + pasted.get(), color = cs.onSurfaceVariant, style = typography().bodySmall);
             // withBackground (Compose's withContext(Dispatchers.Default)) in a TaskOf: the primes
@@ -591,7 +586,7 @@ void PlatformServicesSection(CallSite site) {
                         primes.set(std::format("{} asal ({} ms)", n, started));
                         counting.set(false);
                     });
-                }, [] { Text("Arkada hesapla"); });
+                }) { Text("Arkada hesapla"); };
                 if (counting.get()) CircularProgressIndicator(Modifier().size(24));
                 Text(primes.get(), style = typography().bodyMedium);
             };

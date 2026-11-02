@@ -14,7 +14,7 @@ void TextSection(CallSite site) {
             Box(Modifier().fillMaxWidth(fitWidth.get()).height(56).background(cs.surfaceContainerHigh, 12).padding(8, 4), Alignment::CenterStart) {
                 Text("Sığdığı kadar büyük", Modifier().fillMaxWidth(), maxLines = 1, autoSize = TextAutoSize::StepBased(10, 48, 1));
             };
-            Slider(fitWidth.get(), [fitWidth](float v) { fitWidth.set(v); }, Modifier().fillMaxWidth(), {.valueFrom = 0.2f, .valueTo = 1});
+            Slider(fitWidth.get(), [fitWidth](float v) { fitWidth.set(v); }, Modifier().fillMaxWidth(), valueFrom = 0.2f, valueTo = 1);
             Text(buildAnnotatedString([&](AnnotatedString::Builder& b) {
                      b.append("Bir metinde ");
                      b.withStyle({.fontWeight = FontWeight::Bold}, [&] { b.append("kalın"); });

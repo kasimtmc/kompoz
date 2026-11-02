@@ -31,7 +31,7 @@ void CounterCard(CallSite site = CallSite::current()) {
         float progress = animateFloatAsState(float(std::clamp(count.get(), 0, 10)) / 10.f);
         const ColorScheme& cs = colorScheme();
 
-        Card(traced(Modifier().fillMaxWidth()), [&] {
+        Card(traced(Modifier().fillMaxWidth())) {
             Column(Modifier().padding(20), verticalArrangement = Arrangement::spacedBy(12)) {
                 Text("Sayaç", style = typography().titleMedium);
                 Text(std::to_string(count.get()), fontSize = 48, fontWeight = FontWeight::Bold, color = cs.primary);
@@ -39,13 +39,12 @@ void CounterCard(CallSite site = CallSite::current()) {
                     Box(Modifier().fillMaxWidth(progress).fillMaxHeight().background(cs.primary, 4)) {};
                 };
                 Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                    OutlinedButton([count] { count.set(count.get() - 1); }, Modifier(), {.enabled = count.get() > 0},
-                                   [] { Text("−"); });
-                    Button([count] { count.set(count.get() + 1); }, [] { Text("+ Arttır"); });
-                    TextButton([count] { count.set(0); }, [] { Text("Sıfırla"); });
+                    OutlinedButton([count] { count.set(count.get() - 1); }, Modifier(), enabled = count.get() > 0) { Text("−"); };
+                    Button([count] { count.set(count.get() + 1); }) { Text("+ Arttır"); };
+                    TextButton([count] { count.set(0); }) { Text("Sıfırla"); };
                 };
             };
-        });
+        };
     });
 }
 
@@ -70,7 +69,7 @@ void TodoRow(const Todo& todo, MutableState<std::vector<Todo>> todos, CallSite s
                 Checkbox(todo.done, setDone);
                 Text(todo.title, Modifier().weight(1),
                      color = todo.done ? std::optional(colorScheme().onSurfaceVariant) : std::nullopt, textDecoration = todo.done ? TextDecoration::LineThrough : TextDecoration::None);
-                TextButton(remove, [] { Text("Sil"); });
+                TextButton(remove) { Text("Sil"); };
             };
     });
 }
@@ -92,7 +91,7 @@ void TodoCard(CallSite site = CallSite::current()) {
         };
         auto remaining = std::ranges::count_if(todos.get(), [](const Todo& t) { return !t.done; });
 
-        Card(traced(Modifier().fillMaxWidth()), [&] {
+        Card(traced(Modifier().fillMaxWidth())) {
             Column(Modifier().padding(20), verticalArrangement = Arrangement::spacedBy(8)) {
                 Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
                     Text("Yapılacaklar", Modifier().weight(1), style = typography().titleMedium);
@@ -105,14 +104,14 @@ void TodoCard(CallSite site = CallSite::current()) {
                                           Modifier().weight(1).testTag("todo-input"),
                                           {.singleLine = true, .placeholder = "örn. Slot table yaz", .onSubmit = add, .label = "Yeni görev",
                                            .keyboardOptions = {.capitalization = KeyboardCapitalization::Sentences}});
-                        Button(add, [] { Text("Ekle"); });
+                        Button(add) { Text("Ekle"); };
                     };
                 for (const Todo& todo : todos.get()) key(todo.id, [&] { TodoRow(todo, todos); });
                 if (todos->empty())
                     Text("Hepsi bitti!", Modifier().fillMaxWidth().padding(8),
                          color = colorScheme().onSurfaceVariant, textAlign = TextAlign::Center);
             };
-        });
+        };
     });
 }
 
@@ -132,7 +131,7 @@ void HomeScreen(Modifier modifier, CallSite site) {
     composable(site, modifier, [=] {
         auto scroll = rememberScrollState();
         Column(modifier.verticalScroll(scroll).padding(20, 8, 20, 96), verticalArrangement = Arrangement::spacedBy(16)) {
-                   Card(Modifier().fillMaxWidth(), [&] {
+                   Card(Modifier().fillMaxWidth()) {
                        Row(Modifier().padding(20, 16), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                                Icon(Icons::Filled::Info, "Bilgi", Modifier().size(32), colorScheme().primary);
                                Column(Modifier().weight(1)) {
@@ -142,7 +141,7 @@ void HomeScreen(Modifier modifier, CallSite site) {
                                    MediaLine();
                                };
                            };
-                   });
+                   };
                    CounterCard();
                    TodoCard();
                    Text("Kompoz · C++20", Modifier().fillMaxWidth(),
@@ -154,11 +153,11 @@ void HomeScreen(Modifier modifier, CallSite site) {
 // Previews (KOMPOZ_PREVIEW=CounterCardPreview ./build/showcase, or =* for all of them).
 KOMPOZ_PREVIEW(CounterCardPreview, .width = 400, .height = 220) {
     MaterialTheme(isSystemInDarkTheme() ? darkColorScheme() : lightColorScheme(), [] {
-        Surface(Modifier().fillMaxSize(), [] { (Box)(Modifier().padding(16), [] { CounterCard(); }); });
+        Surface(Modifier().fillMaxSize()) { (Box)(Modifier().padding(16), [] { CounterCard(); }); };
     });
 }
 KOMPOZ_PREVIEW(TodoCardDarkPreview, .width = 400, .height = 360, .darkTheme = true) {
     MaterialTheme(isSystemInDarkTheme() ? darkColorScheme() : lightColorScheme(), [] {
-        Surface(Modifier().fillMaxSize(), [] { (Box)(Modifier().padding(16), [] { TodoCard(); }); });
+        Surface(Modifier().fillMaxSize()) { (Box)(Modifier().padding(16), [] { TodoCard(); }); };
     });
 }

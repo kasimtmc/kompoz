@@ -199,11 +199,11 @@ void MenuBar(const std::vector<MenuBarMenu>& menus, const Modifier& modifier, Ca
                 Layout(m.padding(12, 0), [&] {
                     if (checks)
                         detail::Box(Modifier().size(20), Alignment::Center, [&] {
-                            if (item.checked.value_or(false)) Icon(Icons::Filled::Check, LocalStrings.current().checked, Modifier().size(18), quiet);
+                            if (item.checked.value_or(false)) detail::Icon(Icons::Filled::Check, LocalStrings.current().checked, Modifier().size(18), quiet);
                         });
                     detail::Text(item.text, {.font = t.bodyMedium, .color = text});
                     if (hasSub)
-                        Icon(Icons::AutoMirrored::Filled::KeyboardArrowRight, LocalStrings.current().submenu, Modifier().size(18), quiet);
+                        detail::Icon(Icons::AutoMirrored::Filled::KeyboardArrowRight, LocalStrings.current().submenu, Modifier().size(18), quiet);
                     else if (item.shortcut)
                         detail::Text(item.shortcut->text(), {.font = t.labelMedium, .color = quiet});
                 }, [trailing = hasSub || item.shortcut.has_value()](const std::vector<Measurable>& children, const Constraints& c) {

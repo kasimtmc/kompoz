@@ -64,7 +64,7 @@ void Screen() {
     Column() {
         NameTag("Ada");                                   // clicks değişince yeniden çalışmaz
         Text("Clicks: " + std::to_string(clicks.get()));  // Screen clicks'i okudu
-        Button([clicks] { clicks.set(clicks.get() + 1); }, [] { Text("Click"); });
+        Button([clicks] { clicks.set(clicks.get() + 1); }) { Text("Click"); };
     };
 }
 ```

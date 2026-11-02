@@ -152,9 +152,9 @@ Keyboard focus is shown, as in Compose Material 3, by the component's focus stat
 void HoverCard() {
     auto source = remember([] { return MutableInteractionSource(); });
     bool hovered = source.collectIsHoveredAsState();
-    Card(Modifier().hoverable(source).pointerHoverIcon(PointerIcon::Hand), [&] {
+    Card(Modifier().hoverable(source).pointerHoverIcon(PointerIcon::Hand)) {
         Text(hovered ? "Hovering" : "Point at me", Modifier().padding(24));
-    });
+    };
 }
 ```
 
@@ -168,7 +168,7 @@ A `MutableInteractionSource` is told of the presses, hovers, focus and drags of 
 void PressToRecord() {
     auto source = remember([] { return MutableInteractionSource(); });
     bool pressed = source.collectIsPressedAsState();
-    Button([] {}, Modifier(), {.interactionSource = source}, [&] { Text(pressed ? "Recording…" : "Hold to record"); });
+    Button([] {}, Modifier(), interactionSource = source) { Text(pressed ? "Recording…" : "Hold to record"); };
 }
 ```
 

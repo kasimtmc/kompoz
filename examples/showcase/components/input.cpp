@@ -111,14 +111,14 @@ void PointerSection(CallSite site) {
                              color = cs.inverseOnSurface, style = typography().bodySmall);
                     },
                     Modifier().weight(1),
-                    [&] { OutlinedButton([] {}, Modifier().fillMaxWidth(), {}, [] { Text("Üstünde bekleyin"); }); });
+                    [&] { OutlinedButton([] {}, Modifier().fillMaxWidth()) { Text("Üstünde bekleyin"); }; });
                 TooltipArea(
                     [&] {
                         Text("Düğmenin altında, ortada", Modifier().shadow(4, 4).background(cs.inverseSurface, 4).padding(8, 4),
                              color = cs.inverseOnSurface, style = typography().bodySmall);
                     },
                     Modifier().weight(1), {.delayMillis = 300, .tooltipPlacement = TooltipPlacement::ComponentRect(Alignment::BottomCenter, Alignment::BottomCenter, {0, 4})},
-                    [&] { OutlinedButton([] {}, Modifier().fillMaxWidth(), {}, [] { Text("ComponentRect"); }); });
+                    [&] { OutlinedButton([] {}, Modifier().fillMaxWidth()) { Text("ComponentRect"); }; });
             };
         });
     });
@@ -390,7 +390,7 @@ void SelectableCard(int index, MutableState<int> selected, CallSite site) {
         Column(Modifier().weight(1).height(84).graphicsLayer({.scaleX = 1 + 0.05f * lift, .scaleY = 1 + 0.05f * lift})
                    .background(container, 16).clickable([selected, index] { selected.set(index); }).padding(12),
                verticalArrangement = Arrangement::SpaceBetween) {
-                   Icon(index == 0 ? Icons::Filled::Home : index == 1 ? Icons::Filled::Star : Icons::Filled::Favorite, "Kart", {}, content);
+                   Icon(index == 0 ? Icons::Filled::Home : index == 1 ? Icons::Filled::Star : Icons::Filled::Favorite, "Kart", tint = content);
                    Text(t.currentState() ? "Seçili" : t.isRunning() ? "…" : std::format("Kart {}", index + 1),
                         color = content, style = typography().labelLarge);
                };

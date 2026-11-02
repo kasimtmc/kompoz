@@ -224,7 +224,7 @@ void ElevatedFilterChip(bool selected, std::function<void()> onClick, const Cont
     chip(ChipKind::Filter, selected, std::move(onClick), label, options, modifier, site, true);
 }
 
-void RadioButton(bool selected, std::function<void()> onClick, const Modifier& modifier, bool enabled,
+void detail::RadioButton(bool selected, std::function<void()> onClick, const Modifier& modifier, bool enabled,
                  std::optional<MutableInteractionSource> interactionSource, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
@@ -467,14 +467,14 @@ std::shared_ptr<SliderState::Data> sliderData(float value, std::function<void(fl
 
 } // namespace
 
-void Slider(float value, std::function<void(float)> onValueChange, const Modifier& modifier, SliderOptions options, CallSite site) {
+void detail::Slider(float value, std::function<void(float)> onValueChange, const Modifier& modifier, SliderOptions options, CallSite site) {
     ComposableScope scope(site);
     // Right to left the track starts at the right.
     slider(false, LocalLayoutDirection.current() == LayoutDirection::Rtl, sliderData(value, std::move(onValueChange), options), modifier,
            options);
 }
 
-void Slider(const SliderState& state, const Modifier& modifier, SliderOptions options, CallSite site) {
+void detail::Slider(const SliderState& state, const Modifier& modifier, SliderOptions options, CallSite site) {
     ComposableScope scope(site);
     slider(false, LocalLayoutDirection.current() == LayoutDirection::Rtl, state.data_, modifier, options);
 }
@@ -493,7 +493,7 @@ SliderState rememberSliderState(float value, int steps, float valueFrom, float v
     return SliderState{data};
 }
 
-void VerticalSlider(float value, std::function<void(float)> onValueChange, const Modifier& modifier, SliderOptions options,
+void detail::VerticalSlider(float value, std::function<void(float)> onValueChange, const Modifier& modifier, SliderOptions options,
                     bool reverseDirection, CallSite site) {
     ComposableScope scope(site);
     slider(true, !reverseDirection, sliderData(value, std::move(onValueChange), options), modifier, options);
@@ -542,7 +542,7 @@ void IconThumb(const SliderState& state, const ImageVector& icon, float size, Ca
     Color c = state.colors().value_or(colors()).thumb(state.enabled());
     auto grow = animateFloatAsState(state.isPressed() ? 1.1f : 1.f, 120);
     detail::Box(detail::animatedScale(Modifier().size(size), grow).background(c, CircleShape), Alignment::Center,
-        [&] { Icon(icon, "", Modifier().size(size * 0.6f), colorScheme().onPrimary); });
+        [&] { detail::Icon(icon, "", Modifier().size(size * 0.6f), colorScheme().onPrimary); });
 }
 
 void ValueThumb(const SliderState& state, std::function<std::string(float)> label, CallSite site) {
@@ -831,14 +831,14 @@ std::shared_ptr<RangeSliderState::Data> rangeSliderData(std::pair<float, float> 
 
 } // namespace
 
-void RangeSlider(std::pair<float, float> value, std::function<void(std::pair<float, float>)> onValueChange, const Modifier& modifier,
+void detail::RangeSlider(std::pair<float, float> value, std::function<void(std::pair<float, float>)> onValueChange, const Modifier& modifier,
                  SliderOptions options, CallSite site) {
     ComposableScope scope(site);
     rangeSlider(LocalLayoutDirection.current() == LayoutDirection::Rtl, rangeSliderData(value, std::move(onValueChange), options), modifier,
                 options);
 }
 
-void RangeSlider(const RangeSliderState& state, const Modifier& modifier, SliderOptions options, CallSite site) {
+void detail::RangeSlider(const RangeSliderState& state, const Modifier& modifier, SliderOptions options, CallSite site) {
     ComposableScope scope(site);
     rangeSlider(LocalLayoutDirection.current() == LayoutDirection::Rtl, state.data_, modifier, options);
 }
@@ -985,7 +985,7 @@ void segment(bool selected, const std::function<Modifier(const Modifier&)>& clic
                     if (options.icon)
                         options.icon();
                     else if (selected)
-                        Icon(Icons::Filled::Check, LocalStrings.current().selected,
+                        detail::Icon(Icons::Filled::Check, LocalStrings.current().selected,
                              Modifier()
                                  .graphicsLayer([grown, shown](GraphicsLayerScope& l) {
                                      l.scaleX = l.scaleY = grown.value(), l.alpha = shown.value(), l.transformOrigin = {0, 1};
@@ -1082,7 +1082,7 @@ using GroupItems = std::shared_ptr<std::vector<ButtonGroupItem>>;  // the latest
 void groupButton(const GroupItems& items, size_t i, const Modifier& modifier, std::optional<MutableInteractionSource> source) {
     const ButtonGroupItem& item = (*items)[i];
     Content content = [icon = item.icon, label = item.label] {
-        if (icon) Icon(*icon, "", Modifier().size(18));
+        if (icon) detail::Icon(*icon, "", Modifier().size(18));
         detail::Text(label);
     };
     if (item.checked)
@@ -1090,7 +1090,7 @@ void groupButton(const GroupItems& items, size_t i, const Modifier& modifier, st
             if (i < items->size() && (*items)[i].onCheckedChange) (*items)[i].onCheckedChange(on);
         }, modifier, {.interactionSource = source}, content);
     else
-        Button([items, i] {
+        detail::Button([items, i] {
             if (i < items->size() && (*items)[i].onClick) (*items)[i].onClick();
         }, modifier, {.interactionSource = source}, content);
 }
@@ -1098,13 +1098,13 @@ void groupButton(const GroupItems& items, size_t i, const Modifier& modifier, st
 // The ⋮ button and its menu of the items from `first` on.
 void groupOverflow(const GroupItems& items, size_t first, const MutableState<bool>& open) {
     detail::Box([&] {
-        IconButton([open] { open.set(true); }, [] { Icon(Icons::Filled::MoreVert, LocalStrings.current().moreOptions); });
+        detail::IconButton([open] { open.set(true); }, [] { detail::Icon(Icons::Filled::MoreVert, LocalStrings.current().moreOptions); });
         DropdownMenu(open.get(), [open] { open.set(false); }, [&] {
             for (size_t i = first; i < items->size(); ++i) {
                 const ButtonGroupItem& item = (*items)[i];
                 Content leading;
-                if (item.checked && *item.checked) leading = [] { Icon(Icons::Filled::Check, LocalStrings.current().selected); };
-                else if (item.icon) leading = [icon = item.icon] { Icon(*icon, ""); };
+                if (item.checked && *item.checked) leading = [] { detail::Icon(Icons::Filled::Check, LocalStrings.current().selected); };
+                else if (item.icon) leading = [icon = item.icon] { detail::Icon(*icon, ""); };
                 DropdownMenuItem([label = item.label] { detail::Text(label); }, [items, i, open] {
                     open.set(false);
                     if (i >= items->size()) return;

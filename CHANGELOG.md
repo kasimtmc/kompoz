@@ -609,6 +609,12 @@
   block form Compose writes, `Column(modifier) { … };`, which the showcase and the guide use. `Box`, `Column`, `Row`,
   `Spacer` and `Text` take them now (`ColumnStyle` and `RowStyle` are gone; Text's `style` takes a theme's text style,
   `typography().bodyMedium`, as it is); the other composables follow.
+- **Named arguments and blocks for buttons, cards and controls**: the buttons, icon buttons and icon toggle buttons,
+  the cards, `Surface`, `Icon`, `Image`, `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch` and the sliders take
+  them, `Button(onClick, enabled = false) { Text("Gönder"); };`, `Slider(v, set, valueFrom = 0, valueTo = 100,
+  steps = 9)`, `Icon(icon, "Sil", tint = cs.error)`, in Compose's order. Their option structs are no longer given
+  (`SwitchOptions`, `SliderOptions`...); a slider's colors are `sliderColors =` (`colors` is the color constants'
+  namespace), and a callback left out is `nullptr`, as `{}` has no type to take.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

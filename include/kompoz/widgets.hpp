@@ -697,27 +697,122 @@ inline const PaddingValues TextButtonWithIconContentPadding{12, 8, 16, 8};
 inline constexpr float MinWidth = 58, MinHeight = 40, IconSize = 18, IconSpacing = 8;
 } // namespace ButtonDefaults
 
+namespace detail {
 void Button(std::function<void()> onClick, const Content& content, CallSite site = CallSite::current());
 void Button(std::function<void()> onClick, const Modifier& modifier, const Content& content,
             CallSite site = CallSite::current());
 void Button(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style, const Content& content,
             CallSite site = CallSite::current());
+struct ButtonImpl {
+    using P = Params<names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: Button takes a block: its content");
+        ButtonStyle style;
+        P::set<names::Enabled>(style.enabled, args...);
+        P::set<names::Shapes>(style.shapes, args...);
+        P::set<names::ContainerColor>(style.containerColor, args...);
+        P::set<names::ContentColor>(style.contentColor, args...);
+        P::set<names::ContentPadding>(style.contentPadding, args...);
+        P::set<names::InteractionSource>(style.interactionSource, args...);
+        detail::Button(std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ButtonImpl> Button;
 
+namespace detail {
 void OutlinedButton(std::function<void()> onClick, const Content& content, CallSite site = CallSite::current());
 void OutlinedButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                     const Content& content, CallSite site = CallSite::current());
+struct OutlinedButtonImpl {
+    using P = Params<names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: OutlinedButton takes a block: its content");
+        ButtonStyle style;
+        P::set<names::Enabled>(style.enabled, args...);
+        P::set<names::Shapes>(style.shapes, args...);
+        P::set<names::ContainerColor>(style.containerColor, args...);
+        P::set<names::ContentColor>(style.contentColor, args...);
+        P::set<names::ContentPadding>(style.contentPadding, args...);
+        P::set<names::InteractionSource>(style.interactionSource, args...);
+        detail::OutlinedButton(std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::OutlinedButtonImpl> OutlinedButton;
 
+namespace detail {
 void FilledTonalButton(std::function<void()> onClick, const Content& content, CallSite site = CallSite::current());
 void FilledTonalButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                        const Content& content, CallSite site = CallSite::current());
+struct FilledTonalButtonImpl {
+    using P = Params<names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: FilledTonalButton takes a block: its content");
+        ButtonStyle style;
+        P::set<names::Enabled>(style.enabled, args...);
+        P::set<names::Shapes>(style.shapes, args...);
+        P::set<names::ContainerColor>(style.containerColor, args...);
+        P::set<names::ContentColor>(style.contentColor, args...);
+        P::set<names::ContentPadding>(style.contentPadding, args...);
+        P::set<names::InteractionSource>(style.interactionSource, args...);
+        detail::FilledTonalButton(std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::FilledTonalButtonImpl> FilledTonalButton;
 
+namespace detail {
 void ElevatedButton(std::function<void()> onClick, const Content& content, CallSite site = CallSite::current());
 void ElevatedButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                     const Content& content, CallSite site = CallSite::current());
+struct ElevatedButtonImpl {
+    using P = Params<names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: ElevatedButton takes a block: its content");
+        ButtonStyle style;
+        P::set<names::Enabled>(style.enabled, args...);
+        P::set<names::Shapes>(style.shapes, args...);
+        P::set<names::ContainerColor>(style.containerColor, args...);
+        P::set<names::ContentColor>(style.contentColor, args...);
+        P::set<names::ContentPadding>(style.contentPadding, args...);
+        P::set<names::InteractionSource>(style.interactionSource, args...);
+        detail::ElevatedButton(std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ElevatedButtonImpl> ElevatedButton;
 
+namespace detail {
 void TextButton(std::function<void()> onClick, const Content& content, CallSite site = CallSite::current());
 void TextButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                 const Content& content, CallSite site = CallSite::current());
+struct TextButtonImpl {
+    using P = Params<names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: TextButton takes a block: its content");
+        ButtonStyle style;
+        P::set<names::Enabled>(style.enabled, args...);
+        P::set<names::Shapes>(style.shapes, args...);
+        P::set<names::ContainerColor>(style.containerColor, args...);
+        P::set<names::ContentColor>(style.contentColor, args...);
+        P::set<names::ContentPadding>(style.contentPadding, args...);
+        P::set<names::InteractionSource>(style.interactionSource, args...);
+        detail::TextButton(std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::TextButtonImpl> TextButton;
 
 // M3 Expressive's toggle buttons (Compose's ToggleButton and its Elevated, Tonal and Outlined
 // kinds): a button that stays checked, its corners morphing from round to square when it is
@@ -791,9 +886,6 @@ void TrailingButtonIcon(bool checked, CallSite site = CallSite::current());
 
 // Shows a bitmap. Its pixels count as dp; with only one fixed dimension (fillMaxWidth()) the
 // other follows the image's aspect ratio.
-void Image(const ImageBitmap& bitmap, std::string contentDescription, const Modifier& modifier = {},
-           ContentScale contentScale = ContentScale::Fit, float alpha = 1, std::optional<ColorFilter> colorFilter = {},
-           CallSite site = CallSite::current());
 
 // Loads an image asset once ("images/photo.png"), like painterResource: JPEG, PNG, WebP, BMP
 // (on the web PNG and BMP: the browser decodes the others asynchronously, use AsyncImage). The
@@ -878,9 +970,33 @@ Painter rememberAnimatedVectorPainter(const AnimatedImageVector& vector, bool at
 // A Painter's drawing as an image (Compose's Image(painter)): as big as the painter is (scaled
 // down to fit), placed in it by `alignment` and `contentScale` and clipped to it.
 //   Image(painterResource("images/photo.jpg"), "Fotoğraf", Modifier().size(120), Alignment::Center, ContentScale::Crop);
+namespace detail {
+void Image(const ImageBitmap& bitmap, std::string contentDescription, const Modifier& modifier = {},
+           ContentScale contentScale = ContentScale::Fit, float alpha = 1, std::optional<ColorFilter> colorFilter = {},
+           CallSite site = CallSite::current());
 void Image(const Painter& painter, std::string contentDescription, const Modifier& modifier = {},
            Alignment alignment = Alignment::Center, ContentScale contentScale = ContentScale::Fit, float alpha = 1,
            std::optional<ColorFilter> colorFilter = {}, CallSite site = CallSite::current());
+struct ImageImpl {
+    using Bitmap = Params<names::Modifier, names::ContentScale, names::Alpha, names::ColorFilter>;
+    using Painted = Params<names::Modifier, names::Alignment, names::ContentScale, names::Alpha, names::ColorFilter>;
+    template <class... A>
+    static void call(CallSite site, const ImageBitmap& bitmap, std::string contentDescription, A&&... args) {
+        static_assert(Bitmap::check<A...>());
+        detail::Image(bitmap, std::move(contentDescription), Bitmap::get<names::Modifier>(Modifier{}, args...),
+              Bitmap::get<names::ContentScale>(ContentScale::Fit, args...), Bitmap::get<names::Alpha>(1.f, args...),
+              Bitmap::get<names::ColorFilter>(std::optional<ColorFilter>{}, args...), site);
+    }
+    template <class... A>
+    static void call(CallSite site, const Painter& painter, std::string contentDescription, A&&... args) {
+        static_assert(Painted::check<A...>());
+        detail::Image(painter, std::move(contentDescription), Painted::get<names::Modifier>(Modifier{}, args...),
+              Painted::get<names::Alignment>(Alignment{Alignment::Center}, args...), Painted::get<names::ContentScale>(ContentScale::Fit, args...),
+              Painted::get<names::Alpha>(1.f, args...), Painted::get<names::ColorFilter>(std::optional<ColorFilter>{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ImageImpl> Image;
 
 // An image loaded away from the UI thread, as Coil's AsyncImage: `model` is an asset or file
 // path ("images/photo.jpg") or an http(s) URL; JPEG, PNG, WebP and BMP. It is decoded at the
@@ -917,12 +1033,30 @@ Painter rememberAsyncImagePainter(const std::string& model, ImageRequestSize siz
 void clearImageCache();
 
 // A 24dp icon tinted with LocalContentColor (or `tint`); a size() modifier changes its size.
-void Icon(const ImageVector& icon, std::string contentDescription, const Modifier& modifier = {},
-          std::optional<Color> tint = {}, CallSite site = CallSite::current());
 // A Painter as an icon: its own size (24 dp if it has none), tinted the same way (Compose's
 // Icon(painter); a bitmap turns into its shape in the tint).
+namespace detail {
+void Icon(const ImageVector& icon, std::string contentDescription, const Modifier& modifier = {},
+          std::optional<Color> tint = {}, CallSite site = CallSite::current());
 void Icon(const Painter& painter, std::string contentDescription, const Modifier& modifier = {},
           std::optional<Color> tint = {}, CallSite site = CallSite::current());
+struct IconImpl {
+    using P = Params<names::Modifier, names::Tint>;
+    template <class... A>
+    static void call(CallSite site, const ImageVector& icon, std::string contentDescription, A&&... args) {
+        static_assert(P::check<A...>());
+        detail::Icon(icon, std::move(contentDescription), P::get<names::Modifier>(Modifier{}, args...), P::get<names::Tint>(std::optional<Color>{}, args...),
+             site);
+    }
+    template <class... A>
+    static void call(CallSite site, const Painter& painter, std::string contentDescription, A&&... args) {
+        static_assert(P::check<A...>());
+        detail::Icon(painter, std::move(contentDescription), P::get<names::Modifier>(Modifier{}, args...),
+             P::get<names::Tint>(std::optional<Color>{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::IconImpl> Icon;
 
 struct IconButtonStyle {
     bool enabled = true;
@@ -931,19 +1065,87 @@ struct IconButtonStyle {
     std::optional<MutableInteractionSource> interactionSource;  // told of presses, hovers and focus
 };
 
+namespace detail {
 void IconButton(std::function<void()> onClick, const Content& content, CallSite site = CallSite::current());
 void IconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
                 const Content& content, CallSite site = CallSite::current());
+struct IconButtonImpl {
+    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::InteractionSource, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: IconButton takes a block: its content");
+        IconButtonStyle style;
+        P::set<names::Enabled>(style.enabled, args...);
+        P::set<names::ContainerColor>(style.containerColor, args...);
+        P::set<names::ContentColor>(style.contentColor, args...);
+        P::set<names::InteractionSource>(style.interactionSource, args...);
+        detail::IconButton(std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::IconButtonImpl> IconButton;
+namespace detail {
 void FilledIconButton(std::function<void()> onClick, const Content& content, CallSite site = CallSite::current());
 void FilledIconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
                       const Content& content, CallSite site = CallSite::current());
+struct FilledIconButtonImpl {
+    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::InteractionSource, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: FilledIconButton takes a block: its content");
+        IconButtonStyle style;
+        P::set<names::Enabled>(style.enabled, args...);
+        P::set<names::ContainerColor>(style.containerColor, args...);
+        P::set<names::ContentColor>(style.contentColor, args...);
+        P::set<names::InteractionSource>(style.interactionSource, args...);
+        detail::FilledIconButton(std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::FilledIconButtonImpl> FilledIconButton;
+namespace detail {
 void FilledTonalIconButton(std::function<void()> onClick, const Content& content, CallSite site = CallSite::current());
 void FilledTonalIconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
                            const Content& content, CallSite site = CallSite::current());
+struct FilledTonalIconButtonImpl {
+    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::InteractionSource, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: FilledTonalIconButton takes a block: its content");
+        IconButtonStyle style;
+        P::set<names::Enabled>(style.enabled, args...);
+        P::set<names::ContainerColor>(style.containerColor, args...);
+        P::set<names::ContentColor>(style.contentColor, args...);
+        P::set<names::InteractionSource>(style.interactionSource, args...);
+        detail::FilledTonalIconButton(std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::FilledTonalIconButtonImpl> FilledTonalIconButton;
 // A 1dp outline around a transparent one (`containerColor` fills it; the outline stays).
+namespace detail {
 void OutlinedIconButton(std::function<void()> onClick, const Content& content, CallSite site = CallSite::current());
 void OutlinedIconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
                         const Content& content, CallSite site = CallSite::current());
+struct OutlinedIconButtonImpl {
+    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::InteractionSource, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: OutlinedIconButton takes a block: its content");
+        IconButtonStyle style;
+        P::set<names::Enabled>(style.enabled, args...);
+        P::set<names::ContainerColor>(style.containerColor, args...);
+        P::set<names::ContentColor>(style.contentColor, args...);
+        P::set<names::InteractionSource>(style.interactionSource, args...);
+        detail::OutlinedIconButton(std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::OutlinedIconButtonImpl> OutlinedIconButton;
 
 // Icon buttons that are on or off (Compose's IconToggleButton family): a tap calls
 // onCheckedChange(!checked), and `checked` picks the colors — a star that turns primary, a
@@ -961,24 +1163,100 @@ struct IconToggleButtonStyle {
     std::optional<Color> checkedContentColor;
     std::optional<MutableInteractionSource> interactionSource;
 };
+namespace detail {
 void IconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content,
                       CallSite site = CallSite::current());
 void IconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
                       const IconToggleButtonStyle& style, const Content& content, CallSite site = CallSite::current());
+struct IconToggleButtonImpl {
+    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::CheckedContainerColor, names::CheckedContentColor, names::InteractionSource, Block>;
+    template <class... A>
+    static void call(CallSite site, bool checked, std::function<void(bool)> onCheckedChange, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: IconToggleButton takes a block: its content");
+        IconToggleButtonStyle style;
+        P::set<names::Enabled>(style.enabled, args...);
+        P::set<names::ContainerColor>(style.containerColor, args...);
+        P::set<names::ContentColor>(style.contentColor, args...);
+        P::set<names::CheckedContainerColor>(style.checkedContainerColor, args...);
+        P::set<names::CheckedContentColor>(style.checkedContentColor, args...);
+        P::set<names::InteractionSource>(style.interactionSource, args...);
+        detail::IconToggleButton(checked, std::move(onCheckedChange), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::IconToggleButtonImpl> IconToggleButton;
+namespace detail {
 void FilledIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content,
                             CallSite site = CallSite::current());
 void FilledIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
                             const IconToggleButtonStyle& style, const Content& content, CallSite site = CallSite::current());
+struct FilledIconToggleButtonImpl {
+    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::CheckedContainerColor, names::CheckedContentColor, names::InteractionSource, Block>;
+    template <class... A>
+    static void call(CallSite site, bool checked, std::function<void(bool)> onCheckedChange, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: FilledIconToggleButton takes a block: its content");
+        IconToggleButtonStyle style;
+        P::set<names::Enabled>(style.enabled, args...);
+        P::set<names::ContainerColor>(style.containerColor, args...);
+        P::set<names::ContentColor>(style.contentColor, args...);
+        P::set<names::CheckedContainerColor>(style.checkedContainerColor, args...);
+        P::set<names::CheckedContentColor>(style.checkedContentColor, args...);
+        P::set<names::InteractionSource>(style.interactionSource, args...);
+        detail::FilledIconToggleButton(checked, std::move(onCheckedChange), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::FilledIconToggleButtonImpl> FilledIconToggleButton;
+namespace detail {
 void FilledTonalIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content,
                                  CallSite site = CallSite::current());
 void FilledTonalIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
                                  const IconToggleButtonStyle& style, const Content& content,
                                  CallSite site = CallSite::current());
+struct FilledTonalIconToggleButtonImpl {
+    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::CheckedContainerColor, names::CheckedContentColor, names::InteractionSource, Block>;
+    template <class... A>
+    static void call(CallSite site, bool checked, std::function<void(bool)> onCheckedChange, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: FilledTonalIconToggleButton takes a block: its content");
+        IconToggleButtonStyle style;
+        P::set<names::Enabled>(style.enabled, args...);
+        P::set<names::ContainerColor>(style.containerColor, args...);
+        P::set<names::ContentColor>(style.contentColor, args...);
+        P::set<names::CheckedContainerColor>(style.checkedContainerColor, args...);
+        P::set<names::CheckedContentColor>(style.checkedContentColor, args...);
+        P::set<names::InteractionSource>(style.interactionSource, args...);
+        detail::FilledTonalIconToggleButton(checked, std::move(onCheckedChange), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::FilledTonalIconToggleButtonImpl> FilledTonalIconToggleButton;
+namespace detail {
 void OutlinedIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content,
                               CallSite site = CallSite::current());
 void OutlinedIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
                               const IconToggleButtonStyle& style, const Content& content,
                               CallSite site = CallSite::current());
+struct OutlinedIconToggleButtonImpl {
+    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::CheckedContainerColor, names::CheckedContentColor, names::InteractionSource, Block>;
+    template <class... A>
+    static void call(CallSite site, bool checked, std::function<void(bool)> onCheckedChange, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: OutlinedIconToggleButton takes a block: its content");
+        IconToggleButtonStyle style;
+        P::set<names::Enabled>(style.enabled, args...);
+        P::set<names::ContainerColor>(style.containerColor, args...);
+        P::set<names::ContentColor>(style.contentColor, args...);
+        P::set<names::CheckedContainerColor>(style.checkedContainerColor, args...);
+        P::set<names::CheckedContentColor>(style.checkedContentColor, args...);
+        P::set<names::InteractionSource>(style.interactionSource, args...);
+        detail::OutlinedIconToggleButton(checked, std::move(onCheckedChange), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::OutlinedIconToggleButtonImpl> OutlinedIconToggleButton;
 
 // Indeterminate (spinning) and determinate (0..1) progress, Material 3 style.
 void CircularProgressIndicator(const Modifier& modifier = {}, std::optional<Color> color = {}, float strokeWidth = 4,
@@ -1039,30 +1317,123 @@ void ContainedLoadingIndicator(const Modifier& modifier = {}, std::optional<Colo
 void ContainedLoadingIndicator(float progress, const Modifier& modifier = {}, std::optional<Color> indicatorColor = {},
                                std::optional<Color> containerColor = {}, CallSite site = CallSite::current());
 
-void Card(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
-void ElevatedCard(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
-void OutlinedCard(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 // Clickable cards (Compose's Card(onClick = ...)): the ripple keeps to their shape.
+namespace detail {
+void Card(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 void Card(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
+struct CardImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+        requires(!startsWithClick<A...>())
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        detail::Card(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+    template <class F, class... A>
+        requires(startsWithClick<F, A...>())
+    static void call(CallSite site, F&& onClick, A&&... args) {  // a clickable one
+        static_assert(P::check<A...>());
+        detail::Card(std::function<void()>(std::forward<F>(onClick)), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::CardImpl> Card;
+namespace detail {
+void ElevatedCard(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 void ElevatedCard(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
+struct ElevatedCardImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+        requires(!startsWithClick<A...>())
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        detail::ElevatedCard(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+    template <class F, class... A>
+        requires(startsWithClick<F, A...>())
+    static void call(CallSite site, F&& onClick, A&&... args) {  // a clickable one
+        static_assert(P::check<A...>());
+        detail::ElevatedCard(std::function<void()>(std::forward<F>(onClick)), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ElevatedCardImpl> ElevatedCard;
+namespace detail {
+void OutlinedCard(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 void OutlinedCard(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
+struct OutlinedCardImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+        requires(!startsWithClick<A...>())
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        detail::OutlinedCard(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+    template <class F, class... A>
+        requires(startsWithClick<F, A...>())
+    static void call(CallSite site, F&& onClick, A&&... args) {  // a clickable one
+        static_assert(P::check<A...>());
+        detail::OutlinedCard(std::function<void()>(std::forward<F>(onClick)), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::OutlinedCardImpl> OutlinedCard;
 
+namespace detail {
 void Surface(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 void Surface(const Modifier& modifier, Color color, Color contentColor, const Content& content,
              CallSite site = CallSite::current());
+struct SurfaceImpl {
+    using P = Params<names::Modifier, names::Color, names::ContentColor, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
+        if constexpr (!P::given<names::Color, A...>() && !P::given<names::ContentColor, A...>()) {
+            detail::Surface(modifier, P::block(std::forward<A>(args)...), site);
+        } else {
+            Color color = P::get<names::Color>(colorScheme().surface, args...);
+            detail::Surface(modifier, color, P::get<names::ContentColor>(contentColorFor(color), args...), P::block(std::forward<A>(args)...), site);
+        }
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::SurfaceImpl> Surface;
 
 void HorizontalDivider(const Modifier& modifier = {}, CallSite site = CallSite::current());
 void VerticalDivider(const Modifier& modifier = {}, CallSite site = CallSite::current());
 
+namespace detail {
 void Checkbox(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier = {},
               bool enabled = true, std::optional<MutableInteractionSource> interactionSource = {}, CallSite site = CallSite::current());
+struct CheckboxImpl {
+    using P = Params<names::Modifier, names::Enabled, names::InteractionSource>;
+    template <class... A>
+    static void call(CallSite site, bool checked, std::function<void(bool)> onCheckedChange, A&&... args) {
+        static_assert(P::check<A...>());
+        detail::Checkbox(checked, std::move(onCheckedChange), P::get<names::Modifier>(Modifier{}, args...), P::get<names::Enabled>(true, args...),
+            P::get<names::InteractionSource>(std::optional<MutableInteractionSource>{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::CheckboxImpl> Checkbox;
 // A checkbox that can also be partly checked (Compose's TriStateCheckbox): a parent of
 // checkboxes some of which are checked shows Indeterminate (a dash).
+namespace detail {
 void TriStateCheckbox(ToggleableState state, std::function<void()> onClick, const Modifier& modifier = {}, bool enabled = true,
                       std::optional<MutableInteractionSource> interactionSource = {}, CallSite site = CallSite::current());
+struct TriStateCheckboxImpl {
+    using P = Params<names::Modifier, names::Enabled, names::InteractionSource>;
+    template <class... A>
+    static void call(CallSite site, ToggleableState state, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        detail::TriStateCheckbox(state, std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), P::get<names::Enabled>(true, args...),
+            P::get<names::InteractionSource>(std::optional<MutableInteractionSource>{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::TriStateCheckboxImpl> TriStateCheckbox;
 
-void Switch(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier = {},
-            bool enabled = true, std::optional<MutableInteractionSource> interactionSource = {}, CallSite site = CallSite::current());
 // thumbContent: an icon in the thumb (16 dp; onPrimaryContainer when on, surfaceContainerHighest
 // when off), which keeps the thumb at its large size. The thumb grows to 28 dp while held.
 struct SwitchOptions {
@@ -1070,8 +1441,25 @@ struct SwitchOptions {
     std::optional<MutableInteractionSource> interactionSource;
     Content thumbContent;
 };
+namespace detail {
+void Switch(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier = {},
+            bool enabled = true, std::optional<MutableInteractionSource> interactionSource = {}, CallSite site = CallSite::current());
 void Switch(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, const SwitchOptions& options,
             CallSite site = CallSite::current());
+struct SwitchImpl {
+    using P = Params<names::Modifier, names::ThumbContent, names::Enabled, names::InteractionSource>;
+    template <class... A>
+    static void call(CallSite site, bool checked, std::function<void(bool)> onCheckedChange, A&&... args) {
+        static_assert(P::check<A...>());
+        SwitchOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        P::set<names::ThumbContent>(options.thumbContent, args...);
+        detail::Switch(checked, std::move(onCheckedChange), P::get<names::Modifier>(Modifier{}, args...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::SwitchImpl> Switch;
 
 // What the keyboard's action key does; unset: Next/Previous move the focus, Done hides the
 // keyboard (or runs TextFieldOptions::onSubmit).

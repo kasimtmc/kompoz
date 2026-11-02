@@ -85,18 +85,18 @@ namespace {
 // A composable taking named arguments and a block, as the library's do.
 namespace names {
 struct Prefix {};
-struct Tint {};
+struct Hue {};
 } // namespace names
 inline constexpr Param<names::Prefix> prefix;
-inline constexpr Param<names::Tint> tint;
+inline constexpr Param<names::Hue> hue;
 int gTaglineRuns = 0, gTaglineBlockRuns = 0;
 struct TaglineImpl {
-    using P = detail::Params<names::Prefix, names::Tint, detail::Block>;
+    using P = detail::Params<names::Prefix, names::Hue, detail::Block>;
     template <class... A>
     static void call(CallSite site, std::string text, A&&... args) {
         static_assert(P::check<A...>());
         std::string shown = P::get<names::Prefix>(std::string(), args...) + text;
-        Color color = P::get<names::Tint>(colors::Black, args...);
+        Color color = P::get<names::Hue>(colors::Black, args...);
         Content block = P::block(std::forward<A>(args)...);
         ComposableScope scope(site);
         ++gTaglineRuns;
@@ -112,7 +112,7 @@ TEST(composables_take_named_arguments_and_blocks_in_scopes_of_their_own) {
     auto inner = mutableStateOf(0);
     ComposeTestRule rule([&] {
         Tagline("a");
-        Tagline("b", tint = colors::Red, prefix = "> ");  // any order, only those wanted
+        Tagline("b", hue = colors::Red, prefix = "> ");  // any order, only those wanted
         Tagline("e", "- ", colors::Blue);                 // or by place, as Kotlin's
         Tagline("c", prefix = "* ", [=] {
             ++gTaglineBlockRuns;
@@ -127,7 +127,7 @@ TEST(composables_take_named_arguments_and_blocks_in_scopes_of_their_own) {
     CHECK(rule.onNodeWithText("iç 1").exists() && gTaglineRuns == 4 && gTaglineBlockRuns == 2);
     // A call before its block (what <kompoz/blocks.hpp>'s form makes): the same.
     gTaglineRuns = 0;
-    ComposeTestRule other([&] { Tagline.withBlock("d", tint = colors::Blue) + [=] { Text("blok"); }; });
+    ComposeTestRule other([&] { Tagline.withBlock("d", hue = colors::Blue) + [=] { Text("blok"); }; });
     CHECK(other.onNodeWithText("d").exists() && other.onNodeWithText("blok").exists() && gTaglineRuns == 1);
 }
 
@@ -1527,7 +1527,7 @@ TEST(checkbox_toggles) {
 TEST(disabled_button_ignores_clicks) {
     auto clicks = std::make_shared<int>(0);
     ComposeTestRule rule([clicks] {
-        Button([clicks] { ++*clicks; }, Modifier(), {.enabled = false}, [] { Text("Go"); });
+        Button([clicks] { ++*clicks; }, Modifier(), enabled = false, [] { Text("Go"); });
     });
     rule.onNodeWithText("Go").performClick();
     CHECK(*clicks == 0);
@@ -2338,7 +2338,7 @@ TEST(layout_is_in_whole_pixels_as_composes) {
             });
             ButtonGroup([&held](const ButtonGroupScope& group) {
                 Button([] {}, group.animateWidth(MutableInteractionSource()).testTag("g0"), [] { Text("Önceki"); });
-                Button([] {}, group.animateWidth(held).testTag("g1"), {.interactionSource = held}, [] { Text("Oynat"); });
+                Button([] {}, group.animateWidth(held).testTag("g1"), interactionSource = held, [] { Text("Oynat"); });
                 Button([] {}, group.animateWidth(MutableInteractionSource()).testTag("g2"), [] { Text("Sonraki"); });
             });
         });
@@ -2375,7 +2375,7 @@ TEST(buttons_animate_composing_around_them_only_as_they_turn) {
             SmallExtendedFloatingActionButton([] {}, Icons::Filled::Add, "Ekle", expanded.get(), Modifier().testTag("fab"));
             ButtonGroup([&held](const ButtonGroupScope& group) {
                 Button([] {}, group.animateWidth(MutableInteractionSource()), [] { Text("Önceki"); });
-                Button([] {}, group.animateWidth(held).testTag("tutulan"), {.interactionSource = held}, [] { Text("Oynat"); });
+                Button([] {}, group.animateWidth(held).testTag("tutulan"), interactionSource = held, [] { Text("Oynat"); });
             });
         });
     }, {400, 800});
@@ -2442,7 +2442,7 @@ TEST(selection_controls_animate_composing_around_them_only_as_they_turn) {
             });
             VerticalDragHandle(Modifier().testTag("tutamak"), held);
             Slider(0.5f, [](float) {}, Modifier().width(200).testTag("kaydırıcı"),
-                   {.thumb = [](const SliderState& s) { SliderDefaults::ShapeThumb(s, RectangleShape, {20, 20}); }});
+                   thumb = [](const SliderState& s) { SliderDefaults::ShapeThumb(s, RectangleShape, {20, 20}); });
         });
     }, {400, 800});
     on.set(true);
@@ -2597,7 +2597,7 @@ TEST(icon_button_clicks) {
     ComposeTestRule rule([&] {
         Row([=, &clicks] {
             IconButton([&] { ++clicks; }, [] { Icon(Icons::Filled::Favorite, "Beğen"); });
-            IconButton([&] { ++clicks; }, Modifier(), {.enabled = false}, [] { Icon(Icons::Filled::Delete, "Sil"); });
+            IconButton([&] { ++clicks; }, Modifier(), enabled = false, [] { Icon(Icons::Filled::Delete, "Sil"); });
         });
     });
     rule.onNodeWithText("Beğen").performClick();
@@ -2618,10 +2618,10 @@ TEST(icon_toggle_buttons_flip_and_take_their_checked_colors) {
         };
         auto icon = [] { Icon(Icons::Filled::Star, "Yıldız"); };
         Row([=, &on] {
-            IconToggleButton(on[0].get(), set(0), Modifier().testTag("düz"), {}, icon);
-            FilledIconToggleButton(on[1].get(), set(1), Modifier().testTag("dolu"), {}, icon);
-            FilledTonalIconToggleButton(on[2].get(), set(2), Modifier().testTag("tonal"), {}, icon);
-            OutlinedIconToggleButton(on[3].get(), set(3), Modifier().testTag("çerçeveli"), {}, icon);
+            IconToggleButton(on[0].get(), set(0), Modifier().testTag("düz"), icon);
+            FilledIconToggleButton(on[1].get(), set(1), Modifier().testTag("dolu"), icon);
+            FilledTonalIconToggleButton(on[2].get(), set(2), Modifier().testTag("tonal"), icon);
+            OutlinedIconToggleButton(on[3].get(), set(3), Modifier().testTag("çerçeveli"), icon);
         });
     });
     auto draw = [&] {
@@ -2665,12 +2665,11 @@ TEST(icon_toggle_buttons_disabled_and_restyled) {
     ComposeTestRule rule([&] {
         auto icon = [] { Icon(Icons::Filled::Favorite, "Beğen"); };
         Row([=, &changes] {
-            FilledIconToggleButton(liked.get(), [&](bool) { ++changes; }, Modifier().testTag("kapalı"), {.enabled = false}, icon);
-            OutlinedIconToggleButton(liked.get(), [&](bool) { ++changes; }, Modifier().testTag("kapalı çerçeveli"), {.enabled = false}, icon);
-            OutlinedIconToggleButton(!liked.get(), [&](bool) { ++changes; }, Modifier(), {.enabled = false}, icon);
+            FilledIconToggleButton(liked.get(), [&](bool) { ++changes; }, Modifier().testTag("kapalı"), enabled = false, icon);
+            OutlinedIconToggleButton(liked.get(), [&](bool) { ++changes; }, Modifier().testTag("kapalı çerçeveli"), enabled = false, icon);
+            OutlinedIconToggleButton(!liked.get(), [&](bool) { ++changes; }, Modifier(), enabled = false, icon);
             IconToggleButton(liked.get(), [&](bool v) { liked.set(v); }, Modifier().testTag("renkli"),
-                             {.containerColor = colors::White, .contentColor = Color::hex(0x808080),
-                              .checkedContainerColor = colors::Black, .checkedContentColor = Color::hex(0xFFEB3B)},
+                             containerColor = colors::White, contentColor = Color::hex(0x808080), checkedContainerColor = colors::Black, checkedContentColor = Color::hex(0xFFEB3B),
                              icon);
         });
     });
@@ -2698,9 +2697,9 @@ TEST(outlined_icon_button_has_an_outline_and_ripples_in_its_circle) {
     auto on = mutableStateOf(true);
     ComposeTestRule rule([&] {
         Row([=, &clicks] {
-            OutlinedIconButton([&] { ++clicks; }, Modifier().testTag("çerçeve"), {}, [] { Icon(Icons::Filled::Add, "Ekle"); });
-            OutlinedIconButton([&] { ++clicks; }, Modifier(), {.enabled = false}, [] { Icon(Icons::Filled::Add, "Ekleme"); });
-            FilledIconToggleButton(on.get(), [&](bool v) { on.set(v); }, Modifier().testTag("aç"), {},
+            OutlinedIconButton([&] { ++clicks; }, Modifier().testTag("çerçeve"), [] { Icon(Icons::Filled::Add, "Ekle"); });
+            OutlinedIconButton([&] { ++clicks; }, Modifier(), enabled = false, [] { Icon(Icons::Filled::Add, "Ekleme"); });
+            FilledIconToggleButton(on.get(), [&](bool v) { on.set(v); }, Modifier().testTag("aç"),
                                    [] { Icon(Icons::Filled::Star, "Yıldız"); });
         });
     });
@@ -5088,7 +5087,7 @@ TEST(saved_state_outlives_the_host) {
                         items.items(100, [](int i) { return size_t(i); }, [](int i) {
                             auto liked = rememberSaveable([] { return mutableStateOf(false); });
                             Button([liked] { liked.set(true); }, Modifier().height(50).testTag(std::format("satır{}", i)),
-                                   [&] { Text(std::format("satır {}{}", i, liked.get() ? " ♥" : "")); });
+                                   [=] { Text(std::format("satır {}{}", i, liked.get() ? " ♥" : "")); });
                         });
                     });
                 });
@@ -5456,7 +5455,7 @@ TEST(a_nested_graph_is_saved_and_restored_as_a_tab) {
                 list.composable("item/{n}", [&](const NavBackStackEntry& e) {
                     listModel = viewModel<TestViewModel>(*e.parent());
                     auto likes = rememberSaveable([] { return mutableStateOf(0); });
-                    Button([likes] { likes.set(likes.peek() + 1); }, [&] {
+                    Button([likes] { likes.set(likes.peek() + 1); }, [=] {
                         Text(std::format("öğe {} · {}", e.arguments().getInt("n").value_or(0), likes.get()));
                     });
                 });
@@ -8808,9 +8807,9 @@ TEST(range_slider_moves_the_nearer_thumb) {
     ComposeTestRule rule([&] {
         Column(Modifier().fillMaxSize().verticalScroll(scroll), [=] {
             RangeSlider(range.get(), [range](std::pair<float, float> v) { range.set(v); }, Modifier().width(220).testTag("range"),
-                        {.valueFrom = 0, .valueTo = 100, .onValueChangeFinished = [finished] { ++*finished; }});
+                        valueFrom = 0, valueTo = 100, onValueChangeFinished = [finished] { ++*finished; });
             RangeSlider(range.get(), [range](std::pair<float, float> v) { range.set(v); }, Modifier().width(220),
-                        {.valueFrom = 0, .valueTo = 100, .steps = 9});
+                        valueFrom = 0, valueTo = 100, steps = 9);
             Box(Modifier().height(2000));
         });
     });
@@ -8850,9 +8849,9 @@ TEST(slider_tap_drag_and_steps) {
     ComposeTestRule rule([&] {
         Column(Modifier().fillMaxSize().verticalScroll(scroll), [=] {
             Slider(value.get(), [value](float v) { value.set(v); }, Modifier().width(220),
-                   {.valueFrom = 0, .valueTo = 100, .onValueChangeFinished = [finished] { ++*finished; }});
+                   valueFrom = 0, valueTo = 100, onValueChangeFinished = [finished] { ++*finished; });
             Slider(value.get(), [value](float v) { value.set(v); }, Modifier().width(220).testTag("stepped"),
-                   {.valueFrom = 0, .valueTo = 100, .steps = 3});
+                   valueFrom = 0, valueTo = 100, steps = 3);
             Box(Modifier().height(2000));
         });
     });
@@ -9597,7 +9596,7 @@ TEST(test_rule_assertions) {
     ComposeTestRule rule([&] {
         Column(Modifier().fillMaxSize().verticalScroll(scroll), [=] {
             Button([] {}, [] { Text("Tamam"); });
-            Button([] {}, Modifier(), {.enabled = false}, [] { Text("Kapalı"); });
+            Button([] {}, Modifier(), enabled = false, [] { Text("Kapalı"); });
             Checkbox(ticked.get(), [&](bool v) { ticked.set(v); }, Modifier().testTag("box"));
             Icon(Icons::Filled::Info, "Bilgi");
             Text("Tekrar");
@@ -12433,8 +12432,8 @@ TEST(navigation_suite_scaffold_moves_its_items_and_keeps_the_screen) {
                     auto count = remember([] { return mutableStateOf(0); });
                     Box(Modifier().fillMaxSize().padding(p).consumeWindowInsets(p).imePadding(), [=] {
                         Box(Modifier().fillMaxSize().testTag("ekran"));
-                        TextButton([count] { count.set(count.peek() + 1); }, Modifier().testTag("sayac"), {},
-                                   [&] { Text(std::format("sayaç {}", count.get())); });
+                        TextButton([count] { count.set(count.peek() + 1); }, Modifier().testTag("sayac"),
+                                   [=] { Text(std::format("sayaç {}", count.get())); });
                     });
                 });
             });
@@ -12958,7 +12957,7 @@ TEST(subcompose_layout_composes_slots_from_what_it_measured) {
                              log->push_back(wide ? "+geniş" : "+dar");
                              return [wide, log] { log->push_back(wide ? "-geniş" : "-dar"); };
                          });
-                         TextButton([taps] { taps.set(taps.peek() + 1); }, [&] { Text(std::format("{} düzen {}", wide ? "geniş" : "dar", taps.get())); });
+                         TextButton([taps] { taps.set(taps.peek() + 1); }, [=] { Text(std::format("{} düzen {}", wide ? "geniş" : "dar", taps.get())); });
                      })) {
                     Placeable p = m.measure(c.loosen());
                     p.place(0, 0);
@@ -13292,7 +13291,7 @@ TEST(semantics_tree_has_the_keyboard_focus) {
     ComposeTestRule rule([] {
         Column([] {
             Button([] {}, [] { Text("Bir"); });
-            Button([] {}, Modifier(), {.enabled = false}, [] { Text("Kapalı"); });
+            Button([] {}, Modifier(), enabled = false, [] { Text("Kapalı"); });
             Button([] {}, [] { Text("İki"); });
             Button([] {}, Modifier().focusProperties({.canFocus = false}), [] { Text("Odaksız"); });
             Text("Etiket");
@@ -13743,7 +13742,7 @@ TEST(what_lays_out_by_a_scaffolds_padding_follows_it_without_recomposing) {
                          HorizontalUncontainedCarousel(carousel, 100, Modifier().fillMaxWidth().height(150).testTag("carousel"),
                                                        {.contentPadding = padding},
                                                        [](int i) { Box(Modifier().fillMaxSize().testTag("c" + std::to_string(i))); });
-                         Button([] {}, Modifier().testTag("button"), {.contentPadding = padding}, [] { Text("Düğme", Modifier().testTag("label")); });
+                         Button([] {}, Modifier().testTag("button"), contentPadding = padding, [] { Text("Düğme", Modifier().testTag("label")); });
                          // Read while composing: this one is composed again.
                          composable(CallSite::current(), [padding] { Text("Üst " + std::to_string(int(padding.calculateTopPadding()))); });
                      });
@@ -15151,18 +15150,18 @@ TEST(buttons_as_compose_1_4) {
         Column([=] {
             // 8 dp above and below (46 for a 30 dp label), at least 58 wide (a TextButton too).
             Button([] {}, Modifier().testTag("dolu"), [] { Box(Modifier().size(4, 30)); });
-            TextButton([] {}, Modifier().testTag("metin"), {}, [] { Box(Modifier().size(4, 20)); });
+            TextButton([] {}, Modifier().testTag("metin"), [] { Box(Modifier().size(4, 20)); });
             // An icon's padding: 16 dp before, 24 after; the start mirrored right to left.
             CompositionLocalProvider({LocalLayoutDirection.provides(rtl.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
-                Button([] {}, Modifier().testTag("simgeli"), {.contentPadding = ButtonDefaults::ButtonWithIconContentPadding},
+                Button([] {}, Modifier().testTag("simgeli"), contentPadding = ButtonDefaults::ButtonWithIconContentPadding,
                        [] { Box(Modifier().size(20).testTag("simge")); });
                 // Squeezed: each side gives way by its share (16:24).
-                Button([] {}, Modifier().width(50).testTag("sıkışık"), {.contentPadding = ButtonDefaults::ButtonWithIconContentPadding},
+                Button([] {}, Modifier().width(50).testTag("sıkışık"), contentPadding = ButtonDefaults::ButtonWithIconContentPadding,
                        [] { Box(Modifier().widthIn(0, 40).fillMaxWidth().height(20).testTag("sıkışık-içi")); });
             });
-            OutlinedButton([] {}, Modifier().testTag("çizgili"), {}, [] { Box(Modifier().size(4, 20)); });
-            OutlinedButton([] {}, Modifier().testTag("kapalı"), {.enabled = false}, [] { Box(Modifier().size(4, 20)); });
-            ElevatedButton([] {}, Modifier().testTag("yüksek"), {}, [] { Box(Modifier().size(80, 20)); });
+            OutlinedButton([] {}, Modifier().testTag("çizgili"), [] { Box(Modifier().size(4, 20)); });
+            OutlinedButton([] {}, Modifier().testTag("kapalı"), enabled = false, [] { Box(Modifier().size(4, 20)); });
+            ElevatedButton([] {}, Modifier().testTag("yüksek"), [] { Box(Modifier().size(80, 20)); });
         });
     });
     auto canvas = std::make_shared<testing::RecordingCanvas>();
@@ -15573,7 +15572,7 @@ TEST(disabled_switch_and_checkbox_ignore_taps) {
     auto on = mutableStateOf(false);
     ComposeTestRule rule([&] {
         Column([=] {
-            Switch(on.get(), [on](bool v) { on.set(v); }, Modifier().testTag("switch"), false);
+            Switch(on.get(), [on](bool v) { on.set(v); }, Modifier().testTag("switch"), enabled = false);
             Checkbox(on.get(), [on](bool v) { on.set(v); }, Modifier().testTag("box"), false);
         });
     });
@@ -16363,9 +16362,9 @@ TEST(rtl_mirrors_arrows_switches_and_sliders) {
                 Switch(true, [](bool) {}, Modifier().testTag("açık"));
                 Switch(false, [](bool) {}, Modifier().testTag("kapalı"));
                 Slider(value.get(), [value](float v) { value.set(v); }, Modifier().width(220).testTag("kaydırıcı"),
-                       {.valueFrom = 0, .valueTo = 100});
+                       valueFrom = 0, valueTo = 100);
                 RangeSlider(range.get(), [range](std::pair<float, float> v) { range.set(v); }, Modifier().width(220).testTag("aralık"),
-                            {.valueFrom = 0, .valueTo = 100});
+                            valueFrom = 0, valueTo = 100);
             });
         });
     });
@@ -16514,8 +16513,8 @@ TEST(switch_colors_and_press_as_compose_1_4) {
         cs = colorScheme();
         Column([=] {
             Switch(on.get(), [on](bool v) { on.set(v); }, Modifier().testTag("anahtar"));
-            Switch(true, {}, Modifier(), false);
-            Switch(false, {}, Modifier(), false);
+            Switch(true, nullptr, Modifier(), enabled = false);
+            Switch(false, nullptr, Modifier(), enabled = false);
         });
     });
     auto shapes = [&] {
@@ -17147,7 +17146,7 @@ TEST(toggle_buttons_morph_from_round_to_square_and_tell_they_are_checked) {
         Column([=] {
             ToggleButton(bold.get(), [bold](bool on) { bold.set(on); }, Modifier().testTag("kalın"), {}, [] { Text("Kalın"); });
             OutlinedToggleButton(italic.get(), [italic](bool on) { italic.set(on); }, Modifier().testTag("italik"), {}, [] { Text("İtalik"); });
-            Button([clicks] { ++*clicks; }, Modifier().testTag("düğme"), {.shapes = ButtonShapes{}}, [] { Text("Bas"); });
+            Button([clicks] { ++*clicks; }, Modifier().testTag("düğme"), shapes = ButtonShapes{}, [] { Text("Bas"); });
             TonalToggleButton(true, [clicks](bool) { ++*clicks; }, Modifier().testTag("ton"), {}, [] { Text("Ton"); });
             ToggleButton(true, [clicks](bool) { ++*clicks; }, Modifier().testTag("kapalı"), {.enabled = false}, [] { Text("Kapalı"); });
             ElevatedToggleButton(true, [](bool) {}, Modifier().testTag("kabarık"), {}, [] { Text("Kabarık"); });
@@ -17230,9 +17229,9 @@ TEST(button_group_grows_the_held_button_and_squeezes_its_neighbours) {
         CompositionLocalProvider({LocalLayoutDirection.provides(rtl.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
             Column([=, &first, &second, &third] {
                 ButtonGroup([&](const ButtonGroupScope& group) {
-                    Button([] {}, group.animateWidth(first).testTag("a"), {.interactionSource = first}, [] { Text("Önceki"); });
-                    Button([] {}, group.animateWidth(second).testTag("b"), {.interactionSource = second}, [] { Text("Oynat"); });
-                    Button([] {}, group.animateWidth(third).testTag("c"), {.interactionSource = third}, [] { Text("Sonraki"); });
+                    Button([] {}, group.animateWidth(first).testTag("a"), interactionSource = first, [] { Text("Önceki"); });
+                    Button([] {}, group.animateWidth(second).testTag("b"), interactionSource = second, [] { Text("Oynat"); });
+                    Button([] {}, group.animateWidth(third).testTag("c"), interactionSource = third, [] { Text("Sonraki"); });
                 });
                 Button([] {}, Modifier().width(50), [] { Text("Dar"); });  // narrower than its label and padding
             });
@@ -17281,11 +17280,11 @@ TEST(button_group_grows_the_held_button_and_squeezes_its_neighbours) {
     ComposeTestRule extreme([&] {
         Column([=, &big, &only, &small] {
             ButtonGroup([&](const ButtonGroupScope& group) {
-                Button([] {}, group.animateWidth(only).testTag("tek"), {.interactionSource = only}, [] { Text("Tek"); });
+                Button([] {}, group.animateWidth(only).testTag("tek"), interactionSource = only, [] { Text("Tek"); });
             });
             ButtonGroup(Modifier(), {.expandedRatio = 0.6f, .spacing = 4}, [&](const ButtonGroupScope& group) {
-                Button([] {}, group.animateWidth(big).testTag("büyük"), {.interactionSource = big}, [] { Text("Önceki"); });
-                Button([] {}, group.animateWidth(small).testTag("küçük"), {.interactionSource = small}, [] { Text("Oynat"); });
+                Button([] {}, group.animateWidth(big).testTag("büyük"), interactionSource = big, [] { Text("Önceki"); });
+                Button([] {}, group.animateWidth(small).testTag("küçük"), interactionSource = small, [] { Text("Oynat"); });
                 Box(Modifier().size(64).testTag("kutu"));
             });
         });
@@ -17831,11 +17830,11 @@ TEST(layouts_that_measure_twice_probe_first_so_sizes_settle) {
     ComposeTestRule rule([&] {
         Column([=, &first, &second] {
             ButtonGroup([&](const ButtonGroupScope& group) {
-                Button([] {}, group.animateWidth(first).testTag("a"), {.interactionSource = first}, [] { Text("Önceki"); });
+                Button([] {}, group.animateWidth(first).testTag("a"), interactionSource = first, [] { Text("Önceki"); });
                 Button([] {}, group.animateWidth(second).onSizeChanged([squeezed, reports](Size s) {
                     ++*reports;
                     squeezed.set(s.width);
-                }), {.interactionSource = second}, [] { Text("Oynat"); });
+                }), interactionSource = second, [] { Text("Oynat"); });
             });
             ShortNavigationBar(Modifier(), [&] {
                 ShortNavigationBarItem(true, [] {}, [] {}, [] { Text("Ana"); }, Modifier().onSizeChanged([item, reports](Size s) {
@@ -17844,7 +17843,7 @@ TEST(layouts_that_measure_twice_probe_first_so_sizes_settle) {
                 }));
                 ShortNavigationBarItem(false, [] {}, [] {}, [] { Text("Uzun sekme"); });
             }, {.arrangement = ShortNavigationBarArrangement::Centered, .windowInsets = WindowInsets{}});
-            Button([] {}, Modifier().width(16), [&] {  // narrower than its label: the padding gone, the label wraps
+            Button([] {}, Modifier().width(16), [=] {  // narrower than its label: the padding gone, the label wraps
                 Text("Dar", Modifier().onSizeChanged([label, reports](Size s) {
                     ++*reports;
                     label.set(s.height);
@@ -18275,7 +18274,7 @@ TEST(vertical_slider_grows_upwards_and_follows_a_vertical_drag) {
     ComposeTestRule rule([&] {
         Row(Modifier().height(220), [=] {
             VerticalSlider(value.get(), [value](float v) { value.set(v); }, Modifier().testTag("dikey"));
-            VerticalSlider(reversed.get(), [reversed](float v) { reversed.set(v); }, Modifier().testTag("ters"), {.steps = 3}, true);
+            VerticalSlider(reversed.get(), [reversed](float v) { reversed.set(v); }, Modifier().testTag("ters"), steps = 3, reverseDirection = true);
         });
     }, {400, 600});
     Rect slider = rule.onNodeWithTag("dikey").bounds();
@@ -18405,10 +18404,10 @@ TEST(switch_shows_an_icon_in_its_thumb_and_grows_it_while_held) {
     ComposeTestRule rule([&] {
         Column([=, &source] {
             Switch(on.get(), [on](bool v) { on.set(v); }, Modifier().testTag("simgeli"),
-                   {.interactionSource = source, .thumbContent = [iconColor] {
+                   interactionSource = source, thumbContent = [iconColor] {
                         *iconColor = LocalContentColor.current();
                         Box(Modifier().fillMaxSize().testTag("simge"));
-                    }});
+                    });
             Switch(false, [](bool) {}, Modifier().testTag("düz"));
         });
     });
@@ -19707,7 +19706,7 @@ TEST(focus_moved_by_keys_scrolls_into_view_and_so_does_the_keyboard) {
     ComposeTestRule rule([&] {
         Column(Modifier().fillMaxSize().imePadding().verticalScroll(scroll), [=] {
             for (int i = 0; i < 20; ++i)
-                Button([] {}, Modifier().height(60).testTag(std::format("b{}", i)), [&] { Text(std::format("Düğme {}", i)); });
+                Button([] {}, Modifier().height(60).testTag(std::format("b{}", i)), [=] { Text(std::format("Düğme {}", i)); });
             TextField(text.get(), [text](std::string v) { text.set(std::move(v)); }, Modifier().height(60).testTag("field"));
         });
     }, {400, 800});
@@ -22078,8 +22077,8 @@ TEST(interaction_source_hears_presses_releases_cancels_and_keyboard_clicks) {
         LogInteractions(source, log);
         Column([=, &clicks, &source] {
             if (shown.get())
-                Button([&] { ++clicks; }, Modifier().testTag("düğme"), {.interactionSource = source},
-                       [&] { Text(source.collectIsPressedAsState() ? "basılı" : "serbest"); });
+                Button([&] { ++clicks; }, Modifier().testTag("düğme"), interactionSource = source,
+                       [=, &source] { Text(source.collectIsPressedAsState() ? "basılı" : "serbest"); });
             Box(Modifier().size(100).testTag("boş"));
         });
     });
@@ -22135,7 +22134,7 @@ TEST(hover_interactions_follow_the_mouse_only) {
     ComposeTestRule rule([&] {
         Column([=, &box, &button] {
             Box(Modifier().size(200).hoverable(box).testTag("kutu"), [=, &button] {
-                Button([] {}, Modifier().testTag("düğme"), {.interactionSource = button}, [] { Text("bas"); });
+                Button([] {}, Modifier().testTag("düğme"), interactionSource = button, [] { Text("bas"); });
             });
             Box(Modifier().size(100).testTag("dışarı"));
             Text(std::format("kutu {} düğme {}", box.collectIsHoveredAsState(), button.collectIsHoveredAsState()));
@@ -22234,7 +22233,7 @@ TEST(scrollable_states_hear_the_users_drags) {
         Column([=, &item, &list, &own] {
             Text(std::format("liste {} sayfa {}", list.interactionSource().collectIsDraggedAsState(), p.interactionSource().collectIsDraggedAsState()));
             LazyColumn(Modifier().fillMaxWidth().height(300).testTag("liste"), {.state = list}, [&](LazyListScope& l) {
-                l.item([&] { Button([] {}, Modifier().testTag("öğe"), {.interactionSource = item}, [] { Text("öğe"); }); });
+                l.item([&] { Button([] {}, Modifier().testTag("öğe"), interactionSource = item, [] { Text("öğe"); }); });
                 l.items(50, [](int i) { Text(std::format("satır {}", i), Modifier().height(40)); });
             });
             HorizontalPager(p, Modifier().fillMaxWidth().height(200).testTag("sayfalar"), [](int page) { Text(std::format("sayfa {}", page)); });
@@ -22303,8 +22302,8 @@ TEST(slider_tells_its_interaction_source_presses_drags_and_hovers) {
         Column([=, &off, &source] {
             if (shown.get())
                 Slider(value.get(), [value](float v) { value.set(v); }, Modifier().width(220).testTag("kaydırıcı"),
-                       {.valueFrom = 0, .valueTo = 100, .interactionSource = source});
-            Slider(50, [](float) {}, Modifier().width(220).testTag("kapalı"), {.enabled = false, .interactionSource = off});
+                       valueFrom = 0, valueTo = 100, interactionSource = source);
+            Slider(50, [](float) {}, Modifier().width(220).testTag("kapalı"), enabled = false, interactionSource = off);
             Text(std::format("basılı {} sürükleniyor {}", source.collectIsPressedAsState(), source.collectIsDraggedAsState()));
         });
     });
@@ -22366,7 +22365,7 @@ TEST(slider_takes_only_touches_not_taken_and_keeps_those_it_takes) {
             Row(Modifier().fillMaxWidth().horizontalScroll(across), [=, &outerClicks, &source] {
                 Box(Modifier().clickable([&] { ++outerClicks; }), [=, &source] {
                     Slider(value.get(), [value](float v) { value.set(v); }, Modifier().width(220),
-                           {.valueFrom = 0, .valueTo = 100, .interactionSource = source, .thumb = [&](const SliderState& st) {
+                           valueFrom = 0, valueTo = 100, interactionSource = source, thumb = [&](const SliderState& st) {
                                 int takes = thumbTakes.get();
                                 SliderDefaults::CircleThumb(st);
                                 Box(Modifier().matchParentSize().pointerInput(takes, [takes](PointerInputScope& sc) -> Task {
@@ -22376,7 +22375,7 @@ TEST(slider_takes_only_touches_not_taken_and_keeps_those_it_takes) {
                                             e.change.consume();
                                     }
                                 }));
-                            }});
+                            });
                 });
                 Box(Modifier().size(1000, 48));
             });
@@ -22451,7 +22450,7 @@ TEST(range_slider_tells_each_thumbs_source) {
         LogInteractions(start, startLog);
         LogInteractions(end, endLog);
         RangeSlider(range.get(), [range](std::pair<float, float> v) { range.set(v); }, Modifier().width(220),
-                    {.valueFrom = 0, .valueTo = 100, .interactionSource = start, .endInteractionSource = end});
+                    valueFrom = 0, valueTo = 100, interactionSource = start, endInteractionSource = end);
     });
     auto x = [](float v) { return 10 + 2 * v; };
     tap(rule, {x(30), 22});  // nearer the start
@@ -23319,8 +23318,8 @@ TEST(semantics_ranges_live_regions_custom_actions_and_order) {
     ComposeTestRule rule([&] {
         Column([=] {
             Slider(value.get(), [&](float v) { value.set(v); }, Modifier().testTag("ayar"),
-                   {.valueFrom = 0, .valueTo = 100, .steps = 3, .onValueChangeFinished = [finished] { ++*finished; }});
-            Slider(0.5f, [](float) {}, Modifier().testTag("kapalı"), {.enabled = false});
+                   valueFrom = 0, valueTo = 100, steps = 3, onValueChangeFinished = [finished] { ++*finished; });
+            Slider(0.5f, [](float) {}, Modifier().testTag("kapalı"), enabled = false);
             LinearProgressIndicator(0.3f, Modifier().testTag("yükleme"));
             CircularProgressIndicator(Modifier().testTag("bekleme"));
             Text(std::format("{} yeni ileti", round.get()), Modifier().testTag("sayaç").semantics({.liveRegion = LiveRegionMode::Polite}));
@@ -25208,13 +25207,13 @@ TEST(selectable_and_toggleable_rows_take_the_tap_for_their_controls) {
                 Row(Modifier().fillMaxWidth().height(56).selectable(choice.get() == i, [choice, i] { choice.set(i); }, SemanticsRole::RadioButton)
                         .testTag(std::format("satır {}", i)),
                     verticalAlignment = Alignment::CenterVertically, [=] {
-                        RadioButton(choice.get() == i, {}, Modifier().testTag(std::format("düğme {}", i)));
+                        RadioButton(choice.get() == i, nullptr, Modifier().testTag(std::format("düğme {}", i)));
                         Text(std::format("seçenek {}", i));
                     });
             Row(Modifier().fillMaxWidth().height(56).toggleable(on.get(), [on](bool v) { on.set(v); }, SemanticsRole::Switch).testTag("anahtar satırı"),
                 verticalAlignment = Alignment::CenterVertically, [=] {
                     Text("Bildirimler");
-                    Switch(on.get(), {}, Modifier().testTag("anahtar"));
+                    Switch(on.get(), nullptr, Modifier().testTag("anahtar"));
                 });
             Row(Modifier().fillMaxWidth().height(56)
                     .triStateToggleable(tri.get(), [tri] { tri.set(tri.peek() == ToggleableState::Off ? ToggleableState::Indeterminate
@@ -25222,7 +25221,7 @@ TEST(selectable_and_toggleable_rows_take_the_tap_for_their_controls) {
                                                                                                                   : ToggleableState::Off); },
                                         SemanticsRole::Checkbox)
                     .testTag("üç"),
-                [=] { TriStateCheckbox(tri.get(), {}, Modifier().testTag("kutu")); });
+                [=] { TriStateCheckbox(tri.get(), nullptr, Modifier().testTag("kutu")); });
         });
     });
     rule.onNodeWithTag("satır 0").assertIsSelected();
@@ -25312,9 +25311,9 @@ TEST(filled_and_tonal_icon_buttons_as_compose_1_4) {
     const ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
         Row([=] {
-            FilledTonalIconButton([] {}, Modifier(), {}, [] { Icon(Icons::Filled::Add, "Tonal"); });
-            FilledIconButton([] {}, Modifier(), {.enabled = false}, [] { Icon(Icons::Filled::Add, "Dolu"); });
-            FilledTonalIconButton([] {}, Modifier(), {.enabled = false}, [] { Icon(Icons::Filled::Add, "Kapalı"); });
+            FilledTonalIconButton([] {}, Modifier(), [] { Icon(Icons::Filled::Add, "Tonal"); });
+            FilledIconButton([] {}, Modifier(), enabled = false, [] { Icon(Icons::Filled::Add, "Dolu"); });
+            FilledTonalIconButton([] {}, Modifier(), enabled = false, [] { Icon(Icons::Filled::Add, "Kapalı"); });
         });
     });
     testing::RecordingCanvas canvas;
@@ -25330,8 +25329,8 @@ TEST(icon_buttons_take_the_content_color_around_them) {
             Column([=, &red] {
                 CompositionLocalProvider({LocalContentColor.provides(red)}, [] {
                     IconButton([] {}, [] { Icon(Icons::Filled::Add, "Ekle"); });
-                    IconButton([] {}, Modifier(), {.enabled = false}, [] { Icon(Icons::Filled::Add, "Ekleme"); });
-                    FilledTonalIconButton([] {}, Modifier(), {}, [] { Icon(Icons::Filled::Add, "Tonal"); });  // its own
+                    IconButton([] {}, Modifier(), enabled = false, [] { Icon(Icons::Filled::Add, "Ekleme"); });
+                    FilledTonalIconButton([] {}, Modifier(), [] { Icon(Icons::Filled::Add, "Tonal"); });  // its own
                 });
                 Snackbar(SnackbarData{.message = "Gitti", .withDismissAction = true});  // the close button: inverseOnSurface
             });
@@ -25353,7 +25352,7 @@ TEST(snackbar_hosts_hand_their_data_to_a_snackbar_of_your_own) {
         SnackbarHost(state, Modifier(), [](const SnackbarData& data) {
             Row(Modifier().testTag("kendi"), [=] {
                 Text("» " + data.message);
-                TextButton([data] { data.performAction(); }, [&] { Text(data.actionLabel); });
+                TextButton([data] { data.performAction(); }, [=] { Text(data.actionLabel); });
                 TextButton([data] { data.dismiss(); }, [] { Text("Kapat"); });
             });
         });
@@ -25708,7 +25707,7 @@ TEST(pointer_hover_icon_picks_the_innermost_say) {
                  Modifier().width(80).testTag("bağ"));
             Row([=, &box, &radio, &toggle] {
                 Checkbox(false, [](bool) {}, Modifier().testTag("kutu"), true, box);
-                Switch(false, [](bool) {}, Modifier().testTag("anahtar"), true, toggle);
+                Switch(false, [](bool) {}, Modifier().testTag("anahtar"), enabled = true, interactionSource = toggle);
                 RadioButton(false, [] {}, Modifier().testTag("radyo"), false, radio);  // disabled
             });
         });
@@ -28934,13 +28933,11 @@ TEST(slider_thumbs_and_tracks_are_slots_given_its_state) {
     ComposeTestRule rule([&] {
         Column([=, &seen] {
             Slider(value.get(), [value](float v) { value.set(v); }, Modifier().width(200).testTag("kaydırıcı"),
-                   {.valueFrom = 0, .valueTo = 100,
-                    .thumb = [&](const SliderState& s) {
+                   valueFrom = 0, valueTo = 100, thumb = [&](const SliderState& s) {
                         seen = s;
                         Box(Modifier().size(s.isPressed() ? 20 : 10).testTag("başparmak"));
-                    },
-                    .track = [](const SliderState&) { Box(Modifier().fillMaxWidth().height(6).testTag("iz")); }});
-            Slider(50, [](float) {}, Modifier().width(200), {.valueTo = 100, .thumb = [](const SliderState& s) { SliderDefaults::ValueThumb(s); }});
+                    }, track = [](const SliderState&) { Box(Modifier().fillMaxWidth().height(6).testTag("iz")); });
+            Slider(50, [](float) {}, Modifier().width(200), valueTo = 100, thumb = [](const SliderState& s) { SliderDefaults::ValueThumb(s); });
         });
     });
     // The track: as long as the slider less the thumb, from half a thumb in; the thumb's middle at the value along it.
@@ -28964,7 +28961,7 @@ TEST(remembered_slider_state_keeps_its_value_and_steps) {
     ComposeTestRule rule([&] {
         auto state = rememberSliderState(2, 3, 1, 5, [&] { ++finished; });  // 1..5 in four parts
         kept = state;
-        Slider(state, Modifier().width(220).testTag("puan"), {.valueFrom = 0, .valueTo = 1000});  // the options' range isn't used
+        Slider(state, Modifier().width(220).testTag("puan"));  // (its range is the state's: Slider(state) takes none)
     });
     CHECK(kept && kept->value() == 2 && kept->steps() == 3 && (kept->tickFractions() == std::vector<float>{0, 0.25f, 0.5f, 0.75f, 1}));
     Rect b = rule.onNodeWithTag("puan").bounds();
@@ -28980,12 +28977,10 @@ TEST(material3_slider_track_keeps_apart_from_its_bar_thumb) {
     ComposeTestRule rule([&] {
         Column([=] {
             Slider(0.5f, [](float) {}, Modifier().width(204).testTag("m3"),
-                   {.thumb = [](const SliderState& s) { SliderDefaults::Thumb(s); }, .track = [](const SliderState& s) { SliderDefaults::Track(s); }});
+                   thumb = [](const SliderState& s) { SliderDefaults::Thumb(s); }, track = [](const SliderState& s) { SliderDefaults::Track(s); });
             Slider(1, [](float) {}, Modifier().width(204).testTag("adımlı"),
-                   {.valueFrom = 0, .valueTo = 4, .steps = 3, .colors = SliderColors{.thumbColor = Color{1, 0, 0, 1}},
-                    .thumb = [](const SliderState& s) { SliderDefaults::ShapeThumb(s, RectangleShape, {8, 8}); },
-                    .track = [](const SliderState& s) { SliderDefaults::Track(s); }});
-            VerticalSlider(0.5f, [](float) {}, Modifier().height(204).testTag("dikey"), {.thumb = [](const SliderState& s) { SliderDefaults::Thumb(s); }});
+                   valueFrom = 0, valueTo = 4, steps = 3, sliderColors = SliderColors{.thumbColor = Color{1, 0, 0, 1}}, thumb = [](const SliderState& s) { SliderDefaults::ShapeThumb(s, RectangleShape, {8, 8}); }, track = [](const SliderState& s) { SliderDefaults::Track(s); });
+            VerticalSlider(0.5f, [](float) {}, Modifier().height(204).testTag("dikey"), thumb = [](const SliderState& s) { SliderDefaults::Thumb(s); });
         });
     });
     testing::RecordingCanvas canvas;
@@ -29034,21 +29029,18 @@ TEST(range_slider_thumbs_and_track_are_slots) {
         Column([=, &seen, &thumbs] {
             thumbs.clear();
             RangeSlider(range.get(), [range](std::pair<float, float> v) { range.set(v); }, Modifier().width(210).testTag("aralık"),
-                        {.valueFrom = 0, .valueTo = 100,
-                         .startThumb = [&](const SliderState& s) {
+                        valueFrom = 0, valueTo = 100, startThumb = [&](const SliderState& s) {
                              thumbs.push_back({s.value(), s.isPressed()});
                              Box(Modifier().size(10).testTag("baş"));
-                         },
-                         .endThumb = [&](const SliderState& s) {
+                         }, endThumb = [&](const SliderState& s) {
                              thumbs.push_back({s.value(), s.isPressed()});
                              Box(Modifier().size(10).testTag("son"));
-                         },
-                         .rangeTrack = [&](const RangeSliderState& s) {
+                         }, rangeTrack = [&](const RangeSliderState& s) {
                              seen = s;
                              Box(Modifier().fillMaxWidth().height(6).testTag("iz"));
-                         }});
-            RangeSlider({1, 3}, [](std::pair<float, float>) {}, Modifier().width(210),
-                        {.valueFrom = 0, .valueTo = 4, .thumb = [](const SliderState& s) { Box(Modifier().size(12).testTag(std::format("t{:.0f}", s.value()))); }});
+                         });
+            RangeSlider(std::pair{1.f, 3.f}, [](std::pair<float, float>) {}, Modifier().width(210),
+                        valueFrom = 0, valueTo = 4, thumb = [](const SliderState& s) { Box(Modifier().size(12).testTag(std::format("t{:.0f}", s.value()))); });
         });
     });
     Rect slider = rule.onNodeWithTag("aralık").bounds(), track = rule.onNodeWithTag("iz").bounds();
@@ -29073,8 +29065,7 @@ TEST(remembered_range_slider_state_and_its_material3_track) {
         auto state = rememberRangeSliderState(1, 3, 3, 0, 4, [&] { ++finished; });
         kept = state;
         RangeSlider(state, Modifier().width(208).testTag("m3"),
-                    {.thumb = [](const SliderState& s) { SliderDefaults::Thumb(s); },
-                     .rangeTrack = [](const RangeSliderState& s) { SliderDefaults::Track(s); }});
+                    thumb = [](const SliderState& s) { SliderDefaults::Thumb(s); }, rangeTrack = [](const RangeSliderState& s) { SliderDefaults::Track(s); });
     });
     // 4 dp bar thumbs: a 204 dp track from 2 dp in. On steps the values sit 8 dp in from its ends:
     // 1 at 8 + 188/4 = 55, 3 at 149; each stretch keeps 2 + 6 from a thumb.
@@ -29186,7 +29177,7 @@ TEST(controls_keep_48_dp_of_room_and_take_taps_anywhere_in_it) {
         LogInteractions(buttonSource, log);
         CompositionLocalProvider({LocalMinimumInteractiveComponentSize.provides(room.get())}, [&] {
             Column([=, &buttonSource] {
-                IconButton([clicks] { ++*clicks; }, Modifier().testTag("düğme"), {.interactionSource = buttonSource},
+                IconButton([clicks] { ++*clicks; }, Modifier().testTag("düğme"), interactionSource = buttonSource,
                            [] { Icon(Icons::Filled::Add, "Ekle"); });
                 Checkbox(checked.get(), [checked](bool v) { checked.set(v); }, Modifier().testTag("kutu"));
                 RadioButton(selected.get(), [selected] { selected.set(!selected.peek()); }, Modifier().testTag("radyo"));
@@ -29246,7 +29237,7 @@ TEST(buttons_and_chips_keep_48_dp_of_room_to_touch_them) {
         CompositionLocalProvider({LocalMinimumInteractiveComponentSize.provides(room.get())}, [&] {
             Column([=] {
                 Button([taps] { taps->push_back("düğme"); }, Modifier().testTag("düğme"), [] { Text("Kaydet"); });
-                TextButton([taps] { taps->push_back("metin"); }, Modifier().testTag("metin"), {}, [] { Text("İptal"); });
+                TextButton([taps] { taps->push_back("metin"); }, Modifier().testTag("metin"), [] { Text("İptal"); });
                 ToggleButton(on.get(), [on](bool v) { on.set(v); }, Modifier().testTag("aç"), {}, [] { Text("Aç"); });
                 AssistChip([taps] { taps->push_back("çip"); }, [] { Text("Yol"); }, {}, Modifier().testTag("çip"));
                 SmallFloatingActionButton([taps] { taps->push_back("fab"); }, [] { Icon(Icons::Filled::Add, "Ekle"); },
@@ -29446,10 +29437,10 @@ TEST(alert_dialog_buttons_wrap_with_the_confirming_one_above) {
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
         AlertDialog([] {},
-                    {.confirmButton = [&] { TextButton([] {}, Modifier().testTag("onay"), {}, [&] { Text(longer.get() ? "Şimdi güncelle ve yeniden başlat" : "Tamam"); }); },
+                    {.confirmButton = [&] { TextButton([] {}, Modifier().testTag("onay"), [=] { Text(longer.get() ? "Şimdi güncelle ve yeniden başlat" : "Tamam"); }); },
                      .dismissButton = [&] {
-                         TextButton([] {}, Modifier().testTag("ret"), {}, [] { Text("Sonra"); });
-                         if (longer.get()) TextButton([] {}, Modifier().testTag("asla"), {}, [] { Text("Bir daha hiç sorma bana lütfen"); });
+                         TextButton([] {}, Modifier().testTag("ret"), [] { Text("Sonra"); });
+                         if (longer.get()) TextButton([] {}, Modifier().testTag("asla"), [] { Text("Bir daha hiç sorma bana lütfen"); });
                      },
                      .icon = [] { Icon(Icons::Filled::Info, "Bilgi"); },
                      .title = [] { Text("Güncelleme"); },
@@ -29490,7 +29481,7 @@ TEST(alert_dialog_buttons_wrap_with_the_confirming_one_above) {
 TEST(alert_dialog_text_gives_way_to_its_buttons_in_a_short_window) {
     ComposeTestRule rule([&] {
         AlertDialog([] {},
-                    {.confirmButton = [] { TextButton([] {}, Modifier().testTag("onay"), {}, [] { Text("Tamam"); }); },
+                    {.confirmButton = [] { TextButton([] {}, Modifier().testTag("onay"), [] { Text("Tamam"); }); },
                      .title = [] { Text("Başlık"); },
                      .text = [] { Column([] { for (int i = 0; i < 40; ++i) Text("Satır " + std::to_string(i)); }); }},
                     Modifier().testTag("diyalog"));
@@ -30416,9 +30407,9 @@ TEST(labels_show_over_their_content_while_held_or_always) {
                   [] { Box(Modifier().size(100, 30)); });
             Label([] { Box(Modifier().size(10, 10).testTag("hep")); }, Modifier(), std::nullopt, true, [] { Box(Modifier().size(30)); });
             Slider(0.5f, [](float) {}, Modifier().width(200).testTag("kaydırıcı"),
-                   {.thumb = [](const SliderState& s) {
+                   thumb = [](const SliderState& s) {
                        SliderDefaults::Label(s, [] { Box(Modifier().size(30, 16).testTag("değer")); }, [&] { SliderDefaults::Thumb(s); });
-                   }});
+                   });
         });
     });
     CHECK(!rule.onNodeWithTag("etiket").exists() && rule.onNodeWithTag("hep").exists() && !rule.onNodeWithTag("değer").exists());

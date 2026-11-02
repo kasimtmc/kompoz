@@ -152,9 +152,9 @@ Klavye odağı, Compose Material 3'teki gibi bileşenin odak durum katmanıyla g
 void HoverCard() {
     auto source = remember([] { return MutableInteractionSource(); });
     bool hovered = source.collectIsHoveredAsState();
-    Card(Modifier().hoverable(source).pointerHoverIcon(PointerIcon::Hand), [&] {
+    Card(Modifier().hoverable(source).pointerHoverIcon(PointerIcon::Hand)) {
         Text(hovered ? "Hovering" : "Point at me", Modifier().padding(24));
-    });
+    };
 }
 ```
 
@@ -168,7 +168,7 @@ Bir `MutableInteractionSource`'a, verildiği bileşenlerin basmaları, üzerine 
 void PressToRecord() {
     auto source = remember([] { return MutableInteractionSource(); });
     bool pressed = source.collectIsPressedAsState();
-    Button([] {}, Modifier(), {.interactionSource = source}, [&] { Text(pressed ? "Recording…" : "Hold to record"); });
+    Button([] {}, Modifier(), interactionSource = source) { Text(pressed ? "Recording…" : "Hold to record"); };
 }
 ```
 

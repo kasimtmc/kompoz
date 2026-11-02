@@ -646,6 +646,12 @@
   kullanıyor. Şimdilik `Box`, `Column`, `Row`, `Spacer` ve `Text` bunları alıyor (`ColumnStyle` ve `RowStyle` kalktı;
   Text'in `style`'ı bir temanın metin stilini, `typography().bodyMedium`'u, olduğu gibi alıyor); diğer parçalar sırayla
   geliyor.
+- **Düğmeler, kartlar ve denetimler için adlı argümanlar ve bloklar**: düğmeler, simge düğmeleri ve simge açma kapama
+  düğmeleri, kartlar, `Surface`, `Icon`, `Image`, `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch` ve
+  kaydırıcılar bunları alıyor, `Button(onClick, enabled = false) { Text("Gönder"); };`, `Slider(v, set, valueFrom = 0,
+  valueTo = 100, steps = 9)`, `Icon(icon, "Sil", tint = cs.error)`, Compose'un sırasıyla. Seçenek yapıları artık
+  verilmiyor (`SwitchOptions`, `SliderOptions`...); bir kaydırıcının renkleri `sliderColors =` ile veriliyor (`colors`
+  renk sabitlerinin ad alanı) ve verilmeyen bir geri çağırma `nullptr`, çünkü `{}`'nin alınacak bir türü yok.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

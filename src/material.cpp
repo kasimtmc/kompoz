@@ -573,7 +573,7 @@ void NavigationBarItem(bool selected, std::function<void()> onClick, const Image
                        CallSite site) {
     ComposableScope scope(site);
     // Compose 1.4's: 80 dp tall, the 64 dp wide indicator 12 dp down.
-    detail::indicatorNavigationItem(selected, std::move(onClick), [icon] { Icon(icon, ""); }, [label] { detail::Text(label); },  // (the label says it)
+    detail::indicatorNavigationItem(selected, std::move(onClick), [icon] { detail::Icon(icon, ""); }, [label] { detail::Text(label); },  // (the label says it)
                                     Modifier().weight(1).height(80), 64, 12, true, std::nullopt);
 }
 
@@ -623,7 +623,7 @@ void ExtendedFloatingActionButton(std::function<void()> onClick, const ImageVect
         detail::Row(fab(modifier.heightIn(56).widthIn(80), RoundedCornerShape(16), std::move(onClick)).padding(16, 0, 20, 0),
             {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
             [&] {
-                Icon(icon, text);
+                detail::Icon(icon, text);
                 detail::Text(text, {.font = typography().labelLarge});
             });
     });
@@ -732,7 +732,7 @@ void extendedFab(const ExtendedFabSize& size, std::function<void()> onClick, con
                    .semantics({.contentDescription = text})
                    .clipToBounds(),
                [&] {
-                   Icon(icon, "", Modifier().size(size.icon));
+                   detail::Icon(icon, "", Modifier().size(size.icon));
                    detail::Text(text, Modifier().graphicsLayer([p](GraphicsLayerScope& l) { l.alpha = std::clamp(p.value(), 0.f, 1.f); }),
                         {.font = size.label, .maxLines = 1});
                },
@@ -846,7 +846,7 @@ void SnackbarHostState::dismiss(uint64_t id, SnackbarResult result) const {
 }
 
 void AppBarScope::clickableItem(std::function<void()> onClick, Content icon, std::string label, bool enabled) {
-    items.push_back({[onClick, icon, enabled] { IconButton(onClick, Modifier(), {.enabled = enabled}, icon); },
+    items.push_back({[onClick, icon, enabled] { detail::IconButton(onClick, Modifier(), {.enabled = enabled}, icon); },
                      [onClick, label, enabled](const AppBarMenuState& menu) {
                          DropdownMenuItem([label] { detail::Text(label); }, [onClick, menu] {
                              onClick();
@@ -856,7 +856,7 @@ void AppBarScope::clickableItem(std::function<void()> onClick, Content icon, std
 }
 
 void AppBarScope::toggleableItem(bool checked, std::function<void(bool)> onCheckedChange, Content icon, std::string label, bool enabled) {
-    items.push_back({[checked, onCheckedChange, icon, enabled] { IconToggleButton(checked, onCheckedChange, Modifier(), {.enabled = enabled}, icon); },
+    items.push_back({[checked, onCheckedChange, icon, enabled] { detail::IconToggleButton(checked, onCheckedChange, Modifier(), {.enabled = enabled}, icon); },
                      [checked, onCheckedChange, label, enabled](const AppBarMenuState& menu) {
                          DropdownMenuItem([label] { detail::Text(label); }, [checked, onCheckedChange, menu] {
                              onCheckedChange(!checked);
@@ -882,7 +882,7 @@ void appBarItems(bool vertical, std::function<void(AppBarScope&)> content, const
         for (const auto& item : row.items) item.appBar();
         detail::Box([&] {
             if (o.overflowIndicator) o.overflowIndicator(menu);
-            else IconButton([menu] { menu.show(); }, [] { Icon(Icons::Filled::MoreVert, LocalStrings.current().moreOptions); });
+            else detail::IconButton([menu] { menu.show(); }, [] { detail::Icon(Icons::Filled::MoreVert, LocalStrings.current().moreOptions); });
             DropdownMenu(menu.isShowing(), [menu] { menu.dismiss(); }, [&] {
                 for (int i = std::max(0, visible.get()); i < count; ++i) row.items[size_t(i)].menu(menu);
             });
@@ -1047,10 +1047,10 @@ void Snackbar(const SnackbarData& data, const Modifier& modifier, SnackbarOption
     const ColorScheme& cs = colorScheme();
     if (!data.actionLabel.empty())
         o.action = [&data, color = o.actionColor.value_or(cs.inversePrimary)] {
-            TextButton([data] { data.performAction(); }, Modifier(), {.contentColor = color}, [&] { detail::Text(data.actionLabel); });
+            detail::TextButton([data] { data.performAction(); }, Modifier(), {.contentColor = color}, [&] { detail::Text(data.actionLabel); });
         };
     if (data.withDismissAction)
-        o.dismissAction = [&data] { IconButton([data] { data.dismiss(); }, [] { Icon(Icons::Filled::Close, LocalStrings.current().dismiss); }); };
+        o.dismissAction = [&data] { detail::IconButton([data] { data.dismiss(); }, [] { detail::Icon(Icons::Filled::Close, LocalStrings.current().dismiss); }); };
     Snackbar([&] { detail::Text(data.message); }, modifier.padding(12), o);
 }
 

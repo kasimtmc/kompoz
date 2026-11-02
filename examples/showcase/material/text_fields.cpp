@@ -37,10 +37,10 @@ void TextFieldsSection(CallSite site) {
                                     {.label = "Şifre",
                                      .leadingIcon = [] { Icon(Icons::Filled::Lock, "Şifre"); },
                                      .trailingIcon = [showPassword] {
-                                         IconButton([showPassword] { showPassword.set(!showPassword.get()); }, [&] {
-                                             Icon(Icons::Filled::Visibility, showPassword.get() ? "Gizle" : "Göster", {},
-                                                  showPassword.get() ? std::optional(colorScheme().primary) : std::nullopt);
-                                         });
+                                         IconButton([showPassword] { showPassword.set(!showPassword.get()); }) {
+                                             Icon(Icons::Filled::Visibility, showPassword.get() ? "Gizle" : "Göster",
+                                                  tint = showPassword.get() ? std::optional(colorScheme().primary) : std::nullopt);
+                                         };
                                      },
                                      .supportingText = "Yazdığınız son karakter bir an görünür; kopyalanamaz",
                                      .textObfuscationMode = showPassword.get() ? TextObfuscationMode::Visible
@@ -111,10 +111,9 @@ void TextFieldsSection(CallSite site) {
                                .supportingText = std::format("{} / 10 · seçim {}–{}", plateChars, plateSelection.start, plateSelection.end),
                                .inputTransformation = InputTransformation::allCaps("tr").then(InputTransformation::maxLength(10))});
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                TextButton([plate] { plate.edit([](TextFieldBuffer& b) { b.selectAll(); }); }, [] { Text("Tümünü seç"); });
-                TextButton([plate] { plate.edit([](TextFieldBuffer& b) { b.placeCursorBeforeCharAt(0); }); },
-                           [] { Text("İmleci başa al"); });
-                TextButton([plate] { plate.clearText(); }, [] { Text("Temizle"); });
+                TextButton([plate] { plate.edit([](TextFieldBuffer& b) { b.selectAll(); }); }) { Text("Tümünü seç"); };
+                TextButton([plate] { plate.edit([](TextFieldBuffer& b) { b.placeCursorBeforeCharAt(0); }); }) { Text("İmleci başa al"); };
+                TextButton([plate] { plate.clearText(); }) { Text("Temizle"); };
             };
             // OutputTransformation: the state keeps the digits, the field shows them in
             // groups (the caret and taps step over the spaces); digits only, at most 10.
@@ -141,8 +140,8 @@ void TextFieldsSection(CallSite site) {
             // Its undo history: a word at a time (Ctrl+Z / Ctrl+Shift+Z on a keyboard too).
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 UndoState undo = notes.undoState();
-                TextButton([undo] { undo.undo(); }, Modifier(), {.enabled = undo.canUndo()}, [] { Text("Geri al"); });
-                TextButton([undo] { undo.redo(); }, Modifier(), {.enabled = undo.canRedo()}, [] { Text("Yinele"); });
+                TextButton([undo] { undo.undo(); }, Modifier(), enabled = undo.canUndo()) { Text("Geri al"); };
+                TextButton([undo] { undo.redo(); }, Modifier(), enabled = undo.canRedo()) { Text("Yinele"); };
             };
             // BasicTextField's decorator (Compose's decorationBox): its own look around the text — a
             // rounded box with an icon and a clear button; a tap anywhere on it types into the field.
@@ -151,15 +150,15 @@ void TextFieldsSection(CallSite site) {
                             .decorator = [&](const Content& innerTextField) {
                                 Row(Modifier().fillMaxWidth().heightIn(48).background(cs.surfaceContainerHigh, CircleShape).padding(16, 4, 4, 4),
                                     horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                                        Icon(Icons::Filled::Search, "", {}, cs.onSurfaceVariant);
+                                        Icon(Icons::Filled::Search, "", tint = cs.onSurfaceVariant);
                                         Box(Modifier().weight(1)) { innerTextField(); };
                                         if (!tagQuery.text().empty())
-                                            IconButton([tagQuery] { tagQuery.clearText(); }, [] { Icon(Icons::Filled::Close, "Temizle"); });
+                                            IconButton([tagQuery] { tagQuery.clearText(); }) { Icon(Icons::Filled::Close, "Temizle"); };
                                     };
                             }});
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                FilledTonalButton([emailFocus] { emailFocus.requestFocus(); }, [] { Text("E-postaya odaklan"); });
-                OutlinedButton([focus] { focus.clearFocus(); }, [] { Text("Odağı temizle"); });
+                FilledTonalButton([emailFocus] { emailFocus.requestFocus(); }) { Text("E-postaya odaklan"); };
+                OutlinedButton([focus] { focus.clearFocus(); }) { Text("Odağı temizle"); };
             };
             FocusPropertiesDemo();
         });

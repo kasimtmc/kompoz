@@ -234,14 +234,14 @@ void Calendar(std::shared_ptr<MonthRange> d, year_month_day today, const DatePic
             {.horizontalArrangement = Arrangement::spacedBy(4), .verticalAlignment = Alignment::CenterVertically}, [&] {
                 detail::Text(std::format("{} {}", strings.months[unsigned(shown.month()) - 1], int(shown.year())),
                      {.font = t.labelLarge, .color = cs.onSurfaceVariant});
-                Icon(yearPicking.get() ? Icons::Filled::KeyboardArrowUp : Icons::Filled::KeyboardArrowDown, strings.selectYear, Modifier().size(18));
+                detail::Icon(yearPicking.get() ? Icons::Filled::KeyboardArrowUp : Icons::Filled::KeyboardArrowDown, strings.selectYear, Modifier().size(18));
             });
         detail::Spacer(Modifier().weight(1));
         if (!yearPicking.get()) {
-            IconButton([go, shown] { go(shown - months{1}); }, Modifier(), {.enabled = index > 0},
-                       [&] { Icon(Icons::AutoMirrored::Filled::KeyboardArrowLeft, strings.previousMonth); });
-            IconButton([go, shown] { go(shown + months{1}); }, Modifier(), {.enabled = index < count - 1},
-                       [&] { Icon(Icons::AutoMirrored::Filled::KeyboardArrowRight, strings.nextMonth); });
+            detail::IconButton([go, shown] { go(shown - months{1}); }, Modifier(), {.enabled = index > 0},
+                       [&] { detail::Icon(Icons::AutoMirrored::Filled::KeyboardArrowLeft, strings.previousMonth); });
+            detail::IconButton([go, shown] { go(shown + months{1}); }, Modifier(), {.enabled = index < count - 1},
+                       [&] { detail::Icon(Icons::AutoMirrored::Filled::KeyboardArrowRight, strings.nextMonth); });
         }
     });
     });
@@ -486,8 +486,8 @@ void DatePicker(const DatePickerState& state, const Modifier& modifier, DatePick
                          {.fontSize = 32, .color = cs.onSurface, .maxLines = 1, .overflow = TextOverflow::Ellipsis});
                     if (options.showModeToggle)  // the pencil to type the date, the calendar to pick it
                         CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
-                            IconButton([state, typing] { state.setDisplayMode(typing ? DisplayMode::Picker : DisplayMode::Input); }, [&] {
-                                Icon(typing ? Icons::Filled::DateRange : Icons::Filled::Edit, typing ? strings.switchToCalendar : strings.switchToInput);
+                            detail::IconButton([state, typing] { state.setDisplayMode(typing ? DisplayMode::Picker : DisplayMode::Input); }, [&] {
+                                detail::Icon(typing ? Icons::Filled::DateRange : Icons::Filled::Edit, typing ? strings.switchToCalendar : strings.switchToInput);
                             });
                         });
                 });
@@ -620,8 +620,8 @@ void DateRangePicker(const DateRangePickerState& state, const Modifier& modifier
                     });
                     if (options.showModeToggle)
                         CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
-                            IconButton([state, typing] { state.setDisplayMode(typing ? DisplayMode::Picker : DisplayMode::Input); }, [&] {
-                                Icon(typing ? Icons::Filled::DateRange : Icons::Filled::Edit, typing ? strings.switchToCalendar : strings.switchToInput);
+                            detail::IconButton([state, typing] { state.setDisplayMode(typing ? DisplayMode::Picker : DisplayMode::Input); }, [&] {
+                                detail::Icon(typing ? Icons::Filled::DateRange : Icons::Filled::Edit, typing ? strings.switchToCalendar : strings.switchToInput);
                             });
                         });
                 });

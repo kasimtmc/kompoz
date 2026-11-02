@@ -43,7 +43,7 @@ Bir composable'ın gövdesi her recomposition'da çalışır, yani içinde oluş
 ```cpp
 void Counter() {
     auto count = remember([] { return mutableStateOf(0); });   // bir kez yapılır
-    Button([count] { count.set(count.get() + 1); }, [&] { Text(std::to_string(count.get())); });
+    Button([count] { count.set(count.get() + 1); }) { Text(std::to_string(count.get())); };
 }
 ```
 
@@ -161,7 +161,7 @@ Button([from, to] {
         from.set(from.peek() - 10);
         to.set(to.peek() + 10);
     });
-}, [] { Text("10 aktar"); });
+}) { Text("10 aktar"); };
 ```
 
 Arayüz iş parçacığında durumlar serbestçe okunur ve yazılır. Başka bir iş parçacığı onları yazabilir, okumayı ise bir anlık görüntünün içinde yapar: `Snapshot::takeSnapshot()` onların o anki halinin bir görünümünü verir; `enter(block)`'unda okunur, `dispose()` onu bırakır. `takeMutableSnapshot()` içine yazılabilen bir tane verir, `apply()` ile uygulanır; bir başkasının içinde alınırsa ona uygulanır. Anlık görüntüler okuma ve yazma gözlemcileri alır; `Snapshot::registerApplyObserver` uygulanan her anlık görüntünün neyi değiştirdiğini duyar.
@@ -175,7 +175,7 @@ void Tags() {
     auto tags = remember([] { return mutableStateListOf<std::string>({"red", "green"}); });
     Column() {
         for (const std::string& tag : tags) Text(tag);
-        Button([tags] { tags.add("blue"); }, [] { Text("Add"); });
+        Button([tags] { tags.add("blue"); }) { Text("Add"); };
     };
 }
 ```

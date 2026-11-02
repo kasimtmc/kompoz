@@ -94,25 +94,21 @@ void ShowcaseApp() {
             {.title = [] { Text("Kompoz"); },
              .navigationIcon =
                  [drawer, scope] {
-                     IconButton([drawer, scope] { scope.launch([drawer]() -> Task { co_await drawer.open(); }); },
-                                [] { Icon(Icons::Filled::Menu, "Menü"); });
+                     IconButton([drawer, scope] { scope.launch([drawer]() -> Task { co_await drawer.open(); }); }) { Icon(Icons::Filled::Menu, "Menü"); };
                  },
              .actions =
                  [&] {
-                     IconButton([dark, darkChosen] { dark.set(!dark.get()), darkChosen.set(true); }, [] { Icon(Icons::Filled::DarkMode, "Koyu tema"); });
-                     IconButton(
-                         [showRecompositions, snackbar] {
+                     IconButton([dark, darkChosen] { dark.set(!dark.get()), darkChosen.set(true); }) { Icon(Icons::Filled::DarkMode, "Koyu tema"); };
+                     IconButton([showRecompositions, snackbar] {
                              bool on = !showRecompositions.get();
                              showRecompositions.set(on);
                              snackbar.showSnackbar(on ? "Recomposition vurgusu açık" : "Recomposition vurgusu kapalı");
-                         },
-                         [&] {
-                             Icon(Icons::Filled::Visibility, "Recomposition'ları göster", {},
-                                  showRecompositions.get() ? std::optional(colorScheme().primary) : std::nullopt);
-                         });
+                         }) {
+                             Icon(Icons::Filled::Visibility, "Recomposition'ları göster",
+                                  tint = showRecompositions.get() ? std::optional(colorScheme().primary) : std::nullopt);
+                         };
                      Box() {  // the menu opens below its anchor, this Box
-                         IconButton([overflow] { overflow.set(true); },
-                                    [] { Icon(Icons::Filled::MoreVert, "Diğer seçenekler"); });
+                         IconButton([overflow] { overflow.set(true); }) { Icon(Icons::Filled::MoreVert, "Diğer seçenekler"); };
                          DropdownMenu(overflow.get(), [overflow] { overflow.set(false); }, [&] {
                              DropdownMenuItem([] { Text("Hakkında"); },
                                               [overflow, about] {
@@ -183,7 +179,7 @@ void ShowcaseApp() {
         }, {.transition = fade, .popTransition = fade});
         if (about.get())
             AlertDialog([about] { about.set(false); },
-                        {.confirmButton = [about] { TextButton([about] { about.set(false); }, [] { Text("Tamam"); }); },
+                        {.confirmButton = [about] { TextButton([about] { about.set(false); }) { Text("Tamam"); }; },
                          .icon = [] { Icon(Icons::Filled::Info, "Bilgi"); },
                          .title = [] { Text("Kompoz"); },
                          .text = [] {
