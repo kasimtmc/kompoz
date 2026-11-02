@@ -84,18 +84,18 @@ Placed placedOf(const Matrix& m) {
 namespace {
 // A composable taking named arguments and a block, as the library's do.
 namespace names {
-struct Prefix {};
+struct Opener {};
 struct Hue {};
 } // namespace names
-inline constexpr Param<names::Prefix> prefix;
+inline constexpr Param<names::Opener> opener;
 inline constexpr Param<names::Hue> hue;
 int gTaglineRuns = 0, gTaglineBlockRuns = 0;
 struct TaglineImpl {
-    using P = detail::Params<names::Prefix, names::Hue, detail::Block>;
+    using P = detail::Params<names::Opener, names::Hue, detail::Block>;
     template <class... A>
     static void call(CallSite site, std::string text, A&&... args) {
         static_assert(P::check<A...>());
-        std::string shown = P::get<names::Prefix>(std::string(), args...) + text;
+        std::string shown = P::get<names::Opener>(std::string(), args...) + text;
         Color color = P::get<names::Hue>(colors::Black, args...);
         Content block = P::block(std::forward<A>(args)...);
         ComposableScope scope(site);
@@ -112,9 +112,9 @@ TEST(composables_take_named_arguments_and_blocks_in_scopes_of_their_own) {
     auto inner = mutableStateOf(0);
     ComposeTestRule rule([&] {
         Tagline("a");
-        Tagline("b", hue = colors::Red, prefix = "> ");  // any order, only those wanted
+        Tagline("b", hue = colors::Red, opener = "> ");  // any order, only those wanted
         Tagline("e", "- ", colors::Blue);                 // or by place, as Kotlin's
-        Tagline("c", prefix = "* ", [=] {
+        Tagline("c", opener = "* ", [=] {
             ++gTaglineBlockRuns;
             Text("iç " + std::to_string(inner.get()));
         });
@@ -614,13 +614,13 @@ TEST(text_fields_line_up_by_their_baselines_too) {
         Column([=] {
             Row([] {
                 Text("Ad:", Modifier().alignByBaseline());
-                OutlinedTextField("ali", [](std::string) {}, Modifier().width(120).alignByBaseline(), {.singleLine = true, .label = "Ad"});
-                TextField("veli", [](std::string) {}, Modifier().width(120).alignByBaseline(), {.singleLine = true, .label = "Soyad"});
+                OutlinedTextField("ali", [](std::string) {}, Modifier().width(120).alignByBaseline(), singleLine = true, label = "Ad");
+                TextField("veli", [](std::string) {}, Modifier().width(120).alignByBaseline(), singleLine = true, label = "Soyad");
             });
             Row([] {
                 Text("son", Modifier().alignBy(LastBaseline));
                 TextField("bir\niki\nüç", [](std::string) {}, Modifier().width(150).alignBy(LastBaseline));
-                BasicTextField("düz", [](std::string) {}, Modifier().width(60).alignByBaseline(), {.singleLine = true});
+                BasicTextField("düz", [](std::string) {}, Modifier().width(60).alignByBaseline(), singleLine = true);
             });
         });
     }, {600, 800});
@@ -836,7 +836,7 @@ TEST(ime_nested_scroll_moves_the_keyboard_past_the_end) {
         Column(Modifier().fillMaxSize(), [=, &scroll] {
             Column(Modifier().weight(1).fillMaxWidth().imeNestedScroll().verticalScroll(scroll).testTag("liste"),
                    [=] { for (int i = 0; i < 20; ++i) Box(Modifier().fillMaxWidth().height(50)); });
-            TextField("", {}, Modifier().testTag("alan"));
+            TextField("", nullptr, Modifier().testTag("alan"));
         });
     }, {400, 800});
     rule.host().setCallbacks({.imeControlBy = [&](float dp) { peak = std::max(peak, moved += dp); }, .imeControlEnd = [&](float v) { ends.push_back(v); }});
@@ -880,7 +880,7 @@ TEST(swiping_over_a_text_field_does_not_focus_it) {
     ComposeTestRule rule([&] {
         Column(Modifier().fillMaxSize().verticalScroll(scroll), [=] {
             Box(Modifier().height(100));
-            TextField("", {}, Modifier().testTag("field"));
+            TextField("", nullptr, Modifier().testTag("field"));
             Box(Modifier().height(2000));
         });
     }, {400, 800});
@@ -908,7 +908,7 @@ TEST(long_press_selects_a_word_with_handles_and_a_toolbar) {
         Column([=] {
             Box(Modifier().height(200));  // room above for the toolbar
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().fillMaxWidth().testTag("field"),
-                      {.singleLine = true});
+                      singleLine = true);
             Box(Modifier().fillMaxWidth().height(300).testTag("below"));
         });
     }, {400, 800});
@@ -1006,7 +1006,7 @@ TEST(platform_services_open_links_vibrate_and_hide_the_keyboard) {
             TextButton([clip, &value] { value.set(clip.getText()); clip.setText("kopya"); }, [] { Text("pano"); });
             Box(Modifier().size(100, 40).combinedClickable([] {}, [&] { ++longClicks; }).testTag("uzun"));
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("field"),
-                      {.keyboardActions = {.onDone = [keys] { keys.hide(); }}});
+                      keyboardActions = KeyboardActions{.onDone = [keys] { keys.hide(); }});
         });
     }, {400, 800});
     rule.host().setCallbacks({.textInput = [&](bool active, Rect, const TextEditState&, const ImeOptions&) { keyboard.push_back(active); },
@@ -1093,11 +1093,11 @@ TEST(a_field_whose_value_comes_back_a_frame_later_keeps_what_is_typed) {
         Column([=, &query] {
             Text(std::format("{}", ticks.get()));
             std::string q = query.collectAsState();
-            TextField(q, [&query](std::string v) { query.setValue(std::move(v)); }, Modifier().testTag("ara"), {.singleLine = true});
+            TextField(q, [&query](std::string v) { query.setValue(std::move(v)); }, Modifier().testTag("ara"), singleLine = true);
             // One that refuses letters: the input method goes back to what it keeps.
             TextField(digitsOnly.get(), [&](std::string v) {
                 if (v.find_first_not_of("0123456789") == std::string::npos) digitsOnly.set(std::move(v));
-            }, Modifier().testTag("sayi"), {.singleLine = true});
+            }, Modifier().testTag("sayi"), singleLine = true);
         });
     }, {400, 800});
     rule.host().setCallbacks({.textInputChanged = [&](const TextEditState& s) { resets.push_back(s.text); }});
@@ -1130,7 +1130,7 @@ TEST(caret_handle_for_fingers_double_click_for_the_mouse) {
         Column([=] {
             Box(Modifier().height(200));
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().fillMaxWidth().testTag("field"),
-                      {.singleLine = true});
+                      singleLine = true);
         });
     }, {400, 800});
     auto& host = rule.host();
@@ -1454,7 +1454,7 @@ TEST(app_side_change_resyncs_input_method) {
     int shows = 0;
     ComposeTestRule rule([value] {
         TextField(value->get(), [value](std::string v) { value->set(std::move(v)); }, Modifier().testTag("field"),
-                  {.singleLine = true, .onSubmit = [value] { value->set(""); }});
+                  singleLine = true, onSubmit = [value] { value->set(""); });
     });
     rule.host().setCallbacks({
         .textInput = [&](bool active, Rect, const TextEditState&, const KeyboardOptions&) { shows += active; },
@@ -1475,7 +1475,7 @@ TEST(app_side_change_resyncs_input_method) {
 TEST(text_field_submit) {
     auto submitted = std::make_shared<int>(0);
     ComposeTestRule rule([submitted] {
-        TextField("", nullptr, Modifier().testTag("field"), {.singleLine = true, .onSubmit = [submitted] { ++*submitted; }});
+        TextField("", nullptr, Modifier().testTag("field"), singleLine = true, onSubmit = [submitted] { ++*submitted; });
     });
     rule.onNodeWithTag("field").performClick().performKey(Key::Enter);
     CHECK(*submitted == 1);
@@ -1547,7 +1547,7 @@ TEST(draw_reaches_canvas) {
         MaterialTheme(lightColorScheme(), [] {
             Column([] {
                 Text("Merhaba");
-                TextField("", nullptr, Modifier(), {.placeholder = "Yaz…"});
+                TextField("", nullptr, Modifier(), placeholder = "Yaz…");
             });
         });
     });
@@ -2517,7 +2517,7 @@ TEST(overlays_fields_and_indicators_animate_composing_around_them_only_as_they_t
             auto t = rememberTooltipState();
             tip = t;
             TooltipBox([] { PlainTooltip([] { Text("İpucu"); }); }, t, Modifier(), [] { Box(Modifier().size(40)); });
-            TextField(text.get(), [&text](std::string s) { text.set(std::move(s)); }, Modifier().testTag("alan"), {.label = "Ad"});
+            TextField(text.get(), [&text](std::string s) { text.set(std::move(s)); }, Modifier().testTag("alan"), label = "Ad");
             ToggleFloatingActionButton(o, [&open](bool c) { open.set(c); }, [](const ToggleFloatingActionButtonScope&) { Icon(Icons::Filled::Add, ""); });
             LinearWavyProgressIndicator(o ? 0.5f : 0.f);  // (the wave rises from none)
             Image(rememberAnimatedVectorPainter(blink, o), "Göz");
@@ -6670,7 +6670,7 @@ TEST(dragging_a_handle_shows_the_text_magnifier) {
         Column([=] {
             Box(Modifier().height(200));
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().fillMaxWidth().testTag("field"),
-                      {.singleLine = true});
+                      singleLine = true);
         });
     }, {400, 800});
     auto& host = rule.host();
@@ -6877,7 +6877,7 @@ TEST(right_to_left_text_field_puts_the_start_at_the_right) {
     auto value = mutableStateOf(std::string("שלום"));
     ComposeTestRule rule([&] {
         TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().fillMaxWidth().testTag("field"),
-                  {.singleLine = true});
+                  singleLine = true);
     }, {400, 800});
     Rect field = rule.onNodeWithTag("field").bounds();
     auto draw = [&] {  // where the text sits is worked out as it is drawn
@@ -8744,11 +8744,11 @@ TEST(text_field_prefix_and_suffix_sit_around_the_text) {
     ComposeTestRule rule([&] {
         Column([=] {
             TextField(price.get(), [price](std::string v) { price.set(std::move(v)); }, Modifier().testTag("fiyat"),
-                      {.singleLine = true, .prefix = "$", .suffix = "kg"});
+                      singleLine = true, prefix = "$", suffix = "kg");
             OutlinedTextField(weight.get(), [weight](std::string v) { weight.set(std::move(v)); }, Modifier().testTag("kilo"),
-                              {.singleLine = true, .label = "Kilo", .suffix = "kg"});
-            TextField("a\nb", nullptr, Modifier().testTag("satırlar"), {.prefix = "#"});
-            TextField("", nullptr, Modifier(), {.singleLine = true, .prefix = "@"});  // no label: shown empty too
+                              singleLine = true, label = "Kilo", suffix = "kg");
+            TextField("a\nb", nullptr, Modifier().testTag("satırlar"), prefix = "#");
+            TextField("", nullptr, Modifier(), singleLine = true, prefix = "@");  // no label: shown empty too
         });
     });
     rule.waitForIdle();
@@ -9964,19 +9964,19 @@ TEST(basic_text_fields_take_a_decorator_and_fields_line_limits) {
     int submitted = 0;
     ComposeTestRule rule([&] {
         Column(Modifier().width(300), [=, &a, &b, &c, &one, &query, &secret, &submitted] {
-            BasicTextField(query, Modifier(), {.placeholder = "Ara", .decorator = [](const Content& innerTextField) {
+            BasicTextField(query, Modifier(), placeholder = "Ara", decorator = [](const Content& innerTextField) {
                 Row(Modifier().padding(10).testTag("süs"), [=] {
                     Box(Modifier().size(20).testTag("ikon"));
                     Box(Modifier().weight(1).testTag("iç"), innerTextField);
                 });
-            }});
-            BasicSecureTextField(secret, Modifier(), {.decorator = [](const Content& innerTextField) {
+            });
+            BasicSecureTextField(secret, Modifier(), decorator = [](const Content& innerTextField) {
                 Box(Modifier().padding(6).testTag("parola"), innerTextField);
-            }});
-            TextField(a, Modifier().testTag("çok"), {.lineLimits = TextFieldLineLimits::MultiLine(2, 3)});
-            TextField(b, Modifier().testTag("eski"), {.minLines = 2, .maxLines = 3});
-            TextField(c, Modifier().testTag("ezen"), {.singleLine = true, .lineLimits = TextFieldLineLimits::MultiLine(2, 3)});
-            TextField(one, Modifier().testTag("tek"), {.lineLimits = TextFieldLineLimits::SingleLine, .onSubmit = [&] { ++submitted; }});
+            });
+            TextField(a, Modifier().testTag("çok"), lineLimits = TextFieldLineLimits::MultiLine(2, 3));
+            TextField(b, Modifier().testTag("eski"), minLines = 2, maxLines = 3);
+            TextField(c, Modifier().testTag("ezen"), singleLine = true, lineLimits = TextFieldLineLimits::MultiLine(2, 3));
+            TextField(one, Modifier().testTag("tek"), lineLimits = TextFieldLineLimits::SingleLine, onSubmit = [&] { ++submitted; });
         });
     });
     // The text where the decorator put it: after the icon, inside the padding.
@@ -10211,7 +10211,7 @@ TEST(a_focus_request_brings_the_node_into_view) {
             Button([] {}, Modifier().height(60).focusRequester(above).testTag("üst"), [] { Text("Üst"); });
             Box(Modifier().height(1500));
             TextField("", [](std::string) {}, Modifier().focusRequester(below).testTag("alan"),
-                      {.singleLine = true, .keyboardOptions = {.showKeyboardOnFocus = false}});
+                      singleLine = true, keyboardOptions = KeyboardOptions{.showKeyboardOnFocus = false});
             Box(Modifier().height(1500));
         });
     }, {400, 800});
@@ -10230,8 +10230,8 @@ TEST(fields_focused_from_code_may_keep_the_keyboard_down) {
     ComposeTestRule rule([&] {
         Column([=, &loud, &quiet] {
             TextField("ali", [](std::string) {}, Modifier().testTag("sessiz").focusRequester(quiet),
-                      {.singleLine = true, .keyboardOptions = {.showKeyboardOnFocus = false}});
-            TextField("veli", [](std::string) {}, Modifier().testTag("normal").focusRequester(loud), {.singleLine = true});
+                      singleLine = true, keyboardOptions = KeyboardOptions{.showKeyboardOnFocus = false});
+            TextField("veli", [](std::string) {}, Modifier().testTag("normal").focusRequester(loud), singleLine = true);
         });
     });
     rule.host().setCallbacks({.textInput = [&](bool active, Rect, const TextEditState&, const ImeOptions& o) {
@@ -10280,10 +10280,10 @@ TEST(focus_requester_focus_manager_and_ime_actions) {
                               Modifier().testTag("first").onFocusChanged([log](FocusState s) {
                                   log->push_back(std::string("first ") + (s.hasFocus ? "on" : "off"));
                               }),
-                              {.singleLine = true, .label = "Ad", .keyboardOptions = {.imeAction = ImeAction::Next}});
+                              singleLine = true, label = "Ad", keyboardOptions = KeyboardOptions{.imeAction = ImeAction::Next});
             OutlinedTextField(second.get(), [&](std::string v) { second.set(std::move(v)); },
                               Modifier().testTag("second").focusRequester(requester),
-                              {.singleLine = true, .label = "Soyad", .keyboardOptions = {.imeAction = ImeAction::Done}});
+                              singleLine = true, label = "Soyad", keyboardOptions = KeyboardOptions{.imeAction = ImeAction::Done});
         });
     });
     rule.waitForIdle();
@@ -10356,9 +10356,9 @@ TEST(text_editing_keys_go_by_words_and_paragraphs) {
     std::string clipboard;
     ComposeTestRule rule([&] {
         Column([=] {
-            TextField(line.get(), [&](std::string v) { line.set(std::move(v)); }, Modifier().testTag("tek"), {.singleLine = true});
+            TextField(line.get(), [&](std::string v) { line.set(std::move(v)); }, Modifier().testTag("tek"), singleLine = true);
             TextField(lines.get(), [&](std::string v) { lines.set(std::move(v)); }, Modifier().testTag("çok"));
-            TextField(locked.get(), [&](std::string v) { locked.set(std::move(v)); }, Modifier().testTag("kilitli"), {.readOnly = true});
+            TextField(locked.get(), [&](std::string v) { locked.set(std::move(v)); }, Modifier().testTag("kilitli"), readOnly = true);
         });
     });
     rule.host().setCallbacks({.getClipboard = [&] { return clipboard; }, .setClipboard = [&](const std::string& t) { clipboard = t; }});
@@ -10412,7 +10412,7 @@ TEST(a_field_whose_text_the_app_keeps_undoes_too) {
     auto value = mutableStateOf(std::string());
     auto label = mutableStateOf(std::string("Not"));
     ComposeTestRule rule([&] {
-        TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("f"), {.label = label.get()});
+        TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("f"), kompoz::label = label.get());
     });
     ComposeHost& h = rule.host();
     KeyModifiers ctrl{.ctrl = true}, ctrlShift{.shift = true, .ctrl = true};
@@ -10491,9 +10491,9 @@ TEST(tap_places_the_caret_and_password_shows_dots) {
         Column([=] {
             OutlinedTextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("f"));
             OutlinedTextField(secret.get(), [&](std::string v) { secret.set(std::move(v)); }, Modifier().testTag("p"),
-                              {.supportingText = "En az 8 karakter", .isError = true,
-                               .keyboardOptions = {.keyboardType = KeyboardType::Password},
-                               .visualTransformation = VisualTransformation::Password});
+                              supportingText = "En az 8 karakter", isError = true,
+                              keyboardOptions = KeyboardOptions{.keyboardType = KeyboardType::Password},
+                              visualTransformation = VisualTransformation::Password);
         });
     });
     rule.host().setCallbacks({.textInput = [&](bool active, Rect, const TextEditState&, const KeyboardOptions& o) {
@@ -10536,15 +10536,15 @@ TEST(text_field_colors_follow_focus_and_error) {
     ComposeTestRule rule([&] {
         Column([=, &colors, &errorTrailing, &leading, &trailing] {
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("ad"),
-                      {.label = "Ad", .prefix = "@", .suffix = "!",
-                       .leadingIcon = [&] { leading = LocalContentColor.current(); },
-                       .trailingIcon = [&] { trailing = LocalContentColor.current(); },
-                       .supportingText = "ipucu", .isError = error.get(), .colors = colors});
+                      label = "Ad", prefix = "@", suffix = "!",
+                      leadingIcon = [&] { leading = LocalContentColor.current(); },
+                      trailingIcon = [&] { trailing = LocalContentColor.current(); },
+                      supportingText = "ipucu", isError = error.get(), textFieldColors = colors);
             OutlinedTextField("", [](std::string) {}, Modifier().testTag("boş"),  // M3's own
-                              {.placeholder = "yaz", .trailingIcon = [&] { errorTrailing = LocalContentColor.current(); }, .isError = true});
+                              placeholder = "yaz", trailingIcon = [&] { errorTrailing = LocalContentColor.current(); }, isError = true);
             auto password = rememberTextFieldState("gizli");  // one line, its colors passed on
             OutlinedSecureTextField(password, Modifier().testTag("parola"),
-                                    {.colors = {.cursorColor = c(0.30f), .textSelectionColors = TextSelectionColors{c(0.31f), c(0.32f)}}});
+                                    textFieldColors = TextFieldColors{.cursorColor = c(0.30f), .textSelectionColors = TextSelectionColors{c(0.31f), c(0.32f)}});
         });
     });
     auto draw = [&] {
@@ -10604,14 +10604,14 @@ TEST(disabled_text_fields_take_no_focus_and_fade) {
     ComposeTestRule rule([&] {
         Column([=, &leading] {
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("ad"),
-                      {.label = "Ad", .prefix = "@", .leadingIcon = [&] { leading = LocalContentColor.current(); },
-                       .supportingText = "ipucu", .enabled = enabled.get()});
+                      label = "Ad", prefix = "@", leadingIcon = [&] { leading = LocalContentColor.current(); },
+                      supportingText = "ipucu", kompoz::enabled = enabled.get());
             OutlinedTextField("", [](std::string) {}, Modifier().testTag("boş"),
-                              {.placeholder = "yaz", .enabled = false,
-                               .colors = {.disabledPlaceholderColor = Color{0.3f, 0.6f, 0.9f, 1}}});  // its own
+                              placeholder = "yaz", kompoz::enabled = false,
+                              textFieldColors = TextFieldColors{.disabledPlaceholderColor = Color{0.3f, 0.6f, 0.9f, 1}});  // its own
             auto password = rememberTextFieldState();  // disabled wins over error
             SecureTextField(password, Modifier().testTag("parola"),
-                            {.placeholder = "parola", .supportingText = "hatalı", .isError = true, .enabled = false});
+                            placeholder = "parola", supportingText = "hatalı", isError = true, kompoz::enabled = false);
         });
     }, {400, 800});
     rule.host().setCallbacks({.textInput = [&](bool active, Rect, const TextEditState& s, const KeyboardOptions&) {
@@ -10658,15 +10658,15 @@ TEST(text_field_labels_go_above_or_stay_up) {
     ComposeTestRule rule([&] {
         Column([=] {
             OutlinedTextField("ali", [](std::string) {}, Modifier().testTag("üstte"),
-                              {.label = "Ad", .labelPosition = TextFieldLabelPosition::Above()});
+                              label = "Ad", labelPosition = TextFieldLabelPosition::Above());
             TextField("veli", [](std::string) {}, Modifier().testTag("sonda"),
-                      {.singleLine = true, .label = "Soyad", .labelPosition = TextFieldLabelPosition::Above(Alignment::End)});
+                      singleLine = true, label = "Soyad", labelPosition = TextFieldLabelPosition::Above(Alignment::End));
             TextField("", [](std::string) {}, Modifier().testTag("yukarıda"),
-                      {.singleLine = true, .placeholder = "yaz", .label = "Tutar", .prefix = "₺",
-                       .labelPosition = TextFieldLabelPosition::Attached(true)});
-            TextField("", [](std::string) {}, Modifier().testTag("aşağıda"), {.singleLine = true, .placeholder = "boş", .label = "Not"});
+                      singleLine = true, placeholder = "yaz", label = "Tutar", prefix = "₺",
+                      labelPosition = TextFieldLabelPosition::Attached(true));
+            TextField("", [](std::string) {}, Modifier().testTag("aşağıda"), singleLine = true, placeholder = "boş", label = "Not");
             auto password = rememberTextFieldState();
-            SecureTextField(password, Modifier().testTag("parola"), {.label = "Parola", .labelPosition = TextFieldLabelPosition::Above()});
+            SecureTextField(password, Modifier().testTag("parola"), label = "Parola", labelPosition = TextFieldLabelPosition::Above());
         });
     }, {400, 1000});
     testing::RecordingCanvas canvas;
@@ -10693,9 +10693,9 @@ TEST(text_field_labels_go_above_or_stay_up) {
 TEST(outlined_fields_keep_room_for_the_floated_label) {
     ComposeTestRule rule([&] {
         Column([=] {
-            OutlinedTextField("ali", [](std::string) {}, Modifier().testTag("etiketli"), {.label = "Ad"});
+            OutlinedTextField("ali", [](std::string) {}, Modifier().testTag("etiketli"), label = "Ad");
             OutlinedTextField("veli", [](std::string) {}, Modifier().testTag("etiketsiz"));
-            TextField("can", [](std::string) {}, Modifier().testTag("dolgulu"), {.label = "Ad"});
+            TextField("can", [](std::string) {}, Modifier().testTag("dolgulu"), label = "Ad");
         });
     });
     Rect labelled = rule.onNodeWithTag("etiketli").bounds();
@@ -10715,12 +10715,12 @@ TEST(text_field_shapes_round_the_container_and_the_outline) {
     ComposeTestRule rule([&] {
         Column([=, &blue, &green] {
             TextField("a", [](std::string) {}, Modifier().testTag("dolgulu"));  // 4 dp at the top
-            TextField("b", [](std::string) {}, Modifier(), {.colors = {.unfocusedContainerColor = blue}, .shape = RoundedCornerShape(12)});
+            TextField("b", [](std::string) {}, Modifier(), textFieldColors = TextFieldColors{.unfocusedContainerColor = blue}, shape = RoundedCornerShape(12));
             OutlinedTextField("c", [](std::string) {}, Modifier().testTag("çizgili"));
             OutlinedTextField("d", [](std::string) {}, Modifier().testTag("yuvarlak"),
-                              {.colors = {.unfocusedContainerColor = green}, .shape = RoundedCornerShape(24)});
+                              textFieldColors = TextFieldColors{.unfocusedContainerColor = green}, shape = RoundedCornerShape(24));
             auto password = rememberTextFieldState("x");
-            SecureTextField(password, Modifier(), {.colors = {.unfocusedContainerColor = green.copy(0.5f)}, .shape = CircleShape});
+            SecureTextField(password, Modifier(), textFieldColors = TextFieldColors{.unfocusedContainerColor = green.copy(0.5f)}, shape = CircleShape);
         });
     }, {400, 800});
     testing::RecordingCanvas canvas;
@@ -10781,9 +10781,9 @@ TEST(text_field_label_floats_and_keyboard_actions_run) {
     auto searched = std::make_shared<int>(0);
     ComposeTestRule rule([&] {
         TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("f"),
-                  {.singleLine = true, .placeholder = "örn. kahve", .label = "Ara",
-                   .keyboardOptions = {.imeAction = ImeAction::Search},
-                   .keyboardActions = {.onSearch = [searched] { ++*searched; }}});
+                  singleLine = true, placeholder = "örn. kahve", label = "Ara",
+                  keyboardOptions = KeyboardOptions{.imeAction = ImeAction::Search},
+                  keyboardActions = KeyboardActions{.onSearch = [searched] { ++*searched; }});
     });
     auto texts = rule.drawnTexts();
     CHECK((texts == std::vector<std::string>{"Ara"}));  // the label, no placeholder until focused
@@ -11131,7 +11131,7 @@ TEST(refocused_field_shows_no_stale_selection_and_password_is_not_copied) {
         Column([=] {
             OutlinedTextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("f"));
             OutlinedTextField(secret.get(), [&](std::string v) { secret.set(std::move(v)); }, Modifier().testTag("p"),
-                              {.visualTransformation = VisualTransformation::Password});
+                              visualTransformation = VisualTransformation::Password);
         });
     });
     rule.host().setCallbacks({.getClipboard = [&] { return clipboard; },
@@ -13244,7 +13244,7 @@ TEST(semantics_tree_merges_buttons_and_performs_actions) {
                 Text("Ekle");
             });
             Checkbox(checked.get(), [&](bool v) { checked.set(v); });
-            TextField("merhaba", nullptr, Modifier(), {.placeholder = "yaz"});
+            TextField("merhaba", nullptr, Modifier(), placeholder = "yaz");
             Box(Modifier().height(2000));
             if (dialog.get()) AlertDialog([] {}, {.title = [] { Text("Uyarı"); }});
         });
@@ -16102,7 +16102,7 @@ TEST(focus_properties_skip_and_redirect_the_focus) {
                 Box(Modifier().size(50).clickable([] {}).testTag("üç"));
             });
             TextField("", [](std::string) {}, Modifier().focusRequester(field).focusProperties({.canFocus = false}).testTag("alan"),
-                      {.singleLine = true});
+                      singleLine = true);
             Box(Modifier().size(50).clickable([] {}).focusRequester(last).focusProperties({.previous = first, .down = field}).testTag("son"));
             // A target's properties are its own: the clickable inside one that can't be focused still can.
             Box(Modifier().size(80).clickable([] {}).focusProperties({.canFocus = false}).testTag("dış"),
@@ -16770,7 +16770,7 @@ TEST(provide_text_style_and_text_without_a_direction_follow_the_layout) {
                 measurer = rememberTextMeasurer();
                 Text("12345", Modifier().width(200).testTag("rakam"));
                 Text("Merhaba", Modifier().width(200).testTag("latin"));
-                TextField("678", [](std::string) {}, Modifier().testTag("alan"), {.singleLine = true});
+                TextField("678", [](std::string) {}, Modifier().testTag("alan"), singleLine = true);
             });
         });
     }, {400, 800});
@@ -18451,10 +18451,10 @@ TEST(secure_text_field_shows_the_character_just_typed_for_a_moment) {
         auto s = rememberTextFieldState();
         secret = s;
         Column([=, &other, &submitted] {
-            SecureTextField(s, Modifier().testTag("şifre"), {.label = "Parola", .textObfuscationMode = mode.get(), .onSubmit = [&] { ++submitted; }});
+            SecureTextField(s, Modifier().testTag("şifre"), label = "Parola", textObfuscationMode = mode.get(), onSubmit = [&] { ++submitted; });
             other = rememberTextFieldState("gizli");
             OutlinedSecureTextField(*other, Modifier().testTag("diğer"),
-                                    {.textObfuscationCharacter = "*", .inputTransformation = InputTransformation::maxLength(6)});
+                                    textObfuscationCharacter = "*", inputTransformation = InputTransformation::maxLength(6));
         });
     }, {400, 800});
     rule.host().setCallbacks({.textInput = [&](bool active, Rect, const TextEditState&, const ImeOptions& o) {
@@ -18566,8 +18566,8 @@ TEST(a_tap_on_a_text_fields_icon_focuses_it) {
     ComposeTestRule rule([&] {
         Column([=, &eyes] {
             OutlinedTextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("alan"),
-                              {.label = "Şifre", .leadingIcon = [] { Icon(Icons::Filled::Lock, "kilit"); },
-                               .trailingIcon = [&] { IconButton([&] { ++eyes; }, [] { Icon(Icons::Filled::Visibility, "göz"); }); }});
+                              label = "Şifre", leadingIcon = [] { Icon(Icons::Filled::Lock, "kilit"); },
+                              trailingIcon = [&] { IconButton([&] { ++eyes; }, [] { Icon(Icons::Filled::Visibility, "göz"); }); });
         });
     }, {400, 800});
     rule.host().setCallbacks({.textInput = [&](bool active, Rect, const TextEditState&, const ImeOptions& o) {
@@ -19516,7 +19516,7 @@ TEST(right_click_opens_context_menus) {
     std::vector<std::string> picked;
     ComposeTestRule rule([&] {
         Column([=, &picked] {
-            TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().width(300).testTag("alan"), {.singleLine = true});
+            TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().width(300).testTag("alan"), singleLine = true);
             ContextMenuArea(
                 [&] {
                     return std::vector<ContextMenuItem>{{"Yenile", [&] { picked.push_back("Yenile"); }}, {"Sil", [&] { picked.push_back("Sil"); }, false}};
@@ -19625,7 +19625,7 @@ TEST(menu_bar_opens_menus_and_runs_shortcuts) {
                           {{.text = "Tümünü seç", .onClick = [&] { ran.push_back("menü"); }, .shortcut = KeyShortcut{Key::A, true}},
                            {.text = "Bul", .onClick = [&] { ran.push_back("Bul"); }, .shortcut = KeyShortcut{Key::F, true, true}}}}},
                         Modifier().testTag("çubuk"));
-            TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("alan"), {.singleLine = true});
+            TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("alan"), singleLine = true);
         });
     }, {800, 800});
     auto& host = rule.host();
@@ -19749,7 +19749,7 @@ TEST(focus_moved_by_keys_scrolls_into_view_and_so_does_the_keyboard) {
 TEST(multi_line_field_wraps_and_grows_up_to_max_lines) {
     auto value = mutableStateOf(std::string());
     ComposeTestRule rule([&] {
-        OutlinedTextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("f"), {.maxLines = 3});
+        OutlinedTextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("f"), maxLines = 3);
     }, {400, 800});
     // 280 dp wide, 248 for text: 29 test characters (8.5 dp with bodyLarge's spacing) a line of
     // 24 dp (its line height).
@@ -19800,7 +19800,7 @@ TEST(tapping_a_multi_line_field_puts_the_caret_on_that_line) {
     ComposeTestRule rule([&] {
         Column([=] {
             TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("f"));
-            TextField("", nullptr, Modifier().testTag("single"), {.singleLine = true});
+            TextField("", nullptr, Modifier().testTag("single"), singleLine = true);
         });
     }, {400, 800});
     rule.host().setCallbacks({.textInput = [&](bool active, Rect, const TextEditState&, const ImeOptions& o) {
@@ -19819,7 +19819,7 @@ TEST(tapping_a_multi_line_field_puts_the_caret_on_that_line) {
 TEST(single_line_field_joins_pasted_lines) {
     auto value = mutableStateOf(std::string());
     ComposeTestRule rule([&] {
-        TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("f"), {.singleLine = true});
+        TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().testTag("f"), singleLine = true);
     });
     rule.onNodeWithTag("f").performClick();
     rule.host().textEdit({"bir\niki", 7, 7, -1, -1});
@@ -19834,7 +19834,7 @@ TEST(text_field_state_holds_the_text) {
         auto s = rememberTextFieldState("merhaba");
         state = s;
         Column([=] {
-            OutlinedTextField(s, Modifier().testTag("f"), {.label = "Not"});
+            OutlinedTextField(s, Modifier().testTag("f"), label = "Not");
             Text("[" + s.text() + "]", Modifier().testTag("echo"));
         });
     });
@@ -19883,7 +19883,7 @@ TEST(text_field_state_keeps_its_selection) {
         auto s = rememberTextFieldState("merhaba");
         state = s;
         Column([=] {
-            TextField(s, Modifier().testTag("f"), {.singleLine = true});
+            TextField(s, Modifier().testTag("f"), singleLine = true);
             Text(std::format("{}-{}", s.selection().start, s.selection().end), Modifier().testTag("seçim"));
         });
     });
@@ -19934,16 +19934,16 @@ TEST(output_transformation_formats_what_is_shown) {
         Column([=, &amount, &phone] {
             auto p = rememberTextFieldState("5551234567");
             phone = p;
-            TextField(p, Modifier().testTag("tel"), {.singleLine = true, .outputTransformation = OutputTransformation{[](TextFieldBuffer& b) {
+            TextField(p, Modifier().testTag("tel"), singleLine = true, outputTransformation = OutputTransformation{[](TextFieldBuffer& b) {
                 for (int at : {8, 6, 3})
                     if (b.length() > at) b.insert(at, " ");
-            }}});
+            }});
             auto a = rememberTextFieldState("250");
             amount = a;
-            TextField(a, Modifier().testTag("tutar"), {.singleLine = true, .outputTransformation = OutputTransformation{[](TextFieldBuffer& b) {
+            TextField(a, Modifier().testTag("tutar"), singleLine = true, outputTransformation = OutputTransformation{[](TextFieldBuffer& b) {
                 b.insert(0, "$");
                 b.append(" USD");
-            }}});
+            }});
         });
     });
     auto drawn = [&](const std::string& t) { return std::ranges::count(rule.drawnTexts(), t) == 1; };
@@ -19992,7 +19992,7 @@ TEST(password_field_maps_its_selection_to_the_dots) {
     ComposeTestRule rule([&] {
         auto s = rememberTextFieldState("abçd");
         secret = s;
-        TextField(s, Modifier().testTag("şifre"), {.singleLine = true, .visualTransformation = VisualTransformation::Password});
+        TextField(s, Modifier().testTag("şifre"), singleLine = true, visualTransformation = VisualTransformation::Password);
     });
     rule.host().keyDown(Key::Tab);
     secret->edit([](TextFieldBuffer& b) { b.setSelection({1, 4}); });  // "bç": one dot in, two dots wide
@@ -20117,16 +20117,16 @@ TEST(input_transformations_change_or_refuse_what_is_typed) {
     ComposeTestRule rule([&] {
         Column([=, &digits, &name] {
             TextField(code.get(), [&](std::string v) { code.set(std::move(v)); }, Modifier(),
-                      {.singleLine = true, .inputTransformation = InputTransformation::maxLength(4)});
+                      singleLine = true, inputTransformation = InputTransformation::maxLength(4));
             auto n = rememberTextFieldState();
             name = n;
-            TextField(n, Modifier(), {.singleLine = true, .inputTransformation = InputTransformation::allCaps("tr")});
+            TextField(n, Modifier(), singleLine = true, inputTransformation = InputTransformation::allCaps("tr"));
             auto d = rememberTextFieldState("12");
             digits = d;
             auto onlyDigits = InputTransformation::byValue([](const std::string& current, const std::string& proposed) {
                 return std::ranges::all_of(proposed, [](char c) { return c >= '0' && c <= '9'; }) ? proposed : current;
             });
-            TextField(d, Modifier(), {.singleLine = true, .inputTransformation = onlyDigits.then(InputTransformation::maxLength(5))});
+            TextField(d, Modifier(), singleLine = true, inputTransformation = onlyDigits.then(InputTransformation::maxLength(5)));
         });
     });
     rule.host().setCallbacks({.textInputChanged = [&](const TextEditState& t) {
@@ -20803,7 +20803,7 @@ TEST(basic_text_field_is_just_the_text) {
     auto value = mutableStateOf(std::string());
     ComposeTestRule rule([&] {
         BasicTextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().width(200).testTag("f"),
-                       {.singleLine = true, .placeholder = "yaz"});
+                       singleLine = true, placeholder = "yaz");
     });
     CHECK(near(rule.onNodeWithTag("f").bounds().height, 24));  // one line of bodyLarge, no padding
     testing::RecordingCanvas canvas;
@@ -21432,8 +21432,8 @@ TEST(exposed_dropdown_menu_picks_an_option) {
         Column(Modifier().padding(20), [=, &cities] {
             ExposedDropdownMenuBox(open.get(), [&](bool v) { open.set(v); }, Modifier().testTag("box"), [&] {
                 TextField(choice.get(), [&](std::string v) { choice.set(std::move(v)); }, Modifier().fillMaxWidth(),
-                          {.label = "Şehir", .trailingIcon = [&] { ExposedDropdownMenuDefaults::TrailingIcon(open.get()); },
-                           .readOnly = true});
+                          label = "Şehir", trailingIcon = [&] { ExposedDropdownMenuDefaults::TrailingIcon(open.get()); },
+                          readOnly = true);
                 ExposedDropdownMenu(open.get(), [&] { open.set(false); }, [&] {
                     for (const std::string& city : cities)
                         DropdownMenuItem([city] { Text(city); }, [&, city] {
@@ -21473,7 +21473,7 @@ TEST(exposed_dropdown_menu_filters_as_you_type) {
             TextField(query.get(), [&](std::string v) {
                 query.set(std::move(v));
                 open.set(true);  // typing shows the matches
-            }, Modifier().fillMaxWidth().testTag("field"), {.label = "Şehir"});
+            }, Modifier().fillMaxWidth().testTag("field"), label = "Şehir");
             ExposedDropdownMenu(open.get(), [&] { open.set(false); }, [&] {
                 for (const std::string& city : cities)
                     if (city.starts_with(query.get())) DropdownMenuItem([city] { Text(city); }, [&, city] { query.set(city); open.set(false); });
@@ -22276,7 +22276,7 @@ TEST(text_field_interaction_source_tells_presses_and_focus) {
         });
         Column([=, &source] {
             OutlinedTextField("05.10.2026", [](std::string) {}, Modifier().testTag("tarih"),
-                              {.label = "Tarih", .readOnly = true, .interactionSource = source});
+                              label = "Tarih", readOnly = true, interactionSource = source);
             if (open.get()) Text("seçici açık");
             Text(source.collectIsFocusedAsState() ? "odakta" : "odakta değil");
         });
@@ -23765,13 +23765,13 @@ TEST(autofill_hears_of_text_fields_and_fills_them) {
             Column([=, &code, &password] {
                 TextField(user.get(), [&](std::string v) { user.set(std::move(v)); },
                           Modifier().semantics({.contentType = ContentType::Username + ContentType::EmailAddress}).testTag("kullanıcı"),
-                          {.label = "E-posta"});
+                          label = "E-posta");
                 SecureTextField(*password, Modifier().semantics({.contentType = ContentType::Password}).testTag("parola"),
-                                {.label = "Parola", .keyboardOptions = {}});  // a plain keyboard: hidden text alone makes it a password
+                                label = "Parola", keyboardOptions = KeyboardOptions{});  // a plain keyboard: hidden text alone makes it a password
                 TextField("sabit", [](std::string) {}, Modifier().testTag("not"),
-                          {.label = "Not", .keyboardOptions = {.keyboardType = KeyboardType::Password}, .readOnly = locked.get()});
+                          label = "Not", keyboardOptions = KeyboardOptions{.keyboardType = KeyboardType::Password}, readOnly = locked.get());
                 TextField(*code, Modifier().semantics({.contentDescription = "Kod"}).semantics({.contentType = ContentType::SmsOtpCode}),
-                          {.keyboardOptions = {.keyboardType = KeyboardType::NumberPassword}, .inputTransformation = InputTransformation::allCaps()});
+                          keyboardOptions = KeyboardOptions{.keyboardType = KeyboardType::NumberPassword}, inputTransformation = InputTransformation::allCaps());
                 Button([autofill = autofillManager()] { autofill.commit(); }, [] { Text("Giriş"); });
                 Button([autofill = autofillManager()] { autofill.cancel(); }, [] { Text("Vazgeç"); });
             });
@@ -24171,7 +24171,7 @@ TEST(text_toolbar_of_ones_own_is_told_instead_of_kompoz_drawing_one) {
             Column(Modifier().fillMaxSize(), [=] {
                 Box(Modifier().height(200));
                 TextField(value.get(), [&](std::string v) { value.set(std::move(v)); }, Modifier().fillMaxWidth().testTag("field"),
-                          {.singleLine = true, .readOnly = locked.get()});
+                          singleLine = true, readOnly = locked.get());
                 SelectionContainer(Modifier().testTag("seçilen"), [] { Text("Seçilebilir metin"); });
                 Box(Modifier().fillMaxWidth().height(300).testTag("below"));
             });
@@ -26118,7 +26118,7 @@ TEST(letter_spacing_widens_text_and_where_its_carets_are) {
             auto measurer = rememberTextMeasurer();
             result = measurer.measure("abcd", {.fontSize = 10, .letterSpacing = 3});
             TextField(value.get(), [value](std::string v) { value.set(std::move(v)); }, Modifier(),
-                      {.textStyle = {.fontSize = 10, .letterSpacing = 2}});
+                      textStyle = TextStyle{.fontSize = 10, .letterSpacing = 2});
         });
     });
     CHECK(rule.onNodeWithTag("düz").bounds().width == 21);
@@ -26257,7 +26257,7 @@ TEST(material_type_styles_carry_line_heights_and_letter_spacing) {
                 Text("başlık", Modifier().testTag("başlık"), style = typography().headlineSmall);  // 32 sp lines
                 Text("etiket", Modifier().testTag("etiket"), style = typography().labelSmall);      // 11 sp in 16
                 BasicTextField(notes, [&](std::string s) { notes = std::move(s); }, Modifier().width(200).testTag("alan"),
-                               {.minLines = 3});
+                               minLines = 3);
             });
         });
     });

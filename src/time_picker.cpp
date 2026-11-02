@@ -338,7 +338,7 @@ void TimeField(MutableState<std::string> text, std::function<int()> current, std
                            });
         if (isFocused) box = box.border(2, cs.primary, 8);
         detail::Box(box.padding(8, 0), Alignment::Center, [&] {
-            BasicTextField(
+            detail::BasicTextField(
                 text.get(),
                 [text, accept](std::string v) {
                     auto digits = [](std::string_view s) {

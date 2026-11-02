@@ -102,8 +102,8 @@ void TodoCard(CallSite site = CallSite::current()) {
                     horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                         OutlinedTextField(input.get(), [input](std::string v) { input.set(std::move(v)); },
                                           Modifier().weight(1).testTag("todo-input"),
-                                          {.singleLine = true, .placeholder = "örn. Slot table yaz", .onSubmit = add, .label = "Yeni görev",
-                                           .keyboardOptions = {.capitalization = KeyboardCapitalization::Sentences}});
+                                          singleLine = true, placeholder = "örn. Slot table yaz", onSubmit = add, label = "Yeni görev",
+                                          keyboardOptions = KeyboardOptions{.capitalization = KeyboardCapitalization::Sentences});
                         Button(add) { Text("Ekle"); };
                     };
                 for (const Todo& todo : todos.get()) key(todo.id, [&] { TodoRow(todo, todos); });

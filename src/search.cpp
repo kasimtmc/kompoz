@@ -41,9 +41,9 @@ void inputField(const SearchBarDefaults::InputFieldOptions& o, const std::option
                                              .keyboardActions = {.onSearch = search}};
                     Modifier field = Modifier().fillMaxWidth().focusRequester(requester);
                     if (state)
-                        BasicTextField(*state, field, std::move(options));
+                        detail::BasicTextField(*state, field, std::move(options));
                     else
-                        BasicTextField(o.query, o.onQueryChange, field, std::move(options));
+                        detail::BasicTextField(o.query, o.onQueryChange, field, std::move(options));
                 } else {
                     detail::Text(o.query.empty() ? o.placeholder : o.query,
                          {.font = t.bodyLarge, .color = o.query.empty() ? cs.onSurfaceVariant : cs.onSurface, .maxLines = 1,

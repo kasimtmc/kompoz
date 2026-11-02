@@ -6,7 +6,7 @@
 // (collectIsPressedAsState()...), or hear each one (interactions(), a SharedFlow).
 //
 //   auto source = remember([] { return MutableInteractionSource(); });
-//   Button(onClick, Modifier(), {.interactionSource = source}, [&] { Text(source.collectIsPressedAsState() ? "Basılı" : "Bas"); });
+//   Button(onClick, Modifier(), interactionSource = source, [=] { Text(source.collectIsPressedAsState() ? "Basılı" : "Bas"); });
 //
 //   // A read-only field that opens a picker when tapped:
 //   LaunchedEffect(source, [source, open]() -> Task {

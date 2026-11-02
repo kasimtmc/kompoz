@@ -240,6 +240,30 @@ struct EndThumb {};
 struct RangeTrack {};
 struct EndInteractionSource {};
 struct ReverseDirection {};
+struct ReadOnly {};
+struct TextStyle {};
+struct Label {};
+struct Placeholder {};
+struct LeadingIcon {};
+struct TrailingIcon {};
+struct Prefix {};
+struct Suffix {};
+struct SupportingText {};
+struct IsError {};
+struct VisualTransformation {};
+struct KeyboardOptions {};
+struct KeyboardActions {};
+struct SingleLine {};
+struct Shape {};
+struct TextFieldColors {};
+struct LineLimits {};
+struct OnSubmit {};
+struct InputTransformation {};
+struct OutputTransformation {};
+struct LabelPosition {};
+struct Decorator {};
+struct TextObfuscationMode {};
+struct TextObfuscationCharacter {};
 } // namespace detail::names
 inline namespace args {
 inline constexpr Param<detail::names::Modifier> modifier;
@@ -291,12 +315,36 @@ inline constexpr Param<detail::names::EndThumb> endThumb;
 inline constexpr Param<detail::names::RangeTrack> rangeTrack;
 inline constexpr Param<detail::names::EndInteractionSource> endInteractionSource;
 inline constexpr Param<detail::names::ReverseDirection> reverseDirection;
+inline constexpr Param<detail::names::ReadOnly> readOnly;
+inline constexpr Param<detail::names::TextStyle> textStyle;
+inline constexpr Param<detail::names::Label> label;
+inline constexpr Param<detail::names::Placeholder> placeholder;
+inline constexpr Param<detail::names::LeadingIcon> leadingIcon;
+inline constexpr Param<detail::names::TrailingIcon> trailingIcon;
+inline constexpr Param<detail::names::Prefix> prefix;
+inline constexpr Param<detail::names::Suffix> suffix;
+inline constexpr Param<detail::names::SupportingText> supportingText;
+inline constexpr Param<detail::names::IsError> isError;
+inline constexpr Param<detail::names::VisualTransformation> visualTransformation;
+inline constexpr Param<detail::names::KeyboardOptions> keyboardOptions;
+inline constexpr Param<detail::names::KeyboardActions> keyboardActions;
+inline constexpr Param<detail::names::SingleLine> singleLine;
+inline constexpr Param<detail::names::Shape> shape;
+inline constexpr Param<detail::names::TextFieldColors> textFieldColors;
+inline constexpr Param<detail::names::LineLimits> lineLimits;
+inline constexpr Param<detail::names::OnSubmit> onSubmit;
+inline constexpr Param<detail::names::InputTransformation> inputTransformation;
+inline constexpr Param<detail::names::OutputTransformation> outputTransformation;
+inline constexpr Param<detail::names::LabelPosition> labelPosition;
+inline constexpr Param<detail::names::Decorator> decorator;
+inline constexpr Param<detail::names::TextObfuscationMode> textObfuscationMode;
+inline constexpr Param<detail::names::TextObfuscationCharacter> textObfuscationCharacter;
 } // namespace args
 
 // A composable taking named arguments: each call's arguments and call site go to Impl::call.
 template <class Impl>
 struct Composable {
-    // (One overload for each count of arguments, up to twelve: a default argument can't follow a pack.)
+    // (One overload for each count of arguments, up to sixteen: a default argument can't follow a pack.)
     decltype(auto) operator()(CallSite site = CallSite::current()) const { return Impl::call(site); }
     template <class A1>
     decltype(auto) operator()(A1&& a1, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1)); }
@@ -322,6 +370,14 @@ struct Composable {
     decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11)); }
     template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11, class A12>
     decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12)); }
+    template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11, class A12, class A13>
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, A13&& a13, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12), std::forward<A13>(a13)); }
+    template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11, class A12, class A13, class A14>
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, A13&& a13, A14&& a14, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12), std::forward<A13>(a13), std::forward<A14>(a14)); }
+    template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11, class A12, class A13, class A14, class A15>
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, A13&& a13, A14&& a14, A15&& a15, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12), std::forward<A13>(a13), std::forward<A14>(a14), std::forward<A15>(a15)); }
+    template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11, class A12, class A13, class A14, class A15, class A16>
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, A13&& a13, A14&& a14, A15&& a15, A16&& a16, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12), std::forward<A13>(a13), std::forward<A14>(a14), std::forward<A15>(a15), std::forward<A16>(a16)); }
 
     // The call without its block yet, for <kompoz/blocks.hpp>: the block comes after it with +.
     detail::BlockCall<Impl> withBlock(CallSite site = CallSite::current()) const { return {site, std::forward_as_tuple()}; }
@@ -347,6 +403,14 @@ struct Composable {
     detail::BlockCall<Impl, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10> withBlock(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, CallSite site = CallSite::current()) const { return {site, std::forward_as_tuple(std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10))}; }
     template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11>
     detail::BlockCall<Impl, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11> withBlock(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, CallSite site = CallSite::current()) const { return {site, std::forward_as_tuple(std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11))}; }
+    template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11, class A12>
+    detail::BlockCall<Impl, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12> withBlock(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, CallSite site = CallSite::current()) const { return {site, std::forward_as_tuple(std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12))}; }
+    template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11, class A12, class A13>
+    detail::BlockCall<Impl, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13> withBlock(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, A13&& a13, CallSite site = CallSite::current()) const { return {site, std::forward_as_tuple(std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12), std::forward<A13>(a13))}; }
+    template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11, class A12, class A13, class A14>
+    detail::BlockCall<Impl, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14> withBlock(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, A13&& a13, A14&& a14, CallSite site = CallSite::current()) const { return {site, std::forward_as_tuple(std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12), std::forward<A13>(a13), std::forward<A14>(a14))}; }
+    template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11, class A12, class A13, class A14, class A15>
+    detail::BlockCall<Impl, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15> withBlock(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, A13&& a13, A14&& a14, A15&& a15, CallSite site = CallSite::current()) const { return {site, std::forward_as_tuple(std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12), std::forward<A13>(a13), std::forward<A14>(a14), std::forward<A15>(a15))}; }
 };
 
 } // namespace kompoz

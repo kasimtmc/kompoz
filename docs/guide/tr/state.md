@@ -197,7 +197,7 @@ Kendi durumunu tutan bir composable'ı kullanmak kolaydır ama dışarıdan kont
 ```cpp
 // Durumsuz: `name`'i gösterir, düzenlemeleri bildirir. Yeniden kullanması, önizlemesi ve test etmesi kolay.
 void NameInput(const std::string& name, std::function<void(std::string)> onNameChange) {
-    OutlinedTextField(name, std::move(onNameChange), Modifier(), {.label = "Name"});
+    OutlinedTextField(name, std::move(onNameChange), Modifier(), label = "Name");
 }
 
 // Durumlu: durumun sahibidir ve onu aşağı verir.

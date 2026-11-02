@@ -588,7 +588,7 @@ void key(const K& id, const Content& content, CallSite site = CallSite::current(
 // its remembered values, nodes and running effects move there instead of starting over. Called
 // in two places at once, the second is a new instance. Keep it with remember:
 //   auto video = remember([] { return movableContentOf([] { VideoPlayer(); }); });
-//   if (wide) Row([&] { video(); Details(); }); else Column([&] { video(); Details(); });
+//   if (wide) Row([=] { video(); Details(); }); else Column([=] { video(); Details(); });
 class MovableContent {
 public:
     explicit MovableContent(Content content) : data_(std::make_shared<detail::MovableData>()) { data_->content = std::move(content); }
@@ -606,7 +606,7 @@ inline MovableContent movableContentOf(Content content) { return MovableContent(
 //       auto likes = remember([] { return mutableStateOf(0); });  // moves with it
 //       ...
 //   }); });
-//   if (wide) Row([&] { card(title, true); }); else Column([&] { card(title, false); });
+//   if (wide) Row([=] { card(title, true); }); else Column([=] { card(title, false); });
 template <class... P>
 class MovableContentOf {
 public:

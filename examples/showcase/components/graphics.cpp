@@ -237,7 +237,7 @@ void AsyncImageSection(CallSite site) {
                 AsyncImage("images/lake.webp", "Göl (WebP)", Modifier().weight(1).height(110).clip(RoundedCornerShape(12)), options);
             };
             OutlinedTextField(url.get(), [url](std::string v) { url.set(std::move(v)); }, Modifier().fillMaxWidth(),
-                              {.singleLine = true, .label = "Adres"});
+                              singleLine = true, label = "Adres");
             Button([url, requested] { requested.set(url.peek()); }) { Text("Ağdan yükle"); };
             if (!requested.get().empty()) {
                 AsyncImageOptions network = options;

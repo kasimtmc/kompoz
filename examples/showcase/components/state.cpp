@@ -204,7 +204,7 @@ void FlowSearchSection(CallSite site) {
                  "Sorgu SavedStateHandle'da: uygulama arka planda kapatılıp geri gelince yazılı kalır.",
                  color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
             OutlinedTextField(query, [vm](std::string v) { vm->setQuery(std::move(v)); }, Modifier().fillMaxWidth(),
-                              {.singleLine = true, .placeholder = "örn. an", .label = "Şehir ara"});
+                              singleLine = true, placeholder = "örn. an", label = "Şehir ara");
             if (results.searching) Text("aranıyor…", color = colorScheme().primary, style = typography().bodyMedium);
             else if (!query.empty() && results.cities.empty()) Text("bulunamadı", style = typography().bodyMedium);
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8},
@@ -449,8 +449,8 @@ void ChatSection(CallSite site) {
                        });
             Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
                 OutlinedTextField(draft.get(), [draft](std::string v) { draft.set(std::move(v)); }, Modifier().weight(1),
-                                  {.singleLine = true, .placeholder = "Mesaj", .keyboardOptions = {.imeAction = ImeAction::Send},
-                                   .keyboardActions = {.onSend = send}});
+                                  singleLine = true, placeholder = "Mesaj", keyboardOptions = KeyboardOptions{.imeAction = ImeAction::Send},
+                                  keyboardActions = KeyboardActions{.onSend = send});
                 IconButton(send) { Icon(Icons::AutoMirrored::Filled::Send, "Gönder"); };
             };
         });
@@ -505,9 +505,9 @@ void PlatformServicesSection(CallSite site) {
                 OutlinedButton([links] { links.openUri("kompoz://item/7"); }) { Text("kompoz://item/7"); };
             });
             OutlinedTextField(note.get(), [note](std::string v) { note.set(std::move(v)); }, Modifier().fillMaxWidth(),
-                              {.singleLine = true,
-                               .label = "Not (Bitti klavyeyi gizler)",
-                               .keyboardActions = {.onDone = [keyboard] { keyboard.hide(); }}});
+                              singleLine = true,
+                              label = "Not (Bitti klavyeyi gizler)",
+                              keyboardActions = KeyboardActions{.onDone = [keyboard] { keyboard.hide(); }});
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 TextButton([keyboard] { keyboard.hide(); }) { Text("Klavyeyi gizle"); };
                 TextButton([keyboard] { keyboard.show(); }) { Text("Klavyeyi göster"); };
@@ -526,15 +526,15 @@ void PlatformServicesSection(CallSite site) {
             };
             OutlinedTextField(card.get(), [card](std::string v) { card.set(std::move(v)); },
                               Modifier().fillMaxWidth().sensitiveContent(sensitive.get()),
-                              {.singleLine = true, .label = sensitive.get() ? "Kart numarası (paylaşımda gizli)" : "Kart numarası"});
+                              singleLine = true, label = sensitive.get() ? "Kart numarası (paylaşımda gizli)" : "Kart numarası");
             // Autofill: a password manager fills the fields marked with a contentType, and offers to
             // keep them when the form is sent (commit).
             Text("Giriş formu (autofill): parola yöneticisi doldurur, Giriş'te kaydetmeyi önerir.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             OutlinedTextField(email.get(), [email](std::string v) { email.set(std::move(v)); },
                               Modifier().fillMaxWidth().semantics({.contentType = ContentType::Username + ContentType::EmailAddress}),
-                              {.singleLine = true, .label = "E-posta", .keyboardOptions = {.keyboardType = KeyboardType::Email}});
-            OutlinedSecureTextField(password, Modifier().fillMaxWidth().semantics({.contentType = ContentType::Password}), {.label = "Parola"});
+                              singleLine = true, label = "E-posta", keyboardOptions = KeyboardOptions{.keyboardType = KeyboardType::Email});
+            OutlinedSecureTextField(password, Modifier().fillMaxWidth().semantics({.contentType = ContentType::Password}), label = "Parola");
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                 Button([autofill, email, password, signedIn] {
                     autofill.commit();

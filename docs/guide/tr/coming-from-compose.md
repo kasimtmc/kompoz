@@ -57,12 +57,10 @@ Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
 
 Adsız argümanlar parametreleri Compose'un sırasıyla doldurur (`Text(text, modifier, color, fontSize, …)`, `Box(modifier, contentAlignment)`). Composable'ın almadığı bir ad, iki kez verilen bir ad ya da alamayacağı bir değer derleme hatasıdır, hiçbir zaman yok sayılmaz. Adlar (`modifier`, `color`, `fontSize`, …) `kompoz`'un sabitleridir: sizin aynı adlı bir değişkeniniz adı gizler, bu da yine derleme hatası verir; orada `kompoz::color = …` yazın. Adsız bir argümanın kendi türü olmalıdır: verilmeyen bir geri çağırma `nullptr` olur (`Checkbox(checked, nullptr)`; `{}`'nin türü yoktur), bir çift `std::pair{1.f, 3.f}`.
 
-Şimdilik `Box`, `Column`, `Row`, `Spacer`, `Text`, düğmeler, simge düğmeleri ve simge açma kapama düğmeleri, kartlar, `Surface`, `Icon`, `Image`, `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch` ve kaydırıcılar adlı argüman alıyor. Diğer bileşenler sıraları gelene kadar, alanların bildirildiği sırayla tasarlanmış ilklendiricilerle bir *seçenek yapısı* almaya devam ediyor:
+Şimdilik `Box`, `Column`, `Row`, `Spacer`, `Text`, düğmeler, simge düğmeleri ve simge açma kapama düğmeleri, kartlar, `Surface`, `Icon`, `Image`, `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, kaydırıcılar ve metin alanları adlı argüman alıyor. Diğer bileşenler sıraları gelene kadar, alanların bildirildiği sırayla tasarlanmış ilklendiricilerle bir *seçenek yapısı* almaya devam ediyor:
 
 ```cpp body
-#! std::string value;
-#! std::function<void(std::string)> onValueChange;
-OutlinedTextField(value, onValueChange, Modifier(), {.singleLine = true, .label = "Email"});
+ListItem({.headline = [] { Text("Wi-Fi"); }, .supporting = [] { Text("Bağlı"); }});
 ```
 
 ## Sondaki lambdalar

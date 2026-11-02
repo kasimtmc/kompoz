@@ -551,7 +551,7 @@ void LayoutSection(CallSite site) {
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12)) {
                 Text("Şehir:", Modifier().alignByBaseline(), style = typography().titleMedium);
                 OutlinedTextField(city.get(), [&city](std::string v) { city.set(std::move(v)); }, Modifier().weight(1).alignByBaseline(),
-                                  {.singleLine = true, .label = "Teslimat"});
+                                  singleLine = true, label = "Teslimat");
             };
             caption("paddingFromBaseline(32, 16): metin bir ızgaraya göre (ilk taban çizgisi üstten 32, son taban çizgisi alttan 16).");
             Text("Taban çizgisinden boşluk", Modifier().fillMaxWidth().background(colorScheme().surfaceContainerHigh, 8).paddingFromBaseline(32, 16).padding(12, 0));

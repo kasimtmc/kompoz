@@ -414,7 +414,7 @@ void DateTextField(std::optional<year_month_day> initial, const std::string& lab
         onDate(problem.empty() ? date : std::nullopt);
     };
     std::string problem = error.get();
-    OutlinedTextField(text.get(), onChange, modifier.padding(0, 0, 0, problem.empty() ? 16.f : 12.f),
+    detail::OutlinedTextField(text.get(), onChange, modifier.padding(0, 0, 0, problem.empty() ? 16.f : 12.f),
                       {.singleLine = true,
                        .placeholder = upper(pattern),
                        .label = label,

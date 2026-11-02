@@ -10,8 +10,8 @@
 //       d.drawText(label, {d.center().x - label.size().width / 2, d.center().y - label.size().height / 2});
 //   });
 //
-//   Text(article, Modifier(), {.maxLines = 3, .overflow = TextOverflow::Ellipsis},
-//        [cut](const TextLayoutResult& r) { cut.set(r.hasVisualOverflow()); });  // "devamını oku"
+//   Text(article, Modifier(), maxLines = 3, overflow = TextOverflow::Ellipsis,
+//        onTextLayout = [cut](const TextLayoutResult& r) { cut.set(r.hasVisualOverflow()); });  // "devamını oku"
 //
 // Offsets are UTF-8 byte offsets into the text, as everywhere in Kompoz.
 

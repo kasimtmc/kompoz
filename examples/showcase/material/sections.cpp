@@ -179,9 +179,9 @@ void DropdownSection(CallSite site) {
         auto query = remember([] { return mutableStateOf(std::string()); });
         Section("ExposedDropdownMenuBox", [&] {
             ExposedDropdownMenuBox(open.get(), [open](bool v) { open.set(v); }, Modifier().fillMaxWidth(), [&] {
-                TextField(fruit.get(), {}, Modifier().fillMaxWidth(),
-                          {.label = "Meyve", .trailingIcon = [&] { ExposedDropdownMenuDefaults::TrailingIcon(open.get()); },
-                           .readOnly = true});
+                TextField(fruit.get(), nullptr, Modifier().fillMaxWidth(),
+                          label = "Meyve", trailingIcon = [&] { ExposedDropdownMenuDefaults::TrailingIcon(open.get()); },
+                          readOnly = true);
                 ExposedDropdownMenu(open.get(), [open] { open.set(false); }, [&] {
                     for (const std::string& f : fruits)
                         DropdownMenuItem([f] { Text(f); }, [fruit, open, f] {
@@ -194,8 +194,8 @@ void DropdownSection(CallSite site) {
                 OutlinedTextField(query.get(), [query, searching](std::string v) {
                     query.set(std::move(v));
                     searching.set(true);
-                }, Modifier().fillMaxWidth(), {.singleLine = true, .label = "Meyve ara (yazdıkça süzülür)",
-                                              .trailingIcon = [&] { ExposedDropdownMenuDefaults::TrailingIcon(searching.get()); }});
+                }, Modifier().fillMaxWidth(), singleLine = true, label = "Meyve ara (yazdıkça süzülür)",
+                                             trailingIcon = [&] { ExposedDropdownMenuDefaults::TrailingIcon(searching.get()); });
                 ExposedDropdownMenu(searching.get(), [searching] { searching.set(false); }, [&] {
                     for (const std::string& f : fruits)
                         if (startsWithIgnoringCase(f, query.get()))
@@ -274,8 +274,8 @@ void InteractionSection(CallSite site) {
                 return std::format("{} {} {}", unsigned(d.day()), strings.months[unsigned(d.month()) - 1], int(d.year()));
             };
             OutlinedTextField(date.get() ? format(*date.get()) : "", [](std::string) {}, Modifier().fillMaxWidth().padding(0, 12, 0, 0),
-                              {.singleLine = true, .placeholder = "Seçmek için dokunun", .label = "Doğum tarihi",
-                               .trailingIcon = [] { Icon(Icons::Filled::DateRange, ""); }, .readOnly = true, .interactionSource = field});
+                              singleLine = true, placeholder = "Seçmek için dokunun", label = "Doğum tarihi",
+                              trailingIcon = [] { Icon(Icons::Filled::DateRange, ""); }, readOnly = true, interactionSource = field);
             if (pickerOpen.get()) {
                 auto state = rememberDatePickerState(date.get());
                 auto close = [pickerOpen] { pickerOpen.set(false); };
@@ -727,7 +727,7 @@ void ImeNestedScrollSection(CallSite site) {
                                };
                        };
                 TextField(draft.get(), [draft](std::string s) { draft.set(std::move(s)); }, Modifier().fillMaxWidth(),
-                          {.singleLine = true, .placeholder = "Yazın…"});
+                          singleLine = true, placeholder = "Yazın…");
             };
             Text("Alana dokunup klavyeyi kapatın; mesajları sonlarından öteye yukarı çekin: klavye parmakla gelir, aşağı itince gider (Android 11+).",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);

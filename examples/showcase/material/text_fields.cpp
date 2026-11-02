@@ -24,65 +24,65 @@ void TextFieldsSection(CallSite site) {
             bool badEmail = !email.get().empty() && email.get().find('@') == std::string::npos;
             OutlinedTextField(email.get(), [email](std::string v) { email.set(std::move(v)); },
                               Modifier().fillMaxWidth().focusRequester(emailFocus),
-                              {.singleLine = true, .placeholder = "ad@ornek.com", .label = "E-posta",
-                               .leadingIcon = [] { Icon(Icons::Filled::Email, "E-posta"); },
-                               .supportingText = badEmail ? "Geçerli bir e-posta adresi girin"
-                                                          : "Next: şifreye geçer · koddan odaklanınca klavye açılmaz",
-                               .isError = badEmail,
-                               // Focused from code ("E-postaya odaklan" below): no keyboard until a tap.
-                               .keyboardOptions = {.autoCorrect = false, .keyboardType = KeyboardType::Email,
-                                                   .imeAction = ImeAction::Next, .showKeyboardOnFocus = false}});
+                              singleLine = true, placeholder = "ad@ornek.com", label = "E-posta",
+                              leadingIcon = [] { Icon(Icons::Filled::Email, "E-posta"); },
+                              supportingText = badEmail ? "Geçerli bir e-posta adresi girin"
+                                                        : "Next: şifreye geçer · koddan odaklanınca klavye açılmaz",
+                              isError = badEmail,
+                              // Focused from code ("E-postaya odaklan" below): no keyboard until a tap.
+                              keyboardOptions = KeyboardOptions{.autoCorrect = false, .keyboardType = KeyboardType::Email,
+                                                                .imeAction = ImeAction::Next, .showKeyboardOnFocus = false});
             // A secure field: the character just typed shows for a moment; the eye shows it all.
             OutlinedSecureTextField(password, Modifier().fillMaxWidth(),
-                                    {.label = "Şifre",
-                                     .leadingIcon = [] { Icon(Icons::Filled::Lock, "Şifre"); },
-                                     .trailingIcon = [showPassword] {
-                                         IconButton([showPassword] { showPassword.set(!showPassword.get()); }) {
-                                             Icon(Icons::Filled::Visibility, showPassword.get() ? "Gizle" : "Göster",
-                                                  tint = showPassword.get() ? std::optional(colorScheme().primary) : std::nullopt);
-                                         };
-                                     },
-                                     .supportingText = "Yazdığınız son karakter bir an görünür; kopyalanamaz",
-                                     .textObfuscationMode = showPassword.get() ? TextObfuscationMode::Visible
-                                                                               : TextObfuscationMode::RevealLastTyped,
-                                     .keyboardOptions = {.autoCorrect = false, .keyboardType = KeyboardType::Password,
-                                                         .imeAction = ImeAction::Done}});
+                                    label = "Şifre",
+                                    leadingIcon = [] { Icon(Icons::Filled::Lock, "Şifre"); },
+                                    trailingIcon = [showPassword] {
+                                        IconButton([showPassword] { showPassword.set(!showPassword.get()); }) {
+                                            Icon(Icons::Filled::Visibility, showPassword.get() ? "Gizle" : "Göster",
+                                                 tint = showPassword.get() ? std::optional(colorScheme().primary) : std::nullopt);
+                                        };
+                                    },
+                                    supportingText = "Yazdığınız son karakter bir an görünür; kopyalanamaz",
+                                    textObfuscationMode = showPassword.get() ? TextObfuscationMode::Visible
+                                                                             : TextObfuscationMode::RevealLastTyped,
+                                    keyboardOptions = KeyboardOptions{.autoCorrect = false, .keyboardType = KeyboardType::Password,
+                                                                      .imeAction = ImeAction::Done});
             TextField(query.get(), [query](std::string v) { query.set(std::move(v)); }, Modifier().fillMaxWidth(),
-                      {.singleLine = true, .placeholder = "örn. kahve", .label = "Ara (filled TextField)",
-                       .leadingIcon = [] { Icon(Icons::Filled::Search, "Ara"); },
-                       .keyboardOptions = {.imeAction = ImeAction::Search},
-                       .keyboardActions = {.onSearch = [query, searched, focus] {
-                           searched.set(query.get());
-                           focus.clearFocus();
-                       }}});
+                      singleLine = true, placeholder = "örn. kahve", label = "Ara (filled TextField)",
+                      leadingIcon = [] { Icon(Icons::Filled::Search, "Ara"); },
+                      keyboardOptions = KeyboardOptions{.imeAction = ImeAction::Search},
+                      keyboardActions = KeyboardActions{.onSearch = [query, searched, focus] {
+                          searched.set(query.get());
+                          focus.clearFocus();
+                      }});
             if (!searched.get().empty())
                 Text("Arandı: " + searched.get(), color = cs.onSurfaceVariant, style = typography().bodyMedium);
             // Its own colors (TextFieldColors) and shape: tertiary, the selection too, round
             // without the indicator line (a common Compose look).
             TextField(motto.get(), [motto](std::string v) { motto.set(std::move(v)); }, Modifier().fillMaxWidth(),
-                      {.singleLine = true, .label = "Slogan (kendi renkleri)",
-                       .leadingIcon = [] { Icon(Icons::Filled::Favorite, "Slogan"); },
-                       .supportingText = "TextFieldColors + shape: üçüncül renkler, yuvarlak köşeler",
-                       .colors = {.focusedTextColor = cs.onTertiaryContainer,
-                                  .unfocusedTextColor = cs.onTertiaryContainer,
-                                  .focusedContainerColor = cs.tertiaryContainer,
-                                  .unfocusedContainerColor = cs.tertiaryContainer.copy(0.5f),
-                                  .cursorColor = cs.tertiary,
-                                  .textSelectionColors = TextSelectionColors{cs.tertiary, cs.tertiary.copy(0.4f)},
-                                  .focusedIndicatorColor = colors::Transparent,
-                                  .unfocusedIndicatorColor = colors::Transparent,
-                                  .focusedLeadingIconColor = cs.tertiary,
-                                  .unfocusedLeadingIconColor = cs.tertiary,
-                                  .focusedLabelColor = cs.tertiary,
-                                  .unfocusedLabelColor = cs.onTertiaryContainer},
-                       .shape = RoundedCornerShape(16)});
+                      singleLine = true, label = "Slogan (kendi renkleri)",
+                      leadingIcon = [] { Icon(Icons::Filled::Favorite, "Slogan"); },
+                      supportingText = "TextFieldColors + shape: üçüncül renkler, yuvarlak köşeler",
+                      textFieldColors = TextFieldColors{.focusedTextColor = cs.onTertiaryContainer,
+                                                        .unfocusedTextColor = cs.onTertiaryContainer,
+                                                        .focusedContainerColor = cs.tertiaryContainer,
+                                                        .unfocusedContainerColor = cs.tertiaryContainer.copy(0.5f),
+                                                        .cursorColor = cs.tertiary,
+                                                        .textSelectionColors = TextSelectionColors{cs.tertiary, cs.tertiary.copy(0.4f)},
+                                                        .focusedIndicatorColor = colors::Transparent,
+                                                        .unfocusedIndicatorColor = colors::Transparent,
+                                                        .focusedLeadingIconColor = cs.tertiary,
+                                                        .unfocusedLeadingIconColor = cs.tertiary,
+                                                        .focusedLabelColor = cs.tertiary,
+                                                        .unfocusedLabelColor = cs.onTertiaryContainer},
+                      shape = RoundedCornerShape(16));
             // enabled = false: no focus, the disabled colors.
-            OutlinedTextField("TR-0042", {}, Modifier().fillMaxWidth(),
-                              {.singleLine = true, .label = "Müşteri no (enabled = false)",
-                               .leadingIcon = [] { Icon(Icons::Filled::Lock, "Kilitli"); },
-                               .supportingText = "Odaklanmaz, düzenlenmez · etiket üstte (Above)",
-                               .enabled = false,
-                               .labelPosition = TextFieldLabelPosition::Above()});
+            OutlinedTextField("TR-0042", nullptr, Modifier().fillMaxWidth(),
+                              singleLine = true, label = "Müşteri no (enabled = false)",
+                              leadingIcon = [] { Icon(Icons::Filled::Lock, "Kilitli"); },
+                              supportingText = "Odaklanmaz, düzenlenmez · etiket üstte (Above)",
+                              enabled = false,
+                              labelPosition = TextFieldLabelPosition::Above());
             // Prefix and suffix: shown once the label floats; digits only.
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 auto digits = [](MutableState<std::string> to) {
@@ -92,13 +92,13 @@ void TextFieldsSection(CallSite site) {
                     };
                 };
                 OutlinedTextField(amount.get(), digits(amount), Modifier().weight(1),
-                                  {.singleLine = true, .label = "Tutar", .prefix = "₺", .suffix = ",00",
-                                   .keyboardOptions = {.keyboardType = KeyboardType::Number}});
+                                  singleLine = true, label = "Tutar", prefix = "₺", suffix = ",00",
+                                  keyboardOptions = KeyboardOptions{.keyboardType = KeyboardType::Number});
                 // Its label always up: the placeholder and "kg" show while it is empty.
                 OutlinedTextField(kilos.get(), digits(kilos), Modifier().weight(1),
-                                  {.singleLine = true, .placeholder = "0", .label = "Ağırlık", .suffix = "kg",
-                                   .keyboardOptions = {.keyboardType = KeyboardType::Number},
-                                   .labelPosition = TextFieldLabelPosition::Attached(true)});
+                                  singleLine = true, placeholder = "0", label = "Ağırlık", suffix = "kg",
+                                  keyboardOptions = KeyboardOptions{.keyboardType = KeyboardType::Number},
+                                  labelPosition = TextFieldLabelPosition::Attached(true));
             };
             // A TextFieldState with an InputTransformation: what is typed comes in as
             // capitals and stops at 10 characters; the state keeps the selection too.
@@ -107,9 +107,9 @@ void TextFieldsSection(CallSite site) {
             for (size_t i = 0; i < plateText.size(); ++plateChars) utf8::next(plateText, i);
             TextRange plateSelection = plate.selection();
             OutlinedTextField(plate, Modifier().fillMaxWidth(),
-                              {.singleLine = true, .label = "Plaka (büyük harf, en çok 10)",
-                               .supportingText = std::format("{} / 10 · seçim {}–{}", plateChars, plateSelection.start, plateSelection.end),
-                               .inputTransformation = InputTransformation::allCaps("tr").then(InputTransformation::maxLength(10))});
+                              singleLine = true, label = "Plaka (büyük harf, en çok 10)",
+                              supportingText = std::format("{} / 10 · seçim {}–{}", plateChars, plateSelection.start, plateSelection.end),
+                              inputTransformation = InputTransformation::allCaps("tr").then(InputTransformation::maxLength(10)));
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 TextButton([plate] { plate.edit([](TextFieldBuffer& b) { b.selectAll(); }); }) { Text("Tümünü seç"); };
                 TextButton([plate] { plate.edit([](TextFieldBuffer& b) { b.placeCursorBeforeCharAt(0); }); }) { Text("İmleci başa al"); };
@@ -118,25 +118,25 @@ void TextFieldsSection(CallSite site) {
             // OutputTransformation: the state keeps the digits, the field shows them in
             // groups (the caret and taps step over the spaces); digits only, at most 10.
             OutlinedTextField(phoneNumber, Modifier().fillMaxWidth(),
-                              {.singleLine = true, .label = "Telefon", .prefix = "+90 ",
-                               .supportingText = "Değer: " + phoneNumber.text() + " · gösterim: 555 123 45 67",
-                               .keyboardOptions = {.keyboardType = KeyboardType::Phone},
-                               .inputTransformation = InputTransformation::byValue([](const std::string& current, const std::string& proposed) {
-                                                          return std::ranges::all_of(proposed, [](char c) { return c >= '0' && c <= '9'; }) ? proposed : current;
-                                                      }).then(InputTransformation::maxLength(10)),
-                               .outputTransformation = OutputTransformation{[](TextFieldBuffer& b) {
-                                   for (int at : {8, 6, 3})
-                                       if (b.length() > at) b.insert(at, " ");
-                               }}});
+                              singleLine = true, label = "Telefon", prefix = "+90 ",
+                              supportingText = "Değer: " + phoneNumber.text() + " · gösterim: 555 123 45 67",
+                              keyboardOptions = KeyboardOptions{.keyboardType = KeyboardType::Phone},
+                              inputTransformation = InputTransformation::byValue([](const std::string& current, const std::string& proposed) {
+                                                         return std::ranges::all_of(proposed, [](char c) { return c >= '0' && c <= '9'; }) ? proposed : current;
+                                                     }).then(InputTransformation::maxLength(10)),
+                              outputTransformation = OutputTransformation{[](TextFieldBuffer& b) {
+                                  for (int at : {8, 6, 3})
+                                      if (b.length() > at) b.insert(at, " ");
+                              }});
             // Multi-line (Compose's default; TextFieldLineLimits::MultiLine(2, 5)): wraps, Enter starts a
             // new line, up to 5 lines then scrolls.
             std::string note = notes.text();
             size_t noteChars = 0;
             for (size_t i = 0; i < note.size(); ++noteChars) utf8::next(note, i);
             OutlinedTextField(notes, Modifier().fillMaxWidth(),
-                              {.lineLimits = TextFieldLineLimits::MultiLine(2, 5), .placeholder = "Birkaç satır yazın", .label = "Not (çok satırlı)",
-                               .supportingText = std::format("{} karakter · rememberTextFieldState", noteChars),
-                               .keyboardOptions = {.capitalization = KeyboardCapitalization::Sentences}});
+                              lineLimits = TextFieldLineLimits::MultiLine(2, 5), placeholder = "Birkaç satır yazın", label = "Not (çok satırlı)",
+                              supportingText = std::format("{} karakter · rememberTextFieldState", noteChars),
+                              keyboardOptions = KeyboardOptions{.capitalization = KeyboardCapitalization::Sentences});
             // Its undo history: a word at a time (Ctrl+Z / Ctrl+Shift+Z on a keyboard too).
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 UndoState undo = notes.undoState();
@@ -146,16 +146,16 @@ void TextFieldsSection(CallSite site) {
             // BasicTextField's decorator (Compose's decorationBox): its own look around the text — a
             // rounded box with an icon and a clear button; a tap anywhere on it types into the field.
             BasicTextField(tagQuery, Modifier().fillMaxWidth(),
-                           {.lineLimits = TextFieldLineLimits::SingleLine, .placeholder = "Etiket ara (decorator)",
-                            .decorator = [&](const Content& innerTextField) {
-                                Row(Modifier().fillMaxWidth().heightIn(48).background(cs.surfaceContainerHigh, CircleShape).padding(16, 4, 4, 4),
-                                    horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                                        Icon(Icons::Filled::Search, "", tint = cs.onSurfaceVariant);
-                                        Box(Modifier().weight(1)) { innerTextField(); };
-                                        if (!tagQuery.text().empty())
-                                            IconButton([tagQuery] { tagQuery.clearText(); }) { Icon(Icons::Filled::Close, "Temizle"); };
-                                    };
-                            }});
+                           lineLimits = TextFieldLineLimits::SingleLine, placeholder = "Etiket ara (decorator)",
+                           decorator = [&](const Content& innerTextField) {
+                               Row(Modifier().fillMaxWidth().heightIn(48).background(cs.surfaceContainerHigh, CircleShape).padding(16, 4, 4, 4),
+                                   horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
+                                       Icon(Icons::Filled::Search, "", tint = cs.onSurfaceVariant);
+                                       Box(Modifier().weight(1)) { innerTextField(); };
+                                       if (!tagQuery.text().empty())
+                                           IconButton([tagQuery] { tagQuery.clearText(); }) { Icon(Icons::Filled::Close, "Temizle"); };
+                                   };
+                           });
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 FilledTonalButton([emailFocus] { emailFocus.requestFocus(); }) { Text("E-postaya odaklan"); };
                 OutlinedButton([focus] { focus.clearFocus(); }) { Text("Odağı temizle"); };

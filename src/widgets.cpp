@@ -3196,17 +3196,17 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
 
 } // namespace
 
-void TextField(const std::string& value, std::function<void(std::string)> onValueChange, const Modifier& modifier,
+void detail::TextField(const std::string& value, std::function<void(std::string)> onValueChange, const Modifier& modifier,
                TextFieldOptions options, CallSite site) {
     textField(FieldKind::Filled, value, std::move(onValueChange), modifier, std::move(options), site);
 }
 
-void OutlinedTextField(const std::string& value, std::function<void(std::string)> onValueChange,
+void detail::OutlinedTextField(const std::string& value, std::function<void(std::string)> onValueChange,
                        const Modifier& modifier, TextFieldOptions options, CallSite site) {
     textField(FieldKind::Outlined, value, std::move(onValueChange), modifier, std::move(options), site);
 }
 
-void BasicTextField(const std::string& value, std::function<void(std::string)> onValueChange, const Modifier& modifier,
+void detail::BasicTextField(const std::string& value, std::function<void(std::string)> onValueChange, const Modifier& modifier,
                     TextFieldOptions options, CallSite site) {
     textField(FieldKind::Plain, value, std::move(onValueChange), modifier, std::move(options), site);
 }
@@ -3478,15 +3478,15 @@ TextFieldState rememberTextFieldState(std::string initialText, CallSite site) {
     return rememberSaveable([&] { return TextFieldState(std::move(initialText)); }, site);
 }
 
-void TextField(const TextFieldState& state, const Modifier& modifier, TextFieldOptions options, CallSite site) {
+void detail::TextField(const TextFieldState& state, const Modifier& modifier, TextFieldOptions options, CallSite site) {
     textField(FieldKind::Filled, state.text(), {}, modifier, std::move(options), site, state);
 }
 
-void OutlinedTextField(const TextFieldState& state, const Modifier& modifier, TextFieldOptions options, CallSite site) {
+void detail::OutlinedTextField(const TextFieldState& state, const Modifier& modifier, TextFieldOptions options, CallSite site) {
     textField(FieldKind::Outlined, state.text(), {}, modifier, std::move(options), site, state);
 }
 
-void BasicTextField(const TextFieldState& state, const Modifier& modifier, TextFieldOptions options, CallSite site) {
+void detail::BasicTextField(const TextFieldState& state, const Modifier& modifier, TextFieldOptions options, CallSite site) {
     textField(FieldKind::Plain, state.text(), {}, modifier, std::move(options), site, state);
 }
 
@@ -3556,15 +3556,15 @@ void secureTextField(FieldKind kind, const TextFieldState& state, const Modifier
 
 } // namespace
 
-void SecureTextField(const TextFieldState& state, const Modifier& modifier, SecureTextFieldOptions options, CallSite site) {
+void detail::SecureTextField(const TextFieldState& state, const Modifier& modifier, SecureTextFieldOptions options, CallSite site) {
     secureTextField(FieldKind::Filled, state, modifier, std::move(options), site);
 }
 
-void OutlinedSecureTextField(const TextFieldState& state, const Modifier& modifier, SecureTextFieldOptions options, CallSite site) {
+void detail::OutlinedSecureTextField(const TextFieldState& state, const Modifier& modifier, SecureTextFieldOptions options, CallSite site) {
     secureTextField(FieldKind::Outlined, state, modifier, std::move(options), site);
 }
 
-void BasicSecureTextField(const TextFieldState& state, const Modifier& modifier, SecureTextFieldOptions options, CallSite site) {
+void detail::BasicSecureTextField(const TextFieldState& state, const Modifier& modifier, SecureTextFieldOptions options, CallSite site) {
     secureTextField(FieldKind::Plain, state, modifier, std::move(options), site);
 }
 

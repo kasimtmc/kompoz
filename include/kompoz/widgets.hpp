@@ -2,7 +2,7 @@
 
 // Foundation layouts (Box, Row, Column, Text, Spacer) and a small Material-like component set.
 // Arguments that are named in Kotlin are passed as designated initializers here:
-//   Column(Modifier().fillMaxSize(), {.verticalArrangement = Arrangement::spacedBy(8)}, [&] { ... });
+//   Column(Modifier().fillMaxSize(), verticalArrangement = Arrangement::spacedBy(8), [=] { ... });
 
 #include "animation.hpp"
 #include "layout.hpp"
@@ -1152,7 +1152,7 @@ inline constexpr Composable<detail::OutlinedIconButtonImpl> OutlinedIconButton;
 // filled one that goes from a gray container to a primary one, an outlined one that loses its
 // outline for a dark (inverse surface) container. Read as a checkbox by accessibility services.
 //
-//   IconToggleButton(liked.get(), [liked](bool on) { liked.set(on); }, [&] {
+//   IconToggleButton(liked.get(), [liked](bool on) { liked.set(on); }, [=] {
 //       Icon(liked.get() ? Icons::Filled::Favorite : Icons::Filled::FavoriteBorder, "Beğen");
 //   });
 struct IconToggleButtonStyle {
@@ -1462,7 +1462,7 @@ struct SwitchImpl {
 inline constexpr Composable<detail::SwitchImpl> Switch;
 
 // What the keyboard's action key does; unset: Next/Previous move the focus, Done hides the
-// keyboard (or runs TextFieldOptions::onSubmit).
+// keyboard (or runs the field's onSubmit).
 struct KeyboardActions {
     std::function<void()> onDone, onGo, onNext, onPrevious, onSearch, onSend;
 };
@@ -1519,7 +1519,7 @@ private:
 // What becomes of an edit the user types or pastes before the field keeps it (Compose's
 // InputTransformation): change it (capitals), or refuse it (too long). Changes made in code
 // (TextFieldState::edit, a new value) don't go through it.
-//   TextField(state, Modifier(), {.inputTransformation = InputTransformation::maxLength(11)});
+//   TextField(state, Modifier(), inputTransformation = InputTransformation::maxLength(11));
 struct InputTransformation {
     std::function<void(TextFieldBuffer&)> transformInput;
 
@@ -1537,9 +1537,9 @@ struct InputTransformation {
 // How the text is shown, not what it is (Compose's OutputTransformation): separators in a
 // phone or card number, a unit after it. The value, the keyboard and copying keep the text
 // itself; the caret and taps step over what was added.
-//   TextField(phone, Modifier(), {.outputTransformation = OutputTransformation{[](TextFieldBuffer& b) {
+//   TextField(phone, Modifier(), outputTransformation = OutputTransformation{[](TextFieldBuffer& b) {
 //       for (int at : {8, 6, 3}) if (b.length() > at) b.insert(at, " ");  // 555 123 45 67
-//   }}});
+//   }});
 struct OutputTransformation {
     std::function<void(TextFieldBuffer&)> transformOutput;
 };
@@ -1553,7 +1553,7 @@ struct OutputTransformation {
 // suffix onSurfaceVariant (the trailing icon and supporting text error in error); disabled,
 // onSurface at 38% (the outline at 12%, prefix and suffix onSurfaceVariant at 38%, the container
 // as it is); the selection LocalTextSelectionColors.
-//   TextField(v, set, {}, {.colors = {.focusedContainerColor = cs.primaryContainer, .cursorColor = cs.tertiary}});
+//   TextField(v, set, textFieldColors = TextFieldColors{.focusedContainerColor = cs.primaryContainer, .cursorColor = cs.tertiary});
 struct TextFieldColors {
     std::optional<Color> focusedTextColor, unfocusedTextColor, disabledTextColor, errorTextColor;
     std::optional<Color> focusedContainerColor, unfocusedContainerColor, disabledContainerColor, errorContainerColor;
@@ -1633,29 +1633,23 @@ struct TextFieldOptions {
     // BasicTextField's own decoration around its text (Compose's decorationBox / decorator):
     // call innerTextField where the text goes (once). A tap on the decoration that nothing in it
     // takes goes to the field, as on the text itself.
-    //   BasicTextField(query, Modifier(), {.decorator = [&](const Content& innerTextField) {
-    //       Row(Modifier().border(1, cs.outline, CircleShape).padding(12, 8), {.verticalAlignment = Alignment::CenterVertically}, [&] {
+    //   BasicTextField(query, Modifier(), decorator = [&](const Content& innerTextField) {
+    //       Row(Modifier().border(1, cs.outline, CircleShape).padding(12, 8), verticalAlignment = Alignment::CenterVertically, [=] {
     //           Icon(Icons::Filled::Search, ""); Box(Modifier().weight(1).padding(8, 0, 0, 0), innerTextField);
     //       });
-    //   }});
+    //   });
     std::function<void(const Content& innerTextField)> decorator;
 };
 
 // Text fields with hoisted state, like Compose's TextField(value, onValueChange): filled
 // (TextField) and outlined. Tap to place the caret; with a hardware keyboard the arrows,
 // Home/End, Delete and Ctrl+A/C/X/V work too.
-void TextField(const std::string& value, std::function<void(std::string)> onValueChange,
-               const Modifier& modifier = {}, TextFieldOptions options = {}, CallSite site = CallSite::current());
-void OutlinedTextField(const std::string& value, std::function<void(std::string)> onValueChange,
-                       const Modifier& modifier = {}, TextFieldOptions options = {}, CallSite site = CallSite::current());
 // Editable text without decoration (Compose's BasicTextField): no container, padding or label;
 // the placeholder shows while it is empty. For building other fields (a search bar's).
-void BasicTextField(const std::string& value, std::function<void(std::string)> onValueChange,
-                    const Modifier& modifier = {}, TextFieldOptions options = {}, CallSite site = CallSite::current());
 
 // The text of a field kept in a state object instead of hoisted (Compose's TextFieldState):
 //   auto notes = rememberTextFieldState();
-//   OutlinedTextField(notes, Modifier().fillMaxWidth(), {.label = "Not", .maxLines = 5});
+//   OutlinedTextField(notes, Modifier().fillMaxWidth(), label = "Not", maxLines = 5);
 //   Button([notes] { save(notes.text()); notes.clearText(); }, ...);
 //
 // Its selection is kept too: read it, or change both in one go (Compose's edit { }):
@@ -1667,7 +1661,7 @@ struct TextHistory;
 // A TextFieldState's undo history (Compose's TextFieldState.undoState): what is typed comes
 // back a word at a time, what is deleted in one go; an edit made in code is a step of its own.
 // Its field undoes with Ctrl+Z and redoes with Ctrl+Shift+Z or Ctrl+Y.
-//   TextButton([notes] { notes.undoState().undo(); }, Modifier(), {.enabled = notes.undoState().canUndo()}, ...);
+//   TextButton([notes] { notes.undoState().undo(); }, Modifier(), enabled = notes.undoState().canUndo(), ...);
 class UndoState {
 public:
     bool canUndo() const;  // observable
@@ -1710,12 +1704,209 @@ struct Saver<TextFieldState> {
     }
 };
 TextFieldState rememberTextFieldState(std::string initialText = {}, CallSite site = CallSite::current());
+namespace detail {
+void TextField(const std::string& value, std::function<void(std::string)> onValueChange,
+               const Modifier& modifier = {}, TextFieldOptions options = {}, CallSite site = CallSite::current());
 void TextField(const TextFieldState& state, const Modifier& modifier = {}, TextFieldOptions options = {},
                CallSite site = CallSite::current());
+struct TextFieldImpl {
+    template <class... A>
+    static void call(CallSite site, const std::string& value, std::function<void(std::string)> onValueChange, A&&... args) {
+        using P = Params<names::Modifier, names::Enabled, names::ReadOnly, names::TextStyle, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::VisualTransformation, names::KeyboardOptions, names::KeyboardActions, names::SingleLine, names::MaxLines, names::MinLines, names::InteractionSource, names::Shape, names::TextFieldColors, names::LineLimits, names::OnSubmit, names::InputTransformation, names::OutputTransformation, names::LabelPosition>;
+        static_assert(P::check<A...>());
+        TextFieldOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::ReadOnly>(options.readOnly, args...);
+        P::set<names::TextStyle>(options.textStyle, args...);
+        P::set<names::Label>(options.label, args...);
+        P::set<names::Placeholder>(options.placeholder, args...);
+        P::set<names::LeadingIcon>(options.leadingIcon, args...);
+        P::set<names::TrailingIcon>(options.trailingIcon, args...);
+        P::set<names::Prefix>(options.prefix, args...);
+        P::set<names::Suffix>(options.suffix, args...);
+        P::set<names::SupportingText>(options.supportingText, args...);
+        P::set<names::IsError>(options.isError, args...);
+        P::set<names::VisualTransformation>(options.visualTransformation, args...);
+        P::set<names::KeyboardOptions>(options.keyboardOptions, args...);
+        P::set<names::KeyboardActions>(options.keyboardActions, args...);
+        P::set<names::SingleLine>(options.singleLine, args...);
+        P::set<names::MaxLines>(options.maxLines, args...);
+        P::set<names::MinLines>(options.minLines, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        P::set<names::Shape>(options.shape, args...);
+        P::set<names::TextFieldColors>(options.colors, args...);
+        P::set<names::LineLimits>(options.lineLimits, args...);
+        P::set<names::OnSubmit>(options.onSubmit, args...);
+        P::set<names::InputTransformation>(options.inputTransformation, args...);
+        P::set<names::OutputTransformation>(options.outputTransformation, args...);
+        P::set<names::LabelPosition>(options.labelPosition, args...);
+        TextField(value, std::move(onValueChange), P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
+    }
+    template <class... A>
+    static void call(CallSite site, const TextFieldState& state, A&&... args) {
+        using P = Params<names::Modifier, names::Enabled, names::ReadOnly, names::InputTransformation, names::TextStyle, names::LabelPosition, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::KeyboardOptions, names::KeyboardActions, names::LineLimits, names::Shape, names::TextFieldColors, names::InteractionSource, names::OutputTransformation, names::SingleLine, names::MaxLines, names::MinLines, names::VisualTransformation, names::OnSubmit>;
+        static_assert(P::check<A...>());
+        TextFieldOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::ReadOnly>(options.readOnly, args...);
+        P::set<names::InputTransformation>(options.inputTransformation, args...);
+        P::set<names::TextStyle>(options.textStyle, args...);
+        P::set<names::LabelPosition>(options.labelPosition, args...);
+        P::set<names::Label>(options.label, args...);
+        P::set<names::Placeholder>(options.placeholder, args...);
+        P::set<names::LeadingIcon>(options.leadingIcon, args...);
+        P::set<names::TrailingIcon>(options.trailingIcon, args...);
+        P::set<names::Prefix>(options.prefix, args...);
+        P::set<names::Suffix>(options.suffix, args...);
+        P::set<names::SupportingText>(options.supportingText, args...);
+        P::set<names::IsError>(options.isError, args...);
+        P::set<names::KeyboardOptions>(options.keyboardOptions, args...);
+        P::set<names::KeyboardActions>(options.keyboardActions, args...);
+        P::set<names::LineLimits>(options.lineLimits, args...);
+        P::set<names::Shape>(options.shape, args...);
+        P::set<names::TextFieldColors>(options.colors, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        P::set<names::OutputTransformation>(options.outputTransformation, args...);
+        P::set<names::SingleLine>(options.singleLine, args...);
+        P::set<names::MaxLines>(options.maxLines, args...);
+        P::set<names::MinLines>(options.minLines, args...);
+        P::set<names::VisualTransformation>(options.visualTransformation, args...);
+        P::set<names::OnSubmit>(options.onSubmit, args...);
+        TextField(state, P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::TextFieldImpl> TextField;
+namespace detail {
+void BasicTextField(const std::string& value, std::function<void(std::string)> onValueChange,
+                    const Modifier& modifier = {}, TextFieldOptions options = {}, CallSite site = CallSite::current());
 void BasicTextField(const TextFieldState& state, const Modifier& modifier = {}, TextFieldOptions options = {},
                     CallSite site = CallSite::current());
+struct BasicTextFieldImpl {
+    template <class... A>
+    static void call(CallSite site, const std::string& value, std::function<void(std::string)> onValueChange, A&&... args) {
+        using P = Params<names::Modifier, names::Enabled, names::ReadOnly, names::TextStyle, names::KeyboardOptions, names::KeyboardActions, names::SingleLine, names::MaxLines, names::MinLines, names::VisualTransformation, names::InteractionSource, names::Decorator, names::Placeholder, names::OnSubmit, names::LineLimits, names::InputTransformation, names::OutputTransformation, names::TextFieldColors>;
+        static_assert(P::check<A...>());
+        TextFieldOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::ReadOnly>(options.readOnly, args...);
+        P::set<names::TextStyle>(options.textStyle, args...);
+        P::set<names::KeyboardOptions>(options.keyboardOptions, args...);
+        P::set<names::KeyboardActions>(options.keyboardActions, args...);
+        P::set<names::SingleLine>(options.singleLine, args...);
+        P::set<names::MaxLines>(options.maxLines, args...);
+        P::set<names::MinLines>(options.minLines, args...);
+        P::set<names::VisualTransformation>(options.visualTransformation, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        P::set<names::Decorator>(options.decorator, args...);
+        P::set<names::Placeholder>(options.placeholder, args...);
+        P::set<names::OnSubmit>(options.onSubmit, args...);
+        P::set<names::LineLimits>(options.lineLimits, args...);
+        P::set<names::InputTransformation>(options.inputTransformation, args...);
+        P::set<names::OutputTransformation>(options.outputTransformation, args...);
+        P::set<names::TextFieldColors>(options.colors, args...);
+        BasicTextField(value, std::move(onValueChange), P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
+    }
+    template <class... A>
+    static void call(CallSite site, const TextFieldState& state, A&&... args) {
+        using P = Params<names::Modifier, names::Enabled, names::ReadOnly, names::InputTransformation, names::TextStyle, names::KeyboardOptions, names::KeyboardActions, names::LineLimits, names::InteractionSource, names::Decorator, names::OutputTransformation, names::SingleLine, names::MaxLines, names::MinLines, names::VisualTransformation, names::Placeholder, names::OnSubmit, names::TextFieldColors>;
+        static_assert(P::check<A...>());
+        TextFieldOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::ReadOnly>(options.readOnly, args...);
+        P::set<names::InputTransformation>(options.inputTransformation, args...);
+        P::set<names::TextStyle>(options.textStyle, args...);
+        P::set<names::KeyboardOptions>(options.keyboardOptions, args...);
+        P::set<names::KeyboardActions>(options.keyboardActions, args...);
+        P::set<names::LineLimits>(options.lineLimits, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        P::set<names::Decorator>(options.decorator, args...);
+        P::set<names::OutputTransformation>(options.outputTransformation, args...);
+        P::set<names::SingleLine>(options.singleLine, args...);
+        P::set<names::MaxLines>(options.maxLines, args...);
+        P::set<names::MinLines>(options.minLines, args...);
+        P::set<names::VisualTransformation>(options.visualTransformation, args...);
+        P::set<names::Placeholder>(options.placeholder, args...);
+        P::set<names::OnSubmit>(options.onSubmit, args...);
+        P::set<names::TextFieldColors>(options.colors, args...);
+        BasicTextField(state, P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::BasicTextFieldImpl> BasicTextField;
+namespace detail {
+void OutlinedTextField(const std::string& value, std::function<void(std::string)> onValueChange,
+                       const Modifier& modifier = {}, TextFieldOptions options = {}, CallSite site = CallSite::current());
 void OutlinedTextField(const TextFieldState& state, const Modifier& modifier = {}, TextFieldOptions options = {},
                        CallSite site = CallSite::current());
+struct OutlinedTextFieldImpl {
+    template <class... A>
+    static void call(CallSite site, const std::string& value, std::function<void(std::string)> onValueChange, A&&... args) {
+        using P = Params<names::Modifier, names::Enabled, names::ReadOnly, names::TextStyle, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::VisualTransformation, names::KeyboardOptions, names::KeyboardActions, names::SingleLine, names::MaxLines, names::MinLines, names::InteractionSource, names::Shape, names::TextFieldColors, names::LineLimits, names::OnSubmit, names::InputTransformation, names::OutputTransformation, names::LabelPosition>;
+        static_assert(P::check<A...>());
+        TextFieldOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::ReadOnly>(options.readOnly, args...);
+        P::set<names::TextStyle>(options.textStyle, args...);
+        P::set<names::Label>(options.label, args...);
+        P::set<names::Placeholder>(options.placeholder, args...);
+        P::set<names::LeadingIcon>(options.leadingIcon, args...);
+        P::set<names::TrailingIcon>(options.trailingIcon, args...);
+        P::set<names::Prefix>(options.prefix, args...);
+        P::set<names::Suffix>(options.suffix, args...);
+        P::set<names::SupportingText>(options.supportingText, args...);
+        P::set<names::IsError>(options.isError, args...);
+        P::set<names::VisualTransformation>(options.visualTransformation, args...);
+        P::set<names::KeyboardOptions>(options.keyboardOptions, args...);
+        P::set<names::KeyboardActions>(options.keyboardActions, args...);
+        P::set<names::SingleLine>(options.singleLine, args...);
+        P::set<names::MaxLines>(options.maxLines, args...);
+        P::set<names::MinLines>(options.minLines, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        P::set<names::Shape>(options.shape, args...);
+        P::set<names::TextFieldColors>(options.colors, args...);
+        P::set<names::LineLimits>(options.lineLimits, args...);
+        P::set<names::OnSubmit>(options.onSubmit, args...);
+        P::set<names::InputTransformation>(options.inputTransformation, args...);
+        P::set<names::OutputTransformation>(options.outputTransformation, args...);
+        P::set<names::LabelPosition>(options.labelPosition, args...);
+        OutlinedTextField(value, std::move(onValueChange), P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
+    }
+    template <class... A>
+    static void call(CallSite site, const TextFieldState& state, A&&... args) {
+        using P = Params<names::Modifier, names::Enabled, names::ReadOnly, names::InputTransformation, names::TextStyle, names::LabelPosition, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::KeyboardOptions, names::KeyboardActions, names::LineLimits, names::Shape, names::TextFieldColors, names::InteractionSource, names::OutputTransformation, names::SingleLine, names::MaxLines, names::MinLines, names::VisualTransformation, names::OnSubmit>;
+        static_assert(P::check<A...>());
+        TextFieldOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::ReadOnly>(options.readOnly, args...);
+        P::set<names::InputTransformation>(options.inputTransformation, args...);
+        P::set<names::TextStyle>(options.textStyle, args...);
+        P::set<names::LabelPosition>(options.labelPosition, args...);
+        P::set<names::Label>(options.label, args...);
+        P::set<names::Placeholder>(options.placeholder, args...);
+        P::set<names::LeadingIcon>(options.leadingIcon, args...);
+        P::set<names::TrailingIcon>(options.trailingIcon, args...);
+        P::set<names::Prefix>(options.prefix, args...);
+        P::set<names::Suffix>(options.suffix, args...);
+        P::set<names::SupportingText>(options.supportingText, args...);
+        P::set<names::IsError>(options.isError, args...);
+        P::set<names::KeyboardOptions>(options.keyboardOptions, args...);
+        P::set<names::KeyboardActions>(options.keyboardActions, args...);
+        P::set<names::LineLimits>(options.lineLimits, args...);
+        P::set<names::Shape>(options.shape, args...);
+        P::set<names::TextFieldColors>(options.colors, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        P::set<names::OutputTransformation>(options.outputTransformation, args...);
+        P::set<names::SingleLine>(options.singleLine, args...);
+        P::set<names::MaxLines>(options.maxLines, args...);
+        P::set<names::MinLines>(options.minLines, args...);
+        P::set<names::VisualTransformation>(options.visualTransformation, args...);
+        P::set<names::OnSubmit>(options.onSubmit, args...);
+        OutlinedTextField(state, P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::OutlinedTextFieldImpl> OutlinedTextField;
 
 // ---- Context menus (Compose Multiplatform's ContextMenuArea) ----
 
@@ -1761,14 +1952,102 @@ struct SecureTextFieldOptions {
 // Password fields (Compose's SecureTextField, OutlinedSecureTextField): one line, the text shown
 // as dots and never copied or cut, a password keyboard without suggestions.
 //   auto password = rememberTextFieldState();
-//   SecureTextField(password, Modifier(), {.label = "Parola"});
+//   SecureTextField(password, Modifier(), label = "Parola");
+namespace detail {
 void SecureTextField(const TextFieldState& state, const Modifier& modifier = {}, SecureTextFieldOptions options = {},
                      CallSite site = CallSite::current());
+struct SecureTextFieldImpl {
+    template <class... A>
+    static void call(CallSite site, const TextFieldState& state, A&&... args) {
+        using P = Params<names::Modifier, names::Enabled, names::TextStyle, names::LabelPosition, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::InputTransformation, names::TextObfuscationMode, names::TextObfuscationCharacter, names::KeyboardOptions, names::KeyboardActions, names::Shape, names::TextFieldColors, names::InteractionSource, names::OnSubmit>;
+        static_assert(P::check<A...>());
+        SecureTextFieldOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::TextStyle>(options.textStyle, args...);
+        P::set<names::LabelPosition>(options.labelPosition, args...);
+        P::set<names::Label>(options.label, args...);
+        P::set<names::Placeholder>(options.placeholder, args...);
+        P::set<names::LeadingIcon>(options.leadingIcon, args...);
+        P::set<names::TrailingIcon>(options.trailingIcon, args...);
+        P::set<names::Prefix>(options.prefix, args...);
+        P::set<names::Suffix>(options.suffix, args...);
+        P::set<names::SupportingText>(options.supportingText, args...);
+        P::set<names::IsError>(options.isError, args...);
+        P::set<names::InputTransformation>(options.inputTransformation, args...);
+        P::set<names::TextObfuscationMode>(options.textObfuscationMode, args...);
+        P::set<names::TextObfuscationCharacter>(options.textObfuscationCharacter, args...);
+        P::set<names::KeyboardOptions>(options.keyboardOptions, args...);
+        P::set<names::KeyboardActions>(options.keyboardActions, args...);
+        P::set<names::Shape>(options.shape, args...);
+        P::set<names::TextFieldColors>(options.colors, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        P::set<names::OnSubmit>(options.onSubmit, args...);
+        SecureTextField(state, P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::SecureTextFieldImpl> SecureTextField;
+namespace detail {
 void OutlinedSecureTextField(const TextFieldState& state, const Modifier& modifier = {}, SecureTextFieldOptions options = {},
                              CallSite site = CallSite::current());
+struct OutlinedSecureTextFieldImpl {
+    template <class... A>
+    static void call(CallSite site, const TextFieldState& state, A&&... args) {
+        using P = Params<names::Modifier, names::Enabled, names::TextStyle, names::LabelPosition, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::InputTransformation, names::TextObfuscationMode, names::TextObfuscationCharacter, names::KeyboardOptions, names::KeyboardActions, names::Shape, names::TextFieldColors, names::InteractionSource, names::OnSubmit>;
+        static_assert(P::check<A...>());
+        SecureTextFieldOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::TextStyle>(options.textStyle, args...);
+        P::set<names::LabelPosition>(options.labelPosition, args...);
+        P::set<names::Label>(options.label, args...);
+        P::set<names::Placeholder>(options.placeholder, args...);
+        P::set<names::LeadingIcon>(options.leadingIcon, args...);
+        P::set<names::TrailingIcon>(options.trailingIcon, args...);
+        P::set<names::Prefix>(options.prefix, args...);
+        P::set<names::Suffix>(options.suffix, args...);
+        P::set<names::SupportingText>(options.supportingText, args...);
+        P::set<names::IsError>(options.isError, args...);
+        P::set<names::InputTransformation>(options.inputTransformation, args...);
+        P::set<names::TextObfuscationMode>(options.textObfuscationMode, args...);
+        P::set<names::TextObfuscationCharacter>(options.textObfuscationCharacter, args...);
+        P::set<names::KeyboardOptions>(options.keyboardOptions, args...);
+        P::set<names::KeyboardActions>(options.keyboardActions, args...);
+        P::set<names::Shape>(options.shape, args...);
+        P::set<names::TextFieldColors>(options.colors, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        P::set<names::OnSubmit>(options.onSubmit, args...);
+        OutlinedSecureTextField(state, P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::OutlinedSecureTextFieldImpl> OutlinedSecureTextField;
 // The same without decoration (Compose's BasicSecureTextField): the dots alone, for a field
 // of your own (the label and supporting text aside).
+namespace detail {
 void BasicSecureTextField(const TextFieldState& state, const Modifier& modifier = {}, SecureTextFieldOptions options = {},
                           CallSite site = CallSite::current());
+struct BasicSecureTextFieldImpl {
+    template <class... A>
+    static void call(CallSite site, const TextFieldState& state, A&&... args) {
+        using P = Params<names::Modifier, names::Enabled, names::InputTransformation, names::TextStyle, names::InteractionSource, names::Decorator, names::TextObfuscationMode, names::TextObfuscationCharacter, names::KeyboardOptions, names::KeyboardActions, names::Placeholder, names::OnSubmit, names::TextFieldColors>;
+        static_assert(P::check<A...>());
+        SecureTextFieldOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::InputTransformation>(options.inputTransformation, args...);
+        P::set<names::TextStyle>(options.textStyle, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        P::set<names::Decorator>(options.decorator, args...);
+        P::set<names::TextObfuscationMode>(options.textObfuscationMode, args...);
+        P::set<names::TextObfuscationCharacter>(options.textObfuscationCharacter, args...);
+        P::set<names::KeyboardOptions>(options.keyboardOptions, args...);
+        P::set<names::KeyboardActions>(options.keyboardActions, args...);
+        P::set<names::Placeholder>(options.placeholder, args...);
+        P::set<names::OnSubmit>(options.onSubmit, args...);
+        P::set<names::TextFieldColors>(options.colors, args...);
+        BasicSecureTextField(state, P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::BasicSecureTextFieldImpl> BasicSecureTextField;
 
 } // namespace kompoz

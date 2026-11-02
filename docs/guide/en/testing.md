@@ -57,7 +57,7 @@ A test tag is the most robust way to find something whose text changes or is tra
 #! using namespace kompoz::testing;
 void Search() {
     auto query = rememberTextFieldState();
-    OutlinedTextField(query, Modifier().testTag("search"), {.label = "Search"});
+    OutlinedTextField(query, Modifier().testTag("search"), label = "Search");
 }
 
 void typingFillsTheField() {

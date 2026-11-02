@@ -2,7 +2,7 @@
 // the content in view, where the content is; drag it to scroll, click the track to page there.
 //
 //   auto scroll = rememberScrollState();
-//   Box(Modifier().fillMaxSize(), [&] {
+//   Box(Modifier().fillMaxSize(), [=] {
 //       Column(Modifier().fillMaxSize().verticalScroll(scroll), ...);
 //       VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier().align(Alignment::CenterEnd).fillMaxHeight());
 //   });

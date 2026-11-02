@@ -106,10 +106,10 @@ SelectionContainer(Modifier(), [&] {
 void EmailField() {
     auto email = rememberSaveable([] { return mutableStateOf(std::string()); });
     OutlinedTextField(email.get(), [email](std::string v) { email.set(std::move(v)); }, Modifier().fillMaxWidth(),
-                      {.singleLine = true,
-                       .label = "Email",
-                       .supportingText = "We never share it",
-                       .keyboardOptions = {.keyboardType = KeyboardType::Email, .imeAction = ImeAction::Next}});
+                      singleLine = true,
+                      label = "Email",
+                      supportingText = "We never share it",
+                      keyboardOptions = KeyboardOptions{.keyboardType = KeyboardType::Email, .imeAction = ImeAction::Next});
 }
 ```
 
@@ -122,7 +122,7 @@ Bir `TextFieldState`, metni ve seçimini, bir de geri alma geçmişini tutar:
 void Composer() {
     auto message = rememberTextFieldState();
     Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
-        OutlinedTextField(message, Modifier().weight(1), {.maxLines = 4, .placeholder = "Message"});
+        OutlinedTextField(message, Modifier().weight(1), maxLines = 4, placeholder = "Message");
         IconButton([message] { send(message.text()); message.clearText(); }) { Icon(Icons::AutoMirrored::Filled::Send, "Send"); };
     };
 }
@@ -160,7 +160,7 @@ void Search() {
         focus.requestFocus();   // ekran açıldığında alana odaklan
         co_return;
     });
-    OutlinedTextField(query, Modifier().fillMaxWidth().focusRequester(focus), {.singleLine = true, .label = "Search"});
+    OutlinedTextField(query, Modifier().fillMaxWidth().focusRequester(focus), singleLine = true, label = "Search");
 }
 ```
 

@@ -10,7 +10,7 @@
 //   auto state = rememberAnchoredDraggableState(DragValue::Start);
 //   Box(Modifier().fillMaxWidth().height(56).onSizeChanged([state](Size s) {
 //       state.updateAnchors({{DragValue::Start, 0}, {DragValue::Center, (s.width - 56) / 2}, {DragValue::End, s.width - 56}});
-//   }), [&] {
+//   }), [=] {
 //       Box(Modifier().offset([state] { return Offset{state.requireOffset(), 0}; })
 //               .anchoredDraggable(state, Orientation::Horizontal).size(56).background(colorScheme().primary));
 //   });

@@ -57,7 +57,7 @@ Metni değişen ya da çevrilen bir şeyi bulmanın en sağlam yolu bir test eti
 #! using namespace kompoz::testing;
 void Search() {
     auto query = rememberTextFieldState();
-    OutlinedTextField(query, Modifier().testTag("search"), {.label = "Search"});
+    OutlinedTextField(query, Modifier().testTag("search"), label = "Search");
 }
 
 void typingFillsTheField() {

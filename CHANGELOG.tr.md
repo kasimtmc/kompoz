@@ -652,6 +652,12 @@
   valueTo = 100, steps = 9)`, `Icon(icon, "Sil", tint = cs.error)`, Compose'un sırasıyla. Seçenek yapıları artık
   verilmiyor (`SwitchOptions`, `SliderOptions`...); bir kaydırıcının renkleri `sliderColors =` ile veriliyor (`colors`
   renk sabitlerinin ad alanı) ve verilmeyen bir geri çağırma `nullptr`, çünkü `{}`'nin alınacak bir türü yok.
+- **Metin alanları için adlı argümanlar**: `TextField`, `OutlinedTextField`, `BasicTextField`, `SecureTextField`,
+  `OutlinedSecureTextField` ve `BasicSecureTextField`, bir değerle ya da bir `TextFieldState` ile, bunları Compose'un
+  sırasıyla alıyor, `OutlinedTextField(email, setEmail, label = "E-posta", singleLine = true, keyboardOptions =
+  KeyboardOptions{.keyboardType = KeyboardType::Email})`; temel alanlar yalnızca kendilerine uyan adları. Bir alanın
+  renkleri `textFieldColors =` ile veriliyor. Bir composable en çok on altı argüman alıyor (önceden on iki).
+  Başlık yorumlarındaki örnekler yeni biçimde yazıldı, önceden dönüştürülen composable'larınkiler de.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

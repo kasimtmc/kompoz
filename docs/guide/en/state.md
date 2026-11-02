@@ -197,7 +197,7 @@ A composable that holds its own state is easy to use but hard to control from ou
 ```cpp
 // Stateless: shows `name`, reports edits. Easy to reuse, preview and test.
 void NameInput(const std::string& name, std::function<void(std::string)> onNameChange) {
-    OutlinedTextField(name, std::move(onNameChange), Modifier(), {.label = "Name"});
+    OutlinedTextField(name, std::move(onNameChange), Modifier(), label = "Name");
 }
 
 // Stateful: owns the state and hands it down.

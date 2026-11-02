@@ -145,7 +145,7 @@ void LargeFlexibleTopAppBar(const TopAppBarSlots& slots, const Modifier& modifie
 // collapsed top row (false), in the text style around the bar, so each can be its own size or
 // say something else. The rest from `slots` (their title and subtitle aside): icons, colors,
 // heights (unset: 112 dp, 136 with a subtitle; 64 collapsed), titleHorizontalAlignment, scrollBehavior.
-//   TwoRowsTopAppBar([](bool expanded) { Text("Gelen kutusu", {.font = expanded ? typography().displaySmall : typography().titleLarge}); },
+//   TwoRowsTopAppBar([](bool expanded) { Text("Gelen kutusu", style = TextStyle{.font = expanded ? typography().displaySmall : typography().titleLarge}); },
 //                    {.navigationIcon = ..., .scrollBehavior = behavior});
 void TwoRowsTopAppBar(const std::function<void(bool expanded)>& title, const TopAppBarSlots& slots, const Modifier& modifier = {},
                       const std::function<void(bool expanded)>& subtitle = {}, CallSite site = CallSite::current());
@@ -790,7 +790,7 @@ void FloatingActionButtonMenuItem(const FloatingActionButtonMenuScope& menu, std
 // a pill of actions over the content, usually near an edge; its leading and trailing actions
 // show only while expanded. With a scroll behavior it moves out of view as the content scrolls
 // forwards and comes back as it scrolls back.
-//   Box(Modifier().fillMaxSize().nestedScroll(toolbar.nestedScrollConnection), [&] {
+//   Box(Modifier().fillMaxSize().nestedScroll(toolbar.nestedScrollConnection), [=] {
 //       LazyColumn(...);
 //       HorizontalFloatingToolbar(expanded, [&] { IconButton(...); ... },
 //                                 Modifier().align(Alignment::BottomCenter).offset(0, -FloatingToolbarDefaults::ScreenOffset),
@@ -1009,7 +1009,7 @@ void ListItem(bool checked, std::function<void(bool)> onCheckedChange, const Lis
               const InteractiveListItemOptions& options = {}, CallSite site = CallSite::current());
 // Items that make one card together (Compose's SegmentedListItem): give each its segmented
 // shapes and put them ListItemDefaults::SegmentedGap apart.
-//   Column(Modifier(), {.verticalArrangement = Arrangement::spacedBy(ListItemDefaults::SegmentedGap)}, [&] {
+//   Column(Modifier(), verticalArrangement = Arrangement::spacedBy(ListItemDefaults::SegmentedGap), [=] {
 //       for (int i = 0; i < 3; ++i) SegmentedListItem(open(i), ListItemDefaults::segmentedShapes(i, 3), {...});
 //   });
 void SegmentedListItem(std::function<void()> onClick, const ListItemShapes& shapes, const ListItemSlots& slots,
@@ -1322,7 +1322,7 @@ void SegmentedButton(bool checked, std::function<void(bool)> onCheckedChange, co
 // group.animateWidth(source), with the interaction source it was given:
 //   ButtonGroup([&](const ButtonGroupScope& group) {
 //       auto source = remember([] { return MutableInteractionSource(); });
-//       Button(onClick, group.animateWidth(source), {.interactionSource = source}, [] { Text("Oynat"); });
+//       Button(onClick, group.animateWidth(source), interactionSource = source, [] { Text("Oynat"); });
 //       ...
 //   });
 struct ButtonGroupOptions {
@@ -1352,7 +1352,7 @@ void ButtonGroup(const std::vector<ButtonGroupItem>& items, const Modifier& modi
 // A connected button group (M3 Expressive's successor to segmented buttons): ToggleButtons
 // 2 dp apart in a Row, the first and last rounded on their outer side, the others squarish;
 // a checked one turns fully round.
-//   Row(Modifier(), {.horizontalArrangement = Arrangement::spacedBy(ButtonGroupDefaults::ConnectedSpaceBetween)}, [&] {
+//   Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(ButtonGroupDefaults::ConnectedSpaceBetween), [=] {
 //       for (int i = 0; i < 3; ++i)
 //           ToggleButton(picked.get() == i, [picked, i](bool) { picked.set(i); }, Modifier().weight(1),
 //                        {.shapes = i == 0 ? ButtonGroupDefaults::connectedLeadingButtonShapes()
@@ -1498,7 +1498,7 @@ void BasicAlertDialog(std::function<void()> onDismissRequest, const Modifier& mo
                       DialogProperties properties = {}, CallSite site = CallSite::current());
 
 // Opens below the node it is composed in (or above it, near the bottom of the window):
-//   Box([&] { IconButton(open, ...); DropdownMenu(expanded.get(), close, [&] { DropdownMenuItem(...); }); });
+//   Box([=] { IconButton(open, ...); DropdownMenu(expanded.get(), close, [&] { DropdownMenuItem(...); }); });
 void DropdownMenu(bool expanded, std::function<void()> onDismissRequest, const Content& content,
                   const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct MenuItemOptions {
@@ -1539,9 +1539,9 @@ void DropdownMenuItem(bool selected, std::function<void()> onClick, const Conten
 // A menu that belongs to a text field (Compose's ExposedDropdownMenuBox): a tap on the field
 // opens and closes it, and the menu opens under the field (or above it) at its width.
 //   ExposedDropdownMenuBox(open.get(), [open](bool v) { open.set(v); }, Modifier(), [&] {
-//       TextField(choice, {}, Modifier().fillMaxWidth(),
-//                 {.label = "Şehir", .trailingIcon = [&] { ExposedDropdownMenuDefaults::TrailingIcon(open.get()); },
-//                  .readOnly = true});
+//       TextField(choice, nullptr, Modifier().fillMaxWidth(),
+//                 label = "Şehir", trailingIcon = [&] { ExposedDropdownMenuDefaults::TrailingIcon(open.get()); },
+//                 readOnly = true);
 //       ExposedDropdownMenu(open.get(), [open] { open.set(false); }, [&] { DropdownMenuItem(...); });
 //   });
 // An editable field works too: it filters as the user types, keeping the menu open.

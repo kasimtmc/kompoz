@@ -46,7 +46,7 @@ void ContextMenuSection(CallSite site) {
                 [&] {
                     Box(Modifier().fillMaxWidth().height(88).background(cs.secondaryContainer, 16), Alignment::Center) { Text("Buraya sağ tıklayın — son seçim: " + last.get(), color = cs.onSecondaryContainer); };
                 });
-            OutlinedTextField(note.get(), [note](std::string v) { note.set(std::move(v)); }, Modifier().fillMaxWidth(), {.singleLine = true});
+            OutlinedTextField(note.get(), [note](std::string v) { note.set(std::move(v)); }, Modifier().fillMaxWidth(), singleLine = true);
         });
     });
 }
@@ -236,7 +236,7 @@ void TextToolbarSection(CallSite site) {
         Section("LocalTextToolbar · TextToolbar", [&] {
             CompositionLocalProvider({LocalTextToolbar.provides(std::shared_ptr<TextToolbar>(pill))}, [&] {
                 OutlinedTextField(text.get(), [text](std::string v) { text.set(std::move(v)); }, Modifier().fillMaxWidth(),
-                                  {.singleLine = true, .label = "Kendi araç çubuğumuz"});
+                                  singleLine = true, label = "Kendi araç çubuğumuz");
                 SelectionContainer(Modifier(), [] { Text("Bu metin de seçilebilir: uzun basın, kopyala ve tümünü seç çıkar."); });
             });
             (void)changes.get();  // shown and hidden by the toolbar's calls

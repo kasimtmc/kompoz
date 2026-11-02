@@ -615,6 +615,12 @@
   steps = 9)`, `Icon(icon, "Sil", tint = cs.error)`, in Compose's order. Their option structs are no longer given
   (`SwitchOptions`, `SliderOptions`...); a slider's colors are `sliderColors =` (`colors` is the color constants'
   namespace), and a callback left out is `nullptr`, as `{}` has no type to take.
+- **Named arguments for the text fields**: `TextField`, `OutlinedTextField`, `BasicTextField`, `SecureTextField`,
+  `OutlinedSecureTextField` and `BasicSecureTextField`, with a value or a `TextFieldState`, take them in Compose's
+  order, `OutlinedTextField(email, setEmail, label = "E-posta", singleLine = true, keyboardOptions =
+  KeyboardOptions{.keyboardType = KeyboardType::Email})`; the basic fields only the names that apply to them. A
+  field's colors are `textFieldColors =`. A composable takes up to sixteen arguments (twelve before).
+  Header comments' examples are written the new way, those of the composables converted earlier too.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and
