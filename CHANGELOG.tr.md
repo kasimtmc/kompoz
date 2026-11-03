@@ -658,6 +658,14 @@
   KeyboardOptions{.keyboardType = KeyboardType::Email})`; temel alanlar yalnızca kendilerine uyan adları. Bir alanın
   renkleri `textFieldColors =` ile veriliyor. Bir composable en çok on altı argüman alıyor (önceden on iki).
   Başlık yorumlarındaki örnekler yeni biçimde yazıldı, önceden dönüştürülen composable'larınkiler de.
+- **Scaffold, uygulama çubukları, FAB'lar, kayan araç çubukları ve snackbar'lar için adlı argümanlar**: `Scaffold`,
+  üst uygulama çubukları (`TopAppBar`, `CenterAlignedTopAppBar`, orta, büyük, esnek ve iki satırlı olanlar),
+  `BottomAppBar`, `FlexibleBottomAppBar`, kayan eylem düğmeleri, `HorizontalFloatingToolbar`/`VerticalFloatingToolbar`,
+  `SnackbarHost` ve `Snackbar` bunları Compose'un sırasıyla alıyor: `TopAppBar(title = [] { Text("Gelen kutusu"); },
+  scrollBehavior = s)`, `FloatingActionButton(onClick) { Icon(…); };`. Bir değer alan blok çağrıdan sonra gelen bir
+  lambda: `Scaffold(topBar = …) [=](PaddingValues padding) { … };`, o da kendine ait bir kapsamda çalışıyor. Genişletilmiş
+  bir FAB'ın `expanded`'ı, Compose'daki gibi, değiştiricisinden sonra geliyor; kayan araç çubuğunun renkleri
+  `floatingToolbarColors =` ile veriliyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

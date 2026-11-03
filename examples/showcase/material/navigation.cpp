@@ -166,23 +166,23 @@ void FloatingToolbarsSection(CallSite site) {
                         list.items(40, [](int i) { Text(std::format("Satır {}", i + 1), Modifier().fillMaxWidth().padding(16, 12)); });
                     });
                     // The middle actions stay; ⋮ shows the ones on the sides.
-                    HorizontalFloatingToolbar(more.get(), [&] {
+                    HorizontalFloatingToolbar(more.get(), Modifier().align(Alignment::BottomCenter).offset(0, -FloatingToolbarDefaults::ScreenOffset),
+                        scrollBehavior = below,
+                        leadingContent = [] { IconButton([] {}) { Icon(Icons::Filled::Favorite, "Beğen"); }; },
+                        trailingContent = [] { IconButton([] {}) { Icon(Icons::Filled::Delete, "Sil"); }; }) {
                         IconButton([] {}) { Icon(Icons::Filled::Edit, "Düzenle"); };
                         IconButton([] {}) { Icon(Icons::Filled::Share, "Paylaş"); };
                         IconButton([more] { more.set(!more.get()); }) { Icon(Icons::Filled::MoreVert, "Daha fazla"); };
-                    }, Modifier().align(Alignment::BottomCenter).offset(0, -FloatingToolbarDefaults::ScreenOffset),
-                        {.scrollBehavior = below,
-                         .leadingContent = [] { IconButton([] {}) { Icon(Icons::Filled::Favorite, "Beğen"); }; },
-                         .trailingContent = [] { IconButton([] {}) { Icon(Icons::Filled::Delete, "Sil"); }; }});
+                    };
                     // A vibrant one with a FAB: collapsed, only the FAB is left.
                     VerticalFloatingToolbar(tools.get(), [&] {
                         FloatingToolbarDefaults::VibrantFloatingActionButton([tools] { tools.set(!tools.get()); },
                                                                             [&] { Icon(tools.get() ? Icons::Filled::Close : Icons::Filled::Add, "Araçlar"); });
-                    }, [&] {
+                    }, Modifier().align(Alignment::TopEnd).offset(-FloatingToolbarDefaults::ScreenOffset, FloatingToolbarDefaults::ScreenOffset),
+                        floatingToolbarColors = FloatingToolbarDefaults::vibrantFloatingToolbarColors(), scrollBehavior = aside) {
                         IconButton([] {}) { Icon(Icons::Filled::Place, "Konum"); };
                         IconButton([] {}) { Icon(Icons::Filled::Email, "E-posta"); };
-                    }, Modifier().align(Alignment::TopEnd).offset(-FloatingToolbarDefaults::ScreenOffset, FloatingToolbarDefaults::ScreenOffset),
-                        {.colors = FloatingToolbarDefaults::vibrantFloatingToolbarColors(), .scrollBehavior = aside});
+                    };
                 };
         });
     });

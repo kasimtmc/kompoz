@@ -115,8 +115,7 @@ void Messages(const std::vector<std::string>& messages) {
         });
         if (showTop.get()) {
             SmallFloatingActionButton([scope, list] { scope.launch([list]() -> Task { co_await list.animateScrollToItem(0); }); },
-                                      [] { Icon(Icons::Filled::KeyboardArrowUp, "Back to top"); },
-                                      Modifier().align(Alignment::BottomEnd).padding(16));
+                                      Modifier().align(Alignment::BottomEnd).padding(16)) { Icon(Icons::Filled::KeyboardArrowUp, "Back to top"); };
         }
     };
 }
@@ -227,12 +226,11 @@ Bir başkasının içindeki kaydırılabilir bir öğe, örneğin daralan bir uy
 ```cpp body
 auto behavior = TopAppBarDefaults::exitUntilCollapsedScrollBehavior();
 Scaffold(Modifier().nestedScroll(behavior.nestedScrollConnection),
-         {.topBar = [&] { LargeTopAppBar({.title = [] { Text("Inbox"); }, .scrollBehavior = behavior}); }},
-         [&](PaddingValues padding) {
-             LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& l) {
-                 l.items(50, [](int i) { Text("Message " + std::to_string(i), Modifier().padding(16)); });
-             });
-         });
+         topBar = [&] { LargeTopAppBar(title = [] { Text("Inbox"); }, scrollBehavior = behavior); }) [=](PaddingValues padding) {
+    LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& l) {
+        l.items(50, [](int i) { Text("Message " + std::to_string(i), Modifier().padding(16)); });
+    });
+};
 ```
 
 Kendiniz katılmak için `Modifier().nestedScroll`'a bir bağlantı verin. Bunun `onPreScroll`'u her miktarı çocuk kaymadan önce görür ve ne kadarını tükettiğini döndürür; `onPostScroll` çocuğun bıraktığını görür:

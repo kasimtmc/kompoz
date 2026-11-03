@@ -621,6 +621,13 @@
   KeyboardOptions{.keyboardType = KeyboardType::Email})`; the basic fields only the names that apply to them. A
   field's colors are `textFieldColors =`. A composable takes up to sixteen arguments (twelve before).
   Header comments' examples are written the new way, those of the composables converted earlier too.
+- **Named arguments for Scaffold, the app bars, FABs, floating toolbars and snackbars**: `Scaffold`, the top app
+  bars (`TopAppBar`, `CenterAlignedTopAppBar`, the medium, large, flexible and two row ones), `BottomAppBar`,
+  `FlexibleBottomAppBar`, the floating action buttons, `HorizontalFloatingToolbar`/`VerticalFloatingToolbar`,
+  `SnackbarHost` and `Snackbar` take them in Compose's order: `TopAppBar(title = [] { Text("Inbox"); },
+  scrollBehavior = s)`, `FloatingActionButton(onClick) { Icon(…); };`. A block given a value is a lambda after the
+  call: `Scaffold(topBar = …) [=](PaddingValues padding) { … };`, and it too runs in a scope of its own. An extended
+  FAB's `expanded` comes after its modifier, as in Compose; a floating toolbar's colors are `floatingToolbarColors =`.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

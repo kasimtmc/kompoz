@@ -106,10 +106,9 @@ Kompoz, Compose Material 3 gibi Material 3'ü uygular. `MaterialTheme` içindeki
 #! struct Message { std::string author, body; };
 #! void Conversation(const std::vector<Message>&) {}
 void ConversationScreen(const std::vector<Message>& messages) {
-    Scaffold(Modifier(), {.topBar = [] { TopAppBar({.title = [] { Text("Messages"); }}); }},
-             [&](PaddingValues padding) {
-                 Box(Modifier().padding(padding)) { Conversation(messages); };
-             });
+    Scaffold(Modifier(), topBar = [] { TopAppBar(title = [] { Text("Messages"); }); }) [=](PaddingValues padding) {
+        Box(Modifier().padding(padding)) { Conversation(messages); };
+    };
 }
 
 Application kompoz::createApplication(int, char**) {

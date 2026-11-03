@@ -115,8 +115,7 @@ void Messages(const std::vector<std::string>& messages) {
         });
         if (showTop.get()) {
             SmallFloatingActionButton([scope, list] { scope.launch([list]() -> Task { co_await list.animateScrollToItem(0); }); },
-                                      [] { Icon(Icons::Filled::KeyboardArrowUp, "Back to top"); },
-                                      Modifier().align(Alignment::BottomEnd).padding(16));
+                                      Modifier().align(Alignment::BottomEnd).padding(16)) { Icon(Icons::Filled::KeyboardArrowUp, "Back to top"); };
         }
     };
 }
@@ -227,12 +226,11 @@ A scrollable inside another, such as a list under a collapsing app bar, shares s
 ```cpp body
 auto behavior = TopAppBarDefaults::exitUntilCollapsedScrollBehavior();
 Scaffold(Modifier().nestedScroll(behavior.nestedScrollConnection),
-         {.topBar = [&] { LargeTopAppBar({.title = [] { Text("Inbox"); }, .scrollBehavior = behavior}); }},
-         [&](PaddingValues padding) {
-             LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& l) {
-                 l.items(50, [](int i) { Text("Message " + std::to_string(i), Modifier().padding(16)); });
-             });
-         });
+         topBar = [&] { LargeTopAppBar(title = [] { Text("Inbox"); }, scrollBehavior = behavior); }) [=](PaddingValues padding) {
+    LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& l) {
+        l.items(50, [](int i) { Text("Message " + std::to_string(i), Modifier().padding(16)); });
+    });
+};
 ```
 
 To take part yourself, give `Modifier().nestedScroll` a connection. Its `onPreScroll` sees each delta before the child scrolls and returns what it consumed; `onPostScroll` sees what the child left:

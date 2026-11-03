@@ -91,48 +91,46 @@ void ShowcaseApp() {
 
     auto topBar = [&] {
         TopAppBar(
-            {.title = [] { Text("Kompoz"); },
-             .navigationIcon =
-                 [drawer, scope] {
-                     IconButton([drawer, scope] { scope.launch([drawer]() -> Task { co_await drawer.open(); }); }) { Icon(Icons::Filled::Menu, "Menü"); };
-                 },
-             .actions =
-                 [&] {
-                     IconButton([dark, darkChosen] { dark.set(!dark.get()), darkChosen.set(true); }) { Icon(Icons::Filled::DarkMode, "Koyu tema"); };
-                     IconButton([showRecompositions, snackbar] {
-                             bool on = !showRecompositions.get();
-                             showRecompositions.set(on);
-                             snackbar.showSnackbar(on ? "Recomposition vurgusu açık" : "Recomposition vurgusu kapalı");
-                         }) {
-                             Icon(Icons::Filled::Visibility, "Recomposition'ları göster",
-                                  tint = showRecompositions.get() ? std::optional(colorScheme().primary) : std::nullopt);
-                         };
-                     Box() {  // the menu opens below its anchor, this Box
-                         IconButton([overflow] { overflow.set(true); }) { Icon(Icons::Filled::MoreVert, "Diğer seçenekler"); };
-                         DropdownMenu(overflow.get(), [overflow] { overflow.set(false); }, [&] {
-                             DropdownMenuItem([] { Text("Hakkında"); },
-                                              [overflow, about] {
-                                                  overflow.set(false);
-                                                  about.set(true);
-                                              },
-                                              {.leadingIcon = [] { Icon(Icons::Filled::Info, "Hakkında"); }});
-                             DropdownMenuItem([] { Text("Material bileşenleri"); },
-                                              [overflow, goTab] {
-                                                  overflow.set(false);
-                                                  goTab(3);
-                                              },
-                                              {.leadingIcon = [] { Icon(Icons::Filled::CheckCircle, "Material"); }});
-                             // LocalLayoutDirection: rows from the right, Start is the right, horizontal lists start there.
-                             DropdownMenuItem([rightToLeft] { Text(rightToLeft.get() ? "Soldan sağa (LTR)" : "Sağdan sola (RTL)"); },
-                                              [overflow, rightToLeft] {
-                                                  overflow.set(false);
-                                                  rightToLeft.set(!rightToLeft.get());
-                                              },
-                                              {.leadingIcon = [] { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Yön"); }});
-                         });
-                     };
-                 },
-             .scrollBehavior = barScroll});
+            title = [] { Text("Kompoz"); },
+            navigationIcon = [drawer, scope] {
+                    IconButton([drawer, scope] { scope.launch([drawer]() -> Task { co_await drawer.open(); }); }) { Icon(Icons::Filled::Menu, "Menü"); };
+                },
+            actions = [&] {
+                    IconButton([dark, darkChosen] { dark.set(!dark.get()), darkChosen.set(true); }) { Icon(Icons::Filled::DarkMode, "Koyu tema"); };
+                    IconButton([showRecompositions, snackbar] {
+                            bool on = !showRecompositions.get();
+                            showRecompositions.set(on);
+                            snackbar.showSnackbar(on ? "Recomposition vurgusu açık" : "Recomposition vurgusu kapalı");
+                        }) {
+                            Icon(Icons::Filled::Visibility, "Recomposition'ları göster",
+                                 tint = showRecompositions.get() ? std::optional(colorScheme().primary) : std::nullopt);
+                        };
+                    Box() {  // the menu opens below its anchor, this Box
+                        IconButton([overflow] { overflow.set(true); }) { Icon(Icons::Filled::MoreVert, "Diğer seçenekler"); };
+                        DropdownMenu(overflow.get(), [overflow] { overflow.set(false); }, [&] {
+                            DropdownMenuItem([] { Text("Hakkında"); },
+                                             [overflow, about] {
+                                                 overflow.set(false);
+                                                 about.set(true);
+                                             },
+                                             {.leadingIcon = [] { Icon(Icons::Filled::Info, "Hakkında"); }});
+                            DropdownMenuItem([] { Text("Material bileşenleri"); },
+                                             [overflow, goTab] {
+                                                 overflow.set(false);
+                                                 goTab(3);
+                                             },
+                                             {.leadingIcon = [] { Icon(Icons::Filled::CheckCircle, "Material"); }});
+                            // LocalLayoutDirection: rows from the right, Start is the right, horizontal lists start there.
+                            DropdownMenuItem([rightToLeft] { Text(rightToLeft.get() ? "Soldan sağa (LTR)" : "Sağdan sola (RTL)"); },
+                                             [overflow, rightToLeft] {
+                                                 overflow.set(false);
+                                                 rightToLeft.set(!rightToLeft.get());
+                                             },
+                                             {.leadingIcon = [] { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Yön"); }});
+                        });
+                    };
+                },
+            scrollBehavior = barScroll);
     };
 
     auto fab = [&] {
@@ -154,7 +152,7 @@ void ShowcaseApp() {
             ScrollToTopButton(listState);
     };
 
-    auto screen = [&](PaddingValues padding) {
+    auto screen = [=](PaddingValues padding) {  // (by value: the Scaffold's block keeps it)
         // Clear of the bars; the keyboard only takes what the bottom bar doesn't already cover.
         Modifier m = Modifier().fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding();
         ContentTransform fade = togetherWith(fadeIn(0, tween(220, 60)), fadeOut(0, tween(120)));
@@ -218,15 +216,14 @@ void ShowcaseApp() {
                         },
                         Modifier().fillMaxSize(), {}, [&] {
                             Scaffold(Modifier().fillMaxSize().nestedScroll(barScroll.nestedScrollConnection),
-                                     {.topBar = topBar,
-                                      .floatingActionButton = fab,
-                                      // A snackbar of the app's own (here the standard one): a long action under the text.
-                                      .snackbarHost = [&] {
-                                          SnackbarHost(snackbar, Modifier(), [](const SnackbarData& data) {
-                                              Snackbar(data, Modifier(), {.actionOnNewLine = data.actionLabel.size() > 12});
-                                          });
-                                      }},
-                                     screen);
+                                     kompoz::topBar = topBar,
+                                     floatingActionButton = fab,
+                                     // A snackbar of the app's own (here the standard one): a long action under the text.
+                                     snackbarHost = [&] {
+                                         SnackbarHost(snackbar, Modifier(), [](const SnackbarData& data) {
+                                             Snackbar(data, Modifier(), actionOnNewLine = data.actionLabel.size() > 12);
+                                         });
+                                     }) [=](PaddingValues padding) { screen(padding); };
                         });
                 });
             };

@@ -3,11 +3,11 @@
 // App structure from Material 3: Scaffold, top app bars (with scroll behaviors), NavigationBar,
 // floating action buttons and snackbars.
 //
-//   Scaffold(Modifier().fillMaxSize(), {
-//       .topBar = [&] { TopAppBar({.title = [] { Text("Kompoz"); }}); },
-//       .floatingActionButton = [&] { FloatingActionButton(onAdd, [] { Icon(Icons::Filled::Add, "Ekle"); }); },
-//       .snackbarHost = [&] { SnackbarHost(snackbar); },
-//   }, [&](PaddingValues padding) {
+//   Scaffold(Modifier().fillMaxSize(),
+//            topBar = [&] { TopAppBar(title = [] { Text("Kompoz"); }); },
+//            floatingActionButton = [&] { FloatingActionButton(onAdd, [] { Icon(Icons::Filled::Add, "Ekle"); }); },
+//            snackbarHost = [&] { SnackbarHost(snackbar); },
+//            [=](PaddingValues padding) {  // (with <kompoz/blocks.hpp>: Scaffold(…) [=](PaddingValues padding) { … };)
 //       LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, ...);
 //   });
 
@@ -46,8 +46,28 @@ struct ScaffoldSlots {
 // follows without the content recomposing; PaddingValues::calculate*Padding); it is
 // laid out full size so lists can scroll behind the bars. With a text field, pad it as in
 // Compose: Modifier().padding(padding).consumeWindowInsets(padding).imePadding().
+namespace detail {
 void Scaffold(const Modifier& modifier, const ScaffoldSlots& slots, const std::function<void(PaddingValues)>& content,
               CallSite site = CallSite::current());
+struct ScaffoldImpl {
+    using P = Params<names::Modifier, names::TopBar, names::BottomBar, names::SnackbarHost, names::FloatingActionButton, names::FloatingActionButtonPosition, names::ContainerColor, names::ContentWindowInsets, BlockWith<PaddingValues>>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: Scaffold takes a block, [=](PaddingValues padding) { … }: its content");
+        ScaffoldSlots slots;
+        P::set<names::TopBar>(slots.topBar, args...);
+        P::set<names::BottomBar>(slots.bottomBar, args...);
+        P::set<names::SnackbarHost>(slots.snackbarHost, args...);
+        P::set<names::FloatingActionButton>(slots.floatingActionButton, args...);
+        P::set<names::FloatingActionButtonPosition>(slots.floatingActionButtonPosition, args...);
+        P::set<names::ContainerColor>(slots.containerColor, args...);
+        P::set<names::ContentWindowInsets>(slots.contentWindowInsets, args...);
+        Scaffold(P::get<names::Modifier>(Modifier{}, args...), slots, P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ScaffoldImpl> Scaffold;
 
 // How far a top app bar is collapsed and how far the content under it has scrolled, in dp
 // (negative: collapsed / scrolled up). Observable.
@@ -80,8 +100,8 @@ TopAppBarState rememberTopAppBarState(float initialHeightOffsetLimit = -kInfinit
 
 // Put the connection on a parent of the scrolling content (usually the Scaffold):
 //   auto scroll = TopAppBarDefaults::enterAlwaysScrollBehavior();
-//   Scaffold(Modifier().nestedScroll(scroll.nestedScrollConnection), {.topBar = [&] {
-//       TopAppBar({.title = ..., .scrollBehavior = scroll}); }}, ...);
+//   Scaffold(Modifier().nestedScroll(scroll.nestedScrollConnection), topBar = [&] {
+//       TopAppBar(title = ..., scrollBehavior = scroll); }, ...);
 struct TopAppBarScrollBehavior {
     TopAppBarState state;
     std::shared_ptr<NestedScrollConnection> nestedScrollConnection;
@@ -130,27 +150,216 @@ struct TopAppBarSlots {
 };
 
 // Includes the status bar inset.
+namespace detail {
 void TopAppBar(const TopAppBarSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct TopAppBarImpl {
+    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        TopAppBarSlots slots;
+        P::set<names::Title>(slots.title, args...);
+        P::set<names::Subtitle>(slots.subtitle, args...);
+        P::set<names::NavigationIcon>(slots.navigationIcon, args...);
+        P::set<names::Actions>(slots.actions, args...);
+        P::set<names::ExpandedHeight>(slots.expandedHeight, args...);
+        P::set<names::CollapsedHeight>(slots.collapsedHeight, args...);
+        P::set<names::WindowInsets>(slots.windowInsets, args...);
+        P::set<names::ContainerColor>(slots.containerColor, args...);
+        P::set<names::ScrolledContainerColor>(slots.scrolledContainerColor, args...);
+        P::set<names::NavigationIconContentColor>(slots.navigationIconContentColor, args...);
+        P::set<names::TitleContentColor>(slots.titleContentColor, args...);
+        P::set<names::ActionIconContentColor>(slots.actionIconContentColor, args...);
+        P::set<names::SubtitleContentColor>(slots.subtitleContentColor, args...);
+        P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
+        P::set<names::TitleHorizontalAlignment>(slots.titleHorizontalAlignment, args...);
+        TopAppBar(slots, P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::TopAppBarImpl> TopAppBar;
 // Two rows: the title starts large below the icons (112 / 152 dp) and moves up into the top row
 // as the bar collapses to 64 dp with exitUntilCollapsedScrollBehavior.
+namespace detail {
 void MediumTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct MediumTopAppBarImpl {
+    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        TopAppBarSlots slots;
+        P::set<names::Title>(slots.title, args...);
+        P::set<names::Subtitle>(slots.subtitle, args...);
+        P::set<names::NavigationIcon>(slots.navigationIcon, args...);
+        P::set<names::Actions>(slots.actions, args...);
+        P::set<names::ExpandedHeight>(slots.expandedHeight, args...);
+        P::set<names::CollapsedHeight>(slots.collapsedHeight, args...);
+        P::set<names::WindowInsets>(slots.windowInsets, args...);
+        P::set<names::ContainerColor>(slots.containerColor, args...);
+        P::set<names::ScrolledContainerColor>(slots.scrolledContainerColor, args...);
+        P::set<names::NavigationIconContentColor>(slots.navigationIconContentColor, args...);
+        P::set<names::TitleContentColor>(slots.titleContentColor, args...);
+        P::set<names::ActionIconContentColor>(slots.actionIconContentColor, args...);
+        P::set<names::SubtitleContentColor>(slots.subtitleContentColor, args...);
+        P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
+        P::set<names::TitleHorizontalAlignment>(slots.titleHorizontalAlignment, args...);
+        MediumTopAppBar(slots, P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::MediumTopAppBarImpl> MediumTopAppBar;
+namespace detail {
 void LargeTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct LargeTopAppBarImpl {
+    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        TopAppBarSlots slots;
+        P::set<names::Title>(slots.title, args...);
+        P::set<names::Subtitle>(slots.subtitle, args...);
+        P::set<names::NavigationIcon>(slots.navigationIcon, args...);
+        P::set<names::Actions>(slots.actions, args...);
+        P::set<names::ExpandedHeight>(slots.expandedHeight, args...);
+        P::set<names::CollapsedHeight>(slots.collapsedHeight, args...);
+        P::set<names::WindowInsets>(slots.windowInsets, args...);
+        P::set<names::ContainerColor>(slots.containerColor, args...);
+        P::set<names::ScrolledContainerColor>(slots.scrolledContainerColor, args...);
+        P::set<names::NavigationIconContentColor>(slots.navigationIconContentColor, args...);
+        P::set<names::TitleContentColor>(slots.titleContentColor, args...);
+        P::set<names::ActionIconContentColor>(slots.actionIconContentColor, args...);
+        P::set<names::SubtitleContentColor>(slots.subtitleContentColor, args...);
+        P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
+        P::set<names::TitleHorizontalAlignment>(slots.titleHorizontalAlignment, args...);
+        LargeTopAppBar(slots, P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::LargeTopAppBarImpl> LargeTopAppBar;
 // M3 Expressive's flexible ones (Compose's MediumFlexibleTopAppBar, LargeFlexibleTopAppBar):
 // bigger titles (headlineMedium / displaySmall, subtitles labelLarge / titleMedium), 112 / 120 dp
 // tall (136 / 152 with a subtitle), the title anywhere across (titleHorizontalAlignment).
+namespace detail {
 void MediumFlexibleTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct MediumFlexibleTopAppBarImpl {
+    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        TopAppBarSlots slots;
+        P::set<names::Title>(slots.title, args...);
+        P::set<names::Subtitle>(slots.subtitle, args...);
+        P::set<names::NavigationIcon>(slots.navigationIcon, args...);
+        P::set<names::Actions>(slots.actions, args...);
+        P::set<names::ExpandedHeight>(slots.expandedHeight, args...);
+        P::set<names::CollapsedHeight>(slots.collapsedHeight, args...);
+        P::set<names::WindowInsets>(slots.windowInsets, args...);
+        P::set<names::ContainerColor>(slots.containerColor, args...);
+        P::set<names::ScrolledContainerColor>(slots.scrolledContainerColor, args...);
+        P::set<names::NavigationIconContentColor>(slots.navigationIconContentColor, args...);
+        P::set<names::TitleContentColor>(slots.titleContentColor, args...);
+        P::set<names::ActionIconContentColor>(slots.actionIconContentColor, args...);
+        P::set<names::SubtitleContentColor>(slots.subtitleContentColor, args...);
+        P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
+        P::set<names::TitleHorizontalAlignment>(slots.titleHorizontalAlignment, args...);
+        MediumFlexibleTopAppBar(slots, P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::MediumFlexibleTopAppBarImpl> MediumFlexibleTopAppBar;
+namespace detail {
 void LargeFlexibleTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct LargeFlexibleTopAppBarImpl {
+    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        TopAppBarSlots slots;
+        P::set<names::Title>(slots.title, args...);
+        P::set<names::Subtitle>(slots.subtitle, args...);
+        P::set<names::NavigationIcon>(slots.navigationIcon, args...);
+        P::set<names::Actions>(slots.actions, args...);
+        P::set<names::ExpandedHeight>(slots.expandedHeight, args...);
+        P::set<names::CollapsedHeight>(slots.collapsedHeight, args...);
+        P::set<names::WindowInsets>(slots.windowInsets, args...);
+        P::set<names::ContainerColor>(slots.containerColor, args...);
+        P::set<names::ScrolledContainerColor>(slots.scrolledContainerColor, args...);
+        P::set<names::NavigationIconContentColor>(slots.navigationIconContentColor, args...);
+        P::set<names::TitleContentColor>(slots.titleContentColor, args...);
+        P::set<names::ActionIconContentColor>(slots.actionIconContentColor, args...);
+        P::set<names::SubtitleContentColor>(slots.subtitleContentColor, args...);
+        P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
+        P::set<names::TitleHorizontalAlignment>(slots.titleHorizontalAlignment, args...);
+        LargeFlexibleTopAppBar(slots, P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::LargeFlexibleTopAppBarImpl> LargeFlexibleTopAppBar;
 // A two row bar whose titles style themselves (Compose's TwoRowsTopAppBar, M3 Expressive):
 // title(expanded) and subtitle(expanded) are called for the large row (true) and for the
 // collapsed top row (false), in the text style around the bar, so each can be its own size or
-// say something else. The rest from `slots` (their title and subtitle aside): icons, colors,
-// heights (unset: 112 dp, 136 with a subtitle; 64 collapsed), titleHorizontalAlignment, scrollBehavior.
+// say something else. The rest as the other bars take it: icons, colors, heights (unset: 112 dp,
+// 136 with a subtitle; 64 collapsed), titleHorizontalAlignment, scrollBehavior.
 //   TwoRowsTopAppBar([](bool expanded) { Text("Gelen kutusu", style = TextStyle{.font = expanded ? typography().displaySmall : typography().titleLarge}); },
-//                    {.navigationIcon = ..., .scrollBehavior = behavior});
+//                    navigationIcon = ..., scrollBehavior = behavior);
+namespace detail {
 void TwoRowsTopAppBar(const std::function<void(bool expanded)>& title, const TopAppBarSlots& slots, const Modifier& modifier = {},
                       const std::function<void(bool expanded)>& subtitle = {}, CallSite site = CallSite::current());
+struct TwoRowsTopAppBarImpl {
+    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::given<names::Title, A...>(), "kompoz: TwoRowsTopAppBar takes a title, [](bool expanded) { … }");
+        TopAppBarSlots slots;
+        P::set<names::NavigationIcon>(slots.navigationIcon, args...);
+        P::set<names::Actions>(slots.actions, args...);
+        P::set<names::ExpandedHeight>(slots.expandedHeight, args...);
+        P::set<names::CollapsedHeight>(slots.collapsedHeight, args...);
+        P::set<names::WindowInsets>(slots.windowInsets, args...);
+        P::set<names::ContainerColor>(slots.containerColor, args...);
+        P::set<names::ScrolledContainerColor>(slots.scrolledContainerColor, args...);
+        P::set<names::NavigationIconContentColor>(slots.navigationIconContentColor, args...);
+        P::set<names::TitleContentColor>(slots.titleContentColor, args...);
+        P::set<names::ActionIconContentColor>(slots.actionIconContentColor, args...);
+        P::set<names::SubtitleContentColor>(slots.subtitleContentColor, args...);
+        P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
+        P::set<names::TitleHorizontalAlignment>(slots.titleHorizontalAlignment, args...);
+        TwoRowsTopAppBar(P::get<names::Title>(std::function<void(bool)>{}, args...), slots, P::get<names::Modifier>(Modifier{}, args...),
+                         P::get<names::Subtitle>(std::function<void(bool)>{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::TwoRowsTopAppBarImpl> TwoRowsTopAppBar;
 // The title in the middle of the bar (not past the icons on either side).
+namespace detail {
 void CenterAlignedTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct CenterAlignedTopAppBarImpl {
+    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        TopAppBarSlots slots;
+        P::set<names::Title>(slots.title, args...);
+        P::set<names::Subtitle>(slots.subtitle, args...);
+        P::set<names::NavigationIcon>(slots.navigationIcon, args...);
+        P::set<names::Actions>(slots.actions, args...);
+        P::set<names::ExpandedHeight>(slots.expandedHeight, args...);
+        P::set<names::CollapsedHeight>(slots.collapsedHeight, args...);
+        P::set<names::WindowInsets>(slots.windowInsets, args...);
+        P::set<names::ContainerColor>(slots.containerColor, args...);
+        P::set<names::ScrolledContainerColor>(slots.scrolledContainerColor, args...);
+        P::set<names::NavigationIconContentColor>(slots.navigationIconContentColor, args...);
+        P::set<names::TitleContentColor>(slots.titleContentColor, args...);
+        P::set<names::ActionIconContentColor>(slots.actionIconContentColor, args...);
+        P::set<names::SubtitleContentColor>(slots.subtitleContentColor, args...);
+        P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
+        P::set<names::TitleHorizontalAlignment>(slots.titleHorizontalAlignment, args...);
+        CenterAlignedTopAppBar(slots, P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::CenterAlignedTopAppBarImpl> CenterAlignedTopAppBar;
 
 // The menu an AppBarRow opens for the items that didn't fit (Compose's AppBarMenuState).
 class AppBarMenuState {
@@ -186,12 +395,12 @@ struct AppBarRowOptions {
 };
 // App bar actions that fit (Compose's AppBarRow): as many items as there is room for, the rest
 // in a menu behind the overflow button (only when something is left out).
-//   TopAppBar({.title = ..., .actions = [] {
+//   TopAppBar(title = ..., actions = [] {
 //       AppBarRow([](AppBarScope& s) {
 //           s.clickableItem(share, [] { Icon(Icons::Filled::Share, "Paylaş"); }, "Paylaş");
 //           s.toggleableItem(liked, setLiked, [] { Icon(Icons::Filled::Favorite, "Beğen"); }, "Beğen");
 //       });
-//   }});
+//   });
 void AppBarRow(std::function<void(AppBarScope&)> content, const Modifier& modifier = {}, AppBarRowOptions options = {},
                CallSite site = CallSite::current());
 // The same down a column (Compose's AppBarColumn): for a rail or a vertical toolbar, the menu's
@@ -439,9 +648,9 @@ void ExpandedDockedSearchBar(const SearchBarState& state, const Content& inputFi
 // scrolling content's parent it slides away as the content scrolls on and comes back first as it
 // scrolls back (enterAlwaysSearchBarScrollBehavior).
 //   auto scroll = SearchBarDefaults::enterAlwaysSearchBarScrollBehavior();
-//   Scaffold(Modifier().nestedScroll(scroll.nestedScrollConnection), {.topBar = [&] {
+//   Scaffold(Modifier().nestedScroll(scroll.nestedScrollConnection), topBar = [&] {
 //       AppBarWithSearch(state, field, Modifier(), {.scrollBehavior = scroll});
-//   }}, ...);
+//   }, ...);
 //   ExpandedFullScreenSearchBar(state, field, results);
 struct AppBarWithSearchSlots {
     Content navigationIcon, actions;
@@ -716,26 +925,118 @@ struct ModalWideNavigationRailOptions {
 void ModalWideNavigationRail(const Modifier& modifier, const Content& content, const ModalWideNavigationRailOptions& options = {},
                              CallSite site = CallSite::current());
 
+namespace detail {
 void FloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier = {},
                           CallSite site = CallSite::current());
+struct FloatingActionButtonImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: FloatingActionButton takes a block: its content");
+        FloatingActionButton(std::move(onClick), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::FloatingActionButtonImpl> FloatingActionButton;
+namespace detail {
 void SmallFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier = {},
                                CallSite site = CallSite::current());  // 40 dp
+struct SmallFloatingActionButtonImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: SmallFloatingActionButton takes a block: its content");
+        SmallFloatingActionButton(std::move(onClick), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::SmallFloatingActionButtonImpl> SmallFloatingActionButton;
+namespace detail {
 void LargeFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier = {},
                                CallSite site = CallSite::current());  // 96 dp (its icon 36)
+struct LargeFloatingActionButtonImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: LargeFloatingActionButton takes a block: its content");
+        LargeFloatingActionButton(std::move(onClick), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::LargeFloatingActionButtonImpl> LargeFloatingActionButton;
+namespace detail {
 void ExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text,
                                   const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct ExtendedFloatingActionButtonImpl {
+    using P = Params<names::Modifier>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, const ImageVector& icon, std::string text, A&&... args) {
+        static_assert(P::check<A...>());
+        ExtendedFloatingActionButton(std::move(onClick), icon, std::move(text), P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ExtendedFloatingActionButtonImpl> ExtendedFloatingActionButton;
 // M3 Expressive's FAB sizes: medium is 80 dp (its icon 28, corners 20).
+namespace detail {
 void MediumFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier = {},
                                 CallSite site = CallSite::current());
+struct MediumFloatingActionButtonImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: MediumFloatingActionButton takes a block: its content");
+        MediumFloatingActionButton(std::move(onClick), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::MediumFloatingActionButtonImpl> MediumFloatingActionButton;
 // M3 Expressive's extended FABs, 56 / 80 / 96 dp tall (icons 24 / 28 / 36, labels titleMedium /
 // titleLarge / headlineSmall). Not expanded, the label fades out and the button narrows to a
 // square FAB around its icon (scrolled content often collapses it).
+namespace detail {
 void SmallExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded = true,
                                        const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct SmallExtendedFloatingActionButtonImpl {
+    using P = Params<names::Modifier, names::Expanded>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, const ImageVector& icon, std::string text, A&&... args) {
+        static_assert(P::check<A...>());
+        SmallExtendedFloatingActionButton(std::move(onClick), icon, std::move(text), P::get<names::Expanded>(true, args...), P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::SmallExtendedFloatingActionButtonImpl> SmallExtendedFloatingActionButton;
+namespace detail {
 void MediumExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded = true,
                                         const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct MediumExtendedFloatingActionButtonImpl {
+    using P = Params<names::Modifier, names::Expanded>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, const ImageVector& icon, std::string text, A&&... args) {
+        static_assert(P::check<A...>());
+        MediumExtendedFloatingActionButton(std::move(onClick), icon, std::move(text), P::get<names::Expanded>(true, args...), P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::MediumExtendedFloatingActionButtonImpl> MediumExtendedFloatingActionButton;
+namespace detail {
 void LargeExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded = true,
                                        const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct LargeExtendedFloatingActionButtonImpl {
+    using P = Params<names::Modifier, names::Expanded>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, const ImageVector& icon, std::string text, A&&... args) {
+        static_assert(P::check<A...>());
+        LargeExtendedFloatingActionButton(std::move(onClick), icon, std::move(text), P::get<names::Expanded>(true, args...), P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::LargeExtendedFloatingActionButtonImpl> LargeExtendedFloatingActionButton;
 
 // M3 Expressive's FAB that stays checked (Compose's ToggleFloatingActionButton), the button of a
 // FloatingActionButtonMenu: checked, it turns from primaryContainer to primary and from its
@@ -792,9 +1093,9 @@ void FloatingActionButtonMenuItem(const FloatingActionButtonMenuScope& menu, std
 // forwards and comes back as it scrolls back.
 //   Box(Modifier().fillMaxSize().nestedScroll(toolbar.nestedScrollConnection), [=] {
 //       LazyColumn(...);
-//       HorizontalFloatingToolbar(expanded, [&] { IconButton(...); ... },
-//                                 Modifier().align(Alignment::BottomCenter).offset(0, -FloatingToolbarDefaults::ScreenOffset),
-//                                 {.scrollBehavior = toolbar, .trailingContent = [&] { IconButton(...); }});
+//       HorizontalFloatingToolbar(expanded, Modifier().align(Alignment::BottomCenter).offset(0, -FloatingToolbarDefaults::ScreenOffset),
+//                                 scrollBehavior = toolbar, trailingContent = [&] { IconButton(...); },
+//                                 [=] { IconButton(...); ... });
 //   });
 // How far it has moved out of view: 0 shown .. offsetLimit (its size and its gap to the edge).
 class FloatingToolbarState {
@@ -825,6 +1126,30 @@ struct FloatingToolbarScrollBehavior {
 struct FloatingToolbarColors {
     Color toolbarContainerColor, toolbarContentColor, fabContainerColor, fabContentColor;
 };
+namespace detail {
+void StandardFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier = {},
+                                  CallSite site = CallSite::current());
+void VibrantFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier = {},
+                                 CallSite site = CallSite::current());
+struct StandardFloatingActionButtonImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: StandardFloatingActionButton takes a block: its content");
+        StandardFloatingActionButton(std::move(onClick), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+struct VibrantFloatingActionButtonImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: VibrantFloatingActionButton takes a block: its content");
+        VibrantFloatingActionButton(std::move(onClick), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
 namespace FloatingToolbarDefaults {
 inline constexpr float ContainerSize = 64, ContentPadding = 8, ScreenOffset = 16, FabSpacing = 8;  // dp
 FloatingToolbarColors standardFloatingToolbarColors();  // surfaceContainer; its FAB secondaryContainer
@@ -833,10 +1158,8 @@ FloatingToolbarColors vibrantFloatingToolbarColors();   // primaryContainer; its
 // half way finishes the move.
 FloatingToolbarScrollBehavior exitAlwaysScrollBehavior(FloatingToolbarExitDirection exitDirection, CallSite site = CallSite::current());
 // The FAB beside a toolbar (in the toolbar colors' FAB colors).
-void StandardFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier = {},
-                                  CallSite site = CallSite::current());
-void VibrantFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier = {},
-                                 CallSite site = CallSite::current());
+inline constexpr Composable<detail::StandardFloatingActionButtonImpl> StandardFloatingActionButton;
+inline constexpr Composable<detail::VibrantFloatingActionButtonImpl> VibrantFloatingActionButton;
 } // namespace FloatingToolbarDefaults
 struct FloatingToolbarOptions {
     std::optional<FloatingToolbarColors> colors;  // standard
@@ -845,15 +1168,91 @@ struct FloatingToolbarOptions {
     Shape shape = CircleShape;
     float shadowElevation = 6;
 };
+// With a FAB at its end (below a vertical one): collapsed, only the FAB is left.
+namespace detail {
 void HorizontalFloatingToolbar(bool expanded, const Content& content, const Modifier& modifier = {}, const FloatingToolbarOptions& options = {},
                                CallSite site = CallSite::current());
-void VerticalFloatingToolbar(bool expanded, const Content& content, const Modifier& modifier = {}, const FloatingToolbarOptions& options = {},
-                             CallSite site = CallSite::current());
-// With a FAB at its end (below a vertical one): collapsed, only the FAB is left.
 void HorizontalFloatingToolbar(bool expanded, const Content& floatingActionButton, const Content& content, const Modifier& modifier = {},
                                const FloatingToolbarOptions& options = {}, CallSite site = CallSite::current());
+struct HorizontalFloatingToolbarImpl {
+    // Its FAB (Compose's floatingActionButton), named or second without a name.
+    using P = Params<names::Modifier, names::FloatingToolbarColors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, names::FloatingActionButton, Block>;
+    template <class... A>
+    static FloatingToolbarOptions options(A&... args) {
+        FloatingToolbarOptions options;
+        P::set<names::FloatingToolbarColors>(options.colors, args...);
+        P::set<names::ScrollBehavior>(options.scrollBehavior, args...);
+        P::set<names::Shape>(options.shape, args...);
+        P::set<names::LeadingContent>(options.leadingContent, args...);
+        P::set<names::TrailingContent>(options.trailingContent, args...);
+        P::set<names::ShadowElevation>(options.shadowElevation, args...);
+        return options;
+    }
+    template <class... A>
+        requires(!startsWithClick<A...>())
+    static void call(CallSite site, bool expanded, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: HorizontalFloatingToolbar takes a block: its content");
+        Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
+        if constexpr (P::given<names::FloatingActionButton, A...>())
+            HorizontalFloatingToolbar(expanded, P::get<names::FloatingActionButton>(Content{}, args...), P::block(std::forward<A>(args)...), modifier,
+                options(args...), site);
+        else
+            HorizontalFloatingToolbar(expanded, P::block(std::forward<A>(args)...), modifier, options(args...), site);
+    }
+    template <class F, class... A>
+        requires(startsWithClick<F, A...>())
+    static void call(CallSite site, bool expanded, F&& floatingActionButton, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(!P::given<names::FloatingActionButton, A...>(), "kompoz: HorizontalFloatingToolbar's floatingActionButton given twice");
+        HorizontalFloatingToolbar(expanded, Content(std::forward<F>(floatingActionButton)), P::block(std::forward<A>(args)...),
+            P::get<names::Modifier>(Modifier{}, args...), options(args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::HorizontalFloatingToolbarImpl> HorizontalFloatingToolbar;
+namespace detail {
+void VerticalFloatingToolbar(bool expanded, const Content& content, const Modifier& modifier = {}, const FloatingToolbarOptions& options = {},
+                             CallSite site = CallSite::current());
 void VerticalFloatingToolbar(bool expanded, const Content& floatingActionButton, const Content& content, const Modifier& modifier = {},
                              const FloatingToolbarOptions& options = {}, CallSite site = CallSite::current());
+struct VerticalFloatingToolbarImpl {
+    // Its FAB (Compose's floatingActionButton), named or second without a name.
+    using P = Params<names::Modifier, names::FloatingToolbarColors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, names::FloatingActionButton, Block>;
+    template <class... A>
+    static FloatingToolbarOptions options(A&... args) {
+        FloatingToolbarOptions options;
+        P::set<names::FloatingToolbarColors>(options.colors, args...);
+        P::set<names::ScrollBehavior>(options.scrollBehavior, args...);
+        P::set<names::Shape>(options.shape, args...);
+        P::set<names::LeadingContent>(options.leadingContent, args...);
+        P::set<names::TrailingContent>(options.trailingContent, args...);
+        P::set<names::ShadowElevation>(options.shadowElevation, args...);
+        return options;
+    }
+    template <class... A>
+        requires(!startsWithClick<A...>())
+    static void call(CallSite site, bool expanded, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: VerticalFloatingToolbar takes a block: its content");
+        Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
+        if constexpr (P::given<names::FloatingActionButton, A...>())
+            VerticalFloatingToolbar(expanded, P::get<names::FloatingActionButton>(Content{}, args...), P::block(std::forward<A>(args)...), modifier,
+                options(args...), site);
+        else
+            VerticalFloatingToolbar(expanded, P::block(std::forward<A>(args)...), modifier, options(args...), site);
+    }
+    template <class F, class... A>
+        requires(startsWithClick<F, A...>())
+    static void call(CallSite site, bool expanded, F&& floatingActionButton, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(!P::given<names::FloatingActionButton, A...>(), "kompoz: VerticalFloatingToolbar's floatingActionButton given twice");
+        VerticalFloatingToolbar(expanded, Content(std::forward<F>(floatingActionButton)), P::block(std::forward<A>(args)...),
+            P::get<names::Modifier>(Modifier{}, args...), options(args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::VerticalFloatingToolbarImpl> VerticalFloatingToolbar;
 
 enum class SnackbarDuration { Short, Long, Indefinite };
 
@@ -931,12 +1330,25 @@ inline SnackbarHostState rememberSnackbarHostState(CallSite site = CallSite::cur
     return remember([] { return SnackbarHostState(); }, site);
 }
 
-void SnackbarHost(SnackbarHostState state, const Modifier& modifier = {}, CallSite site = CallSite::current());
 // With snackbars of your own (Compose's SnackbarHost(state, modifier, snackbar)): `snackbar`
 // draws the one showing, by default Snackbar(data); it calls data.performAction() / dismiss().
-//   SnackbarHost(state, Modifier(), [](const SnackbarData& d) { Snackbar(d, Modifier(), {.containerColor = cs.errorContainer}); });
+//   SnackbarHost(state, Modifier(), [](const SnackbarData& d) { Snackbar(d, Modifier(), containerColor = cs.errorContainer); });
+namespace detail {
+void SnackbarHost(SnackbarHostState state, const Modifier& modifier = {}, CallSite site = CallSite::current());
 void SnackbarHost(SnackbarHostState state, const Modifier& modifier, std::function<void(const SnackbarData&)> snackbar,
                   CallSite site = CallSite::current());
+struct SnackbarHostImpl {
+    using P = Params<names::Modifier, BlockWith<const SnackbarData&>>;
+    template <class... A>
+    static void call(CallSite site, SnackbarHostState state, A&&... args) {
+        static_assert(P::check<A...>());
+        Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
+        if constexpr (P::blockGiven<A...>()) SnackbarHost(std::move(state), modifier, P::block(std::forward<A>(args)...), site);
+        else SnackbarHost(std::move(state), modifier, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::SnackbarHostImpl> SnackbarHost;
 
 // A snackbar's options (Compose's Snackbar parameters): its slots and colors.
 struct SnackbarOptions {
@@ -951,12 +1363,48 @@ struct SnackbarOptions {
 // The snackbar itself (Compose's Snackbar): the text (bodyMedium) and, at its end or under it,
 // the action and the close button, on inverseSurface; at most 600 dp wide, 48 dp tall (68 for
 // two lines, the first line's baseline 30 dp down).
-void Snackbar(const Content& content, const Modifier& modifier = {}, const SnackbarOptions& options = {},
-              CallSite site = CallSite::current());
 // One of a SnackbarData, as SnackbarHost shows it: its message, its action as a text button,
 // a close button if it has one, 12 dp around.
+namespace detail {
+void Snackbar(const Content& content, const Modifier& modifier = {}, const SnackbarOptions& options = {},
+              CallSite site = CallSite::current());
 void Snackbar(const SnackbarData& data, const Modifier& modifier = {}, SnackbarOptions options = {},
               CallSite site = CallSite::current());
+struct SnackbarImpl {
+    template <class... A>
+    static void call(CallSite site, const SnackbarData& data, A&&... args) {  // a SnackbarData's, as SnackbarHost shows it
+        using P = Params<names::Modifier, names::ActionOnNewLine, names::Shape, names::ContainerColor, names::ContentColor, names::ActionColor, names::ActionContentColor, names::DismissActionContentColor>;
+        static_assert(P::check<A...>());
+        SnackbarOptions options;
+        P::set<names::ActionOnNewLine>(options.actionOnNewLine, args...);
+        P::set<names::Shape>(options.shape, args...);
+        P::set<names::ContainerColor>(options.containerColor, args...);
+        P::set<names::ContentColor>(options.contentColor, args...);
+        P::set<names::ActionColor>(options.actionColor, args...);
+        P::set<names::ActionContentColor>(options.actionContentColor, args...);
+        P::set<names::DismissActionContentColor>(options.dismissActionContentColor, args...);
+        Snackbar(data, P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
+    }
+    template <class... A>
+        requires(!(std::is_convertible_v<A, const SnackbarData&> || ...))
+    static void call(CallSite site, A&&... args) {  // with slots, the block its text
+        using P = Params<names::Modifier, names::Action, names::DismissAction, names::ActionOnNewLine, names::Shape, names::ContainerColor, names::ContentColor, names::ActionContentColor, names::DismissActionContentColor, Block>;
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: Snackbar takes a block (its text), or a SnackbarData");
+        SnackbarOptions options;
+        P::set<names::Action>(options.action, args...);
+        P::set<names::DismissAction>(options.dismissAction, args...);
+        P::set<names::ActionOnNewLine>(options.actionOnNewLine, args...);
+        P::set<names::Shape>(options.shape, args...);
+        P::set<names::ContainerColor>(options.containerColor, args...);
+        P::set<names::ContentColor>(options.contentColor, args...);
+        P::set<names::ActionContentColor>(options.actionContentColor, args...);
+        P::set<names::DismissActionContentColor>(options.dismissActionContentColor, args...);
+        Snackbar(P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::SnackbarImpl> Snackbar;
 
 // ---- Lists, chips, selection controls, tabs, badges ------------------------------------
 
@@ -1446,7 +1894,24 @@ struct BottomAppBarSlots {
     bool windowInsets = true;  // pad by the navigation bar
     std::optional<BottomAppBarScrollBehavior> scrollBehavior;
 };
+namespace detail {
 void BottomAppBar(const BottomAppBarSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct BottomAppBarImpl {
+    using P = Params<names::Actions, names::Modifier, names::FloatingActionButton, names::ContainerColor, names::WindowInsets, names::ScrollBehavior>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        BottomAppBarSlots slots;
+        P::set<names::Actions>(slots.actions, args...);
+        P::set<names::FloatingActionButton>(slots.floatingActionButton, args...);
+        P::set<names::ContainerColor>(slots.containerColor, args...);
+        P::set<names::WindowInsets>(slots.windowInsets, args...);
+        P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
+        BottomAppBar(slots, P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::BottomAppBarImpl> BottomAppBar;
 
 // M3 Expressive's flexible bottom app bar (Compose's FlexibleBottomAppBar): 64 dp, its content
 // spread out across it (SpaceBetween, 16 dp in from the sides) by default.
@@ -1458,8 +1923,27 @@ struct FlexibleBottomAppBarOptions {
     std::optional<BottomAppBarScrollBehavior> scrollBehavior;
     bool windowInsets = true;  // pad by the navigation bar
 };
+namespace detail {
 void FlexibleBottomAppBar(const Modifier& modifier, const Content& content, const FlexibleBottomAppBarOptions& options = {},
                           CallSite site = CallSite::current());
+struct FlexibleBottomAppBarImpl {
+    using P = Params<names::Modifier, names::ContainerColor, names::ContentPadding, names::HorizontalArrangement, names::ExpandedHeight, names::WindowInsets, names::ScrollBehavior, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: FlexibleBottomAppBar takes a block: its content");
+        FlexibleBottomAppBarOptions options;
+        P::set<names::ContainerColor>(options.containerColor, args...);
+        P::set<names::ContentPadding>(options.contentPadding, args...);
+        P::set<names::HorizontalArrangement>(options.horizontalArrangement, args...);
+        P::set<names::ExpandedHeight>(options.expandedHeight, args...);
+        P::set<names::WindowInsets>(options.windowInsets, args...);
+        P::set<names::ScrollBehavior>(options.scrollBehavior, args...);
+        FlexibleBottomAppBar(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::FlexibleBottomAppBarImpl> FlexibleBottomAppBar;
 
 // ---- Dialogs, menus and sheets (popups above the screen) ------------------------------
 

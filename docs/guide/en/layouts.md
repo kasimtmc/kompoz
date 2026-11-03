@@ -195,11 +195,11 @@ On phones, the system bars, the display cutout and the keyboard cover parts of t
 Insets paddings don't add up: an inner one pads only by what outer ones didn't already take. In a `Scaffold` with a text field, pad the content as Compose does:
 
 ```cpp body
-Scaffold(Modifier(), {}, [&](PaddingValues padding) {
+Scaffold(Modifier()) [=](PaddingValues padding) {
     Column(Modifier().padding(padding).consumeWindowInsets(padding).imePadding()) {
         OutlinedTextField("", [](std::string) {});
     };
-});
+};
 ```
 
 ## Right to left

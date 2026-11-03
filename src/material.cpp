@@ -13,7 +13,7 @@
 
 namespace kompoz {
 
-void Scaffold(const Modifier& modifier, const ScaffoldSlots& slots, const std::function<void(PaddingValues)>& content,
+void detail::Scaffold(const Modifier& modifier, const ScaffoldSlots& slots, const std::function<void(PaddingValues)>& content,
               CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
@@ -210,7 +210,7 @@ struct ExitUntilCollapsedConnection final : AppBarConnection {
 };
 
 template <class C>
-TopAppBarScrollBehavior scrollBehavior(const TopAppBarState* given, bool pinned, CallSite site) {
+TopAppBarScrollBehavior makeScrollBehavior(const TopAppBarState* given, bool pinned, CallSite site) {
     ComposableScope group(site);
     TopAppBarState state = given ? *given : rememberTopAppBarState();
     auto scope = rememberCoroutineScope();
@@ -223,22 +223,22 @@ TopAppBarScrollBehavior scrollBehavior(const TopAppBarState* given, bool pinned,
 
 namespace TopAppBarDefaults {
 TopAppBarScrollBehavior pinnedScrollBehavior(CallSite site) {
-    return scrollBehavior<PinnedConnection>(nullptr, true, site);
+    return makeScrollBehavior<PinnedConnection>(nullptr, true, site);
 }
 TopAppBarScrollBehavior pinnedScrollBehavior(const TopAppBarState& state, CallSite site) {
-    return scrollBehavior<PinnedConnection>(&state, true, site);
+    return makeScrollBehavior<PinnedConnection>(&state, true, site);
 }
 TopAppBarScrollBehavior enterAlwaysScrollBehavior(CallSite site) {
-    return scrollBehavior<EnterAlwaysConnection>(nullptr, false, site);
+    return makeScrollBehavior<EnterAlwaysConnection>(nullptr, false, site);
 }
 TopAppBarScrollBehavior enterAlwaysScrollBehavior(const TopAppBarState& state, CallSite site) {
-    return scrollBehavior<EnterAlwaysConnection>(&state, false, site);
+    return makeScrollBehavior<EnterAlwaysConnection>(&state, false, site);
 }
 TopAppBarScrollBehavior exitUntilCollapsedScrollBehavior(CallSite site) {
-    return scrollBehavior<ExitUntilCollapsedConnection>(nullptr, false, site);
+    return makeScrollBehavior<ExitUntilCollapsedConnection>(nullptr, false, site);
 }
 TopAppBarScrollBehavior exitUntilCollapsedScrollBehavior(const TopAppBarState& state, CallSite site) {
-    return scrollBehavior<ExitUntilCollapsedConnection>(&state, false, site);
+    return makeScrollBehavior<ExitUntilCollapsedConnection>(&state, false, site);
 }
 WindowInsets windowInsets() { return WindowInsets::safeDrawing().only(WindowInsetsSides::Horizontal | WindowInsetsSides::Top); }
 } // namespace TopAppBarDefaults
@@ -423,7 +423,7 @@ void singleRowTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, b
 
 } // namespace
 
-void TopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
+void detail::TopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     singleRowTopAppBar(slots, modifier, false);
 }
@@ -476,27 +476,27 @@ TopAppBarScrollBehavior SearchBarDefaults::enterAlwaysSearchBarScrollBehavior(Ca
     return TopAppBarDefaults::enterAlwaysScrollBehavior(site);
 }
 
-void CenterAlignedTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
+void detail::CenterAlignedTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     singleRowTopAppBar(slots, modifier, true);
 }
 
-void MediumTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
+void detail::MediumTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     twoRowsTopAppBar(slots, modifier, TopAppBarDefaults::MediumAppBarExpandedHeight, typography().headlineSmall, typography().labelLarge);
 }
 
-void MediumFlexibleTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
+void detail::MediumFlexibleTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     twoRowsTopAppBar(slots, modifier, 112, typography().headlineMedium, typography().labelLarge, 24, 24);
 }
 
-void LargeFlexibleTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
+void detail::LargeFlexibleTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     twoRowsTopAppBar(slots, modifier, 120, typography().displaySmall, typography().titleMedium, 32, 28);
 }
 
-void TwoRowsTopAppBar(const std::function<void(bool expanded)>& title, const TopAppBarSlots& slots, const Modifier& modifier,
+void detail::TwoRowsTopAppBar(const std::function<void(bool expanded)>& title, const TopAppBarSlots& slots, const Modifier& modifier,
                       const std::function<void(bool expanded)>& subtitle, CallSite site) {
     ComposableScope scope(site);
     TopAppBarSlots small = slots;
@@ -507,7 +507,7 @@ void TwoRowsTopAppBar(const std::function<void(bool expanded)>& title, const Top
     twoRowsTopAppBar(small, modifier, 112, ambient, ambient, 24, std::nullopt, &large);
 }
 
-void LargeTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
+void detail::LargeTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     twoRowsTopAppBar(slots, modifier, TopAppBarDefaults::LargeAppBarExpandedHeight, typography().headlineMedium, typography().titleMedium);
 }
@@ -589,7 +589,7 @@ Modifier fab(const Modifier& m, Shape shape, std::function<void()> onClick, Call
 }
 } // namespace
 
-void SmallFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier, CallSite site) {
+void detail::SmallFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
@@ -597,7 +597,7 @@ void SmallFloatingActionButton(std::function<void()> onClick, const Content& con
     });
 }
 
-void LargeFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier, CallSite site) {
+void detail::LargeFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
@@ -605,7 +605,7 @@ void LargeFloatingActionButton(std::function<void()> onClick, const Content& con
     });
 }
 
-void FloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier,
+void detail::FloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier,
                           CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
@@ -614,7 +614,7 @@ void FloatingActionButton(std::function<void()> onClick, const Content& content,
     });
 }
 
-void ExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text,
+void detail::ExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text,
                                   const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
@@ -706,7 +706,7 @@ void FloatingActionButtonMenuItem(const FloatingActionButtonMenuScope& menu, std
                        });
 }
 
-void MediumFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier, CallSite site) {
+void detail::MediumFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
@@ -752,19 +752,19 @@ void extendedFab(const ExtendedFabSize& size, std::function<void()> onClick, con
 
 } // namespace
 
-void SmallExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded,
+void detail::SmallExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded,
                                        const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     extendedFab({56, 16, 24, 16, 8, typography().titleMedium}, std::move(onClick), icon, text, expanded, modifier);
 }
 
-void MediumExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded,
+void detail::MediumExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded,
                                         const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     extendedFab({80, 20, 28, 26, 12, typography().titleLarge}, std::move(onClick), icon, text, expanded, modifier);
 }
 
-void LargeExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded,
+void detail::LargeExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded,
                                        const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     extendedFab({96, 28, 36, 28, 16, typography().headlineSmall}, std::move(onClick), icon, text, expanded, modifier);
@@ -935,12 +935,12 @@ void AppBarColumn(std::function<void(AppBarScope&)> content, const Modifier& mod
     appBarItems(true, std::move(content), modifier, o);
 }
 
-void SnackbarHost(SnackbarHostState state, const Modifier& modifier, CallSite site) {
+void detail::SnackbarHost(SnackbarHostState state, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
-    SnackbarHost(state, modifier, [](const SnackbarData& data) { Snackbar(data); });
+    detail::SnackbarHost(state, modifier, [](const SnackbarData& data) { detail::Snackbar(data); });
 }
 
-void SnackbarHost(SnackbarHostState state, const Modifier& modifier, std::function<void(const SnackbarData&)> snackbar, CallSite site) {
+void detail::SnackbarHost(SnackbarHostState state, const Modifier& modifier, std::function<void(const SnackbarData&)> snackbar, CallSite site) {
     composable(site, state, modifier, [=] {
         std::optional<SnackbarData> current = state.current();
         auto& shown = remember([] { return std::optional<SnackbarData>(); });  // kept for the exit animation
@@ -1008,7 +1008,7 @@ Size oneRowSnackbar(const std::vector<Measurable>& children, const Constraints& 
 }
 } // namespace
 
-void Snackbar(const Content& content, const Modifier& modifier, const SnackbarOptions& o, CallSite site) {
+void detail::Snackbar(const Content& content, const Modifier& modifier, const SnackbarOptions& o, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     Shape shape = o.shape.value_or(RoundedCornerShape(4));
@@ -1042,7 +1042,7 @@ void Snackbar(const Content& content, const Modifier& modifier, const SnackbarOp
     });
 }
 
-void Snackbar(const SnackbarData& data, const Modifier& modifier, SnackbarOptions o, CallSite site) {
+void detail::Snackbar(const SnackbarData& data, const Modifier& modifier, SnackbarOptions o, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     if (!data.actionLabel.empty())
@@ -1051,7 +1051,7 @@ void Snackbar(const SnackbarData& data, const Modifier& modifier, SnackbarOption
         };
     if (data.withDismissAction)
         o.dismissAction = [&data] { detail::IconButton([data] { data.dismiss(); }, [] { detail::Icon(Icons::Filled::Close, LocalStrings.current().dismiss); }); };
-    Snackbar([&] { detail::Text(data.message); }, modifier.padding(12), o);
+    detail::Snackbar([&] { detail::Text(data.message); }, modifier.padding(12), o);
 }
 
 } // namespace kompoz

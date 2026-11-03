@@ -2372,7 +2372,7 @@ TEST(buttons_animate_composing_around_them_only_as_they_turn) {
         Column([=, &held] {
             Button([] {}, Modifier().testTag("düğme"), [] { Text("Gönder"); });
             ToggleButton(checked.get(), [&checked](bool c) { checked.set(c); }, Modifier().testTag("seçim"), {}, [] { Text("Seç"); });
-            SmallExtendedFloatingActionButton([] {}, Icons::Filled::Add, "Ekle", expanded.get(), Modifier().testTag("fab"));
+            SmallExtendedFloatingActionButton([] {}, Icons::Filled::Add, "Ekle", Modifier().testTag("fab"), kompoz::expanded = expanded.get());
             ButtonGroup([&held](const ButtonGroupScope& group) {
                 Button([] {}, group.animateWidth(MutableInteractionSource()), [] { Text("Önceki"); });
                 Button([] {}, group.animateWidth(held).testTag("tutulan"), interactionSource = held, [] { Text("Oynat"); });
@@ -3151,10 +3151,9 @@ TEST(scaffold_pads_content_by_its_bars_and_insets) {
         [&] {
             CompositionLocalProvider({LocalSystemInsets.provides({.statusBars = {0, 24, 0, 0}, .navigationBars = {0, 0, 0, 16}})}, [&] {
                 Scaffold(Modifier().fillMaxSize(),
-                         {.topBar = [] { TopAppBar({.title = [] { Text("Başlık"); }}); },
-                          .floatingActionButton =
-                              [] { FloatingActionButton([] {}, [] { Icon(Icons::Filled::Add, "Ekle"); }); }},
-                         [&](PaddingValues padding) {
+                         topBar = [] { TopAppBar(title = [] { Text("Başlık"); }); },
+                         floatingActionButton = [] { FloatingActionButton([] {}, [] { Icon(Icons::Filled::Add, "Ekle"); }); },
+                         [=, &seen](PaddingValues padding) {
                              seen = padding;
                              Box(Modifier().fillMaxSize().padding(padding).testTag("content"));
                          });
@@ -3173,14 +3172,13 @@ TEST(navigation_bar_switches_tabs) {
     ComposeTestRule rule(
         [&] {
             Scaffold(Modifier().fillMaxSize(),
-                     {.bottomBar =
-                          [&] {
-                              NavigationBar(Modifier(), [&] {
-                                  NavigationBarItem(tab.get() == 0, [&] { tab.set(0); }, Icons::Filled::Home, "Bir");
-                                  NavigationBarItem(tab.get() == 1, [&] { tab.set(1); }, Icons::Filled::List, "İki");
-                              });
-                          }},
-                     [&](PaddingValues padding) {
+                     bottomBar = [&] {
+                             NavigationBar(Modifier(), [&] {
+                                 NavigationBarItem(tab.get() == 0, [&] { tab.set(0); }, Icons::Filled::Home, "Bir");
+                                 NavigationBarItem(tab.get() == 1, [&] { tab.set(1); }, Icons::Filled::List, "İki");
+                             });
+                         },
+                     [=](PaddingValues padding) {
                          Text(tab.get() == 0 ? "sayfa 1" : "sayfa 2", Modifier().padding(padding));
                      });
         },
@@ -12427,7 +12425,7 @@ TEST(navigation_suite_scaffold_moves_its_items_and_keeps_the_screen) {
                 nav.item(tab.get() == 1, [&] { tab.set(1); }, Icons::Filled::Settings, "Ayarlar");
             },
             Modifier().fillMaxSize(), {.layoutType = forced.get()}, [&] {
-                Scaffold(Modifier().fillMaxSize(), {}, [&](PaddingValues p) {
+                Scaffold(Modifier().fillMaxSize(), [=, &seen](PaddingValues p) {
                     seen = p;
                     auto count = remember([] { return mutableStateOf(0); });
                     Box(Modifier().fillMaxSize().padding(p).consumeWindowInsets(p).imePadding(), [=] {
@@ -12838,7 +12836,7 @@ TEST(scaffold_bodies_and_carousel_items_leave_content_its_own_size_as_compose) {
         auto body = [] { Box(Modifier().size(60, 40).testTag("icerik")); };
         auto bar = [] { Box(Modifier().size(80, 80)); };  // a bar or a rail
         switch (which.get()) {
-        case 0: Scaffold(Modifier().fillMaxSize(), {}, [&](PaddingValues) { body(); }); break;
+        case 0: Scaffold(Modifier().fillMaxSize(), [=](PaddingValues) { body(); }); break;
         case 1: BottomSheetScaffold([] { Text("Ayrıntılar"); }, Modifier().fillMaxSize(), {}, [&](PaddingValues) { body(); }); break;
         case 2: NavigationSuiteScaffoldLayout(bar, NavigationSuiteType::NavigationBar, body); break;
         case 3: NavigationSuiteScaffoldLayout(bar, NavigationSuiteType::NavigationRail, body); break;
@@ -13654,8 +13652,8 @@ TEST(top_app_bar_enter_always_hides_before_the_list_scrolls) {
         auto scroll = TopAppBarDefaults::enterAlwaysScrollBehavior();
         behavior = scroll;
         Scaffold(Modifier().fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
-                 {.topBar = [&] { TopAppBar({.title = [] { Text("Başlık"); }, .scrollBehavior = scroll}); }},
-                 [&](PaddingValues padding) {
+                 topBar = [&] { TopAppBar(title = [] { Text("Başlık"); }, scrollBehavior = scroll); },
+                 [=, &list](PaddingValues padding) {
                      LazyColumn(Modifier().fillMaxSize(), {.state = list, .contentPadding = padding}, [](LazyListScope& s) {
                          s.items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
                      });
@@ -13689,8 +13687,8 @@ TEST(a_collapsing_top_bar_moves_the_content_without_recomposing_it) {
         auto scroll = TopAppBarDefaults::enterAlwaysScrollBehavior();
         behavior = scroll;
         Scaffold(Modifier().fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
-                 {.topBar = [&] { TopAppBar({.title = [] { Text("Başlık"); }, .scrollBehavior = scroll}); }},
-                 [&](PaddingValues padding) {
+                 topBar = [&] { TopAppBar(title = [] { Text("Başlık"); }, scrollBehavior = scroll); },
+                 [=, &composed, &list, &seen](PaddingValues padding) {
                      ++composed;
                      seen = padding;
                      Box(Modifier().fillMaxSize(), [=, &list] {
@@ -13719,16 +13717,16 @@ TEST(what_lays_out_by_a_scaffolds_padding_follows_it_without_recomposing) {
     int composed = 0;
     ComposeTestRule rule([&] {
         Scaffold(Modifier().fillMaxSize(),
-                 {.topBar = [&] {
-                     // As tall as `bar`, read as it is measured: the content's padding changes, nothing is recomposed.
-                     Box(Modifier().fillMaxWidth().layout([&](const MeasureNext& next, const Constraints& c, Offset& at) {
-                         at = {};
-                         float h = bar.get();
-                         next({c.maxWidth, c.maxWidth, h, h});
-                         return Size{c.maxWidth, h};
-                     }));
-                 }},
-                 [&](PaddingValues padding) {
+                 topBar = [&] {
+                    // As tall as `bar`, read as it is measured: the content's padding changes, nothing is recomposed.
+                    Box(Modifier().fillMaxWidth().layout([&](const MeasureNext& next, const Constraints& c, Offset& at) {
+                        at = {};
+                        float h = bar.get();
+                        next({c.maxWidth, c.maxWidth, h, h});
+                        return Size{c.maxWidth, h};
+                    }));
+                },
+                 [=, &composed](PaddingValues padding) {
                      ++composed;
                      auto pager = rememberPagerState(0, [] { return 3; });
                      auto carousel = rememberCarouselState(0, [] { return 5; });
@@ -13775,7 +13773,7 @@ TEST(a_scaffolds_content_is_measured_with_the_padding_its_bars_give_it_then) {
         });
     };
     ComposeTestRule rule([&] {
-        Scaffold(Modifier().fillMaxSize(), {.topBar = [&] { Box(sized(bar)); }}, [&](PaddingValues padding) {
+        Scaffold(Modifier().fillMaxSize(), topBar = [&] { Box(sized(bar)); }, [=, &told](PaddingValues padding) {
             Box(Modifier().fillMaxSize().padding(padding), [=, &told] {
                 Box(sized(tall).onGloballyPositioned([&](const LayoutCoordinates& at) {
                     told.push_back({at.positionInRoot().x, at.positionInRoot().y, at.size().width, at.size().height});
@@ -13826,8 +13824,8 @@ TEST(large_top_app_bar_exit_until_collapsed) {
         auto scroll = TopAppBarDefaults::exitUntilCollapsedScrollBehavior();
         behavior = scroll;
         Scaffold(Modifier().fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
-                 {.topBar = [&] { LargeTopAppBar({.title = [] { Text("Büyük başlık"); }, .scrollBehavior = scroll}); }},
-                 [&](PaddingValues padding) {
+                 topBar = [&] { LargeTopAppBar(title = [] { Text("Büyük başlık"); }, scrollBehavior = scroll); },
+                 [=, &list](PaddingValues padding) {
                      LazyColumn(Modifier().fillMaxSize(), {.state = list, .contentPadding = padding}, [](LazyListScope& s) {
                          s.items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
                      });
@@ -13855,15 +13853,15 @@ TEST(two_rows_top_app_bars_let_their_titles_style_themselves) {
         behavior = scroll;
         CompositionLocalProvider({LocalTextStyle.provides(Font{20})}, [&] {  // the style around the bar: 10 dp a letter
             Scaffold(Modifier().fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
-                     {.topBar = [&] {
-                         TwoRowsTopAppBar([&](bool expanded) {
-                             asked.push_back(expanded);
-                             Text(expanded ? "Büyük başlık" : "Küçük", Modifier().testTag(expanded ? "büyük" : "küçük"));
-                         }, {.scrollBehavior = scroll}, Modifier().testTag("çubuk"), [](bool expanded) {
-                             Text(expanded ? "uzun alt başlık" : "alt", Modifier().testTag(expanded ? "alt büyük" : "alt küçük"));
-                         });
-                     }},
-                     [&](PaddingValues padding) {
+                     topBar = [&] {
+                        TwoRowsTopAppBar([&](bool expanded) {
+                            asked.push_back(expanded);
+                            Text(expanded ? "Büyük başlık" : "Küçük", Modifier().testTag(expanded ? "büyük" : "küçük"));
+                        }, scrollBehavior = scroll, modifier = Modifier().testTag("çubuk"), subtitle = [](bool expanded) {
+                            Text(expanded ? "uzun alt başlık" : "alt", Modifier().testTag(expanded ? "alt büyük" : "alt küçük"));
+                        });
+                    },
+                     [=, &list](PaddingValues padding) {
                          LazyColumn(Modifier().fillMaxSize(), {.state = list, .contentPadding = padding}, [](LazyListScope& s) {
                              s.items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
                          });
@@ -13887,8 +13885,8 @@ TEST(pinned_top_app_bar_knows_when_content_is_under_it) {
         auto pinned = TopAppBarDefaults::pinnedScrollBehavior();
         behavior = pinned;
         Scaffold(Modifier().fillMaxSize().nestedScroll(pinned.nestedScrollConnection),
-                 {.topBar = [&] { TopAppBar({.title = [] { Text("Başlık"); }, .scrollBehavior = pinned}); }},
-                 [&](PaddingValues padding) {
+                 topBar = [&] { TopAppBar(title = [] { Text("Başlık"); }, scrollBehavior = pinned); },
+                 [=, &scroll](PaddingValues padding) {
                      Column(Modifier().fillMaxSize().verticalScroll(scroll).padding(padding), [] { Box(Modifier().height(2000)); });
                  });
     }, {400, 800});
@@ -13909,8 +13907,8 @@ TEST(a_top_app_bar_takes_its_scrolled_color) {
         auto pinned = TopAppBarDefaults::pinnedScrollBehavior();
         behavior = pinned;
         Scaffold(Modifier().fillMaxSize().nestedScroll(pinned.nestedScrollConnection),
-                 {.topBar = [&] { TopAppBar({.title = [] { Text("Başlık"); }, .scrollBehavior = pinned}); }},
-                 [&](PaddingValues padding) {
+                 topBar = [&] { TopAppBar(title = [] { Text("Başlık"); }, scrollBehavior = pinned); },
+                 [=, &scroll](PaddingValues padding) {
                      Column(Modifier().fillMaxSize().verticalScroll(scroll).padding(padding), [] { Box(Modifier().height(2000)); });
                  });
     }, {400, 800});
@@ -15324,7 +15322,7 @@ TEST(chips_as_compose_1_4) {
 TEST(fabs_as_compose_1_4) {
     ComposeTestRule rule([&] {
         Column([=] {
-            FloatingActionButton([] {}, [] { Icon(Icons::Filled::Add, "Ekle"); }, Modifier().testTag("fab"));
+            FloatingActionButton([] {}, Modifier().testTag("fab"), [] { Icon(Icons::Filled::Add, "Ekle"); });
             ExtendedFloatingActionButton([] {}, Icons::Filled::Add, "Yeni", Modifier().testTag("geniş"));
             ExtendedFloatingActionButton([] {}, Icons::Filled::Add, "", Modifier().testTag("kısa"));
             Text("Yeni", Modifier().testTag("ölçü"), style = typography().labelLarge);
@@ -15556,10 +15554,10 @@ TEST(segmented_buttons_as_compose_1_4) {
 TEST(bottom_app_bar_as_compose_1_4) {
     ComposeTestRule rule([] {
         Box(Modifier().fillMaxSize(), Alignment::BottomStart, [] {
-            BottomAppBar({.actions = [] { Box(Modifier().size(48).testTag("eylem")); },
-                          .floatingActionButton = [] { Box(Modifier().size(56).testTag("fab")); },
-                          .windowInsets = false},
-                         Modifier().testTag("çubuk"));
+            BottomAppBar(actions = [] { Box(Modifier().size(48).testTag("eylem")); },
+                         floatingActionButton = [] { Box(Modifier().size(56).testTag("fab")); },
+                         windowInsets = false,
+                         modifier = Modifier().testTag("çubuk"));
         });
     }, {400, 800});
     Rect bar = rule.onNodeWithTag("çubuk").bounds(), action = rule.onNodeWithTag("eylem").bounds(), fab = rule.onNodeWithTag("fab").bounds();
@@ -15856,10 +15854,10 @@ TEST(scaffold_and_navigation_bar_leave_the_keyboard_to_ime_padding) {
     PaddingValues seen;
     ComposeTestRule rule([&] {
         Scaffold(Modifier().fillMaxSize(),
-                 {.bottomBar = [] {
-                      NavigationBar(Modifier().testTag("bar"), [] { NavigationBarItem(true, [] {}, Icons::Filled::Home, "Bir"); });
-                  }},
-                 [&](PaddingValues padding) {
+                 bottomBar = [] {
+                     NavigationBar(Modifier().testTag("bar"), [] { NavigationBarItem(true, [] {}, Icons::Filled::Home, "Bir"); });
+                 },
+                 [=, &seen](PaddingValues padding) {
                      seen = padding;
                      Box(Modifier().fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().testTag("content"));
                  });
@@ -17573,12 +17571,12 @@ TEST(floating_toolbar_shows_its_side_actions_when_expanded_and_leaves_on_scroll)
     auto action = [](const char* tag) { Box(Modifier().size(48).testTag(tag)); };
     ComposeTestRule rule([&] {
         Column([=] {
-            HorizontalFloatingToolbar(expanded.get(), [&] { action("orta"); }, Modifier().testTag("yatay"),
-                                      {.leadingContent = [&] { action("baş"); }, .trailingContent = [&] { action("son"); }});
-            VerticalFloatingToolbar(expanded.get(), [&] { action("dikey-orta"); }, Modifier().testTag("dikey"),
-                                    {.colors = FloatingToolbarDefaults::vibrantFloatingToolbarColors(), .trailingContent = [&] { action("alt"); }});
-            HorizontalFloatingToolbar(expanded.get(), [&] { FloatingToolbarDefaults::StandardFloatingActionButton([] {}, [] {}, Modifier().testTag("fab")); },
-                                      [&] { action("araç"); }, Modifier().testTag("fablı"));
+            HorizontalFloatingToolbar(expanded.get(), Modifier().testTag("yatay"),
+                                      leadingContent = [&] { action("baş"); }, trailingContent = [&] { action("son"); }, [=] { action("orta"); });
+            VerticalFloatingToolbar(expanded.get(), Modifier().testTag("dikey"),
+                                    floatingToolbarColors = FloatingToolbarDefaults::vibrantFloatingToolbarColors(), trailingContent = [&] { action("alt"); }, [=] { action("dikey-orta"); });
+            HorizontalFloatingToolbar(expanded.get(), [&] { FloatingToolbarDefaults::StandardFloatingActionButton([] {}, Modifier().testTag("fab"), [] {}); }, Modifier().testTag("fablı"),
+                                      [=] { action("araç"); });
         });
     });
     auto at = [&](const char* tag) { return rule.onNodeWithTag(tag).bounds(); };
@@ -17616,9 +17614,9 @@ TEST(floating_toolbar_shows_its_side_actions_when_expanded_and_leaves_on_scroll)
         behavior = &kept;
         Box(Modifier().size(400, 600).nestedScroll(kept.nestedScrollConnection).nestedScroll(side.nestedScrollConnection), [=] {
             LazyColumn(Modifier().fillMaxSize(), {}, [](LazyListScope& list) { list.items(100, [](int) { Box(Modifier().fillMaxWidth().height(60)); }); });
-            HorizontalFloatingToolbar(true, [&] { action("sayfa"); }, Modifier().align(Alignment::BottomCenter).offset(0, -16).testTag("araçlar"),
-                                      {.scrollBehavior = kept});
-            VerticalFloatingToolbar(true, [&] { action("yan"); }, Modifier().align(Alignment::CenterEnd).offset(-16, 0), {.scrollBehavior = side});
+            HorizontalFloatingToolbar(true, Modifier().align(Alignment::BottomCenter).offset(0, -16).testTag("araçlar"),
+                                      scrollBehavior = kept, [=] { action("sayfa"); });
+            VerticalFloatingToolbar(true, Modifier().align(Alignment::CenterEnd).offset(-16, 0), scrollBehavior = side, [=] { action("yan"); });
         });
     }, {400, 600});
     auto moved = [&] { return page.onNodeWithTag("sayfa").bounds(); };  // an action in it: where the toolbar's offsets put it
@@ -18022,10 +18020,10 @@ TEST(expressive_fabs_come_in_sizes_and_extended_ones_narrow_to_their_icon) {
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
         Column([=] {
-            MediumFloatingActionButton([clicks] { ++*clicks; }, [] { Box(Modifier().size(28)); }, Modifier().testTag("orta"));
-            SmallExtendedFloatingActionButton([clicks] { ++*clicks; }, Icons::Filled::Add, "Yeni", expanded.get(), Modifier().testTag("küçük"));
-            MediumExtendedFloatingActionButton([] {}, Icons::Filled::Edit, "Yaz", expanded.get(), Modifier().testTag("orta-uzun"));
-            LargeExtendedFloatingActionButton([] {}, Icons::Filled::Edit, "Yaz", expanded.get(), Modifier().testTag("büyük"));
+            MediumFloatingActionButton([clicks] { ++*clicks; }, Modifier().testTag("orta"), [] { Box(Modifier().size(28)); });
+            SmallExtendedFloatingActionButton([clicks] { ++*clicks; }, Icons::Filled::Add, "Yeni", Modifier().testTag("küçük"), kompoz::expanded = expanded.get());
+            MediumExtendedFloatingActionButton([] {}, Icons::Filled::Edit, "Yaz", Modifier().testTag("orta-uzun"), kompoz::expanded = expanded.get());
+            LargeExtendedFloatingActionButton([] {}, Icons::Filled::Edit, "Yaz", Modifier().testTag("büyük"), kompoz::expanded = expanded.get());
         });
     });
     auto at = [&](const char* tag) { return rule.onNodeWithTag(tag).bounds(); };
@@ -18065,19 +18063,19 @@ TEST(expressive_fabs_come_in_sizes_and_extended_ones_narrow_to_their_icon) {
 TEST(flexible_top_app_bars_are_bigger_and_place_their_title_across) {
     ComposeTestRule rule([&] {
         Column([=] {
-            MediumFlexibleTopAppBar({.title = [] { Text("Notlar"); }, .windowInsets = WindowInsets{}},
-                                    Modifier().testTag("orta-çubuk"));
-            MediumFlexibleTopAppBar({.title = [] { Text("Notlar"); }, .subtitle = [] { Text("12 not"); }, .windowInsets = WindowInsets{}},
-                                    Modifier().testTag("alt-yazılı"));
-            LargeFlexibleTopAppBar({.title = [] { Text("Gelen"); },
-                                    .windowInsets = WindowInsets{},
-                                    .titleHorizontalAlignment = Alignment::CenterHorizontally},
-                                   Modifier().testTag("büyük-çubuk"));
-            LargeFlexibleTopAppBar({.title = [] { Text("Giden"); },
-                                    .subtitle = [] { Text("2 ileti"); },
-                                    .windowInsets = WindowInsets{},
-                                    .titleHorizontalAlignment = Alignment::End},
-                                   Modifier().testTag("son-çubuk"));
+            MediumFlexibleTopAppBar(title = [] { Text("Notlar"); }, windowInsets = WindowInsets{},
+                                    modifier = Modifier().testTag("orta-çubuk"));
+            MediumFlexibleTopAppBar(title = [] { Text("Notlar"); }, subtitle = [] { Text("12 not"); }, windowInsets = WindowInsets{},
+                                    modifier = Modifier().testTag("alt-yazılı"));
+            LargeFlexibleTopAppBar(title = [] { Text("Gelen"); },
+                                   windowInsets = WindowInsets{},
+                                   titleHorizontalAlignment = Alignment::CenterHorizontally,
+                                   modifier = Modifier().testTag("büyük-çubuk"));
+            LargeFlexibleTopAppBar(title = [] { Text("Giden"); },
+                                   subtitle = [] { Text("2 ileti"); },
+                                   windowInsets = WindowInsets{},
+                                   titleHorizontalAlignment = Alignment::End,
+                                   modifier = Modifier().testTag("son-çubuk"));
         });
     }, {400, 1000});
     auto at = [&](const char* tag) { return rule.onNodeWithTag(tag).bounds(); };
@@ -18177,12 +18175,12 @@ TEST(top_app_bars_show_a_subtitle_under_the_title) {
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
         Column([=] {
-            TopAppBar({.title = [] { Text("Gelen kutusu", Modifier().testTag("başlık")); },
-                       .subtitle = [] { Text("3 okunmamış", Modifier().testTag("alt")); }});
-            CenterAlignedTopAppBar({.title = [] { Text("Takvim", Modifier().testTag("orta-başlık")); },
-                                    .subtitle = [] { Text("Ekim", Modifier().testTag("orta-alt")); }});
-            MediumTopAppBar({.title = [] { Text("Notlar", Modifier().testTag("m-başlık")); }, .subtitle = [] { Text("12 not", Modifier().testTag("m-alt")); }},
-                            Modifier().testTag("orta-çubuk"));
+            TopAppBar(title = [] { Text("Gelen kutusu", Modifier().testTag("başlık")); },
+                      subtitle = [] { Text("3 okunmamış", Modifier().testTag("alt")); });
+            CenterAlignedTopAppBar(title = [] { Text("Takvim", Modifier().testTag("orta-başlık")); },
+                                   subtitle = [] { Text("Ekim", Modifier().testTag("orta-alt")); });
+            MediumTopAppBar(title = [] { Text("Notlar", Modifier().testTag("m-başlık")); }, subtitle = [] { Text("12 not", Modifier().testTag("m-alt")); },
+                            modifier = Modifier().testTag("orta-çubuk"));
         });
     }, {400, 800});
     auto at = [&](const char* tag) { return rule.onNodeWithTag(tag).bounds(); };
@@ -18220,15 +18218,15 @@ TEST(bottom_app_bars_spread_out_and_leave_as_the_content_scrolls_on) {
         kept = BottomAppBarDefaults::exitAlwaysScrollBehavior();
         behavior = &kept;
         Scaffold(Modifier().fillMaxSize().nestedScroll(kept.nestedScrollConnection),
-                 {.bottomBar = [&] {
-                     if (flexible.get())
-                         FlexibleBottomAppBar(Modifier().testTag("çubuk"), [] {
-                             for (const char* tag : {"a", "b", "c"}) Box(Modifier().size(48).testTag(tag));
-                         }, {.scrollBehavior = kept, .windowInsets = false});
-                     else
-                         BottomAppBar({.actions = [] { Box(Modifier().size(48).testTag("a")); }, .windowInsets = false, .scrollBehavior = kept},
-                                      Modifier().testTag("çubuk"));
-                 }},
+                 bottomBar = [&] {
+                    if (flexible.get())
+                        FlexibleBottomAppBar(Modifier().testTag("çubuk"), scrollBehavior = kept, windowInsets = false, [] {
+                            for (const char* tag : {"a", "b", "c"}) Box(Modifier().size(48).testTag(tag));
+                        });
+                    else
+                        BottomAppBar(actions = [] { Box(Modifier().size(48).testTag("a")); }, windowInsets = false, scrollBehavior = kept,
+                                     modifier = Modifier().testTag("çubuk"));
+                },
                  [](PaddingValues padding) {
                      LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& list) {
                          list.items(60, [](int) { Box(Modifier().fillMaxWidth().height(60)); });
@@ -19116,9 +19114,9 @@ TEST(top_search_bar_sits_alone_and_slides_away) {
         auto field = [=] { SearchBarDefaults::InputField(s, text, {.placeholder = "Ara"}, Modifier().testTag("hap")); };
         Box(Modifier().width(wide.get() ? 1000.f : 400.f).fillMaxHeight(), [=, &list] {
             Scaffold(Modifier().fillMaxSize().nestedScroll(scroll.nestedScrollConnection).nestedScroll(exit.nestedScrollConnection),
-                     {.topBar = [&] { TopSearchBar(s, field, Modifier(), scroll); },
-                      .bottomBar = [&] { BottomAppBar({.actions = [] { Text("Alt"); }, .scrollBehavior = exit}); }},
-                     [&](PaddingValues padding) {
+                     topBar = [&] { TopSearchBar(s, field, Modifier(), scroll); },
+                     bottomBar = [&] { BottomAppBar(actions = [] { Text("Alt"); }, scrollBehavior = exit); },
+                     [=, &list](PaddingValues padding) {
                          LazyColumn(Modifier().fillMaxSize(), {.state = list, .contentPadding = padding}, [](LazyListScope& l) {
                              l.items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
                          });
@@ -19167,13 +19165,13 @@ TEST(app_bar_with_search_slides_away_with_the_content) {
         auto text = rememberTextFieldState();
         auto field = [=] { SearchBarDefaults::InputField(s, text, {.placeholder = "Postalarda ara"}); };
         Scaffold(Modifier().fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
-                 {.topBar = [&] {
-                     AppBarWithSearch(s, field, Modifier().testTag("çubuk"),
-                                      {.navigationIcon = [&] { IconButton([&] { ++menus; }, [] { Icon(Icons::Filled::Menu, "Menü"); }); },
-                                       .actions = [] { Icon(Icons::Filled::Person, "Hesap"); },
-                                       .scrollBehavior = pinned.get() ? std::nullopt : std::optional(scroll)});
-                 }},
-                 [&](PaddingValues padding) {
+                 topBar = [&] {
+                    AppBarWithSearch(s, field, Modifier().testTag("çubuk"),
+                                     {.navigationIcon = [&] { IconButton([&] { ++menus; }, [] { Icon(Icons::Filled::Menu, "Menü"); }); },
+                                      .actions = [] { Icon(Icons::Filled::Person, "Hesap"); },
+                                      .scrollBehavior = pinned.get() ? std::nullopt : std::optional(scroll)});
+                },
+                 [=, &list](PaddingValues padding) {
                      LazyColumn(Modifier().fillMaxSize(), {.state = list, .contentPadding = padding}, [](LazyListScope& l) {
                          l.items(100, [](int i) { Text("Posta " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
                      });
@@ -25270,17 +25268,17 @@ TEST(match_parent_size_and_fill_parent_max) {
 TEST(snackbars_lay_out_as_compose_and_host_your_own) {
     ComposeTestRule rule([&] {
         Column([=] {
-            Snackbar([] { Text("Kaydedildi"); }, Modifier().testTag("tek"),
-                     {.action = [] { TextButton([] {}, [] { Text("Geri al"); }); }});
-            Snackbar([] { Text("Uzun bir ileti iki satıra iner çünkü sığmaz bu genişliğe"); }, Modifier().width(300).testTag("çift"),
-                     {.action = [] { TextButton([] {}, [] { Text("Tamam"); }); }});
-            Snackbar([] { Text("Yalnız"); }, Modifier().testTag("yalnız"));  // nothing else: still 48
-            Snackbar([] { Text("Büyük eylemli"); }, Modifier().testTag("büyük"), {.action = [] { Text("EYLEM", fontSize = 28); }});
-            Snackbar([] { Text("İki satıra inen bir ileti"); }, Modifier().width(240).testTag("iki"),
-                     {.action = [] { TextButton([] {}, [] { Text("Tamam"); }); }});
-            Snackbar([] { Text("Alt satırda eylem"); }, Modifier().testTag("alt"),
-                     {.action = [] { TextButton([] {}, [] { Text("Uzun bir eylem adı"); }); }, .actionOnNewLine = true,
-                      .containerColor = Color{0.1f, 0.2f, 0.3f, 1}});
+            Snackbar( Modifier().testTag("tek"),
+                     action = [] { TextButton([] {}, [] { Text("Geri al"); }); },[] { Text("Kaydedildi"); });
+            Snackbar( Modifier().width(300).testTag("çift"),
+                     action = [] { TextButton([] {}, [] { Text("Tamam"); }); },[] { Text("Uzun bir ileti iki satıra iner çünkü sığmaz bu genişliğe"); });
+            Snackbar( Modifier().testTag("yalnız"),[] { Text("Yalnız"); });  // nothing else: still 48
+            Snackbar( Modifier().testTag("büyük"), action = [] { Text("EYLEM", fontSize = 28); },[] { Text("Büyük eylemli"); });
+            Snackbar( Modifier().width(240).testTag("iki"),
+                     action = [] { TextButton([] {}, [] { Text("Tamam"); }); },[] { Text("İki satıra inen bir ileti"); });
+            Snackbar( Modifier().testTag("alt"),
+                     action = [] { TextButton([] {}, [] { Text("Uzun bir eylem adı"); }); }, actionOnNewLine = true,
+                     containerColor = Color{0.1f, 0.2f, 0.3f, 1},[] { Text("Alt satırda eylem"); });
         });
     }, {800, 1000});
     testing::RecordingCanvas canvas;
@@ -25748,23 +25746,23 @@ TEST(center_aligned_bar_clickable_cards_fab_sizes_and_positions) {
     int clicks = 0;
     ComposeTestRule rule([&] {
         Scaffold(Modifier().fillMaxSize(),
-                 {.topBar = [&] {
-                      CenterAlignedTopAppBar({.title = [&] { Text(title.get(), Modifier().testTag("başlık"), maxLines = 1, overflow = TextOverflow::Ellipsis); },
-                                              .navigationIcon = [] { IconButton([] {}, [] { Icon(Icons::Filled::Menu, "Menü"); }); },
-                                              .actions = [] {
-                                                  IconButton([] {}, [] { Icon(Icons::Filled::Search, "Ara"); });
-                                                  IconButton([] {}, [] { Icon(Icons::Filled::MoreVert, "Diğer"); });
-                                              }});
-                  },
-                  .bottomBar = [] { Box(Modifier().fillMaxWidth().height(80)); },
-                  .floatingActionButton = [] { FloatingActionButton([] {}, [] { Icon(Icons::Filled::Add, "Ekle"); }, Modifier().testTag("fab")); },
-                  .floatingActionButtonPosition = position.get()},
-                 [&](PaddingValues padding) {
+                 topBar = [&] {
+                     CenterAlignedTopAppBar(kompoz::title = [&] { Text(title.get(), Modifier().testTag("başlık"), maxLines = 1, overflow = TextOverflow::Ellipsis); },
+                                            navigationIcon = [] { IconButton([] {}, [] { Icon(Icons::Filled::Menu, "Menü"); }); },
+                                            actions = [] {
+                                                IconButton([] {}, [] { Icon(Icons::Filled::Search, "Ara"); });
+                                                IconButton([] {}, [] { Icon(Icons::Filled::MoreVert, "Diğer"); });
+                                            });
+                 },
+                 bottomBar = [] { Box(Modifier().fillMaxWidth().height(80)); },
+                 floatingActionButton = [] { FloatingActionButton([] {}, Modifier().testTag("fab"), [] { Icon(Icons::Filled::Add, "Ekle"); }); },
+                 floatingActionButtonPosition = position.get(),
+                 [=, &clicks](PaddingValues padding) {
                      Column(Modifier().padding(padding), [=, &clicks] {
                          Card([&] { ++clicks; }, Modifier().testTag("kart"), [] { Text("Kart", Modifier().padding(16)); });
                          Row([] {
-                             SmallFloatingActionButton([] {}, [] { Icon(Icons::Filled::Add, "Küçük"); }, Modifier().testTag("küçük"));
-                             LargeFloatingActionButton([] {}, [] { Icon(Icons::Filled::Add, "Büyük"); }, Modifier().testTag("büyük"));
+                             SmallFloatingActionButton([] {}, Modifier().testTag("küçük"), [] { Icon(Icons::Filled::Add, "Küçük"); });
+                             LargeFloatingActionButton([] {}, Modifier().testTag("büyük"), [] { Icon(Icons::Filled::Add, "Büyük"); });
                          });
                      });
                  });
@@ -29240,8 +29238,8 @@ TEST(buttons_and_chips_keep_48_dp_of_room_to_touch_them) {
                 TextButton([taps] { taps->push_back("metin"); }, Modifier().testTag("metin"), [] { Text("İptal"); });
                 ToggleButton(on.get(), [on](bool v) { on.set(v); }, Modifier().testTag("aç"), {}, [] { Text("Aç"); });
                 AssistChip([taps] { taps->push_back("çip"); }, [] { Text("Yol"); }, {}, Modifier().testTag("çip"));
-                SmallFloatingActionButton([taps] { taps->push_back("fab"); }, [] { Icon(Icons::Filled::Add, "Ekle"); },
-                                          Modifier().testTag("fab"));
+                SmallFloatingActionButton([taps] { taps->push_back("fab"); },
+                                          Modifier().testTag("fab"), [] { Icon(Icons::Filled::Add, "Ekle"); });
             });
         });
     });
@@ -29315,27 +29313,26 @@ TEST(top_app_bar_colors_heights_and_insets_can_be_set) {
         auto behavior = TopAppBarDefaults::exitUntilCollapsedScrollBehavior();
         state = behavior.state;
         Column([=, &blue, &green, &magenta, &red] {
-            TopAppBarSlots slots{.title = [] { Text("Başlık"); },
-                                 .subtitle = [] { Text("Alt"); },
-                                 .navigationIcon = [] { Icon(Icons::Filled::Menu, "Menü"); },
-                                 .actions = [] { Icon(Icons::Filled::Search, "Ara"); }};
-            if (custom.get()) {
-                slots.navigationIconContentColor = red;
-                slots.titleContentColor = green;
-                slots.actionIconContentColor = blue;
-                slots.subtitleContentColor = magenta;
-                slots.expandedHeight = 80;
-                slots.windowInsets = WindowInsets{0, 10, 0, 0};
-            }
+            bool own = custom.get();
+            auto navigationColor = own ? std::optional(red) : std::nullopt, titleColor = own ? std::optional(green) : std::nullopt;
+            auto actionColor = own ? std::optional(blue) : std::nullopt, subtitleColor = own ? std::optional(magenta) : std::nullopt;
+            auto height = own ? std::optional(80.f) : std::nullopt;
+            auto insets = own ? std::optional(WindowInsets{0, 10, 0, 0}) : std::nullopt;
             if (centered.get())
-                CenterAlignedTopAppBar(slots, Modifier().testTag("tek"));
+                CenterAlignedTopAppBar(title = [] { Text("Başlık"); }, modifier = Modifier().testTag("tek"), subtitle = [] { Text("Alt"); },
+                    navigationIcon = [] { Icon(Icons::Filled::Menu, "Menü"); }, actions = [] { Icon(Icons::Filled::Search, "Ara"); },
+                    navigationIconContentColor = navigationColor, titleContentColor = titleColor, actionIconContentColor = actionColor,
+                    subtitleContentColor = subtitleColor, expandedHeight = height, kompoz::windowInsets = insets);
             else
-                TopAppBar(slots, Modifier().testTag("tek"));
-            MediumTopAppBar({.title = [] { Text("Orta"); },
-                             .expandedHeight = custom.get() ? std::optional(150.f) : std::nullopt,
-                             .collapsedHeight = custom.get() ? std::optional(56.f) : std::nullopt,
-                             .scrollBehavior = behavior},
-                            Modifier().testTag("orta"));
+                TopAppBar(title = [] { Text("Başlık"); }, modifier = Modifier().testTag("tek"), subtitle = [] { Text("Alt"); },
+                    navigationIcon = [] { Icon(Icons::Filled::Menu, "Menü"); }, actions = [] { Icon(Icons::Filled::Search, "Ara"); },
+                    navigationIconContentColor = navigationColor, titleContentColor = titleColor, actionIconContentColor = actionColor,
+                    subtitleContentColor = subtitleColor, expandedHeight = height, kompoz::windowInsets = insets);
+            MediumTopAppBar(title = [] { Text("Orta"); },
+                            expandedHeight = custom.get() ? std::optional(150.f) : std::nullopt,
+                            collapsedHeight = custom.get() ? std::optional(56.f) : std::nullopt,
+                            scrollBehavior = behavior,
+                            modifier = Modifier().testTag("orta"));
         });
     }, {400, 800});
     auto colorsOf = [&] {
@@ -29396,10 +29393,10 @@ TEST(rows_and_columns_with_weights_that_dont_fill_are_as_big_as_their_children) 
 TEST(center_aligned_top_app_bar_mirrors_right_to_left) {
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] {
-            CenterAlignedTopAppBar({.title = [] { Text("Başlık"); },
-                                    .navigationIcon = [] { Icon(Icons::Filled::Menu, "Menü"); },
-                                    .actions = [] { Icon(Icons::Filled::Search, "Ara"); },
-                                    .windowInsets = WindowInsets{}});
+            CenterAlignedTopAppBar(title = [] { Text("Başlık"); },
+                                   navigationIcon = [] { Icon(Icons::Filled::Menu, "Menü"); },
+                                   actions = [] { Icon(Icons::Filled::Search, "Ara"); },
+                                   windowInsets = WindowInsets{});
         });
     }, {400, 800});
     // The navigation icon at the start (the right), the actions at the end (the left), 4 dp in.

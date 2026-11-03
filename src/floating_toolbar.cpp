@@ -182,19 +182,19 @@ FloatingToolbarScrollBehavior exitAlwaysScrollBehavior(FloatingToolbarExitDirect
     return {state, exitDirection, connection};
 }
 
-void StandardFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
-    FloatingToolbarColors c = standardFloatingToolbarColors();
-    toolbarFab(c.fabContainerColor, c.fabContentColor, std::move(onClick), content, modifier);
-}
-
-void VibrantFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
-    FloatingToolbarColors c = vibrantFloatingToolbarColors();
-    toolbarFab(c.fabContainerColor, c.fabContentColor, std::move(onClick), content, modifier);
-}
-
 } // namespace FloatingToolbarDefaults
+
+void detail::StandardFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier, CallSite site) {
+    ComposableScope scope(site);
+    FloatingToolbarColors c = FloatingToolbarDefaults::standardFloatingToolbarColors();
+    toolbarFab(c.fabContainerColor, c.fabContentColor, std::move(onClick), content, modifier);
+}
+
+void detail::VibrantFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier, CallSite site) {
+    ComposableScope scope(site);
+    FloatingToolbarColors c = FloatingToolbarDefaults::vibrantFloatingToolbarColors();
+    toolbarFab(c.fabContainerColor, c.fabContentColor, std::move(onClick), content, modifier);
+}
 
 namespace BottomAppBarDefaults {
 
@@ -212,25 +212,25 @@ BottomAppBarScrollBehavior exitAlwaysScrollBehavior(BottomAppBarState state, Cal
 
 } // namespace BottomAppBarDefaults
 
-void HorizontalFloatingToolbar(bool expanded, const Content& content, const Modifier& modifier, const FloatingToolbarOptions& options,
+void detail::HorizontalFloatingToolbar(bool expanded, const Content& content, const Modifier& modifier, const FloatingToolbarOptions& options,
                                CallSite site) {
     ComposableScope scope(site);
     toolbar(false, expanded, content, scrolled(modifier, options.scrollBehavior), options);
 }
 
-void VerticalFloatingToolbar(bool expanded, const Content& content, const Modifier& modifier, const FloatingToolbarOptions& options,
+void detail::VerticalFloatingToolbar(bool expanded, const Content& content, const Modifier& modifier, const FloatingToolbarOptions& options,
                              CallSite site) {
     ComposableScope scope(site);
     toolbar(true, expanded, content, scrolled(modifier, options.scrollBehavior), options);
 }
 
-void HorizontalFloatingToolbar(bool expanded, const Content& floatingActionButton, const Content& content, const Modifier& modifier,
+void detail::HorizontalFloatingToolbar(bool expanded, const Content& floatingActionButton, const Content& content, const Modifier& modifier,
                                const FloatingToolbarOptions& options, CallSite site) {
     ComposableScope scope(site);
     toolbarWithFab(false, expanded, floatingActionButton, content, modifier, options);
 }
 
-void VerticalFloatingToolbar(bool expanded, const Content& floatingActionButton, const Content& content, const Modifier& modifier,
+void detail::VerticalFloatingToolbar(bool expanded, const Content& floatingActionButton, const Content& content, const Modifier& modifier,
                              const FloatingToolbarOptions& options, CallSite site) {
     ComposableScope scope(site);
     toolbarWithFab(true, expanded, floatingActionButton, content, modifier, options);

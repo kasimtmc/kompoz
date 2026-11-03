@@ -121,8 +121,7 @@ void ScrollToTopButton(LazyListState state, CallSite site) {
     composable(site, state, [=] {
         auto scrolled = remember([state] { return derivedStateOf([state] { return state.firstVisibleItemIndex() > 0; }); });
         AnimatedVisibility(scrolled.get(), Modifier(), fadeIn() + expandIn(), fadeOut() + shrinkOut(), [&] {
-            FloatingActionButton([state] { state.scrollToItem(0); },
-                                 [] { Icon(Icons::Filled::KeyboardArrowUp, "Başa dön"); });
+            FloatingActionButton([state] { state.scrollToItem(0); }) { Icon(Icons::Filled::KeyboardArrowUp, "Başa dön"); };
         });
     });
 }

@@ -221,10 +221,10 @@ void CardsSection(CallSite site) {
                 OutlinedCard([cardTaps] { cardTaps.set(cardTaps.peek() + 1); }, Modifier().weight(1).height(72)) { Text("Outlined", Modifier().padding(12)); };
             };
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
-                    SmallFloatingActionButton([] {}, [] { Icon(Icons::Filled::Edit, "Küçük FAB"); });
-                    FloatingActionButton([] {}, [] { Icon(Icons::Filled::Edit, "FAB"); });
-                    MediumFloatingActionButton([] {}, [] { Icon(Icons::Filled::Edit, "Orta FAB", Modifier().size(28)); });
-                    LargeFloatingActionButton([] {}, [] { Icon(Icons::Filled::Edit, "Büyük FAB", Modifier().size(36)); });
+                    SmallFloatingActionButton([] {}) { Icon(Icons::Filled::Edit, "Küçük FAB"); };
+                    FloatingActionButton([] {}) { Icon(Icons::Filled::Edit, "FAB"); };
+                    MediumFloatingActionButton([] {}) { Icon(Icons::Filled::Edit, "Orta FAB", Modifier().size(28)); };
+                    LargeFloatingActionButton([] {}) { Icon(Icons::Filled::Edit, "Büyük FAB", Modifier().size(36)); };
                 };
             // M3 Expressive's extended FABs: switched off, they narrow to their icon.
             auto fabsOpen = remember([] { return mutableStateOf(true); });
@@ -233,21 +233,21 @@ void CardsSection(CallSite site) {
                 Text("  Genişletilmiş", style = typography().bodyMedium);
             };
             Column(Modifier(), verticalArrangement = Arrangement::spacedBy(12)) {
-                SmallExtendedFloatingActionButton([] {}, Icons::Filled::Add, "Yeni", fabsOpen.get());
-                MediumExtendedFloatingActionButton([] {}, Icons::Filled::Edit, "Yaz", fabsOpen.get());
-                LargeExtendedFloatingActionButton([] {}, Icons::Filled::Email, "Gönder", fabsOpen.get());
+                SmallExtendedFloatingActionButton([] {}, Icons::Filled::Add, "Yeni", expanded = fabsOpen.get());
+                MediumExtendedFloatingActionButton([] {}, Icons::Filled::Edit, "Yaz", expanded = fabsOpen.get());
+                LargeExtendedFloatingActionButton([] {}, Icons::Filled::Email, "Gönder", expanded = fabsOpen.get());
             };
-            BottomAppBar({.actions = [] {
+            BottomAppBar(actions = [] {
                               IconButton([] {}) { Icon(Icons::Filled::Check, "Tamam"); };
                               IconButton([] {}) { Icon(Icons::Filled::Edit, "Düzenle"); };
                               IconButton([] {}) { Icon(Icons::Filled::Delete, "Sil"); };
                           },
-                          .floatingActionButton = [] {
-                              FloatingActionButton([] {}, [] { Icon(Icons::Filled::Add, "Ekle"); });
-                          },
-                          .containerColor = cs.surfaceContainerHighest,
-                          .windowInsets = false},
-                         Modifier().clip(RoundedCornerShape(12)));
+                         floatingActionButton = [] {
+                             FloatingActionButton([] {}) { Icon(Icons::Filled::Add, "Ekle"); };
+                         },
+                         containerColor = cs.surfaceContainerHighest,
+                         windowInsets = false,
+                         modifier = Modifier().clip(RoundedCornerShape(12)));
         });
     });
 }

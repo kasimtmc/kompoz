@@ -57,7 +57,7 @@ Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
 
 Adsız argümanlar parametreleri Compose'un sırasıyla doldurur (`Text(text, modifier, color, fontSize, …)`, `Box(modifier, contentAlignment)`). Composable'ın almadığı bir ad, iki kez verilen bir ad ya da alamayacağı bir değer derleme hatasıdır, hiçbir zaman yok sayılmaz. Adlar (`modifier`, `color`, `fontSize`, …) `kompoz`'un sabitleridir: sizin aynı adlı bir değişkeniniz adı gizler, bu da yine derleme hatası verir; orada `kompoz::color = …` yazın. Adsız bir argümanın kendi türü olmalıdır: verilmeyen bir geri çağırma `nullptr` olur (`Checkbox(checked, nullptr)`; `{}`'nin türü yoktur), bir çift `std::pair{1.f, 3.f}`.
 
-Şimdilik `Box`, `Column`, `Row`, `Spacer`, `Text`, düğmeler, simge düğmeleri ve simge açma kapama düğmeleri, kartlar, `Surface`, `Icon`, `Image`, `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, kaydırıcılar ve metin alanları adlı argüman alıyor. Diğer bileşenler sıraları gelene kadar, alanların bildirildiği sırayla tasarlanmış ilklendiricilerle bir *seçenek yapısı* almaya devam ediyor:
+Şimdilik `Box`, `Column`, `Row`, `Spacer`, `Text`, düğmeler, simge düğmeleri ve simge açma kapama düğmeleri, kartlar, `Surface`, `Icon`, `Image`, `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, kaydırıcılar, metin alanları, `Scaffold`, üst ve alt uygulama çubukları, kayan eylem düğmeleri ve araç çubukları, `SnackbarHost` ve `Snackbar` adlı argüman alıyor. Diğer bileşenler sıraları gelene kadar, alanların bildirildiği sırayla tasarlanmış ilklendiricilerle bir *seçenek yapısı* almaya devam ediyor:
 
 ```cpp body
 ListItem({.headline = [] { Text("Wi-Fi"); }, .supporting = [] { Text("Bağlı"); }});
@@ -82,6 +82,20 @@ Column(Modifier().padding(16)) {
 ```
 
 Başlık, blok alan composable'ların adlarını makro yapar; böylece `Column(…) { … };`, parantezleri bloğu olan çağrıdır: değerle yakalayan (`[=]`) bir lambda. Başlık olmadan ya da bir şeyi başvuruyla yakalaması gereken bir blok için blok son argümandır; başlık ekliyse ad, makro dokunmasın diye parantez içinde yazılır: `(Column)(Modifier(), [=, &log] { … })`. İçeriği olmayan bir `Box`'ın bloğu boştur: `Box(Modifier().size(24)) {};`.
+
+Bir değer alan blok, `Scaffold`'un iç boşluğu gibi (Kotlin'in `{ padding -> … }`'si), çağrıdan sonra yazılan, parametresi orada adlandırılan bir lambdadır:
+
+```kotlin
+Scaffold(topBar = { TopAppBar(title = { Text("Inbox") }) }) { padding ->
+    Column(Modifier.padding(padding)) { Text("…") }
+}
+```
+
+```cpp body
+Scaffold(topBar = [] { TopAppBar(title = [] { Text("Inbox"); }); }) [=](PaddingValues padding) {
+    Column(Modifier().padding(padding)) { Text("…"); };
+};
+```
 
 Bir blok kendine ait bir kapsamda çalışır: onu yapan işlev döndükten sonra, tek başına yeniden çalışabilir. Bu yüzden `onClick` gibi geri çağrılar gibi kullandığını **değerle** yakalar; bir başvuru, composable'dan uzun yaşayan bir şeye olmalıdır, asla onun yerel değişkenlerinden birine değil:
 

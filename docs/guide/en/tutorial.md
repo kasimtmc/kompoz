@@ -106,10 +106,9 @@ Kompoz implements Material 3, as Compose Material 3 does. `MaterialTheme` gives 
 #! struct Message { std::string author, body; };
 #! void Conversation(const std::vector<Message>&) {}
 void ConversationScreen(const std::vector<Message>& messages) {
-    Scaffold(Modifier(), {.topBar = [] { TopAppBar({.title = [] { Text("Messages"); }}); }},
-             [&](PaddingValues padding) {
-                 Box(Modifier().padding(padding)) { Conversation(messages); };
-             });
+    Scaffold(Modifier(), topBar = [] { TopAppBar(title = [] { Text("Messages"); }); }) [=](PaddingValues padding) {
+        Box(Modifier().padding(padding)) { Conversation(messages); };
+    };
 }
 
 Application kompoz::createApplication(int, char**) {

@@ -400,32 +400,32 @@ void NestedScrollSection(CallSite site) {
                 };
             });
             caption("TopAppBar: kendi renkleri, 56 dp yükseklik, windowInsets yok (sayfanın ortasında):");
-            TopAppBar({.title = [] { Text("Renkli çubuk"); },
-                       .navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menü"); }; },
-                       .actions = [] { IconButton([] {}) { Icon(Icons::Filled::Favorite, "Beğen"); }; },
-                       .containerColor = cs.primaryContainer,
-                       .navigationIconContentColor = cs.onPrimaryContainer,
-                       .titleContentColor = cs.onPrimaryContainer,
-                       .actionIconContentColor = cs.primary,
-                       .expandedHeight = 56,
-                       .windowInsets = WindowInsets{}},
-                      Modifier().clip(RoundedCornerShape(16)));
+            TopAppBar(title = [] { Text("Renkli çubuk"); },
+                      navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menü"); }; },
+                      actions = [] { IconButton([] {}) { Icon(Icons::Filled::Favorite, "Beğen"); }; },
+                      containerColor = cs.primaryContainer,
+                      navigationIconContentColor = cs.onPrimaryContainer,
+                      titleContentColor = cs.onPrimaryContainer,
+                      actionIconContentColor = cs.primary,
+                      expandedHeight = 56,
+                      windowInsets = WindowInsets{},
+                      modifier = Modifier().clip(RoundedCornerShape(16)));
             // AppBarRow: actions that don't fit (here more than three slots) go into the ⋮ menu.
             caption("AppBarRow (maxItemCount = 3): beş eylemden ikisi çubukta, gerisi ⋮ menüsünde.");
-            TopAppBar({.title = [] { Text("Belge"); },
-                       .actions = [] {
-                           AppBarRow([](AppBarScope& s) {
-                               s.clickableItem([] {}, [] { Icon(Icons::Filled::Share, "Paylaş"); }, "Paylaş");
-                               s.clickableItem([] {}, [] { Icon(Icons::Filled::Edit, "Düzenle"); }, "Düzenle");
-                               s.clickableItem([] {}, [] { Icon(Icons::Filled::Delete, "Sil"); }, "Sil");
-                               s.clickableItem([] {}, [] { Icon(Icons::Filled::Add, "Kopya oluştur"); }, "Kopya oluştur");
-                               s.clickableItem([] {}, [] { Icon(Icons::Filled::Info, "Bilgi"); }, "Bilgi");
-                           }, Modifier(), {.maxItemCount = 3});
-                       },
-                       .containerColor = cs.surfaceContainerHigh,
-                       .expandedHeight = 56,
-                       .windowInsets = WindowInsets{}},
-                      Modifier().clip(RoundedCornerShape(16)));
+            TopAppBar(title = [] { Text("Belge"); },
+                      actions = [] {
+                          AppBarRow([](AppBarScope& s) {
+                              s.clickableItem([] {}, [] { Icon(Icons::Filled::Share, "Paylaş"); }, "Paylaş");
+                              s.clickableItem([] {}, [] { Icon(Icons::Filled::Edit, "Düzenle"); }, "Düzenle");
+                              s.clickableItem([] {}, [] { Icon(Icons::Filled::Delete, "Sil"); }, "Sil");
+                              s.clickableItem([] {}, [] { Icon(Icons::Filled::Add, "Kopya oluştur"); }, "Kopya oluştur");
+                              s.clickableItem([] {}, [] { Icon(Icons::Filled::Info, "Bilgi"); }, "Bilgi");
+                          }, Modifier(), {.maxItemCount = 3});
+                      },
+                      containerColor = cs.surfaceContainerHigh,
+                      expandedHeight = 56,
+                      windowInsets = WindowInsets{},
+                      modifier = Modifier().clip(RoundedCornerShape(16)));
             caption("AppBarColumn: 150 dp yükseklikte iki eylem ve ⋮ (bir ray ya da dikey araç çubuğu için).");
             (Box)(Modifier().height(150).background(cs.surfaceContainerHigh, 16), [] {
                 AppBarColumn([](AppBarScope& s) {
@@ -436,92 +436,88 @@ void NestedScrollSection(CallSite site) {
                 });
             });
             caption("MediumFlexibleTopAppBar: daha büyük başlık ve alt yazı, ortalanmış (titleHorizontalAlignment).");
-            MediumFlexibleTopAppBar({.title = [] { Text("Takvim"); },
-                                     .subtitle = [] { Text("Ekim 2026"); },
-                                     .navigationIcon = [] { IconButton([] {}) { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); }; },
-                                     .actions = [] { IconButton([] {}) { Icon(Icons::Filled::MoreVert, "Diğer"); }; },
-                                     .containerColor = cs.surfaceContainerLow,
-                                     .windowInsets = WindowInsets{},
-                                     .titleHorizontalAlignment = Alignment::CenterHorizontally},
-                                    Modifier().clip(RoundedCornerShape(16)));
+            MediumFlexibleTopAppBar(title = [] { Text("Takvim"); },
+                                    subtitle = [] { Text("Ekim 2026"); },
+                                    navigationIcon = [] { IconButton([] {}) { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); }; },
+                                    actions = [] { IconButton([] {}) { Icon(Icons::Filled::MoreVert, "Diğer"); }; },
+                                    containerColor = cs.surfaceContainerLow,
+                                    windowInsets = WindowInsets{},
+                                    titleHorizontalAlignment = Alignment::CenterHorizontally,
+                                    modifier = Modifier().clip(RoundedCornerShape(16)));
             caption("LargeTopAppBar + exitUntilCollapsed (alt başlıklı): önce başlık küçülür, sonra liste kayar.");
             Box(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16))) {
                 CompositionLocalProvider({LocalSystemInsets.provides(SystemInsets{})}, [&] {  // not at the window's edge
                     Scaffold(Modifier().fillMaxSize().nestedScroll(appBar.nestedScrollConnection),
-                             {.topBar = [&] {
-                                  LargeTopAppBar({.title = [] { Text("Gelen kutusu"); },
-                                                  .subtitle = [] { Text("3 okunmamış ileti"); },
-                                                  .navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menü"); }; },
-                                                  .actions = [] { IconButton([] {}) { Icon(Icons::Filled::Search, "Ara"); }; },
-                                                  .containerColor = cs.surfaceContainerLow,
-                                                  .scrollBehavior = appBar});
-                              },
-                              .containerColor = cs.surfaceContainerLow},
-                             [&](PaddingValues padding) {
-                                 LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& list) {
-                                     list.items(30, [](int i) {
-                                         ListItem({.headline = [i] { Text(std::format("İleti {}", i + 1)); },
-                                                   .supporting = [] { Text("Kaydırınca başlık küçülür"); },
-                                                   .leading = [] { Icon(Icons::Filled::Email, "İleti"); },
-                                                   .containerColor = colors::Transparent});
-                                     });
-                                 });
-                             });
+                             topBar = [&] {
+                                 LargeTopAppBar(title = [] { Text("Gelen kutusu"); },
+                                                subtitle = [] { Text("3 okunmamış ileti"); },
+                                                navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menü"); }; },
+                                                actions = [] { IconButton([] {}) { Icon(Icons::Filled::Search, "Ara"); }; },
+                                                containerColor = cs.surfaceContainerLow,
+                                                scrollBehavior = appBar);
+                             },
+                             containerColor = cs.surfaceContainerLow) [=](PaddingValues padding) {
+                        LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& list) {
+                            list.items(30, [](int i) {
+                                ListItem({.headline = [i] { Text(std::format("İleti {}", i + 1)); },
+                                          .supporting = [] { Text("Kaydırınca başlık küçülür"); },
+                                          .leading = [] { Icon(Icons::Filled::Email, "İleti"); },
+                                          .containerColor = colors::Transparent});
+                            });
+                        });
+                    };
                 });
             };
             caption("TwoRowsTopAppBar: başlık iki satırda da kendi biçimini seçer — açıkken büyük ve iki satır, kapanınca kısa.");
             Box(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16))) {
                 CompositionLocalProvider({LocalSystemInsets.provides(SystemInsets{})}, [&] {  // not at the window's edge
                     Scaffold(Modifier().fillMaxSize().nestedScroll(twoRows.nestedScrollConnection),
-                             {.topBar = [&] {
-                                  TwoRowsTopAppBar(
-                                      [](bool expanded) {
-                                          if (expanded) Text("Haftalık\nözet", fontWeight = FontWeight::Bold, style = typography().headlineMedium);
-                                          else Text("Özet", style = typography().titleLarge);
-                                      },
-                                      {.navigationIcon = [] { IconButton([] {}) { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); }; },
-                                       .actions = [] { IconButton([] {}) { Icon(Icons::Filled::DateRange, "Tarih"); }; },
-                                       .containerColor = cs.surfaceContainerLow,
-                                       .expandedHeight = 168,
-                                       .scrollBehavior = twoRows},
-                                      Modifier(),
-                                      [&](bool expanded) {
-                                          Text(expanded ? "6–12 Ekim · 14 etkinlik" : "6–12 Ekim",
-                                               color = cs.onSurfaceVariant, style = expanded ? typography().titleMedium : typography().labelMedium);
-                                      });
-                              },
-                              .containerColor = cs.surfaceContainerLow},
-                             [&](PaddingValues padding) {
-                                 LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& list) {
-                                     list.items(30, [](int i) {
-                                         ListItem({.headline = [i] { Text(std::format("Etkinlik {}", i + 1)); },
-                                                   .supporting = [] { Text("Kaydırınca başlık kısalır"); },
-                                                   .leading = [] { Icon(Icons::Filled::Schedule, "Etkinlik"); },
-                                                   .containerColor = colors::Transparent});
+                             topBar = [&] {
+                                 TwoRowsTopAppBar(
+                                     [](bool expanded) {
+                                         if (expanded) Text("Haftalık\nözet", fontWeight = FontWeight::Bold, style = typography().headlineMedium);
+                                         else Text("Özet", style = typography().titleLarge);
+                                     },
+                                     navigationIcon = [] { IconButton([] {}) { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); }; },
+                                     actions = [] { IconButton([] {}) { Icon(Icons::Filled::DateRange, "Tarih"); }; },
+                                     containerColor = cs.surfaceContainerLow,
+                                     expandedHeight = 168,
+                                     scrollBehavior = twoRows,
+                                     subtitle = [&](bool expanded) {
+                                         Text(expanded ? "6–12 Ekim · 14 etkinlik" : "6–12 Ekim",
+                                              color = cs.onSurfaceVariant, style = expanded ? typography().titleMedium : typography().labelMedium);
                                      });
-                                 });
-                             });
+                             },
+                             containerColor = cs.surfaceContainerLow) [=](PaddingValues padding) {
+                        LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& list) {
+                            list.items(30, [](int i) {
+                                ListItem({.headline = [i] { Text(std::format("Etkinlik {}", i + 1)); },
+                                          .supporting = [] { Text("Kaydırınca başlık kısalır"); },
+                                          .leading = [] { Icon(Icons::Filled::Schedule, "Etkinlik"); },
+                                          .containerColor = colors::Transparent});
+                            });
+                        });
+                    };
                 });
             };
             caption("FlexibleBottomAppBar + exitAlways: liste ilerledikçe alt çubuk aşağı kayıp gider, geri kaydırınca döner.");
             Box(Modifier().fillMaxWidth().height(300).clip(RoundedCornerShape(16))) {
                 Scaffold(Modifier().fillMaxSize().nestedScroll(bottomBar.nestedScrollConnection),
-                         {.bottomBar = [&] {
-                              FlexibleBottomAppBar(Modifier(), [] {
-                                  IconButton([] {}) { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); };
-                                  IconButton([] {}) { Icon(Icons::Filled::Edit, "Düzenle"); };
-                                  IconButton([] {}) { Icon(Icons::Filled::Share, "Paylaş"); };
-                                  IconButton([] {}) { Icon(Icons::Filled::Delete, "Sil"); };
-                              }, {.scrollBehavior = bottomBar, .windowInsets = false});
-                          },
-                          .containerColor = cs.surfaceContainerLow},
-                         [&](PaddingValues padding) {
-                             LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& list) {
-                                 list.items(30, [](int i) {
-                                     ListItem({.headline = [i] { Text(std::format("Fotoğraf {}", i + 1)); }, .containerColor = colors::Transparent});
-                                 });
-                             });
-                         });
+                         kompoz::bottomBar = [&] {
+                             FlexibleBottomAppBar(Modifier(), scrollBehavior = bottomBar, windowInsets = false) {
+                                 IconButton([] {}) { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); };
+                                 IconButton([] {}) { Icon(Icons::Filled::Edit, "Düzenle"); };
+                                 IconButton([] {}) { Icon(Icons::Filled::Share, "Paylaş"); };
+                                 IconButton([] {}) { Icon(Icons::Filled::Delete, "Sil"); };
+                             };
+                         },
+                         containerColor = cs.surfaceContainerLow) [=](PaddingValues padding) {
+                    LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& list) {
+                        list.items(30, [](int i) {
+                            ListItem({.headline = [i] { Text(std::format("Fotoğraf {}", i + 1)); }, .containerColor = colors::Transparent});
+                        });
+                    });
+                };
             };
             caption("AppBarWithSearch + enterAlways: liste ilerledikçe arama çubuğu yukarı kayar, geri kaydırınca önce o gelir; dokununca "
                     "tam ekran arama açılır.");
@@ -532,22 +528,21 @@ void NestedScrollSection(CallSite site) {
             Box(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16))) {
                 CompositionLocalProvider({LocalSystemInsets.provides(SystemInsets{})}, [&] {  // not at the window's edge
                     Scaffold(Modifier().fillMaxSize().nestedScroll(searchScroll.nestedScrollConnection),
-                             {.topBar = [&] {
-                                  AppBarWithSearch(mailSearch, mailField, Modifier(),
-                                                   {.navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menü"); }; },
-                                                    .actions = [] { IconButton([] {}) { Icon(Icons::Filled::Person, "Hesap"); }; },
-                                                    .scrollBehavior = searchScroll});
-                              }},
-                             [&](PaddingValues padding) {
-                                 LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& list) {
-                                     list.items(30, [](int i) {
-                                         ListItem({.headline = [i] { Text(std::format("Posta {}", i + 1)); },
-                                                   .supporting = [] { Text("Kaydırınca arama çubuğu çekilir"); },
-                                                   .leading = [] { Icon(Icons::Filled::Email, "Posta"); },
-                                                   .containerColor = colors::Transparent});
-                                     });
-                                 });
-                             });
+                             topBar = [&] {
+                                 AppBarWithSearch(mailSearch, mailField, Modifier(),
+                                                  {.navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menü"); }; },
+                                                   .actions = [] { IconButton([] {}) { Icon(Icons::Filled::Person, "Hesap"); }; },
+                                                   .scrollBehavior = searchScroll});
+                             }) [=](PaddingValues padding) {
+                        LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& list) {
+                            list.items(30, [](int i) {
+                                ListItem({.headline = [i] { Text(std::format("Posta {}", i + 1)); },
+                                          .supporting = [] { Text("Kaydırınca arama çubuğu çekilir"); },
+                                          .leading = [] { Icon(Icons::Filled::Email, "Posta"); },
+                                          .containerColor = colors::Transparent});
+                            });
+                        });
+                    };
                 });
             };
             ExpandedFullScreenSearchBar(mailSearch, mailField, [&] {

@@ -57,7 +57,7 @@ Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
 
 Arguments without a name fill the parameters in Compose's order (`Text(text, modifier, color, fontSize, …)`, `Box(modifier, contentAlignment)`). A name the composable doesn't take, one given twice, or a value it can't take is a compile error, never ignored. The names (`modifier`, `color`, `fontSize`, …) are constants of `kompoz`: a variable of yours called the same hides the name, which then is a compile error too; write `kompoz::color = …` there. An argument without a name needs a type of its own: a callback left out is `nullptr` (`Checkbox(checked, nullptr)`; `{}` has no type), a pair is `std::pair{1.f, 3.f}`.
 
-`Box`, `Column`, `Row`, `Spacer`, `Text`, the buttons, icon buttons and icon toggle buttons, the cards, `Surface`, `Icon`, `Image`, `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, the sliders and the text fields take named arguments so far. The other components still take an *options struct* with designated initializers, in the order its fields are declared, until their turn comes:
+`Box`, `Column`, `Row`, `Spacer`, `Text`, the buttons, icon buttons and icon toggle buttons, the cards, `Surface`, `Icon`, `Image`, `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, the sliders, the text fields, `Scaffold`, the top and bottom app bars, the floating action buttons and toolbars, `SnackbarHost` and `Snackbar` take named arguments so far. The other components still take an *options struct* with designated initializers, in the order its fields are declared, until their turn comes:
 
 ```cpp body
 ListItem({.headline = [] { Text("Wi-Fi"); }, .supporting = [] { Text("Bağlı"); }});
@@ -82,6 +82,20 @@ Column(Modifier().padding(16)) {
 ```
 
 The header makes macros of the names of the composables that take a block, so `Column(…) { … };` is the call with the braces as its block, a lambda that captures by value (`[=]`). Without it, or for a block that has to capture something by reference, the block is the last argument, and with the header included the name goes in parentheses so the macro leaves it alone: `(Column)(Modifier(), [=, &log] { … })`. A `Box` with no content has an empty block: `Box(Modifier().size(24)) {};`.
+
+A block given a value, as `Scaffold`'s padding (Kotlin's `{ padding -> … }`), is a lambda written after the call, its parameter named there:
+
+```kotlin
+Scaffold(topBar = { TopAppBar(title = { Text("Inbox") }) }) { padding ->
+    Column(Modifier.padding(padding)) { Text("…") }
+}
+```
+
+```cpp body
+Scaffold(topBar = [] { TopAppBar(title = [] { Text("Inbox"); }); }) [=](PaddingValues padding) {
+    Column(Modifier().padding(padding)) { Text("…"); };
+};
+```
 
 A block runs in a scope of its own: it can run again later, alone, when the function that made it has returned. So, as callbacks such as `onClick`, it captures what it uses **by value**; a reference must be to something that outlives the composable, never to one of its locals:
 

@@ -195,11 +195,11 @@ Telefonlarda sistem çubukları, ekran çentiği ve klavye pencerenin bazı kıs
 Insets iç boşlukları toplanmaz: içteki, yalnızca dıştakilerin henüz almadığı kadar boşluk ekler. Metin alanı olan bir `Scaffold`'da içeriğe Compose'daki gibi iç boşluk verin:
 
 ```cpp body
-Scaffold(Modifier(), {}, [&](PaddingValues padding) {
+Scaffold(Modifier()) [=](PaddingValues padding) {
     Column(Modifier().padding(padding).consumeWindowInsets(padding).imePadding()) {
         OutlinedTextField("", [](std::string) {});
     };
-});
+};
 ```
 
 ## Sağdan sola

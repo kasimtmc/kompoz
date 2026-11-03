@@ -17,13 +17,22 @@
 // as the composable's last argument instead, with the name in parentheses so the macro leaves it
 // alone: (Column)(modifier, [=, &log] { … }).
 //
+// A block given a value is written as a lambda after the call, its parameter named there:
+//
+//   Scaffold(topBar = [] { TopAppBar(title = [] { Text("Gelen kutusu"); }); }) [=](PaddingValues padding) {
+//       Column(Modifier().padding(padding)) { … };
+//   };
+//
+// Composables also called without a block (Snackbar of a SnackbarData, SnackbarHost) aren't macros:
+// their block, if any, is their last argument.
+//
 // Macros know no namespaces: in a file including this header, Column( always means the
 // composable, so it isn't for a file that has other things called so.
 
 #include "kompoz.hpp"
 
 #define KOMPOZ_BLOCK(composable, ...) ::kompoz::composable.withBlock(__VA_ARGS__) + [=]()
-
+#define KOMPOZ_CALL(composable, ...) ::kompoz::composable.withBlock(__VA_ARGS__) +
 #define Box(...) KOMPOZ_BLOCK(Box __VA_OPT__(, ) __VA_ARGS__)
 #define Button(...) KOMPOZ_BLOCK(Button __VA_OPT__(, ) __VA_ARGS__)
 #define Card(...) KOMPOZ_BLOCK(Card __VA_OPT__(, ) __VA_ARGS__)
@@ -35,12 +44,20 @@
 #define FilledTonalButton(...) KOMPOZ_BLOCK(FilledTonalButton __VA_OPT__(, ) __VA_ARGS__)
 #define FilledTonalIconButton(...) KOMPOZ_BLOCK(FilledTonalIconButton __VA_OPT__(, ) __VA_ARGS__)
 #define FilledTonalIconToggleButton(...) KOMPOZ_BLOCK(FilledTonalIconToggleButton __VA_OPT__(, ) __VA_ARGS__)
+#define FlexibleBottomAppBar(...) KOMPOZ_BLOCK(FlexibleBottomAppBar __VA_OPT__(, ) __VA_ARGS__)
+#define FloatingActionButton(...) KOMPOZ_BLOCK(FloatingActionButton __VA_OPT__(, ) __VA_ARGS__)
+#define HorizontalFloatingToolbar(...) KOMPOZ_BLOCK(HorizontalFloatingToolbar __VA_OPT__(, ) __VA_ARGS__)
 #define IconButton(...) KOMPOZ_BLOCK(IconButton __VA_OPT__(, ) __VA_ARGS__)
 #define IconToggleButton(...) KOMPOZ_BLOCK(IconToggleButton __VA_OPT__(, ) __VA_ARGS__)
+#define LargeFloatingActionButton(...) KOMPOZ_BLOCK(LargeFloatingActionButton __VA_OPT__(, ) __VA_ARGS__)
+#define MediumFloatingActionButton(...) KOMPOZ_BLOCK(MediumFloatingActionButton __VA_OPT__(, ) __VA_ARGS__)
 #define OutlinedButton(...) KOMPOZ_BLOCK(OutlinedButton __VA_OPT__(, ) __VA_ARGS__)
 #define OutlinedCard(...) KOMPOZ_BLOCK(OutlinedCard __VA_OPT__(, ) __VA_ARGS__)
 #define OutlinedIconButton(...) KOMPOZ_BLOCK(OutlinedIconButton __VA_OPT__(, ) __VA_ARGS__)
 #define OutlinedIconToggleButton(...) KOMPOZ_BLOCK(OutlinedIconToggleButton __VA_OPT__(, ) __VA_ARGS__)
 #define Row(...) KOMPOZ_BLOCK(Row __VA_OPT__(, ) __VA_ARGS__)
+#define Scaffold(...) KOMPOZ_CALL(Scaffold __VA_OPT__(, ) __VA_ARGS__)
+#define SmallFloatingActionButton(...) KOMPOZ_BLOCK(SmallFloatingActionButton __VA_OPT__(, ) __VA_ARGS__)
 #define Surface(...) KOMPOZ_BLOCK(Surface __VA_OPT__(, ) __VA_ARGS__)
 #define TextButton(...) KOMPOZ_BLOCK(TextButton __VA_OPT__(, ) __VA_ARGS__)
+#define VerticalFloatingToolbar(...) KOMPOZ_BLOCK(VerticalFloatingToolbar __VA_OPT__(, ) __VA_ARGS__)

@@ -14,18 +14,17 @@ Material components read their colors, type and motion from `MaterialTheme`, so 
 void Inbox() {
     auto snackbars = rememberSnackbarHostState();
     Scaffold(Modifier(),
-             {.topBar = [] { TopAppBar({.title = [] { Text("Inbox"); },
-                                        .navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menu"); }; },
-                                        .actions = [] { IconButton([] {}) { Icon(Icons::Filled::Search, "Search"); }; }}); },
-              .floatingActionButton = [snackbars] {
-                  FloatingActionButton([snackbars] { snackbars.showSnackbar("Draft saved"); }, [] { Icon(Icons::Filled::Edit, "Compose"); });
-              },
-              .snackbarHost = [snackbars] { SnackbarHost(snackbars); }},
-             [](PaddingValues padding) {
-                 LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& l) {
-                     l.items(30, [](int i) { ListItem({.headline = [i] { Text("Message " + std::to_string(i)); }}); });
-                 });
-             });
+             topBar = [] { TopAppBar(title = [] { Text("Inbox"); },
+                                     navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menu"); }; },
+                                     actions = [] { IconButton([] {}) { Icon(Icons::Filled::Search, "Search"); }; }); },
+             floatingActionButton = [snackbars] {
+                 FloatingActionButton([snackbars] { snackbars.showSnackbar("Draft saved"); }) { Icon(Icons::Filled::Edit, "Compose"); };
+             },
+             snackbarHost = [snackbars] { SnackbarHost(snackbars); }) [](PaddingValues padding) {
+        LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& l) {
+            l.items(30, [](int i) { ListItem({.headline = [i] { Text("Message " + std::to_string(i)); }}); });
+        });
+    };
 }
 ```
 

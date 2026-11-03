@@ -77,8 +77,26 @@ constexpr bool startsWithClick() {
     else return isBlock<std::tuple_element_t<0, std::tuple<A...>>> && lastIsBlock<A...>();
 }
 
-// What a parameter list ends with when its composable takes a block last.
-struct Block {};
+// What a parameter list ends with when its composable takes a block last: one called with Args
+// (Scaffold's gets its padding), or with nothing.
+template <class... Args>
+struct BlockWith {};
+using Block = BlockWith<>;
+template <class P>
+constexpr bool isBlockParam = false;
+template <class... Args>
+constexpr bool isBlockParam<BlockWith<Args...>> = true;
+// Whether a call's last argument is a block of `B`'s: a callable given without a name, taking B's Args.
+template <class B, class... A>
+constexpr bool endsWithBlockOf = false;
+template <class... Args, class... A>
+constexpr bool endsWithBlockOf<BlockWith<Args...>, A...> = [] {
+    if constexpr (sizeof...(A) == 0) return false;
+    else {
+        using L = std::tuple_element_t<sizeof...(A) - 1, std::tuple<A...>>;
+        return !isNamed<L> && std::is_invocable_v<std::remove_cvref_t<L>&, Args...>;
+    }
+}();
 
 template <class T, class... L>
 constexpr size_t indexOf = [] {
@@ -93,12 +111,14 @@ constexpr size_t indexOf = [] {
 // only names it has, then the block. Anything else is a compile error.
 template <class... P>
 struct Params {
-    static constexpr bool takesBlock = oneOf<Block, P...>;
-    static constexpr size_t count = sizeof...(P) - (takesBlock ? 1 : 0);  // (Block isn't one)
+    static constexpr bool takesBlock = (isBlockParam<P> || ...);
+    static constexpr size_t count = sizeof...(P) - (takesBlock ? 1 : 0);  // (the block isn't one)
+    using BlockParam = std::tuple_element_t<sizeof...(P), std::tuple<void, P...>>;  // (when it takes one: last)
 
     template <class... A>
     static constexpr bool blockGiven() {
-        return takesBlock && lastIsBlock<A...>();
+        if constexpr (takesBlock) return endsWithBlockOf<BlockParam, A...>;
+        else return false;
     }
     // How many arguments are given without a name (before the first named one).
     template <class... A>
@@ -153,7 +173,7 @@ struct Params {
     }
     // The block given last, in a scope of its own; empty if none was.
     template <class... A>
-    static Content block(A&&... args);
+    static auto block(A&&... args);
 };
 
 // The block given last, if it was: its content, run in a scope of its own.
@@ -168,11 +188,34 @@ Content blockOf(A&&... args) {
     }
 }
 
+// A block called with arguments: each call in a scope of its own, as a plain block's.
+template <class... Args>
+struct ScopedBlockWith;
+template <class... Args>
+struct ScopedBlockWith<BlockWith<Args...>> {
+    using type = std::function<void(Args...)>;
+    template <class F>
+    static std::function<void(Args...)> of(F&& f) {
+        return [f = std::function<void(Args...)>(std::forward<F>(f))](Args... a) {
+            scopedBlock([f, a...] { f(a...); })();
+        };
+    }
+};
+
 template <class... P>
 template <class... A>
-Content Params<P...>::block(A&&... args) {
-    if constexpr (blockGiven<A...>()) return blockOf(std::forward<A>(args)...);
-    else return {};
+auto Params<P...>::block(A&&... args) {
+    if constexpr (!takesBlock) {
+        return Content();
+    } else if constexpr (std::is_same_v<BlockParam, Block>) {
+        if constexpr (blockGiven<A...>()) return blockOf(std::forward<A>(args)...);
+        else return Content();
+    } else {
+        using Fn = typename ScopedBlockWith<BlockParam>::type;
+        if constexpr (blockGiven<A...>())
+            return ScopedBlockWith<BlockParam>::of(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...)));
+        else return Fn();
+    }
 }
 
 // A call made before its block: <kompoz/blocks.hpp>'s Column(…) { … } gives it the block with +.
@@ -264,6 +307,37 @@ struct LabelPosition {};
 struct Decorator {};
 struct TextObfuscationMode {};
 struct TextObfuscationCharacter {};
+struct TopBar {};
+struct BottomBar {};
+struct SnackbarHost {};
+struct FloatingActionButton {};
+struct FloatingActionButtonPosition {};
+struct ContentWindowInsets {};
+struct Title {};
+struct Subtitle {};
+struct NavigationIcon {};
+struct Actions {};
+struct ExpandedHeight {};
+struct CollapsedHeight {};
+struct WindowInsets {};
+struct ScrolledContainerColor {};
+struct NavigationIconContentColor {};
+struct TitleContentColor {};
+struct ActionIconContentColor {};
+struct SubtitleContentColor {};
+struct ScrollBehavior {};
+struct TitleHorizontalAlignment {};
+struct Expanded {};
+struct FloatingToolbarColors {};
+struct LeadingContent {};
+struct TrailingContent {};
+struct ShadowElevation {};
+struct Action {};
+struct DismissAction {};
+struct ActionOnNewLine {};
+struct ActionColor {};
+struct ActionContentColor {};
+struct DismissActionContentColor {};
 } // namespace detail::names
 inline namespace args {
 inline constexpr Param<detail::names::Modifier> modifier;
@@ -339,6 +413,37 @@ inline constexpr Param<detail::names::LabelPosition> labelPosition;
 inline constexpr Param<detail::names::Decorator> decorator;
 inline constexpr Param<detail::names::TextObfuscationMode> textObfuscationMode;
 inline constexpr Param<detail::names::TextObfuscationCharacter> textObfuscationCharacter;
+inline constexpr Param<detail::names::TopBar> topBar;
+inline constexpr Param<detail::names::BottomBar> bottomBar;
+inline constexpr Param<detail::names::SnackbarHost> snackbarHost;
+inline constexpr Param<detail::names::FloatingActionButton> floatingActionButton;
+inline constexpr Param<detail::names::FloatingActionButtonPosition> floatingActionButtonPosition;
+inline constexpr Param<detail::names::ContentWindowInsets> contentWindowInsets;
+inline constexpr Param<detail::names::Title> title;
+inline constexpr Param<detail::names::Subtitle> subtitle;
+inline constexpr Param<detail::names::NavigationIcon> navigationIcon;
+inline constexpr Param<detail::names::Actions> actions;
+inline constexpr Param<detail::names::ExpandedHeight> expandedHeight;
+inline constexpr Param<detail::names::CollapsedHeight> collapsedHeight;
+inline constexpr Param<detail::names::WindowInsets> windowInsets;
+inline constexpr Param<detail::names::ScrolledContainerColor> scrolledContainerColor;
+inline constexpr Param<detail::names::NavigationIconContentColor> navigationIconContentColor;
+inline constexpr Param<detail::names::TitleContentColor> titleContentColor;
+inline constexpr Param<detail::names::ActionIconContentColor> actionIconContentColor;
+inline constexpr Param<detail::names::SubtitleContentColor> subtitleContentColor;
+inline constexpr Param<detail::names::ScrollBehavior> scrollBehavior;
+inline constexpr Param<detail::names::TitleHorizontalAlignment> titleHorizontalAlignment;
+inline constexpr Param<detail::names::Expanded> expanded;
+inline constexpr Param<detail::names::FloatingToolbarColors> floatingToolbarColors;
+inline constexpr Param<detail::names::LeadingContent> leadingContent;
+inline constexpr Param<detail::names::TrailingContent> trailingContent;
+inline constexpr Param<detail::names::ShadowElevation> shadowElevation;
+inline constexpr Param<detail::names::Action> action;
+inline constexpr Param<detail::names::DismissAction> dismissAction;
+inline constexpr Param<detail::names::ActionOnNewLine> actionOnNewLine;
+inline constexpr Param<detail::names::ActionColor> actionColor;
+inline constexpr Param<detail::names::ActionContentColor> actionContentColor;
+inline constexpr Param<detail::names::DismissActionContentColor> dismissActionContentColor;
 } // namespace args
 
 // A composable taking named arguments: each call's arguments and call site go to Impl::call.

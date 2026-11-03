@@ -1617,7 +1617,7 @@ Modifier exiting(const Modifier& m, const std::optional<BottomAppBarScrollBehavi
 
 } // namespace
 
-void FlexibleBottomAppBar(const Modifier& modifier, const Content& content, const FlexibleBottomAppBarOptions& options, CallSite site) {
+void detail::FlexibleBottomAppBar(const Modifier& modifier, const Content& content, const FlexibleBottomAppBarOptions& options, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     PaddingValues insets = bottomBarInsets(options.windowInsets);
@@ -1631,7 +1631,7 @@ void FlexibleBottomAppBar(const Modifier& modifier, const Content& content, cons
     });
 }
 
-void BottomAppBar(const BottomAppBarSlots& slots, const Modifier& modifier, CallSite site) {
+void detail::BottomAppBar(const BottomAppBarSlots& slots, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     PaddingValues insets = bottomBarInsets(slots.windowInsets);
