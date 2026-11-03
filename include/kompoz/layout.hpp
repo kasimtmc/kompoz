@@ -462,7 +462,7 @@ BringIntoViewSpec currentBringIntoViewSpec();  // LocalBringIntoViewSpec's (the 
 // What a scroll container does with a finger's drag and fling past its ends, and how that shows
 // (Compose's OverscrollEffect). The scroll containers have Android 12's stretch by default
 // (rememberOverscrollEffect()); give one your own, or none (nullptr):
-//   LazyColumn(Modifier(), {.overscrollEffect = nullptr}, ...);         // no stretch
+//   LazyColumn(Modifier(), overscrollEffect = nullptr, ...);         // no stretch
 //   auto effect = rememberOverscrollEffect();                           // one stretch for two:
 //   Box(Modifier().overscroll(effect).scrollable(state, Orientation::Vertical, effect), ...);
 // Deltas and velocities go the finger's way (dp, dp/s), as in nested scrolling. Only touch

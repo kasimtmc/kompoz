@@ -21,9 +21,9 @@ void Inbox() {
                  FloatingActionButton([snackbars] { snackbars.showSnackbar("Draft saved"); }) { Icon(Icons::Filled::Edit, "Compose"); };
              },
              snackbarHost = [snackbars] { SnackbarHost(snackbars); }) [](PaddingValues padding) {
-        LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& l) {
-            l.items(30, [](int i) { ListItem({.headline = [i] { Text("Message " + std::to_string(i)); }}); });
-        });
+        LazyColumn(Modifier().fillMaxSize(), contentPadding = padding) {
+            items(30, [](int i) { ListItem({.headline = [i] { Text("Message " + std::to_string(i)); }}); });
+        };
     };
 }
 ```

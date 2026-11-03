@@ -118,15 +118,14 @@ void ListScreen(Modifier modifier, LazyListState state, NavController nav, std::
         });
         const ColorScheme& cs = colorScheme();
         Column(modifier) {
-            LazyRow(Modifier().fillMaxWidth(), {.contentPadding = {16, 4, 16, 4}, .spacing = 8},
-                    [&](LazyListScope& row) {
-                        row.items(40, [&](int i) {
+            LazyRow(Modifier().fillMaxWidth(), contentPadding = PaddingValues{16, 4, 16, 4}, horizontalArrangement = Arrangement::spacedBy(8)) {
+                        items(40, [&](int i) {
                             Box(Modifier().background(cs.primaryContainer, 16).padding(14, 8)) {
                                 Text(std::format("Etiket {}", i + 1),
                                      color = cs.onPrimaryContainer, style = typography().labelLarge);
                             };
                         });
-                    });
+                    };
             SingleChoiceSegmentedButtonRow(Modifier().fillMaxWidth().padding(16, 4), [&] {
                 const char* labels[] = {"Liste", "Izgara", "Kademeli"};
                 for (int i = 0; i < 3; ++i) SegmentedButton(mode.get() == i, [mode, i] { mode.set(i); }, [&, i] { Text(labels[i]); });
@@ -145,18 +144,17 @@ void ListScreen(Modifier modifier, LazyListState state, NavController nav, std::
                 PullToRefreshBox(refreshing.get(), refresh, Modifier().fillMaxWidth().weight(1), [&] {
                     // Sections of 50 rows under sticky headers (opaque: the rows scroll under them).
                     Color headerColor = cs.background, headerText = cs.primary;
-                    LazyColumn(Modifier().fillMaxSize(), {.state = state, .contentPadding = {16, 4, 16, 88}, .spacing = 6},
-                               [&](LazyListScope& list) {
+                    LazyColumn(Modifier().fillMaxSize(), kompoz::state = state, contentPadding = PaddingValues{16, 4, 16, 88}, verticalArrangement = Arrangement::spacedBy(6)) {
                                    for (int g = 0; g < int(rows.size()); g += 50) {
-                                       list.stickyHeader(std::format("section{}", g), [g, headerColor, headerText] {
+                                       stickyHeader(std::format("section{}", g), [g, headerColor, headerText] {
                                            Box(Modifier().fillMaxWidth().background(headerColor).padding(4, 10)) {
                                                Text(std::format("{} – {}", g, g + 49),
                                                     color = headerText, style = typography().labelLarge);
                                            };
                                        });
-                                       list.items(50, [g](int i) { return size_t(g + i); }, [g, nav](int i) { ListRow(g + i, nav); });
+                                       items(50, [g](int i) { return size_t(g + i); }, [g, nav](int i) { ListRow(g + i, nav); });
                                    }
-                               });
+                               };
                 });
             } else if (mode.get() == 1) {
                 // LazyGridState: the tiles in view (layoutInfo) and scrolls to an item.
@@ -175,14 +173,13 @@ void ListScreen(Modifier modifier, LazyListState state, NavController nav, std::
                 // 10,000 tiles, as many columns of at least 88 dp as fit; only rows in view are composed.
                 PullToRefreshBox(refreshing.get(), refresh, Modifier().fillMaxWidth().weight(1), [&] {
                     LazyVerticalGrid(GridCells::Adaptive(88), Modifier().fillMaxSize(),
-                                     {.state = gridState, .contentPadding = {16, 8, 16, 88}, .verticalSpacing = 8,
-                                      .horizontalSpacing = 8},
-                                     [&](LazyGridScope& cells) {
-                                         cells.item([&] { Text("10.000 kare", Modifier().padding(4, 0, 0, 4),
+                                     kompoz::state = gridState, contentPadding = PaddingValues{16, 8, 16, 88}, verticalArrangement = Arrangement::spacedBy(8),
+                                     horizontalArrangement = Arrangement::spacedBy(8)) {
+                                         item([&] { Text("10.000 kare", Modifier().padding(4, 0, 0, 4),
                                                                style = typography().titleMedium); },
                                                     LazyGridScope::FullLine);
-                                         cells.items(rows, [](int v) { return v; }, [](int v) { GridTile(v); });
-                                     });
+                                         items(rows, [](int v) { return v; }, [](int v) { GridTile(v); });
+                                     };
                 });
             } else {
                 // LazyStaggeredGridState: the cards in view and scrolls to one (item 0 is the title).
@@ -201,14 +198,13 @@ void ListScreen(Modifier modifier, LazyListState state, NavController nav, std::
                 };
                 // Cards of their own heights, each under the shorter lane (LazyVerticalStaggeredGrid).
                 LazyVerticalStaggeredGrid(StaggeredGridCells::Adaptive(150), Modifier().fillMaxWidth().weight(1),
-                                          {.state = staggeredScroll, .contentPadding = {16, 8, 16, 88}, .verticalItemSpacing = 8,
-                                           .horizontalSpacing = 8},
-                                          [&](LazyGridScope& cells) {
-                                              cells.item([&] { Text("10.000 kart, kendi yükseklikleriyle", Modifier().padding(4, 0, 0, 4),
+                                          kompoz::state = staggeredScroll, contentPadding = PaddingValues{16, 8, 16, 88}, verticalItemSpacing = 8,
+                                          horizontalArrangement = Arrangement::spacedBy(8)) {
+                                              item([&] { Text("10.000 kart, kendi yükseklikleriyle", Modifier().padding(4, 0, 0, 4),
                                                                     style = typography().titleMedium); },
                                                          LazyGridScope::FullLine);
-                                              cells.items(rows, [](int v) { return v; }, [](int v) { StaggeredTile(v); });
-                                          });
+                                              items(rows, [](int v) { return v; }, [](int v) { StaggeredTile(v); });
+                                          };
             }
         };
     });

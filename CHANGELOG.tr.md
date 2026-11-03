@@ -675,6 +675,14 @@
   `BottomSheetScaffold(sheetContent, sheetPeekHeight = 128) [=](PaddingValues padding) { … };`. İçerikleri kendine ait bir
   kapsamda çalışan bir blok. Bir ray öğesinin etiketi, Compose'daki gibi, değiştiricisinden sonra geliyor; bir iletişim
   kutusunun özellikleri `properties = DialogProperties{…}` ile veriliyor.
+- **Tembel listeler, ızgaralar ve sayfalayıcılar adlı argüman alıyor, öğeleri Compose'daki gibi ekleniyor**:
+  `LazyColumn`, `LazyRow`, `LazyVerticalGrid`, `LazyHorizontalGrid`, kademeli ızgaralar ve sayfalayıcılar seçeneklerini
+  Compose'un sırası ve adlarıyla alıyor (aralık için `verticalArrangement = Arrangement::spacedBy(8)`, karşı eksende
+  `horizontalAlignment = Alignment::CenterHorizontally`); tembel bir düzenin bloğu öğelerini içinde çağrılan `item`,
+  `items`, `itemsIndexed` ve `stickyHeader` ile ekliyor, Compose'un alıcısı gibi: `LazyColumn(m) { items(mails,
+  [=](const Mail& m) { MailRow(m); }); };`. Bu blok çağrının içinde çalışıyor ve referansla yakalıyor, böylece liste
+  kopyalanmıyor; bir sayfalayıcının sayfası numarasını alan bir blok: `HorizontalPager(state) [=](int page) { … };`.
+  Sayfa anahtarı `pageKey =` ile veriliyor (`key`, kimlik veren composable).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

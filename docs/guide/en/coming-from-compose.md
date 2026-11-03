@@ -57,7 +57,7 @@ Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
 
 Arguments without a name fill the parameters in Compose's order (`Text(text, modifier, color, fontSize, …)`, `Box(modifier, contentAlignment)`). A name the composable doesn't take, one given twice, or a value it can't take is a compile error, never ignored. The names (`modifier`, `color`, `fontSize`, …) are constants of `kompoz`: a variable of yours called the same hides the name, which then is a compile error too; write `kompoz::color = …` there. One of yours at namespace scope (a global `selected`, a function `badge()`) makes the name ambiguous where `using namespace kompoz` is in force: write `kompoz::selected = …`, or name yours otherwise. An argument without a name needs a type of its own: a callback left out is `nullptr` (`Checkbox(checked, nullptr)`; `{}` has no type), a pair is `std::pair{1.f, 3.f}`.
 
-`Box`, `Column`, `Row`, `Spacer`, `Text`, the buttons, icon buttons and icon toggle buttons, the cards, `Surface`, `Icon`, `Image`, `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, the sliders, the text fields, `Scaffold`, the top and bottom app bars, the floating action buttons and toolbars, `SnackbarHost`, `Snackbar`, the navigation bars, rails and drawers, the dialogs, the menus and the bottom sheets take named arguments so far. The other components still take an *options struct* with designated initializers, in the order its fields are declared, until their turn comes:
+`Box`, `Column`, `Row`, `Spacer`, `Text`, the buttons, icon buttons and icon toggle buttons, the cards, `Surface`, `Icon`, `Image`, `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, the sliders, the text fields, `Scaffold`, the top and bottom app bars, the floating action buttons and toolbars, `SnackbarHost`, `Snackbar`, the navigation bars, rails and drawers, the dialogs, the menus, the bottom sheets, the lazy lists and grids and the pagers take named arguments so far. The other components still take an *options struct* with designated initializers, in the order its fields are declared, until their turn comes:
 
 ```cpp body
 ListItem({.headline = [] { Text("Wi-Fi"); }, .supporting = [] { Text("Bağlı"); }});
@@ -110,7 +110,7 @@ void LikeButton() {
 }
 ```
 
-Lambdas that receive a scope, such as `LazyColumn`'s, take it as a parameter instead of as a receiver: `LazyColumn(modifier, [&](LazyListScope& list) { list.items(...); })`.
+In a lazy layout's block, as with Compose's receiver, `item`, `items`, `itemsIndexed` and `stickyHeader` add its items: `LazyColumn(modifier) { items(list, [=](const T& x) { … }); };`. That block runs right away, in the call, and isn't kept, so it captures by reference (a list given to `items` isn't copied); an item's lambda runs later, as the item comes into view, and captures by value. A variable of yours called `items` hides the function: write `kompoz::items(items, …)` there.
 
 ## State
 
@@ -206,7 +206,7 @@ CompositionLocalProvider({LocalContentColor.provides(Color::hex(0xE53935))}, [&]
 | `DisposableEffect(k) { onDispose { … } }` | `DisposableEffect(k, [=] { return [=] { … }; })` |
 | `LocalX.current` | `LocalX.current()` |
 | `MaterialTheme.colorScheme.primary` | `colorScheme().primary` |
-| `LazyColumn { items(list) { … } }` | `LazyColumn(Modifier(), [&](LazyListScope& l) { l.items(list, [](const T& x) { … }); })` |
+| `LazyColumn { items(list) { … } }` | `LazyColumn(Modifier()) { items(list, [=](const T& x) { … }); };` |
 | `val vm: MyViewModel = viewModel()` | `auto vm = viewModel<MyViewModel>();` |
 | `@Preview` | `KOMPOZ_PREVIEW(Name) { … }` |
 | `createComposeRule()` | `kompoz::testing::ComposeTestRule` |

@@ -548,11 +548,11 @@ void BlendModeSection(CallSite site) {
                             d.drawContent();
                             d.drawRect(Brush::verticalGradient({colors::Transparent, colors::Black, colors::Black, colors::Transparent}), {}, std::nullopt, 1, Fill, {}, BlendMode::DstIn);
                         })) {
-                        LazyColumn(Modifier().fillMaxSize(), {.contentPadding = {0, 16, 0, 16}}, [&](LazyListScope& list) {
-                            list.items(40, [&](int i) {
+                        LazyColumn(Modifier().fillMaxSize(), contentPadding = PaddingValues{0, 16, 0, 16}) {
+                            items(40, [&](int i) {
                                 Text(std::format("Satır {}", i + 1), Modifier().fillMaxWidth().padding(8, 6), style = typography().bodyLarge);
                             });
-                        });
+                        };
                     };
                 Box(Modifier().weight(1).fillMaxHeight()
                         .graphicsLayer([](GraphicsLayerScope& l) { l.compositingStrategy = CompositingStrategy::Offscreen; })

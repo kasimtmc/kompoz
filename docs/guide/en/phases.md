@@ -77,9 +77,9 @@ void Contacts(const std::vector<Contact>& contacts) {
         std::ranges::sort(s, {}, &Contact::name);
         return s;
     });
-    LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-        list.items(sorted, [](const Contact& c) { Text(c.name); });
-    });
+    LazyColumn(Modifier().fillMaxSize()) {
+        items(sorted, [](const Contact& c) { Text(c.name); });
+    };
 }
 ```
 

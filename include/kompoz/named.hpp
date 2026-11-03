@@ -375,6 +375,17 @@ struct DrawerState {};
 struct GesturesEnabled {};
 struct Badge {};
 struct Selected {};
+struct ReverseLayout {};
+struct FlingBehavior {};
+struct UserScrollEnabled {};
+struct OverscrollEffect {};
+struct VerticalItemSpacing {};
+struct HorizontalItemSpacing {};
+struct PageSize {};
+struct BeyondViewportPageCount {};
+struct PageSpacing {};
+struct PageKey {};
+struct SnapPosition {};
 } // namespace detail::names
 inline namespace args {
 inline constexpr Param<detail::names::Modifier> modifier;
@@ -511,6 +522,17 @@ inline constexpr Param<detail::names::DrawerState> drawerState;
 inline constexpr Param<detail::names::GesturesEnabled> gesturesEnabled;
 inline constexpr Param<detail::names::Badge> badge;
 inline constexpr Param<detail::names::Selected> selected;
+inline constexpr Param<detail::names::ReverseLayout> reverseLayout;
+inline constexpr Param<detail::names::FlingBehavior> flingBehavior;
+inline constexpr Param<detail::names::UserScrollEnabled> userScrollEnabled;
+inline constexpr Param<detail::names::OverscrollEffect> overscrollEffect;
+inline constexpr Param<detail::names::VerticalItemSpacing> verticalItemSpacing;
+inline constexpr Param<detail::names::HorizontalItemSpacing> horizontalItemSpacing;
+inline constexpr Param<detail::names::PageSize> pageSize;
+inline constexpr Param<detail::names::BeyondViewportPageCount> beyondViewportPageCount;
+inline constexpr Param<detail::names::PageSpacing> pageSpacing;
+inline constexpr Param<detail::names::PageKey> pageKey;
+inline constexpr Param<detail::names::SnapPosition> snapPosition;
 } // namespace args
 
 // A composable taking named arguments: each call's arguments and call site go to Impl::call.

@@ -2,9 +2,9 @@
 
 // LazyColumn / LazyRow: lists that compose and lay out only the items in view.
 //
-//   LazyColumn(Modifier().fillMaxSize(), {.spacing = 8}, [&](LazyListScope& list) {
-//       list.item([&] { Text("Başlık"); });
-//       list.items(todos.get(), [](const Todo& t) { return t.id; }, [&](const Todo& t) { TodoRow(t); });
+//   LazyColumn(Modifier().fillMaxSize(), verticalArrangement = Arrangement::spacedBy(8), [&] {
+//       item([&] { Text("Başlık"); });
+//       items(todos.get(), [](const Todo& t) { return t.id; }, [&](const Todo& t) { TodoRow(t); });
 //   });
 //
 // The item lambdas run during composition only, so they may capture by reference like a
@@ -14,6 +14,7 @@
 
 #include "animation.hpp"
 #include "layout.hpp"
+#include "named.hpp"
 #include "runtime.hpp"
 
 #include <functional>
@@ -198,6 +199,36 @@ private:
     std::vector<Interval> intervals_;
 };
 
+class LazyGridScope;
+namespace detail {
+// The scope the running lazy layout's block adds to.
+struct LazyReceiver {
+    LazyListScope* list = nullptr;
+    LazyGridScope* grid = nullptr;
+};
+LazyReceiver& lazyReceiver();
+[[noreturn]] void outsideLazyBlock(const char* function);
+// While a block runs: its scope the current one (and the one before it back after).
+class LazyReceiverScope {
+public:
+    explicit LazyReceiverScope(LazyListScope& list) : saved_(lazyReceiver()) { lazyReceiver() = {&list, nullptr}; }
+    explicit LazyReceiverScope(LazyGridScope& grid) : saved_(lazyReceiver()) { lazyReceiver() = {nullptr, &grid}; }
+    ~LazyReceiverScope() { lazyReceiver() = saved_; }
+    LazyReceiverScope(const LazyReceiverScope&) = delete;
+    LazyReceiverScope& operator=(const LazyReceiverScope&) = delete;
+
+private:
+    LazyReceiver saved_;
+};
+template <class Scope, class Block>
+std::function<void(Scope&)> lazyContent(Block&& block) {
+    return [block = std::forward<Block>(block)](Scope& scope) {
+        LazyReceiverScope current(scope);
+        block();
+    };
+}
+} // namespace detail
+
 // How a fling of a list ends (LazyListOptions::flingBehavior): freely, or settling with an item
 // lined up — the one nearest to where the fling would have stopped (rememberSnapFlingBehavior).
 struct FlingBehavior {
@@ -235,12 +266,54 @@ struct LazyListOptions {
 
 using LazyListContent = std::function<void(LazyListScope&)>;
 
+namespace detail {
 void LazyColumn(const Modifier& modifier, const LazyListContent& content, CallSite site = CallSite::current());
 void LazyColumn(const Modifier& modifier, const LazyListOptions& options, const LazyListContent& content,
                 CallSite site = CallSite::current());
+struct LazyColumnImpl {
+    using P = Params<names::Modifier, names::State, names::ContentPadding, names::ReverseLayout, names::VerticalArrangement, names::HorizontalAlignment, names::FlingBehavior, names::UserScrollEnabled, names::OverscrollEffect, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: LazyColumn takes a block: its items (item(…), items(…))");
+        LazyListOptions options;
+        P::set<names::State>(options.state, args...);
+        P::set<names::ContentPadding>(options.contentPadding, args...);
+        P::set<names::ReverseLayout>(options.reverseLayout, args...);
+        P::set<names::FlingBehavior>(options.flingBehavior, args...);
+        P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
+        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        P::set<names::VerticalArrangement>(options.arrangement, args...);
+        if constexpr (P::given<names::HorizontalAlignment, A...>()) options.crossAxisBias = P::get<names::HorizontalAlignment>(HorizontalAlignment{}, args...).bias;
+        LazyColumn(P::get<names::Modifier>(Modifier{}, args...), options, lazyContent<LazyListScope>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...))), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::LazyColumnImpl> LazyColumn;
+namespace detail {
 void LazyRow(const Modifier& modifier, const LazyListContent& content, CallSite site = CallSite::current());
 void LazyRow(const Modifier& modifier, const LazyListOptions& options, const LazyListContent& content,
              CallSite site = CallSite::current());
+struct LazyRowImpl {
+    using P = Params<names::Modifier, names::State, names::ContentPadding, names::ReverseLayout, names::HorizontalArrangement, names::VerticalAlignment, names::FlingBehavior, names::UserScrollEnabled, names::OverscrollEffect, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: LazyRow takes a block: its items (item(…), items(…))");
+        LazyListOptions options;
+        P::set<names::State>(options.state, args...);
+        P::set<names::ContentPadding>(options.contentPadding, args...);
+        P::set<names::ReverseLayout>(options.reverseLayout, args...);
+        P::set<names::FlingBehavior>(options.flingBehavior, args...);
+        P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
+        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        P::set<names::HorizontalArrangement>(options.arrangement, args...);
+        if constexpr (P::given<names::VerticalAlignment, A...>()) options.crossAxisBias = P::get<names::VerticalAlignment>(VerticalAlignment{}, args...).bias;
+        LazyRow(P::get<names::Modifier>(Modifier{}, args...), options, lazyContent<LazyListScope>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...))), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::LazyRowImpl> LazyRow;
 
 // ---- LazyVerticalGrid ---------------------------------------------------------------------
 
@@ -312,7 +385,7 @@ struct LazyGridLayoutInfo {
 // A lazy grid's scroll position by item (Compose's LazyGridState): the first visible item is
 // the first of the first line in view, and a scroll to an item goes to its line.
 //   auto grid = rememberLazyGridState();
-//   LazyVerticalGrid(GridCells::Fixed(3), Modifier(), {.state = grid}, ...);
+//   LazyVerticalGrid(GridCells::Fixed(3), Modifier(), state = grid, ...);
 //   scope.launch([grid]() -> Task { co_await grid.animateScrollToItem(0); });
 class LazyGridState {
 public:
@@ -371,12 +444,52 @@ inline FlingBehavior rememberSnapFlingBehavior(const LazyGridState&, SnapPositio
 }
 
 // A lazy grid: rows are composed as they come into view, like LazyColumn items.
+namespace detail {
 void LazyVerticalGrid(GridCells columns, const Modifier& modifier, const LazyGridOptions& options,
                       const std::function<void(LazyGridScope&)>& content, CallSite site = CallSite::current());
+struct LazyVerticalGridImpl {
+    using P = Params<names::Modifier, names::State, names::ContentPadding, names::VerticalArrangement, names::HorizontalArrangement, names::FlingBehavior, names::UserScrollEnabled, names::OverscrollEffect, Block>;
+    template <class... A>
+    static void call(CallSite site, GridCells columns, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: LazyVerticalGrid takes a block: its items (item(…), items(…))");
+        LazyGridOptions options;
+        P::set<names::State>(options.state, args...);
+        P::set<names::ContentPadding>(options.contentPadding, args...);
+        P::set<names::FlingBehavior>(options.flingBehavior, args...);
+        P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
+        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        if constexpr (P::given<names::VerticalArrangement, A...>()) options.verticalSpacing = P::get<names::VerticalArrangement>(Arrangement{}, args...).spacing;
+        if constexpr (P::given<names::HorizontalArrangement, A...>()) options.horizontalSpacing = P::get<names::HorizontalArrangement>(Arrangement{}, args...).spacing;
+        LazyVerticalGrid(columns, P::get<names::Modifier>(Modifier{}, args...), options, lazyContent<LazyGridScope>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...))), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::LazyVerticalGridImpl> LazyVerticalGrid;
 // The same sideways: `rows` divide the grid's height, columns come into view like LazyRow
 // items (a span covers rows). Give it a height.
+namespace detail {
 void LazyHorizontalGrid(GridCells rows, const Modifier& modifier, const LazyGridOptions& options,
                         const std::function<void(LazyGridScope&)>& content, CallSite site = CallSite::current());
+struct LazyHorizontalGridImpl {
+    using P = Params<names::Modifier, names::State, names::ContentPadding, names::HorizontalArrangement, names::VerticalArrangement, names::FlingBehavior, names::UserScrollEnabled, names::OverscrollEffect, Block>;
+    template <class... A>
+    static void call(CallSite site, GridCells rows, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: LazyHorizontalGrid takes a block: its items (item(…), items(…))");
+        LazyGridOptions options;
+        P::set<names::State>(options.state, args...);
+        P::set<names::ContentPadding>(options.contentPadding, args...);
+        P::set<names::FlingBehavior>(options.flingBehavior, args...);
+        P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
+        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        if constexpr (P::given<names::VerticalArrangement, A...>()) options.verticalSpacing = P::get<names::VerticalArrangement>(Arrangement{}, args...).spacing;
+        if constexpr (P::given<names::HorizontalArrangement, A...>()) options.horizontalSpacing = P::get<names::HorizontalArrangement>(Arrangement{}, args...).spacing;
+        LazyHorizontalGrid(rows, P::get<names::Modifier>(Modifier{}, args...), options, lazyContent<LazyGridScope>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...))), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::LazyHorizontalGridImpl> LazyHorizontalGrid;
 
 // ---- LazyVerticalStaggeredGrid, LazyHorizontalStaggeredGrid ----------------------------------
 
@@ -459,12 +572,95 @@ struct LazyStaggeredGridOptions {
 // Items of their own heights in lanes, each going under the lane that is shortest so far
 // (Pinterest-like); they are composed as they come into view. An item with a span of more
 // than one (LazyGridScope::FullLine) crosses all lanes, below the longest one, like a header.
+namespace detail {
 void LazyVerticalStaggeredGrid(StaggeredGridCells columns, const Modifier& modifier, const LazyStaggeredGridOptions& options,
                                const std::function<void(LazyGridScope&)>& content, CallSite site = CallSite::current());
+struct LazyVerticalStaggeredGridImpl {
+    using P = Params<names::Modifier, names::State, names::ContentPadding, names::VerticalItemSpacing, names::HorizontalArrangement, names::UserScrollEnabled, names::OverscrollEffect, Block>;
+    template <class... A>
+    static void call(CallSite site, StaggeredGridCells columns, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: LazyVerticalStaggeredGrid takes a block: its items (item(…), items(…))");
+        LazyStaggeredGridOptions options;
+        P::set<names::State>(options.state, args...);
+        P::set<names::ContentPadding>(options.contentPadding, args...);
+        P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
+        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        P::set<names::VerticalItemSpacing>(options.verticalItemSpacing, args...);
+        if constexpr (P::given<names::HorizontalArrangement, A...>()) options.horizontalSpacing = P::get<names::HorizontalArrangement>(Arrangement{}, args...).spacing;
+        LazyVerticalStaggeredGrid(columns, P::get<names::Modifier>(Modifier{}, args...), options, lazyContent<LazyGridScope>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...))), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::LazyVerticalStaggeredGridImpl> LazyVerticalStaggeredGrid;
 // The same sideways: items of their own widths in rows, each after the row that is shortest so
 // far; it scrolls horizontally (from the right in a right-to-left layout). The state's places,
 // offsets and layout info go along x.
+namespace detail {
 void LazyHorizontalStaggeredGrid(StaggeredGridCells rows, const Modifier& modifier, const LazyStaggeredGridOptions& options,
                                  const std::function<void(LazyGridScope&)>& content, CallSite site = CallSite::current());
+struct LazyHorizontalStaggeredGridImpl {
+    using P = Params<names::Modifier, names::State, names::ContentPadding, names::VerticalArrangement, names::HorizontalItemSpacing, names::UserScrollEnabled, names::OverscrollEffect, Block>;
+    template <class... A>
+    static void call(CallSite site, StaggeredGridCells rows, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: LazyHorizontalStaggeredGrid takes a block: its items (item(…), items(…))");
+        LazyStaggeredGridOptions options;
+        P::set<names::State>(options.state, args...);
+        P::set<names::ContentPadding>(options.contentPadding, args...);
+        P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
+        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        P::set<names::HorizontalItemSpacing>(options.horizontalItemSpacing, args...);
+        if constexpr (P::given<names::VerticalArrangement, A...>()) options.verticalSpacing = P::get<names::VerticalArrangement>(Arrangement{}, args...).spacing;
+        LazyHorizontalStaggeredGrid(rows, P::get<names::Modifier>(Modifier{}, args...), options, lazyContent<LazyGridScope>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...))), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::LazyHorizontalStaggeredGridImpl> LazyHorizontalStaggeredGrid;
+
+
+// ---- A lazy layout's block: its items (Compose's LazyListScope / LazyGridScope receivers) ----
+//
+// (With <kompoz/blocks.hpp>; without it, the block is the last argument: LazyColumn(m, [&] { … }).)
+//
+//   LazyColumn(Modifier().fillMaxSize()) {
+//       item([=] { Text("Bugün", style = typography().titleSmall); });
+//       items(mails, [=](const Mail& m) { MailRow(m); });
+//   };
+//
+// The block runs right away, in the call, adding the items to the layout being called (they are
+// composed as they come into view): item, items, itemsIndexed and stickyHeader add to it as its
+// scope's functions do. A variable of yours called `items` hides the function: write
+// kompoz::items(items, …) there.
+
+
+template <class... A>
+void item(A&&... args) {
+    detail::LazyReceiver& r = detail::lazyReceiver();
+    if constexpr (requires(LazyGridScope& g) { g.item(std::forward<A>(args)...); })
+        if (r.grid) return r.grid->item(std::forward<A>(args)...);
+    if constexpr (requires(LazyListScope& l) { l.item(std::forward<A>(args)...); })
+        if (r.list) return r.list->item(std::forward<A>(args)...);
+    detail::outsideLazyBlock("item");
+}
+template <class... A>
+void items(A&&... args) {
+    detail::LazyReceiver& r = detail::lazyReceiver();
+    if constexpr (requires(LazyGridScope& g) { g.items(std::forward<A>(args)...); })
+        if (r.grid) return r.grid->items(std::forward<A>(args)...);
+    if constexpr (requires(LazyListScope& l) { l.items(std::forward<A>(args)...); })
+        if (r.list) return r.list->items(std::forward<A>(args)...);
+    detail::outsideLazyBlock("items");
+}
+template <class... A>
+void itemsIndexed(A&&... args) {
+    if (LazyListScope* l = detail::lazyReceiver().list) return l->itemsIndexed(std::forward<A>(args)...);
+    detail::outsideLazyBlock("itemsIndexed");
+}
+template <class... A>
+void stickyHeader(A&&... args) {
+    if (LazyListScope* l = detail::lazyReceiver().list) return l->stickyHeader(std::forward<A>(args)...);
+    detail::outsideLazyBlock("stickyHeader");
+}
 
 } // namespace kompoz

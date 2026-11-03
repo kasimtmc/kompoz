@@ -25,13 +25,13 @@ struct Message {
 };
 
 void Conversation(const std::vector<Message>& messages) {
-    LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-        list.item([] { Text("Today", style = typography().labelLarge); });
-        list.items(messages, [](const Message& m) { return m.id; }, [](const Message& m) {
+    LazyColumn(Modifier().fillMaxSize()) {
+        item([] { Text("Today", style = typography().labelLarge); });
+        items(messages, [](const Message& m) { return m.id; }, [](const Message& m) {
             ListItem({.headline = [&] { Text(m.author); }, .supporting = [&] { Text(m.body); }});
         });
-        list.item([] { Text("No more messages"); });
-    });
+        item([] { Text("No more messages"); });
+    };
 }
 ```
 
@@ -54,37 +54,36 @@ Anahtar yoksa bir öğenin durumu konumuna bağlıdır. En üste bir öğe ekley
 ```cpp body
 #! struct Message { int id; std::string author, body; };
 #! std::vector<Message> messages;
-LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-    list.items(messages, [](const Message& m) { return m.id; }, [](const Message& m) {
+LazyColumn(Modifier().fillMaxSize()) {
+    items(messages, [](const Message& m) { return m.id; }, [](const Message& m) {
         auto expanded = remember([] { return mutableStateOf(false); });   // mesajla birlikte kalır
         Text(m.body, Modifier().clickable([expanded] { expanded.set(!expanded.get()); }),
              maxLines = expanded.get() ? 0 : 1);
     });
-});
+};
 ```
 
 Anahtar, hash'lenebilen herhangi bir şey olabilir: bir id, bir string. Anahtarlar liste içinde benzersiz olmalıdır.
 
 ### Seçenekler
 
-Seçenekler struct'ı iç boşluğu, aralığı ve yönü ayarlar:
+Adlı argümanlar, Compose'daki gibi, iç boşluğu, aralığı ve yönü ayarlar:
 
 ```cpp body
-LazyColumn(Modifier().fillMaxSize(),
-           {.contentPadding = PaddingValues(16), .spacing = 8},
-           [&](LazyListScope& list) { list.items(50, [](int i) { Text("Item " + std::to_string(i)); }); });
+LazyColumn(Modifier().fillMaxSize(), contentPadding = PaddingValues(16), verticalArrangement = Arrangement::spacedBy(8)) {
+    items(50, [](int i) { Text("Item " + std::to_string(i)); });
+};
 ```
 
 | Seçenek | Ne yapar |
 |---|---|
 | `state` | Kaydırma konumunu okumak ya da yönetmek için bir `LazyListState`. |
 | `contentPadding` | Öğelerin çevresinde, kaydırma alanının içinde iç boşluk: öğeler onun içine kayar. |
-| `spacing` | Öğeler arasındaki boşluk. |
-| `arrangement` | `spacing` yerine: hepsi sığdığında öğelerin nasıl dizileceği (`Arrangement::Bottom`, `Center`…). |
+| `verticalArrangement` (bir `LazyRow`'da `horizontalArrangement`) | Öğeler arasındaki boşluk, `Arrangement::spacedBy(8)`, ve hepsi sığdığında nasıl dizilecekleri (`Arrangement::Bottom`, `Center`…). |
 | `reverseLayout` | Bir sohbetteki gibi 0. öğe altta (bir `LazyRow`'da sonda). |
 | `flingBehavior` | Bir fırlatmanın nasıl biteceği: `rememberSnapFlingBehavior(state)` bir öğeye yakalar. |
 | `userScrollEnabled` | `false`: yalnızca koddan kaydırılır. |
-| `crossAxisBias` | Listeden dar öğelerin nerede duracağı: başta (-1), ortada (0) ya da sonda (1). |
+| `horizontalAlignment` (bir `LazyRow`'da `verticalAlignment`) | Listeden dar öğelerin nerede duracağı: `Alignment::Start`, `CenterHorizontally` ya da `End`. |
 
 ### Öğeleri canlandırmak
 
@@ -92,11 +91,11 @@ Bir öğenin kökündeki `Modifier().animateItem()`, öğe belirdiğinde (belire
 
 ```cpp body
 #! std::vector<std::string> names;
-LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-    list.items(names, [](const std::string& n) { return n; }, [](const std::string& n) {
+LazyColumn(Modifier().fillMaxSize()) {
+    items(names, [](const std::string& n) { return n; }, [](const std::string& n) {
         Text(n, Modifier().animateItem().padding(16));
     });
-});
+};
 ```
 
 ## Kaydırma konumunu yönetmek
@@ -110,9 +109,9 @@ void Messages(const std::vector<std::string>& messages) {
     auto showTop = remember([list] { return derivedStateOf([list] { return list.firstVisibleItemIndex() > 3; }); });
 
     Box(Modifier().fillMaxSize()) {
-        LazyColumn(Modifier().fillMaxSize(), {.state = list}, [&](LazyListScope& l) {
-            l.items(messages, [](const std::string& m) { Text(m, Modifier().padding(16)); });
-        });
+        LazyColumn(Modifier().fillMaxSize(), state = list) {
+            items(messages, [](const std::string& m) { Text(m, Modifier().padding(16)); });
+        };
         if (showTop.get()) {
             SmallFloatingActionButton([scope, list] { scope.launch([list]() -> Task { co_await list.animateScrollToItem(0); }); },
                                       Modifier().align(Alignment::BottomEnd).padding(16)) { Icon(Icons::Filled::KeyboardArrowUp, "Back to top"); };
@@ -147,13 +146,12 @@ LaunchedEffect(nearEnd.get(), [nearEnd, loadMore]() -> Task {
 #! struct Photo { int id; std::string url; };
 #! std::vector<Photo> photos;
 LazyVerticalGrid(GridCells::Adaptive(120), Modifier().fillMaxSize(),
-                 {.contentPadding = PaddingValues(8), .verticalSpacing = 8, .horizontalSpacing = 8},
-                 [&](LazyGridScope& grid) {
-                     grid.item([] { Text("Photos", style = typography().titleLarge); }, LazyGridScope::FullLine);
-                     grid.items(photos, [](const Photo& p) { return p.id; }, [](const Photo& p) {
+                 contentPadding = PaddingValues(8), verticalArrangement = Arrangement::spacedBy(8), horizontalArrangement = Arrangement::spacedBy(8)) {
+                     item([] { Text("Photos", style = typography().titleLarge); }, LazyGridScope::FullLine);
+                     items(photos, [](const Photo& p) { return p.id; }, [](const Photo& p) {
                          AsyncImage(p.url, "", Modifier().aspectRatio(1), {.contentScale = ContentScale::Crop});
                      });
-                 });
+                 };
 ```
 
 - `GridCells::Fixed(3)` üç sütun verir; `GridCells::Adaptive(120)` en az 120 dp'lik sütunlardan sığabildiği kadar.
@@ -164,12 +162,11 @@ LazyVerticalGrid(GridCells::Adaptive(120), Modifier().fillMaxSize(),
 
 ```cpp body
 #! std::vector<std::string> notes;
-LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxSize(), {.verticalItemSpacing = 8},
-                          [&](LazyGridScope& grid) {
-                              grid.items(notes, [](const std::string& note) {
+LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxSize(), verticalItemSpacing = 8) {
+                              items(notes, [](const std::string& note) {
                                   OutlinedCard(Modifier().padding(4)) { Text(note, Modifier().padding(12)); };
                               });
-                          });
+                          };
 ```
 
 ## Pager'lar
@@ -181,9 +178,9 @@ void Onboarding() {
     auto pager = rememberPagerState(0, [] { return 3; });
     auto scope = rememberCoroutineScope();
     Column(Modifier().fillMaxSize()) {
-        HorizontalPager(pager, Modifier().weight(1), [](int page) {
+        HorizontalPager(pager, Modifier().weight(1)) [](int page) {
             Box(Modifier().fillMaxSize(), Alignment::Center) { Text("Page " + std::to_string(page + 1)); };
-        });
+        };
         Button([scope, pager] { scope.launch([pager]() -> Task { co_await pager.animateScrollToPage(pager.currentPage() + 1); }); }) { Text("Next"); };
     };
 }
@@ -227,9 +224,9 @@ Bir başkasının içindeki kaydırılabilir bir öğe, örneğin daralan bir uy
 auto behavior = TopAppBarDefaults::exitUntilCollapsedScrollBehavior();
 Scaffold(Modifier().nestedScroll(behavior.nestedScrollConnection),
          topBar = [&] { LargeTopAppBar(title = [] { Text("Inbox"); }, scrollBehavior = behavior); }) [=](PaddingValues padding) {
-    LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& l) {
-        l.items(50, [](int i) { Text("Message " + std::to_string(i), Modifier().padding(16)); });
-    });
+    LazyColumn(Modifier().fillMaxSize(), contentPadding = padding) {
+        items(50, [](int i) { Text("Message " + std::to_string(i), Modifier().padding(16)); });
+    };
 };
 ```
 
@@ -246,9 +243,9 @@ void CollapsingHeader() {
     }});
     Column(Modifier().fillMaxSize().nestedScroll(connection)) {
         Box(Modifier().fillMaxWidth().height(height.get()).background(colorScheme().primaryContainer)) {};
-        LazyColumn(Modifier().fillMaxSize(), [](LazyListScope& l) {
-            l.items(50, [](int i) { Text("Row " + std::to_string(i), Modifier().padding(16)); });
-        });
+        LazyColumn(Modifier().fillMaxSize()) {
+            items(50, [](int i) { Text("Row " + std::to_string(i), Modifier().padding(16)); });
+        };
     };
 }
 ```
@@ -262,19 +259,19 @@ void CollapsingHeader() {
 ```cpp
 #! TaskOf<std::vector<std::string>> fetchNews() { co_return std::vector<std::string>{}; }
 void News() {
-    auto items = remember([] { return mutableStateOf(std::vector<std::string>{"First"}); });
+    auto news = remember([] { return mutableStateOf(std::vector<std::string>{"First"}); });
     auto refreshing = remember([] { return mutableStateOf(false); });
     auto scope = rememberCoroutineScope();
     PullToRefreshBox(refreshing.get(), [=] {
         refreshing.set(true);
-        scope.launch([items, refreshing]() -> Task {
-            items.set(co_await fetchNews());
+        scope.launch([news, refreshing]() -> Task {
+            news.set(co_await fetchNews());
             refreshing.set(false);
         });
     }, Modifier().fillMaxSize(), [&] {
-        LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& l) {
-            l.items(items.get(), [](const std::string& s) { Text(s, Modifier().padding(16)); });
-        });
+        LazyColumn(Modifier().fillMaxSize()) {
+            items(news.get(), [](const std::string& s) { Text(s, Modifier().padding(16)); });
+        };
     });
 }
 ```

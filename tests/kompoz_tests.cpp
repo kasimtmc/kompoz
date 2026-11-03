@@ -1814,8 +1814,8 @@ TEST(lazy_column_composes_only_what_is_visible) {
     auto data = range(10'000);
     ComposeTestRule rule(
         [&] {
-            LazyColumn(Modifier().fillMaxSize().testTag("list"), [&](LazyListScope& list) {
-                list.items(data, [](int v) { return v; }, [](int v) { Text("row " + std::to_string(v)); });
+            LazyColumn(Modifier().fillMaxSize().testTag("list"), [&] {
+                items(data, [](int v) { return v; }, [](int v) { Text("row " + std::to_string(v)); });
             });
         },
         {400, 800});
@@ -1829,8 +1829,8 @@ TEST(lazy_column_composes_only_what_is_visible) {
     int composed = 0;
     ComposeTestRule tall(
         [&] {
-            LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-                list.items(100, [&](int i) {
+            LazyColumn(Modifier().fillMaxSize(), [&] {
+                items(100, [&](int i) {
                     ++composed;
                     Box(Modifier().fillMaxWidth().height(500).testTag("page " + std::to_string(i)));
                 });
@@ -1852,8 +1852,8 @@ TEST(lazy_list_composes_the_next_item_in_a_pause) {
         [&] {
             auto s = rememberLazyListState();
             state = s;
-            LazyColumn(Modifier().fillMaxSize(), {.state = s}, [&](LazyListScope& list) {
-                list.items(100, [&](int i) {
+            LazyColumn(Modifier().fillMaxSize(), state = s, [&] {
+                items(100, [&](int i) {
                     remember([&] {
                         made.push_back(i);
                         return 0;
@@ -1909,8 +1909,8 @@ TEST(lazy_list_state_opens_at_an_item) {
         [&] {
             auto s = rememberLazyListState(500);  // before the list knows its count
             state = s;
-            LazyColumn(Modifier().fillMaxSize(), {.state = s}, [&](LazyListScope& list) {
-                list.items(1000, [](int i) { Text("row " + std::to_string(i)); });
+            LazyColumn(Modifier().fillMaxSize(), state = s, [&] {
+                items(1000, [](int i) { Text("row " + std::to_string(i)); });
             });
         },
         {400, 800});
@@ -1924,8 +1924,8 @@ TEST(lazy_column_scrolls_and_disposes_items) {
     LazyListState state;
     ComposeTestRule rule(
         [&] {
-            LazyColumn(Modifier().fillMaxSize(), {.state = state}, [&](LazyListScope& list) {
-                list.items(data, [](int v) { return v; }, [&](int v) {
+            LazyColumn(Modifier().fillMaxSize(), kompoz::state = state, [&] {
+                items(data, [](int v) { return v; }, [&](int v) {
                     DisposableEffect(0, [alive]() -> std::function<void()> {
                         ++*alive;
                         return [alive] { --*alive; };
@@ -2005,8 +2005,8 @@ TEST(lazy_column_stops_at_the_end) {
     LazyListState state;
     ComposeTestRule rule(
         [&] {
-            LazyColumn(Modifier().fillMaxSize(), {.state = state}, [&](LazyListScope& list) {
-                list.items(data, [](int v) { Text("row " + std::to_string(v)); });
+            LazyColumn(Modifier().fillMaxSize(), kompoz::state = state, [&] {
+                items(data, [](int v) { Text("row " + std::to_string(v)); });
             });
         },
         {400, 800});
@@ -2021,8 +2021,8 @@ TEST(lazy_column_stops_at_the_end) {
 TEST(lazy_column_keys_keep_item_state) {
     auto data = mutableStateOf(std::vector<int>{1, 2, 3});
     ComposeTestRule rule([&] {
-        LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-            list.items(data.get(), [](int v) { return v; }, [](int v) { Item(v); });
+        LazyColumn(Modifier().fillMaxSize(), [&] {
+            items(data.get(), [](int v) { return v; }, [](int v) { Item(v); });
         });
     });
     rule.onNodeWithText("item2:0").performClick();
@@ -2035,10 +2035,10 @@ TEST(lazy_column_keys_keep_item_state) {
 TEST(lazy_column_content_padding_and_spacing) {
     auto data = range(5);
     ComposeTestRule rule([&] {
-        LazyColumn(Modifier().fillMaxSize(), {.contentPadding = {8, 16, 8, 16}, .spacing = 10},
-                   [&](LazyListScope& list) {
-                       list.item([] { Text("header"); });
-                       list.items(data, [](int v) { Text("row " + std::to_string(v)); });
+        LazyColumn(Modifier().fillMaxSize(), contentPadding = PaddingValues{8, 16, 8, 16}, verticalArrangement = Arrangement::spacedBy(10),
+                   [&] {
+                       item([] { Text("header"); });
+                       items(data, [](int v) { Text("row " + std::to_string(v)); });
                    });
     });
     CHECK(near(rule.onNodeWithText("header").bounds().y, 16));
@@ -2053,8 +2053,8 @@ TEST(lazy_column_scroll_to_item_and_observable_index) {
         [&] {
             Column([=, &state] {
                 Text("first=" + std::to_string(state.firstVisibleItemIndex()));
-                LazyColumn(Modifier().fillMaxSize(), {.state = state}, [&](LazyListScope& list) {
-                    list.items(data, [](int v) { Text("row " + std::to_string(v)); });
+                LazyColumn(Modifier().fillMaxSize(), kompoz::state = state, [&] {
+                    items(data, [](int v) { Text("row " + std::to_string(v)); });
                 });
             });
         },
@@ -2070,13 +2070,13 @@ TEST(lazy_row_inside_lazy_column_scrolls_on_its_own_axis) {
     LazyListState column, row;
     ComposeTestRule rule(
         [&] {
-            LazyColumn(Modifier().fillMaxSize(), {.state = column}, [&](LazyListScope& list) {
-                list.item([&] {
-                    LazyRow(Modifier().fillMaxWidth().height(60), {.state = row}, [&](LazyListScope& r) {
-                        r.items(cells, [](int v) { Box(Modifier().size(60).testTag("cell" + std::to_string(v))); });
+            LazyColumn(Modifier().fillMaxSize(), state = column, [&] {
+                item([&] {
+                    LazyRow(Modifier().fillMaxWidth().height(60), state = row, [&] {
+                        items(cells, [](int v) { Box(Modifier().size(60).testTag("cell" + std::to_string(v))); });
                     });
                 });
-                list.items(rows, [](int v) { Text("row " + std::to_string(v)); });
+                items(rows, [](int v) { Text("row " + std::to_string(v)); });
             });
         },
         {400, 800});
@@ -2094,8 +2094,8 @@ TEST(fling_keeps_scrolling_after_release) {
     LazyListState state;
     ComposeTestRule rule(
         [&] {
-            LazyColumn(Modifier().fillMaxSize(), {.state = state}, [&](LazyListScope& list) {
-                list.items(data, [](int v) { Text("row " + std::to_string(v)); });
+            LazyColumn(Modifier().fillMaxSize(), kompoz::state = state, [&] {
+                items(data, [](int v) { Text("row " + std::to_string(v)); });
             });
         },
         {400, 800});
@@ -3872,8 +3872,8 @@ TEST(local_overscroll_factory_turns_the_stretch_off) {
             CompositionLocalProvider({LocalOverscrollFactory.provides(std::nullopt)}, [&] {
                 Column(Modifier().weight(1).fillMaxHeight().verticalScroll(column).testTag("kapalı"),
                        [=] { for (int i = 0; i < 30; ++i) Box(Modifier().fillMaxWidth().height(50)); });
-                LazyColumn(Modifier().weight(1).fillMaxHeight().testTag("tembel"), {.state = lazy},
-                           [](LazyListScope& l) { l.items(30, [](int) { Box(Modifier().fillMaxWidth().height(50)); }); });
+                LazyColumn(Modifier().weight(1).fillMaxHeight().testTag("tembel"), state = lazy,
+                           [] { items(30, [](int) { Box(Modifier().fillMaxWidth().height(50)); }); });
             });
         });
     }, {600, 800});
@@ -4213,8 +4213,8 @@ TEST(stretch_holds_while_touched_and_lets_a_fling_go_by) {
             Column(Modifier().fillMaxWidth().height(600).verticalScroll(scroll).testTag("list"), [=] {
                 for (int i = 0; i < 30; ++i) Box(Modifier().fillMaxWidth().height(50));
             });
-            LazyRow(Modifier().fillMaxWidth().height(200).testTag("row"), {.state = row},
-                    [](LazyListScope& l) { l.items(20, [](int) { Box(Modifier().size(100, 200)); }); });
+            LazyRow(Modifier().fillMaxWidth().height(200).testTag("row"), state = row,
+                    [] { items(20, [](int) { Box(Modifier().size(100, 200)); }); });
         });
     }, {400, 800});
     auto& host = rule.host();
@@ -4296,12 +4296,12 @@ TEST(overscroll_effect_none_shared_or_halved) {
         Column([=, &drawn, &effect, &events, &later, &lazy, &none, &off, &pager, &shared] {
             Row(Modifier().fillMaxWidth().height(600), [=, &drawn, &effect, &events, &later, &lazy, &none, &off, &shared] {
                 Column(Modifier().weight(1).fillMaxHeight().verticalScroll(none, nullptr).testTag("yok"), items);
-                LazyColumn(Modifier().weight(1).fillMaxHeight().testTag("tembel"), {.state = lazy, .overscrollEffect = nullptr},
-                           [](LazyListScope& l) { l.items(30, [](int) { Box(Modifier().fillMaxWidth().height(50)); }); });
-                LazyVerticalGrid(GridCells::Fixed(2), Modifier().weight(1).fillMaxHeight().testTag("ızgara"), {.overscrollEffect = nullptr},
-                                 [](LazyGridScope& g) { g.items(60, [](int) { Box(Modifier().fillMaxWidth().height(50)); }); });
-                LazyVerticalStaggeredGrid(GridCells::Fixed(2), Modifier().weight(1).fillMaxHeight().testTag("kademeli"), {.overscrollEffect = nullptr},
-                                          [](LazyGridScope& g) { g.items(60, [](int) { Box(Modifier().fillMaxWidth().height(50)); }); });
+                LazyColumn(Modifier().weight(1).fillMaxHeight().testTag("tembel"), state = lazy, overscrollEffect = nullptr,
+                           [] { kompoz::items(30, [](int) { Box(Modifier().fillMaxWidth().height(50)); }); });
+                LazyVerticalGrid(GridCells::Fixed(2), Modifier().weight(1).fillMaxHeight().testTag("ızgara"), overscrollEffect = nullptr,
+                                 [] { kompoz::items(60, [](int) { Box(Modifier().fillMaxWidth().height(50)); }); });
+                LazyVerticalStaggeredGrid(GridCells::Fixed(2), Modifier().weight(1).fillMaxHeight().testTag("kademeli"), overscrollEffect = nullptr,
+                                          [] { kompoz::items(60, [](int) { Box(Modifier().fillMaxWidth().height(50)); }); });
                 // A bare scrollable (half its height) taking the drags into the effect the box around it draws.
                 Box(Modifier().weight(1).fillMaxHeight().overscroll(effect).testTag("kutu"), [=, &effect] {
                     Box(Modifier().fillMaxWidth().height(300).scrollable(rememberScrollableState([](float) { return 0.f; }), Orientation::Vertical, effect)
@@ -4315,8 +4315,8 @@ TEST(overscroll_effect_none_shared_or_halved) {
                            .testTag("sonra"),
                        items);
             });
-            HorizontalPager(*pager, Modifier().fillMaxWidth().height(200).testTag("sayfa"), [](int) { Box(Modifier().fillMaxSize()); },
-                            {.overscrollEffect = pagerEffect});
+            HorizontalPager(*pager, Modifier().fillMaxWidth().height(200).testTag("sayfa"),
+                            overscrollEffect = pagerEffect, [](int) { Box(Modifier().fillMaxSize()); });
         });
     }, {800, 800});
     auto& host = rule.host();
@@ -5081,8 +5081,8 @@ TEST(saved_state_outlives_the_host) {
                 graph.composable("home", [&](const NavBackStackEntry&) {
                     auto state = rememberLazyListState();
                     r.list = state;
-                    LazyColumn(Modifier().fillMaxSize(), {.state = state}, [&](LazyListScope& items) {
-                        items.items(100, [](int i) { return size_t(i); }, [](int i) {
+                    LazyColumn(Modifier().fillMaxSize(), kompoz::state = state, [&] {
+                        items(100, [](int i) { return size_t(i); }, [](int i) {
                             auto liked = rememberSaveable([] { return mutableStateOf(false); });
                             Button([liked] { liked.set(true); }, Modifier().height(50).testTag(std::format("satır{}", i)),
                                    [=] { Text(std::format("satır {}{}", i, liked.get() ? " ♥" : "")); });
@@ -6183,8 +6183,8 @@ TEST(display_list_follows_clips_of_any_shape) {
 TEST(lazy_column_items_keep_saveable_state_when_scrolled_away) {
     LazyListState list;
     ComposeTestRule rule([&] {
-        LazyColumn(Modifier().fillMaxSize(), {.state = list}, [&](LazyListScope& items) {
-            items.items(200, [](int i) { return size_t(i); }, [](int i) {
+        LazyColumn(Modifier().fillMaxSize(), state = list, [&] {
+            items(200, [](int i) { return size_t(i); }, [](int i) {
                 auto liked = rememberSaveable([] { return mutableStateOf(false); });
                 auto plain = remember([] { return mutableStateOf(false); });
                 Row(Modifier().fillMaxWidth().height(50), [=] {
@@ -6208,8 +6208,8 @@ TEST(lazy_column_items_keep_saveable_state_when_scrolled_away) {
     // registration ends): it starts over when it comes back.
     auto open = mutableStateOf(true);
     ComposeTestRule inner([&] {
-        LazyColumn(Modifier().fillMaxSize(), {}, [&](LazyListScope& items) {
-            items.items(3, [](int i) { return size_t(i); }, [&](int i) {
+        LazyColumn(Modifier().fillMaxSize(), [&] {
+            items(3, [](int i) { return size_t(i); }, [&](int i) {
                 if (i == 0 && open.get()) {
                     auto count = rememberSaveable([] { return mutableStateOf(0); });
                     Button([count] { count.set(count.peek() + 1); }, Modifier().testTag("say"),
@@ -9313,9 +9313,9 @@ TEST(lazy_vertical_grid_fixed_adaptive_and_full_line_spans) {
     auto adaptive = mutableStateOf(false);
     ComposeTestRule rule([&] {
         LazyVerticalGrid(adaptive.get() ? GridCells::Adaptive(100) : GridCells::Fixed(3), Modifier().fillMaxSize(),
-                         {.verticalSpacing = 8, .horizontalSpacing = 10}, [&](LazyGridScope& grid) {
-                             grid.item([] { Text("Başlık", Modifier().testTag("header")); }, LazyGridScope::FullLine);
-                             grid.items(data, [](int v) { return v; },
+                         verticalArrangement = Arrangement::spacedBy(8), horizontalArrangement = Arrangement::spacedBy(10), [&] {
+                             item([] { Text("Başlık", Modifier().testTag("header")); }, LazyGridScope::FullLine);
+                             items(data, [](int v) { return v; },
                                         [](int v) { Box(Modifier().fillMaxWidth().height(50).testTag("cell" + std::to_string(v))); });
                          });
     }, {400, 800});
@@ -9336,9 +9336,9 @@ TEST(lazy_horizontal_grid_lays_out_columns) {
     auto data = range(300);
     ComposeTestRule rule([&] {
         LazyHorizontalGrid(GridCells::Fixed(3), Modifier().fillMaxWidth().height(320).testTag("grid"),
-                           {.verticalSpacing = 10, .horizontalSpacing = 8}, [&](LazyGridScope& grid) {
-                               grid.item([] { Box(Modifier().width(40).fillMaxHeight().testTag("side")); }, LazyGridScope::FullLine);
-                               grid.items(data, [](int v) { return v; },
+                           verticalArrangement = Arrangement::spacedBy(10), horizontalArrangement = Arrangement::spacedBy(8), [&] {
+                               item([] { Box(Modifier().width(40).fillMaxHeight().testTag("side")); }, LazyGridScope::FullLine);
+                               items(data, [](int v) { return v; },
                                           [](int v) { Box(Modifier().width(90).fillMaxHeight().testTag("cell" + std::to_string(v))); });
                            });
     }, {400, 800});
@@ -9360,8 +9360,8 @@ TEST(staggered_grid_composes_the_next_item_in_a_pause) {
     ScrollState scroll = gridState.scrollState();
     std::vector<int> made;
     ComposeTestRule rule([&] {
-        LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxSize(), {.state = gridState}, [&](LazyGridScope& grid) {
-            grid.items(200, [&](int i) {
+        LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxSize(), state = gridState, [&] {
+            items(200, [&](int i) {
                 remember([&] {
                     made.push_back(i);
                     return 0;
@@ -9388,11 +9388,11 @@ TEST(staggered_grid_puts_items_under_the_shortest_lane) {
     auto height = [](int i) { return float(50 + (i * 37) % 100); };
     ComposeTestRule rule([&] {
         LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxSize(),
-                                  {.state = gridState, .verticalItemSpacing = 8, .horizontalSpacing = 8}, [&](LazyGridScope& grid) {
-                                      grid.item([] { Box(Modifier().fillMaxWidth().height(40).testTag("header")); }, LazyGridScope::FullLine);
-                                      grid.items(10, [&](int i) { Box(Modifier().fillMaxWidth().height(height(i)).testTag("a" + std::to_string(i))); });
-                                      grid.item([] { Box(Modifier().fillMaxWidth().height(30).testTag("middle")); }, LazyGridScope::FullLine);
-                                      grid.items(500, [&](int i) { Box(Modifier().fillMaxWidth().height(height(i)).testTag("b" + std::to_string(i))); });
+                                  state = gridState, verticalItemSpacing = 8, horizontalArrangement = Arrangement::spacedBy(8), [&] {
+                                      item([] { Box(Modifier().fillMaxWidth().height(40).testTag("header")); }, LazyGridScope::FullLine);
+                                      items(10, [&](int i) { Box(Modifier().fillMaxWidth().height(height(i)).testTag("a" + std::to_string(i))); });
+                                      item([] { Box(Modifier().fillMaxWidth().height(30).testTag("middle")); }, LazyGridScope::FullLine);
+                                      items(500, [&](int i) { Box(Modifier().fillMaxWidth().height(height(i)).testTag("b" + std::to_string(i))); });
                                   });
     }, {400, 800});
     // Worked out the same way: lanes of (400 - 8) / 2 = 196; each item under the shorter lane.
@@ -9435,9 +9435,9 @@ TEST(horizontal_staggered_grid_puts_items_after_the_shortest_row) {
     auto width = [](int i) { return float(50 + (i * 37) % 100); };
     ComposeTestRule rule([&] {
         LazyHorizontalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxWidth().height(208),
-                                    {.state = gridState, .horizontalItemSpacing = 6, .verticalSpacing = 8}, [&](LazyGridScope& grid) {
-                                        grid.item([] { Box(Modifier().width(40).fillMaxHeight().testTag("header")); }, LazyGridScope::FullLine);
-                                        grid.items(300, [&](int i) { Box(Modifier().width(width(i)).fillMaxHeight().testTag("a" + std::to_string(i))); });
+                                    state = gridState, horizontalItemSpacing = 6, verticalArrangement = Arrangement::spacedBy(8), [&] {
+                                        item([] { Box(Modifier().width(40).fillMaxHeight().testTag("header")); }, LazyGridScope::FullLine);
+                                        items(300, [&](int i) { Box(Modifier().width(width(i)).fillMaxHeight().testTag("a" + std::to_string(i))); });
                                     });
     }, {400, 800});
     // Rows of (208 - 8) / 2 = 100; each item after the shorter row, 6 dp on.
@@ -9720,18 +9720,18 @@ TEST(pager_pages_of_a_fixed_size_snap_where_asked) {
         Column([=] {
             // 200 dp pages in the middle of 300 dp of room (the padding's 50 each side), 10 apart.
             HorizontalPager(a, Modifier().fillMaxWidth().height(100), page("orta"),
-                            {.contentPadding = {.start = 50, .end = 50}, .pageSize = PageSize::Fixed(200), .pageSpacing = 10,
-                             .snapPosition = SnapPosition::Center});
+                            contentPadding = PaddingValues{.start = 50, .end = 50}, pageSize = PageSize::Fixed(200), pageSpacing = 10,
+                            snapPosition = SnapPosition::Center);
             // 100 dp pages from the start: four in view.
-            HorizontalPager(b, Modifier().fillMaxWidth().height(100), page("baş"), {.pageSize = PageSize::Fixed(100)});
+            HorizontalPager(b, Modifier().fillMaxWidth().height(100), page("baş"), pageSize = PageSize::Fixed(100));
             // From page 9, which can't come to the start: as far as the pages go, settled there.
-            HorizontalPager(c, Modifier().fillMaxWidth().height(100), page("son"), {.pageSize = PageSize::Fixed(100)});
+            HorizontalPager(c, Modifier().fillMaxWidth().height(100), page("son"), pageSize = PageSize::Fixed(100));
             // 100 dp pages the padding lets come to the middle (from 150).
             HorizontalPager(rememberPagerState(5, [] { return 10; }), Modifier().fillMaxWidth().height(100), page("dar"),
-                            {.contentPadding = {.start = 150, .end = 150}, .pageSize = PageSize::Fixed(100)});
+                            contentPadding = PaddingValues{.start = 150, .end = 150}, pageSize = PageSize::Fixed(100));
             // Two pages a view, as a PageSize of its own says.
             HorizontalPager(rememberPagerState(0, [] { return 4; }), Modifier().fillMaxWidth().height(100), page("yarım"),
-                            {.pageSize = PageSize{[](float room, float spacing) { return (room - spacing) / 2; }}, .pageSpacing = 20});
+                            pageSize = PageSize{[](float room, float spacing) { return (room - spacing) / 2; }}, pageSpacing = 20);
         });
     }, {400, 800});
     auto x = [&](const std::string& tag) { return rule.onNodeWithTag(tag).bounds().x; };
@@ -9770,8 +9770,8 @@ TEST(pager_measured_without_end_shows_its_first_pages) {
         auto s = rememberPagerState(0, [] { return 5; });
         state = s;
         Row(Modifier().horizontalScroll(rememberScrollState()), [=] {
-            HorizontalPager(s, Modifier().height(100), [](int i) { Box(Modifier().fillMaxSize().testTag("sayfa" + std::to_string(i))); },
-                            {.pageSize = PageSize::Fixed(120)});
+            HorizontalPager(s, Modifier().height(100),
+                            pageSize = PageSize::Fixed(120), [](int i) { Box(Modifier().fillMaxSize().testTag("sayfa" + std::to_string(i))); });
         });
     }, {400, 800});
     CHECK(rule.onNodeWithTag("sayfa0").exists() && state->currentPage() == 0);
@@ -9787,17 +9787,17 @@ TEST(pager_measured_without_end_shows_its_first_pages) {
     // no page in view past int's range.
     ComposeTestRule padded([&] {
         HorizontalPager(rememberPagerState(0, [] { return 5; }), Modifier().fillMaxWidth().height(100),
-                        [](int i) { Box(Modifier().fillMaxSize().testTag("dolgu" + std::to_string(i))); },
-                        {.contentPadding = {.start = kInfinity, .end = kInfinity}, .pageSize = PageSize::Fixed(120),
-                         .snapPosition = SnapPosition::Center});
+                        contentPadding = PaddingValues{.start = kInfinity, .end = kInfinity}, pageSize = PageSize::Fixed(120),
+                        snapPosition = SnapPosition::Center,
+                        [](int i) { Box(Modifier().fillMaxSize().testTag("dolgu" + std::to_string(i))); });
     }, {400, 800});
     CHECK(padded.onNodeWithTag("dolgu0").exists());
 }
 
 TEST(pager_composes_the_pages_a_bigger_view_shows) {
     ComposeTestRule rule([&] {
-        HorizontalPager(rememberPagerState(0, [] { return 10; }), Modifier().fillMaxWidth().height(100),
-                        [](int i) { Box(Modifier().fillMaxSize().testTag("sayfa" + std::to_string(i))); }, {.pageSize = PageSize::Fixed(100)});
+        HorizontalPager(rememberPagerState(0, [] { return 10; }), Modifier().fillMaxWidth().height(100), pageSize = PageSize::Fixed(100),
+                        [](int i) { Box(Modifier().fillMaxSize().testTag("sayfa" + std::to_string(i))); });
     }, {400, 800});
     CHECK(rule.onNodeWithTag("sayfa4").exists() && !rule.onNodeWithTag("sayfa6").exists());
     rule.host().setViewportSize({800, 800});  // the same current page, four more in view
@@ -9815,15 +9815,15 @@ TEST(pagers_laid_out_from_the_end_and_keyed_pages) {
         reversed = a, keyed = b;
         Column([=] {
             HorizontalPager(a, Modifier().fillMaxWidth().height(100),
-                            [](int i) { Box(Modifier().fillMaxSize().testTag("ters" + std::to_string(i))); },
-                            {.contentPadding = {.start = 20, .end = 40}, .pageSize = PageSize::Fixed(100), .reverseLayout = true});
-            VerticalPager(rememberPagerState(0, [] { return 3; }), Modifier().fillMaxWidth().height(100),
-                          [](int i) { Box(Modifier().fillMaxSize().testTag("dikey" + std::to_string(i))); }, {.reverseLayout = true});
-            HorizontalPager(b, Modifier().fillMaxWidth().height(100), [&](int i) {
+                            contentPadding = PaddingValues{.start = 20, .end = 40}, pageSize = PageSize::Fixed(100), reverseLayout = true,
+                            [](int i) { Box(Modifier().fillMaxSize().testTag("ters" + std::to_string(i))); });
+            VerticalPager(rememberPagerState(0, [] { return 3; }), Modifier().fillMaxWidth().height(100), reverseLayout = true,
+                          [](int i) { Box(Modifier().fillMaxSize().testTag("dikey" + std::to_string(i))); });
+            HorizontalPager(b, Modifier().fillMaxWidth().height(100), pageKey = [list](int i) { return std::hash<std::string>{}(list[size_t(i)]); }, [=](int i) {
                 auto taps = remember([] { return mutableStateOf(0); });  // a page's own state, kept by its key
                 Box(Modifier().fillMaxSize().testTag("sayfa " + list[size_t(i)]).clickable([taps] { taps.set(taps.get() + 1); }),
                     [=] { Text(list[size_t(i)] + " " + std::to_string(taps.get())); });
-            }, {.key = [list](int i) { return std::hash<std::string>{}(list[size_t(i)]); }});
+            });
         });
     }, {400, 800});
     auto at = [&](const std::string& tag) { return rule.onNodeWithTag(tag).bounds(); };
@@ -9862,10 +9862,10 @@ TEST(pager_flings_turn_as_many_pages_as_allowed) {
         auto b = rememberPagerState(1, [] { return 10; });
         far = a, near_ = b;
         Column([=] {
-            HorizontalPager(a, Modifier().fillMaxWidth().height(100), [](int) { Box(Modifier().fillMaxSize()); },
-                            {.flingBehavior = PagerDefaults::flingBehavior(a, PagerSnapDistance::atMost(3))});
-            HorizontalPager(b, Modifier().fillMaxWidth().height(100), [](int) { Box(Modifier().fillMaxSize()); },
-                            {.flingBehavior = {.snapPositionalThreshold = 0.25f, .snapAnimationSpec = tween(1500, 0, LinearEasing)}});
+            HorizontalPager(a, Modifier().fillMaxWidth().height(100),
+                            flingBehavior = PagerDefaults::flingBehavior(a, PagerSnapDistance::atMost(3)), [](int) { Box(Modifier().fillMaxSize()); });
+            HorizontalPager(b, Modifier().fillMaxWidth().height(100),
+                            flingBehavior = PagerFlingBehavior{.snapPositionalThreshold = 0.25f, .snapAnimationSpec = tween(1500, 0, LinearEasing)}, [](int) { Box(Modifier().fillMaxSize()); });
         });
     }, {400, 800});
     // A hard fling: three pages, no more; heading there before it gets there.
@@ -9933,9 +9933,9 @@ TEST(pager_pages_line_up_across_it) {
             };
             HorizontalPager(rememberPagerState(0, [] { return 3; }), Modifier().fillMaxWidth().height(200), small("orta"));
             HorizontalPager(rememberPagerState(0, [] { return 3; }), Modifier().fillMaxWidth().height(200), small("üst"),
-                            {.verticalAlignment = Alignment::Top});
+                            verticalAlignment = Alignment::Top);
             VerticalPager(rememberPagerState(0, [] { return 3; }), Modifier().fillMaxWidth().height(200), small("sağ"),
-                          {.horizontalAlignment = Alignment::End});
+                          horizontalAlignment = Alignment::End);
         });
     }, {400, 800});
     auto at = [&](const std::string& tag) { return rule.onNodeWithTag(tag).bounds(); };
@@ -11292,8 +11292,8 @@ TEST(font_families_reach_the_canvas) {
 TEST(animate_item_glides_on_removal_and_fades_in_on_insert) {
     auto items = mutableStateListOf<int>({1, 2, 3, 4});
     ComposeTestRule rule([&] {
-        LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-            list.items(items.items(), [](int v) { return v; }, [](int v) {
+        LazyColumn(Modifier().fillMaxSize(), [&] {
+            kompoz::items(items.items(), [](int v) { return v; }, [](int v) {
                 Box(Modifier().animateItem(tween(200, 0, LinearEasing)).fillMaxWidth().height(50).testTag("item" + std::to_string(v)));
             });
         });
@@ -11323,8 +11323,8 @@ TEST(animate_item_fades_a_removed_item_out_where_it_was) {
     std::vector<int> clicked;
     ComposeTestRule rule([&] {
         int t = tick.get();
-        LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-            list.items(items.items(), [](int v) { return v; }, [&, t](int v) {
+        LazyColumn(Modifier().fillMaxSize(), [&] {
+            kompoz::items(items.items(), [](int v) { return v; }, [&, t](int v) {
                 ++composed[v];
                 Text(std::format("öğe {} · {}", v, t),
                      Modifier()
@@ -11591,12 +11591,12 @@ TEST(reverse_layout_puts_the_first_item_at_the_bottom) {
     auto count = mutableStateOf(3);
     ComposeTestRule rule([&] {
         Column([=, &state] {
-            LazyColumn(Modifier().size(200, 400), {.state = state, .contentPadding = {0, 10, 0, 20}, .reverseLayout = true},
-                       [&](LazyListScope& list) {
-                           list.items(count.get(), [](int i) { Box(Modifier().fillMaxWidth().height(40).testTag(std::format("i{}", i))); });
+            LazyColumn(Modifier().size(200, 400), kompoz::state = state, contentPadding = PaddingValues{0, 10, 0, 20}, reverseLayout = true,
+                       [&] {
+                           items(count.get(), [](int i) { Box(Modifier().fillMaxWidth().height(40).testTag(std::format("i{}", i))); });
                        });
-            LazyRow(Modifier().size(400, 50), {.reverseLayout = true}, [&](LazyListScope& list) {
-                list.items(3, [](int i) { Box(Modifier().width(60).fillMaxHeight().testTag(std::format("r{}", i))); });
+            LazyRow(Modifier().size(400, 50), reverseLayout = true, [&] {
+                items(3, [](int i) { Box(Modifier().width(60).fillMaxHeight().testTag(std::format("r{}", i))); });
             });
         });
     }, {400, 800});
@@ -11634,8 +11634,8 @@ TEST(animate_scroll_to_item_glides_there) {
     std::optional<CoroutineScope> scope;
     ComposeTestRule rule([&] {
         scope = rememberCoroutineScope();
-        LazyColumn(Modifier().size(200, 400), {.state = state}, [&](LazyListScope& list) {
-            list.items(1000, [](int i) { Box(Modifier().fillMaxWidth().height(i % 3 == 0 ? 60 : 40)); });  // estimates are off
+        LazyColumn(Modifier().size(200, 400), kompoz::state = state, [&] {
+            items(1000, [](int i) { Box(Modifier().fillMaxWidth().height(i % 3 == 0 ? 60 : 40)); });  // estimates are off
         });
     });
     auto go = [&](int index, float offset) { scope->launch([state, index, offset]() -> Task { co_await state.animateScrollToItem(index, offset); }); };
@@ -11684,8 +11684,8 @@ TEST(animate_scroll_to_item_finds_items_bigger_than_guessed) {
     std::optional<CoroutineScope> scope;
     ComposeTestRule rule([&] {
         scope = rememberCoroutineScope();
-        LazyColumn(Modifier().size(200, 400), {.state = state}, [&](LazyListScope& list) {
-            list.items(200, [](int i) { Box(Modifier().fillMaxWidth().height(i >= 117 && i < 130 ? 400 : 40)); });
+        LazyColumn(Modifier().size(200, 400), kompoz::state = state, [&] {
+            items(200, [](int i) { Box(Modifier().fillMaxWidth().height(i >= 117 && i < 130 ? 400 : 40)); });
         });
     });
     state.scrollToItem(100);
@@ -11762,11 +11762,11 @@ TEST(scroll_states_tell_their_value_and_whether_they_scroll) {
                              scroll.canScrollForward() ? ">" : "", scroll.isScrollInProgress() ? " kayıyor" : ""));
             Text(std::string("liste") + (list.isScrollInProgress() ? " kayıyor" : "") + (grid.isScrollInProgress() ? " ızgara" : ""));
             Column(Modifier().size(200, 200).verticalScroll(scroll), [] { Box(Modifier().fillMaxWidth().height(1000)); });
-            LazyColumn(Modifier().size(200, 200), {.state = list}, [](LazyListScope& s) {
-                s.items(100, [](int i) { Text(std::to_string(i), Modifier().height(40)); });
+            LazyColumn(Modifier().size(200, 200), state = list, [] {
+                items(100, [](int i) { Text(std::to_string(i), Modifier().height(40)); });
             });
-            LazyVerticalGrid(GridCells::Fixed(2), Modifier().size(200, 200), {.state = grid}, [](LazyGridScope& s) {
-                s.items(100, [](int i) { Text(std::to_string(i), Modifier().height(40)); });
+            LazyVerticalGrid(GridCells::Fixed(2), Modifier().size(200, 200), state = grid, [] {
+                items(100, [](int i) { Text(std::to_string(i), Modifier().height(40)); });
             });
         });
     }, {400, 1200});
@@ -11849,12 +11849,12 @@ TEST(scrolling_turned_off_for_the_user_and_scrolling_from_the_end) {
     ComposeTestRule rule([&] {
         Column(Modifier().fillMaxSize().verticalScroll(page), [=, &deep, &fixedScroll, &fromEnd, &inner, &list, &page] {
             // Not by the user: a drag on it goes to the page around it.
-            LazyColumn(Modifier().size(200, 200).testTag("liste"), {.state = list, .userScrollEnabled = false}, [](LazyListScope& s) {
-                s.items(50, [](int i) { Text(std::to_string(i), Modifier().height(40)); });
+            LazyColumn(Modifier().size(200, 200).testTag("liste"), state = list, userScrollEnabled = false, [] {
+                items(50, [](int i) { Text(std::to_string(i), Modifier().height(40)); });
             });
             Column(Modifier().size(200, 200).verticalScroll(fixedScroll, false).testTag("sabit"), [=, &deep, &inner] {
-                LazyColumn(Modifier().size(200, 100), {.state = inner}, [](LazyListScope& s) {  // what it leaves goes past the fixed one
-                    s.items(3, [](int i) { Text("iç " + std::to_string(i), Modifier().height(40)); });
+                LazyColumn(Modifier().size(200, 100), state = inner, [] {  // what it leaves goes past the fixed one
+                    items(3, [](int i) { Text("iç " + std::to_string(i), Modifier().height(40)); });
                 });
                 Box(Modifier().fillMaxWidth().height(400));
                 Box(Modifier().size(40).focusRequester(deep).focusable().testTag("derin"));
@@ -11907,10 +11907,10 @@ TEST(lazy_lists_arrange_items_that_all_fit) {
     LazyListState bottom;
     ComposeTestRule rule([&] {
         auto list = [=](const char* name, std::optional<Arrangement> arrangement, bool reverse = false) {
-            LazyListOptions o{.reverseLayout = reverse, .arrangement = arrangement};
-            if (std::string(name) == "alt") o.state = bottom;
-            LazyColumn(Modifier().size(100, 400), o, [&](LazyListScope& s) {
-                s.items(many.get() ? 11 : 3, [name](int i) { Box(Modifier().fillMaxWidth().height(40).testTag(name + std::to_string(i))); });
+            std::optional<LazyListState> chosen;
+            if (std::string(name) == "alt") chosen = bottom;
+            LazyColumn(Modifier().size(100, 400), reverseLayout = reverse, verticalArrangement = arrangement, state = chosen, [&] {
+                items(many.get() ? 11 : 3, [name](int i) { Box(Modifier().fillMaxWidth().height(40).testTag(name + std::to_string(i))); });
             });
         };
         Row([=] {
@@ -11920,8 +11920,8 @@ TEST(lazy_lists_arrange_items_that_all_fit) {
             list("ters", Arrangement::Top, true);  // on the screen: at the top, the first item lowest
             list("düz", std::nullopt);
         });
-        LazyRow(Modifier().size(400, 40), {.arrangement = Arrangement::End}, [](LazyListScope& s) {
-            s.items(2, [](int i) { Box(Modifier().size(50, 40).testTag("satır" + std::to_string(i))); });
+        LazyRow(Modifier().size(400, 40), horizontalArrangement = Arrangement::End, [] {
+            items(2, [](int i) { Box(Modifier().size(50, 40).testTag("satır" + std::to_string(i))); });
         });
     }, {600, 800});
     auto y = [&](const std::string& tag) { return rule.onNodeWithTag(tag).bounds().y; };
@@ -12181,8 +12181,8 @@ TEST(bottom_sheet_scaffold_moves_before_the_list_in_it_scrolls) {
     ComposeTestRule rule([&] {
         BottomSheetScaffold(
             [&] {
-                LazyColumn(Modifier().fillMaxWidth().height(400), {.state = list}, [](LazyListScope& items) {
-                    items.items(50, [](int i) { Box(Modifier().fillMaxWidth().height(40)); });
+                LazyColumn(Modifier().fillMaxWidth().height(400), state = list, [] {
+                    items(50, [](int i) { Box(Modifier().fillMaxWidth().height(40)); });
                 });
             },
             Modifier().fillMaxSize(), scaffoldState = BottomSheetScaffoldState{sheet}, sheetPeekHeight = 150, [](PaddingValues) {});
@@ -13445,7 +13445,7 @@ TEST(pager_takes_over_from_a_row_inside_its_page) {
     ComposeTestRule rule([&] {
         auto state = rememberPagerState(0, [] { return 3; });
         pager = &remember([&] { return state; });
-        HorizontalPager(state, Modifier().fillMaxWidth().height(200), [&](int page) {
+        HorizontalPager(state, Modifier().fillMaxWidth().height(200), [=, &rows](int page) {
             Row(Modifier().fillMaxSize().horizontalScroll(rows[page]), [] { Box(Modifier().width(800).height(10)); });
         });
     }, {400, 800});
@@ -13481,9 +13481,9 @@ TEST(reversed_pager_goes_back_to_its_page_before_a_row_in_it_scrolls) {
     ComposeTestRule rule([&] {
         auto state = rememberPagerState(0, [] { return 3; });
         pager = state;
-        HorizontalPager(state, Modifier().fillMaxWidth().height(200), [&](int page) {
+        HorizontalPager(state, Modifier().fillMaxWidth().height(200), reverseLayout = true, [=, &rows](int page) {
             Row(Modifier().fillMaxSize().horizontalScroll(rows[page]), [] { Box(Modifier().width(800).height(10)); });
-        }, {.reverseLayout = true});
+        });
     }, {400, 800});
     // Right: the row is at its start, the pager goes on (from the end, the finger the other way)...
     rule.host().pointerDown({10, 100});
@@ -13515,11 +13515,11 @@ TEST(pager_turns_the_page_with_a_flick_past_a_row_on_it) {
             ComposeTestRule rule([&] {
                 CompositionLocalProvider({LocalLayoutDirection.provides(direction)}, [&] {
                     Box(Modifier().nestedScroll(outer), [=] {
-                        HorizontalPager(pages, Modifier().width(200).height(60), [&](int page) {
+                        HorizontalPager(pages, Modifier().width(200).height(60), userScrollEnabled = userScroll, [=](int page) {
                             if (page == 0)
-                                LazyRow(Modifier().fillMaxSize(), {.state = row},
-                                        [](LazyListScope& l) { l.items(3, [](int) { Box(Modifier().size(100, 60)); }); });
-                        }, {.userScrollEnabled = userScroll});
+                                LazyRow(Modifier().fillMaxSize(), state = row,
+                                        [] { items(3, [](int) { Box(Modifier().size(100, 60)); }); });
+                        });
                     });
                 });
             }, {200, 400});
@@ -13552,9 +13552,9 @@ TEST(rtl_snapping_row_settles_on_with_what_an_inner_fling_left) {
     ScrollState inner;
     ComposeTestRule rule([&] {
         CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] {
-            LazyRow(Modifier().width(200).height(60), {.state = list, .flingBehavior = rememberSnapFlingBehavior(list, SnapPosition::Start)},
-                    [&](LazyListScope& l) {
-                        l.items(4, [&](int i) {
+            LazyRow(Modifier().width(200).height(60), state = list, flingBehavior = rememberSnapFlingBehavior(list, SnapPosition::Start),
+                    [&] {
+                        items(4, [&](int i) {
                             if (i == 3)
                                 Row(Modifier().size(100, 60).horizontalScroll(inner).testTag("iç"), [] { Box(Modifier().size(200, 60)); });
                             else
@@ -13579,8 +13579,8 @@ TEST(snapping_grid_settles_with_a_row_lined_up) {
         Row([=, &free, &grid] {
             for (LazyGridState* s : {&grid, &free})
                 LazyVerticalGrid(GridCells::Fixed(2), Modifier().size(150, 450),
-                                 {.state = *s, .flingBehavior = s == &grid ? std::optional(rememberSnapFlingBehavior(grid, SnapPosition::Start)) : std::nullopt},
-                                 [](LazyGridScope& g) { g.items(200, [](int) { Box(Modifier().fillMaxWidth().height(100)); }); });
+                                 state = *s, flingBehavior = s == &grid ? std::optional(rememberSnapFlingBehavior(grid, SnapPosition::Start)) : std::nullopt,
+                                 [] { items(200, [](int) { Box(Modifier().fillMaxWidth().height(100)); }); });
         });
     }, {300, 800});
     // The same fling on both: the snapping one stops with a row at the top, the other anywhere.
@@ -13615,8 +13615,8 @@ TEST(bottom_sheet_moves_with_what_its_list_leaves) {
     ComposeTestRule rule([&] {
         if (open.get())
             ModalBottomSheet([open] { open.set(false); }, [=, &list] {
-                LazyColumn(Modifier().fillMaxWidth().height(300).testTag("list"), {.state = list}, [](LazyListScope& s) {
-                    s.items(50, [](int i) { Text("Öğe " + std::to_string(i), Modifier().height(48)); });
+                LazyColumn(Modifier().fillMaxWidth().height(300).testTag("list"), state = list, [] {
+                    items(50, [](int i) { Text("Öğe " + std::to_string(i), Modifier().height(48)); });
                 });
             });
     }, {400, 800});
@@ -13654,8 +13654,8 @@ TEST(top_app_bar_enter_always_hides_before_the_list_scrolls) {
         Scaffold(Modifier().fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
                  topBar = [&] { TopAppBar(title = [] { Text("Başlık"); }, scrollBehavior = scroll); },
                  [=, &list](PaddingValues padding) {
-                     LazyColumn(Modifier().fillMaxSize(), {.state = list, .contentPadding = padding}, [](LazyListScope& s) {
-                         s.items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
+                     LazyColumn(Modifier().fillMaxSize(), state = list, contentPadding = padding, [] {
+                         items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
                      });
                  });
     }, {400, 800});
@@ -13692,8 +13692,8 @@ TEST(a_collapsing_top_bar_moves_the_content_without_recomposing_it) {
                      ++composed;
                      seen = padding;
                      Box(Modifier().fillMaxSize(), [=, &list] {
-                         LazyColumn(Modifier().fillMaxSize(), {.state = list, .contentPadding = padding}, [](LazyListScope& s) {
-                             s.items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
+                         LazyColumn(Modifier().fillMaxSize(), state = list, contentPadding = padding, [] {
+                             items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
                          });
                          // What is left of 120 at the top once the bar's padding is kept clear of.
                          Box(Modifier().fillMaxWidth().padding(padding).consumeWindowInsets(padding).windowInsetsTopHeight({0, 120, 0, 0}).testTag("kenar"));
@@ -13732,11 +13732,11 @@ TEST(what_lays_out_by_a_scaffolds_padding_follows_it_without_recomposing) {
                      auto carousel = rememberCarouselState(0, [] { return 5; });
                      Column(Modifier().fillMaxSize(), [=, &composed] {
                          LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxWidth().height(150).testTag("grid"),
-                                                   {.contentPadding = padding}, [](LazyGridScope& g) {
-                                                       g.items(10, [](int i) { Box(Modifier().fillMaxWidth().height(40).testTag("g" + std::to_string(i))); });
+                                                   contentPadding = padding, [] {
+                                                       items(10, [](int i) { Box(Modifier().fillMaxWidth().height(40).testTag("g" + std::to_string(i))); });
                                                    });
-                         HorizontalPager(pager, Modifier().fillMaxWidth().height(150).testTag("pager"),
-                                         [](int p) { Box(Modifier().fillMaxSize().testTag("p" + std::to_string(p))); }, {.contentPadding = padding});
+                         HorizontalPager(pager, Modifier().fillMaxWidth().height(150).testTag("pager"), contentPadding = padding,
+                                         [](int p) { Box(Modifier().fillMaxSize().testTag("p" + std::to_string(p))); });
                          HorizontalUncontainedCarousel(carousel, 100, Modifier().fillMaxWidth().height(150).testTag("carousel"),
                                                        {.contentPadding = padding},
                                                        [](int i) { Box(Modifier().fillMaxSize().testTag("c" + std::to_string(i))); });
@@ -13826,8 +13826,8 @@ TEST(large_top_app_bar_exit_until_collapsed) {
         Scaffold(Modifier().fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
                  topBar = [&] { LargeTopAppBar(title = [] { Text("Büyük başlık"); }, scrollBehavior = scroll); },
                  [=, &list](PaddingValues padding) {
-                     LazyColumn(Modifier().fillMaxSize(), {.state = list, .contentPadding = padding}, [](LazyListScope& s) {
-                         s.items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
+                     LazyColumn(Modifier().fillMaxSize(), state = list, contentPadding = padding, [] {
+                         items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
                      });
                  });
     }, {400, 800});
@@ -13862,8 +13862,8 @@ TEST(two_rows_top_app_bars_let_their_titles_style_themselves) {
                         });
                     },
                      [=, &list](PaddingValues padding) {
-                         LazyColumn(Modifier().fillMaxSize(), {.state = list, .contentPadding = padding}, [](LazyListScope& s) {
-                             s.items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
+                         LazyColumn(Modifier().fillMaxSize(), state = list, contentPadding = padding, [] {
+                             items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
                          });
                      });
         });
@@ -16178,8 +16178,8 @@ TEST(rtl_horizontal_scrolling_starts_at_the_right_and_follows_the_finger) {
                 Row(Modifier().width(200).height(40).horizontalScroll(scroll).testTag("kaydır"), [=] {
                     for (int i = 0; i < 10; ++i) Box(Modifier().size(50, 40).clickable([] {}).testTag(std::format("k{}", i)));
                 });
-                LazyRow(Modifier().width(200).height(40).testTag("liste"), {.state = list}, [](LazyListScope& l) {
-                    l.items(20, [](int i) { Box(Modifier().size(50, 40).testTag(std::format("l{}", i))); });
+                LazyRow(Modifier().width(200).height(40).testTag("liste"), state = list, [] {
+                    items(20, [](int i) { Box(Modifier().size(50, 40).testTag(std::format("l{}", i))); });
                 });
                 Column(Modifier().size(100, 100).verticalScroll(down).testTag("dikey"), [] {
                     for (int i = 0; i < 5; ++i) Box(Modifier().size(100, 50));
@@ -16308,15 +16308,15 @@ TEST(rtl_nested_horizontal_scrolls_hand_over_the_right_way) {
             Column([=, &inner, &knob, &onPage, &outer, &pages] {
                 // A lazy row inside a horizontal scroll: what the row can't take goes on to the scroll.
                 Row(Modifier().width(200).height(40).horizontalScroll(outer), [=, &inner] {
-                    LazyRow(Modifier().width(200).height(40).testTag("iç"), {.state = inner},
-                            [](LazyListScope& l) { l.items(3, [](int) { Box(Modifier().size(100, 40)); }); });
+                    LazyRow(Modifier().width(200).height(40).testTag("iç"), state = inner,
+                            [] { items(3, [](int) { Box(Modifier().size(100, 40)); }); });
                     Box(Modifier().size(300, 40));
                 });
                 // A lazy row on a page: past its end, the drag moves the page.
-                HorizontalPager(pages, Modifier().width(200).height(60), [&](int page) {
+                HorizontalPager(pages, Modifier().width(200).height(60), [=, &onPage](int page) {
                     if (page == 0)
-                        LazyRow(Modifier().fillMaxSize().testTag("sayfadaki"), {.state = onPage},
-                                [](LazyListScope& l) { l.items(3, [](int) { Box(Modifier().size(100, 60)); }); });
+                        LazyRow(Modifier().fillMaxSize().testTag("sayfadaki"), state = onPage,
+                                [] { items(3, [](int) { Box(Modifier().size(100, 60)); }); });
                 });
                 // anchoredDraggable keeps to the screen: the finger to the right is towards the end.
                 auto s = rememberAnchoredDraggableState(Spot::Start);
@@ -16606,16 +16606,16 @@ TEST(lazy_grid_state_goes_by_item_and_tells_rows_and_columns) {
         auto s = rememberLazyGridState(10);  // opens at item 10's row
         state = s;
         scope = rememberCoroutineScope();
-        Column([=, &sideways] {
-            LazyVerticalGrid(GridCells::Fixed(3), Modifier().size(300, 400), {.state = s, .verticalSpacing = 10, .horizontalSpacing = 6},
-                             [](LazyGridScope& g) {
-                                 g.item([] { Box(Modifier().fillMaxWidth().height(50)); }, LazyGridScope::FullLine);  // item 0: a row of its own
-                                 g.items(60, [](int i) { Box(Modifier().fillMaxWidth().height(i % 2 ? 80 : 60)); });   // items 1..60
+        Column([=, &sideways, &state] {
+            LazyVerticalGrid(GridCells::Fixed(3), Modifier().size(300, 400), state = s, verticalArrangement = Arrangement::spacedBy(10), horizontalArrangement = Arrangement::spacedBy(6),
+                             [] {
+                                 item([] { Box(Modifier().fillMaxWidth().height(50)); }, LazyGridScope::FullLine);  // item 0: a row of its own
+                                 items(60, [](int i) { Box(Modifier().fillMaxWidth().height(i % 2 ? 80 : 60)); });   // items 1..60
                              });
             auto h = rememberLazyGridState();
             sideways = h;
-            LazyHorizontalGrid(GridCells::Fixed(2), Modifier().size(300, 200), {.state = h},
-                               [](LazyGridScope& g) { g.items(20, [](int) { Box(Modifier().width(70).fillMaxHeight()); }); });
+            LazyHorizontalGrid(GridCells::Fixed(2), Modifier().size(300, 200), state = h,
+                               [] { items(20, [](int) { Box(Modifier().width(70).fillMaxHeight()); }); });
         });
     }, {400, 800});
     // Rows: [0], [1 2 3], [4 5 6] ... item 10 starts the fifth.
@@ -16864,12 +16864,12 @@ TEST(lazy_staggered_grid_state_goes_by_item_and_tells_lanes) {
         auto s = rememberLazyStaggeredGridState(30);  // opens at item 30
         state = s;
         scope = rememberCoroutineScope();
-        Column([=] {
+        Column([=, &state] {
             Text(std::format("ilk {}", s.firstVisibleItemIndex()), Modifier().testTag("ilk"));
             LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().size(400, 600).testTag("ızgara"),
-                                      {.state = s, .contentPadding = {0, 10, 0, 10}, .verticalItemSpacing = 8, .horizontalSpacing = 8},
-                                      [&](LazyGridScope& g) {
-                                          g.items(200, [&](int i) { Box(Modifier().fillMaxWidth().height(height(i)).testTag(std::format("s{}", i))); });
+                                      state = s, contentPadding = PaddingValues{0, 10, 0, 10}, verticalItemSpacing = 8, horizontalArrangement = Arrangement::spacedBy(8),
+                                      [&] {
+                                          items(200, [&](int i) { Box(Modifier().fillMaxWidth().height(height(i)).testTag(std::format("s{}", i))); });
                                       });
         });
     }, {400, 800});
@@ -16912,9 +16912,9 @@ TEST(lazy_staggered_grid_state_goes_by_item_and_tells_lanes) {
     // tall one and what is in view count, not the indices between them.
     LazyStaggeredGridState tall;
     ComposeTestRule other([&] {
-        LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().size(400, 300), {.state = tall}, [](LazyGridScope& g) {
-            g.item([] { Box(Modifier().fillMaxWidth().height(800)); });
-            g.items(40, [](int) { Box(Modifier().fillMaxWidth().height(50)); });
+        LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().size(400, 300), state = tall, [] {
+            item([] { Box(Modifier().fillMaxWidth().height(800)); });
+            items(40, [](int) { Box(Modifier().fillMaxWidth().height(50)); });
         });
     }, {400, 800});
     tall.scrollState().scrollTo(400);
@@ -17613,7 +17613,7 @@ TEST(floating_toolbar_shows_its_side_actions_when_expanded_and_leaves_on_scroll)
         side = FloatingToolbarDefaults::exitAlwaysScrollBehavior(FloatingToolbarExitDirection::End);
         behavior = &kept;
         Box(Modifier().size(400, 600).nestedScroll(kept.nestedScrollConnection).nestedScroll(side.nestedScrollConnection), [=] {
-            LazyColumn(Modifier().fillMaxSize(), {}, [](LazyListScope& list) { list.items(100, [](int) { Box(Modifier().fillMaxWidth().height(60)); }); });
+            LazyColumn(Modifier().fillMaxSize(), [] { items(100, [](int) { Box(Modifier().fillMaxWidth().height(60)); }); });
             HorizontalFloatingToolbar(true, Modifier().align(Alignment::BottomCenter).offset(0, -16).testTag("araçlar"),
                                       scrollBehavior = kept, [=] { action("sayfa"); });
             VerticalFloatingToolbar(true, Modifier().align(Alignment::CenterEnd).offset(-16, 0), scrollBehavior = side, [=] { action("yan"); });
@@ -18228,8 +18228,8 @@ TEST(bottom_app_bars_spread_out_and_leave_as_the_content_scrolls_on) {
                                      modifier = Modifier().testTag("çubuk"));
                 },
                  [](PaddingValues padding) {
-                     LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& list) {
-                         list.items(60, [](int) { Box(Modifier().fillMaxWidth().height(60)); });
+                     LazyColumn(Modifier().fillMaxSize(), contentPadding = padding, [] {
+                         items(60, [](int) { Box(Modifier().fillMaxWidth().height(60)); });
                      });
                  });
     }, {400, 600});
@@ -19117,8 +19117,8 @@ TEST(top_search_bar_sits_alone_and_slides_away) {
                      topBar = [&] { TopSearchBar(s, field, Modifier(), scroll); },
                      bottomBar = [&] { BottomAppBar(actions = [] { Text("Alt"); }, scrollBehavior = exit); },
                      [=, &list](PaddingValues padding) {
-                         LazyColumn(Modifier().fillMaxSize(), {.state = list, .contentPadding = padding}, [](LazyListScope& l) {
-                             l.items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
+                         LazyColumn(Modifier().fillMaxSize(), state = list, contentPadding = padding, [] {
+                             items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
                          });
                      });
         });
@@ -19172,8 +19172,8 @@ TEST(app_bar_with_search_slides_away_with_the_content) {
                                       .scrollBehavior = pinned.get() ? std::nullopt : std::optional(scroll)});
                 },
                  [=, &list](PaddingValues padding) {
-                     LazyColumn(Modifier().fillMaxSize(), {.state = list, .contentPadding = padding}, [](LazyListScope& l) {
-                         l.items(100, [](int i) { Text("Posta " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
+                     LazyColumn(Modifier().fillMaxSize(), state = list, contentPadding = padding, [] {
+                         items(100, [](int i) { Text("Posta " + std::to_string(i), Modifier().height(50).testTag("row" + std::to_string(i))); });
                      });
                  });
         ExpandedFullScreenSearchBar(s, field, [] { Text("Sonuçlar"); });
@@ -19398,8 +19398,8 @@ TEST(scrollbars_show_where_the_content_is_and_move_it) {
                 VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier().align(Alignment::CenterEnd).fillMaxHeight().testTag("dikey"));
             });
             Box(Modifier().size(300, 300), [=, &list] {
-                LazyColumn(Modifier().fillMaxSize(), {.state = list}, [](LazyListScope& l) {
-                    l.items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
+                LazyColumn(Modifier().fillMaxSize(), state = list, [] {
+                    items(100, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
                 });
                 VerticalScrollbar(rememberScrollbarAdapter(list), Modifier().align(Alignment::CenterEnd).fillMaxHeight().testTag("liste"));
             });
@@ -20393,8 +20393,8 @@ TEST(pull_to_refresh_refreshes_past_the_threshold) {
             ++*refreshes;
             refreshing.set(true);
         }, Modifier().fillMaxSize(), [&] {
-            LazyColumn(Modifier().fillMaxSize(), {.state = list}, [](LazyListScope& l) {
-                l.items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
+            LazyColumn(Modifier().fillMaxSize(), kompoz::state = list, [] {
+                items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
             });
         }, {.state = s});
     }, {400, 800});
@@ -20426,8 +20426,8 @@ TEST(pull_to_refresh_goes_back_in_before_the_list_scrolls) {
         auto s = rememberPullToRefreshState();
         state = s;
         PullToRefreshBox(false, [refreshes] { ++*refreshes; }, Modifier().fillMaxSize(), [&] {
-            LazyColumn(Modifier().fillMaxSize(), {.state = list}, [](LazyListScope& l) {
-                l.items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
+            LazyColumn(Modifier().fillMaxSize(), kompoz::state = list, [] {
+                items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
             });
         }, {.state = s});
     }, {400, 800});
@@ -20461,8 +20461,8 @@ TEST(pull_to_refresh_modifier_slows_past_the_threshold_and_can_be_turned_off) {
             ++*refreshes;
             refreshing.set(true);
         }, enabled.get(), 100), [=, &list, &state] {
-            LazyColumn(Modifier().fillMaxSize(), {.state = list}, [](LazyListScope& l) {
-                l.items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
+            LazyColumn(Modifier().fillMaxSize(), kompoz::state = list, [] {
+                items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
             });
             PullToRefreshDefaults::Indicator(state, refreshing.get(), Modifier().align(Alignment::TopCenter));
         });
@@ -20519,8 +20519,8 @@ TEST(pull_to_refresh_ignores_pulls_while_its_state_animates) {
     PullToRefreshState state;
     ComposeTestRule rule([&] {
         Box(Modifier().fillMaxSize().pullToRefresh(false, state, [] {}), [=] {
-            LazyColumn(Modifier().fillMaxSize(), {}, [](LazyListScope& l) {
-                l.items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
+            LazyColumn(Modifier().fillMaxSize(), [] {
+                items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
             });
         });
     }, {400, 800});
@@ -20546,9 +20546,9 @@ TEST(pull_to_refresh_lets_an_animation_the_app_starts_win_over_the_finger) {
     std::optional<CoroutineScope> scope;
     ComposeTestRule rule([&] {
         scope = rememberCoroutineScope();
-        Box(Modifier().fillMaxSize().pullToRefresh(false, state, [] {}), [=, &list] {
-            LazyColumn(Modifier().fillMaxSize(), {.state = list}, [](LazyListScope& l) {
-                l.items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
+        Box(Modifier().fillMaxSize().pullToRefresh(false, state, [] {}), [=, &list, &state] {
+            LazyColumn(Modifier().fillMaxSize(), kompoz::state = list, [] {
+                items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
             });
         });
     }, {400, 800});
@@ -20573,8 +20573,8 @@ TEST(pull_to_refresh_keeps_a_fling_down_from_the_list) {
     PullToRefreshState state;
     ComposeTestRule rule([&] {
         Box(Modifier().fillMaxSize().pullToRefresh(false, state, [] {}), [=] {
-            LazyColumn(Modifier().fillMaxSize().testTag("list"), {}, [](LazyListScope& l) {
-                l.items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
+            LazyColumn(Modifier().fillMaxSize().testTag("list"), [] {
+                items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
             });
         });
     }, {400, 800});
@@ -20601,8 +20601,8 @@ TEST(pull_to_refresh_box_can_be_turned_off) {
     auto refreshes = std::make_shared<int>(0);
     ComposeTestRule rule([&] {
         PullToRefreshBox(false, [refreshes] { ++*refreshes; }, Modifier().fillMaxSize(), [&] {
-            LazyColumn(Modifier().fillMaxSize(), {}, [](LazyListScope& l) {
-                l.items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
+            LazyColumn(Modifier().fillMaxSize(), [] {
+                items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
             });
         }, {.state = state, .enabled = false});
     }, {400, 800});
@@ -20690,14 +20690,14 @@ TEST(sticky_headers_stay_at_the_top_until_the_next_one_pushes) {
     LazyListState list;
     auto taps = std::make_shared<std::vector<int>>();
     ComposeTestRule rule([&] {
-        LazyColumn(Modifier().fillMaxWidth().height(400), {.state = list}, [taps](LazyListScope& l) {
+        LazyColumn(Modifier().fillMaxWidth().height(400), state = list, [taps] {
             for (int section = 0; section < 6; ++section) {  // 40 + 10 * 50 = 540 dp each
-                l.stickyHeader(section, [section, taps] {
+                stickyHeader(section, [section, taps] {
                     Text("Bölüm " + std::to_string(section),
                          Modifier().fillMaxWidth().height(40).clickable([section, taps] { taps->push_back(section); })
                              .testTag("h" + std::to_string(section)));
                 });
-                l.items(10, [section](int i) { Text(std::format("{}.{}", section, i), Modifier().height(50)); });
+                items(10, [section](int i) { Text(std::format("{}.{}", section, i), Modifier().height(50)); });
             }
         });
     }, {400, 800});
@@ -22230,9 +22230,9 @@ TEST(scrollable_states_hear_the_users_drags) {
         LogInteractions(own, ownLog);
         Column([=, &item, &list, &own] {
             Text(std::format("liste {} sayfa {}", list.interactionSource().collectIsDraggedAsState(), p.interactionSource().collectIsDraggedAsState()));
-            LazyColumn(Modifier().fillMaxWidth().height(300).testTag("liste"), {.state = list}, [&](LazyListScope& l) {
-                l.item([&] { Button([] {}, Modifier().testTag("öğe"), interactionSource = item, [] { Text("öğe"); }); });
-                l.items(50, [](int i) { Text(std::format("satır {}", i), Modifier().height(40)); });
+            LazyColumn(Modifier().fillMaxWidth().height(300).testTag("liste"), state = list, [&] {
+                kompoz::item([&] { Button([] {}, Modifier().testTag("öğe"), interactionSource = item, [] { Text("öğe"); }); });
+                items(50, [](int i) { Text(std::format("satır {}", i), Modifier().height(40)); });
             });
             HorizontalPager(p, Modifier().fillMaxWidth().height(200).testTag("sayfalar"), [](int page) { Text(std::format("sayfa {}", page)); });
             Box(Modifier().fillMaxWidth().height(100).scrollable(rememberScrollableState([](float d) { return d; }), Orientation::Vertical, true,
@@ -22744,13 +22744,13 @@ TEST(lazy_list_layout_info_tells_what_is_in_view) {
             ++compositions;
             int last = info.visibleItemsInfo.empty() ? -1 : info.visibleItemsInfo.back().index;
             Text(std::format("son {} / {}", last, info.totalItemsCount));
-            LazyColumn(Modifier().fillMaxWidth().height(200), {.state = state, .contentPadding = {0, 10, 0, 10}, .spacing = 4}, [&](LazyListScope& l) {
-                l.item("başlık", "header", [] { Box(Modifier().height(40)); });
-                l.items(30, [](int i) { return size_t(i); }, [](int) { return size_t(7); }, [](int) { Box(Modifier().height(36)); });
+            LazyColumn(Modifier().fillMaxWidth().height(200), kompoz::state = state, contentPadding = PaddingValues{0, 10, 0, 10}, verticalArrangement = Arrangement::spacedBy(4), [&] {
+                item("başlık", "header", [] { Box(Modifier().height(40)); });
+                items(30, [](int i) { return size_t(i); }, [](int) { return size_t(7); }, [](int) { Box(Modifier().height(36)); });
             });
-            LazyColumn(Modifier().fillMaxWidth().height(100), {.state = headed}, [&](LazyListScope& l) {
-                l.stickyHeader([] { Box(Modifier().height(20)); });
-                l.items(20, [](int) { Box(Modifier().height(30)); });
+            LazyColumn(Modifier().fillMaxWidth().height(100), state = headed, [&] {
+                stickyHeader([] { Box(Modifier().height(20)); });
+                items(20, [](int) { Box(Modifier().height(30)); });
             });
         });
     });
@@ -23885,7 +23885,7 @@ TEST(scroll_containers_clip_along_their_axis_and_leave_room_across) {
     ComposeTestRule rule([&] {
         Column(Modifier().padding(40), [=] {
             Column(Modifier().size(200, 100).verticalScroll(rememberScrollState()), [] { Box(Modifier().size(200, 300)); });
-            LazyRow(Modifier().size(200, 100), {}, [](LazyListScope& l) { l.items(10, [](int) { Box(Modifier().size(80, 100)); }); });
+            LazyRow(Modifier().size(200, 100), [] { items(10, [](int) { Box(Modifier().size(80, 100)); }); });
         });
     }, {400, 800});
     testing::RecordingCanvas canvas;
@@ -23904,8 +23904,8 @@ TEST(bring_into_view_spec_puts_the_focused_item_where_it_says) {
     ComposeTestRule rule([&] {
         Row(Modifier().fillMaxSize(), [=, &at100, &big, &items, &plain, &row, &sameWith, &sameWithout, &scrolled] {
             CompositionLocalProvider({LocalBringIntoViewSpec.provides(at100)}, [&] {
-                LazyColumn(Modifier().width(100).fillMaxHeight().testTag("liste"), {}, [&](LazyListScope& l) {
-                    l.items(30, [&](int i) { Box(Modifier().fillMaxWidth().height(50).focusRequester(items[size_t(i)]).focusable().testTag(std::format("ö{}", i))); });
+                LazyColumn(Modifier().width(100).fillMaxHeight().testTag("liste"), [&] {
+                    kompoz::items(30, [&](int i) { Box(Modifier().fillMaxWidth().height(50).focusRequester(items[size_t(i)]).focusable().testTag(std::format("ö{}", i))); });
                 });
                 ScrollState st;
                 sameWith = Modifier().verticalScroll(st) == Modifier().verticalScroll(st);
@@ -23925,8 +23925,8 @@ TEST(bring_into_view_spec_puts_the_focused_item_where_it_says) {
             CompositionLocalProvider({LocalLayoutDirection.provides(rtl.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr),
                                       LocalBringIntoViewSpec.provides(BringIntoViewSpec{[](float offset, float, float) { return offset - 30; }})},
                                      [&] {
-                                         LazyRow(Modifier().width(200).height(50), {}, [&](LazyListScope& l) {
-                                             l.items(20, [&](int i) {
+                                         LazyRow(Modifier().width(200).height(50), [&] {
+                                             kompoz::items(20, [&](int i) {
                                                  Box(Modifier().width(50).fillMaxHeight().focusRequester(row[size_t(i)]).focusable().testTag(std::format("r{}", i)));
                                              });
                                          });
@@ -25070,13 +25070,13 @@ TEST(what_shows_past_a_scroll_container_across_counts_as_shown) {
                 }));
             });
             // Hanging 10 dp under a row: still clicked there (in its 30).
-            LazyRow(Modifier().size(200, 100), {}, [&](LazyListScope& l) {
-                l.item([&] { Box(Modifier().size(80, 100), [=, &clicks] { Box(Modifier().offset(0, 100).size(80, 20).clickable([&] { ++clicks; })); }); });
+            LazyRow(Modifier().size(200, 100), [&] {
+                item([&] { Box(Modifier().size(80, 100), [=, &clicks] { Box(Modifier().offset(0, 100).size(80, 20).clickable([&] { ++clicks; })); }); });
             });
             Spacer(Modifier().height(40));
             // A box cutting off a row 10 dp under it: the row is drawn (its 30 dp across reach into the box).
             Box(Modifier().size(200, 100).clipToBounds(), [=] {
-                LazyRow(Modifier().offset(0, 110).size(200, 100), {}, [](LazyListScope& l) { l.items(3, [](int) { Box(Modifier().size(80, 100)); }); });
+                LazyRow(Modifier().offset(0, 110).size(200, 100), [] { items(3, [](int) { Box(Modifier().size(80, 100)); }); });
             });
         });
     }, {400, 800});
@@ -25251,9 +25251,9 @@ TEST(match_parent_size_and_fill_parent_max) {
                 Box(Modifier().size(120, 60));
                 Box(Modifier().matchParentSize().testTag("arka"), [] { Box(Modifier().size(300)); });  // as big as the others made it, no bigger
             });
-            LazyColumn(Modifier().size(200, 300), {.contentPadding = {0, 20, 0, 20}}, [&](LazyListScope& l) {
-                l.item([] { Box(Modifier().fillParentMaxHeight(0.5f).fillParentMaxWidth(0.5f).testTag("yarı")); });
-                l.item([] { Box(Modifier().fillParentMaxSize().testTag("tam")); });
+            LazyColumn(Modifier().size(200, 300), contentPadding = PaddingValues{0, 20, 0, 20}, [&] {
+                item([] { Box(Modifier().fillParentMaxHeight(0.5f).fillParentMaxWidth(0.5f).testTag("yarı")); });
+                item([] { Box(Modifier().fillParentMaxSize().testTag("tam")); });
             });
             Box(Modifier().size(200), [] { Box(Modifier().fillParentMaxWidth(0.5f).height(10).testTag("dışarıda")); });  // outside a list: as fillMaxWidth
         });
@@ -25661,9 +25661,9 @@ TEST(half_open_sheet_expands_before_its_list_scrolls) {
     ComposeTestRule rule([&] {
         auto s = rememberModalBottomSheetState();
         state = s;
-        ModalBottomSheet([] {}, s, [=, &list] {
-            LazyColumn(Modifier().fillMaxWidth().height(600).testTag("liste"), {.state = list}, [](LazyListScope& l) {
-                l.items(60, [](int i) { Text(std::format("Öğe {}", i), Modifier().height(48)); });
+        ModalBottomSheet([] {}, s, [=, &list, &state] {
+            LazyColumn(Modifier().fillMaxWidth().height(600).testTag("liste"), kompoz::state = list, [] {
+                items(60, [](int i) { Text(std::format("Öğe {}", i), Modifier().height(48)); });
             });
         });
     }, {400, 800});
@@ -25795,11 +25795,11 @@ TEST(snap_fling_behavior_settles_on_an_item) {
     ComposeTestRule rule([&] {
         Column([=, &center, &start] {
             LazyRow(Modifier().width(300).height(60).testTag("baş"),
-                    {.state = start, .spacing = 10, .flingBehavior = rememberSnapFlingBehavior(start, SnapPosition::Start)}, [](LazyListScope& l) {
-                        l.items(30, [](int i) { Box(Modifier().size(100, 60).testTag(std::format("b{}", i))); });
+                    state = start, horizontalArrangement = Arrangement::spacedBy(10), flingBehavior = rememberSnapFlingBehavior(start, SnapPosition::Start), [] {
+                        items(30, [](int i) { Box(Modifier().size(100, 60).testTag(std::format("b{}", i))); });
                     });
-            LazyRow(Modifier().width(300).height(60), {.state = center, .spacing = 10, .flingBehavior = rememberSnapFlingBehavior(center)},
-                    [](LazyListScope& l) { l.items(30, [](int i) { Box(Modifier().size(100, 60).testTag(std::format("o{}", i))); }); });
+            LazyRow(Modifier().width(300).height(60), state = center, horizontalArrangement = Arrangement::spacedBy(10), flingBehavior = rememberSnapFlingBehavior(center),
+                    [] { items(30, [](int i) { Box(Modifier().size(100, 60).testTag(std::format("o{}", i))); }); });
         });
     });
     // Dragged 130 dp and held still: the nearest item lines up with the start (item 1 is 110 in).
@@ -25827,8 +25827,8 @@ TEST(snap_fling_behavior_settles_on_an_item) {
 TEST(a_hair_short_of_an_item_counts_as_there) {
     LazyListState state;
     ComposeTestRule rule([&] {
-        LazyRow(Modifier().width(300).height(40), {.state = state, .spacing = 10},
-                [](LazyListScope& l) { l.items(20, [](int) { Box(Modifier().size(100, 40)); }); });
+        LazyRow(Modifier().width(300).height(40), kompoz::state = state, horizontalArrangement = Arrangement::spacedBy(10),
+                [] { items(20, [](int) { Box(Modifier().size(100, 40)); }); });
     });
     state.scrollBy(109.99999f);  // float error short of item 1: it is first
     rule.waitForIdle();

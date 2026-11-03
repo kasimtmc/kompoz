@@ -23,6 +23,9 @@
 //       Column(Modifier().padding(padding)) { … };
 //   };
 //
+// A lazy layout's block (LazyColumn(…) { items(…); };) runs right away, in the call, adding its items,
+// and isn't kept: it captures by reference ([&]), so a list it gives items(…) isn't copied.
+//
 // Composables also called without a block (Snackbar of a SnackbarData, SnackbarHost) aren't macros:
 // their block, if any, is their last argument.
 //
@@ -33,6 +36,7 @@
 
 #define KOMPOZ_BLOCK(composable, ...) ::kompoz::composable.withBlock(__VA_ARGS__) + [=]()
 #define KOMPOZ_CALL(composable, ...) ::kompoz::composable.withBlock(__VA_ARGS__) +
+#define KOMPOZ_ITEMS(composable, ...) ::kompoz::composable.withBlock(__VA_ARGS__) + [&]()
 #define BasicAlertDialog(...) KOMPOZ_BLOCK(BasicAlertDialog __VA_OPT__(, ) __VA_ARGS__)
 #define BottomSheetScaffold(...) KOMPOZ_CALL(BottomSheetScaffold __VA_OPT__(, ) __VA_ARGS__)
 #define Box(...) KOMPOZ_BLOCK(Box __VA_OPT__(, ) __VA_ARGS__)
@@ -57,9 +61,16 @@
 #define FlexibleBottomAppBar(...) KOMPOZ_BLOCK(FlexibleBottomAppBar __VA_OPT__(, ) __VA_ARGS__)
 #define FloatingActionButton(...) KOMPOZ_BLOCK(FloatingActionButton __VA_OPT__(, ) __VA_ARGS__)
 #define HorizontalFloatingToolbar(...) KOMPOZ_BLOCK(HorizontalFloatingToolbar __VA_OPT__(, ) __VA_ARGS__)
+#define HorizontalPager(...) KOMPOZ_CALL(HorizontalPager __VA_OPT__(, ) __VA_ARGS__)
 #define IconButton(...) KOMPOZ_BLOCK(IconButton __VA_OPT__(, ) __VA_ARGS__)
 #define IconToggleButton(...) KOMPOZ_BLOCK(IconToggleButton __VA_OPT__(, ) __VA_ARGS__)
 #define LargeFloatingActionButton(...) KOMPOZ_BLOCK(LargeFloatingActionButton __VA_OPT__(, ) __VA_ARGS__)
+#define LazyColumn(...) KOMPOZ_ITEMS(LazyColumn __VA_OPT__(, ) __VA_ARGS__)
+#define LazyHorizontalGrid(...) KOMPOZ_ITEMS(LazyHorizontalGrid __VA_OPT__(, ) __VA_ARGS__)
+#define LazyHorizontalStaggeredGrid(...) KOMPOZ_ITEMS(LazyHorizontalStaggeredGrid __VA_OPT__(, ) __VA_ARGS__)
+#define LazyRow(...) KOMPOZ_ITEMS(LazyRow __VA_OPT__(, ) __VA_ARGS__)
+#define LazyVerticalGrid(...) KOMPOZ_ITEMS(LazyVerticalGrid __VA_OPT__(, ) __VA_ARGS__)
+#define LazyVerticalStaggeredGrid(...) KOMPOZ_ITEMS(LazyVerticalStaggeredGrid __VA_OPT__(, ) __VA_ARGS__)
 #define MediumFloatingActionButton(...) KOMPOZ_BLOCK(MediumFloatingActionButton __VA_OPT__(, ) __VA_ARGS__)
 #define ModalBottomSheet(...) KOMPOZ_BLOCK(ModalBottomSheet __VA_OPT__(, ) __VA_ARGS__)
 #define ModalDrawerSheet(...) KOMPOZ_BLOCK(ModalDrawerSheet __VA_OPT__(, ) __VA_ARGS__)
@@ -80,4 +91,5 @@
 #define Surface(...) KOMPOZ_BLOCK(Surface __VA_OPT__(, ) __VA_ARGS__)
 #define TextButton(...) KOMPOZ_BLOCK(TextButton __VA_OPT__(, ) __VA_ARGS__)
 #define VerticalFloatingToolbar(...) KOMPOZ_BLOCK(VerticalFloatingToolbar __VA_OPT__(, ) __VA_ARGS__)
+#define VerticalPager(...) KOMPOZ_CALL(VerticalPager __VA_OPT__(, ) __VA_ARGS__)
 #define WideNavigationRail(...) KOMPOZ_BLOCK(WideNavigationRail __VA_OPT__(, ) __VA_ARGS__)

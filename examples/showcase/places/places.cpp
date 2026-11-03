@@ -22,14 +22,14 @@ void PlacesScreen(Modifier modifier, CallSite site) {
                     OutlinedButton([scope, sheet] { scope.launch([sheet]() -> Task { co_await sheet.partialExpand(); }); }) { Text("Daralt"); };
                 };
             };
-            LazyColumn(Modifier().fillMaxWidth().height(420), {.contentPadding = {8, 0, 8, 8}}, [&](LazyListScope& list) {
-                list.items(30, [&](int i) {
+            LazyColumn(Modifier().fillMaxWidth().height(420), contentPadding = PaddingValues{8, 0, 8, 8}) {
+                items(30, [&](int i) {
                     ListItem({.headline = [&] { Text(names[i % 10]); },
                               .supporting = [i] { Text(std::format("{:.1f} km · {} dk yürüme", 0.3 + 0.27 * i, 4 + 3 * i)); },
                               .leading = [] { Icon(Icons::Filled::Place, "Yer"); },
                               .containerColor = colors::Transparent});
                 });
-            });
+            };
         };
         BottomSheetScaffold(sheetContent, Modifier().fillMaxSize(), scaffoldState = state, sheetPeekHeight = 128) [=](PaddingValues padding) {
             Box(Modifier().fillMaxSize()) {

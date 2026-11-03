@@ -162,9 +162,9 @@ void FloatingToolbarsSection(CallSite site) {
                     .background(cs.surfaceContainerHigh)
                     .nestedScroll(below.nestedScrollConnection)
                     .nestedScroll(aside.nestedScrollConnection)) {
-                    LazyColumn(Modifier().fillMaxSize(), {}, [](LazyListScope& list) {
-                        list.items(40, [](int i) { Text(std::format("Satır {}", i + 1), Modifier().fillMaxWidth().padding(16, 12)); });
-                    });
+                    LazyColumn(Modifier().fillMaxSize()) {
+                        items(40, [](int i) { Text(std::format("Satır {}", i + 1), Modifier().fillMaxWidth().padding(16, 12)); });
+                    };
                     // The middle actions stay; ⋮ shows the ones on the sides.
                     HorizontalFloatingToolbar(more.get(), Modifier().align(Alignment::BottomCenter).offset(0, -FloatingToolbarDefaults::ScreenOffset),
                         scrollBehavior = below,

@@ -253,7 +253,7 @@ void Calendar(std::shared_ptr<MonthRange> d, year_month_day today, const DatePic
             grid.scrollToItem(std::max(0, shownYear - d->years.first - 6));  // two rows above the shown year
             co_return;
         });
-        LazyVerticalGrid(GridCells::Fixed(3), Modifier().fillMaxWidth().height(336), {.state = grid, .contentPadding = {12, 0, 12, 12}},
+        detail::LazyVerticalGrid(GridCells::Fixed(3), Modifier().fillMaxWidth().height(336), {.state = grid, .contentPadding = {12, 0, 12, 12}},
                          [&](LazyGridScope& cells) {
                              cells.items(years, [&, go, shown, yearPicking](int i) {
                                  int y = d->years.first + i;
@@ -275,7 +275,7 @@ void Calendar(std::shared_ptr<MonthRange> d, year_month_day today, const DatePic
                          });
     } else {
         WeekdayLabels(strings);
-        HorizontalPager(pager, Modifier().fillMaxWidth().height(288), [&](int page) { MonthGrid(d->monthAt(page), today, strings, days); });
+        detail::HorizontalPager(pager, Modifier().fillMaxWidth().height(288), [&](int page) { MonthGrid(d->monthAt(page), today, strings, days); });
     }
 }
 

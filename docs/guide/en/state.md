@@ -137,9 +137,9 @@ void ScrollToTop() {
     auto showButton = remember([list] { return derivedStateOf([list] { return list.firstVisibleItemIndex() > 0; }); });
 
     Box(Modifier().fillMaxSize()) {
-        LazyColumn(Modifier().fillMaxSize(), {.state = list}, [](LazyListScope& l) {
-            l.items(100, [](int i) { Text("Row " + std::to_string(i)); });
-        });
+        LazyColumn(Modifier().fillMaxSize(), state = list) {
+            items(100, [](int i) { Text("Row " + std::to_string(i)); });
+        };
         if (showButton.get()) Text("Back to top");
     };
 }

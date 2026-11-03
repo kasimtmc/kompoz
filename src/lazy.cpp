@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <unordered_set>
 
 namespace kompoz {
@@ -788,16 +790,26 @@ void lazyList(bool vertical, const Modifier& modifier, const LazyListOptions& gi
 
 } // namespace
 
-void LazyColumn(const Modifier& modifier, const LazyListContent& content, CallSite site) {
+detail::LazyReceiver& detail::lazyReceiver() {
+    thread_local LazyReceiver current;
+    return current;
+}
+
+void detail::outsideLazyBlock(const char* function) {
+    std::fprintf(stderr, "kompoz: %s() outside a lazy layout's block (LazyColumn(…) { %s(…); })\n", function, function);
+    std::abort();
+}
+
+void detail::LazyColumn(const Modifier& modifier, const LazyListContent& content, CallSite site) {
     lazyList(true, modifier, LazyListOptions{}, content, site);
 }
-void LazyColumn(const Modifier& modifier, const LazyListOptions& options, const LazyListContent& content, CallSite site) {
+void detail::LazyColumn(const Modifier& modifier, const LazyListOptions& options, const LazyListContent& content, CallSite site) {
     lazyList(true, modifier, options, content, site);
 }
-void LazyRow(const Modifier& modifier, const LazyListContent& content, CallSite site) {
+void detail::LazyRow(const Modifier& modifier, const LazyListContent& content, CallSite site) {
     lazyList(false, modifier, LazyListOptions{}, content, site);
 }
-void LazyRow(const Modifier& modifier, const LazyListOptions& options, const LazyListContent& content, CallSite site) {
+void detail::LazyRow(const Modifier& modifier, const LazyListOptions& options, const LazyListContent& content, CallSite site) {
     lazyList(false, modifier, options, content, site);
 }
 
@@ -1010,20 +1022,20 @@ void lazyGrid(GridCells cells, const Modifier& modifier, const LazyGridOptions& 
             }));
     };
     if (vertical)
-        LazyColumn(modifier, list, items);
+        detail::LazyColumn(modifier, list, items);
     else
-        LazyRow(modifier, list, items);
+        detail::LazyRow(modifier, list, items);
 }
 
 } // namespace
 
-void LazyVerticalGrid(GridCells columns, const Modifier& modifier, const LazyGridOptions& options,
+void detail::LazyVerticalGrid(GridCells columns, const Modifier& modifier, const LazyGridOptions& options,
                       const std::function<void(LazyGridScope&)>& content, CallSite site) {
     ComposableScope scope(site);
     lazyGrid(columns, modifier, options, content, true);
 }
 
-void LazyHorizontalGrid(GridCells rows, const Modifier& modifier, const LazyGridOptions& options,
+void detail::LazyHorizontalGrid(GridCells rows, const Modifier& modifier, const LazyGridOptions& options,
                         const std::function<void(LazyGridScope&)>& content, CallSite site) {
     ComposableScope scope(site);
     lazyGrid(rows, modifier, options, content, false);
@@ -1364,13 +1376,13 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
 
 } // namespace
 
-void LazyVerticalStaggeredGrid(StaggeredGridCells columns, const Modifier& modifier, const LazyStaggeredGridOptions& options,
+void detail::LazyVerticalStaggeredGrid(StaggeredGridCells columns, const Modifier& modifier, const LazyStaggeredGridOptions& options,
                                const std::function<void(LazyGridScope&)>& content, CallSite site) {
     ComposableScope scope(site);
     staggeredGrid(false, columns, modifier, options, content);
 }
 
-void LazyHorizontalStaggeredGrid(StaggeredGridCells rows, const Modifier& modifier, const LazyStaggeredGridOptions& options,
+void detail::LazyHorizontalStaggeredGrid(StaggeredGridCells rows, const Modifier& modifier, const LazyStaggeredGridOptions& options,
                                  const std::function<void(LazyGridScope&)>& content, CallSite site) {
     ComposableScope scope(site);
     staggeredGrid(true, rows, modifier, options, content);

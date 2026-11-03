@@ -436,9 +436,8 @@ void ChatSection(CallSite site) {
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             std::vector<Message> shown = messages->get();
             LazyColumn(Modifier().fillMaxWidth().height(240).background(cs.surfaceContainerLow, 12),
-                       {.state = list, .contentPadding = {12, 8, 12, 8}, .spacing = 6, .reverseLayout = true},
-                       [&](LazyListScope& items) {
-                           items.items(shown, [](const Message& m) { return m.id; }, [cs](const Message& m) {
+                       state = list, contentPadding = PaddingValues{12, 8, 12, 8}, verticalArrangement = Arrangement::spacedBy(6), reverseLayout = true) {
+                           items(shown, [](const Message& m) { return m.id; }, [cs](const Message& m) {
                                Box(Modifier().fillMaxWidth().animateItem(), m.mine ? Alignment::CenterEnd : Alignment::CenterStart) {
                                    Box(Modifier()
                                            .widthIn(0, 260)
@@ -446,7 +445,7 @@ void ChatSection(CallSite site) {
                                            .padding(12, 8)) { Text(m.text, color = m.mine ? cs.onPrimary : cs.onSurface); };
                                };
                            });
-                       });
+                       };
             Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
                 OutlinedTextField(draft.get(), [draft](std::string v) { draft.set(std::move(v)); }, Modifier().weight(1),
                                   singleLine = true, placeholder = "Mesaj", keyboardOptions = KeyboardOptions{.imeAction = ImeAction::Send},

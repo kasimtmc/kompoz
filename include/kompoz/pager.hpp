@@ -11,6 +11,7 @@
 #include "animation.hpp"
 #include "coroutines.hpp"
 #include "layout.hpp"
+#include "named.hpp"
 #include "runtime.hpp"
 
 #include <algorithm>
@@ -125,10 +126,58 @@ struct PagerOptions {
     std::optional<std::shared_ptr<OverscrollEffect>> overscrollEffect;
 };
 
+namespace detail {
 void HorizontalPager(PagerState state, const Modifier& modifier, const std::function<void(int page)>& content,
                      PagerOptions options = {}, CallSite site = CallSite::current());
+struct HorizontalPagerImpl {
+    using P = Params<names::Modifier, names::ContentPadding, names::PageSize, names::BeyondViewportPageCount, names::PageSpacing, names::VerticalAlignment, names::FlingBehavior, names::UserScrollEnabled, names::ReverseLayout, names::PageKey, names::SnapPosition, names::OverscrollEffect, BlockWith<int>>;
+    template <class... A>
+    static void call(CallSite site, PagerState state, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: HorizontalPager takes a block, [=](int page) { … }: a page");
+        PagerOptions options;
+        P::set<names::ContentPadding>(options.contentPadding, args...);
+        P::set<names::PageSize>(options.pageSize, args...);
+        P::set<names::BeyondViewportPageCount>(options.beyondViewportPageCount, args...);
+        P::set<names::PageSpacing>(options.pageSpacing, args...);
+        P::set<names::VerticalAlignment>(options.verticalAlignment, args...);
+        P::set<names::FlingBehavior>(options.flingBehavior, args...);
+        P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
+        P::set<names::ReverseLayout>(options.reverseLayout, args...);
+        P::set<names::PageKey>(options.key, args...);
+        P::set<names::SnapPosition>(options.snapPosition, args...);
+        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        HorizontalPager(std::move(state), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::HorizontalPagerImpl> HorizontalPager;
 // Pages stacked vertically, each as tall as the pager (give it a bounded height).
+namespace detail {
 void VerticalPager(PagerState state, const Modifier& modifier, const std::function<void(int page)>& content,
                    PagerOptions options = {}, CallSite site = CallSite::current());
+struct VerticalPagerImpl {
+    using P = Params<names::Modifier, names::ContentPadding, names::PageSize, names::BeyondViewportPageCount, names::PageSpacing, names::HorizontalAlignment, names::FlingBehavior, names::UserScrollEnabled, names::ReverseLayout, names::PageKey, names::SnapPosition, names::OverscrollEffect, BlockWith<int>>;
+    template <class... A>
+    static void call(CallSite site, PagerState state, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: VerticalPager takes a block, [=](int page) { … }: a page");
+        PagerOptions options;
+        P::set<names::ContentPadding>(options.contentPadding, args...);
+        P::set<names::PageSize>(options.pageSize, args...);
+        P::set<names::BeyondViewportPageCount>(options.beyondViewportPageCount, args...);
+        P::set<names::PageSpacing>(options.pageSpacing, args...);
+        P::set<names::HorizontalAlignment>(options.horizontalAlignment, args...);
+        P::set<names::FlingBehavior>(options.flingBehavior, args...);
+        P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
+        P::set<names::ReverseLayout>(options.reverseLayout, args...);
+        P::set<names::PageKey>(options.key, args...);
+        P::set<names::SnapPosition>(options.snapPosition, args...);
+        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        VerticalPager(std::move(state), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::VerticalPagerImpl> VerticalPager;
 
 } // namespace kompoz

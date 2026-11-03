@@ -77,13 +77,13 @@ void Counter() {
 #! struct Message { std::string author, body; };
 #! void MessageCard(const Message&) {}
 void Conversation(const std::vector<Message>& messages) {
-    LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-        list.items(messages, [](const Message& msg) { MessageCard(msg); });
-    });
+    LazyColumn(Modifier().fillMaxSize()) {
+        items(messages, [](const Message& msg) { MessageCard(msg); });
+    };
 }
 ```
 
-Lambda, öğeleri tarif eden bir `LazyListScope` alır: `item` tek bir öğe, `items` bütün bir liste ekler. Öğe içeriği daha sonra, her öğe görünür oldukça kompoze edilir; bu yüzden öğe lambdası o zamana kadar ortadan kalkmış olabilecek hiçbir şeyi referansla yakalamaz. Burada yalnızca kendi argümanını kullanıyor.
+Blok, Compose'da `LazyColumn`'un alıcısının yaptığı gibi öğeleri tarif eder: `item` tek bir öğe, `items` bütün bir liste ekler. Öğe içeriği daha sonra, her öğe görünür oldukça kompoze edilir; bu yüzden öğe lambdası o zamana kadar ortadan kalkmış olabilecek hiçbir şeyi referansla yakalamaz. Burada yalnızca kendi argümanını kullanıyor.
 
 Öğeler eklenip çıkarılabiliyor ya da yer değiştirebiliyorsa, durumu öğeyle birlikte gitsin diye her birine sabit bir anahtar verin:
 
@@ -91,9 +91,9 @@ Lambda, öğeleri tarif eden bir `LazyListScope` alır: `item` tek bir öğe, `i
 #! struct Message { int id; std::string author, body; };
 #! void MessageCard(const Message&) {}
 #! std::vector<Message> messages;
-LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-    list.items(messages, [](const Message& msg) { return msg.id; }, [](const Message& msg) { MessageCard(msg); });
-});
+LazyColumn(Modifier().fillMaxSize()) {
+    items(messages, [](const Message& msg) { return msg.id; }, [](const Message& msg) { MessageCard(msg); });
+};
 ```
 
 Izgaralar, pager'lar, yapışkan başlıklar ve koddan kaydırma için [Listeler ve ızgaralar](lists.md) sayfasına bakın.

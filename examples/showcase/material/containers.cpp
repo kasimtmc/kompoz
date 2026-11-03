@@ -24,9 +24,9 @@ void AnimateItemSection(CallSite site) {
                     *nextTask = 6;
                 }) { Text("Sıfırla"); };
             });
-            LazyColumn(Modifier().fillMaxWidth().height(330), {.spacing = 6}, [&](LazyListScope& list) {
-                list.items(tasks.items(), [](int id) { return id; }, [&](int id) { SwipeableTask(id, tasks); });
-            });
+            LazyColumn(Modifier().fillMaxWidth().height(330), verticalArrangement = Arrangement::spacedBy(6)) {
+                items(tasks.items(), [](int id) { return id; }, [&](int id) { SwipeableTask(id, tasks); });
+            };
         });
     });
 }
@@ -197,13 +197,13 @@ void DialogsSection(NavController nav, CallSite site) {
                     Text("Uzun liste: sayfa yarıya kadar açılır; yukarı itince önce sayfa tam açılır, sonra liste kayar; "
                          "en üstte aşağı çekince sayfa iner",
                          Modifier().padding(24, 0, 24, 8), style = typography().titleSmall);
-                    LazyColumn(Modifier().fillMaxWidth().height(420), [&](LazyListScope& list) {
-                        list.items(40, [longSheet, choice](int i) {
+                    LazyColumn(Modifier().fillMaxWidth().height(420)) {
+                        items(40, [longSheet, choice](int i) {
                             std::string label = std::format("Seçenek {}", i + 1);
                             ListItem({.headline = [label] { Text(label); }, .containerColor = colors::Transparent},
                                      Modifier().clickable([longSheet, choice, label] { choice.set(label); longSheet.set(false); }));
                         });
-                    });
+                    };
                 };
         });
     });

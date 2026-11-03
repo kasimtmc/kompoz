@@ -123,9 +123,9 @@ void ScrollbarSection(CallSite site) {
                     VerticalScrollbar(rememberScrollbarAdapter(column), Modifier().align(Alignment::CenterEnd).fillMaxHeight().padding(0, 4, 2, 4));
                 };
                 Box(Modifier().weight(1).fillMaxHeight().background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12))) {
-                    LazyColumn(Modifier().fillMaxSize(), {.state = list}, [](LazyListScope& l) {
-                        l.items(1000, [](int i) { Text(std::format("Satır {}", i + 1), Modifier().padding(12, 6)); });
-                    });
+                    LazyColumn(Modifier().fillMaxSize(), state = list) {
+                        items(1000, [](int i) { Text(std::format("Satır {}", i + 1), Modifier().padding(12, 6)); });
+                    };
                     VerticalScrollbar(rememberScrollbarAdapter(list), Modifier().align(Alignment::CenterEnd).fillMaxHeight().padding(0, 4, 2, 4));
                 };
             };
@@ -308,11 +308,11 @@ void OverscrollSection(CallSite site) {
             auto row = [&](const char* title, std::optional<std::shared_ptr<OverscrollEffect>> effect) {
                 Text(title, style = typography().labelLarge);
                 LazyRow(Modifier().fillMaxWidth().height(48).background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12)),
-                        {.contentPadding = {6, 6, 6, 6}, .spacing = 6, .overscrollEffect = effect}, [tile = cs.secondaryContainer](LazyListScope& l) {
-                            l.items(12, [tile](int i) {
+                        contentPadding = PaddingValues{6, 6, 6, 6}, horizontalArrangement = Arrangement::spacedBy(6), overscrollEffect = effect) {
+                            items(12, [tile = cs.secondaryContainer](int i) {
                                 (Box)(Modifier().size(48, 36).background(tile, 8), Alignment::Center, [i] { Text(std::to_string(i + 1)); });
                             });
-                        });
+                        };
             };
             row("Esneme (varsayılan)", std::nullopt);
             row("Kayma (kendi efektimiz)", offset);
@@ -334,10 +334,9 @@ void BringIntoViewSection(CallSite site) {
         BringIntoViewSpec third{[](float offset, float size, float container) { return offset - (container - size) * 0.3f; }};
         Section("LocalBringIntoViewSpec · BringIntoViewSpec", [&] {
             CompositionLocalProvider({LocalBringIntoViewSpec.provides(pinned.get() ? third : BringIntoViewSpec{})}, [&] {
-                LazyRow(Modifier().fillMaxWidth().height(72), {.spacing = 8},
-                        [reqs = requesters, focused, on = cs.primary, onText = cs.onPrimary, off = cs.secondaryContainer,
-                         offText = cs.onSecondaryContainer](LazyListScope& l) {
-                            l.items(20, [=](int i) {
+                LazyRow(Modifier().fillMaxWidth().height(72), horizontalArrangement = Arrangement::spacedBy(8)) {
+                            items(20, [=, reqs = requesters, on = cs.primary, onText = cs.onPrimary, off = cs.secondaryContainer,
+                                       offText = cs.onSecondaryContainer](int i) {
                                 bool current = focused.get() == i;
                                 Box(Modifier()
                                         .size(96, 64)
@@ -349,7 +348,7 @@ void BringIntoViewSection(CallSite site) {
                                         .background(current ? on : off, 12),
                                     Alignment::Center) { Text(std::format("Kart {}", i + 1), color = current ? onText : offText); };
                             });
-                        });
+                        };
             });
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                 OutlinedButton([reqs = requesters, focused] { reqs[size_t(std::max(0, focused.peek() - 1))].requestFocus(); }) { Text("‹ Önceki"); };
@@ -384,21 +383,21 @@ void NestedScrollSection(CallSite site) {
                        for (int i = 1; i <= 12; ++i) Text(std::format("İç satır {}", i), Modifier().padding(0, 6));
                    };
             caption("Sayfadaki satır sona gelince pager sayfayı çevirir:");
-            HorizontalPager(pager, Modifier().fillMaxWidth().height(72), [](int page) {
-                LazyRow(Modifier().fillMaxSize(), {.spacing = 8}, [page](LazyListScope& row) {
-                    row.items(8, [page](int i) {
+            HorizontalPager(pager, Modifier().fillMaxWidth().height(72), pageSpacing = 16) [](int page) {
+                LazyRow(Modifier().fillMaxSize(), horizontalArrangement = Arrangement::spacedBy(8)) {
+                    items(8, [page](int i) {
                         Box(Modifier().size(72).background(hueColor(page * 2300 + i * 140), 16), Alignment::Center) {
                             Text(std::format("{}·{}", page + 1, i + 1), fontWeight = FontWeight::Bold, color = colors::White);
                         };
                     });
-                });
-            }, {.pageSpacing = 16});
+                };
+            };
             caption("VerticalPager (son sayfadan sonra sayfa kayar):");
-            VerticalPager(vertical, Modifier().fillMaxWidth().height(96).clip(RoundedCornerShape(16)), [](int page) {
+            VerticalPager(vertical, Modifier().fillMaxWidth().height(96).clip(RoundedCornerShape(16))) [](int page) {
                 Box(Modifier().fillMaxSize().background(hueColor(page * 1500 + 200)), Alignment::Center) {
                     Text(std::format("Dikey sayfa {}", page + 1), fontSize = 20, fontWeight = FontWeight::Bold, color = colors::White);
                 };
-            });
+            };
             caption("TopAppBar: kendi renkleri, 56 dp yükseklik, windowInsets yok (sayfanın ortasında):");
             TopAppBar(title = [] { Text("Renkli çubuk"); },
                       navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menü"); }; },
@@ -457,14 +456,14 @@ void NestedScrollSection(CallSite site) {
                                                 scrollBehavior = appBar);
                              },
                              containerColor = cs.surfaceContainerLow) [=](PaddingValues padding) {
-                        LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& list) {
-                            list.items(30, [](int i) {
+                        LazyColumn(Modifier().fillMaxSize(), contentPadding = padding) {
+                            items(30, [](int i) {
                                 ListItem({.headline = [i] { Text(std::format("İleti {}", i + 1)); },
                                           .supporting = [] { Text("Kaydırınca başlık küçülür"); },
                                           .leading = [] { Icon(Icons::Filled::Email, "İleti"); },
                                           .containerColor = colors::Transparent});
                             });
-                        });
+                        };
                     };
                 });
             };
@@ -489,14 +488,14 @@ void NestedScrollSection(CallSite site) {
                                      });
                              },
                              containerColor = cs.surfaceContainerLow) [=](PaddingValues padding) {
-                        LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& list) {
-                            list.items(30, [](int i) {
+                        LazyColumn(Modifier().fillMaxSize(), contentPadding = padding) {
+                            items(30, [](int i) {
                                 ListItem({.headline = [i] { Text(std::format("Etkinlik {}", i + 1)); },
                                           .supporting = [] { Text("Kaydırınca başlık kısalır"); },
                                           .leading = [] { Icon(Icons::Filled::Schedule, "Etkinlik"); },
                                           .containerColor = colors::Transparent});
                             });
-                        });
+                        };
                     };
                 });
             };
@@ -512,11 +511,11 @@ void NestedScrollSection(CallSite site) {
                              };
                          },
                          containerColor = cs.surfaceContainerLow) [=](PaddingValues padding) {
-                    LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& list) {
-                        list.items(30, [](int i) {
+                    LazyColumn(Modifier().fillMaxSize(), contentPadding = padding) {
+                        items(30, [](int i) {
                             ListItem({.headline = [i] { Text(std::format("Fotoğraf {}", i + 1)); }, .containerColor = colors::Transparent});
                         });
-                    });
+                    };
                 };
             };
             caption("AppBarWithSearch + enterAlways: liste ilerledikçe arama çubuğu yukarı kayar, geri kaydırınca önce o gelir; dokununca "
@@ -534,14 +533,14 @@ void NestedScrollSection(CallSite site) {
                                                    .actions = [] { IconButton([] {}) { Icon(Icons::Filled::Person, "Hesap"); }; },
                                                    .scrollBehavior = searchScroll});
                              }) [=](PaddingValues padding) {
-                        LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& list) {
-                            list.items(30, [](int i) {
+                        LazyColumn(Modifier().fillMaxSize(), contentPadding = padding) {
+                            items(30, [](int i) {
                                 ListItem({.headline = [i] { Text(std::format("Posta {}", i + 1)); },
                                           .supporting = [] { Text("Kaydırınca arama çubuğu çekilir"); },
                                           .leading = [] { Icon(Icons::Filled::Email, "Posta"); },
                                           .containerColor = colors::Transparent});
                             });
-                        });
+                        };
                     };
                 });
             };
@@ -588,11 +587,11 @@ void PullToRefreshSection(CallSite site) {
             int round = refreshes.get();
             Box(Modifier().fillMaxWidth().height(260).clip(RoundedCornerShape(16)).background(cs.surfaceContainerHighest)
                     .pullToRefresh(refreshing.get(), state, refresh, enabled.get())) {
-                    LazyColumn(Modifier().fillMaxSize(), {.contentPadding = {16, 8, 16, 8}}, [round](LazyListScope& list) {
-                        list.items(20, [round](int i) {
+                    LazyColumn(Modifier().fillMaxSize(), contentPadding = PaddingValues{16, 8, 16, 8}) {
+                        items(20, [round](int i) {
                             Text(std::format("Haber {} (tur {})", i + 1, round + 1), Modifier().padding(0, 10));
                         });
-                    });
+                    };
                     if (custom.get()) {
                         // A Material 3 Expressive loading indicator that fills up with the pull.
                         bool busy = refreshing.get();

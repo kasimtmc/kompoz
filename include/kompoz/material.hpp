@@ -8,7 +8,7 @@
 //            floatingActionButton = [&] { FloatingActionButton(onAdd, [] { Icon(Icons::Filled::Add, "Ekle"); }); },
 //            snackbarHost = [&] { SnackbarHost(snackbar); },
 //            [=](PaddingValues padding) {  // (with <kompoz/blocks.hpp>: Scaffold(…) [=](PaddingValues padding) { … };)
-//       LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, ...);
+//       LazyColumn(Modifier().fillMaxSize(), contentPadding = padding, ...);
 //   });
 
 #include "coroutines.hpp"

@@ -127,18 +127,18 @@ void LayoutInfoSection(CallSite site) {
             Text(std::format("Görünen: {}–{} · toplam {}{}", first + 1, last + 1, count.get(), loading.get() ? " · yükleniyor" : ""),
                  Modifier().padding(0, 8, 0, 0), style = typography().titleSmall);
             LazyColumn(Modifier().fillMaxWidth().padding(0, 8, 0, 0).height(260).background(cs.surfaceContainerHigh, RoundedCornerShape(12)),
-                       {.state = list, .contentPadding = {12, 8, 12, 8}, .spacing = 4}, [&](LazyListScope& l) {
-                           l.items(count.get(), [](int i) { return size_t(i); }, [](int) { return size_t(1); }, [&](int i) {
+                       state = list, contentPadding = PaddingValues{12, 8, 12, 8}, verticalArrangement = Arrangement::spacedBy(4)) {
+                           items(count.get(), [](int i) { return size_t(i); }, [](int) { return size_t(1); }, [&](int i) {
                                Text(std::format("Öğe {}", i + 1), Modifier().fillMaxWidth().height(40).padding(4, 10), style = typography().bodyLarge);
                            });
                            if (loading.get())
-                               l.item("yükleniyor", "alt bilgi", [&] {
+                               item("yükleniyor", "alt bilgi", [&] {
                                    Row(Modifier().fillMaxWidth().height(48), horizontalArrangement = Arrangement::Center, verticalAlignment = Alignment::CenterVertically) {
                                            CircularProgressIndicator(Modifier().size(20));
                                            Text("  yükleniyor…", style = typography().bodyMedium);
                                        };
                                });
-                       });
+                       };
         });
     });
 }
@@ -225,9 +225,8 @@ void SnapRowSection(CallSite site) {
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             Text(std::format("Görülen kart (tamamı yarım saniye görünen): {} / 20", seen.get()), style = typography().labelLarge);
             Text("Kart 1 (kaydırma durunca): " + firstCard.get(), color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            LazyRow(Modifier().fillMaxWidth().padding(0, 12, 0, 0).height(120), {.state = row, .spacing = 12, .flingBehavior = rememberSnapFlingBehavior(row)},
-                    [&](LazyListScope& l) {
-                        l.items(20, [seen, firstCard](int i) {
+            LazyRow(Modifier().fillMaxWidth().padding(0, 12, 0, 0).height(120), state = row, horizontalArrangement = Arrangement::spacedBy(12), flingBehavior = rememberSnapFlingBehavior(row)) {
+                        items(20, [seen, firstCard](int i) {
                             Modifier where = i == 0 ? Modifier().onLayoutRectChanged([firstCard](const RelativeLayoutBounds& b) {
                                 firstCard.set(std::format("x = {:.0f} dp · %{:.0f} görünür", b.positionInWindow().x, b.fractionVisibleInWindow() * 100));
                             }) : Modifier();
@@ -239,7 +238,7 @@ void SnapRowSection(CallSite site) {
                                 Alignment::Center,
                                 [i] { Text(std::format("Kart {}", i + 1), color = colors::White, style = typography().titleMedium); });
                         });
-                    });
+                    };
         });
     });
 }
@@ -292,21 +291,20 @@ void CarouselSection(CallSite site) {
 void HorizontalGridSection(CallSite site) {
     composable(site, [=] {
         Section("LazyHorizontalGrid · LazyHorizontalStaggeredGrid", [&] {
-            LazyHorizontalGrid(GridCells::Fixed(3), Modifier().fillMaxWidth().height(180), {.verticalSpacing = 6, .horizontalSpacing = 6},
-                               [&](LazyGridScope& cells) {
-                                   cells.items(300, [](int i) {
+            LazyHorizontalGrid(GridCells::Fixed(3), Modifier().fillMaxWidth().height(180), verticalArrangement = Arrangement::spacedBy(6), horizontalArrangement = Arrangement::spacedBy(6)) {
+                                   items(300, [](int i) {
                                        Box(Modifier().width(i % 7 == 0 ? 120 : 72).fillMaxHeight().background(hueColor(i), 12),
                                            Alignment::Center) { Text(std::to_string(i), fontWeight = FontWeight::Bold, color = colors::White); };
                                    });
-                               });
+                               };
             // Items of their own widths, each after the shorter row (LazyHorizontalStaggeredGrid).
             LazyHorizontalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxWidth().height(120),
-                                        {.horizontalItemSpacing = 6, .verticalSpacing = 6}, [&](LazyGridScope& cells) {
-                                            cells.items(200, [](int i) {
+                                        horizontalItemSpacing = 6, verticalArrangement = Arrangement::spacedBy(6)) {
+                                            items(200, [](int i) {
                                                 Box(Modifier().width(float(48 + (i * 37) % 90)).fillMaxHeight().background(hueColor(i * 3), 12),
                                                     Alignment::Center) { Text(std::to_string(i), fontWeight = FontWeight::Bold, color = colors::White); };
                                             });
-                                        });
+                                        };
         });
     });
 }
@@ -320,13 +318,13 @@ void PagerSection(CallSite site) {
         const ColorScheme& cs = colorScheme();
         int current = pager.currentPage();
         Section("HorizontalPager · PageSize · animateContentSize · BoxWithConstraints", [&] {
-            HorizontalPager(pager, Modifier().fillMaxWidth().height(150), [](int page) {
+            HorizontalPager(pager, Modifier().fillMaxWidth().height(150), pageSpacing = 12) [](int page) {
                 Box(Modifier().fillMaxSize().background(
                         Brush::linearGradient({hueColor(page * 1700 + 300), hueColor(page * 1700 + 900)}), RoundedCornerShape(20)),
                     Alignment::Center) {
                         Text(std::format("Sayfa {}", page + 1), fontSize = 28, fontWeight = FontWeight::Bold, color = colors::White);
                     };
-            }, {.pageSpacing = 12});
+            };
             Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
                 IconButton([pager, scope, current] {
                     scope.launch([pager, current]() -> Task { co_await pager.animateScrollToPage(current - 1); });
@@ -346,7 +344,8 @@ void PagerSection(CallSite site) {
             Text("PageSize.Fixed · SnapPosition.Center · PagerSnapDistance.atMost(3)", color = cs.onSurfaceVariant, style = typography().labelLarge);
             BoxWithConstraints(Modifier().fillMaxWidth(), [&](const Constraints& c) {
                 float side = c.hasBoundedWidth() ? std::max(0.f, (c.maxWidth - 140) / 2) : 0.f;  // (unbounded before it is first measured)
-                HorizontalPager(cards, Modifier().fillMaxWidth().height(120), [cards](int page) {
+                HorizontalPager(cards, Modifier().fillMaxWidth().height(120), contentPadding = PaddingValues{.start = side, .end = side}, pageSize = PageSize::Fixed(140), pageSpacing = 12,
+                   snapPosition = SnapPosition::Center, flingBehavior = PagerDefaults::flingBehavior(cards, PagerSnapDistance::atMost(3))) [cards](int page) {
                     Box(Modifier()
                             .fillMaxSize()
                             .graphicsLayer([cards, page](GraphicsLayerScope& layer) {
@@ -356,8 +355,7 @@ void PagerSection(CallSite site) {
                             })
                             .background(hueColor(page * 900 + 200), RoundedCornerShape(16)),
                         Alignment::Center) { Text(std::to_string(page + 1), fontSize = 32, fontWeight = FontWeight::Bold, color = colors::White); };
-                }, {.contentPadding = {.start = side, .end = side}, .pageSize = PageSize::Fixed(140), .pageSpacing = 12,
-                    .snapPosition = SnapPosition::Center, .flingBehavior = PagerDefaults::flingBehavior(cards, PagerSnapDistance::atMost(3))});
+                };
             });
             Text(std::format("currentPage {} · settledPage {} · targetPage {}", cards.currentPage() + 1, cards.settledPage() + 1, cards.targetPage() + 1),
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
@@ -376,11 +374,11 @@ void PagerSection(CallSite site) {
                 Switch(fromEnd.get(), [fromEnd](bool on) { fromEnd.set(on); });
                 Text("reverseLayout", style = typography().bodyMedium);
             };
-            HorizontalPager(keyed, Modifier().fillMaxWidth().height(72), [&](int i) {
+            HorizontalPager(keyed, Modifier().fillMaxWidth().height(72), pageSpacing = 8, reverseLayout = fromEnd.get(), pageKey = [numbers](int i) { return size_t(numbers[size_t(i)]); }) [=](int i) {
                 Box(Modifier().fillMaxSize().background(hueColor(numbers[size_t(i)] * 700 + 100), RoundedCornerShape(12)), Alignment::Center) {
                     Text(std::format("Sayfa {}", numbers[size_t(i)]), color = colors::White, style = typography().titleMedium);
                 };
-            }, {.pageSpacing = 8, .reverseLayout = fromEnd.get(), .key = [numbers](int i) { return size_t(numbers[size_t(i)]); }});
+            };
             Text(std::format("key ile: currentPage {} · {} sayfa", keyed.currentPage() + 1, numbers.size()),
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             Column(Modifier().fillMaxWidth().background(cs.secondaryContainer, 16).clickable([expanded] { expanded.set(!expanded.get()); })

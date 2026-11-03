@@ -25,13 +25,13 @@ struct Message {
 };
 
 void Conversation(const std::vector<Message>& messages) {
-    LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-        list.item([] { Text("Today", style = typography().labelLarge); });
-        list.items(messages, [](const Message& m) { return m.id; }, [](const Message& m) {
+    LazyColumn(Modifier().fillMaxSize()) {
+        item([] { Text("Today", style = typography().labelLarge); });
+        items(messages, [](const Message& m) { return m.id; }, [](const Message& m) {
             ListItem({.headline = [&] { Text(m.author); }, .supporting = [&] { Text(m.body); }});
         });
-        list.item([] { Text("No more messages"); });
-    });
+        item([] { Text("No more messages"); });
+    };
 }
 ```
 
@@ -54,37 +54,36 @@ Without keys, an item's state is tied to its position. Insert an item at the top
 ```cpp body
 #! struct Message { int id; std::string author, body; };
 #! std::vector<Message> messages;
-LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-    list.items(messages, [](const Message& m) { return m.id; }, [](const Message& m) {
+LazyColumn(Modifier().fillMaxSize()) {
+    items(messages, [](const Message& m) { return m.id; }, [](const Message& m) {
         auto expanded = remember([] { return mutableStateOf(false); });   // stays with the message
         Text(m.body, Modifier().clickable([expanded] { expanded.set(!expanded.get()); }),
              maxLines = expanded.get() ? 0 : 1);
     });
-});
+};
 ```
 
 A key can be anything hashable: an id, a string. Keys must be unique within the list.
 
 ### Options
 
-The options struct sets padding, spacing and direction:
+Named arguments set its padding, spacing and direction, as in Compose:
 
 ```cpp body
-LazyColumn(Modifier().fillMaxSize(),
-           {.contentPadding = PaddingValues(16), .spacing = 8},
-           [&](LazyListScope& list) { list.items(50, [](int i) { Text("Item " + std::to_string(i)); }); });
+LazyColumn(Modifier().fillMaxSize(), contentPadding = PaddingValues(16), verticalArrangement = Arrangement::spacedBy(8)) {
+    items(50, [](int i) { Text("Item " + std::to_string(i)); });
+};
 ```
 
 | Option | What it does |
 |---|---|
 | `state` | A `LazyListState` to read or control the scroll position. |
 | `contentPadding` | Padding around the items, inside the scrolling area: items scroll into it. |
-| `spacing` | Space between items. |
-| `arrangement` | Instead of `spacing`: how items are arranged when they all fit (`Arrangement::Bottom`, `Center`…). |
+| `verticalArrangement` (a `LazyRow`'s `horizontalArrangement`) | Space between items, `Arrangement::spacedBy(8)`, and how they are arranged when they all fit (`Arrangement::Bottom`, `Center`…). |
 | `reverseLayout` | Item 0 at the bottom (a `LazyRow`'s end), as in a chat. |
 | `flingBehavior` | How a fling ends: `rememberSnapFlingBehavior(state)` snaps to an item. |
 | `userScrollEnabled` | `false`: scrolled only from code. |
-| `crossAxisBias` | Where items narrower than the list sit: start (-1), center (0) or end (1). |
+| `horizontalAlignment` (a `LazyRow`'s `verticalAlignment`) | Where items narrower than the list sit: `Alignment::Start`, `CenterHorizontally` or `End`. |
 
 ### Animating items
 
@@ -92,11 +91,11 @@ LazyColumn(Modifier().fillMaxSize(),
 
 ```cpp body
 #! std::vector<std::string> names;
-LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-    list.items(names, [](const std::string& n) { return n; }, [](const std::string& n) {
+LazyColumn(Modifier().fillMaxSize()) {
+    items(names, [](const std::string& n) { return n; }, [](const std::string& n) {
         Text(n, Modifier().animateItem().padding(16));
     });
-});
+};
 ```
 
 ## Controlling the scroll position
@@ -110,9 +109,9 @@ void Messages(const std::vector<std::string>& messages) {
     auto showTop = remember([list] { return derivedStateOf([list] { return list.firstVisibleItemIndex() > 3; }); });
 
     Box(Modifier().fillMaxSize()) {
-        LazyColumn(Modifier().fillMaxSize(), {.state = list}, [&](LazyListScope& l) {
-            l.items(messages, [](const std::string& m) { Text(m, Modifier().padding(16)); });
-        });
+        LazyColumn(Modifier().fillMaxSize(), state = list) {
+            items(messages, [](const std::string& m) { Text(m, Modifier().padding(16)); });
+        };
         if (showTop.get()) {
             SmallFloatingActionButton([scope, list] { scope.launch([list]() -> Task { co_await list.animateScrollToItem(0); }); },
                                       Modifier().align(Alignment::BottomEnd).padding(16)) { Icon(Icons::Filled::KeyboardArrowUp, "Back to top"); };
@@ -147,13 +146,12 @@ LaunchedEffect(nearEnd.get(), [nearEnd, loadMore]() -> Task {
 #! struct Photo { int id; std::string url; };
 #! std::vector<Photo> photos;
 LazyVerticalGrid(GridCells::Adaptive(120), Modifier().fillMaxSize(),
-                 {.contentPadding = PaddingValues(8), .verticalSpacing = 8, .horizontalSpacing = 8},
-                 [&](LazyGridScope& grid) {
-                     grid.item([] { Text("Photos", style = typography().titleLarge); }, LazyGridScope::FullLine);
-                     grid.items(photos, [](const Photo& p) { return p.id; }, [](const Photo& p) {
+                 contentPadding = PaddingValues(8), verticalArrangement = Arrangement::spacedBy(8), horizontalArrangement = Arrangement::spacedBy(8)) {
+                     item([] { Text("Photos", style = typography().titleLarge); }, LazyGridScope::FullLine);
+                     items(photos, [](const Photo& p) { return p.id; }, [](const Photo& p) {
                          AsyncImage(p.url, "", Modifier().aspectRatio(1), {.contentScale = ContentScale::Crop});
                      });
-                 });
+                 };
 ```
 
 - `GridCells::Fixed(3)` gives three columns; `GridCells::Adaptive(120)` as many columns of at least 120 dp as fit.
@@ -164,12 +162,11 @@ LazyVerticalGrid(GridCells::Adaptive(120), Modifier().fillMaxSize(),
 
 ```cpp body
 #! std::vector<std::string> notes;
-LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxSize(), {.verticalItemSpacing = 8},
-                          [&](LazyGridScope& grid) {
-                              grid.items(notes, [](const std::string& note) {
+LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxSize(), verticalItemSpacing = 8) {
+                              items(notes, [](const std::string& note) {
                                   OutlinedCard(Modifier().padding(4)) { Text(note, Modifier().padding(12)); };
                               });
-                          });
+                          };
 ```
 
 ## Pagers
@@ -181,9 +178,9 @@ void Onboarding() {
     auto pager = rememberPagerState(0, [] { return 3; });
     auto scope = rememberCoroutineScope();
     Column(Modifier().fillMaxSize()) {
-        HorizontalPager(pager, Modifier().weight(1), [](int page) {
+        HorizontalPager(pager, Modifier().weight(1)) [](int page) {
             Box(Modifier().fillMaxSize(), Alignment::Center) { Text("Page " + std::to_string(page + 1)); };
-        });
+        };
         Button([scope, pager] { scope.launch([pager]() -> Task { co_await pager.animateScrollToPage(pager.currentPage() + 1); }); }) { Text("Next"); };
     };
 }
@@ -227,9 +224,9 @@ A scrollable inside another, such as a list under a collapsing app bar, shares s
 auto behavior = TopAppBarDefaults::exitUntilCollapsedScrollBehavior();
 Scaffold(Modifier().nestedScroll(behavior.nestedScrollConnection),
          topBar = [&] { LargeTopAppBar(title = [] { Text("Inbox"); }, scrollBehavior = behavior); }) [=](PaddingValues padding) {
-    LazyColumn(Modifier().fillMaxSize(), {.contentPadding = padding}, [](LazyListScope& l) {
-        l.items(50, [](int i) { Text("Message " + std::to_string(i), Modifier().padding(16)); });
-    });
+    LazyColumn(Modifier().fillMaxSize(), contentPadding = padding) {
+        items(50, [](int i) { Text("Message " + std::to_string(i), Modifier().padding(16)); });
+    };
 };
 ```
 
@@ -246,9 +243,9 @@ void CollapsingHeader() {
     }});
     Column(Modifier().fillMaxSize().nestedScroll(connection)) {
         Box(Modifier().fillMaxWidth().height(height.get()).background(colorScheme().primaryContainer)) {};
-        LazyColumn(Modifier().fillMaxSize(), [](LazyListScope& l) {
-            l.items(50, [](int i) { Text("Row " + std::to_string(i), Modifier().padding(16)); });
-        });
+        LazyColumn(Modifier().fillMaxSize()) {
+            items(50, [](int i) { Text("Row " + std::to_string(i), Modifier().padding(16)); });
+        };
     };
 }
 ```
@@ -262,19 +259,19 @@ void CollapsingHeader() {
 ```cpp
 #! TaskOf<std::vector<std::string>> fetchNews() { co_return std::vector<std::string>{}; }
 void News() {
-    auto items = remember([] { return mutableStateOf(std::vector<std::string>{"First"}); });
+    auto news = remember([] { return mutableStateOf(std::vector<std::string>{"First"}); });
     auto refreshing = remember([] { return mutableStateOf(false); });
     auto scope = rememberCoroutineScope();
     PullToRefreshBox(refreshing.get(), [=] {
         refreshing.set(true);
-        scope.launch([items, refreshing]() -> Task {
-            items.set(co_await fetchNews());
+        scope.launch([news, refreshing]() -> Task {
+            news.set(co_await fetchNews());
             refreshing.set(false);
         });
     }, Modifier().fillMaxSize(), [&] {
-        LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& l) {
-            l.items(items.get(), [](const std::string& s) { Text(s, Modifier().padding(16)); });
-        });
+        LazyColumn(Modifier().fillMaxSize()) {
+            items(news.get(), [](const std::string& s) { Text(s, Modifier().padding(16)); });
+        };
     });
 }
 ```

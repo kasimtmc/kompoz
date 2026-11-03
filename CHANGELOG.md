@@ -637,6 +637,14 @@
   `BottomSheetScaffold(sheetContent, sheetPeekHeight = 128) [=](PaddingValues padding) { … };`. Their content is a
   block in a scope of its own. A rail item's label comes after its modifier, as in Compose; a dialog's properties are
   `properties = DialogProperties{…}`.
+- **Lazy lists, grids and pagers take named arguments, and their items are added as in Compose**: `LazyColumn`,
+  `LazyRow`, `LazyVerticalGrid`, `LazyHorizontalGrid`, the staggered grids and the pagers take their options in
+  Compose's order and names (`verticalArrangement = Arrangement::spacedBy(8)` for the spacing,
+  `horizontalAlignment = Alignment::CenterHorizontally` across), and a lazy layout's block adds its items with `item`,
+  `items`, `itemsIndexed` and `stickyHeader` called in it, as Compose's receiver: `LazyColumn(m) { items(mails,
+  [=](const Mail& m) { MailRow(m); }); };`. That block runs in the call and captures by reference, so a list isn't
+  copied; a pager's page is a block given its number, `HorizontalPager(state) [=](int page) { … };`. A pager's page
+  key is `pageKey =` (`key` is the composable that gives an identity).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

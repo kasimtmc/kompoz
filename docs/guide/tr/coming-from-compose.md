@@ -57,7 +57,7 @@ Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
 
 Adsız argümanlar parametreleri Compose'un sırasıyla doldurur (`Text(text, modifier, color, fontSize, …)`, `Box(modifier, contentAlignment)`). Composable'ın almadığı bir ad, iki kez verilen bir ad ya da alamayacağı bir değer derleme hatasıdır, hiçbir zaman yok sayılmaz. Adlar (`modifier`, `color`, `fontSize`, …) `kompoz`'un sabitleridir: sizin aynı adlı bir değişkeniniz adı gizler, bu da yine derleme hatası verir; orada `kompoz::color = …` yazın. Sizin ad alanı düzeyindeki bir adınız (genel bir `selected`, bir `badge()` işlevi), `using namespace kompoz` geçerli olan yerde adı belirsiz yapar: `kompoz::selected = …` yazın ya da kendinizinkine başka bir ad verin. Adsız bir argümanın kendi türü olmalıdır: verilmeyen bir geri çağırma `nullptr` olur (`Checkbox(checked, nullptr)`; `{}`'nin türü yoktur), bir çift `std::pair{1.f, 3.f}`.
 
-Şimdilik `Box`, `Column`, `Row`, `Spacer`, `Text`, düğmeler, simge düğmeleri ve simge açma kapama düğmeleri, kartlar, `Surface`, `Icon`, `Image`, `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, kaydırıcılar, metin alanları, `Scaffold`, üst ve alt uygulama çubukları, kayan eylem düğmeleri ve araç çubukları, `SnackbarHost`, `Snackbar`, gezinme çubukları, rayları ve çekmeceleri, iletişim kutuları, menüler ve alt sayfalar adlı argüman alıyor. Diğer bileşenler sıraları gelene kadar, alanların bildirildiği sırayla tasarlanmış ilklendiricilerle bir *seçenek yapısı* almaya devam ediyor:
+Şimdilik `Box`, `Column`, `Row`, `Spacer`, `Text`, düğmeler, simge düğmeleri ve simge açma kapama düğmeleri, kartlar, `Surface`, `Icon`, `Image`, `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, kaydırıcılar, metin alanları, `Scaffold`, üst ve alt uygulama çubukları, kayan eylem düğmeleri ve araç çubukları, `SnackbarHost`, `Snackbar`, gezinme çubukları, rayları ve çekmeceleri, iletişim kutuları, menüler, alt sayfalar, tembel listeler ve ızgaralar ve sayfalayıcılar adlı argüman alıyor. Diğer bileşenler sıraları gelene kadar, alanların bildirildiği sırayla tasarlanmış ilklendiricilerle bir *seçenek yapısı* almaya devam ediyor:
 
 ```cpp body
 ListItem({.headline = [] { Text("Wi-Fi"); }, .supporting = [] { Text("Bağlı"); }});
@@ -110,7 +110,7 @@ void LikeButton() {
 }
 ```
 
-`LazyColumn`'unki gibi bir scope alan lambdalar onu receiver olarak değil, parametre olarak alır: `LazyColumn(modifier, [&](LazyListScope& list) { list.items(...); })`.
+Tembel bir düzenin bloğunda, Compose'un alıcısındaki gibi, `item`, `items`, `itemsIndexed` ve `stickyHeader` öğelerini ekler: `LazyColumn(modifier) { items(list, [=](const T& x) { … }); };`. Bu blok hemen, çağrının içinde çalışır ve saklanmaz; bu yüzden referansla yakalar (`items`'a verilen liste kopyalanmaz). Bir öğenin lambdası ise sonra, öğe görünür oldukça çalışır ve değerle yakalar. Sizin `items` adlı bir değişkeniniz işlevi gizler: orada `kompoz::items(items, …)` yazın.
 
 ## Durum
 
@@ -206,7 +206,7 @@ CompositionLocalProvider({LocalContentColor.provides(Color::hex(0xE53935))}, [&]
 | `DisposableEffect(k) { onDispose { … } }` | `DisposableEffect(k, [=] { return [=] { … }; })` |
 | `LocalX.current` | `LocalX.current()` |
 | `MaterialTheme.colorScheme.primary` | `colorScheme().primary` |
-| `LazyColumn { items(list) { … } }` | `LazyColumn(Modifier(), [&](LazyListScope& l) { l.items(list, [](const T& x) { … }); })` |
+| `LazyColumn { items(list) { … } }` | `LazyColumn(Modifier()) { items(list, [=](const T& x) { … }); };` |
 | `val vm: MyViewModel = viewModel()` | `auto vm = viewModel<MyViewModel>();` |
 | `@Preview` | `KOMPOZ_PREVIEW(Name) { … }` |
 | `createComposeRule()` | `kompoz::testing::ComposeTestRule` |

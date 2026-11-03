@@ -222,7 +222,7 @@ Modifier paneExpansionDraggable(const PaneExpansionState& state, std::optional<M
 // details in, Back slides them out.
 //   auto navigator = rememberListDetailPaneScaffoldNavigator<int>();
 //   ListDetailPaneScaffold<int>(navigator, [&] {
-//       LazyColumn(..., [&](LazyListScope& l) { l.items(n, [&](int i) {
+//       LazyColumn(..., [&] { items(n, [&](int i) {
 //           ListItem({.headline = ...}, Modifier().clickable([navigator, i] { navigator.navigateTo(ListDetailPaneScaffoldRole::Detail, i); }));
 //       }); });
 //   }, [&](const std::optional<int>& item) { if (item) Details(*item); else Text("Bir öğe seçin"); });

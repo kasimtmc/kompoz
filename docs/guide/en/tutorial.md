@@ -77,13 +77,13 @@ A `Column` composes and lays out every child, even those out of view. For long l
 #! struct Message { std::string author, body; };
 #! void MessageCard(const Message&) {}
 void Conversation(const std::vector<Message>& messages) {
-    LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-        list.items(messages, [](const Message& msg) { MessageCard(msg); });
-    });
+    LazyColumn(Modifier().fillMaxSize()) {
+        items(messages, [](const Message& msg) { MessageCard(msg); });
+    };
 }
 ```
 
-The lambda gets a `LazyListScope` that describes the items: `item` adds one, `items` a whole list. Item content is composed later, as each item comes into view, so the item lambda captures nothing by reference that might be gone by then. Here it only uses its argument.
+The block describes the items, as `LazyColumn`'s receiver does in Compose: `item` adds one, `items` a whole list. Item content is composed later, as each item comes into view, so the item lambda captures nothing by reference that might be gone by then. Here it only uses its argument.
 
 When items can be added, removed or moved, give each a stable key so its state follows it:
 
@@ -91,9 +91,9 @@ When items can be added, removed or moved, give each a stable key so its state f
 #! struct Message { int id; std::string author, body; };
 #! void MessageCard(const Message&) {}
 #! std::vector<Message> messages;
-LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-    list.items(messages, [](const Message& msg) { return msg.id; }, [](const Message& msg) { MessageCard(msg); });
-});
+LazyColumn(Modifier().fillMaxSize()) {
+    items(messages, [](const Message& msg) { return msg.id; }, [](const Message& msg) { MessageCard(msg); });
+};
 ```
 
 See [Lists and grids](lists.md) for grids, pagers, sticky headers and scrolling from code.

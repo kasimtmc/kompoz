@@ -317,13 +317,13 @@ void pager(PagerState state, const Modifier& modifier, const std::function<void(
 
 } // namespace
 
-void HorizontalPager(PagerState state, const Modifier& modifier, const std::function<void(int page)>& content,
+void detail::HorizontalPager(PagerState state, const Modifier& modifier, const std::function<void(int page)>& content,
                      PagerOptions options, CallSite site) {
     ComposableScope scope(site);
     pager(std::move(state), modifier, content, options, false);
 }
 
-void VerticalPager(PagerState state, const Modifier& modifier, const std::function<void(int page)>& content,
+void detail::VerticalPager(PagerState state, const Modifier& modifier, const std::function<void(int page)>& content,
                    PagerOptions options, CallSite site) {
     ComposableScope scope(site);
     pager(std::move(state), modifier, content, options, true);

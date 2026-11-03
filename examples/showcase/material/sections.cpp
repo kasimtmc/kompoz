@@ -291,12 +291,12 @@ void InteractionSection(CallSite site) {
                     [&] { DatePicker(state); });
             }
             static const Color pages[] = {Color::hex(0x6750A4), Color::hex(0x7D5260), Color::hex(0x386A20), Color::hex(0x00639B)};
-            HorizontalPager(pager, Modifier().fillMaxWidth().padding(0, 12, 0, 0).height(96), [&](int page) {
+            HorizontalPager(pager, Modifier().fillMaxWidth().padding(0, 12, 0, 0).height(96)) [=](int page) {
                 Box(Modifier().fillMaxSize().padding(4, 0).background(pages[page], RoundedCornerShape(16)), Alignment::Center) {
                     Text(held ? "tutuluyor: bekliyor" : std::format("Sayfa {} · kendiliğinden ilerler", page + 1),
                          color = colors::White, style = typography().titleSmall);
                 };
-            });
+            };
         });
     });
 }

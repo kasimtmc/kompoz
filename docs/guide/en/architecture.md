@@ -19,13 +19,13 @@ struct TodoItem {
 };
 
 // Stateless: shows the items, reports what the user did.
-void TodoList(const std::vector<TodoItem>& items, std::function<void(int id, bool done)> onToggle) {
-    LazyColumn(Modifier().fillMaxSize(), [&](LazyListScope& list) {
-        list.items(items, [](const TodoItem& t) { return t.id; }, [onToggle](const TodoItem& t) {
+void TodoList(const std::vector<TodoItem>& todos, std::function<void(int id, bool done)> onToggle) {
+    LazyColumn(Modifier().fillMaxSize()) {
+        items(todos, [](const TodoItem& t) { return t.id; }, [onToggle](const TodoItem& t) {
             ListItem(t.done, [onToggle, id = t.id](bool done) { onToggle(id, done); },
                      {.headline = [&] { Text(t.title); }, .leading = [&] { Checkbox(t.done, nullptr); }});
         });
-    });
+    };
 }
 ```
 
