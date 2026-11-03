@@ -1852,7 +1852,7 @@ TEST(lazy_list_composes_the_next_item_in_a_pause) {
         [&] {
             auto s = rememberLazyListState();
             state = s;
-            LazyColumn(Modifier().fillMaxSize(), state = s, [&] {
+            LazyColumn(Modifier().fillMaxSize(), kompoz::state = s, [&] {
                 items(100, [&](int i) {
                     remember([&] {
                         made.push_back(i);
@@ -1909,7 +1909,7 @@ TEST(lazy_list_state_opens_at_an_item) {
         [&] {
             auto s = rememberLazyListState(500);  // before the list knows its count
             state = s;
-            LazyColumn(Modifier().fillMaxSize(), state = s, [&] {
+            LazyColumn(Modifier().fillMaxSize(), kompoz::state = s, [&] {
                 items(1000, [](int i) { Text("row " + std::to_string(i)); });
             });
         },
@@ -9719,19 +9719,19 @@ TEST(pager_pages_of_a_fixed_size_snap_where_asked) {
         };
         Column([=] {
             // 200 dp pages in the middle of 300 dp of room (the padding's 50 each side), 10 apart.
-            HorizontalPager(a, Modifier().fillMaxWidth().height(100), page("orta"),
+            HorizontalPager(a, Modifier().fillMaxWidth().height(100),
                             contentPadding = PaddingValues{.start = 50, .end = 50}, pageSize = PageSize::Fixed(200), pageSpacing = 10,
-                            snapPosition = SnapPosition::Center);
+                            snapPosition = SnapPosition::Center, page("orta"));
             // 100 dp pages from the start: four in view.
-            HorizontalPager(b, Modifier().fillMaxWidth().height(100), page("baş"), pageSize = PageSize::Fixed(100));
+            HorizontalPager(b, Modifier().fillMaxWidth().height(100), pageSize = PageSize::Fixed(100), page("baş"));
             // From page 9, which can't come to the start: as far as the pages go, settled there.
-            HorizontalPager(c, Modifier().fillMaxWidth().height(100), page("son"), pageSize = PageSize::Fixed(100));
+            HorizontalPager(c, Modifier().fillMaxWidth().height(100), pageSize = PageSize::Fixed(100), page("son"));
             // 100 dp pages the padding lets come to the middle (from 150).
-            HorizontalPager(rememberPagerState(5, [] { return 10; }), Modifier().fillMaxWidth().height(100), page("dar"),
-                            contentPadding = PaddingValues{.start = 150, .end = 150}, pageSize = PageSize::Fixed(100));
+            HorizontalPager(rememberPagerState(5, [] { return 10; }), Modifier().fillMaxWidth().height(100),
+                            contentPadding = PaddingValues{.start = 150, .end = 150}, pageSize = PageSize::Fixed(100), page("dar"));
             // Two pages a view, as a PageSize of its own says.
-            HorizontalPager(rememberPagerState(0, [] { return 4; }), Modifier().fillMaxWidth().height(100), page("yarım"),
-                            pageSize = PageSize{[](float room, float spacing) { return (room - spacing) / 2; }}, pageSpacing = 20);
+            HorizontalPager(rememberPagerState(0, [] { return 4; }), Modifier().fillMaxWidth().height(100),
+                            pageSize = PageSize{[](float room, float spacing) { return (room - spacing) / 2; }}, pageSpacing = 20, page("yarım"));
         });
     }, {400, 800});
     auto x = [&](const std::string& tag) { return rule.onNodeWithTag(tag).bounds().x; };
@@ -9932,10 +9932,10 @@ TEST(pager_pages_line_up_across_it) {
                 return [name](int i) { Box(Modifier().size(50).testTag(name + std::to_string(i))); };
             };
             HorizontalPager(rememberPagerState(0, [] { return 3; }), Modifier().fillMaxWidth().height(200), small("orta"));
-            HorizontalPager(rememberPagerState(0, [] { return 3; }), Modifier().fillMaxWidth().height(200), small("üst"),
-                            verticalAlignment = Alignment::Top);
-            VerticalPager(rememberPagerState(0, [] { return 3; }), Modifier().fillMaxWidth().height(200), small("sağ"),
-                          horizontalAlignment = Alignment::End);
+            HorizontalPager(rememberPagerState(0, [] { return 3; }), Modifier().fillMaxWidth().height(200),
+                            verticalAlignment = Alignment::Top, small("üst"));
+            VerticalPager(rememberPagerState(0, [] { return 3; }), Modifier().fillMaxWidth().height(200),
+                          horizontalAlignment = Alignment::End, small("sağ"));
         });
     }, {400, 800});
     auto at = [&](const std::string& tag) { return rule.onNodeWithTag(tag).bounds(); };
@@ -16607,14 +16607,14 @@ TEST(lazy_grid_state_goes_by_item_and_tells_rows_and_columns) {
         state = s;
         scope = rememberCoroutineScope();
         Column([=, &sideways, &state] {
-            LazyVerticalGrid(GridCells::Fixed(3), Modifier().size(300, 400), state = s, verticalArrangement = Arrangement::spacedBy(10), horizontalArrangement = Arrangement::spacedBy(6),
+            LazyVerticalGrid(GridCells::Fixed(3), Modifier().size(300, 400), kompoz::state = s, verticalArrangement = Arrangement::spacedBy(10), horizontalArrangement = Arrangement::spacedBy(6),
                              [] {
                                  item([] { Box(Modifier().fillMaxWidth().height(50)); }, LazyGridScope::FullLine);  // item 0: a row of its own
                                  items(60, [](int i) { Box(Modifier().fillMaxWidth().height(i % 2 ? 80 : 60)); });   // items 1..60
                              });
             auto h = rememberLazyGridState();
             sideways = h;
-            LazyHorizontalGrid(GridCells::Fixed(2), Modifier().size(300, 200), state = h,
+            LazyHorizontalGrid(GridCells::Fixed(2), Modifier().size(300, 200), kompoz::state = h,
                                [] { items(20, [](int) { Box(Modifier().width(70).fillMaxHeight()); }); });
         });
     }, {400, 800});
@@ -16867,7 +16867,7 @@ TEST(lazy_staggered_grid_state_goes_by_item_and_tells_lanes) {
         Column([=, &state] {
             Text(std::format("ilk {}", s.firstVisibleItemIndex()), Modifier().testTag("ilk"));
             LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().size(400, 600).testTag("ızgara"),
-                                      state = s, contentPadding = PaddingValues{0, 10, 0, 10}, verticalItemSpacing = 8, horizontalArrangement = Arrangement::spacedBy(8),
+                                      kompoz::state = s, contentPadding = PaddingValues{0, 10, 0, 10}, verticalItemSpacing = 8, horizontalArrangement = Arrangement::spacedBy(8),
                                       [&] {
                                           items(200, [&](int i) { Box(Modifier().fillMaxWidth().height(height(i)).testTag(std::format("s{}", i))); });
                                       });
@@ -16912,7 +16912,7 @@ TEST(lazy_staggered_grid_state_goes_by_item_and_tells_lanes) {
     // tall one and what is in view count, not the indices between them.
     LazyStaggeredGridState tall;
     ComposeTestRule other([&] {
-        LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().size(400, 300), state = tall, [] {
+        LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().size(400, 300), kompoz::state = tall, [] {
             item([] { Box(Modifier().fillMaxWidth().height(800)); });
             items(40, [](int) { Box(Modifier().fillMaxWidth().height(50)); });
         });
@@ -22748,7 +22748,7 @@ TEST(lazy_list_layout_info_tells_what_is_in_view) {
                 item("başlık", "header", [] { Box(Modifier().height(40)); });
                 items(30, [](int i) { return size_t(i); }, [](int) { return size_t(7); }, [](int) { Box(Modifier().height(36)); });
             });
-            LazyColumn(Modifier().fillMaxWidth().height(100), state = headed, [&] {
+            LazyColumn(Modifier().fillMaxWidth().height(100), kompoz::state = headed, [&] {
                 stickyHeader([] { Box(Modifier().height(20)); });
                 items(20, [](int) { Box(Modifier().height(30)); });
             });

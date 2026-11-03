@@ -396,7 +396,7 @@ void PagerSection(CallSite site) {
                     Text(std::format("BoxWithConstraints: {:.0f} dp, {}", c.hasBoundedWidth() ? c.maxWidth : 0.f,
                                      wide ? "yan yana" : "alt alta"),
                          color = cs.onSurfaceVariant, style = typography().bodyMedium);
-                    auto tile = [&](const char* label, Color color) {
+                    auto tile = [=](const char* label, Color color) {
                         Box(Modifier().fillMaxWidth().height(48).background(color, 12).padding(12, 0), Alignment::CenterStart) { Text(label, kompoz::color = colors::White); };
                     };
                     if (wide)

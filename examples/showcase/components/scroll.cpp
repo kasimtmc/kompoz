@@ -63,7 +63,7 @@ void DrawersSection(CallSite site) {
         auto drawer = rememberDrawerState();
         auto coroutines = rememberCoroutineScope();
         const char* pages[] = {"Gelen", "Gönderilen", "Taslaklar"};
-        auto items = [&](bool closeAfter) {
+        auto items = [=](bool closeAfter) {
             for (int i = 0; i < 3; ++i)
                 NavigationDrawerItem([&, i] { Text(pages[i]); }, page.get() == i, [page, i, drawer, coroutines, closeAfter] {
                     page.set(i);
@@ -520,7 +520,7 @@ void NestedScrollSection(CallSite site) {
             };
             caption("AppBarWithSearch + enterAlways: liste ilerledikçe arama çubuğu yukarı kayar, geri kaydırınca önce o gelir; dokununca "
                     "tam ekran arama açılır.");
-            auto mailField = [&] {
+            auto mailField = [=] {
                 SearchBarDefaults::InputField(mailSearch, mailQuery,
                                               {.placeholder = "Postalarda ara", .leadingIcon = [] { Icon(Icons::Filled::Search, "Ara"); }});
             };

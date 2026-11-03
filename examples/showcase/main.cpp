@@ -64,9 +64,9 @@ void ShowcaseApp() {
                                         {"Material", &Icons::Filled::CheckCircle}};
     auto closeDrawer = [drawer, scope] { scope.launch([drawer]() -> Task { co_await drawer.close(); }); };
 
-    // The content lambdas below run while composing, so they capture by reference;
-    // event handlers capture by value.
-    auto drawerContent = [&] {
+    // The content lambdas below capture by value, as event handlers do: the blocks they are
+    // called in (the drawer's, the Scaffold's) keep them and run again on their own.
+    auto drawerContent = [=] {
         ModalDrawerSheet(Modifier()) {
             Text("Kompoz", Modifier().padding(16, 8, 16, 16), style = typography().titleLarge);
             for (int i = 0; i < 4; ++i) {
@@ -89,7 +89,7 @@ void ShowcaseApp() {
         };
     };
 
-    auto topBar = [&] {
+    auto topBar = [=] {
         TopAppBar(
             title = [] { Text("Kompoz"); },
             navigationIcon = [drawer, scope] {
@@ -133,7 +133,7 @@ void ShowcaseApp() {
             scrollBehavior = barScroll);
     };
 
-    auto fab = [&] {
+    auto fab = [=] {
         if (entry && entry->hasRoute<routes::Home>())
             ExtendedFloatingActionButton(
                 [snackbar, scope, notified = remember([] { return std::make_shared<int>(0); })] {
@@ -152,7 +152,7 @@ void ShowcaseApp() {
             ScrollToTopButton(listState);
     };
 
-    auto screen = [=](PaddingValues padding) {  // (by value: the Scaffold's block keeps it)
+    auto screen = [=](PaddingValues padding) {
         // Clear of the bars; the keyboard only takes what the bottom bar doesn't already cover.
         Modifier m = Modifier().fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding();
         ContentTransform fade = togetherWith(fadeIn(0, tween(220, 60)), fadeOut(0, tween(120)));
@@ -201,7 +201,7 @@ void ShowcaseApp() {
         CompositionLocalProvider({LocalStrings.provides(Strings::turkish()),
                                   LocalShowRecompositions.provides(showRecompositions.get()),
                                   LocalLayoutDirection.provides(rightToLeft.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
-            auto app = [&] {
+            auto app = [=] {
                 ModalNavigationDrawer(drawerContent, drawer) {
                     // The tabs where they suit the window (currentWindowAdaptiveInfo), as M3
                     // Expressive's: a short bar on a phone (its labels beside the icons when it lies

@@ -503,8 +503,8 @@ void SharedElementSection(CallSite site) {
         Section("SharedTransitionLayout · sharedElement · sharedBounds", [&] {
             SharedTransitionLayout(Modifier().fillMaxWidth().height(340), [&](const SharedTransitionScope& shared) {
                 AnimatedContent<int>(selected.get(), [&](const AnimatedContentScope& scope, const int& item) {
-                    auto photo = [&](int i) { return shared.rememberSharedContentState("photo" + std::to_string(i)); };
-                    auto title = [&](int i) { return shared.rememberSharedContentState("title" + std::to_string(i)); };
+                    auto photo = [=](int i) { return shared.rememberSharedContentState("photo" + std::to_string(i)); };
+                    auto title = [=](int i) { return shared.rememberSharedContentState("title" + std::to_string(i)); };
                     if (item < 0) {
                         Column(Modifier().fillMaxWidth(), verticalArrangement = Arrangement::spacedBy(4)) {
                             for (int i = 0; i < 3; ++i)
@@ -624,7 +624,7 @@ void ColorSpaceSection(CallSite site) {
         auto warm = remember([] { return mutableStateOf(false); });
         Color animated = animateColorAsState(warm.get() ? Color::hex(0xFF6D00) : Color::hex(0x2962FF), tween(1200));
         Section("Color · ColorSpace · Oklab", [&] {
-            auto strip = [&](const char* name, const std::function<Color(float)>& at) {
+            auto strip = [=](const char* name, const std::function<Color(float)>& at) {
                 Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                     Text(name, Modifier().width(104), style = typography().labelLarge);
                     Row(Modifier().weight(1).height(32).clip(RoundedCornerShape(8))) {

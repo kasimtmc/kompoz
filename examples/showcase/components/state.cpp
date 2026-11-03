@@ -240,7 +240,7 @@ void MovableContentSection(CallSite site) {
                 };
             });
         });
-        auto other = [&] {
+        auto other = [=] {
             Box(Modifier().background(cs.surfaceContainerHighest, 12).padding(12)) {
                 Text("Öbür içerik", color = cs.onSurfaceVariant, style = typography().bodyMedium);
             };

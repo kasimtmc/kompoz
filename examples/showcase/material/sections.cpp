@@ -270,7 +270,7 @@ void InteractionSection(CallSite site) {
                     Text(cardPressed ? "Basılı: kendi görünümü, kaplama yok" : cardHovered ? "Fare üzerinde" : "Üzerine gelin ya da basın",
                          color = cardPressed ? cs.onPrimaryContainer : cs.onSurface, style = typography().bodyMedium);
                 };
-            auto format = [&](year_month_day d) {
+            auto format = [=](year_month_day d) {
                 return std::format("{} {} {}", unsigned(d.day()), strings.months[unsigned(d.month()) - 1], int(d.year()));
             };
             OutlinedTextField(date.get() ? format(*date.get()) : "", [](std::string) {}, Modifier().fillMaxWidth().padding(0, 12, 0, 0),
@@ -372,7 +372,7 @@ void AnchoredDraggableSection(CallSite site) {
 void RippleSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
-        auto labelled = [&](const char* label, const Content& content) {
+        auto labelled = [=](const char* label, const Content& content) {
             Column(Modifier().width(76), horizontalAlignment = Alignment::CenterHorizontally) {
                 content();
                 Text(label, Modifier().padding(0, 6, 0, 0), color = cs.onSurfaceVariant, textAlign = TextAlign::Center, style = typography().bodySmall);
@@ -552,7 +552,7 @@ void DatePickerSection(CallSite site) {
         auto picked = remember([] { return mutableStateOf(std::optional<year_month_day>()); });
         auto rangeOpen = remember([] { return mutableStateOf(false); });
         auto range = remember([] { return mutableStateOf(std::optional<std::pair<year_month_day, year_month_day>>()); });
-        auto format = [&](year_month_day d) {
+        auto format = [=](year_month_day d) {
             return std::format("{} {} {}", unsigned(d.day()), strings.months[unsigned(d.month()) - 1], int(d.year()));
         };
         Section("DatePicker · DateRangePicker", [&] {
