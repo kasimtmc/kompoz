@@ -8,7 +8,7 @@
 void SelectableTextSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
-        Section("SelectionContainer · DisableSelection", [&] {
+        Section("SelectionContainer · DisableSelection", [=] {
             SelectionContainer(Modifier().fillMaxWidth(), [&] {
                 Column(Modifier(), verticalArrangement = Arrangement::spacedBy(8)) {
                     Text("Bu paragraftaki bir kelimeye uzun basın: seçilir, tutamaçları bir metinden ötekine "
@@ -33,7 +33,7 @@ void ContextMenuSection(CallSite site) {
         const ColorScheme& cs = colorScheme();
         auto last = remember([] { return mutableStateOf(std::string("yok")); });
         auto note = remember([] { return mutableStateOf(std::string("Sağ tıkla: kes, kopyala, yapıştır")); });
-        Section("ContextMenuArea (sağ tık)", [&] {
+        Section("ContextMenuArea (sağ tık)", [=] {
             Text("Masaüstünde karta sağ tıklayınca menüsü tıklanan yerde açılır; metin alanlarının kendi menüsü var (Kes, Kopyala, "
                  "Yapıştır, Tümünü seç).",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
@@ -61,7 +61,7 @@ void PointerSection(CallSite site) {
         auto wheel = remember([] { return mutableStateOf(0.f); });
         auto button = remember([] { return mutableStateOf(std::string("-")); });
         auto clicks = remember([] { return mutableStateOf(std::array<int, 3>{}); });
-        Section("onPointerEvent · onClick · TooltipArea (fare)", [&] {
+        Section("onPointerEvent · onClick · TooltipArea (fare)", [=] {
             Text("Masaüstünde: fareyi kutunun üstünde gezdirin, tekerleği çevirin (sayfa kaymaz, sayaç değişir), tuşlara basın.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             auto bump = [clicks](int i) {
@@ -180,7 +180,7 @@ void CustomIndicationSection(CallSite site) {
         auto& shrink = remember([] { return Indication(std::make_shared<ShrinkIndication>()); });
         auto& outline = remember([primary = cs.primary] { return Indication(std::make_shared<OutlineIndication>(primary)); });
         auto taps = remember([] { return mutableStateOf(0); });
-        Section("IndicationNodeFactory · özel göstergeler", [&] {
+        Section("IndicationNodeFactory · özel göstergeler", [=] {
             // The indication draws what comes after the clickable: put it before the background
             // to shrink the whole button (a Material button's clickable comes after its background).
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
@@ -233,7 +233,7 @@ void TextToolbarSection(CallSite site) {
         auto changes = remember([] { return mutableStateOf(0); });
         auto& pill = remember([changes] { return std::make_shared<PillToolbar>(changes); });
         auto text = remember([] { return mutableStateOf(std::string("Bir kelimeye uzun basın")); });
-        Section("LocalTextToolbar · TextToolbar", [&] {
+        Section("LocalTextToolbar · TextToolbar", [=] {
             CompositionLocalProvider({LocalTextToolbar.provides(std::shared_ptr<TextToolbar>(pill))}, [&] {
                 OutlinedTextField(text.get(), [text](std::string v) { text.set(std::move(v)); }, Modifier().fillMaxWidth(),
                                   singleLine = true, label = "Kendi araç çubuğumuz");
@@ -299,7 +299,7 @@ void MultiTouchSection(CallSite site) {
             offset.set({offset.peek().x + pan.x, offset.peek().y + pan.y});
         });
         ImageBitmap photo = imageResource("images/landscape.png");
-        Section("Çoklu dokunma (transformable)", [&] {
+        Section("Çoklu dokunma (transformable)", [=] {
             Text("İki parmakla yakınlaştırın ve döndürün; yakınken tek parmakla kaydırın, çift dokunuş sıfırlar.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             Box(Modifier()
@@ -340,7 +340,7 @@ void KeyboardSection(CallSite site) {
         auto clicks = remember([] { return mutableStateOf(std::vector<int>(9, 0)); });
         auto lastKey = remember([] { return mutableStateOf(std::string("yok")); });
         auto boxFocused = remember([] { return mutableStateOf(false); });
-        Section("Klavye ve odak (focusable, onKeyEvent)", [&] {
+        Section("Klavye ve odak (focusable, onKeyEvent)", [=] {
             DesktopNote("Masaüstü için: telefonda yalnızca bir donanım klavyesi (Bluetooth ya da USB) bağlıyken çalışır.");
             Text("Tab / Shift+Tab ve oklarla gezin, Enter ya da Space ile tıklayın (masaüstü, donanım klavyesi).",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
@@ -417,7 +417,7 @@ void DragAndDropSection(CallSite site) {
         auto over = remember([] { return mutableStateOf(-1); });    // the column under the pointer
         auto dropped = remember([] { return mutableStateOf(std::string()); });
         auto overDrop = remember([] { return mutableStateOf(false); });
-        Section("Sürükle-bırak (dragAndDropSource / dragAndDropTarget)", [&] {
+        Section("Sürükle-bırak (dragAndDropSource / dragAndDropTarget)", [=] {
             Text("Bir kartı basılı tutup öbür sütuna sürükleyin (fareyle doğrudan sürükleyin); Escape vazgeçer. Masaüstünde "
                  "dosya yöneticisinden ya da tarayıcıdan aşağıdaki alana dosya / metin de bırakabilirsiniz.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);

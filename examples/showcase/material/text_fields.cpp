@@ -20,7 +20,7 @@ void TextFieldsSection(CallSite site) {
         auto tagQuery = rememberTextFieldState();
         auto& emailFocus = remember([] { return FocusRequester(); });
         FocusManager focus = focusManager();
-        Section("Metin alanları ve odak", [&] {
+        Section("Metin alanları ve odak", [=] {
             bool badEmail = !email.get().empty() && email.get().find('@') == std::string::npos;
             OutlinedTextField(email.get(), [email](std::string v) { email.set(std::move(v)); },
                               Modifier().fillMaxWidth().focusRequester(emailFocus),

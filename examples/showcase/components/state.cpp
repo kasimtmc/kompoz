@@ -14,7 +14,7 @@ void IconGallery(CallSite site) {
             {"Place", &Place}, {"Refresh", &Refresh}, {"Visibility", &Visibility}, {"DarkMode", &DarkMode},
             {"PlayArrow", &PlayArrow}, {"Pause", &Pause}, {"List", &List}, {"CheckCircle", &CheckCircle},
             {"AccountCircle", &AccountCircle}, {"KeyboardArrowUp", &KeyboardArrowUp}};
-        Section("Icon", [&] {
+        Section("Icon", [=] {
             for (size_t row = 0; row < icons.size(); row += 5) {
                 Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::SpaceBetween) {
                     for (size_t i = row; i < std::min(icons.size(), row + 5); ++i) {
@@ -32,7 +32,7 @@ void IconGallery(CallSite site) {
 void IconButtons(CallSite site) {
     composable(site, [=] {
         auto liked = remember([] { return mutableStateOf(false); });
-        Section("IconButton", [&] {
+        Section("IconButton", [=] {
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                     IconButton([liked] { liked.set(!liked.get()); }) {
                         Icon(liked.get() ? Icons::Filled::Favorite : Icons::Filled::FavoriteBorder, "Beğen",
@@ -120,7 +120,7 @@ void StateFlowSection(CallSite site) {
         auto vm = viewModel<DownloadViewModel>();
         float progress = vm->progress.collectAsState();
         std::string status = vm->status.collectAsState();
-        Section("StateFlow · collectAsState · viewModel()", [&] {
+        Section("StateFlow · collectAsState · viewModel()", [=] {
             Text("İş bir iş parçacığında yürür ve StateFlow'ları günceller; ekran onları collectAsState() ile okur. "
                  "ViewModel bu ekranın gezinme girdisine ait: başka sekmeye geçip dönünce indirme sürmüş olur.",
                  color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
@@ -198,7 +198,7 @@ void FlowSearchSection(CallSite site) {
         LaunchedEffect(vm, [vm, lastEvent]() -> Task {  // the events, while this is shown
             co_await vm->events.collect([lastEvent](const std::string& e) { lastEvent.set(e); });
         });
-        Section("Flow · debounce · flatMapLatest · stateIn · SharedFlow", [&] {
+        Section("Flow · debounce · flatMapLatest · stateIn · SharedFlow", [=] {
             Text("Yazmayı bırakınca (300 ms) aranır; yeni bir sorgu süren aramayı iptal eder. Sonuçlar ViewModel'de "
                  "bir StateFlow (WhileSubscribed: yalnızca ekran dinlerken aranır); biten arama bir SharedFlow olayı yayınlar. "
                  "Sorgu SavedStateHandle'da: uygulama arka planda kapatılıp geri gelince yazılı kalır.",
@@ -245,7 +245,7 @@ void MovableContentSection(CallSite site) {
                 Text("Öbür içerik", color = cs.onSurfaceVariant, style = typography().bodyMedium);
             };
         };
-        Section("movableContentOf", [&] {
+        Section("movableContentOf", [=] {
             Text("Kart Row ile Column arasında taşınır: dokunuş sayısı ve çalışan zamanlayıcısı baştan başlamaz.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             FilledTonalButton([sideBySide] { sideBySide.set(!sideBySide.peek()); }) { Text(sideBySide.get() ? "Alt alta diz" : "Yan yana diz"); };
@@ -278,7 +278,7 @@ void ChannelSection(CallSite site) {
                 kitchen.set(std::format("Sipariş {} hazır", *order));
             }
         });
-        Section("Channel · trySend · receive · produce", [&] {
+        Section("Channel · trySend · receive · produce", [=] {
             Text("Mutfak siparişleri sırayla ve birer kez hazırlar; kanalda en çok 3 sipariş bekler, dolunca trySend reddeder.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
@@ -371,7 +371,7 @@ void LifecycleSection(CallSite site) {
         int starts = vm->clockStarts.collectAsState();
         int resumes = vm->resumes.collectAsState();
         std::vector<std::string> events = vm->events.collectAsState();
-        Section("Lifecycle · LifecycleResumeEffect · collectAsStateWithLifecycle", [&] {
+        Section("Lifecycle · LifecycleResumeEffect · collectAsStateWithLifecycle", [=] {
             static const char* const names[] = {"DESTROYED", "INITIALIZED", "CREATED", "STARTED", "RESUMED"};
             Text("Masaüstünde pencere odağı kaybedince STARTED, simge durumuna küçültülünce CREATED olur; Android'de uygulama "
                  "arka plana geçince. Başka sekmeye geçince bu ekranın girdisi CREATED'a iner.",
@@ -431,7 +431,7 @@ void ChatSection(CallSite site) {
                 co_await list.animateScrollToItem(0);
             });
         };
-        Section("Sohbet · reverseLayout · animateScrollToItem", [&] {
+        Section("Sohbet · reverseLayout · animateScrollToItem", [=] {
             Text("İlk öğe altta durur, yenisi oraya gelir; yukarı kaydırılmışsa liste kayarak en yeniye döner.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             std::vector<Message> shown = messages->get();
@@ -493,7 +493,7 @@ void PlatformServicesSection(CallSite site) {
         AutofillManager autofill = autofillManager();
         auto note = remember([] { return mutableStateOf(std::string("Kompoz")); });
         auto pasted = remember([] { return mutableStateOf(std::string()); });
-        Section("Platform · bağlantı · klavye · titreşim · pano", [&] {
+        Section("Platform · bağlantı · klavye · titreşim · pano", [=] {
             Text("uriHandler(), softwareKeyboardController(), hapticFeedback(), clipboardManager(): Compose'daki "
                  "LocalUriHandler & co. kompoz:// adresini uygulamanın kendi NavHost'u tanıdığı için doğrudan içeride açar. "
                  "Titreşim Android'de sistemin dokunma geri bildirimi ayarına uyar; uzun basışlar ve seçim tutamaçları "

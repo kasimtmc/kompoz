@@ -9,7 +9,7 @@ void TabsSection(CallSite site) {
         auto subTab = remember([] { return mutableStateOf(0); });
         auto travel = remember([] { return mutableStateOf(0); });
         auto city = remember([] { return mutableStateOf(0); });
-        Section("Sekmeler", [&] {
+        Section("Sekmeler", [=] {
             PrimaryTabRow(tab.get(), Modifier(), [&] {
                 const char* titles[] = {"Gelen", "Yıldızlı", "Ayarlar"};
                 const ImageVector* icons[] = {&Icons::Filled::Email, &Icons::Filled::Star, &Icons::Filled::Settings};
@@ -50,7 +50,7 @@ void FabMenuSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
         // M3 Expressive's FAB menu: its actions open above the button, which turns into a round close button.
-        Section("FloatingActionButtonMenu", [&] {
+        Section("FloatingActionButtonMenu", [=] {
             auto fabOpen = remember([] { return mutableStateOf(false); });
             auto fabPicked = remember([] { return mutableStateOf(std::string("yok")); });
             BackHandler(fabOpen.get(), [fabOpen] { fabOpen.set(false); });
@@ -84,7 +84,7 @@ void ShortNavigationBarSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
         // M3 Expressive's short navigation bar: items sharing the width (compact) or together in the middle (wider).
-        Section("ShortNavigationBar", [&] {
+        Section("ShortNavigationBar", [=] {
             auto page = remember([] { return mutableStateOf(0); });
             struct Tab {
                 const char* label;
@@ -108,7 +108,7 @@ void WideNavigationRailSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
         // M3 Expressive's wide navigation rail: ☰ widens it, the labels going after the icons.
-        Section("WideNavigationRail", [&] {
+        Section("WideNavigationRail", [=] {
             auto rail = rememberWideNavigationRailState();
             auto box = remember([] { return mutableStateOf(0); });
             struct Box_ {
@@ -150,7 +150,7 @@ void FloatingToolbarsSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
         // M3 Expressive's floating toolbars over a list: they leave as it scrolls on and come back as it scrolls back.
-        Section("Kayan araç çubukları", [&] {
+        Section("Kayan araç çubukları", [=] {
             auto below = FloatingToolbarDefaults::exitAlwaysScrollBehavior(FloatingToolbarExitDirection::Bottom);
             auto aside = FloatingToolbarDefaults::exitAlwaysScrollBehavior(FloatingToolbarExitDirection::End);
             auto more = remember([] { return mutableStateOf(false); });

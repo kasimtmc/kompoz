@@ -5,7 +5,7 @@
 void ButtonsSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
-        Section("Butonlar", [&] {
+        Section("Butonlar", [=] {
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 Button([] {}) { Text("Button"); };
                 FilledTonalButton([] {}) { Text("Tonal"); };
@@ -86,7 +86,7 @@ void ChipsSection(CallSite site) {
         auto drinks = remember([] { return mutableStateListOf<std::string>({"Kahve"}); });
         auto people = remember([] { return mutableStateListOf<std::string>({"Ayşe", "Mehmet"}); });
         auto openOnly = remember([] { return mutableStateOf(false); });
-        Section("Chip'ler", [&] {
+        Section("Chip'ler", [=] {
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 for (const char* drink : {"Kahve", "Çay", "Su", "Ayran"}) {
                     bool on = std::find(drinks.begin(), drinks.end(), drink) != drinks.end();
@@ -142,7 +142,7 @@ void SelectionControlsSection(CallSite site) {
         auto period = remember([] { return mutableStateOf(1); });
         auto transport = remember([] { return mutableStateOf(std::array<bool, 3>{true, false, false}); });
                    auto touchRoom = remember([] { return mutableStateOf(true); });
-        Section("Seçim kontrolleri", [&] {
+        Section("Seçim kontrolleri", [=] {
             // minimumInteractiveComponentSize: 48 dp of room to touch the controls (0: just their own size).
             Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
                 Switch(touchRoom.get(), [touchRoom](bool v) { touchRoom.set(v); });

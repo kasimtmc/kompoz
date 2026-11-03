@@ -9,7 +9,7 @@ void TextSection(CallSite site) {
         const ColorScheme& cs = colorScheme();
         Density density = LocalDensity.current();
         auto fitWidth = remember([] { return mutableStateOf(0.6f); });
-        Section("Metin: AnnotatedString · FontFamily · TextOverflow", [&] {
+        Section("Metin: AnnotatedString · FontFamily · TextOverflow", [=] {
             // autoSize: the largest size that fits the box (TextAutoSize.StepBased).
             Box(Modifier().fillMaxWidth(fitWidth.get()).height(56).background(cs.surfaceContainerHigh, 12).padding(8, 4), Alignment::CenterStart) {
                 Text("Sığdığı kadar büyük", Modifier().fillMaxWidth(), maxLines = 1, autoSize = TextAutoSize::StepBased(10, 48, 1));

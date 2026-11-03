@@ -116,7 +116,7 @@ void SearchSection(CallSite site) {
         auto query = rememberTextFieldState();
         auto dockedState = rememberSearchBarState();
         auto dockedQuery = rememberTextFieldState();
-        Section("SearchBar · SearchBarState", [&] {
+        Section("SearchBar · SearchBarState", [=] {
             key(0, [&] { bar(false, state, query); });  // the same composables twice: keyed apart
             key(1, [&] { bar(true, dockedState, dockedQuery); });
             Text(chosen.get().empty() ? "Üstteki tam ekran açılır, alttaki yerinde; yazdıkça öneriler daralır."
@@ -136,7 +136,7 @@ void TooltipSection(CallSite site) {
         static const std::pair<TooltipAnchorPosition, const char*> sides[] = {
             {TooltipAnchorPosition::Above, "Üst"}, {TooltipAnchorPosition::Below, "Alt"}, {TooltipAnchorPosition::Start, "Baş"},
             {TooltipAnchorPosition::End, "Son"}};
-        Section("TooltipBox · PlainTooltip · RichTooltip · TooltipAnchorPosition", [&] {
+        Section("TooltipBox · PlainTooltip · RichTooltip · TooltipAnchorPosition", [=] {
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                 TooltipBox([] { PlainTooltip([] { Text("Favorilere ekle"); }); }, rememberTooltipState(), Modifier(), [&] {
                     IconButton([liked] { liked.set(!liked.get()); }) {
@@ -177,7 +177,7 @@ void DropdownSection(CallSite site) {
         auto fruit = remember([] { return mutableStateOf(std::string("Elma")); });
         auto searching = remember([] { return mutableStateOf(false); });
         auto query = remember([] { return mutableStateOf(std::string()); });
-        Section("ExposedDropdownMenuBox", [&] {
+        Section("ExposedDropdownMenuBox", [=] {
             ExposedDropdownMenuBox(open.get(), [open](bool v) { open.set(v); }, Modifier().fillMaxWidth()) {
                 TextField(fruit.get(), nullptr, Modifier().fillMaxWidth(),
                           label = "Meyve", trailingIcon = [&] { ExposedDropdownMenuDefaults::TrailingIcon(open.get()); },
@@ -251,7 +251,7 @@ void InteractionSection(CallSite site) {
         bool pressed = button.collectIsPressedAsState();
         float scale = animateFloatAsState(pressed ? 0.92f : 1.f, 120);
         bool cardHovered = card.collectIsHoveredAsState(), cardPressed = card.collectIsPressedAsState();
-        Section("InteractionSource · collectIsPressedAsState · collectIsDraggedAsState", [&] {
+        Section("InteractionSource · collectIsPressedAsState · collectIsDraggedAsState", [=] {
             Text("Bileşenler basmayı, fareyle üzerine gelmeyi, odağı ve sürüklemeyi bir MutableInteractionSource'a söyler; "
                  "ekran bunları durum olarak okur ya da tek tek dinler.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
@@ -341,7 +341,7 @@ void AnchoredDraggableSection(CallSite site) {
         auto spot = rememberAnchoredDraggableState(Spot::Start);
         auto scope = rememberCoroutineScope();
         auto lastAction = remember([] { return mutableStateOf(std::string()); });
-        Section("anchoredDraggable · AnchoredDraggableState", [&] {
+        Section("anchoredDraggable · AnchoredDraggableState", [=] {
             Text("Tutamak üç yerden birinde durur: yarı yoldan fazla sürüklenir ya da fırlatılırsa sonrakine, yoksa geri gider. "
                  "Satırlar sola kaydırılınca eylemleri açılır.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
@@ -378,7 +378,7 @@ void RippleSection(CallSite site) {
                 Text(label, Modifier().padding(0, 6, 0, 0), color = cs.onSurfaceVariant, textAlign = TextAlign::Center, style = typography().bodySmall);
             };
         };
-        Section("Ripple · indication · LocalIndication", [&] {
+        Section("Ripple · indication · LocalIndication", [=] {
             Text("Her tıklanabilirde Material dalgası var: basılan yerden köşelere yayılır, bırakınca söner. ripple() onu sınırsız, "
                  "yarıçaplı ya da renkli yapar; LocalIndication bir alt ağaç için değiştirir.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
@@ -427,7 +427,7 @@ void SemanticsSection(CallSite site) {
         const ColorScheme& cs = colorScheme();
         auto unread = remember([] { return mutableStateOf(3); });
         auto lastAction = remember([] { return mutableStateOf(std::string("—")); });
-        Section("Erişilebilirlik: merge · clearAndSet · hide · customActions · liveRegion", [&] {
+        Section("Erişilebilirlik: merge · clearAndSet · hide · customActions · liveRegion", [=] {
             Row(Modifier().fillMaxWidth().semantics({.mergeDescendants = true}),
                 horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                     Icon(Icons::Filled::Place, "Konum", tint = cs.primary);
@@ -516,7 +516,7 @@ void SelectableRowsSection(CallSite site) {
         auto choice = remember([] { return mutableStateOf(1); });
         auto notify = remember([] { return mutableStateOf(true); });
         static const char* const options[] = {"Sabah", "Öğle", "Akşam"};
-        Section("selectable · toggleable · selectableGroup · matchParentSize", [&] {
+        Section("selectable · toggleable · selectableGroup · matchParentSize", [=] {
             Column(Modifier().fillMaxWidth().selectableGroup()) {
                 for (int i = 0; i < 3; ++i)
                     Row(Modifier().fillMaxWidth().height(52).selectable(choice.get() == i, [choice, i] { choice.set(i); }, SemanticsRole::RadioButton)
@@ -555,7 +555,7 @@ void DatePickerSection(CallSite site) {
         auto format = [=](year_month_day d) {
             return std::format("{} {} {}", unsigned(d.day()), strings.months[unsigned(d.month()) - 1], int(d.year()));
         };
-        Section("DatePicker · DateRangePicker", [&] {
+        Section("DatePicker · DateRangePicker", [=] {
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(12)) {
                 Button([open] { open.set(true); }) {
                     Icon(Icons::Filled::DateRange, "", Modifier().size(18));
@@ -608,7 +608,7 @@ void TimePickerSection(CallSite site) {
         auto open = remember([] { return mutableStateOf(false); });
         auto picked = remember([] { return mutableStateOf(std::optional<std::pair<int, int>>()); });
         auto twelveHour = remember([] { return mutableStateOf(false); });
-        Section("TimePicker", [&] {
+        Section("TimePicker", [=] {
             Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                 Button([open] { open.set(true); }) {
                     Icon(Icons::Filled::Schedule, "", Modifier().size(18));
@@ -663,7 +663,7 @@ void DynamicColorSection(MutableState<ColorSource> source, CallSite site) {
         const ColorScheme& cs = colorScheme();
         const auto& system = LocalDynamicTonalPalette.current();
         const auto& wallpaper = LocalWallpaperTonalPalette.current();
-        Section("Dinamik renk (Material You)", [&] {
+        Section("Dinamik renk (Material You)", [=] {
             // Three sources, each its own API: which one is the app's (or its user's) choice.
             SingleChoiceSegmentedButtonRow(Modifier().fillMaxWidth(), [&] {
                 const std::pair<ColorSource, const char*> choices[] = {
@@ -715,7 +715,7 @@ void ImeNestedScrollSection(CallSite site) {
         const ColorScheme& cs = colorScheme();
         auto draft = remember([] { return mutableStateOf(std::string()); });
         auto& scroll = remember([] { return ScrollState(); });
-        Section("Modifier.imeNestedScroll", [&] {
+        Section("Modifier.imeNestedScroll", [=] {
             Column(Modifier().fillMaxWidth().height(220).background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12))) {
                 Column(Modifier().weight(1).fillMaxWidth().imeNestedScroll().verticalScroll(scroll, true, true).padding(12),
                        verticalArrangement = Arrangement::spacedBy(6)) {
@@ -748,7 +748,7 @@ void FrameRateSection(CallSite site) {
                         : choice.get() == 2 ? Modifier().preferredFrameRate(FrameRateCategory::Normal)
                         : choice.get() == 3 ? Modifier().preferredFrameRate(FrameRateCategory::High)
                                             : Modifier();
-        Section("Modifier.preferredFrameRate", [&] {
+        Section("Modifier.preferredFrameRate", [=] {
             SingleChoiceSegmentedButtonRow(Modifier().fillMaxWidth(), [&] {
                 for (int i = 0; i < 4; ++i) SegmentedButton(choice.get() == i, [choice, i] { choice.set(i); }, [&, i] { Text(labels[i]); });
             });
@@ -765,7 +765,7 @@ void FrameRateSection(CallSite site) {
 void InsetsSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
-        Section("WindowInsets (dp: sol, üst, sağ, alt)", [&] {
+        Section("WindowInsets (dp: sol, üst, sağ, alt)", [=] {
             const std::pair<const char*, WindowInsets> kinds[] = {
                 {"statusBars", WindowInsets::statusBars()},   {"navigationBars", WindowInsets::navigationBars()},
                 {"ime", WindowInsets::ime()},                 {"displayCutout", WindowInsets::displayCutout()},

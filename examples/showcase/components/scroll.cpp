@@ -44,7 +44,7 @@ void FlingSection(CallSite site) {
                             })) {};
                 };
         };
-        Section("animateDecay · VelocityTracker · spring(initialVelocity)", [&] {
+        Section("animateDecay · VelocityTracker · spring(initialVelocity)", [=] {
             Text("Mor topu fırlatın: bırakış hızıyla kayar, yavaşlar, kenarda durur. Diğerini çekip bırakın: hızını taşıyarak "
                  "yaylanır ve ortaya döner.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
@@ -71,7 +71,7 @@ void DrawersSection(CallSite site) {
                 });
         };
         auto frame = Modifier().fillMaxWidth().height(200).border(1, cs.outlineVariant, 12).clip(RoundedCornerShape(12));
-        Section("PermanentNavigationDrawer · DismissibleNavigationDrawer", [&] {
+        Section("PermanentNavigationDrawer · DismissibleNavigationDrawer", [=] {
             PermanentNavigationDrawer([&] { PermanentDrawerSheet(Modifier().width(170)) { items(false); }; }, frame) {
                 Box(Modifier().fillMaxSize().background(cs.surfaceContainer), Alignment::Center) { Text(pages[page.get()]); };
             };
@@ -101,7 +101,7 @@ void ScrollbarSection(CallSite site) {
         auto column = rememberScrollState();
         auto row = rememberScrollState();
         auto list = rememberLazyListState();
-        Section("VerticalScrollbar · HorizontalScrollbar", [&] {
+        Section("VerticalScrollbar · HorizontalScrollbar", [=] {
             Text("Başparmağı sürükleyin, raya tıklayınca bir sayfa kayar; fare üzerindeyken koyulaşır. Liste 1000 satır: "
                  "boyu görünen satırlardan tahmin edilir.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
@@ -163,7 +163,7 @@ void PredictiveBackSection(CallSite site) {
             last.set("kapandı");
             open.set(false);
         });
-        Section("PredictiveBackHandler", [&] {
+        Section("PredictiveBackHandler", [=] {
             Text("Paneli açın, sonra ekranın kenarından geri hareketini yapın: panel parmağı izler, bırakınca kapanır, "
                  "vazgeçince yerine döner (Android 14+). Panel kapalıyken geri hareketi uygulamadan çıkar.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
@@ -203,7 +203,7 @@ void PointerPassSection(CallSite site) {
         auto locked = remember([] { return mutableStateOf(false); });
         auto clicks = remember([] { return mutableStateOf(0); });
         auto seen = remember([] { return mutableStateOf(std::string("—")); });
-        Section("PointerEventPass (Initial · Main · Final)", [&] {
+        Section("PointerEventPass (Initial · Main · Final)", [=] {
             Text("Kilitliyken dış kutu basışı Initial geçişinde, içtekilerden önce tüketir: düğme tepki vermez. "
                  "Final geçişinde basışı bir şeyin alıp almadığını görür.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
@@ -237,7 +237,7 @@ void ScrollableSection(CallSite site) {
             angle.set(std::clamp(angle.peek() + delta, 0.f, 270.f));
             return angle.peek() == 0.f || angle.peek() == 270.f ? 0.f : delta;  // at the ends the page takes it
         });
-        Section("Modifier.scrollable · rotate · scale", [&] {
+        Section("Modifier.scrollable · rotate · scale", [=] {
             Row(Modifier().fillMaxWidth().height(96).scrollable(knob, Orientation::Horizontal),
                 horizontalArrangement = Arrangement::spacedBy(24), verticalAlignment = Alignment::CenterVertically) {
                     Box(Modifier().size(72).rotate(angle.get() - 135).background(cs.secondaryContainer, CircleShape), Alignment::TopCenter) { Box(Modifier().padding(0, 6, 0, 0).size(6, 18).background(cs.primary, 3)) {}; };
@@ -304,7 +304,7 @@ void OverscrollSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
         auto& offset = remember([] { return std::shared_ptr<OverscrollEffect>(std::make_shared<OffsetOverscroll>()); });
-        Section("OverscrollEffect · rememberOverscrollEffect", [&] {
+        Section("OverscrollEffect · rememberOverscrollEffect", [=] {
             auto row = [&](const char* title, std::optional<std::shared_ptr<OverscrollEffect>> effect) {
                 Text(title, style = typography().labelLarge);
                 LazyRow(Modifier().fillMaxWidth().height(48).background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12)),
@@ -332,7 +332,7 @@ void BringIntoViewSection(CallSite site) {
         auto focused = remember([] { return mutableStateOf(-1); });
         auto& requesters = remember([] { return std::vector<FocusRequester>(20); });
         BringIntoViewSpec third{[](float offset, float size, float container) { return offset - (container - size) * 0.3f; }};
-        Section("LocalBringIntoViewSpec · BringIntoViewSpec", [&] {
+        Section("LocalBringIntoViewSpec · BringIntoViewSpec", [=] {
             CompositionLocalProvider({LocalBringIntoViewSpec.provides(pinned.get() ? third : BringIntoViewSpec{})}, [&] {
                 LazyRow(Modifier().fillMaxWidth().height(72), horizontalArrangement = Arrangement::spacedBy(8)) {
                             items(20, [=, reqs = requesters, on = cs.primary, onText = cs.onPrimary, off = cs.secondaryContainer,
@@ -377,7 +377,7 @@ void NestedScrollSection(CallSite site) {
         auto mailSearch = rememberSearchBarState();
         auto mailQuery = rememberTextFieldState();
         auto caption = [&](const char* text) { Text(text, color = cs.onSurfaceVariant, style = typography().bodyMedium); };
-        Section("İç içe kaydırma (nestedScroll)", [&] {
+        Section("İç içe kaydırma (nestedScroll)", [=] {
             caption("İçteki liste sonuna gelince sayfa kaymaya devam eder:");
             Column(Modifier().fillMaxWidth().height(150).background(cs.surfaceContainerHighest, 12).verticalScroll(inner).padding(16, 6)) {
                        for (int i = 1; i <= 12; ++i) Text(std::format("İç satır {}", i), Modifier().padding(0, 6));
@@ -575,7 +575,7 @@ void PullToRefreshSection(CallSite site) {
                 refreshing.set(false);
             });
         };
-        Section("Modifier.pullToRefresh · IndicatorBox", [&] {
+        Section("Modifier.pullToRefresh · IndicatorBox", [=] {
             Text("Listeyi en üstteyken aşağı çekin: eşikten sonra gösterge yavaşlar, eşiği geçip bırakınca yenilenir.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8}, [&] {

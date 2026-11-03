@@ -7,7 +7,7 @@ void AnimateItemSection(CallSite site) {
         auto tasks = remember([] { return mutableStateListOf<int>({1, 2, 3, 4, 5}); });
         auto nextTask = remember([] { return std::make_shared<int>(6); });
         auto shuffles = remember([] { return std::make_shared<unsigned>(1); });
-        Section("animateItem · SwipeToDismissBox", [&] {
+        Section("animateItem · SwipeToDismissBox", [=] {
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 FilledTonalButton([tasks, shuffles] {
                     tasks.update([&](std::vector<int>& v) {
@@ -35,7 +35,7 @@ void ListItemSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
         auto notifications = remember([] { return mutableStateOf(true); });
-        Section("ListItem ve Badge", [&] {
+        Section("ListItem ve Badge", [=] {
             OutlinedCard(Modifier().fillMaxWidth().clip(RoundedCornerShape(12))) {
                 ListItem({.headline = [] { Text("Tek satır"); },
                           .trailing = [&] {
@@ -93,7 +93,7 @@ void DialogsSection(NavController nav, CallSite site) {
         auto formatMenu = remember([] { return mutableStateOf(false); });
         auto format = remember([] { return mutableStateOf(std::array<bool, 2>{true, false}); });  // bold, italic
         auto alignment = remember([] { return mutableStateOf(0); });
-        Section("Dialog, menü ve alt sayfa", [&] {
+        Section("Dialog, menü ve alt sayfa", [=] {
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 FilledTonalButton([dialog] { dialog.set(true); }) { Text("Dialog"); };
                 FilledTonalButton([basicDialog] { basicDialog.set(true); }) { Text("BasicAlertDialog"); };
@@ -213,7 +213,7 @@ void CardsSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
         auto cardTaps = remember([] { return mutableStateOf(0); });
-        Section("Kartlar ve BottomAppBar", [&] {
+        Section("Kartlar ve BottomAppBar", [=] {
             // Card(onClick): the ripple keeps to the card's corners.
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
                 Card([cardTaps] { cardTaps.set(cardTaps.peek() + 1); }, Modifier().weight(1).height(72)) { Text(std::format("Card · {}", cardTaps.get()), Modifier().padding(12)); };

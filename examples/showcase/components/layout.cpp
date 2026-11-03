@@ -17,7 +17,7 @@ void ListDetailSection(CallSite site) {
         static constexpr const char* cities[] = {"İstanbul", "Ankara", "İzmir", "Bursa", "Antalya", "Trabzon"};
         static constexpr const char* notes[] = {"İki kıtada bir şehir", "Başkent", "Ege'nin incisi", "Yeşil Bursa", "Turizmin merkezi",
                                                 "Karadeniz'in kıyısında"};
-        Section("ListDetailPaneScaffold", [&] {
+        Section("ListDetailPaneScaffold", [=] {
             Text("Dikey telefonda liste ya da ayrıntı (geri tuşu listeye döner); yatayda ya da geniş pencerede yan yana, aradaki "
                  "tutamaçla genişlikleri sürüklenir.",
                  color = cs.onSurfaceVariant, style = typography().bodySmall);
@@ -60,7 +60,7 @@ void SupportingPaneSection(CallSite site) {
     composable(site, [=] {
         auto navigator = rememberSupportingPaneScaffoldNavigator<int>();
         const ColorScheme& cs = colorScheme();
-        Section("SupportingPaneScaffold", [&] {
+        Section("SupportingPaneScaffold", [=] {
             Text("Dikey telefonda ana bölme; \"İlgili\" destek bölmesini kaydırarak getirir (geri tuşu döner). Geniş pencerede destek bölmesi sonda.",
                  color = cs.onSurfaceVariant, style = typography().bodySmall);
             Box(Modifier().fillMaxWidth().height(240).background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12))) {
@@ -120,7 +120,7 @@ void LayoutInfoSection(CallSite site) {
             co_return;
         });
         auto [first, last] = shown.get();
-        Section("LazyListState.layoutInfo · contentType", [&] {
+        Section("LazyListState.layoutInfo · contentType", [=] {
             Text("Liste görünen öğelerini layoutInfo ile söyler; sona yaklaşınca 20 öğe daha yüklenir. derivedStateOf yalnızca "
                  "cevabı değişince yeniden kompoze ettirir.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
@@ -152,7 +152,7 @@ void TextMeasureSection(CallSite site) {
         auto expanded = remember([] { return mutableStateOf(false); });
         auto cut = remember([] { return mutableStateOf(false); });
         Color bar = cs.primary, label = cs.onSurface, faint = cs.onSurfaceVariant;
-        Section("rememberTextMeasurer · drawText · onTextLayout", [&] {
+        Section("rememberTextMeasurer · drawText · onTextLayout", [=] {
             Canvas(Modifier().fillMaxWidth().height(170), [measurer, bar, label, faint](DrawScope& d) {
                 static const std::pair<const char*, int> months[] = {{"Oca", 42}, {"Şub", 58}, {"Mar", 35}, {"Nis", 71}, {"May", 64}, {"Haz", 88}};
                 float w = d.size().width, slot = w / 6, top = 22, bottom = d.size().height - 22, h = bottom - top;
@@ -187,7 +187,7 @@ void PositionSection(CallSite site) {
         auto where = remember([] { return mutableStateOf(LayoutCoordinates()); });
         auto placedTimes = remember([] { return std::make_shared<int>(0); });
         auto placed = remember([] { return mutableStateOf(0); });
-        Section("onGloballyPositioned · onPlaced · LayoutCoordinates", [&] {
+        Section("onGloballyPositioned · onPlaced · LayoutCoordinates", [=] {
             Column(Modifier().fillMaxWidth().background(cs.tertiaryContainer, 16).padding(16)
                        .onGloballyPositioned([where](const LayoutCoordinates& now) { where.set(now); })
                        .onPlaced([placedTimes, placed](const LayoutCoordinates&) { placed.set(++*placedTimes); }),
@@ -220,7 +220,7 @@ void SnapRowSection(CallSite site) {
         auto seen = remember([] { return mutableStateOf(0); });
         // onLayoutRectChanged: where the first card is, told once the row stops moving.
         auto firstCard = remember([] { return mutableStateOf(std::string("—")); });
-        Section("LazyRow · rememberSnapFlingBehavior · onFirstVisible · onLayoutRectChanged", [&] {
+        Section("LazyRow · rememberSnapFlingBehavior · onFirstVisible · onLayoutRectChanged", [=] {
             Text("Fırlatın: liste, fırlatmanın varacağı yere en yakın kartı ortaya getirerek durur.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             Text(std::format("Görülen kart (tamamı yarım saniye görünen): {} / 20", seen.get()), style = typography().labelLarge);
@@ -253,7 +253,7 @@ void CarouselSection(CallSite site) {
         auto browse = rememberCarouselState(0, [] { return 8; });
         auto free = rememberCarouselState(0, [] { return 12; });
         auto hero = rememberCarouselState(0, [] { return 8; });
-        Section("Carousel (HorizontalMultiBrowseCarousel · HorizontalUncontainedCarousel · HorizontalCenteredHeroCarousel)", [&] {
+        Section("Carousel (HorizontalMultiBrowseCarousel · HorizontalUncontainedCarousel · HorizontalCenteredHeroCarousel)", [=] {
             Text(std::format("Kaydırın: öğeler ilerledikçe büyüyüp küçülür, bırakınca bir öğeye oturur · şu an {}. öğe",
                              browse.currentItem() + 1),
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
@@ -290,7 +290,7 @@ void CarouselSection(CallSite site) {
 // Three rows of tiles that scroll sideways, composed column by column.
 void HorizontalGridSection(CallSite site) {
     composable(site, [=] {
-        Section("LazyHorizontalGrid · LazyHorizontalStaggeredGrid", [&] {
+        Section("LazyHorizontalGrid · LazyHorizontalStaggeredGrid", [=] {
             LazyHorizontalGrid(GridCells::Fixed(3), Modifier().fillMaxWidth().height(180), verticalArrangement = Arrangement::spacedBy(6), horizontalArrangement = Arrangement::spacedBy(6)) {
                                    items(300, [](int i) {
                                        Box(Modifier().width(i % 7 == 0 ? 120 : 72).fillMaxHeight().background(hueColor(i), 12),
@@ -317,7 +317,7 @@ void PagerSection(CallSite site) {
         auto expanded = remember([] { return mutableStateOf(false); });
         const ColorScheme& cs = colorScheme();
         int current = pager.currentPage();
-        Section("HorizontalPager · PageSize · animateContentSize · BoxWithConstraints", [&] {
+        Section("HorizontalPager · PageSize · animateContentSize · BoxWithConstraints", [=] {
             HorizontalPager(pager, Modifier().fillMaxWidth().height(150), pageSpacing = 12) [](int page) {
                 Box(Modifier().fillMaxSize().background(
                         Brush::linearGradient({hueColor(page * 1700 + 300), hueColor(page * 1700 + 900)}), RoundedCornerShape(20)),
@@ -420,7 +420,7 @@ void ZIndexSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
         auto stack = remember([] { return mutableStateOf(std::vector<int>{0, 1, 2}); });  // bottom to top
-        Section("Modifier.zIndex", [&] {
+        Section("Modifier.zIndex", [=] {
             Text("Üst üste üç kart; her birinin zIndex'i yığındaki yeri. Dokunduğun en üste çıkar, diğerleri sırasını korur; "
                  "dokunuşu da en üstteki alır.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
@@ -463,7 +463,7 @@ void FlexBoxSection(CallSite site) {
         auto wrap = remember([] { return mutableStateOf(true); });
         auto baseline = remember([] { return mutableStateOf(false); });
         const ColorScheme& cs = colorScheme();
-        Section("FlexBox · FlexConfig (grow, shrink, basis, order)", [&] {
+        Section("FlexBox · FlexConfig (grow, shrink, basis, order)", [=] {
             const char* names[] = {"Start", "Center", "SpaceBetween", "SpaceEvenly"};
             const FlexJustifyContent values[] = {FlexJustifyContent::Start, FlexJustifyContent::Center, FlexJustifyContent::SpaceBetween,
                                                  FlexJustifyContent::SpaceEvenly};
@@ -500,7 +500,7 @@ void GridSection(CallSite site) {
         auto byColumn = remember([] { return mutableStateOf(false); });
         auto gaps = remember([] { return mutableStateOf(true); });
         const ColorScheme& cs = colorScheme();
-        Section("Grid · gridItem (satır, sütun, yayılma, alan)", [&] {
+        Section("Grid · gridItem (satır, sütun, yayılma, alan)", [=] {
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8}, [&] {
                 FilterChip(byColumn.get(), [byColumn] { byColumn.set(!byColumn.get()); }, [] { Text("Sütun akışı"); });
                 FilterChip(gaps.get(), [gaps] { gaps.set(!gaps.get()); }, [] { Text("Boşluk 8 dp"); });
@@ -534,7 +534,7 @@ void LayoutSection(CallSite site) {
         auto extra = remember([] { return mutableStateOf(0); });  // how much longer the SubcomposeLayout title is
         auto selected = remember([] { return mutableStateOf(0); });
         const ColorScheme& cs = colorScheme();
-        Section("Layout · IntrinsicSize · FlowRow · updateTransition", [&] {
+        Section("Layout · IntrinsicSize · FlowRow · updateTransition", [=] {
             // Alignment lines: texts of different sizes and a button's label on one baseline.
             auto caption = [](const char* text) { Text(text, color = colorScheme().onSurfaceVariant, style = typography().bodyMedium); };
             caption("alignByBaseline: farklı boyutlarda metinler ve düğme etiketi aynı taban çizgisinde.");

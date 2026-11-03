@@ -23,7 +23,7 @@ void DrawingSection(CallSite site) {
         auto touch = remember([] { return mutableStateOf(Offset{-100, -100}); });
         auto clicks = remember([] { return mutableStateOf(std::array<int, 3>{}); });
 
-        Section("Çizim ve hareket", [&] {
+        Section("Çizim ve hareket", [=] {
             Row(Modifier().fillMaxWidth(),
                 horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                     // A donut chart: pie slices (filled arcs) with a hole on top.

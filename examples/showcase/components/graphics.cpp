@@ -10,7 +10,7 @@ void ProgressSection(CallSite site) {
         auto right = remember([] { return mutableStateOf(false); });
         float x = animateFloatAsState(right.get() ? 1.f : 0.f,
                                       spring(Spring::DampingRatioHighBouncy, Spring::StiffnessLow));
-        Section("İlerleme ve animasyon", [&] {
+        Section("İlerleme ve animasyon", [=] {
             Row(Modifier().fillMaxWidth(),
                 horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                     CircularProgressIndicator();
@@ -73,7 +73,7 @@ void AnimationsSection(CallSite site) {
         auto nextRow = remember([] { return mutableStateOf(3); });
         auto scope = rememberCoroutineScope();
         const ColorScheme& cs = colorScheme();
-        Section("AnimatedVisibility · AnimatedContent · Crossfade", [&] {
+        Section("AnimatedVisibility · AnimatedContent · Crossfade", [=] {
             Row(Modifier().fillMaxWidth(),
                 horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
                     Button([expanded] { expanded.set(!expanded.get()); }) { Text(expanded.get() ? "Gizle" : "Detaylar"); };
@@ -226,7 +226,7 @@ void AsyncImageSection(CallSite site) {
                 [] { CircularProgressIndicator(Modifier().size(24)); });
         };
         AsyncImageOptions options{.placeholder = placeholder, .contentScale = ContentScale::Crop, .crossfadeMillis = 300};
-        Section("AsyncImage · JPEG · WebP · ağ", [&] {
+        Section("AsyncImage · JPEG · WebP · ağ", [=] {
             Text("Resimler arka planda yüklenip çözülür: masaüstünde libjpeg-turbo, libwebp ve libcurl, Android'de "
                  "BitmapFactory, web'de tarayıcı, Windows'ta WIC. Gelene kadar yer tutucu, sonra geçişle belirir. "
                  "Büyük resim kutusunun boyutunda çözülür; yüklenenler bellekte, indirilenler diskte kalır "
@@ -272,7 +272,7 @@ void ImagesSection(CallSite site) {
             return ImageBitmap::fromPixels(64, 64, std::move(px));
         });
         const ColorScheme& cs = colorScheme();
-        Section("Image, Shape, clip · Painter", [&] {
+        Section("Image, Shape, clip · Painter", [=] {
             Image(photo, "Manzara", Modifier().fillMaxWidth().height(150).clip(RoundedCornerShape(16)),
                   ContentScale::Crop);
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::SpaceBetween) {
@@ -394,7 +394,7 @@ void MaterialShapesSection(CallSite site) {
             size_t n = cycle.size();
             return std::make_shared<Morph>(cycle[(size_t(i) + n - 1) % n](), cycle[size_t(i) % n]());
         });
-        Section("MaterialShapes · Morph", [&] {
+        Section("MaterialShapes · Morph", [=] {
             Text("Material 3 Expressive'in 35 şekli; birine dokunun, adı görünsün. Büyük şekle dokununca sıradakine dönüşür (Morph).",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
@@ -429,7 +429,7 @@ void ShapesSection(CallSite site) {
         static const ShapeOutline triangle{{{0.5f, 0}, {1, 1}, {0, 1}}};
         const ColorScheme& cs = colorScheme();
         auto taps = remember([] { return mutableStateOf(0); });
-        Section("Şekiller (OutlineShape)", [&] {
+        Section("Şekiller (OutlineShape)", [=] {
             // dropShadow / innerShadow: a soft shadow under a card, a glow (spread) in a gradient
             // (a brush), and a shadow inside a well, as if its edge cast it.
             Row(Modifier().fillMaxWidth().padding(0, 8), horizontalArrangement = Arrangement::SpaceEvenly) {
@@ -500,7 +500,7 @@ void SharedElementSection(CallSite site) {
         auto selected = remember([] { return mutableStateOf(-1); });
         static const Color palette[] = {Color::hex(0xB8705F), Color::hex(0x6C9F6A), Color::hex(0x5F82B8)};
         static const char* names[] = {"Kızıl kayalar", "Yeşil vadi", "Mavi göl"};
-        Section("SharedTransitionLayout · sharedElement · sharedBounds", [&] {
+        Section("SharedTransitionLayout · sharedElement · sharedBounds", [=] {
             SharedTransitionLayout(Modifier().fillMaxWidth().height(340), [&](const SharedTransitionScope& shared) {
                 AnimatedContent<int>(selected.get(), [&](const AnimatedContentScope& scope, const int& item) {
                     auto photo = [=](int i) { return shared.rememberSharedContentState("photo" + std::to_string(i)); };
@@ -538,7 +538,7 @@ void SharedElementSection(CallSite site) {
 void BlendModeSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
-        Section("BlendMode · CompositingStrategy.Offscreen", [&] {
+        Section("BlendMode · CompositingStrategy.Offscreen", [=] {
             Text("Liste kendi katmanında: üstte ve altta bir degradeyle (DstIn) kaybolur. Sağdaki kartta DstOut bir delik açar.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             Row(Modifier().fillMaxWidth().height(180), horizontalArrangement = Arrangement::spacedBy(12)) {
@@ -580,7 +580,7 @@ void TileModeSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
         ImageBitmap photo = imageResource("images/landscape.png");
-        Section("Brush · TileMode · Shader", [&] {
+        Section("Brush · TileMode · Shader", [=] {
             const std::pair<TileMode, const char*> modes[] = {
                 {TileMode::Clamp, "Clamp"}, {TileMode::Repeated, "Repeated"}, {TileMode::Mirror, "Mirror"}, {TileMode::Decal, "Decal"}};
             for (const auto& [mode, name] : modes)
@@ -623,7 +623,7 @@ void ColorSpaceSection(CallSite site) {
         const ColorScheme& cs = colorScheme();
         auto warm = remember([] { return mutableStateOf(false); });
         Color animated = animateColorAsState(warm.get() ? Color::hex(0xFF6D00) : Color::hex(0x2962FF), tween(1200));
-        Section("Color · ColorSpace · Oklab", [&] {
+        Section("Color · ColorSpace · Oklab", [=] {
             auto strip = [=](const char* name, const std::function<Color(float)>& at) {
                 Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
                     Text(name, Modifier().width(104), style = typography().labelLarge);
@@ -666,7 +666,7 @@ void CanvasSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();
         ImageBitmap photo = imageResource("images/landscape.png");
-        Section("Canvas · Paint · drawVertices", [&] {
+        Section("Canvas · Paint · drawVertices", [=] {
             Row(Modifier().fillMaxWidth().height(96), horizontalArrangement = Arrangement::spacedBy(12)) {
                 Canvas(Modifier().weight(1).fillMaxHeight(), [primary = cs.primary, tertiary = cs.tertiary](DrawScope& d) {
                     Size s = d.size();
@@ -812,7 +812,7 @@ void BlurSection(CallSite site) {
         auto radius = remember([] { return mutableStateOf(8.f); });
         auto unbounded = remember([] { return mutableStateOf(false); });
         ImageBitmap photo = imageResource("images/landscape.png");
-        Section("Modifier.blur", [&] {
+        Section("Modifier.blur", [=] {
             Text(std::format("Yarıçap: {:.0f} dp", radius.get()), color = cs.onSurfaceVariant, style = typography().bodyMedium);
             Slider(radius.get(), [radius](float v) { radius.set(v); }, Modifier().fillMaxWidth(), valueFrom = 0, valueTo = 32);
             Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
@@ -905,7 +905,7 @@ void ColorVectorSection(CallSite site) {
             });
             return b.build();
         }();
-        Section("ImageVector::Builder · renkli vektörler", [&] {
+        Section("ImageVector::Builder · renkli vektörler", [=] {
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
                 Image(VectorPainter(badge), "Onaylı");
                 Image(VectorPainter(sun), "Güneş");
