@@ -638,7 +638,7 @@ void DatePickerDialog(std::function<void()> onDismissRequest, const Content& con
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     // 360 dp wide, as Compose's (not the platform's dialog width, 48 dp in from each side).
-    Dialog(std::move(onDismissRequest), [&] {
+    detail::Dialog(std::move(onDismissRequest), [&] {
         detail::Column(Modifier().widthIn(0, 360).fillMaxWidth().background(cs.surfaceContainerHigh, 28).padding(0, 0, 0, 12), [&] {
             content();
             detail::Row(Modifier().fillMaxWidth().padding(12, 8, 12, 0), {.horizontalArrangement = Arrangement::spacedBy(8, Arrangement::Kind::End)},

@@ -67,7 +67,7 @@ void ShowcaseApp() {
     // The content lambdas below run while composing, so they capture by reference;
     // event handlers capture by value.
     auto drawerContent = [&] {
-        ModalDrawerSheet(Modifier(), [&] {
+        ModalDrawerSheet(Modifier()) {
             Text("Kompoz", Modifier().padding(16, 8, 16, 16), style = typography().titleLarge);
             for (int i = 0; i < 4; ++i) {
                 const Destination& dest = destinations[i];
@@ -76,8 +76,8 @@ void ShowcaseApp() {
                                          goTab(i);
                                          closeDrawer();
                                      },
-                                     [&] { Icon(*dest.icon, dest.label); },
-                                     i == 3 ? Content([] { Badge(Modifier(), [] { Text("Yeni"); }); }) : Content());
+                                     icon = [&] { Icon(*dest.icon, dest.label); },
+                                     badge = i == 3 ? Content([] { Badge(Modifier(), [] { Text("Yeni"); }); }) : Content());
             }
             HorizontalDivider(Modifier().padding(16, 8));
             NavigationDrawerItem([] { Text("Hakkında"); }, false,
@@ -85,8 +85,8 @@ void ShowcaseApp() {
                                      about.set(true);
                                      closeDrawer();
                                  },
-                                 [] { Icon(Icons::Filled::Info, "Hakkında"); });
-        });
+                                 icon = [] { Icon(Icons::Filled::Info, "Hakkında"); });
+        };
     };
 
     auto topBar = [&] {
@@ -107,27 +107,27 @@ void ShowcaseApp() {
                         };
                     Box() {  // the menu opens below its anchor, this Box
                         IconButton([overflow] { overflow.set(true); }) { Icon(Icons::Filled::MoreVert, "Diğer seçenekler"); };
-                        DropdownMenu(overflow.get(), [overflow] { overflow.set(false); }, [&] {
+                        DropdownMenu(overflow.get(), [overflow] { overflow.set(false); }) {
                             DropdownMenuItem([] { Text("Hakkında"); },
                                              [overflow, about] {
                                                  overflow.set(false);
                                                  about.set(true);
                                              },
-                                             {.leadingIcon = [] { Icon(Icons::Filled::Info, "Hakkında"); }});
+                                             leadingIcon = [] { Icon(Icons::Filled::Info, "Hakkında"); });
                             DropdownMenuItem([] { Text("Material bileşenleri"); },
                                              [overflow, goTab] {
                                                  overflow.set(false);
                                                  goTab(3);
                                              },
-                                             {.leadingIcon = [] { Icon(Icons::Filled::CheckCircle, "Material"); }});
+                                             leadingIcon = [] { Icon(Icons::Filled::CheckCircle, "Material"); });
                             // LocalLayoutDirection: rows from the right, Start is the right, horizontal lists start there.
                             DropdownMenuItem([rightToLeft] { Text(rightToLeft.get() ? "Soldan sağa (LTR)" : "Sağdan sola (RTL)"); },
                                              [overflow, rightToLeft] {
                                                  overflow.set(false);
                                                  rightToLeft.set(!rightToLeft.get());
                                              },
-                                             {.leadingIcon = [] { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Yön"); }});
-                        });
+                                             leadingIcon = [] { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Yön"); });
+                        };
                     };
                 },
             scrollBehavior = barScroll);
@@ -177,16 +177,16 @@ void ShowcaseApp() {
         }, {.transition = fade, .popTransition = fade});
         if (about.get())
             AlertDialog([about] { about.set(false); },
-                        {.confirmButton = [about] { TextButton([about] { about.set(false); }) { Text("Tamam"); }; },
-                         .icon = [] { Icon(Icons::Filled::Info, "Bilgi"); },
-                         .title = [] { Text("Kompoz"); },
-                         .text = [] {
-                             Text("C++20 ile Jetpack Compose tarzı, çok platformlu bir arayüz kütüphanesi: Linux, Windows, Android "
-                                  "ve web. Apache 2.0 lisanslı.\n\n"
-                                  "İçindekiler: Noto Sans fontları (SIL OFL 1.1), FreeType (portions of this software are "
-                                  "copyright © 2026 The FreeType Project, www.freetype.org), HarfBuzz (MIT), libpng ve zlib. "
-                                  "Lisans metinleri uygulamanın licenses klasöründe.");
-                         }});
+                        confirmButton = [about] { TextButton([about] { about.set(false); }) { Text("Tamam"); }; },
+                        icon = [] { Icon(Icons::Filled::Info, "Bilgi"); },
+                        title = [] { Text("Kompoz"); },
+                        text = [] {
+                            Text("C++20 ile Jetpack Compose tarzı, çok platformlu bir arayüz kütüphanesi: Linux, Windows, Android "
+                                 "ve web. Apache 2.0 lisanslı.\n\n"
+                                 "İçindekiler: Noto Sans fontları (SIL OFL 1.1), FreeType (portions of this software are "
+                                 "copyright © 2026 The FreeType Project, www.freetype.org), HarfBuzz (MIT), libpng ve zlib. "
+                                 "Lisans metinleri uygulamanın licenses klasöründe.");
+                        });
     };
 
     // The colors from where the user chose, the app's own where that has none.
@@ -202,7 +202,7 @@ void ShowcaseApp() {
                                   LocalShowRecompositions.provides(showRecompositions.get()),
                                   LocalLayoutDirection.provides(rightToLeft.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
             auto app = [&] {
-                ModalNavigationDrawer(drawerContent, drawer, [&] {
+                ModalNavigationDrawer(drawerContent, drawer) {
                     // The tabs where they suit the window (currentWindowAdaptiveInfo), as M3
                     // Expressive's: a short bar on a phone (its labels beside the icons when it lies
                     // on its side), a wide rail on a wider window.
@@ -225,7 +225,7 @@ void ShowcaseApp() {
                                          });
                                      }) [=](PaddingValues padding) { screen(padding); };
                         });
-                });
+                };
             };
 #ifdef __ANDROID__
             app();

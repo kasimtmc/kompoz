@@ -99,10 +99,10 @@ nav.navigate("home", {.popUpTo = "login", .inclusive = true});
 void BottomBar(NavController nav) {
     auto entry = nav.currentBackStackEntryAsState();
     std::string route = entry ? entry->route() : "";
-    NavigationBar(Modifier(), [&] {
+    NavigationBar(Modifier()) {
         NavigationBarItem(route == "home", [nav] { nav.navigate("home", {.launchSingleTop = true}); }, Icons::Filled::Home, "Home");
         NavigationBarItem(route == "search", [nav] { nav.navigate("search", {.launchSingleTop = true}); }, Icons::Filled::Search, "Search");
-    });
+    };
 }
 ```
 

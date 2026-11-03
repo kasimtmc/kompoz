@@ -64,10 +64,10 @@ void ButtonsSection(CallSite site) {
                                       SplitButtonDefaults::TrailingButton(saveMenu.get(), [saveMenu](bool on) { saveMenu.set(on); },
                                                                           [&] { SplitButtonDefaults::TrailingButtonIcon(saveMenu.get()); });
                                   });
-                DropdownMenu(saveMenu.get(), [saveMenu] { saveMenu.set(false); }, [&] {
+                DropdownMenu(saveMenu.get(), [saveMenu] { saveMenu.set(false); }) {
                     DropdownMenuItem([] { Text("Farklı kaydet"); }, [saveMenu] { saveMenu.set(false); });
                     DropdownMenuItem([] { Text("Taslak olarak kaydet"); }, [saveMenu] { saveMenu.set(false); });
-                });
+                };
             };
             FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 const auto& on = styles.get();

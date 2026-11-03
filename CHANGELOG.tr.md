@@ -666,6 +666,15 @@
   lambda: `Scaffold(topBar = …) [=](PaddingValues padding) { … };`, o da kendine ait bir kapsamda çalışıyor. Genişletilmiş
   bir FAB'ın `expanded`'ı, Compose'daki gibi, değiştiricisinden sonra geliyor; kayan araç çubuğunun renkleri
   `floatingToolbarColors =` ile veriliyor.
+- **Gezinme, iletişim kutuları, menüler ve alt sayfalar için adlı argümanlar**: `NavigationBar`, `ShortNavigationBar`,
+  `NavigationRail`, `WideNavigationRail`, `ModalWideNavigationRail` ve öğeleri, gezinme çekmeceleri ve çekmece sayfaları,
+  `NavigationDrawerItem`, `Dialog`, `AlertDialog`, `BasicAlertDialog`, `DropdownMenu`, `DropdownMenuPopup`,
+  `DropdownMenuGroup`, `DropdownMenuItem`, `ExposedDropdownMenuBox`, `ExposedDropdownMenu`, `ModalBottomSheet` ve
+  `BottomSheetScaffold` bunları Compose'un sırasıyla alıyor: `AlertDialog(close, confirmButton = …, title = …)`,
+  `DropdownMenu(open, close) { DropdownMenuItem(text = …, onClick = …); };`,
+  `BottomSheetScaffold(sheetContent, sheetPeekHeight = 128) [=](PaddingValues padding) { … };`. İçerikleri kendine ait bir
+  kapsamda çalışan bir blok. Bir ray öğesinin etiketi, Compose'daki gibi, değiştiricisinden sonra geliyor; bir iletişim
+  kutusunun özellikleri `properties = DialogProperties{…}` ile veriliyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

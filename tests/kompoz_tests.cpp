@@ -2499,7 +2499,7 @@ TEST(overlays_fields_and_indicators_animate_composing_around_them_only_as_they_t
         bool o = open.get();
         Column([=, &blink, &rail, &scrolled, &tip, &wide] {
             Box([=] {
-                DropdownMenu(o, [&open] { open.set(false); }, [&] {
+                DropdownMenu(o, [&open] { open.set(false); }, [=] {
                     Text("Seçenek");
                     DropdownMenuItem(mark.get(), [&mark](bool c) { mark.set(c); }, [] { Text("İşaretli"); });
                 });
@@ -2521,8 +2521,8 @@ TEST(overlays_fields_and_indicators_animate_composing_around_them_only_as_they_t
             ToggleFloatingActionButton(o, [&open](bool c) { open.set(c); }, [](const ToggleFloatingActionButtonScope&) { Icon(Icons::Filled::Add, ""); });
             LinearWavyProgressIndicator(o ? 0.5f : 0.f);  // (the wave rises from none)
             Image(rememberAnimatedVectorPainter(blink, o), "Göz");
-            ModalWideNavigationRail(Modifier(), [] { Text("Ray"); }, {.state = rail, .hideOnCollapse = true});
-            WideNavigationRail(Modifier().testTag("geniş"), [] {}, {.state = wide});
+            ModalWideNavigationRail(Modifier(), state = rail, hideOnCollapse = true, [] { Text("Ray"); });
+            WideNavigationRail(Modifier().testTag("geniş"), state = wide, [] {});
         });
     }, {400, 800});
     CHECK(!rule.onNodeWithText("Seçenek").exists() && !rule.onNodeWithText("İpucu").exists() && !rule.onNodeWithText("Ray").exists());
@@ -3173,7 +3173,7 @@ TEST(navigation_bar_switches_tabs) {
         [&] {
             Scaffold(Modifier().fillMaxSize(),
                      bottomBar = [&] {
-                             NavigationBar(Modifier(), [&] {
+                             NavigationBar(Modifier(), [=] {
                                  NavigationBarItem(tab.get() == 0, [&] { tab.set(0); }, Icons::Filled::Home, "Bir");
                                  NavigationBarItem(tab.get() == 1, [&] { tab.set(1); }, Icons::Filled::List, "İki");
                              });
@@ -9061,9 +9061,9 @@ TEST(dialog_draws_on_top_takes_input_and_dismisses) {
             Button([log] { log->push_back("below"); }, Modifier().testTag("below"), [] { Text("Alttaki"); });
             if (open.get())
                 AlertDialog([open, log] { log->push_back("dismiss"); open.set(false); },
-                            {.confirmButton = [log] { TextButton([log] { log->push_back("ok"); }, [] { Text("Tamam"); }); },
-                             .title = [] { Text("Başlık"); },
-                             .text = [] { Text("Gövde metni"); }});
+                            confirmButton = [log] { TextButton([log] { log->push_back("ok"); }, [] { Text("Tamam"); }); },
+                            title = [] { Text("Başlık"); },
+                            text = [] { Text("Gövde metni"); });
         });
     });
     open.set(true);
@@ -9097,7 +9097,7 @@ TEST(dropdown_menu_opens_below_its_anchor_and_closes_outside) {
         Column(Modifier().padding(20), [=] {
             Box(Modifier().testTag("anchor"), [=] {
                 Button([expanded] { expanded.set(true); }, [] { Text("Menü"); });
-                DropdownMenu(expanded.get(), [expanded] { expanded.set(false); }, [&] {
+                DropdownMenu(expanded.get(), [expanded] { expanded.set(false); }, [=] {
                     DropdownMenuItem([] { Text("Kopyala"); }, [log, expanded] { log->push_back("copy"); expanded.set(false); });
                     DropdownMenuItem([] { Text("Yapıştır"); }, [log] { log->push_back("paste"); });
                 });
@@ -10943,7 +10943,7 @@ TEST(navigation_drawer_opens_closes_and_leaves_content_usable) {
                     NavigationDrawerItem([] { Text("Gelen kutusu"); }, true, [] {});
                 });
             },
-            state, [&] { Button([clicks] { ++*clicks; }, Modifier().padding(100).testTag("content"), [] { Text("İçerik"); }); });
+            state, [=] { Button([clicks] { ++*clicks; }, Modifier().padding(100).testTag("content"), [] { Text("İçerik"); }); });
     }, {400, 800});
     rule.onNodeWithText("İçerik").performClick();  // closed: the content works
     CHECK(*clicks == 1 && !rule.onNodeWithText("Gelen kutusu").exists());
@@ -10975,7 +10975,7 @@ TEST(window_size_local_and_navigation_rail) {
         Size window = LocalWindowSize.current();
         if (window.width >= 600)
             Row(Modifier().fillMaxSize(), [=] {
-                NavigationRail(Modifier().testTag("rail"), {}, [] {
+                NavigationRail(Modifier().testTag("rail"), [] {
                     NavigationRailItem(true, [] {}, Icons::Filled::Home, "Ana");
                     NavigationRailItem(false, [] {}, Icons::Filled::Star, "Yıldız");
                 });
@@ -11115,7 +11115,7 @@ TEST(back_stops_at_a_dialog_that_cannot_be_dismissed) {
     auto backs = std::make_shared<int>(0);
     ComposeTestRule rule([&] {
         BackHandler(true, [backs] { ++*backs; });
-        Dialog([] {}, [] { Text("Kalıcı"); }, {.dismissOnBackPress = false});
+        Dialog([] {}, properties = DialogProperties{.dismissOnBackPress = false}, [] { Text("Kalıcı"); });
     });
     CHECK(rule.host().keyDown(Key::Escape));
     rule.waitForIdle();
@@ -12103,7 +12103,7 @@ TEST(bottom_sheet_scaffold_peeks_expands_and_follows_drags) {
     ComposeTestRule rule([&] {
         scope = rememberCoroutineScope();
         BottomSheetScaffold([] { Column(Modifier().fillMaxWidth().height(300), [] { Text("Ayrıntılar"); }); }, Modifier().fillMaxSize(),
-                            {.scaffoldState = BottomSheetScaffoldState{sheet}, .sheetPeekHeight = 100}, [&](PaddingValues p) {
+                            scaffoldState = BottomSheetScaffoldState{sheet}, sheetPeekHeight = 100, [=, &contentClicks, &seen](PaddingValues p) {
                                 seen = p;
                                 Box(Modifier().fillMaxSize().clickable([&] { ++contentClicks; }));
                             });
@@ -12156,7 +12156,7 @@ TEST(a_dragged_bottom_sheet_moves_without_recomposing_the_scaffold) {
     int composed = 0;
     ComposeTestRule rule([&] {
         BottomSheetScaffold([] { Box(Modifier().fillMaxWidth().height(400).testTag("sayfa")); }, Modifier().fillMaxSize(),
-                            {.scaffoldState = BottomSheetScaffoldState{sheet}, .sheetPeekHeight = 100}, [&](PaddingValues) {
+                            scaffoldState = BottomSheetScaffoldState{sheet}, sheetPeekHeight = 100, [=, &composed](PaddingValues) {
                                 ++composed;
                                 Box(Modifier().fillMaxSize());
                             });
@@ -12185,7 +12185,7 @@ TEST(bottom_sheet_scaffold_moves_before_the_list_in_it_scrolls) {
                     items.items(50, [](int i) { Box(Modifier().fillMaxWidth().height(40)); });
                 });
             },
-            Modifier().fillMaxSize(), {.scaffoldState = BottomSheetScaffoldState{sheet}, .sheetPeekHeight = 150}, [](PaddingValues) {});
+            Modifier().fillMaxSize(), scaffoldState = BottomSheetScaffoldState{sheet}, sheetPeekHeight = 150, [](PaddingValues) {});
     }, {400, 800});
     // 448 tall: peeks at 650, expanded at 352. Dragged up on the list: the sheet goes first...
     CHECK(near(sheet.requireOffset(), 650));
@@ -12219,7 +12219,7 @@ TEST(bottom_sheet_scaffold_settles_with_the_flings_speed) {
     SheetState sheet;
     ComposeTestRule rule([&] {
         BottomSheetScaffold([] { Box(Modifier().fillMaxWidth().height(2000)); }, Modifier().fillMaxSize(),
-                            {.scaffoldState = BottomSheetScaffoldState{sheet}, .sheetPeekHeight = 100}, [](PaddingValues) {});
+                            scaffoldState = BottomSheetScaffoldState{sheet}, sheetPeekHeight = 100, [](PaddingValues) {});
     }, {400, 800});
     // Flung up 100 dp in 4 frames (1560 dp/s): it goes on at that speed, not from rest.
     rule.host().pointerDown({200, 720});
@@ -12248,8 +12248,8 @@ TEST(bottom_sheet_scaffold_keeps_clear_of_the_system_bars_once) {
         Modifier m = inside.get() ? Modifier().fillMaxSize().windowInsetsPadding(WindowInsets::systemBars()) : Modifier().fillMaxSize();
         Box(m, [=, &seen, &sheet] {
             BottomSheetScaffold([] { Box(Modifier().fillMaxWidth().height(2000)); }, Modifier().fillMaxSize(),
-                                {.scaffoldState = BottomSheetScaffoldState{sheet}, .sheetPeekHeight = 100},
-                                [&](PaddingValues p) { seen = p; });
+                                scaffoldState = BottomSheetScaffoldState{sheet}, sheetPeekHeight = 100,
+                                [=, &seen](PaddingValues p) { seen = p; });
         });
     }, {400, 800});
     rule.host().setSystemInsets({.statusBars = {0, 24, 0, 0}, .navigationBars = {0, 0, 0, 48}});
@@ -12837,7 +12837,7 @@ TEST(scaffold_bodies_and_carousel_items_leave_content_its_own_size_as_compose) {
         auto bar = [] { Box(Modifier().size(80, 80)); };  // a bar or a rail
         switch (which.get()) {
         case 0: Scaffold(Modifier().fillMaxSize(), [=](PaddingValues) { body(); }); break;
-        case 1: BottomSheetScaffold([] { Text("Ayrıntılar"); }, Modifier().fillMaxSize(), {}, [&](PaddingValues) { body(); }); break;
+        case 1: BottomSheetScaffold([] { Text("Ayrıntılar"); }, Modifier().fillMaxSize(), [=](PaddingValues) { body(); }); break;
         case 2: NavigationSuiteScaffoldLayout(bar, NavigationSuiteType::NavigationBar, body); break;
         case 3: NavigationSuiteScaffoldLayout(bar, NavigationSuiteType::NavigationRail, body); break;
         case 4: NavigationSuiteScaffoldLayout(bar, NavigationSuiteType::None, body); break;
@@ -13244,7 +13244,7 @@ TEST(semantics_tree_merges_buttons_and_performs_actions) {
             Checkbox(checked.get(), [&](bool v) { checked.set(v); });
             TextField("merhaba", nullptr, Modifier(), placeholder = "yaz");
             Box(Modifier().height(2000));
-            if (dialog.get()) AlertDialog([] {}, {.title = [] { Text("Uyarı"); }});
+            if (dialog.get()) AlertDialog([] {}, title = [] { Text("Uyarı"); });
         });
     });
     auto find = [&](std::vector<SemanticsNode>& tree, auto pred) -> SemanticsNode* {
@@ -13614,7 +13614,7 @@ TEST(bottom_sheet_moves_with_what_its_list_leaves) {
     LazyListState list;
     ComposeTestRule rule([&] {
         if (open.get())
-            ModalBottomSheet([open] { open.set(false); }, [&] {
+            ModalBottomSheet([open] { open.set(false); }, [=, &list] {
                 LazyColumn(Modifier().fillMaxWidth().height(300).testTag("list"), {.state = list}, [](LazyListScope& s) {
                     s.items(50, [](int i) { Text("Öğe " + std::to_string(i), Modifier().height(48)); });
                 });
@@ -13803,7 +13803,7 @@ TEST(a_bottom_sheet_scaffolds_padding_follows_the_sheet_without_recomposing) {
                     return Size{c.maxWidth, h};
                 }));
             },
-            Modifier().fillMaxSize(), {.sheetPeekHeight = 300}, [&](PaddingValues padding) {
+            Modifier().fillMaxSize(), sheetPeekHeight = 300, [=, &composed](PaddingValues padding) {
                 ++composed;
                 Box(Modifier().fillMaxSize().padding(padding).testTag("içerik"));
             });
@@ -13937,16 +13937,16 @@ TEST(navigation_items_animate_composing_nothing_around_them) {
         ++composed;
         int selected = tab.get();
         Column([=, &labels] {
-            ShortNavigationBar(Modifier(), [&] {
+            ShortNavigationBar(Modifier(), [=, &labels] {
                 for (int i = 0; i < 3; ++i)
                     ShortNavigationBarItem(selected == i, [&tab, i] { tab.set(i); }, [] { Icon(Icons::Filled::Home, ""); }, [&labels, i] {
                         composable(CallSite::current(), [&labels, i] { labels[size_t(i)] = LocalContentColor.current(); });
                     });
             });
-            NavigationBar(Modifier(), [&] {
+            NavigationBar(Modifier(), [=] {
                 for (int i = 0; i < 3; ++i) NavigationBarItem(selected == i, [&tab, i] { tab.set(i); }, Icons::Filled::Home, "Sekme");
             });
-            WideNavigationRail(Modifier(), [&] {
+            WideNavigationRail(Modifier(), [=] {
                 for (int i = 0; i < 3; ++i) WideNavigationRailItem(selected == i, [&tab, i] { tab.set(i); }, [] { Icon(Icons::Filled::Home, ""); }, [] { Text("Ray"); });
             });
         });
@@ -15359,7 +15359,7 @@ TEST(navigation_bar_items_as_compose_1_4) {
     auto tab = mutableStateOf(0);
     ComposeTestRule rule([&] {
         cs = colorScheme();
-        NavigationBar(Modifier(), [&] {
+        NavigationBar(Modifier(), [=] {
             NavigationBarItem(tab.get() == 0, [&] { tab.set(0); }, Icons::Filled::Home, "Bir");
             NavigationBarItem(tab.get() == 1, [&] { tab.set(1); }, Icons::Filled::List, "İki");
         });
@@ -15430,7 +15430,7 @@ TEST(navigation_rail_as_compose_1_4) {
     auto tab = mutableStateOf(0);
     ComposeTestRule rule([&] {
         cs = colorScheme();
-        NavigationRail(Modifier().testTag("ray"), [] { Box(Modifier().size(40).testTag("baş")); }, [&] {
+        NavigationRail(Modifier().testTag("ray"), [] { Box(Modifier().size(40).testTag("baş")); }, [=] {
             NavigationRailItem(tab.get() == 0, [&] { tab.set(0); }, Icons::Filled::Home, "Bir");
             NavigationRailItem(tab.get() == 1, [&] { tab.set(1); }, Icons::Filled::List, "İki");
         });
@@ -15491,8 +15491,8 @@ TEST(navigation_drawer_items_as_compose_1_4) {
         cs = colorScheme();
         ambient = LocalTextStyle.current();
         Column(Modifier().width(300), [=] {
-            NavigationDrawerItem([] { Text("Gelen"); }, picked.get() == 0, [&] { picked.set(0); }, {}, {}, Modifier().testTag("gelen"));
-            NavigationDrawerItem([] { Box(Modifier().size(10, 70)); }, picked.get() == 1, [&] { picked.set(1); }, {}, {}, Modifier().testTag("uzun"));
+            NavigationDrawerItem([] { Text("Gelen"); }, picked.get() == 0, [&] { picked.set(0); }, Modifier().testTag("gelen"));
+            NavigationDrawerItem([] { Box(Modifier().size(10, 70)); }, picked.get() == 1, [&] { picked.set(1); }, Modifier().testTag("uzun"));
         });
     });
     // The label in the text style around it; taller labels make it taller than 56.
@@ -16274,7 +16274,7 @@ TEST(rtl_drawer_and_swipe_to_dismiss_follow_the_mirror) {
         CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] {
             auto& state = remember([] { return DrawerState(); });
             drawer = &state;
-            ModalNavigationDrawer([] { ModalDrawerSheet(Modifier().testTag("sheet"), [] { Text("Gelen kutusu"); }); }, state, [&] {
+            ModalNavigationDrawer([] { ModalDrawerSheet(Modifier().testTag("sheet"), [] { Text("Gelen kutusu"); }); }, state, [=, &swipe] {
                 auto s = rememberSwipeToDismissBoxState();
                 swipe = s;
                 Column(Modifier().padding(0, 300, 0, 0), [=] {
@@ -16579,9 +16579,9 @@ TEST(rtl_from_the_host_and_menus_under_the_anchors_end) {
             });
             Box(Modifier().fillMaxWidth(), Alignment::Center, [=] {
                 Box(Modifier().size(100, 40).testTag("çapa"), [=] {
-                    DropdownMenu(open.get(), [open] { open.set(false); }, [&] {
+                    DropdownMenu(open.get(), [open] { open.set(false); }, Modifier().testTag("menü"), [=] {
                         DropdownMenuItem([] { Text("Kısa"); }, [] {});
-                    }, Modifier().testTag("menü"));
+                    });
                 });
             });
         });
@@ -17724,10 +17724,10 @@ TEST(loading_indicator_morphs_and_turns_and_grows_into_a_burst) {
 TEST(short_navigation_bar_ripples_start_under_the_finger) {
     auto arrangement = mutableStateOf(ShortNavigationBarArrangement::EqualWeight);
     ComposeTestRule rule([&] {
-        ShortNavigationBar(Modifier(), [&] {
+        ShortNavigationBar(Modifier(), kompoz::arrangement = arrangement.get(), [=] {
             ShortNavigationBarItem(true, [] {}, [] { Box(Modifier().size(24)); }, [] { Text("Ana"); }, Modifier().testTag("ana"));
             ShortNavigationBarItem(false, [] {}, [] { Box(Modifier().size(24)); }, [] { Text("Ara"); });
-        }, {.arrangement = arrangement.get()});
+        });
     }, {400, 300});
     auto rippleAt = [&](Offset at) {
         rule.host().pointerDown(at);
@@ -17761,12 +17761,12 @@ TEST(short_navigation_bar_shares_the_width_or_centres_its_items) {
     auto arrangement = mutableStateOf(std::optional<ShortNavigationBarArrangement>(ShortNavigationBarArrangement::EqualWeight));
     ColorScheme cs = lightColorScheme();
     auto bar = [&] {
-        ShortNavigationBar(Modifier().testTag("çubuk"), [&] {
+        ShortNavigationBar(Modifier().testTag("çubuk"), kompoz::arrangement = arrangement.get(), windowInsets = WindowInsets{}, [=] {
             const char* labels[] = {"Ana", "Ara", "Profil"};
             for (int i = 0; i < 3; ++i)
                 ShortNavigationBarItem(selected.get() == i, [selected, i] { selected.set(i); }, [] { Box(Modifier().size(24)); },
                                        [&, i] { Text(labels[i]); }, Modifier().testTag(labels[i]));
-        }, {.arrangement = arrangement.get(), .windowInsets = WindowInsets{}});
+        });
     };
     ComposeTestRule rule(bar, {360, 640});
     auto at = [&](const char* tag) { return rule.onNodeWithTag(tag).bounds(); };
@@ -17834,13 +17834,13 @@ TEST(layouts_that_measure_twice_probe_first_so_sizes_settle) {
                     squeezed.set(s.width);
                 }), interactionSource = second, [] { Text("Oynat"); });
             });
-            ShortNavigationBar(Modifier(), [&] {
+            ShortNavigationBar(Modifier(), arrangement = ShortNavigationBarArrangement::Centered, windowInsets = WindowInsets{}, [=] {
                 ShortNavigationBarItem(true, [] {}, [] {}, [] { Text("Ana"); }, Modifier().onSizeChanged([item, reports](Size s) {
                     ++*reports;
                     item.set(s.width);
                 }));
                 ShortNavigationBarItem(false, [] {}, [] {}, [] { Text("Uzun sekme"); });
-            }, {.arrangement = ShortNavigationBarArrangement::Centered, .windowInsets = WindowInsets{}});
+            });
             Button([] {}, Modifier().width(16), [=] {  // narrower than its label: the padding gone, the label wraps
                 Text("Dar", Modifier().onSizeChanged([label, reports](Size s) {
                     ++*reports;
@@ -17865,12 +17865,12 @@ TEST(wide_navigation_rail_widens_and_puts_the_labels_after_the_icons) {
     auto selected = mutableStateOf(0);
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
-        WideNavigationRail(Modifier().testTag("ray"), [&] {
+        WideNavigationRail(Modifier().testTag("ray"), state = rail, header = [] { Box(Modifier().size(40).testTag("başlık")); }, windowInsets = WindowInsets{}, [=] {
             const char* labels[] = {"Gelen", "Giden"};
             for (int i = 0; i < 2; ++i)
                 WideNavigationRailItem(selected.get() == i, [selected, i] { selected.set(i); }, [] { Box(Modifier().size(24)); },
                                        [&, i] { Text(labels[i]); }, Modifier().testTag(labels[i]));
-        }, {.state = rail, .header = [] { Box(Modifier().size(40).testTag("başlık")); }, .windowInsets = WindowInsets{}});
+        });
     }, {400, 600});
     auto at = [&](const char* tag) { return rule.onNodeWithTag(tag).bounds(); };
     auto pills = [&] {
@@ -17964,11 +17964,11 @@ TEST(modal_wide_navigation_rail_opens_over_the_content_with_a_scrim) {
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
         Row(Modifier().fillMaxSize(), [=, &rail] {
-            ModalWideNavigationRail(Modifier(), [&] {
+            ModalWideNavigationRail(Modifier(), state = rail, hideOnCollapse = hide.get(), windowInsets = WindowInsets{}, [=] {
                 for (int i = 0; i < 2; ++i)
                     WideNavigationRailItem(picked.get() == i, [picked, i] { picked.set(i); }, [] { Box(Modifier().size(24)); },
                                            [i] { Text(i == 0 ? "Gelen" : "Giden"); }, Modifier().testTag(i == 0 ? "gelen" : "giden"));
-            }, {.state = rail, .hideOnCollapse = hide.get(), .windowInsets = WindowInsets{}});
+            });
             Box(Modifier().weight(1).fillMaxHeight().testTag("içerik"));
         });
     }, {400, 600});
@@ -18836,23 +18836,23 @@ TEST(expressive_menu_groups_and_checked_and_selected_items) {
     ComposeTestRule rule([&] {
         Box(Modifier().padding(20), [=, &settings] {
             Box(Modifier().size(40));
-            DropdownMenuPopup(open.get(), [&] { open.set(false); }, [&] {
-                DropdownMenuGroup(MenuDefaults::groupShape(0, 3), [&] {
-                    DropdownMenuItem(bold.get(), [&](bool v) { bold.set(v); }, [] { Text("Kalın"); }, {.shape = MenuDefaults::itemShape(0, 2)});
-                    DropdownMenuItem(italic.get(), [&](bool v) { italic.set(v); }, [] { Text("İtalik"); }, {.shape = MenuDefaults::itemShape(1, 2)});
-                }, Modifier().testTag("g0"));
+            DropdownMenuPopup(open.get(), [&] { open.set(false); }, [=, &settings] {
+                DropdownMenuGroup(MenuDefaults::groupShape(0, 3), Modifier().testTag("g0"), [=] {
+                    DropdownMenuItem(bold.get(), [&](bool v) { bold.set(v); }, [] { Text("Kalın"); }, shape = MenuDefaults::itemShape(0, 2));
+                    DropdownMenuItem(italic.get(), [&](bool v) { italic.set(v); }, [] { Text("İtalik"); }, shape = MenuDefaults::itemShape(1, 2));
+                });
                 Spacer(Modifier().height(MenuDefaults::GroupSpacing));
-                DropdownMenuGroup(MenuDefaults::groupShape(1, 3), [&] {
+                DropdownMenuGroup(MenuDefaults::groupShape(1, 3), Modifier().testTag("g1"), [=] {
                     const char* names[] = {"Sola", "Ortaya", "Sağa"};
                     for (int i = 0; i < 3; ++i)
                         DropdownMenuItem(align.get() == i, [&, i] { align.set(i); }, [&, i] { Text(names[i]); },
-                                         {.shape = MenuDefaults::itemShape(i, 3)});
-                }, Modifier().testTag("g1"));
+                                         shape = MenuDefaults::itemShape(i, 3));
+                });
                 Spacer(Modifier().height(MenuDefaults::GroupSpacing));
-                DropdownMenuGroup(MenuDefaults::groupShape(2, 3), [&] {
+                DropdownMenuGroup(MenuDefaults::groupShape(2, 3), Modifier().testTag("g2"), [=, &settings] {
                     DropdownMenuItem([] { Text("Ayarlar"); }, [&] { ++settings; },
-                                     {.supportingText = [] { Text("Görünüm ve yazı"); }, .shape = MenuDefaults::itemShape(0, 1)});
-                }, Modifier().testTag("g2"));
+                                     supportingText = [] { Text("Görünüm ve yazı"); }, shape = MenuDefaults::itemShape(0, 1));
+                });
             });
         });
     }, {400, 800});
@@ -21428,11 +21428,11 @@ TEST(exposed_dropdown_menu_picks_an_option) {
     cities[1] = "Bursa";
     ComposeTestRule rule([&] {
         Column(Modifier().padding(20), [=, &cities] {
-            ExposedDropdownMenuBox(open.get(), [&](bool v) { open.set(v); }, Modifier().testTag("box"), [&] {
+            ExposedDropdownMenuBox(open.get(), [&](bool v) { open.set(v); }, Modifier().testTag("box"), [=, &cities] {
                 TextField(choice.get(), [&](std::string v) { choice.set(std::move(v)); }, Modifier().fillMaxWidth(),
                           label = "Şehir", trailingIcon = [&] { ExposedDropdownMenuDefaults::TrailingIcon(open.get()); },
                           readOnly = true);
-                ExposedDropdownMenu(open.get(), [&] { open.set(false); }, [&] {
+                ExposedDropdownMenu(open.get(), [&] { open.set(false); }, [=, &cities] {
                     for (const std::string& city : cities)
                         DropdownMenuItem([city] { Text(city); }, [&, city] {
                             choice.set(city);
@@ -21467,12 +21467,12 @@ TEST(exposed_dropdown_menu_filters_as_you_type) {
     auto query = mutableStateOf(std::string());
     const std::vector<std::string> cities = {"Adana", "Ankara", "Antalya", "Bursa", "İzmir"};
     ComposeTestRule rule([&] {
-        ExposedDropdownMenuBox(open.get(), [&](bool v) { open.set(v); }, Modifier().padding(20), [&] {
+        ExposedDropdownMenuBox(open.get(), [&](bool v) { open.set(v); }, Modifier().padding(20), [=, &cities] {
             TextField(query.get(), [&](std::string v) {
                 query.set(std::move(v));
                 open.set(true);  // typing shows the matches
             }, Modifier().fillMaxWidth().testTag("field"), label = "Şehir");
-            ExposedDropdownMenu(open.get(), [&] { open.set(false); }, [&] {
+            ExposedDropdownMenu(open.get(), [&] { open.set(false); }, [=, &cities] {
                 for (const std::string& city : cities)
                     if (city.starts_with(query.get())) DropdownMenuItem([city] { Text(city); }, [&, city] { query.set(city); open.set(false); });
             });
@@ -22414,11 +22414,11 @@ TEST(navigation_rail_items_take_their_options) {
     ComposeTestRule rule([&] {
         cs = colorScheme();
         LogInteractions(own, log);
-        NavigationRail(Modifier(), {}, [&] {
-            NavigationRailItem(false, [&] { ++clicks; }, [] { Icon(Icons::Filled::Home, "ev", Modifier().testTag("simge")); }, [] { Text("Kapalı"); },
-                               Modifier().testTag("kapalı"), {.enabled = false});
-            NavigationRailItem(false, [] {}, [] { Icon(Icons::Filled::List, "liste"); }, [] { Text("Kendi"); }, Modifier().testTag("kendi"),
-                               {.interactionSource = own});
+        NavigationRail(Modifier(), [=, &clicks, &own] {
+            NavigationRailItem(false, [&] { ++clicks; }, [] { Icon(Icons::Filled::Home, "ev", Modifier().testTag("simge")); },
+                               Modifier().testTag("kapalı"), label = [] { Text("Kapalı"); }, enabled = false);
+            NavigationRailItem(false, [] {}, [] { Icon(Icons::Filled::List, "liste"); }, Modifier().testTag("kendi"), label = [] { Text("Kendi"); },
+                               interactionSource = own);
         });
     }, {400, 600});
     // The icon 4 dp down the item; disabled: onSurface at 38%, and a tap does nothing.
@@ -25518,7 +25518,7 @@ TEST(modal_bottom_sheet_follows_the_back_gesture) {
         state = s;
         scope = rememberCoroutineScope();
         if (open.get())
-            ModalBottomSheet([&] { ++dismissed, open.set(keep); }, s, [&] {
+            ModalBottomSheet([&] { ++dismissed, open.set(keep); }, s, [=, &field, &innerBacks] {
                 BackHandler(inner.get(), [&] { ++innerBacks; });  // one in the sheet comes first
                 Box(Modifier().fillMaxWidth().height(tall.get() ? 600.f : 200.f), [=, &field] {
                     Box(Modifier().size(40).focusRequester(field).focusable());
@@ -25637,7 +25637,7 @@ TEST(back_handlers_in_a_popup_come_before_it_closes) {
     ComposeTestRule rule([&] {
         BackHandler(true, [log] { log->push_back("pencere"); });
         if (open.get())
-            Dialog([open, log] { log->push_back("kapat"), open.set(false); }, [&] {
+            Dialog([open, log] { log->push_back("kapat"), open.set(false); }, [=] {
                 BackHandler(inner.get(), [log] { log->push_back("içeride"); });
                 Text("diyalog");
             });
@@ -25661,7 +25661,7 @@ TEST(half_open_sheet_expands_before_its_list_scrolls) {
     ComposeTestRule rule([&] {
         auto s = rememberModalBottomSheetState();
         state = s;
-        ModalBottomSheet([] {}, s, [&] {
+        ModalBottomSheet([] {}, s, [=, &list] {
             LazyColumn(Modifier().fillMaxWidth().height(600).testTag("liste"), {.state = list}, [](LazyListScope& l) {
                 l.items(60, [](int i) { Text(std::format("Öğe {}", i), Modifier().height(48)); });
             });
@@ -26231,7 +26231,7 @@ TEST(font_weights_match_the_nearest_file_as_css_does) {
           t.displayLarge.weight == W::Normal);
     // A navigation bar's labels are labelMedium selected or not: the color tells them apart.
     ComposeTestRule rule([&] {
-        NavigationBar(Modifier(), [&] {
+        NavigationBar(Modifier(), [=] {
             NavigationBarItem(true, [] {}, Icons::Filled::Home, "Ana");
             NavigationBarItem(false, [] {}, Icons::Filled::Search, "Ara");
         });
@@ -29408,10 +29408,10 @@ TEST(center_aligned_top_app_bar_mirrors_right_to_left) {
 TEST(basic_alert_dialog_is_280_to_560_wide_and_can_skip_the_platform_margins) {
     auto wide = mutableStateOf(false), platform = mutableStateOf(true), fill = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        BasicAlertDialog([] {}, Modifier().testTag("diyalog"), [&] {
+        BasicAlertDialog([] {}, Modifier().testTag("diyalog"), properties = DialogProperties{.usePlatformDefaultWidth = platform.get()}, [=] {
             Box(Modifier().then(fill.get() ? Modifier().fillMaxWidth() : Modifier().width(wide.get() ? 700.f : 100.f))
                     .height(60).testTag("içerik"));
-        }, {.usePlatformDefaultWidth = platform.get()});
+        });
     }, {1000, 800});
     // Small content gets the least width (280), centered; large is held to 560.
     Rect content = rule.onNodeWithTag("içerik").bounds();
@@ -29434,20 +29434,20 @@ TEST(alert_dialog_buttons_wrap_with_the_confirming_one_above) {
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
         AlertDialog([] {},
-                    {.confirmButton = [&] { TextButton([] {}, Modifier().testTag("onay"), [=] { Text(longer.get() ? "Şimdi güncelle ve yeniden başlat" : "Tamam"); }); },
-                     .dismissButton = [&] {
-                         TextButton([] {}, Modifier().testTag("ret"), [] { Text("Sonra"); });
-                         if (longer.get()) TextButton([] {}, Modifier().testTag("asla"), [] { Text("Bir daha hiç sorma bana lütfen"); });
-                     },
-                     .icon = [] { Icon(Icons::Filled::Info, "Bilgi"); },
-                     .title = [] { Text("Güncelleme"); },
-                     .text = [] { Text("Yeni bir sürüm var."); },
-                     .shape = RoundedCornerShape(8),
-                     .containerColor = cs.primaryContainer,
-                     .iconContentColor = cs.tertiary,
-                     .titleContentColor = cs.onPrimaryContainer,
-                     .textContentColor = cs.primary},
-                    Modifier().testTag("diyalog"));
+                    confirmButton = [&] { TextButton([] {}, Modifier().testTag("onay"), [=] { Text(longer.get() ? "Şimdi güncelle ve yeniden başlat" : "Tamam"); }); },
+                    dismissButton = [&] {
+                        TextButton([] {}, Modifier().testTag("ret"), [] { Text("Sonra"); });
+                        if (longer.get()) TextButton([] {}, Modifier().testTag("asla"), [] { Text("Bir daha hiç sorma bana lütfen"); });
+                    },
+                    icon = [] { Icon(Icons::Filled::Info, "Bilgi"); },
+                    title = [] { Text("Güncelleme"); },
+                    text = [] { Text("Yeni bir sürüm var."); },
+                    shape = RoundedCornerShape(8),
+                    containerColor = cs.primaryContainer,
+                    iconContentColor = cs.tertiary,
+                    titleContentColor = cs.onPrimaryContainer,
+                    textContentColor = cs.primary,
+                    modifier = Modifier().testTag("diyalog"));
     }, {400, 800});
     // Side by side at the end, 8 dp apart.
     Rect dialog = rule.onNodeWithTag("diyalog").bounds(), ok = rule.onNodeWithTag("onay").bounds(), later = rule.onNodeWithTag("ret").bounds();
@@ -29478,10 +29478,10 @@ TEST(alert_dialog_buttons_wrap_with_the_confirming_one_above) {
 TEST(alert_dialog_text_gives_way_to_its_buttons_in_a_short_window) {
     ComposeTestRule rule([&] {
         AlertDialog([] {},
-                    {.confirmButton = [] { TextButton([] {}, Modifier().testTag("onay"), [] { Text("Tamam"); }); },
-                     .title = [] { Text("Başlık"); },
-                     .text = [] { Column([] { for (int i = 0; i < 40; ++i) Text("Satır " + std::to_string(i)); }); }},
-                    Modifier().testTag("diyalog"));
+                    confirmButton = [] { TextButton([] {}, Modifier().testTag("onay"), [] { Text("Tamam"); }); },
+                    title = [] { Text("Başlık"); },
+                    text = [] { Column([] { for (int i = 0; i < 40; ++i) Text("Satır " + std::to_string(i)); }); },
+                    modifier = Modifier().testTag("diyalog"));
     }, {400, 500});
     // The dialog keeps within the window's 24 dp margins, its button still in it.
     Rect dialog = rule.onNodeWithTag("diyalog").bounds(), ok = rule.onNodeWithTag("onay").bounds();

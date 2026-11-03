@@ -120,8 +120,8 @@ Pass an empty callback to a control inside a row that handles the click itself, 
 `AssistChip`, `FilterChip`, `InputChip` and `SuggestionChip`:
 
 ```cpp body
-#! auto selected = mutableStateOf(false);
-FilterChip(selected.get(), [selected] { selected.set(!selected.get()); }, [] { Text("Unread"); });
+#! auto unread = mutableStateOf(false);
+FilterChip(unread.get(), [unread] { unread.set(!unread.get()); }, [] { Text("Unread"); });
 ```
 
 ## Text fields
@@ -138,10 +138,10 @@ void DeleteButton(std::function<void()> onDelete) {
     TextButton([open] { open.set(true); }) { Text("Delete"); };
     if (open.get()) {
         AlertDialog([open] { open.set(false); },
-                    {.confirmButton = [open, onDelete] { TextButton([open, onDelete] { open.set(false); onDelete(); }) { Text("Delete"); }; },
-                     .dismissButton = [open] { TextButton([open] { open.set(false); }) { Text("Cancel"); }; },
-                     .title = [] { Text("Delete this message?"); },
-                     .text = [] { Text("It will be gone for good."); }});
+                    confirmButton = [open, onDelete] { TextButton([open, onDelete] { open.set(false); onDelete(); }) { Text("Delete"); }; },
+                    dismissButton = [open] { TextButton([open] { open.set(false); }) { Text("Cancel"); }; },
+                    title = [] { Text("Delete this message?"); },
+                    text = [] { Text("It will be gone for good."); });
     }
 }
 ```

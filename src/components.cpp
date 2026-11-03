@@ -1099,13 +1099,13 @@ void groupButton(const GroupItems& items, size_t i, const Modifier& modifier, st
 void groupOverflow(const GroupItems& items, size_t first, const MutableState<bool>& open) {
     detail::Box([&] {
         detail::IconButton([open] { open.set(true); }, [] { detail::Icon(Icons::Filled::MoreVert, LocalStrings.current().moreOptions); });
-        DropdownMenu(open.get(), [open] { open.set(false); }, [&] {
+        detail::DropdownMenu(open.get(), [open] { open.set(false); }, [&] {
             for (size_t i = first; i < items->size(); ++i) {
                 const ButtonGroupItem& item = (*items)[i];
                 Content leading;
                 if (item.checked && *item.checked) leading = [] { detail::Icon(Icons::Filled::Check, LocalStrings.current().selected); };
                 else if (item.icon) leading = [icon = item.icon] { detail::Icon(*icon, ""); };
-                DropdownMenuItem([label = item.label] { detail::Text(label); }, [items, i, open] {
+                detail::DropdownMenuItem([label = item.label] { detail::Text(label); }, [items, i, open] {
                     open.set(false);
                     if (i >= items->size()) return;
                     const ButtonGroupItem& it = (*items)[i];

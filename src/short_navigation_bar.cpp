@@ -29,7 +29,7 @@ Modifier indicator(const Modifier& modifier, Color color, const AnimatedState<fl
 
 } // namespace
 
-void ShortNavigationBar(const Modifier& modifier, const Content& content, const ShortNavigationBarOptions& options, CallSite site) {
+void detail::ShortNavigationBar(const Modifier& modifier, const Content& content, const ShortNavigationBarOptions& options, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     ShortNavigationBarArrangement arrangement = options.arrangement.value_or(
@@ -63,7 +63,7 @@ void ShortNavigationBar(const Modifier& modifier, const Content& content, const 
     });
 }
 
-void ShortNavigationBarItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier,
+void detail::ShortNavigationBarItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier,
                             const ShortNavigationBarItemOptions& options, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
@@ -175,7 +175,7 @@ void railColumn(bool expanded, const detail::Live<float>& width, Color container
 
 } // namespace
 
-void WideNavigationRail(const Modifier& modifier, const Content& content, const WideNavigationRailOptions& options, CallSite site) {
+void detail::WideNavigationRail(const Modifier& modifier, const Content& content, const WideNavigationRailOptions& options, CallSite site) {
     ComposableScope scope(site);
     WideNavigationRailState state = options.state ? *options.state : rememberWideNavigationRailState();
     bool expanded = state.isExpanded();
@@ -185,7 +185,7 @@ void WideNavigationRail(const Modifier& modifier, const Content& content, const 
                railInsets(options.windowInsets), options.arrangement);
 }
 
-void ModalWideNavigationRail(const Modifier& modifier, const Content& content, const ModalWideNavigationRailOptions& options, CallSite site) {
+void detail::ModalWideNavigationRail(const Modifier& modifier, const Content& content, const ModalWideNavigationRailOptions& options, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     WideNavigationRailState state = options.state ? *options.state : rememberWideNavigationRailState();
@@ -235,7 +235,7 @@ void ModalWideNavigationRail(const Modifier& modifier, const Content& content, c
     });
 }
 
-void WideNavigationRailItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier,
+void detail::WideNavigationRailItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier,
                             const WideNavigationRailItemOptions& options, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();

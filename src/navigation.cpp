@@ -206,7 +206,7 @@ void modalSheet(const std::shared_ptr<DrawerState::Data>& d, const Modifier& mod
 
 } // namespace
 
-void ModalNavigationDrawer(const Content& drawerContent, DrawerState state, const Content& content,
+void detail::ModalNavigationDrawer(const Content& drawerContent, DrawerState state, const Content& content,
                            DrawerOptions options, CallSite site) {
     ComposableScope scope(site);
     auto d = state.data_;
@@ -237,17 +237,17 @@ void ModalNavigationDrawer(const Content& drawerContent, DrawerState state, cons
     drawerBack(state, coroutines, visible && open, rtl);
 }
 
-void ModalDrawerSheet(const Modifier& modifier, const Content& content, CallSite site) {
+void detail::ModalDrawerSheet(const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     modalSheet(LocalDrawer.current(), modifier, content);
 }
 
-void ModalDrawerSheet(DrawerState drawerState, const Modifier& modifier, const Content& content, CallSite site) {
+void detail::ModalDrawerSheet(DrawerState drawerState, const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     modalSheet(drawerState.data_, modifier, content);
 }
 
-void DismissibleNavigationDrawer(const Content& drawerContent, DrawerState state, const Content& content,
+void detail::DismissibleNavigationDrawer(const Content& drawerContent, DrawerState state, const Content& content,
                                  DrawerOptions options, CallSite site) {
     ComposableScope scope(site);
     auto d = state.data_;
@@ -278,17 +278,17 @@ void DismissibleNavigationDrawer(const Content& drawerContent, DrawerState state
     drawerBack(state, coroutines, visible && open, rtl);
 }
 
-void DismissibleDrawerSheet(const Modifier& modifier, const Content& content, CallSite site) {
+void detail::DismissibleDrawerSheet(const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     standardSheet(LocalDrawer.current(), modifier, content);
 }
 
-void DismissibleDrawerSheet(DrawerState drawerState, const Modifier& modifier, const Content& content, CallSite site) {
+void detail::DismissibleDrawerSheet(DrawerState drawerState, const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     standardSheet(drawerState.data_, modifier, content);
 }
 
-void PermanentNavigationDrawer(const Content& drawerContent, const Modifier& modifier, const Content& content, CallSite site) {
+void detail::PermanentNavigationDrawer(const Content& drawerContent, const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     detail::Row(modifier.fillMaxSize(), [&] {
         drawerContent();
@@ -296,12 +296,12 @@ void PermanentNavigationDrawer(const Content& drawerContent, const Modifier& mod
     });
 }
 
-void PermanentDrawerSheet(const Modifier& modifier, const Content& content, CallSite site) {
+void detail::PermanentDrawerSheet(const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     standardSheet(nullptr, modifier, content);
 }
 
-void NavigationDrawerItem(const Content& label, bool selected, std::function<void()> onClick, const Content& icon,
+void detail::NavigationDrawerItem(const Content& label, bool selected, std::function<void()> onClick, const Content& icon,
                           const Content& badge, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
@@ -320,7 +320,7 @@ void NavigationDrawerItem(const Content& label, bool selected, std::function<voi
     });
 }
 
-void NavigationRail(const Modifier& modifier, const Content& header, const Content& content, CallSite site) {
+void detail::NavigationRail(const Modifier& modifier, const Content& header, const Content& content, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     PaddingValues insets = detail::systemBarsForVisualComponents().only(WindowInsetsSides::Vertical | WindowInsetsSides::Start).asPaddingValues();
@@ -339,12 +339,12 @@ void NavigationRail(const Modifier& modifier, const Content& header, const Conte
     });
 }
 
-void NavigationRailItem(bool selected, std::function<void()> onClick, const ImageVector& icon, std::string label,
+void detail::NavigationRailItem(bool selected, std::function<void()> onClick, const ImageVector& icon, std::string label,
                         CallSite site) {
-    NavigationRailItem(selected, std::move(onClick), [icon] { detail::Icon(icon, ""); }, [label] { detail::Text(label); }, Modifier(), {}, site);  // (the label says it)
+    detail::NavigationRailItem(selected, std::move(onClick), [icon] { detail::Icon(icon, ""); }, [label] { detail::Text(label); }, Modifier(), {}, site);  // (the label says it)
 }
 
-void NavigationRailItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier,
+void detail::NavigationRailItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier,
                         const NavigationRailItemOptions& options, CallSite site) {
     ComposableScope scope(site);
     // Compose 1.4's: 80 × 56, the 56 dp wide indicator at the top.

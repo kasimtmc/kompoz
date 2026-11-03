@@ -15,7 +15,7 @@ const CompositionLocal<float> LocalExposedDropdownWidth{0.f};
 
 } // namespace
 
-void ExposedDropdownMenuBox(bool expanded, std::function<void(bool)> onExpandedChange, const Modifier& modifier,
+void detail::ExposedDropdownMenuBox(bool expanded, std::function<void(bool)> onExpandedChange, const Modifier& modifier,
                             const Content& content, CallSite site) {
     ComposableScope scope(site);
     auto width = remember([] { return mutableStateOf(0.f); });
@@ -31,12 +31,12 @@ void ExposedDropdownMenuBox(bool expanded, std::function<void(bool)> onExpandedC
         [&] { CompositionLocalProvider({LocalExposedDropdownWidth.provides(width.get())}, content); });
 }
 
-void ExposedDropdownMenu(bool expanded, std::function<void()> onDismissRequest, const Content& content, const Modifier& modifier,
+void detail::ExposedDropdownMenu(bool expanded, std::function<void()> onDismissRequest, const Content& content, const Modifier& modifier,
                          CallSite site) {
     ComposableScope scope(site);
     auto scroll = rememberScrollState();
     float maxHeight = std::max(160.f, LocalWindowSize.current().height / 2 - 64);
-    DropdownMenu(expanded, std::move(onDismissRequest), content,
+    detail::DropdownMenu(expanded, std::move(onDismissRequest), content,
                  Modifier().width(LocalExposedDropdownWidth.current()).heightIn(0, maxHeight).verticalScroll(scroll).then(modifier));
 }
 

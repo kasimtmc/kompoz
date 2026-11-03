@@ -178,33 +178,33 @@ void DropdownSection(CallSite site) {
         auto searching = remember([] { return mutableStateOf(false); });
         auto query = remember([] { return mutableStateOf(std::string()); });
         Section("ExposedDropdownMenuBox", [&] {
-            ExposedDropdownMenuBox(open.get(), [open](bool v) { open.set(v); }, Modifier().fillMaxWidth(), [&] {
+            ExposedDropdownMenuBox(open.get(), [open](bool v) { open.set(v); }, Modifier().fillMaxWidth()) {
                 TextField(fruit.get(), nullptr, Modifier().fillMaxWidth(),
                           label = "Meyve", trailingIcon = [&] { ExposedDropdownMenuDefaults::TrailingIcon(open.get()); },
                           readOnly = true);
-                ExposedDropdownMenu(open.get(), [open] { open.set(false); }, [&] {
+                ExposedDropdownMenu(open.get(), [open] { open.set(false); }) {
                     for (const std::string& f : fruits)
                         DropdownMenuItem([f] { Text(f); }, [fruit, open, f] {
                             fruit.set(f);
                             open.set(false);
                         });
-                });
-            });
-            ExposedDropdownMenuBox(searching.get(), [searching](bool v) { searching.set(v); }, Modifier().fillMaxWidth(), [&] {
+                };
+            };
+            ExposedDropdownMenuBox(searching.get(), [searching](bool v) { searching.set(v); }, Modifier().fillMaxWidth()) {
                 OutlinedTextField(query.get(), [query, searching](std::string v) {
                     query.set(std::move(v));
                     searching.set(true);
                 }, Modifier().fillMaxWidth(), singleLine = true, label = "Meyve ara (yazdıkça süzülür)",
                                              trailingIcon = [&] { ExposedDropdownMenuDefaults::TrailingIcon(searching.get()); });
-                ExposedDropdownMenu(searching.get(), [searching] { searching.set(false); }, [&] {
+                ExposedDropdownMenu(searching.get(), [searching] { searching.set(false); }) {
                     for (const std::string& f : fruits)
                         if (startsWithIgnoringCase(f, query.get()))
                             DropdownMenuItem([f] { Text(f); }, [query, searching, f] {
                                 query.set(f);
                                 searching.set(false);
                             });
-                });
-            });
+                };
+            };
         });
     });
 }

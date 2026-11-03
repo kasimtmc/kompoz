@@ -512,7 +512,7 @@ void detail::LargeTopAppBar(const TopAppBarSlots& slots, const Modifier& modifie
     twoRowsTopAppBar(slots, modifier, TopAppBarDefaults::LargeAppBarExpandedHeight, typography().headlineMedium, typography().titleMedium);
 }
 
-void NavigationBar(const Modifier& modifier, const Content& content, CallSite site) {
+void detail::NavigationBar(const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     // The keyboard covers it rather than lifting it.
@@ -569,7 +569,7 @@ void detail::indicatorNavigationItem(bool selected, std::function<void()> onClic
         });
 }
 
-void NavigationBarItem(bool selected, std::function<void()> onClick, const ImageVector& icon, std::string label,
+void detail::NavigationBarItem(bool selected, std::function<void()> onClick, const ImageVector& icon, std::string label,
                        CallSite site) {
     ComposableScope scope(site);
     // Compose 1.4's: 80 dp tall, the 64 dp wide indicator 12 dp down.
@@ -848,7 +848,7 @@ void SnackbarHostState::dismiss(uint64_t id, SnackbarResult result) const {
 void AppBarScope::clickableItem(std::function<void()> onClick, Content icon, std::string label, bool enabled) {
     items.push_back({[onClick, icon, enabled] { detail::IconButton(onClick, Modifier(), {.enabled = enabled}, icon); },
                      [onClick, label, enabled](const AppBarMenuState& menu) {
-                         DropdownMenuItem([label] { detail::Text(label); }, [onClick, menu] {
+                         detail::DropdownMenuItem([label] { detail::Text(label); }, [onClick, menu] {
                              onClick();
                              menu.dismiss();
                          }, {.enabled = enabled});
@@ -858,7 +858,7 @@ void AppBarScope::clickableItem(std::function<void()> onClick, Content icon, std
 void AppBarScope::toggleableItem(bool checked, std::function<void(bool)> onCheckedChange, Content icon, std::string label, bool enabled) {
     items.push_back({[checked, onCheckedChange, icon, enabled] { detail::IconToggleButton(checked, onCheckedChange, Modifier(), {.enabled = enabled}, icon); },
                      [checked, onCheckedChange, label, enabled](const AppBarMenuState& menu) {
-                         DropdownMenuItem([label] { detail::Text(label); }, [checked, onCheckedChange, menu] {
+                         detail::DropdownMenuItem([label] { detail::Text(label); }, [checked, onCheckedChange, menu] {
                              onCheckedChange(!checked);
                              menu.dismiss();
                          }, {.enabled = enabled});
@@ -883,7 +883,7 @@ void appBarItems(bool vertical, std::function<void(AppBarScope&)> content, const
         detail::Box([&] {
             if (o.overflowIndicator) o.overflowIndicator(menu);
             else detail::IconButton([menu] { menu.show(); }, [] { detail::Icon(Icons::Filled::MoreVert, LocalStrings.current().moreOptions); });
-            DropdownMenu(menu.isShowing(), [menu] { menu.dismiss(); }, [&] {
+            detail::DropdownMenu(menu.isShowing(), [menu] { menu.dismiss(); }, [&] {
                 for (int i = std::max(0, visible.get()); i < count; ++i) row.items[size_t(i)].menu(menu);
             });
         });

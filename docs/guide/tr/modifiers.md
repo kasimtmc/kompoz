@@ -22,9 +22,9 @@ void ArtistCard(const std::string& name) {
 Modifier'lar düz değerlerdir: onları değişkenlerde saklayabilir, bir yerden bir yere aktarabilir, koşula göre kurabilirsiniz.
 
 ```cpp body
-#! bool selected = false;
+#! bool picked = false;
 Modifier base = Modifier().fillMaxWidth().padding(8);
-Box(selected ? base.background(colorScheme().secondaryContainer, 12) : base) {};
+Box(picked ? base.background(colorScheme().secondaryContainer, 12) : base) {};
 ```
 
 ## Sıra önemlidir

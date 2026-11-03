@@ -72,11 +72,11 @@ void DrawersSection(CallSite site) {
         };
         auto frame = Modifier().fillMaxWidth().height(200).border(1, cs.outlineVariant, 12).clip(RoundedCornerShape(12));
         Section("PermanentNavigationDrawer · DismissibleNavigationDrawer", [&] {
-            PermanentNavigationDrawer([&] { PermanentDrawerSheet(Modifier().width(170), [&] { items(false); }); }, frame, [&] {
+            PermanentNavigationDrawer([&] { PermanentDrawerSheet(Modifier().width(170)) { items(false); }; }, frame) {
                 Box(Modifier().fillMaxSize().background(cs.surfaceContainer), Alignment::Center) { Text(pages[page.get()]); };
-            });
+            };
             Box(frame) {
-                DismissibleNavigationDrawer([&] { DismissibleDrawerSheet(Modifier().width(170), [&] { items(true); }); }, drawer, [&] {
+                DismissibleNavigationDrawer([&] { DismissibleDrawerSheet(Modifier().width(170)) { items(true); }; }, drawer) {
                     Column(Modifier().fillMaxSize().background(cs.surfaceContainer)) {
                         Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
                             IconButton([drawer, coroutines] {
@@ -87,7 +87,7 @@ void DrawersSection(CallSite site) {
                         Text("Menüye dokunun ya da sağa sürükleyin: çekmece sayfayı iter.", Modifier().padding(16, 8),
                              color = cs.onSurfaceVariant, style = typography().bodyMedium);
                     };
-                });
+                };
             };
         });
     });

@@ -22,9 +22,9 @@ void ArtistCard(const std::string& name) {
 Modifiers are plain values: you can store them in variables, pass them around and build them conditionally.
 
 ```cpp body
-#! bool selected = false;
+#! bool picked = false;
 Modifier base = Modifier().fillMaxWidth().padding(8);
-Box(selected ? base.background(colorScheme().secondaryContainer, 12) : base) {};
+Box(picked ? base.background(colorScheme().secondaryContainer, 12) : base) {};
 ```
 
 ## Order matters

@@ -77,6 +77,13 @@ constexpr bool startsWithClick() {
     else return isBlock<std::tuple_element_t<0, std::tuple<A...>>> && lastIsBlock<A...>();
 }
 
+// Whether a call's first argument is a T (a composable's other form: DropdownMenuItem(checked, …)).
+template <class T, class... A>
+constexpr bool startsWith() {
+    if constexpr (sizeof...(A) == 0) return false;
+    else return std::is_same_v<std::remove_cvref_t<std::tuple_element_t<0, std::tuple<A...>>>, T>;
+}
+
 // What a parameter list ends with when its composable takes a block last: one called with Args
 // (Scaffold's gets its padding), or with nothing.
 template <class... Args>
@@ -338,6 +345,36 @@ struct ActionOnNewLine {};
 struct ActionColor {};
 struct ActionContentColor {};
 struct DismissActionContentColor {};
+struct Header {};
+struct State {};
+struct CollapsedWidth {};
+struct ExpandedWidth {};
+struct Arrangement {};
+struct Icon {};
+struct RailExpanded {};
+struct IconPosition {};
+struct HideOnCollapse {};
+struct Properties {};
+struct ConfirmButton {};
+struct DismissButton {};
+struct Text {};
+struct IconContentColor {};
+struct TextContentColor {};
+struct CheckedLeadingIcon {};
+struct OnClick {};
+struct SheetState {};
+struct SheetContent {};
+struct ScaffoldState {};
+struct SheetPeekHeight {};
+struct SheetContainerColor {};
+struct SheetShadowElevation {};
+struct SheetDragHandle {};
+struct SheetSwipeEnabled {};
+struct DrawerContent {};
+struct DrawerState {};
+struct GesturesEnabled {};
+struct Badge {};
+struct Selected {};
 } // namespace detail::names
 inline namespace args {
 inline constexpr Param<detail::names::Modifier> modifier;
@@ -444,6 +481,36 @@ inline constexpr Param<detail::names::ActionOnNewLine> actionOnNewLine;
 inline constexpr Param<detail::names::ActionColor> actionColor;
 inline constexpr Param<detail::names::ActionContentColor> actionContentColor;
 inline constexpr Param<detail::names::DismissActionContentColor> dismissActionContentColor;
+inline constexpr Param<detail::names::Header> header;
+inline constexpr Param<detail::names::State> state;
+inline constexpr Param<detail::names::CollapsedWidth> collapsedWidth;
+inline constexpr Param<detail::names::ExpandedWidth> expandedWidth;
+inline constexpr Param<detail::names::Arrangement> arrangement;
+inline constexpr Param<detail::names::Icon> icon;
+inline constexpr Param<detail::names::RailExpanded> railExpanded;
+inline constexpr Param<detail::names::IconPosition> iconPosition;
+inline constexpr Param<detail::names::HideOnCollapse> hideOnCollapse;
+inline constexpr Param<detail::names::Properties> properties;
+inline constexpr Param<detail::names::ConfirmButton> confirmButton;
+inline constexpr Param<detail::names::DismissButton> dismissButton;
+inline constexpr Param<detail::names::Text> text;
+inline constexpr Param<detail::names::IconContentColor> iconContentColor;
+inline constexpr Param<detail::names::TextContentColor> textContentColor;
+inline constexpr Param<detail::names::CheckedLeadingIcon> checkedLeadingIcon;
+inline constexpr Param<detail::names::OnClick> onClick;
+inline constexpr Param<detail::names::SheetState> sheetState;
+inline constexpr Param<detail::names::SheetContent> sheetContent;
+inline constexpr Param<detail::names::ScaffoldState> scaffoldState;
+inline constexpr Param<detail::names::SheetPeekHeight> sheetPeekHeight;
+inline constexpr Param<detail::names::SheetContainerColor> sheetContainerColor;
+inline constexpr Param<detail::names::SheetShadowElevation> sheetShadowElevation;
+inline constexpr Param<detail::names::SheetDragHandle> sheetDragHandle;
+inline constexpr Param<detail::names::SheetSwipeEnabled> sheetSwipeEnabled;
+inline constexpr Param<detail::names::DrawerContent> drawerContent;
+inline constexpr Param<detail::names::DrawerState> drawerState;
+inline constexpr Param<detail::names::GesturesEnabled> gesturesEnabled;
+inline constexpr Param<detail::names::Badge> badge;
+inline constexpr Param<detail::names::Selected> selected;
 } // namespace args
 
 // A composable taking named arguments: each call's arguments and call site go to Impl::call.

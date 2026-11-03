@@ -62,7 +62,7 @@ Size menuPolicy(LayoutNode& node, const Constraints& c) {
 
 } // namespace
 
-void Dialog(std::function<void()> onDismissRequest, const Content& content, DialogProperties properties, CallSite site) {
+void detail::Dialog(std::function<void()> onDismissRequest, const Content& content, DialogProperties properties, CallSite site) {
     ComposableScope scope(site);
     auto dismiss = rememberUpdatedState(std::move(onDismissRequest));
     auto outside = rememberUpdatedState(std::function<void()>([dismiss, properties] {
@@ -142,10 +142,10 @@ void dialogButtons(const Content& buttons) {
 }
 } // namespace
 
-void AlertDialog(std::function<void()> onDismissRequest, const AlertDialogSlots& slots, const Modifier& modifier,
+void detail::AlertDialog(std::function<void()> onDismissRequest, const AlertDialogSlots& slots, const Modifier& modifier,
                  DialogProperties properties, CallSite site) {
     ComposableScope scope(site);
-    Dialog(
+    detail::Dialog(
         std::move(onDismissRequest),
         [&] {
             const ColorScheme& cs = colorScheme();
@@ -177,10 +177,10 @@ void AlertDialog(std::function<void()> onDismissRequest, const AlertDialogSlots&
         properties);
 }
 
-void BasicAlertDialog(std::function<void()> onDismissRequest, const Modifier& modifier, const Content& content,
+void detail::BasicAlertDialog(std::function<void()> onDismissRequest, const Modifier& modifier, const Content& content,
                       DialogProperties properties, CallSite site) {
     ComposableScope scope(site);
-    Dialog(
+    detail::Dialog(
         std::move(onDismissRequest),
         [&] {
             // Its children get its least width too (Compose's propagateMinConstraints).
@@ -289,19 +289,19 @@ void markedItem(bool marked, const std::function<Modifier(const Modifier&)>& int
 
 } // namespace
 
-void DropdownMenu(bool expanded, std::function<void()> onDismissRequest, const Content& content,
+void detail::DropdownMenu(bool expanded, std::function<void()> onDismissRequest, const Content& content,
                   const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     menuPopup(expanded, std::move(onDismissRequest), content, modifier, true);
 }
 
-void DropdownMenuPopup(bool expanded, std::function<void()> onDismissRequest, const Content& content, const Modifier& modifier,
+void detail::DropdownMenuPopup(bool expanded, std::function<void()> onDismissRequest, const Content& content, const Modifier& modifier,
                        CallSite site) {
     ComposableScope scope(site);
     menuPopup(expanded, std::move(onDismissRequest), content, modifier, false);
 }
 
-void DropdownMenuGroup(const Shape& shape, const Content& content, const Modifier& modifier, CallSite site) {
+void detail::DropdownMenuGroup(const Shape& shape, const Content& content, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     detail::Column(modifier.fillMaxWidth().shadow(3, shape).background(cs.surfaceContainerLow, shape).padding(0, 4), content);
@@ -321,7 +321,7 @@ Shape itemShape(int index, int count) {
 
 } // namespace MenuDefaults
 
-void DropdownMenuItem(bool checked, std::function<void(bool)> onCheckedChange, const Content& text, const MenuItemOptions& options,
+void detail::DropdownMenuItem(bool checked, std::function<void(bool)> onCheckedChange, const Content& text, const MenuItemOptions& options,
                       CallSite site) {
     ComposableScope scope(site);
     markedItem(checked, [&](const Modifier& m) {
@@ -329,14 +329,14 @@ void DropdownMenuItem(bool checked, std::function<void(bool)> onCheckedChange, c
     }, text, options);
 }
 
-void DropdownMenuItem(bool selected, std::function<void()> onClick, const Content& text, const MenuItemOptions& options, CallSite site) {
+void detail::DropdownMenuItem(bool selected, std::function<void()> onClick, const Content& text, const MenuItemOptions& options, CallSite site) {
     ComposableScope scope(site);
     markedItem(selected, [&](const Modifier& m) {
         return m.selectable(selected, std::move(onClick), SemanticsRole::RadioButton, {.enabled = options.enabled});
     }, text, options);
 }
 
-void DropdownMenuItem(const Content& text, std::function<void()> onClick, const MenuItemOptions& options, CallSite site) {
+void detail::DropdownMenuItem(const Content& text, std::function<void()> onClick, const MenuItemOptions& options, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     Color textColor = options.enabled ? cs.onSurface : cs.onSurface.copy(0.38f);
@@ -427,12 +427,12 @@ ModalBottomSheetState rememberModalBottomSheetState(bool skipPartiallyExpanded, 
     return rememberSaveable([&] { return ModalBottomSheetState(skipPartiallyExpanded); }, site);
 }
 
-void ModalBottomSheet(std::function<void()> onDismissRequest, const Content& content, CallSite site) {
+void detail::ModalBottomSheet(std::function<void()> onDismissRequest, const Content& content, CallSite site) {
     ComposableScope scope(site);
-    ModalBottomSheet(std::move(onDismissRequest), rememberModalBottomSheetState(), content);
+    detail::ModalBottomSheet(std::move(onDismissRequest), rememberModalBottomSheetState(), content);
 }
 
-void ModalBottomSheet(std::function<void()> onDismissRequest, const ModalBottomSheetState& sheetState, const Content& content,
+void detail::ModalBottomSheet(std::function<void()> onDismissRequest, const ModalBottomSheetState& sheetState, const Content& content,
                       CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();

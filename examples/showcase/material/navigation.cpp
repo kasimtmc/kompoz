@@ -94,11 +94,11 @@ void ShortNavigationBarSection(CallSite site) {
             for (ShortNavigationBarArrangement arrangement : {ShortNavigationBarArrangement::EqualWeight, ShortNavigationBarArrangement::Centered}) {
                 Text(arrangement == ShortNavigationBarArrangement::EqualWeight ? "Eşit paylaşım" : "Ortada",
                      color = cs.onSurfaceVariant, style = typography().labelLarge);
-                ShortNavigationBar(Modifier().clip(RoundedCornerShape(16)), [&] {
+                ShortNavigationBar(Modifier().clip(RoundedCornerShape(16)), kompoz::arrangement = arrangement, windowInsets = WindowInsets{}) {
                     for (int i = 0; i < 3; ++i)
                         ShortNavigationBarItem(page.get() == i, [page, i] { page.set(i); },
                                                [&, i] { Icon(*tabs[i].icon, ""); }, [&, i] { Text(tabs[i].label); });
-                }, {.arrangement = arrangement, .windowInsets = WindowInsets{}});
+                };
             }
         });
     });
@@ -126,7 +126,7 @@ void WideNavigationRailSection(CallSite site) {
                 Text("  Modal (ModalWideNavigationRail)", style = typography().bodyMedium);
             };
             Row(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16)).background(cs.surfaceContainerHigh)) {
-                auto items = [&] {
+                auto items = [=] {  // (by value: the rail's block keeps it)
                     for (int i = 0; i < 3; ++i)
                         WideNavigationRailItem(box.get() == i, [box, i, rail, modal] {
                             box.set(i);
@@ -137,9 +137,9 @@ void WideNavigationRailSection(CallSite site) {
                     IconButton([rail] { rail.toggle(); }) { Icon(rail.isExpanded() ? Icons::AutoMirrored::Filled::ArrowBack : Icons::Filled::Menu, "Rayı aç/kapat"); };
                 };
                 if (modal.get())
-                    ModalWideNavigationRail(Modifier(), items, {.state = rail, .header = header});
+                    ModalWideNavigationRail(Modifier(), state = rail, kompoz::header = header) { items(); };
                 else
-                    WideNavigationRail(Modifier(), items, {.state = rail, .header = header, .windowInsets = WindowInsets{}});
+                    WideNavigationRail(Modifier(), state = rail, kompoz::header = header, windowInsets = WindowInsets{}) { items(); };
                 Box(Modifier().weight(1).fillMaxHeight(), Alignment::Center) { Text(boxes[box.get()].label, style = typography().headlineSmall); };
             };
         });

@@ -105,17 +105,17 @@ void DialogsSection(NavController nav, CallSite site) {
                         Text("Menü");
                         Icon(Icons::Filled::KeyboardArrowDown, "Aç", Modifier().size(18));
                     };
-                    DropdownMenu(menu.get(), [menu] { menu.set(false); }, [&] {
+                    DropdownMenu(menu.get(), [menu] { menu.set(false); }) {
                         DropdownMenuItem([] { Text("Düzenle"); }, [menu, choice] { choice.set("Düzenle"); menu.set(false); },
-                                         {.leadingIcon = [] { Icon(Icons::Filled::Edit, "Düzenle"); }});
+                                         leadingIcon = [] { Icon(Icons::Filled::Edit, "Düzenle"); });
                         DropdownMenuItem([] { Text("Paylaş"); }, [menu, choice] { choice.set("Paylaş"); menu.set(false); },
-                                         {.leadingIcon = [] { Icon(Icons::Filled::Share, "Paylaş"); }});
+                                         leadingIcon = [] { Icon(Icons::Filled::Share, "Paylaş"); });
                         HorizontalDivider(Modifier().padding(0, 8));
                         DropdownMenuItem([] { Text("Sil"); }, [menu, choice] { choice.set("Sil"); menu.set(false); },
-                                         {.leadingIcon = [] { Icon(Icons::Filled::Delete, "Sil"); },
-                                          .trailingIcon = [] { Text("Del"); }});
-                        DropdownMenuItem([] { Text("Kapalı seçenek"); }, [] {}, {.enabled = false});
-                    });
+                                         leadingIcon = [] { Icon(Icons::Filled::Delete, "Sil"); },
+                                         trailingIcon = [] { Text("Del"); });
+                        DropdownMenuItem([] { Text("Kapalı seçenek"); }, [] {}, enabled = false);
+                    };
                 };
                 // An expressive menu: groups as cards, checked and selected items.
                 Box() {
@@ -123,8 +123,8 @@ void DialogsSection(NavController nav, CallSite site) {
                         Text("Biçim");
                         Icon(Icons::Filled::KeyboardArrowDown, "Aç", Modifier().size(18));
                     };
-                    DropdownMenuPopup(formatMenu.get(), [formatMenu] { formatMenu.set(false); }, [&] {
-                        DropdownMenuGroup(MenuDefaults::groupShape(0, 3), [&] {
+                    DropdownMenuPopup(formatMenu.get(), [formatMenu] { formatMenu.set(false); }) {
+                        DropdownMenuGroup(MenuDefaults::groupShape(0, 3)) {
                             const char* styles[] = {"Kalın", "İtalik"};
                             for (int i = 0; i < 2; ++i)
                                 DropdownMenuItem(format.get()[size_t(i)],
@@ -133,37 +133,37 @@ void DialogsSection(NavController nav, CallSite site) {
                                                      f[size_t(i)] = on;
                                                      format.set(f);
                                                  },
-                                                 [&, i] { Text(styles[i]); }, {.shape = MenuDefaults::itemShape(i, 2)});
-                        });
+                                                 [&, i] { Text(styles[i]); }, shape = MenuDefaults::itemShape(i, 2));
+                        };
                         Spacer(Modifier().height(MenuDefaults::GroupSpacing));
-                        DropdownMenuGroup(MenuDefaults::groupShape(1, 3), [&] {
+                        DropdownMenuGroup(MenuDefaults::groupShape(1, 3)) {
                             const char* sides[] = {"Sola hizala", "Ortala", "Sağa hizala"};
                             for (int i = 0; i < 3; ++i)
                                 DropdownMenuItem(alignment.get() == i, [alignment, i] { alignment.set(i); }, [&, i] { Text(sides[i]); },
-                                                 {.shape = MenuDefaults::itemShape(i, 3)});
-                        });
+                                                 shape = MenuDefaults::itemShape(i, 3));
+                        };
                         Spacer(Modifier().height(MenuDefaults::GroupSpacing));
-                        DropdownMenuGroup(MenuDefaults::groupShape(2, 3), [&] {
+                        DropdownMenuGroup(MenuDefaults::groupShape(2, 3)) {
                             DropdownMenuItem([] { Text("Yazı tipi"); }, [formatMenu, choice] { choice.set("Yazı tipi"); formatMenu.set(false); },
-                                             {.leadingIcon = [] { Icon(Icons::Filled::Settings, "Yazı tipi"); },
-                                              .supportingText = [] { Text("Boyut ve aile"); },
-                                              .shape = MenuDefaults::itemShape(0, 1)});
-                        });
-                    });
+                                             leadingIcon = [] { Icon(Icons::Filled::Settings, "Yazı tipi"); },
+                                             supportingText = [] { Text("Boyut ve aile"); },
+                                             shape = MenuDefaults::itemShape(0, 1));
+                        };
+                    };
                 };
             });
             Text("Son seçim: " + choice.get(), color = cs.onSurfaceVariant, style = typography().bodyMedium);
             if (dialog.get())
                 AlertDialog([dialog] { dialog.set(false); },
-                            {.confirmButton = [dialog, choice] {
-                                 TextButton([dialog, choice] { choice.set("Dialog: Sil"); dialog.set(false); }) { Text("Sil"); };
-                             },
-                             .dismissButton = [dialog] { TextButton([dialog] { dialog.set(false); }) { Text("Vazgeç"); }; },
-                             .icon = [] { Icon(Icons::Filled::Delete, "Sil"); },
-                             .title = [] { Text("Taslak silinsin mi?"); },
-                             .text = [] { Text("Bu işlem geri alınamaz. Scrim'e dokunmak ya da geri tuşu da dialog'u kapatır."); }});
+                            confirmButton = [dialog, choice] {
+                                TextButton([dialog, choice] { choice.set("Dialog: Sil"); dialog.set(false); }) { Text("Sil"); };
+                            },
+                            dismissButton = [dialog] { TextButton([dialog] { dialog.set(false); }) { Text("Vazgeç"); }; },
+                            icon = [] { Icon(Icons::Filled::Delete, "Sil"); },
+                            title = [] { Text("Taslak silinsin mi?"); },
+                            text = [] { Text("Bu işlem geri alınamaz. Scrim'e dokunmak ya da geri tuşu da dialog'u kapatır."); });
             if (basicDialog.get())  // content of its own, at least 280 dp wide
-                BasicAlertDialog([basicDialog] { basicDialog.set(false); }, Modifier(), [&] {
+                BasicAlertDialog([basicDialog] { basicDialog.set(false); }, Modifier()) {
                     Column(Modifier().background(cs.surfaceContainerHigh, 28).padding(24), horizontalAlignment = Alignment::CenterHorizontally) {
                         LoadingIndicator(Modifier().size(48));
                         Text("Eşitleniyor…", Modifier().padding(0, 16), style = typography().titleMedium);
@@ -171,9 +171,9 @@ void DialogsSection(NavController nav, CallSite site) {
                              color = cs.onSurfaceVariant, style = typography().bodyMedium);
                         TextButton([basicDialog] { basicDialog.set(false); }, Modifier().padding(0, 16, 0, 0)) { Text("Kapat"); };
                     };
-                });
+                };
             if (sheet.get())
-                ModalBottomSheet([sheet] { sheet.set(false); }, sheetState, [&] {
+                ModalBottomSheet([sheet] { sheet.set(false); }, sheetState) {
                     Text("Paylaş", Modifier().padding(24, 0, 24, 8), style = typography().titleMedium);
                     const std::pair<const ImageVector*, const char*> actions[] = {
                         {&Icons::Filled::Share, "Bağlantıyı paylaş"}, {&Icons::Filled::Email, "E-posta ile gönder"},
@@ -190,10 +190,10 @@ void DialogsSection(NavController nav, CallSite site) {
                                  }));
                     Text("Aşağı sürükleyin, scrim'e dokunun ya da geri tuşuna basın.", Modifier().padding(24, 8, 24, 16),
                          color = cs.onSurfaceVariant, style = typography().bodySmall);
-                });
+                };
             // A list in a sheet: it scrolls first; pulled down at its top it moves the sheet.
             if (longSheet.get())
-                ModalBottomSheet([longSheet] { longSheet.set(false); }, [&] {
+                ModalBottomSheet([longSheet] { longSheet.set(false); }) {
                     Text("Uzun liste: sayfa yarıya kadar açılır; yukarı itince önce sayfa tam açılır, sonra liste kayar; "
                          "en üstte aşağı çekince sayfa iner",
                          Modifier().padding(24, 0, 24, 8), style = typography().titleSmall);
@@ -204,7 +204,7 @@ void DialogsSection(NavController nav, CallSite site) {
                                      Modifier().clickable([longSheet, choice, label] { choice.set(label); longSheet.set(false); }));
                         });
                     });
-                });
+                };
         });
     });
 }

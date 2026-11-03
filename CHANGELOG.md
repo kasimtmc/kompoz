@@ -628,6 +628,15 @@
   scrollBehavior = s)`, `FloatingActionButton(onClick) { Icon(…); };`. A block given a value is a lambda after the
   call: `Scaffold(topBar = …) [=](PaddingValues padding) { … };`, and it too runs in a scope of its own. An extended
   FAB's `expanded` comes after its modifier, as in Compose; a floating toolbar's colors are `floatingToolbarColors =`.
+- **Named arguments for navigation, dialogs, menus and sheets**: `NavigationBar`, `ShortNavigationBar`,
+  `NavigationRail`, `WideNavigationRail`, `ModalWideNavigationRail` and their items, the navigation drawers and drawer
+  sheets, `NavigationDrawerItem`, `Dialog`, `AlertDialog`, `BasicAlertDialog`, `DropdownMenu`, `DropdownMenuPopup`,
+  `DropdownMenuGroup`, `DropdownMenuItem`, `ExposedDropdownMenuBox`, `ExposedDropdownMenu`, `ModalBottomSheet` and
+  `BottomSheetScaffold` take them in Compose's order: `AlertDialog(close, confirmButton = …, title = …)`,
+  `DropdownMenu(open, close) { DropdownMenuItem(text = …, onClick = …); };`,
+  `BottomSheetScaffold(sheetContent, sheetPeekHeight = 128) [=](PaddingValues padding) { … };`. Their content is a
+  block in a scope of its own. A rail item's label comes after its modifier, as in Compose; a dialog's properties are
+  `properties = DialogProperties{…}`.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

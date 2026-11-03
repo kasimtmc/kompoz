@@ -135,7 +135,7 @@ void BottomSheetDefaults::DragHandle(CallSite site) {
     detail::Box(Modifier().padding(0, 22).semantics(LocalStrings.current().dragHandle).size(32, 4).background(colorScheme().onSurfaceVariant, 2));
 }
 
-void BottomSheetScaffold(const Content& sheetContent, const Modifier& modifier, const BottomSheetScaffoldOptions& options,
+void detail::BottomSheetScaffold(const Content& sheetContent, const Modifier& modifier, const BottomSheetScaffoldOptions& options,
                          const std::function<void(PaddingValues)>& content, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();

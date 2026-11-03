@@ -425,7 +425,7 @@ void TimePickerDialog(std::function<void()> onDismissRequest, const TimePickerDi
                       CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
-    Dialog(std::move(onDismissRequest), [&] {
+    detail::Dialog(std::move(onDismissRequest), [&] {
         detail::Column(Modifier().background(cs.surfaceContainerHigh, 28).padding(24), {.horizontalAlignment = Alignment::CenterHorizontally},
                [&] {
                    if (slots.title)

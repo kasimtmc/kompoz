@@ -31,7 +31,7 @@ void PlacesScreen(Modifier modifier, CallSite site) {
                 });
             });
         };
-        BottomSheetScaffold(sheetContent, Modifier().fillMaxSize(), {.scaffoldState = state, .sheetPeekHeight = 128}, [&](PaddingValues padding) {
+        BottomSheetScaffold(sheetContent, Modifier().fillMaxSize(), scaffoldState = state, sheetPeekHeight = 128) [=](PaddingValues padding) {
             Box(Modifier().fillMaxSize()) {
                 Canvas(Modifier().fillMaxSize(), [cs](DrawScope& d) {  // streets, a park and the sea
                     Size s = d.size();
@@ -50,6 +50,6 @@ void PlacesScreen(Modifier modifier, CallSite site) {
                 const char* where = sheet.currentValue() == SheetValue::Expanded ? "açık" : "kısmen açık";
                 Box(Modifier().padding(padding).padding(16).background(cs.surface.copy(0.9f), 16).padding(12, 8)) { Text(std::format("Sayfa: {}", where), style = typography().labelLarge); };
             };
-        });
+        };
     });
 }

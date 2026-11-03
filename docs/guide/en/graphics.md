@@ -301,7 +301,7 @@ const ImageVector& sparkle() {
 }
 
 // Paths in paints of their own, in groups, as Compose's ImageVector.Builder makes them.
-const ImageVector& badge() {
+const ImageVector& badgeIcon() {
     static const ImageVector v =
         ImageVector::Builder("Badge", 24, 24, 24, 24)
             .addPath({.pathData = addPathNodes("M12,2a10,10 0 1,0 0.01,0z"), .fill = Brush::solid(Color::hex(0x1E88E5))})
@@ -315,7 +315,7 @@ const ImageVector& badge() {
 
 void Sparkle() {
     Icon(sparkle(), "");
-    Image(rememberVectorPainter(badge()), "Badge");
+    Image(rememberVectorPainter(badgeIcon()), "Badge");
     Image(rememberVectorPainter(vectorResource("vectors/logo.xml")), "Logo", Modifier().size(48));
 }
 ```

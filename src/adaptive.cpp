@@ -166,20 +166,20 @@ void NavigationSuite(NavigationSuiteType navigationSuiteType, const Modifier& mo
     };
     switch (navigationSuiteType) {
     case NavigationSuiteType::ShortNavigationBarCompact:
-    case NavigationSuiteType::ShortNavigationBarMedium: ShortNavigationBar(modifier, content); break;
+    case NavigationSuiteType::ShortNavigationBarMedium: detail::ShortNavigationBar(modifier, content); break;
     case NavigationSuiteType::WideNavigationRailCollapsed:
-        WideNavigationRail(modifier, content, {.header = primaryActionContent, .arrangement = verticalArrangement});
+        detail::WideNavigationRail(modifier, content, {.header = primaryActionContent, .arrangement = verticalArrangement});
         break;
     case NavigationSuiteType::WideNavigationRailExpanded: {
         WideNavigationRailState expanded = rememberWideNavigationRailState(true);
-        WideNavigationRail(modifier, content, {.state = expanded, .header = primaryActionContent, .arrangement = verticalArrangement});
+        detail::WideNavigationRail(modifier, content, {.state = expanded, .header = primaryActionContent, .arrangement = verticalArrangement});
         break;
     }
     // (As Compose's: the older bar's items are short bar items, so its bar is a short one as tall.)
-    case NavigationSuiteType::NavigationBar: ShortNavigationBar(modifier.heightIn(80), content); break;
-    case NavigationSuiteType::NavigationRail: NavigationRail(modifier, primaryActionContent, arranged); break;
+    case NavigationSuiteType::NavigationBar: detail::ShortNavigationBar(modifier.heightIn(80), content); break;
+    case NavigationSuiteType::NavigationRail: detail::NavigationRail(modifier, primaryActionContent, arranged); break;
     case NavigationSuiteType::NavigationDrawer:
-        PermanentDrawerSheet(modifier, [&] {
+        detail::PermanentDrawerSheet(modifier, [&] {
             if (primaryActionContent) primaryActionContent();
             arranged();
         });
@@ -197,7 +197,7 @@ void NavigationSuiteItem(bool selected, std::function<void()> onClick, const Con
     switch (type) {
     case NavigationSuiteType::ShortNavigationBarCompact:
     case NavigationSuiteType::ShortNavigationBarMedium:
-        ShortNavigationBarItem(selected, std::move(onClick), picture, label, modifier,
+        detail::ShortNavigationBarItem(selected, std::move(onClick), picture, label, modifier,
                                {.iconPosition = type == NavigationSuiteType::ShortNavigationBarCompact ? NavigationItemIconPosition::Top
                                                                                                        : NavigationItemIconPosition::Start,
                                 .enabled = options.enabled,
@@ -205,19 +205,19 @@ void NavigationSuiteItem(bool selected, std::function<void()> onClick, const Con
         break;
     case NavigationSuiteType::WideNavigationRailCollapsed:
     case NavigationSuiteType::WideNavigationRailExpanded:
-        WideNavigationRailItem(selected, std::move(onClick), picture, label, modifier,
+        detail::WideNavigationRailItem(selected, std::move(onClick), picture, label, modifier,
                                {.railExpanded = type == NavigationSuiteType::WideNavigationRailExpanded,
                                 .enabled = options.enabled,
                                 .interactionSource = options.interactionSource});
         break;
     case NavigationSuiteType::NavigationBar:  // a short bar item, 8 dp lower: as the older bar's
-        ShortNavigationBarItem(selected, std::move(onClick), picture, label, modifier.padding(0, 8, 0, 0),
+        detail::ShortNavigationBarItem(selected, std::move(onClick), picture, label, modifier.padding(0, 8, 0, 0),
                                {.iconPosition = NavigationItemIconPosition::Top, .enabled = options.enabled, .interactionSource = options.interactionSource});
         break;
     case NavigationSuiteType::NavigationRail:
-        NavigationRailItem(selected, std::move(onClick), picture, label, modifier, {.enabled = options.enabled, .interactionSource = options.interactionSource});
+        detail::NavigationRailItem(selected, std::move(onClick), picture, label, modifier, {.enabled = options.enabled, .interactionSource = options.interactionSource});
         break;
-    case NavigationSuiteType::NavigationDrawer: NavigationDrawerItem(label, selected, std::move(onClick), icon, badge, modifier); break;
+    case NavigationSuiteType::NavigationDrawer: detail::NavigationDrawerItem(label, selected, std::move(onClick), icon, badge, modifier); break;
     case NavigationSuiteType::None: break;
     }
 }
@@ -263,26 +263,26 @@ void NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& n
     auto suite = [&] {
         switch (type) {
         case NavigationSuiteType::NavigationBar:
-            NavigationBar(Modifier(), [&] {
-                for (const auto& item : nav.items()) NavigationBarItem(item.selected, item.onClick, item.icon, item.label);
+            detail::NavigationBar(Modifier(), [&] {
+                for (const auto& item : nav.items()) detail::NavigationBarItem(item.selected, item.onClick, item.icon, item.label);
             });
             break;
         case NavigationSuiteType::NavigationRail:
-            NavigationRail(Modifier(), options.railHeader ? options.railHeader : options.primaryActionContent, [&] {
+            detail::NavigationRail(Modifier(), options.railHeader ? options.railHeader : options.primaryActionContent, [&] {
                 for (const auto& item : nav.items()) {
                     ImageVector icon = item.icon;
-                    NavigationRailItem(item.selected, item.onClick, [icon] { detail::Icon(icon, ""); }, [label = item.label] { detail::Text(label); }, Modifier(),
+                    detail::NavigationRailItem(item.selected, item.onClick, [icon] { detail::Icon(icon, ""); }, [label = item.label] { detail::Text(label); }, Modifier(),
                                        {.enabled = item.enabled});
                 }
             });
             break;
         case NavigationSuiteType::NavigationDrawer:
-            PermanentDrawerSheet(Modifier(), [&] {
+            detail::PermanentDrawerSheet(Modifier(), [&] {
                 if (options.drawerHeader) options.drawerHeader();
                 for (const auto& item : nav.items()) {
                     ImageVector icon = item.icon;
                     std::string label = item.label;
-                    NavigationDrawerItem([label] { detail::Text(label); }, item.selected, item.onClick, [icon, label] { detail::Icon(icon, label); }, item.badge);
+                    detail::NavigationDrawerItem([label] { detail::Text(label); }, item.selected, item.onClick, [icon, label] { detail::Icon(icon, label); }, item.badge);
                 }
             });
             break;

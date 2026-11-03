@@ -842,9 +842,32 @@ void Indicator(const PullToRefreshState& state, bool isRefreshing, const Modifie
 } // namespace PullToRefreshDefaults
 
 // Includes the navigation bar inset; put NavigationBarItems in it.
+namespace detail {
 void NavigationBar(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
+struct NavigationBarImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: NavigationBar takes a block: its content");
+        NavigationBar(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::NavigationBarImpl> NavigationBar;
+namespace detail {
 void NavigationBarItem(bool selected, std::function<void()> onClick, const ImageVector& icon, std::string label,
                        CallSite site = CallSite::current());
+struct NavigationBarItemImpl {
+    template <class... A>
+    static void call(CallSite site, bool selected, std::function<void()> onClick, const ImageVector& icon, A&&... args) {
+        using P = Params<names::Label>;
+        static_assert(P::check<A...>());
+        NavigationBarItem(selected, std::move(onClick), icon, P::get<names::Label>(std::string(), args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::NavigationBarItemImpl> NavigationBarItem;
 
 // M3 Expressive's short navigation bar (Compose's ShortNavigationBar and ShortNavigationBarItem):
 // 64 dp tall. Its items share the width, the icon above the label (EqualWeight, a compact window's
@@ -858,23 +881,56 @@ struct ShortNavigationBarOptions {
     std::optional<Color> containerColor;                       // surfaceContainer
     std::optional<WindowInsets> windowInsets;                  // the system bars' and cutout's sides and bottom
 };
+namespace detail {
 void ShortNavigationBar(const Modifier& modifier, const Content& content, const ShortNavigationBarOptions& options = {},
                         CallSite site = CallSite::current());
+struct ShortNavigationBarImpl {
+    using P = Params<names::Modifier, names::ContainerColor, names::WindowInsets, names::Arrangement, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: ShortNavigationBar takes a block: its content");
+        ShortNavigationBarOptions options;
+        P::set<names::ContainerColor>(options.containerColor, args...);
+        P::set<names::WindowInsets>(options.windowInsets, args...);
+        P::set<names::Arrangement>(options.arrangement, args...);
+        ShortNavigationBar(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ShortNavigationBarImpl> ShortNavigationBar;
 struct ShortNavigationBarItemOptions {
     std::optional<NavigationItemIconPosition> iconPosition;  // Top in EqualWeight bars, Start in Centered ones
     bool enabled = true;
     std::optional<MutableInteractionSource> interactionSource;
 };
+namespace detail {
 void ShortNavigationBarItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label,
                             const Modifier& modifier = {}, const ShortNavigationBarItemOptions& options = {},
                             CallSite site = CallSite::current());
+struct ShortNavigationBarItemImpl {
+    template <class... A>
+    static void call(CallSite site, bool selected, std::function<void()> onClick, A&&... args) {
+        using P = Params<names::Icon, names::Label, names::Modifier, names::Enabled, names::IconPosition, names::InteractionSource>;
+        static_assert(P::check<A...>());
+        static_assert(P::given<names::Icon, A...>(), "kompoz: ShortNavigationBarItem takes an icon");
+        ShortNavigationBarItemOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::IconPosition>(options.iconPosition, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        ShortNavigationBarItem(selected, std::move(onClick), P::get<names::Icon>(Content{}, args...), P::get<names::Label>(Content{}, args...),
+            P::get<names::Modifier>(Modifier{}, args...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ShortNavigationBarItemImpl> ShortNavigationBarItem;
 
 // M3 Expressive's wide navigation rail (Compose's WideNavigationRail): collapsed, 96 dp wide with
 // each icon above its label; expanded (its state's expand(), often from a menu button in its
 // header), it widens and the labels go after the icons. Its items follow its state on their own.
 //   auto rail = rememberWideNavigationRailState();
-//   WideNavigationRail(Modifier(), [&] { WideNavigationRailItem(...); ... },
-//                      {.state = rail, .header = [rail] { IconButton([rail] { rail.toggle(); }, ...); }});
+//   WideNavigationRail(Modifier(), state = rail, header = [rail] { IconButton([rail] { rail.toggle(); }, ...); },
+//                      [=] { WideNavigationRailItem(...); ... });
 class WideNavigationRailState {
 public:
     explicit WideNavigationRailState(bool expanded = false);
@@ -901,16 +957,53 @@ struct WideNavigationRailOptions {
     std::optional<WindowInsets> windowInsets;  // the system bars' and cutout's start, top and bottom
     Arrangement::Kind arrangement = Arrangement::Kind::Start;  // where the items go: Start (top), Center, End (bottom)
 };
+namespace detail {
 void WideNavigationRail(const Modifier& modifier, const Content& content, const WideNavigationRailOptions& options = {},
                         CallSite site = CallSite::current());
+struct WideNavigationRailImpl {
+    using P = Params<names::Modifier, names::State, names::Header, names::ContainerColor, names::CollapsedWidth, names::ExpandedWidth, names::WindowInsets, names::Arrangement, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: WideNavigationRail takes a block: its content");
+        WideNavigationRailOptions options;
+        P::set<names::State>(options.state, args...);
+        P::set<names::Header>(options.header, args...);
+        P::set<names::ContainerColor>(options.containerColor, args...);
+        P::set<names::CollapsedWidth>(options.collapsedWidth, args...);
+        P::set<names::ExpandedWidth>(options.expandedWidth, args...);
+        P::set<names::WindowInsets>(options.windowInsets, args...);
+        P::set<names::Arrangement>(options.arrangement, args...);
+        WideNavigationRail(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::WideNavigationRailImpl> WideNavigationRail;
 struct WideNavigationRailItemOptions {
     std::optional<bool> railExpanded;  // the rail's state
     bool enabled = true;
     std::optional<MutableInteractionSource> interactionSource;
 };
+namespace detail {
 void WideNavigationRailItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label,
                             const Modifier& modifier = {}, const WideNavigationRailItemOptions& options = {},
                             CallSite site = CallSite::current());
+struct WideNavigationRailItemImpl {
+    template <class... A>
+    static void call(CallSite site, bool selected, std::function<void()> onClick, A&&... args) {
+        using P = Params<names::Icon, names::Label, names::Modifier, names::Enabled, names::RailExpanded, names::InteractionSource>;
+        static_assert(P::check<A...>());
+        static_assert(P::given<names::Icon, A...>(), "kompoz: WideNavigationRailItem takes an icon");
+        WideNavigationRailItemOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::RailExpanded>(options.railExpanded, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        WideNavigationRailItem(selected, std::move(onClick), P::get<names::Icon>(Content{}, args...), P::get<names::Label>(Content{}, args...),
+            P::get<names::Modifier>(Modifier{}, args...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::WideNavigationRailItemImpl> WideNavigationRailItem;
 // The modal one (Compose's ModalWideNavigationRail): collapsed, a rail in place (or nothing,
 // hideOnCollapse); expanded, it slides in from the start over everything (surfaceContainer, its
 // end corners round) above a scrim, and a tap on the scrim or Back collapses it. The content
@@ -922,8 +1015,27 @@ struct ModalWideNavigationRailOptions {
     float collapsedWidth = 96, expandedWidth = 220;
     std::optional<WindowInsets> windowInsets;
 };
+namespace detail {
 void ModalWideNavigationRail(const Modifier& modifier, const Content& content, const ModalWideNavigationRailOptions& options = {},
                              CallSite site = CallSite::current());
+struct ModalWideNavigationRailImpl {
+    using P = Params<names::Modifier, names::State, names::HideOnCollapse, names::CollapsedWidth, names::ExpandedWidth, names::Header, names::WindowInsets, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: ModalWideNavigationRail takes a block: its content");
+        ModalWideNavigationRailOptions options;
+        P::set<names::State>(options.state, args...);
+        P::set<names::HideOnCollapse>(options.hideOnCollapse, args...);
+        P::set<names::CollapsedWidth>(options.collapsedWidth, args...);
+        P::set<names::ExpandedWidth>(options.expandedWidth, args...);
+        P::set<names::Header>(options.header, args...);
+        P::set<names::WindowInsets>(options.windowInsets, args...);
+        ModalWideNavigationRail(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ModalWideNavigationRailImpl> ModalWideNavigationRail;
 
 namespace detail {
 void FloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier = {},
@@ -1954,8 +2066,20 @@ struct DialogProperties {
     bool usePlatformDefaultWidth = true;
 };
 // Centered over a scrim. Compose it while it should show: if (open) Dialog(...).
+namespace detail {
 void Dialog(std::function<void()> onDismissRequest, const Content& content, DialogProperties properties = {},
             CallSite site = CallSite::current());
+struct DialogImpl {
+    using P = Params<names::Properties, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onDismissRequest, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: Dialog takes a block: its content");
+        Dialog(std::move(onDismissRequest), P::block(std::forward<A>(args)...), P::get<names::Properties>(DialogProperties{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::DialogImpl> Dialog;
 
 namespace AlertDialogDefaults {
 inline constexpr float cornerRadius = 28;  // its shape: RoundedCornerShape(28)
@@ -1974,17 +2098,63 @@ struct AlertDialogSlots {
 // Material 3's dialog: the icon (centered, with the title under it), title, text (giving way
 // when the window is short) and the buttons at the end, in rows that wrap with the confirming
 // one above. 280 to 560 dp wide.
+namespace detail {
 void AlertDialog(std::function<void()> onDismissRequest, const AlertDialogSlots& slots, const Modifier& modifier = {},
                  DialogProperties properties = {}, CallSite site = CallSite::current());
+struct AlertDialogImpl {
+    using P = Params<names::ConfirmButton, names::Modifier, names::DismissButton, names::Icon, names::Title, names::Text, names::Shape, names::ContainerColor, names::IconContentColor, names::TitleContentColor, names::TextContentColor, names::Properties>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onDismissRequest, A&&... args) {
+        static_assert(P::check<A...>());
+        AlertDialogSlots slots;
+        P::set<names::ConfirmButton>(slots.confirmButton, args...);
+        P::set<names::DismissButton>(slots.dismissButton, args...);
+        P::set<names::Icon>(slots.icon, args...);
+        P::set<names::Title>(slots.title, args...);
+        P::set<names::Text>(slots.text, args...);
+        P::set<names::Shape>(slots.shape, args...);
+        P::set<names::ContainerColor>(slots.containerColor, args...);
+        P::set<names::IconContentColor>(slots.iconContentColor, args...);
+        P::set<names::TitleContentColor>(slots.titleContentColor, args...);
+        P::set<names::TextContentColor>(slots.textContentColor, args...);
+        AlertDialog(std::move(onDismissRequest), slots, P::get<names::Modifier>(Modifier{}, args...), P::get<names::Properties>(DialogProperties{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::AlertDialogImpl> AlertDialog;
 // A dialog with content of your own (Compose's BasicAlertDialog): 280 to 560 dp wide, the
 // content at least as wide as that (give it a Surface or card to sit on).
+namespace detail {
 void BasicAlertDialog(std::function<void()> onDismissRequest, const Modifier& modifier, const Content& content,
                       DialogProperties properties = {}, CallSite site = CallSite::current());
+struct BasicAlertDialogImpl {
+    using P = Params<names::Modifier, names::Properties, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onDismissRequest, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: BasicAlertDialog takes a block: its content");
+        BasicAlertDialog(std::move(onDismissRequest), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), P::get<names::Properties>(DialogProperties{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::BasicAlertDialogImpl> BasicAlertDialog;
 
 // Opens below the node it is composed in (or above it, near the bottom of the window):
-//   Box([=] { IconButton(open, ...); DropdownMenu(expanded.get(), close, [&] { DropdownMenuItem(...); }); });
+//   Box([=] { IconButton(open, ...); DropdownMenu(expanded.get(), close, [=] { DropdownMenuItem(...); }); });
+namespace detail {
 void DropdownMenu(bool expanded, std::function<void()> onDismissRequest, const Content& content,
                   const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct DropdownMenuImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, bool expanded, std::function<void()> onDismissRequest, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: DropdownMenu takes a block: its content");
+        DropdownMenu(expanded, std::move(onDismissRequest), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::DropdownMenuImpl> DropdownMenu;
 struct MenuItemOptions {
     Content leadingIcon, trailingIcon;
     bool enabled = true;
@@ -1994,19 +2164,41 @@ struct MenuItemOptions {
     std::optional<Shape> shape;
     Content checkedLeadingIcon;
 };
-void DropdownMenuItem(const Content& text, std::function<void()> onClick, const MenuItemOptions& options = {},
-                      CallSite site = CallSite::current());
 
 // M3 Expressive menus (Compose's DropdownMenuPopup and DropdownMenuGroup): the popup has no card
 // of its own, each group is one, MenuDefaults::GroupSpacing apart, rounder at the menu's ends.
-//   DropdownMenuPopup(open.get(), close, [&] {
-//       DropdownMenuGroup(MenuDefaults::groupShape(0, 2), [&] { DropdownMenuItem(bold, setBold, [] { Text("Kalın"); }); });
+//   DropdownMenuPopup(open.get(), close, [=] {
+//       DropdownMenuGroup(MenuDefaults::groupShape(0, 2), [=] { DropdownMenuItem(bold, setBold, [] { Text("Kalın"); }); });
 //       Spacer(Modifier().height(MenuDefaults::GroupSpacing));
-//       DropdownMenuGroup(MenuDefaults::groupShape(1, 2), [&] { ... });
+//       DropdownMenuGroup(MenuDefaults::groupShape(1, 2), [=] { ... });
 //   });
+namespace detail {
 void DropdownMenuPopup(bool expanded, std::function<void()> onDismissRequest, const Content& content, const Modifier& modifier = {},
                        CallSite site = CallSite::current());
+struct DropdownMenuPopupImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, bool expanded, std::function<void()> onDismissRequest, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: DropdownMenuPopup takes a block: its content");
+        DropdownMenuPopup(expanded, std::move(onDismissRequest), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::DropdownMenuPopupImpl> DropdownMenuPopup;
+namespace detail {
 void DropdownMenuGroup(const Shape& shape, const Content& content, const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct DropdownMenuGroupImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, const Shape& shape, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: DropdownMenuGroup takes a block: its content");
+        DropdownMenuGroup(shape, P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::DropdownMenuGroupImpl> DropdownMenuGroup;
 namespace MenuDefaults {
 inline constexpr float GroupSpacing = 2;
 Shape groupShape(int index, int count);  // 16 dp at the menu's ends, 4 dp where groups meet
@@ -2015,25 +2207,93 @@ Shape itemShape(int index, int count);   // 12 dp at a group's ends, 4 dp betwee
 // Items that are on or off (a check before the text when on) or one of several to pick
 // (Compose's DropdownMenuItem(checked, onCheckedChange) and (selected, onClick)): checked or
 // selected, they sit in tertiaryContainer, 12 dp round.
+namespace detail {
+void DropdownMenuItem(const Content& text, std::function<void()> onClick, const MenuItemOptions& options = {},
+                      CallSite site = CallSite::current());
 void DropdownMenuItem(bool checked, std::function<void(bool)> onCheckedChange, const Content& text, const MenuItemOptions& options = {},
                       CallSite site = CallSite::current());
 void DropdownMenuItem(bool selected, std::function<void()> onClick, const Content& text, const MenuItemOptions& options = {},
                       CallSite site = CallSite::current());
+struct DropdownMenuItemImpl {
+    template <class P, class... A>  // (P: the call's own parameters, for those given by their place)
+    static MenuItemOptions options(A&... args) {
+        MenuItemOptions options;
+        P::template set<names::LeadingIcon>(options.leadingIcon, args...);
+        P::template set<names::TrailingIcon>(options.trailingIcon, args...);
+        P::template set<names::Enabled>(options.enabled, args...);
+        P::template set<names::SupportingText>(options.supportingText, args...);
+        P::template set<names::Shape>(options.shape, args...);
+        P::template set<names::CheckedLeadingIcon>(options.checkedLeadingIcon, args...);
+        return options;
+    }
+    template <class... A>
+        requires(!startsWith<bool, A...>())
+    static void call(CallSite site, A&&... args) {  // (text, onClick)
+        using P = Params<names::Text, names::OnClick, names::LeadingIcon, names::TrailingIcon, names::Enabled, names::SupportingText, names::Shape, names::CheckedLeadingIcon>;
+        static_assert(P::check<A...>());
+        static_assert(P::given<names::Text, A...>() && P::given<names::OnClick, A...>(), "kompoz: DropdownMenuItem takes a text and an onClick");
+        DropdownMenuItem(P::get<names::Text>(Content{}, args...), P::get<names::OnClick>(std::function<void()>{}, args...), options<P>(args...), site);
+    }
+    template <class F, class... A>
+        requires(std::is_invocable_v<std::remove_cvref_t<F>&, bool>)
+    static void call(CallSite site, bool checked, F&& onCheckedChange, A&&... args) {  // on or off
+        using P = Params<names::Text, names::LeadingIcon, names::TrailingIcon, names::Enabled, names::SupportingText, names::Shape, names::CheckedLeadingIcon>;
+        static_assert(P::check<A...>());
+        static_assert(P::given<names::Text, A...>(), "kompoz: DropdownMenuItem takes a text");
+        DropdownMenuItem(checked, std::function<void(bool)>(std::forward<F>(onCheckedChange)), P::get<names::Text>(Content{}, args...),
+                         options<P>(args...), site);
+    }
+    template <class F, class... A>
+        requires(std::is_invocable_v<std::remove_cvref_t<F>&> && !std::is_invocable_v<std::remove_cvref_t<F>&, bool>)
+    static void call(CallSite site, bool selected, F&& onClick, A&&... args) {  // one of several
+        using P = Params<names::Text, names::LeadingIcon, names::TrailingIcon, names::Enabled, names::SupportingText, names::Shape, names::CheckedLeadingIcon>;
+        static_assert(P::check<A...>());
+        static_assert(P::given<names::Text, A...>(), "kompoz: DropdownMenuItem takes a text");
+        DropdownMenuItem(selected, std::function<void()>(std::forward<F>(onClick)), P::get<names::Text>(Content{}, args...), options<P>(args...),
+                         site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::DropdownMenuItemImpl> DropdownMenuItem;
 
 // A menu that belongs to a text field (Compose's ExposedDropdownMenuBox): a tap on the field
 // opens and closes it, and the menu opens under the field (or above it) at its width.
-//   ExposedDropdownMenuBox(open.get(), [open](bool v) { open.set(v); }, Modifier(), [&] {
+//   ExposedDropdownMenuBox(open.get(), [open](bool v) { open.set(v); }, Modifier(), [=] {
 //       TextField(choice, nullptr, Modifier().fillMaxWidth(),
 //                 label = "Şehir", trailingIcon = [&] { ExposedDropdownMenuDefaults::TrailingIcon(open.get()); },
 //                 readOnly = true);
-//       ExposedDropdownMenu(open.get(), [open] { open.set(false); }, [&] { DropdownMenuItem(...); });
+//       ExposedDropdownMenu(open.get(), [open] { open.set(false); }, [=] { DropdownMenuItem(...); });
 //   });
 // An editable field works too: it filters as the user types, keeping the menu open.
+namespace detail {
 void ExposedDropdownMenuBox(bool expanded, std::function<void(bool)> onExpandedChange, const Modifier& modifier,
                             const Content& content, CallSite site = CallSite::current());
+struct ExposedDropdownMenuBoxImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, bool expanded, std::function<void(bool)> onExpandedChange, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: ExposedDropdownMenuBox takes a block: its content");
+        ExposedDropdownMenuBox(expanded, std::move(onExpandedChange), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ExposedDropdownMenuBoxImpl> ExposedDropdownMenuBox;
 // The box's menu: scrolls when its items don't fit in about half the window.
+namespace detail {
 void ExposedDropdownMenu(bool expanded, std::function<void()> onDismissRequest, const Content& content,
                          const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct ExposedDropdownMenuImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, bool expanded, std::function<void()> onDismissRequest, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: ExposedDropdownMenu takes a block: its content");
+        ExposedDropdownMenu(expanded, std::move(onDismissRequest), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ExposedDropdownMenuImpl> ExposedDropdownMenu;
 namespace ExposedDropdownMenuDefaults {
 // The arrow at the end of the field, turned up while the menu is open.
 void TrailingIcon(bool expanded, CallSite site = CallSite::current());
@@ -2072,9 +2332,24 @@ ModalBottomSheetState rememberModalBottomSheetState(bool skipPartiallyExpanded =
 // Slides up from the bottom over a scrim; tap the scrim, drag it down or press back to close
 // (it slides out, then calls onDismissRequest). A list in it scrolls first; pulled down at its
 // top it moves the sheet, and a sheet open half way expands before the list scrolls.
+namespace detail {
 void ModalBottomSheet(std::function<void()> onDismissRequest, const Content& content, CallSite site = CallSite::current());
 void ModalBottomSheet(std::function<void()> onDismissRequest, const ModalBottomSheetState& sheetState, const Content& content,
                       CallSite site = CallSite::current());
+struct ModalBottomSheetImpl {
+    using P = Params<names::SheetState, Block>;
+    template <class... A>
+    static void call(CallSite site, std::function<void()> onDismissRequest, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: ModalBottomSheet takes a block: its content");
+        if constexpr (P::given<names::SheetState, A...>())
+            ModalBottomSheet(std::move(onDismissRequest), P::get<names::SheetState>(ModalBottomSheetState{}, args...), P::block(std::forward<A>(args)...), site);
+        else
+            ModalBottomSheet(std::move(onDismissRequest), P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ModalBottomSheetImpl> ModalBottomSheet;
 
 // ---- BottomSheetScaffold ----------------------------------------------------------------
 
@@ -2131,11 +2406,34 @@ struct BottomSheetScaffoldOptions {
 // the screen's) and back, and a list in it scrolls once the sheet is all the way up. `content`
 // gets the padding that keeps it clear of the top bar and the peeking sheet.
 //   auto state = rememberBottomSheetScaffoldState();
-//   BottomSheetScaffold([&] { Text("Ayrıntılar"); }, Modifier(), {.scaffoldState = state, .sheetPeekHeight = 128},
-//                       [&](PaddingValues padding) { Map(Modifier().padding(padding)); });
+//   BottomSheetScaffold([&] { Text("Ayrıntılar"); }, Modifier(), scaffoldState = state, sheetPeekHeight = 128,
+//                       [=](PaddingValues padding) { Map(Modifier().padding(padding)); });
 //   scope.launch([state]() -> Task { co_await state.bottomSheetState.expand(); });
+namespace detail {
 void BottomSheetScaffold(const Content& sheetContent, const Modifier& modifier, const BottomSheetScaffoldOptions& options,
                          const std::function<void(PaddingValues)>& content, CallSite site = CallSite::current());
+struct BottomSheetScaffoldImpl {
+    using P = Params<names::SheetContent, names::Modifier, names::ScaffoldState, names::SheetPeekHeight, names::SheetContainerColor, names::SheetShadowElevation, names::SheetDragHandle, names::SheetSwipeEnabled, names::TopBar, names::SnackbarHost, names::ContainerColor, BlockWith<PaddingValues>>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::given<names::SheetContent, A...>(), "kompoz: BottomSheetScaffold takes a sheetContent");
+        static_assert(P::blockGiven<A...>(), "kompoz: BottomSheetScaffold takes a block, [=](PaddingValues padding) { … }: its content");
+        BottomSheetScaffoldOptions options;
+        P::set<names::ScaffoldState>(options.scaffoldState, args...);
+        P::set<names::SheetPeekHeight>(options.sheetPeekHeight, args...);
+        P::set<names::SheetContainerColor>(options.sheetContainerColor, args...);
+        P::set<names::SheetShadowElevation>(options.sheetShadowElevation, args...);
+        P::set<names::SheetDragHandle>(options.sheetDragHandle, args...);
+        P::set<names::SheetSwipeEnabled>(options.sheetSwipeEnabled, args...);
+        P::set<names::TopBar>(options.topBar, args...);
+        P::set<names::SnackbarHost>(options.snackbarHost, args...);
+        P::set<names::ContainerColor>(options.containerColor, args...);
+        BottomSheetScaffold(P::get<names::SheetContent>(Content{}, args...), P::get<names::Modifier>(Modifier{}, args...), options, P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::BottomSheetScaffoldImpl> BottomSheetScaffold;
 
 // ---- Navigation drawer and rail ---------------------------------------------------------
 
@@ -2165,26 +2463,136 @@ struct DrawerOptions {
     bool gesturesEnabled = true;  // drag sideways anywhere to open, on the drawer or scrim to close
 };
 // The drawer slides over `content` from the start edge with a scrim behind it.
+namespace detail {
 void ModalNavigationDrawer(const Content& drawerContent, DrawerState state, const Content& content,
                            DrawerOptions options = {}, CallSite site = CallSite::current());
+struct ModalNavigationDrawerImpl {
+    using P = Params<names::DrawerContent, names::DrawerState, names::GesturesEnabled, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::given<names::DrawerContent, A...>() && P::given<names::DrawerState, A...>(),
+                      "kompoz: ModalNavigationDrawer takes a drawerContent and a drawerState");
+        static_assert(P::blockGiven<A...>(), "kompoz: ModalNavigationDrawer takes a block: its content");
+        DrawerOptions options;
+        P::set<names::GesturesEnabled>(options.gesturesEnabled, args...);
+        ModalNavigationDrawer(P::get<names::DrawerContent>(Content{}, args...), P::get<names::DrawerState>(DrawerState{}, args...), P::block(std::forward<A>(args)...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ModalNavigationDrawerImpl> ModalNavigationDrawer;
 // In a ModalNavigationDrawer's drawer content it follows the drawer's back gesture (Android 14+,
 // as M3's): stretched wider or narrower and lower, then closed; the other one takes that drawer's
 // state, as M3's.
+namespace detail {
 void ModalDrawerSheet(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 void ModalDrawerSheet(DrawerState drawerState, const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
+struct ModalDrawerSheetImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+        requires(!startsWith<DrawerState, A...>())
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: ModalDrawerSheet takes a block: its content");
+        ModalDrawerSheet(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+    template <class... A>
+    static void call(CallSite site, DrawerState drawerState, A&&... args) {  // following that drawer's back gesture
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: ModalDrawerSheet takes a block: its content");
+        ModalDrawerSheet(std::move(drawerState), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ModalDrawerSheetImpl> ModalDrawerSheet;
 // The drawer pushes `content` aside as it opens (no scrim); dragging and back work as for the
 // modal one.
+namespace detail {
 void DismissibleNavigationDrawer(const Content& drawerContent, DrawerState state, const Content& content,
                                  DrawerOptions options = {}, CallSite site = CallSite::current());
+struct DismissibleNavigationDrawerImpl {
+    using P = Params<names::DrawerContent, names::DrawerState, names::GesturesEnabled, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::given<names::DrawerContent, A...>() && P::given<names::DrawerState, A...>(),
+                      "kompoz: DismissibleNavigationDrawer takes a drawerContent and a drawerState");
+        static_assert(P::blockGiven<A...>(), "kompoz: DismissibleNavigationDrawer takes a block: its content");
+        DrawerOptions options;
+        P::set<names::GesturesEnabled>(options.gesturesEnabled, args...);
+        DismissibleNavigationDrawer(P::get<names::DrawerContent>(Content{}, args...), P::get<names::DrawerState>(DrawerState{}, args...), P::block(std::forward<A>(args)...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::DismissibleNavigationDrawerImpl> DismissibleNavigationDrawer;
+namespace detail {
 void DismissibleDrawerSheet(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 void DismissibleDrawerSheet(DrawerState drawerState, const Modifier& modifier, const Content& content,
                             CallSite site = CallSite::current());
+struct DismissibleDrawerSheetImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+        requires(!startsWith<DrawerState, A...>())
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: DismissibleDrawerSheet takes a block: its content");
+        DismissibleDrawerSheet(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+    template <class... A>
+    static void call(CallSite site, DrawerState drawerState, A&&... args) {  // following that drawer's back gesture
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: DismissibleDrawerSheet takes a block: its content");
+        DismissibleDrawerSheet(std::move(drawerState), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::DismissibleDrawerSheetImpl> DismissibleDrawerSheet;
 // Always shown beside `content`, for wide windows.
+namespace detail {
 void PermanentNavigationDrawer(const Content& drawerContent, const Modifier& modifier, const Content& content,
                                CallSite site = CallSite::current());
+struct PermanentNavigationDrawerImpl {
+    using P = Params<names::DrawerContent, names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::given<names::DrawerContent, A...>(), "kompoz: PermanentNavigationDrawer takes a drawerContent");
+        static_assert(P::blockGiven<A...>(), "kompoz: PermanentNavigationDrawer takes a block: its content");
+        PermanentNavigationDrawer(P::get<names::DrawerContent>(Content{}, args...), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::PermanentNavigationDrawerImpl> PermanentNavigationDrawer;
+namespace detail {
 void PermanentDrawerSheet(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
+struct PermanentDrawerSheetImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: PermanentDrawerSheet takes a block: its content");
+        PermanentDrawerSheet(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::PermanentDrawerSheetImpl> PermanentDrawerSheet;
+namespace detail {
 void NavigationDrawerItem(const Content& label, bool selected, std::function<void()> onClick, const Content& icon = {},
                           const Content& badge = {}, const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct NavigationDrawerItemImpl {
+    using P = Params<names::Label, names::Selected, names::OnClick, names::Modifier, names::Icon, names::Badge>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::given<names::Label, A...>() && P::given<names::Selected, A...>() && P::given<names::OnClick, A...>(),
+                      "kompoz: NavigationDrawerItem takes a label, selected and an onClick");
+        NavigationDrawerItem(P::get<names::Label>(Content{}, args...), P::get<names::Selected>(false, args...),
+                             P::get<names::OnClick>(std::function<void()>{}, args...), P::get<names::Icon>(Content{}, args...),
+                             P::get<names::Badge>(Content{}, args...), P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::NavigationDrawerItemImpl> NavigationDrawerItem;
 
 namespace detail {
 // `from`'s interactions told again with their press positions moved back by *shift (Compose's
@@ -2200,17 +2608,52 @@ void indicatorNavigationItem(bool selected, std::function<void()> onClick, const
 } // namespace detail
 
 // A vertical navigation bar for wide windows (instead of NavigationBar).
+namespace detail {
 void NavigationRail(const Modifier& modifier, const Content& header, const Content& content,
                     CallSite site = CallSite::current());
-void NavigationRailItem(bool selected, std::function<void()> onClick, const ImageVector& icon, std::string label,
-                        CallSite site = CallSite::current());
+struct NavigationRailImpl {
+    using P = Params<names::Modifier, names::Header, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: NavigationRail takes a block: its content");
+        NavigationRail(P::get<names::Modifier>(Modifier{}, args...), P::get<names::Header>(Content{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::NavigationRailImpl> NavigationRail;
 // With an icon and a label of its own composing (in the item's colors and labelMedium).
 struct NavigationRailItemOptions {
     bool enabled = true;  // disabled: onSurface at 38%
     std::optional<MutableInteractionSource> interactionSource;
 };
+namespace detail {
+void NavigationRailItem(bool selected, std::function<void()> onClick, const ImageVector& icon, std::string label,
+                        CallSite site = CallSite::current());
 void NavigationRailItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier = {},
                         const NavigationRailItemOptions& options = {}, CallSite site = CallSite::current());
+struct NavigationRailItemImpl {
+    template <class... A>
+    static void call(CallSite site, bool selected, std::function<void()> onClick, const ImageVector& icon, A&&... args) {
+        using P = Params<names::Label>;
+        static_assert(P::check<A...>());
+        NavigationRailItem(selected, std::move(onClick), icon, P::get<names::Label>(std::string(), args...), site);
+    }
+    template <class... A>
+        requires(!startsWith<ImageVector, A...>())
+    static void call(CallSite site, bool selected, std::function<void()> onClick, A&&... args) {
+        using P = Params<names::Icon, names::Modifier, names::Enabled, names::Label, names::InteractionSource>;
+        static_assert(P::check<A...>());
+        static_assert(P::given<names::Icon, A...>(), "kompoz: NavigationRailItem takes an icon");
+        NavigationRailItemOptions options;
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        NavigationRailItem(selected, std::move(onClick), P::get<names::Icon>(Content{}, args...), P::get<names::Label>(Content{}, args...),
+            P::get<names::Modifier>(Modifier{}, args...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::NavigationRailItemImpl> NavigationRailItem;
 
 // ---- Swipe to dismiss --------------------------------------------------------------------
 
