@@ -29,6 +29,7 @@
 #endif
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 #include <cstring>
 #include <ctime>
@@ -518,9 +519,12 @@ public:
         switch (e.type) {
         case EventType::WillEnterBackground:  // between frames: Android may end the app from now on
             android_ime::setSavedState(h.saveState());
+            fingers_ = 0;
             break;
         case EventType::FocusGained:
         case EventType::FocusLost: semanticsDirty_ = true; break;
+        case EventType::TouchDown: ++fingers_; break;  // (fingers on the screen: the refresh rate's)
+        case EventType::TouchUp: fingers_ = std::max(0, fingers_ - 1); break;
         default: break;
         }
     }
@@ -552,10 +556,16 @@ public:
             sensitiveContent_ = sensitive;
             android_ime::setContentSensitive(sensitive);
         }
-        // The refresh rate it would like (preferredFrameRate), when that changes.
-        if (float rate = h.preferredFrameRate(); rate != frameRate_ || h.preferredFrameRateCategory() != frameRateCategory_) {
+        // The refresh rate it would like (preferredFrameRate), when that changes. While the screen
+        // keeps changing (a finger on it, a scroll flung, an animation) and for a second after, the
+        // display's fastest, as Android's views vote for (Android 15's frame rate categories):
+        // otherwise the system keeps an app that doesn't ask at its normal rate (60 Hz).
+        if (fingers_ > 0 || h.wantsFrame()) lastBusy_ = frameTime;
+        FrameRateCategory category = h.preferredFrameRateCategory();
+        if (frameTime - lastBusy_ < 1'000'000'000 && category != FrameRateCategory::NoPreference) category = std::max(category, FrameRateCategory::High);
+        if (float rate = h.preferredFrameRate(); rate != frameRate_ || category != frameRateCategory_) {
             frameRate_ = rate;
-            frameRateCategory_ = h.preferredFrameRateCategory();
+            frameRateCategory_ = category;
             android_ime::setFrameRate(rate, int(frameRateCategory_));
         }
         // Where the system's edge swipes are kept off, when that changes.
@@ -593,6 +603,8 @@ private:
     bool semanticsDirty_ = true, wantsBack_ = false, screenKeptOn_ = false, sensitiveContent_ = false;
     float frameRate_ = 0;
     FrameRateCategory frameRateCategory_ = FrameRateCategory::Default;
+    int fingers_ = 0;         // on the screen now
+    int64_t lastBusy_ = INT64_MIN / 2;  // the last frame the screen was changing in (or a finger down)
     std::vector<Rect> gestureExclusion_;
 
     void callVoid(jmethodID method) {

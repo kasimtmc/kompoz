@@ -649,6 +649,10 @@
   further on (going from one screen to another): the empty place the content left two groups down was taken for a
   group to forget, and
   the content's nodes still had the container's as their parent when it came back.
+- **The display's fastest refresh rate while the screen keeps changing, on Android**: while a finger is on it or a
+  scroll, a fling or an animation goes on, and for a second after, the app's surface asks for the display's fastest
+  rate (the high frame rate category, as Android's views vote): Android 15 kept an app that doesn't ask at 60 Hz.
+  On a Xiaomi 14 Ultra (120 Hz) the same 30 swipes showed 2,088 frames instead of 1,565 (83 a second instead of 55).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

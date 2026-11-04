@@ -686,6 +686,11 @@
 - **Düzeltildi: bir kap, içindeki taşınabilir içerik daha ilerde yeniden çağrılmadan bırakıldığında çökme** (bir
   ekrandan ötekine geçerken): içeriğin iki grup aşağıda bıraktığı boş yer, unutulacak bir grup sanılıyordu;
   içeriğin düğümleri de geri geldiğinde ebeveyn olarak hâlâ kabınkini gösteriyordu.
+- **Android'de ekran değişmeyi sürdürürken ekranın en yüksek yenileme hızı**: ekranda bir parmak varken ya da bir
+  kaydırma, fırlatma ya da animasyon sürerken ve ondan sonraki bir saniye boyunca uygulamanın yüzeyi ekranın en
+  yüksek hızını istiyor (Android'in görünümlerinin oy verdiği gibi yüksek kare hızı kategorisi): Android 15, hız
+  istemeyen bir uygulamayı 60 Hz'de tutuyordu. Bir Xiaomi 14 Ultra'da (120 Hz) aynı 30 kaydırma 1.565 yerine 2.088 kare
+  gösterdi (saniyede 55 yerine 83).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine
