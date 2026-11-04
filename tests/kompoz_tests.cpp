@@ -29589,6 +29589,37 @@ TEST(movable_content_with_parameters_keeps_its_state_where_it_goes) {
     CHECK(!seen.empty() && seen.front() == "sütun 1 1" && seen.back() == "satır 2 1");  // remembered once: moved, not made again
 }
 
+TEST(movable_content_leaves_a_container_from_two_groups_down) {
+    // The container goes while the content moves out of a group inside it (to elsewhere): the place
+    // it leaves in that group is no group to forget. (It crashed going from one screen to another.)
+    auto inside = mutableStateOf(true);
+    std::optional<MovableContent> tile;
+    ComposeTestRule rule([&] {
+        if (!tile) tile = remember([] { return movableContentOf([] {
+            auto clicks = remember([] { return mutableStateOf(0); });
+            Text(std::format("kutu {}", clicks.get()), Modifier().testTag("kutu").clickable([clicks] { clicks.set(clicks.peek() + 1); }));
+        }); });
+        // The container is left first (its group ends before the content is called again further on).
+        Column(Modifier(), [=, &tile] {
+            if (inside.get())
+                Box(Modifier().testTag("dış"), [=, &tile] {
+                    Box(Modifier(), [=, &tile] {
+                        Text("önce");  // siblings: the empty place is sorted among them
+                        (*tile)();
+                        Text("sonra");
+                    });
+                });
+        });
+        Row(Modifier(), [=, &tile] { if (!inside.get()) (*tile)(); });
+    });
+    rule.onNodeWithTag("kutu").performClick();
+    rule.waitForIdle();
+    inside.set(false);
+    rule.waitForIdle();
+    CHECK(!rule.onNodeWithTag("dış").exists());
+    CHECK(rule.onNodeWithTag("kutu").text() == "kutu 1");  // moved, its state with it
+}
+
 TEST(movable_content_keeps_its_state_wherever_it_goes) {
     auto wide = mutableStateOf(true), inFirst = mutableStateOf(true), shown = mutableStateOf(true), twice = mutableStateOf(false);
     auto counts = std::make_shared<std::map<std::string, int>>();  // effects started and disposed, per content

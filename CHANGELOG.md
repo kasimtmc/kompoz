@@ -645,6 +645,10 @@
   [=](const Mail& m) { MailRow(m); }); };`. That block runs in the call and captures by reference, so a list isn't
   copied; a pager's page is a block given its number, `HorizontalPager(state) [=](int page) { … };`. A pager's page
   key is `pageKey =` (`key` is the composable that gives an identity).
+- **Fixed: a crash when a container left the composition before the movable content it held was called again**
+  further on (going from one screen to another): the empty place the content left two groups down was taken for a
+  group to forget, and
+  the content's nodes still had the container's as their parent when it came back.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

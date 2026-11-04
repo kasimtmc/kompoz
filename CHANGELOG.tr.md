@@ -683,6 +683,9 @@
   [=](const Mail& m) { MailRow(m); }); };`. Bu blok çağrının içinde çalışıyor ve referansla yakalıyor, böylece liste
   kopyalanmıyor; bir sayfalayıcının sayfası numarasını alan bir blok: `HorizontalPager(state) [=](int page) { … };`.
   Sayfa anahtarı `pageKey =` ile veriliyor (`key`, kimlik veren composable).
+- **Düzeltildi: bir kap, içindeki taşınabilir içerik daha ilerde yeniden çağrılmadan bırakıldığında çökme** (bir
+  ekrandan ötekine geçerken): içeriğin iki grup aşağıda bıraktığı boş yer, unutulacak bir grup sanılıyordu;
+  içeriğin düğümleri de geri geldiğinde ebeveyn olarak hâlâ kabınkini gösteriyordu.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

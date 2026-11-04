@@ -109,7 +109,8 @@ Group::~Group() {
     if (onForget) gForgets->push_back(std::move(onForget));
     Composer::forgetSlot(*this);
     std::vector<std::unique_ptr<Group>> below;
-    for (auto& [k, child] : children) below.push_back(std::move(child));
+    for (auto& [k, child] : children)
+        if (child) below.push_back(std::move(child));  // (a movable content parked from here leaves its place empty)
     children.clear();
     destroyInCallOrder(below);
     scope.reset();
@@ -328,6 +329,11 @@ void Composer::park(std::unique_ptr<Group>& owner) {
     if (!owner) return;
     if (owner->movable && owner->movable->group == owner.get()) {
         owner->parent = nullptr;
+        // Its nodes no longer below the place it leaves (that may be gone before it is placed again).
+        std::vector<LayoutNode*> nodes, overlays;
+        collectNodes(*owner, nodes, overlays);
+        for (LayoutNode* n : nodes) n->parent = nullptr;
+        for (LayoutNode* n : overlays) n->parent = nullptr;
         parked_.push_back(std::move(owner));
         return;
     }
