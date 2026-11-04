@@ -478,7 +478,7 @@ void FlexBoxSection(CallSite site) {
                                  .rowGap = 8,
                                  .columnGap = 8};
             FlexBox(Modifier().fillMaxWidth().background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12)).padding(8), config, [&] {
-                auto tag = [&](const char* text, float size, FlexConfig flex = {}) {
+                auto tag = [=](const char* text, float size, FlexConfig flex = {}) {
                     Box(Modifier().flex(flex).background(cs.secondaryContainer, 8).padding(10, 6)) { Text(text, fontSize = size, color = cs.onSecondaryContainer); };
                 };
                 tag("Kotlin", 14);

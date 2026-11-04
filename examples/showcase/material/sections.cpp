@@ -71,11 +71,11 @@ void SearchSection(CallSite site) {
         auto chosen = remember([] { return mutableStateOf(std::string()); });
         // The same search, full screen (ExpandedFullScreenSearchBar) or opening in place
         // (ExpandedDockedSearchBar), each a SearchBarState with its query in a TextFieldState.
-        auto bar = [&](bool docked, SearchBarState state, TextFieldState query) {
+        auto bar = [=](bool docked, SearchBarState state, TextFieldState query) {
             auto scope = rememberCoroutineScope();
             auto close = [state, scope] { scope.launch([state]() -> Task { co_await state.animateToCollapsed(); }); };
             bool expanded = state.targetValue() == SearchBarValue::Expanded;
-            auto field = [&] {
+            auto field = [=] {
                 SearchBarDefaults::InputField(state, query,
                                               {.onSearch = [chosen, close](std::string q) { chosen.set(q); close(); },
                                                .placeholder = docked ? "Şehir ara (yerinde)" : "Şehir ara",

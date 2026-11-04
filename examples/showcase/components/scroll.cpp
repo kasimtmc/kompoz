@@ -12,7 +12,7 @@ void FlingSection(CallSite site) {
         auto bounce = remember([] { return Animatable<float>(0.f); });
         auto released = remember([] { return mutableStateOf(0.f); });
         auto scope = rememberCoroutineScope();
-        auto track = [&](Animatable<float> a, bool decays) {
+        auto track = [=](Animatable<float> a, bool decays) {
             Box(Modifier().fillMaxWidth().padding(0, 12, 0, 0).height(56).background(cs.surfaceContainerHigh, 28).onSizeChanged([a, decays](Size s) {
                     if (decays) a.updateBounds(0.f, std::max(0.f, s.width - 56));
                 }),
@@ -376,7 +376,7 @@ void NestedScrollSection(CallSite site) {
         auto searchScroll = SearchBarDefaults::enterAlwaysSearchBarScrollBehavior();
         auto mailSearch = rememberSearchBarState();
         auto mailQuery = rememberTextFieldState();
-        auto caption = [&](const char* text) { Text(text, color = cs.onSurfaceVariant, style = typography().bodyMedium); };
+        auto caption = [=](const char* text) { Text(text, color = cs.onSurfaceVariant, style = typography().bodyMedium); };
         Section("İç içe kaydırma (nestedScroll)", [=] {
             caption("İçteki liste sonuna gelince sayfa kaymaya devam eder:");
             Column(Modifier().fillMaxWidth().height(150).background(cs.surfaceContainerHighest, 12).verticalScroll(inner).padding(16, 6)) {
