@@ -68,7 +68,7 @@ void chip(ChipKind kind, bool selected, std::function<void()> onClick, const Con
 
 } // namespace
 
-void ListItem(const ListItemSlots& slots, const Modifier& modifier, CallSite site) {
+void detail::ListItem(const ListItemSlots& slots, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     const Typography& t = typography();
@@ -172,15 +172,15 @@ void interactiveListItem(ListItemKind kind, bool selected, std::function<void()>
 }
 }  // namespace
 
-void ListItem(std::function<void()> onClick, const ListItemSlots& slots, const Modifier& modifier, const InteractiveListItemOptions& options,
+void detail::ListItem(std::function<void()> onClick, const ListItemSlots& slots, const Modifier& modifier, const InteractiveListItemOptions& options,
               CallSite site) {
     interactiveListItem(ListItemKind::Click, false, std::move(onClick), {}, slots, modifier, options, site);
 }
-void ListItem(bool selected, std::function<void()> onClick, const ListItemSlots& slots, const Modifier& modifier,
+void detail::ListItem(bool selected, std::function<void()> onClick, const ListItemSlots& slots, const Modifier& modifier,
               const InteractiveListItemOptions& options, CallSite site) {
     interactiveListItem(ListItemKind::Select, selected, std::move(onClick), {}, slots, modifier, options, site);
 }
-void ListItem(bool checked, std::function<void(bool)> onCheckedChange, const ListItemSlots& slots, const Modifier& modifier,
+void detail::ListItem(bool checked, std::function<void(bool)> onCheckedChange, const ListItemSlots& slots, const Modifier& modifier,
               const InteractiveListItemOptions& options, CallSite site) {
     interactiveListItem(ListItemKind::Toggle, checked, {}, std::move(onCheckedChange), slots, modifier, options, site);
 }

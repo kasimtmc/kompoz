@@ -1599,7 +1599,9 @@ struct ListItemSlots {
     Content overline, supporting, leading, trailing;
     std::optional<Color> containerColor;
 };
+namespace detail {
 void ListItem(const ListItemSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
+} // namespace detail
 
 // An interactive list item's shapes in each state (Compose's ListItemShapes, M3 Expressive): it
 // morphs between them — a little rounded, rounder when hovered, pressed, focused or selected.
@@ -1634,12 +1636,100 @@ struct InteractiveListItemOptions {
 // shape, which morphs as it is pressed or selected; selected (or checked) on secondaryContainer.
 // The slots as ListItem's (the headline bodyLarge, supporting bodyMedium, overline labelSmall),
 // 16 dp at the sides, 10 above and below, 12 between, at least 56 dp tall.
+namespace detail {
 void ListItem(std::function<void()> onClick, const ListItemSlots& slots, const Modifier& modifier = {},
               const InteractiveListItemOptions& options = {}, CallSite site = CallSite::current());
 void ListItem(bool selected, std::function<void()> onClick, const ListItemSlots& slots, const Modifier& modifier = {},
               const InteractiveListItemOptions& options = {}, CallSite site = CallSite::current());
 void ListItem(bool checked, std::function<void(bool)> onCheckedChange, const ListItemSlots& slots, const Modifier& modifier = {},
               const InteractiveListItemOptions& options = {}, CallSite site = CallSite::current());
+
+// ListItem as Compose writes it: ListItem(headlineContent = { … }, supportingContent = { … }, …),
+// or an interactive one, its headline the block (ListItem(onClick = …) { Text("…") }). The C++
+// forms with a ListItemSlots ({.headline = …}) take their arguments by place, as before.
+struct ListItemImpl {
+    using Plain = Params<names::HeadlineContent, names::Modifier, names::OverlineContent, names::SupportingContent, names::LeadingContent,
+                         names::TrailingContent>;
+    template <class Head>
+    using Interactive = Params<Head, names::Modifier, names::Enabled, names::LeadingContent, names::TrailingContent, names::OverlineContent,
+                               names::SupportingContent, names::OnLongClick, names::Shapes, names::Colors, names::InteractionSource, Block>;
+    template <class Head1, class Head2>
+    using Interactive2 = Params<Head1, Head2, names::Modifier, names::Enabled, names::LeadingContent, names::TrailingContent,
+                                names::OverlineContent, names::SupportingContent, names::OnLongClick, names::Shapes, names::Colors,
+                                names::InteractionSource, Block>;
+    template <class... A>
+    static constexpr bool slotsForm() { return (std::is_same_v<std::remove_cvref_t<A>, ListItemSlots> || ...); }
+    template <class Q, class... A>
+    static ListItemSlots slots(A&&... args) {
+        ListItemSlots s;
+        Q::template set<names::OverlineContent>(s.overline, args...);
+        Q::template set<names::SupportingContent>(s.supporting, args...);
+        Q::template set<names::LeadingContent>(s.leading, args...);
+        Q::template set<names::TrailingContent>(s.trailing, args...);
+        if constexpr (oneOfParams<names::HeadlineContent, Q>) Q::template set<names::HeadlineContent>(s.headline, args...);
+        else s.headline = Q::block(std::forward<A>(args)...);
+        return s;
+    }
+    template <class Q, class... A>
+    static InteractiveListItemOptions options(A&... args) {
+        InteractiveListItemOptions o;
+        Q::template set<names::Enabled>(o.enabled, args...);
+        Q::template set<names::OnLongClick>(o.onLongClick, args...);
+        Q::template set<names::Shapes>(o.shapes, args...);
+        Q::template set<names::Colors>(o.colors, args...);
+        Q::template set<names::InteractionSource>(o.interactionSource, args...);
+        return o;
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (slotsForm<A...>()) {
+            static_assert(!(isNamed<A> || ...), "kompoz: ListItem's ListItemSlots form takes its arguments by place");
+            detail::ListItem(std::forward<A>(args)..., site);
+        } else if constexpr (countOf<names::Checked, A...> + countOf<names::OnCheckedChange, A...> > 0) {
+            using Q = Interactive2<names::Checked, names::OnCheckedChange>;
+            static_assert(Q::check<A...>());
+            detail::ListItem(bool(Q::arg<names::Checked>(args...)), std::function<void(bool)>(Q::arg<names::OnCheckedChange>(args...)),
+                             slots<Q>(args...), Q::get<names::Modifier>(Modifier{}, args...), options<Q>(args...), site);
+        } else if constexpr (countOf<names::Selected, A...> > 0) {
+            using Q = Interactive2<names::Selected, names::OnClick>;
+            static_assert(Q::check<A...>());
+            detail::ListItem(bool(Q::arg<names::Selected>(args...)), std::function<void()>(Q::arg<names::OnClick>(args...)), slots<Q>(args...),
+                             Q::get<names::Modifier>(Modifier{}, args...), options<Q>(args...), site);
+        } else if constexpr (countOf<names::OnClick, A...> > 0 || startsWithClick<A...>()) {
+            using Q = Interactive<names::OnClick>;
+            static_assert(Q::check<A...>());
+            detail::ListItem(std::function<void()>(Q::arg<names::OnClick>(args...)), slots<Q>(args...), Q::get<names::Modifier>(Modifier{}, args...),
+                             options<Q>(args...), site);
+        } else {
+            using Q = Plain;
+            static_assert(Q::check<A...>());
+            static_assert(Q::given<names::HeadlineContent, A...>(), "kompoz: ListItem needs headlineContent");
+            detail::ListItem(slots<Q>(args...), Q::get<names::Modifier>(Modifier{}, args...), site);
+        }
+    }
+};
+// The C++ forms whose ListItemSlots is made in place (ListItem({.headline = …})): a braced
+// list goes to a parameter of its type, not through the template.
+struct ListItemCall : Composable<ListItemImpl> {
+    using Composable<ListItemImpl>::operator();
+    void operator()(const ListItemSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current()) const {
+        ListItem(slots, modifier, site);
+    }
+    void operator()(std::function<void()> onClick, const ListItemSlots& slots, const Modifier& modifier = {},
+                    const InteractiveListItemOptions& options = {}, CallSite site = CallSite::current()) const {
+        ListItem(std::move(onClick), slots, modifier, options, site);
+    }
+    void operator()(bool selected, std::function<void()> onClick, const ListItemSlots& slots, const Modifier& modifier = {},
+                    const InteractiveListItemOptions& options = {}, CallSite site = CallSite::current()) const {
+        ListItem(selected, std::move(onClick), slots, modifier, options, site);
+    }
+    void operator()(bool checked, std::function<void(bool)> onCheckedChange, const ListItemSlots& slots, const Modifier& modifier = {},
+                    const InteractiveListItemOptions& options = {}, CallSite site = CallSite::current()) const {
+        ListItem(checked, std::move(onCheckedChange), slots, modifier, options, site);
+    }
+};
+} // namespace detail
+inline constexpr detail::ListItemCall ListItem;
 // Items that make one card together (Compose's SegmentedListItem): give each its segmented
 // shapes and put them ListItemDefaults::SegmentedGap apart.
 //   Column(Modifier(), verticalArrangement = Arrangement::spacedBy(ListItemDefaults::SegmentedGap), [=] {

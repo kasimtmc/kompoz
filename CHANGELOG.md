@@ -700,6 +700,11 @@
   as not comparable, for skipping as for a state's structural equality. kompozc declares each function just before
   its definition (and those it calls before it), not at the top of the file, so a parameter's type may be a struct
   the file declares above it.
+- **ListItem takes Compose's named arguments**: `ListItem(headlineContent = { … }, supportingContent = { … },
+  leadingContent = …, trailingContent = …, overlineContent = …)`, and the interactive ones with their headline as the
+  block: `ListItem(onClick = …) { Text("…") }`, `ListItem(selected = …, onClick = …) { … }`,
+  `ListItem(checked = …, onCheckedChange = …) { … }` (`enabled`, `onLongClick`, `shapes`, `colors`, `interactionSource`
+  by name). The `ListItemSlots` forms (`ListItem({.headline = …})`) take their arguments as before.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

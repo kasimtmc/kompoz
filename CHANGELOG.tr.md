@@ -740,6 +740,11 @@
   derlenmez) atlama için de bir durumun yapısal eşitliği için de karşılaştırılamaz sayılıyor. kompozc her işlevi
   tanımından hemen önce (çağırdıklarını da ondan önce) bildiriyor, dosyanın başında değil; böylece bir parametrenin
   türü dosyanın üstte bildirdiği bir yapı olabiliyor.
+- **ListItem Compose'un adlı argümanlarını alıyor**: `ListItem(headlineContent = { … }, supportingContent = { … },
+  leadingContent = …, trailingContent = …, overlineContent = …)` ve başlığı blok olan etkileşimliler:
+  `ListItem(onClick = …) { Text("…") }`, `ListItem(selected = …, onClick = …) { … }`,
+  `ListItem(checked = …, onCheckedChange = …) { … }` (`enabled`, `onLongClick`, `shapes`, `colors`, `interactionSource`
+  adla). `ListItemSlots` biçimleri (`ListItem({.headline = …})`) argümanlarını eskisi gibi alıyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

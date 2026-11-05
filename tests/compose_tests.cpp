@@ -492,6 +492,26 @@ TEST(lazy_items_effects_and_locals) {
     CHECK((*log == std::vector<std::string>{"açıldı 2", "kapandı"}));
 }
 
+// ListItem as Compose writes it: its slots by name; an interactive one's headline is its block.
+@Composable
+fun Settings() {
+    var wifi by remember { mutableStateOf(false) }
+    var opened by remember { mutableStateOf(0) }
+    Column {
+        ListItem(headlineContent = { Text("Wi-Fi") }, supportingContent = { Text(if (wifi) "Açık" else "Kapalı") })
+        ListItem(checked = wifi, onCheckedChange = { wifi = it }) { Text("Wi-Fi'yi aç") }
+        ListItem(onClick = { opened++ }, supportingContent = { Text("$opened kez") }) { Text("Hakkında") }
+    }
+}
+
+TEST(list_items_by_name) {
+    ComposeTestRule rule([] { Settings(); });
+    CHECK(rule.onNodeWithText("Kapalı").exists() && rule.onNodeWithText("0 kez").exists());
+    rule.onNodeWithText("Wi-Fi'yi aç").performClick();
+    rule.onNodeWithText("Hakkında").performClick();
+    CHECK(rule.onNodeWithText("Açık").exists() && rule.onNodeWithText("1 kez").exists());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;
