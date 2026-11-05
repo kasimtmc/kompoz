@@ -448,10 +448,11 @@ namespace detail {
 void LazyVerticalGrid(GridCells columns, const Modifier& modifier, const LazyGridOptions& options,
                       const std::function<void(LazyGridScope&)>& content, CallSite site = CallSite::current());
 struct LazyVerticalGridImpl {
-    using P = Params<names::Modifier, names::State, names::ContentPadding, names::VerticalArrangement, names::HorizontalArrangement, names::FlingBehavior, names::UserScrollEnabled, names::OverscrollEffect, Block>;
+    using P = Params<names::Columns, names::Modifier, names::State, names::ContentPadding, names::VerticalArrangement, names::HorizontalArrangement, names::FlingBehavior, names::UserScrollEnabled, names::OverscrollEffect, Block>;
     template <class... A>
-    static void call(CallSite site, GridCells columns, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        GridCells columns = P::arg<names::Columns>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: LazyVerticalGrid takes a block: its items (item(…), items(…))");
         LazyGridOptions options;
         P::set<names::State>(options.state, args...);
@@ -472,10 +473,11 @@ namespace detail {
 void LazyHorizontalGrid(GridCells rows, const Modifier& modifier, const LazyGridOptions& options,
                         const std::function<void(LazyGridScope&)>& content, CallSite site = CallSite::current());
 struct LazyHorizontalGridImpl {
-    using P = Params<names::Modifier, names::State, names::ContentPadding, names::HorizontalArrangement, names::VerticalArrangement, names::FlingBehavior, names::UserScrollEnabled, names::OverscrollEffect, Block>;
+    using P = Params<names::Rows, names::Modifier, names::State, names::ContentPadding, names::HorizontalArrangement, names::VerticalArrangement, names::FlingBehavior, names::UserScrollEnabled, names::OverscrollEffect, Block>;
     template <class... A>
-    static void call(CallSite site, GridCells rows, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        GridCells rows = P::arg<names::Rows>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: LazyHorizontalGrid takes a block: its items (item(…), items(…))");
         LazyGridOptions options;
         P::set<names::State>(options.state, args...);
@@ -576,10 +578,11 @@ namespace detail {
 void LazyVerticalStaggeredGrid(StaggeredGridCells columns, const Modifier& modifier, const LazyStaggeredGridOptions& options,
                                const std::function<void(LazyGridScope&)>& content, CallSite site = CallSite::current());
 struct LazyVerticalStaggeredGridImpl {
-    using P = Params<names::Modifier, names::State, names::ContentPadding, names::VerticalItemSpacing, names::HorizontalArrangement, names::UserScrollEnabled, names::OverscrollEffect, Block>;
+    using P = Params<names::Columns, names::Modifier, names::State, names::ContentPadding, names::VerticalItemSpacing, names::HorizontalArrangement, names::UserScrollEnabled, names::OverscrollEffect, Block>;
     template <class... A>
-    static void call(CallSite site, StaggeredGridCells columns, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        StaggeredGridCells columns = P::arg<names::Columns>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: LazyVerticalStaggeredGrid takes a block: its items (item(…), items(…))");
         LazyStaggeredGridOptions options;
         P::set<names::State>(options.state, args...);
@@ -600,10 +603,11 @@ namespace detail {
 void LazyHorizontalStaggeredGrid(StaggeredGridCells rows, const Modifier& modifier, const LazyStaggeredGridOptions& options,
                                  const std::function<void(LazyGridScope&)>& content, CallSite site = CallSite::current());
 struct LazyHorizontalStaggeredGridImpl {
-    using P = Params<names::Modifier, names::State, names::ContentPadding, names::VerticalArrangement, names::HorizontalItemSpacing, names::UserScrollEnabled, names::OverscrollEffect, Block>;
+    using P = Params<names::Rows, names::Modifier, names::State, names::ContentPadding, names::VerticalArrangement, names::HorizontalItemSpacing, names::UserScrollEnabled, names::OverscrollEffect, Block>;
     template <class... A>
-    static void call(CallSite site, StaggeredGridCells rows, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        StaggeredGridCells rows = P::arg<names::Rows>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: LazyHorizontalStaggeredGrid takes a block: its items (item(…), items(…))");
         LazyStaggeredGridOptions options;
         P::set<names::State>(options.state, args...);

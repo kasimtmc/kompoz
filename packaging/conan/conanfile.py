@@ -33,7 +33,7 @@ class KompozConan(ConanFile):
         self.version = re.search(r"project\(kompoz VERSION ([0-9.]+)", cmake).group(1)
 
     def export_sources(self):
-        for pattern in ("CMakeLists.txt", "LICENSE", "NOTICE", "cmake/*", "include/*", "src/*", "platform/*", "assets/*"):
+        for pattern in ("CMakeLists.txt", "LICENSE", "NOTICE", "cmake/*", "include/*", "src/*", "platform/*", "assets/*", "compiler/*"):
             copy(self, pattern, os.path.join(self.recipe_folder, ROOT), self.export_sources_folder)
 
     def requirements(self):

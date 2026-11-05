@@ -680,7 +680,7 @@ private:
             if (any) out_.text(", ");
             any = true;
             const std::string& n = c.names[i];
-            if (!n.empty() && !positional) out_.text("::kompoz::" + n + " = ");
+            if (!n.empty() && !positional) out_.text("::kompoz::arg::" + n + " = ");
             expr(*c.kids[i + 1]);
         }
         if (c.lambda) {

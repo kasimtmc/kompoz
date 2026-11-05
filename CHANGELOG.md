@@ -667,6 +667,13 @@
   becomes a struct with `==` and Kotlin's `toString()`; it is made with named arguments in any order
   (`Note(title = "x", id = 1)`) and changed with `copy(pinned = true)`. Lambdas capture by value, as Kotlin's do, so a block that runs again on its own
   never holds a dangling reference. The C++ compiler's messages point at the source's own lines (`#line`).
+- **Every argument a composable needs can be named**: `onClick`, `value` and `onValueChange`, `checked` and
+  `onCheckedChange`, `selected`, `expanded`, `onDismissRequest`, `state`, `text`, `imageVector`/`painter`/`bitmap` and
+  `contentDescription`, … are named arguments too, as in Compose: `TextButton(onClick = save, [=] { … })`,
+  `TextField(value = text, onValueChange = setText)`; given without a name they still fill the first places. A
+  composable with two forms takes the one whose name is given (`Icon(painter = …)`, `TextField(state = …)`,
+  `Card(onClick = …)`) or the one the first argument's type says. The text fields and sliders take Compose's
+  `colors =` as well (written `kompoz::arg::colors` in C++, where `kompoz::colors` is the colors' namespace).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

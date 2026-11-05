@@ -173,6 +173,33 @@ struct Params {
     static constexpr bool given() {
         return countOf<Tag, A...> > 0 || indexOf<Tag, P...> < positional<A...>();
     }
+    // Where the argument for `Tag` is: its index among the arguments (by its name, or by its place).
+    template <class Tag, class... A>
+    static constexpr size_t argIndex() {
+        constexpr bool byName[] = {std::is_same_v<TagOf<A>, Tag>..., false};
+        for (size_t i = 0; i < sizeof...(A); ++i)
+            if (byName[i]) return i;
+        return indexOf<Tag, P...>;  // (given by its place: given() says it was)
+    }
+    // The argument for `Tag`, one the composable needs (onClick, value, ...): as it was given, by its
+    // name or by its place.
+    template <class Tag, class... A>
+    static decltype(auto) arg(A&&... args) {
+        static_assert(given<Tag, A...>(), "kompoz: an argument the composable needs is missing");
+        constexpr size_t i = argIndex<Tag, A...>();
+        using Ai = std::tuple_element_t<i, std::tuple<A...>>;
+        auto&& a = std::get<i>(std::forward_as_tuple(std::forward<A>(args)...));
+        if constexpr (isNamed<Ai>) return (std::forward<Ai>(a).value);
+        else return std::forward<Ai>(a);
+    }
+    // Whether the call is the form whose first parameter is `Tag`, a T: Tag given by name, or a
+    // T given first without one (Icon(painter = p) or Icon(p) for the Painter form).
+    template <class Tag, class T, class... A>
+    static constexpr bool form() {
+        if constexpr (countOf<Tag, A...> > 0) return true;
+        else if constexpr (positional<A...>() == 0) return false;
+        else return std::is_convertible_v<std::tuple_element_t<0, std::tuple<A...>>, T>;
+    }
     // `field` set from the argument for `Tag`, if one was given (an options struct filled so).
     template <class Tag, class T, class... A>
     static void set(T& field, A&&... args) {
@@ -386,6 +413,20 @@ struct BeyondViewportPageCount {};
 struct PageSpacing {};
 struct PageKey {};
 struct SnapPosition {};
+struct Checked {};
+struct Columns {};
+struct Rows {};
+struct OnCheckedChange {};
+struct OnDismissRequest {};
+struct OnExpandedChange {};
+struct OnValueChange {};
+struct Value {};
+struct ImageVector {};
+struct Painter {};
+struct Bitmap {};
+struct ContentDescription {};
+struct Data {};
+struct Colors {};
 } // namespace detail::names
 inline namespace args {
 inline constexpr Param<detail::names::Modifier> modifier;
@@ -533,7 +574,26 @@ inline constexpr Param<detail::names::BeyondViewportPageCount> beyondViewportPag
 inline constexpr Param<detail::names::PageSpacing> pageSpacing;
 inline constexpr Param<detail::names::PageKey> pageKey;
 inline constexpr Param<detail::names::SnapPosition> snapPosition;
+inline constexpr Param<detail::names::Checked> checked;
+inline constexpr Param<detail::names::Columns> columns;
+inline constexpr Param<detail::names::Rows> rows;
+inline constexpr Param<detail::names::OnCheckedChange> onCheckedChange;
+inline constexpr Param<detail::names::OnDismissRequest> onDismissRequest;
+inline constexpr Param<detail::names::OnExpandedChange> onExpandedChange;
+inline constexpr Param<detail::names::OnValueChange> onValueChange;
+inline constexpr Param<detail::names::Value> value;
+inline constexpr Param<detail::names::ImageVector> imageVector;
+inline constexpr Param<detail::names::Painter> painter;
+inline constexpr Param<detail::names::Bitmap> bitmap;
+inline constexpr Param<detail::names::ContentDescription> contentDescription;
+inline constexpr Param<detail::names::Data> data;
 } // namespace args
+// The names as kompozc writes them (arg::colors = …): all of args', and those that are something
+// else of Kompoz's too (colors: the colors' namespace).
+namespace arg {
+using namespace args;
+inline constexpr Param<detail::names::Colors> colors;
+} // namespace arg
 
 // A composable taking named arguments: each call's arguments and call site go to Impl::call.
 template <class Impl>

@@ -645,18 +645,20 @@ TextStyle textStyleOf(A&&... args) {
 }
 
 struct TextImpl {
-    using Plain = Params<names::Modifier, names::Color, names::FontSize, names::FontStyle, names::FontWeight, names::FontFamily, names::LetterSpacing, names::TextDecoration, names::TextAlign, names::LineHeight, names::Overflow, names::SoftWrap, names::MaxLines, names::MinLines, names::OnTextLayout, names::Style, names::AutoSize>;
-    using Styled = Params<names::Modifier, names::Color, names::FontSize, names::FontStyle, names::FontWeight, names::FontFamily, names::LetterSpacing, names::TextDecoration, names::TextAlign, names::LineHeight, names::Overflow, names::SoftWrap, names::MaxLines, names::MinLines, names::InlineContent, names::OnTextLayout, names::Style, names::AutoSize>;
-    template <class S, class... A>
-        requires std::is_convertible_v<S, std::string>
-    static void call(CallSite site, S&& value, A&&... args) {
-        static_assert(Plain::check<A...>());
-        detail::Text(std::string(std::forward<S>(value)), Plain::get<names::Modifier>(Modifier{}, args...), textStyleOf<Plain>(args...), Plain::get<names::OnTextLayout>(OnTextLayout{}, args...), site);
-    }
+    using Plain = Params<names::Text, names::Modifier, names::Color, names::FontSize, names::FontStyle, names::FontWeight, names::FontFamily, names::LetterSpacing, names::TextDecoration, names::TextAlign, names::LineHeight, names::Overflow, names::SoftWrap, names::MaxLines, names::MinLines, names::OnTextLayout, names::Style, names::AutoSize>;
+    using Styled = Params<names::Text, names::Modifier, names::Color, names::FontSize, names::FontStyle, names::FontWeight, names::FontFamily, names::LetterSpacing, names::TextDecoration, names::TextAlign, names::LineHeight, names::Overflow, names::SoftWrap, names::MaxLines, names::MinLines, names::InlineContent, names::OnTextLayout, names::Style, names::AutoSize>;
     template <class... A>
-    static void call(CallSite site, const AnnotatedString& value, A&&... args) {
-        static_assert(Styled::check<A...>());
-        detail::Text(value, Styled::get<names::Modifier>(Modifier{}, args...), textStyleOf<Styled>(args...), Styled::get<names::InlineContent>(InlineContents{}, args...), Styled::get<names::OnTextLayout>(OnTextLayout{}, args...), site);
+    static void call(CallSite site, A&&... args) {
+        // A String's form, or an AnnotatedString's (styles, inline content).
+        if constexpr (std::is_same_v<std::remove_cvref_t<decltype(Plain::arg<names::Text>(args...))>, AnnotatedString>) {
+            static_assert(Styled::check<A...>());
+            const AnnotatedString& value = Styled::arg<names::Text>(args...);
+            detail::Text(value, Styled::get<names::Modifier>(Modifier{}, args...), textStyleOf<Styled>(args...), Styled::get<names::InlineContent>(InlineContents{}, args...), Styled::get<names::OnTextLayout>(OnTextLayout{}, args...), site);
+        } else {
+            static_assert(Plain::check<A...>());
+            static_assert(std::is_convertible_v<decltype(Plain::arg<names::Text>(args...)), std::string>, "kompoz: Text's text is a string or an AnnotatedString");
+            detail::Text(std::string(Plain::arg<names::Text>(args...)), Plain::get<names::Modifier>(Modifier{}, args...), textStyleOf<Plain>(args...), Plain::get<names::OnTextLayout>(OnTextLayout{}, args...), site);
+        }
     }
 };
 } // namespace detail
@@ -704,10 +706,11 @@ void Button(std::function<void()> onClick, const Modifier& modifier, const Conte
 void Button(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style, const Content& content,
             CallSite site = CallSite::current());
 struct ButtonImpl {
-    using P = Params<names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
+    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: Button takes a block: its content");
         ButtonStyle style;
         P::set<names::Enabled>(style.enabled, args...);
@@ -727,10 +730,11 @@ void OutlinedButton(std::function<void()> onClick, const Content& content, CallS
 void OutlinedButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                     const Content& content, CallSite site = CallSite::current());
 struct OutlinedButtonImpl {
-    using P = Params<names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
+    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: OutlinedButton takes a block: its content");
         ButtonStyle style;
         P::set<names::Enabled>(style.enabled, args...);
@@ -750,10 +754,11 @@ void FilledTonalButton(std::function<void()> onClick, const Content& content, Ca
 void FilledTonalButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                        const Content& content, CallSite site = CallSite::current());
 struct FilledTonalButtonImpl {
-    using P = Params<names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
+    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: FilledTonalButton takes a block: its content");
         ButtonStyle style;
         P::set<names::Enabled>(style.enabled, args...);
@@ -773,10 +778,11 @@ void ElevatedButton(std::function<void()> onClick, const Content& content, CallS
 void ElevatedButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                     const Content& content, CallSite site = CallSite::current());
 struct ElevatedButtonImpl {
-    using P = Params<names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
+    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: ElevatedButton takes a block: its content");
         ButtonStyle style;
         P::set<names::Enabled>(style.enabled, args...);
@@ -796,10 +802,11 @@ void TextButton(std::function<void()> onClick, const Content& content, CallSite 
 void TextButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                 const Content& content, CallSite site = CallSite::current());
 struct TextButtonImpl {
-    using P = Params<names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
+    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: TextButton takes a block: its content");
         ButtonStyle style;
         P::set<names::Enabled>(style.enabled, args...);
@@ -978,21 +985,25 @@ void Image(const Painter& painter, std::string contentDescription, const Modifie
            Alignment alignment = Alignment::Center, ContentScale contentScale = ContentScale::Fit, float alpha = 1,
            std::optional<ColorFilter> colorFilter = {}, CallSite site = CallSite::current());
 struct ImageImpl {
-    using Bitmap = Params<names::Modifier, names::ContentScale, names::Alpha, names::ColorFilter>;
-    using Painted = Params<names::Modifier, names::Alignment, names::ContentScale, names::Alpha, names::ColorFilter>;
+    using OfBitmap = Params<names::Bitmap, names::ContentDescription, names::Modifier, names::ContentScale, names::Alpha, names::ColorFilter>;
+    using OfPainter = Params<names::Painter, names::ContentDescription, names::Modifier, names::Alignment, names::ContentScale, names::Alpha, names::ColorFilter>;
     template <class... A>
-    static void call(CallSite site, const ImageBitmap& bitmap, std::string contentDescription, A&&... args) {
-        static_assert(Bitmap::check<A...>());
-        detail::Image(bitmap, std::move(contentDescription), Bitmap::get<names::Modifier>(Modifier{}, args...),
-              Bitmap::get<names::ContentScale>(ContentScale::Fit, args...), Bitmap::get<names::Alpha>(1.f, args...),
-              Bitmap::get<names::ColorFilter>(std::optional<ColorFilter>{}, args...), site);
-    }
-    template <class... A>
-    static void call(CallSite site, const Painter& painter, std::string contentDescription, A&&... args) {
-        static_assert(Painted::check<A...>());
-        detail::Image(painter, std::move(contentDescription), Painted::get<names::Modifier>(Modifier{}, args...),
-              Painted::get<names::Alignment>(Alignment{Alignment::Center}, args...), Painted::get<names::ContentScale>(ContentScale::Fit, args...),
-              Painted::get<names::Alpha>(1.f, args...), Painted::get<names::ColorFilter>(std::optional<ColorFilter>{}, args...), site);
+    static void call(CallSite site, A&&... args) {
+        if constexpr (OfBitmap::form<names::Bitmap, ImageBitmap, A...>()) {
+            using P = OfBitmap;
+            static_assert(P::check<A...>());
+            const ImageBitmap& bitmap = P::arg<names::Bitmap>(args...);
+            detail::Image(bitmap, std::string(P::arg<names::ContentDescription>(args...)), P::get<names::Modifier>(Modifier{}, args...),
+                          P::get<names::ContentScale>(ContentScale::Fit, args...), P::get<names::Alpha>(1.f, args...),
+                          P::get<names::ColorFilter>(std::optional<ColorFilter>{}, args...), site);
+        } else {
+            using P = OfPainter;
+            static_assert(P::check<A...>());
+            const Painter& painter = P::arg<names::Painter>(args...);
+            detail::Image(painter, std::string(P::arg<names::ContentDescription>(args...)), P::get<names::Modifier>(Modifier{}, args...),
+                          P::get<names::Alignment>(Alignment{Alignment::Center}, args...), P::get<names::ContentScale>(ContentScale::Fit, args...),
+                          P::get<names::Alpha>(1.f, args...), P::get<names::ColorFilter>(std::optional<ColorFilter>{}, args...), site);
+        }
     }
 };
 } // namespace detail
@@ -1041,18 +1052,23 @@ void Icon(const ImageVector& icon, std::string contentDescription, const Modifie
 void Icon(const Painter& painter, std::string contentDescription, const Modifier& modifier = {},
           std::optional<Color> tint = {}, CallSite site = CallSite::current());
 struct IconImpl {
-    using P = Params<names::Modifier, names::Tint>;
+    using OfVector = Params<names::ImageVector, names::ContentDescription, names::Modifier, names::Tint>;
+    using OfPainter = Params<names::Painter, names::ContentDescription, names::Modifier, names::Tint>;
     template <class... A>
-    static void call(CallSite site, const ImageVector& icon, std::string contentDescription, A&&... args) {
-        static_assert(P::check<A...>());
-        detail::Icon(icon, std::move(contentDescription), P::get<names::Modifier>(Modifier{}, args...), P::get<names::Tint>(std::optional<Color>{}, args...),
-             site);
-    }
-    template <class... A>
-    static void call(CallSite site, const Painter& painter, std::string contentDescription, A&&... args) {
-        static_assert(P::check<A...>());
-        detail::Icon(painter, std::move(contentDescription), P::get<names::Modifier>(Modifier{}, args...),
-             P::get<names::Tint>(std::optional<Color>{}, args...), site);
+    static void call(CallSite site, A&&... args) {
+        if constexpr (OfPainter::form<names::Painter, Painter, A...>() && !OfVector::form<names::ImageVector, ImageVector, A...>()) {
+            using P = OfPainter;
+            static_assert(P::check<A...>());
+            const Painter& painter = P::arg<names::Painter>(args...);
+            detail::Icon(painter, std::string(P::arg<names::ContentDescription>(args...)), P::get<names::Modifier>(Modifier{}, args...),
+                         P::get<names::Tint>(std::optional<Color>{}, args...), site);
+        } else {
+            using P = OfVector;
+            static_assert(P::check<A...>());
+            const ImageVector& icon = P::arg<names::ImageVector>(args...);
+            detail::Icon(icon, std::string(P::arg<names::ContentDescription>(args...)), P::get<names::Modifier>(Modifier{}, args...),
+                         P::get<names::Tint>(std::optional<Color>{}, args...), site);
+        }
     }
 };
 } // namespace detail
@@ -1070,10 +1086,11 @@ void IconButton(std::function<void()> onClick, const Content& content, CallSite 
 void IconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
                 const Content& content, CallSite site = CallSite::current());
 struct IconButtonImpl {
-    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::InteractionSource, Block>;
+    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::InteractionSource, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: IconButton takes a block: its content");
         IconButtonStyle style;
         P::set<names::Enabled>(style.enabled, args...);
@@ -1090,10 +1107,11 @@ void FilledIconButton(std::function<void()> onClick, const Content& content, Cal
 void FilledIconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
                       const Content& content, CallSite site = CallSite::current());
 struct FilledIconButtonImpl {
-    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::InteractionSource, Block>;
+    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::InteractionSource, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: FilledIconButton takes a block: its content");
         IconButtonStyle style;
         P::set<names::Enabled>(style.enabled, args...);
@@ -1110,10 +1128,11 @@ void FilledTonalIconButton(std::function<void()> onClick, const Content& content
 void FilledTonalIconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
                            const Content& content, CallSite site = CallSite::current());
 struct FilledTonalIconButtonImpl {
-    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::InteractionSource, Block>;
+    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::InteractionSource, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: FilledTonalIconButton takes a block: its content");
         IconButtonStyle style;
         P::set<names::Enabled>(style.enabled, args...);
@@ -1131,10 +1150,11 @@ void OutlinedIconButton(std::function<void()> onClick, const Content& content, C
 void OutlinedIconButton(std::function<void()> onClick, const Modifier& modifier, const IconButtonStyle& style,
                         const Content& content, CallSite site = CallSite::current());
 struct OutlinedIconButtonImpl {
-    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::InteractionSource, Block>;
+    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::InteractionSource, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: OutlinedIconButton takes a block: its content");
         IconButtonStyle style;
         P::set<names::Enabled>(style.enabled, args...);
@@ -1169,10 +1189,12 @@ void IconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, c
 void IconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
                       const IconToggleButtonStyle& style, const Content& content, CallSite site = CallSite::current());
 struct IconToggleButtonImpl {
-    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::CheckedContainerColor, names::CheckedContentColor, names::InteractionSource, Block>;
+    using P = Params<names::Checked, names::OnCheckedChange, names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::CheckedContainerColor, names::CheckedContentColor, names::InteractionSource, Block>;
     template <class... A>
-    static void call(CallSite site, bool checked, std::function<void(bool)> onCheckedChange, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        bool checked = P::arg<names::Checked>(args...);
+        std::function<void(bool)> onCheckedChange = P::arg<names::OnCheckedChange>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: IconToggleButton takes a block: its content");
         IconToggleButtonStyle style;
         P::set<names::Enabled>(style.enabled, args...);
@@ -1192,10 +1214,12 @@ void FilledIconToggleButton(bool checked, std::function<void(bool)> onCheckedCha
 void FilledIconToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
                             const IconToggleButtonStyle& style, const Content& content, CallSite site = CallSite::current());
 struct FilledIconToggleButtonImpl {
-    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::CheckedContainerColor, names::CheckedContentColor, names::InteractionSource, Block>;
+    using P = Params<names::Checked, names::OnCheckedChange, names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::CheckedContainerColor, names::CheckedContentColor, names::InteractionSource, Block>;
     template <class... A>
-    static void call(CallSite site, bool checked, std::function<void(bool)> onCheckedChange, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        bool checked = P::arg<names::Checked>(args...);
+        std::function<void(bool)> onCheckedChange = P::arg<names::OnCheckedChange>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: FilledIconToggleButton takes a block: its content");
         IconToggleButtonStyle style;
         P::set<names::Enabled>(style.enabled, args...);
@@ -1216,10 +1240,12 @@ void FilledTonalIconToggleButton(bool checked, std::function<void(bool)> onCheck
                                  const IconToggleButtonStyle& style, const Content& content,
                                  CallSite site = CallSite::current());
 struct FilledTonalIconToggleButtonImpl {
-    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::CheckedContainerColor, names::CheckedContentColor, names::InteractionSource, Block>;
+    using P = Params<names::Checked, names::OnCheckedChange, names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::CheckedContainerColor, names::CheckedContentColor, names::InteractionSource, Block>;
     template <class... A>
-    static void call(CallSite site, bool checked, std::function<void(bool)> onCheckedChange, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        bool checked = P::arg<names::Checked>(args...);
+        std::function<void(bool)> onCheckedChange = P::arg<names::OnCheckedChange>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: FilledTonalIconToggleButton takes a block: its content");
         IconToggleButtonStyle style;
         P::set<names::Enabled>(style.enabled, args...);
@@ -1240,10 +1266,12 @@ void OutlinedIconToggleButton(bool checked, std::function<void(bool)> onCheckedC
                               const IconToggleButtonStyle& style, const Content& content,
                               CallSite site = CallSite::current());
 struct OutlinedIconToggleButtonImpl {
-    using P = Params<names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::CheckedContainerColor, names::CheckedContentColor, names::InteractionSource, Block>;
+    using P = Params<names::Checked, names::OnCheckedChange, names::Modifier, names::Enabled, names::ContainerColor, names::ContentColor, names::CheckedContainerColor, names::CheckedContentColor, names::InteractionSource, Block>;
     template <class... A>
-    static void call(CallSite site, bool checked, std::function<void(bool)> onCheckedChange, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        bool checked = P::arg<names::Checked>(args...);
+        std::function<void(bool)> onCheckedChange = P::arg<names::OnCheckedChange>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: OutlinedIconToggleButton takes a block: its content");
         IconToggleButtonStyle style;
         P::set<names::Enabled>(style.enabled, args...);
@@ -1323,17 +1351,17 @@ void Card(const Modifier& modifier, const Content& content, CallSite site = Call
 void Card(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 struct CardImpl {
     using P = Params<names::Modifier, Block>;
+    using Clickable = Params<names::OnClick, names::Modifier, Block>;
     template <class... A>
-        requires(!startsWithClick<A...>())
     static void call(CallSite site, A&&... args) {
-        static_assert(P::check<A...>());
-        detail::Card(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
-    }
-    template <class F, class... A>
-        requires(startsWithClick<F, A...>())
-    static void call(CallSite site, F&& onClick, A&&... args) {  // a clickable one
-        static_assert(P::check<A...>());
-        detail::Card(std::function<void()>(std::forward<F>(onClick)), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+        if constexpr (countOf<names::OnClick, A...> > 0 || startsWithClick<A...>()) {  // a clickable one
+            static_assert(Clickable::check<A...>());
+            detail::Card(std::function<void()>(Clickable::arg<names::OnClick>(args...)), Clickable::get<names::Modifier>(Modifier{}, args...),
+                         Clickable::block(std::forward<A>(args)...), site);
+        } else {
+            static_assert(P::check<A...>());
+            detail::Card(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+        }
     }
 };
 } // namespace detail
@@ -1343,17 +1371,17 @@ void ElevatedCard(const Modifier& modifier, const Content& content, CallSite sit
 void ElevatedCard(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 struct ElevatedCardImpl {
     using P = Params<names::Modifier, Block>;
+    using Clickable = Params<names::OnClick, names::Modifier, Block>;
     template <class... A>
-        requires(!startsWithClick<A...>())
     static void call(CallSite site, A&&... args) {
-        static_assert(P::check<A...>());
-        detail::ElevatedCard(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
-    }
-    template <class F, class... A>
-        requires(startsWithClick<F, A...>())
-    static void call(CallSite site, F&& onClick, A&&... args) {  // a clickable one
-        static_assert(P::check<A...>());
-        detail::ElevatedCard(std::function<void()>(std::forward<F>(onClick)), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+        if constexpr (countOf<names::OnClick, A...> > 0 || startsWithClick<A...>()) {  // a clickable one
+            static_assert(Clickable::check<A...>());
+            detail::ElevatedCard(std::function<void()>(Clickable::arg<names::OnClick>(args...)), Clickable::get<names::Modifier>(Modifier{}, args...),
+                         Clickable::block(std::forward<A>(args)...), site);
+        } else {
+            static_assert(P::check<A...>());
+            detail::ElevatedCard(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+        }
     }
 };
 } // namespace detail
@@ -1363,17 +1391,17 @@ void OutlinedCard(const Modifier& modifier, const Content& content, CallSite sit
 void OutlinedCard(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 struct OutlinedCardImpl {
     using P = Params<names::Modifier, Block>;
+    using Clickable = Params<names::OnClick, names::Modifier, Block>;
     template <class... A>
-        requires(!startsWithClick<A...>())
     static void call(CallSite site, A&&... args) {
-        static_assert(P::check<A...>());
-        detail::OutlinedCard(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
-    }
-    template <class F, class... A>
-        requires(startsWithClick<F, A...>())
-    static void call(CallSite site, F&& onClick, A&&... args) {  // a clickable one
-        static_assert(P::check<A...>());
-        detail::OutlinedCard(std::function<void()>(std::forward<F>(onClick)), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+        if constexpr (countOf<names::OnClick, A...> > 0 || startsWithClick<A...>()) {  // a clickable one
+            static_assert(Clickable::check<A...>());
+            detail::OutlinedCard(std::function<void()>(Clickable::arg<names::OnClick>(args...)), Clickable::get<names::Modifier>(Modifier{}, args...),
+                         Clickable::block(std::forward<A>(args)...), site);
+        } else {
+            static_assert(P::check<A...>());
+            detail::OutlinedCard(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+        }
     }
 };
 } // namespace detail
@@ -1407,10 +1435,12 @@ namespace detail {
 void Checkbox(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier = {},
               bool enabled = true, std::optional<MutableInteractionSource> interactionSource = {}, CallSite site = CallSite::current());
 struct CheckboxImpl {
-    using P = Params<names::Modifier, names::Enabled, names::InteractionSource>;
+    using P = Params<names::Checked, names::OnCheckedChange, names::Modifier, names::Enabled, names::InteractionSource>;
     template <class... A>
-    static void call(CallSite site, bool checked, std::function<void(bool)> onCheckedChange, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        bool checked = P::arg<names::Checked>(args...);
+        std::function<void(bool)> onCheckedChange = P::arg<names::OnCheckedChange>(args...);
         detail::Checkbox(checked, std::move(onCheckedChange), P::get<names::Modifier>(Modifier{}, args...), P::get<names::Enabled>(true, args...),
             P::get<names::InteractionSource>(std::optional<MutableInteractionSource>{}, args...), site);
     }
@@ -1423,10 +1453,12 @@ namespace detail {
 void TriStateCheckbox(ToggleableState state, std::function<void()> onClick, const Modifier& modifier = {}, bool enabled = true,
                       std::optional<MutableInteractionSource> interactionSource = {}, CallSite site = CallSite::current());
 struct TriStateCheckboxImpl {
-    using P = Params<names::Modifier, names::Enabled, names::InteractionSource>;
+    using P = Params<names::State, names::OnClick, names::Modifier, names::Enabled, names::InteractionSource>;
     template <class... A>
-    static void call(CallSite site, ToggleableState state, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        ToggleableState state = P::arg<names::State>(args...);
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         detail::TriStateCheckbox(state, std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), P::get<names::Enabled>(true, args...),
             P::get<names::InteractionSource>(std::optional<MutableInteractionSource>{}, args...), site);
     }
@@ -1447,10 +1479,12 @@ void Switch(bool checked, std::function<void(bool)> onCheckedChange, const Modif
 void Switch(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, const SwitchOptions& options,
             CallSite site = CallSite::current());
 struct SwitchImpl {
-    using P = Params<names::Modifier, names::ThumbContent, names::Enabled, names::InteractionSource>;
+    using P = Params<names::Checked, names::OnCheckedChange, names::Modifier, names::ThumbContent, names::Enabled, names::InteractionSource>;
     template <class... A>
-    static void call(CallSite site, bool checked, std::function<void(bool)> onCheckedChange, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        bool checked = P::arg<names::Checked>(args...);
+        std::function<void(bool)> onCheckedChange = P::arg<names::OnCheckedChange>(args...);
         SwitchOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::InteractionSource>(options.interactionSource, args...);
@@ -1711,9 +1745,11 @@ void TextField(const TextFieldState& state, const Modifier& modifier = {}, TextF
                CallSite site = CallSite::current());
 struct TextFieldImpl {
     template <class... A>
-    static void call(CallSite site, const std::string& value, std::function<void(std::string)> onValueChange, A&&... args) {
-        using P = Params<names::Modifier, names::Enabled, names::ReadOnly, names::TextStyle, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::VisualTransformation, names::KeyboardOptions, names::KeyboardActions, names::SingleLine, names::MaxLines, names::MinLines, names::InteractionSource, names::Shape, names::TextFieldColors, names::LineLimits, names::OnSubmit, names::InputTransformation, names::OutputTransformation, names::LabelPosition>;
+    static void valueForm(CallSite site, A&&... args) {
+        using P = Params<names::Value, names::OnValueChange, names::Modifier, names::Enabled, names::ReadOnly, names::TextStyle, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::VisualTransformation, names::KeyboardOptions, names::KeyboardActions, names::SingleLine, names::MaxLines, names::MinLines, names::InteractionSource, names::Shape, names::TextFieldColors, names::Colors, names::LineLimits, names::OnSubmit, names::InputTransformation, names::OutputTransformation, names::LabelPosition>;
         static_assert(P::check<A...>());
+        const std::string& value = P::arg<names::Value>(args...);
+        std::function<void(std::string)> onValueChange = P::arg<names::OnValueChange>(args...);
         TextFieldOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::ReadOnly>(options.readOnly, args...);
@@ -1735,6 +1771,7 @@ struct TextFieldImpl {
         P::set<names::InteractionSource>(options.interactionSource, args...);
         P::set<names::Shape>(options.shape, args...);
         P::set<names::TextFieldColors>(options.colors, args...);
+        P::set<names::Colors>(options.colors, args...);
         P::set<names::LineLimits>(options.lineLimits, args...);
         P::set<names::OnSubmit>(options.onSubmit, args...);
         P::set<names::InputTransformation>(options.inputTransformation, args...);
@@ -1743,9 +1780,10 @@ struct TextFieldImpl {
         TextField(value, std::move(onValueChange), P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
     }
     template <class... A>
-    static void call(CallSite site, const TextFieldState& state, A&&... args) {
-        using P = Params<names::Modifier, names::Enabled, names::ReadOnly, names::InputTransformation, names::TextStyle, names::LabelPosition, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::KeyboardOptions, names::KeyboardActions, names::LineLimits, names::Shape, names::TextFieldColors, names::InteractionSource, names::OutputTransformation, names::SingleLine, names::MaxLines, names::MinLines, names::VisualTransformation, names::OnSubmit>;
+    static void stateForm(CallSite site, A&&... args) {
+        using P = Params<names::State, names::Modifier, names::Enabled, names::ReadOnly, names::InputTransformation, names::TextStyle, names::LabelPosition, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::KeyboardOptions, names::KeyboardActions, names::LineLimits, names::Shape, names::TextFieldColors, names::Colors, names::InteractionSource, names::OutputTransformation, names::SingleLine, names::MaxLines, names::MinLines, names::VisualTransformation, names::OnSubmit>;
         static_assert(P::check<A...>());
+        const TextFieldState& state = P::arg<names::State>(args...);
         TextFieldOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::ReadOnly>(options.readOnly, args...);
@@ -1765,6 +1803,7 @@ struct TextFieldImpl {
         P::set<names::LineLimits>(options.lineLimits, args...);
         P::set<names::Shape>(options.shape, args...);
         P::set<names::TextFieldColors>(options.colors, args...);
+        P::set<names::Colors>(options.colors, args...);
         P::set<names::InteractionSource>(options.interactionSource, args...);
         P::set<names::OutputTransformation>(options.outputTransformation, args...);
         P::set<names::SingleLine>(options.singleLine, args...);
@@ -1773,6 +1812,11 @@ struct TextFieldImpl {
         P::set<names::VisualTransformation>(options.visualTransformation, args...);
         P::set<names::OnSubmit>(options.onSubmit, args...);
         TextField(state, P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {  // the value's form, or the state's
+        if constexpr (countOf<names::State, A...> > 0 || startsWith<TextFieldState, A...>()) stateForm(site, std::forward<A>(args)...);
+        else valueForm(site, std::forward<A>(args)...);
     }
 };
 } // namespace detail
@@ -1784,9 +1828,11 @@ void BasicTextField(const TextFieldState& state, const Modifier& modifier = {}, 
                     CallSite site = CallSite::current());
 struct BasicTextFieldImpl {
     template <class... A>
-    static void call(CallSite site, const std::string& value, std::function<void(std::string)> onValueChange, A&&... args) {
-        using P = Params<names::Modifier, names::Enabled, names::ReadOnly, names::TextStyle, names::KeyboardOptions, names::KeyboardActions, names::SingleLine, names::MaxLines, names::MinLines, names::VisualTransformation, names::InteractionSource, names::Decorator, names::Placeholder, names::OnSubmit, names::LineLimits, names::InputTransformation, names::OutputTransformation, names::TextFieldColors>;
+    static void valueForm(CallSite site, A&&... args) {
+        using P = Params<names::Value, names::OnValueChange, names::Modifier, names::Enabled, names::ReadOnly, names::TextStyle, names::KeyboardOptions, names::KeyboardActions, names::SingleLine, names::MaxLines, names::MinLines, names::VisualTransformation, names::InteractionSource, names::Decorator, names::Placeholder, names::OnSubmit, names::LineLimits, names::InputTransformation, names::OutputTransformation, names::TextFieldColors, names::Colors>;
         static_assert(P::check<A...>());
+        const std::string& value = P::arg<names::Value>(args...);
+        std::function<void(std::string)> onValueChange = P::arg<names::OnValueChange>(args...);
         TextFieldOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::ReadOnly>(options.readOnly, args...);
@@ -1805,12 +1851,14 @@ struct BasicTextFieldImpl {
         P::set<names::InputTransformation>(options.inputTransformation, args...);
         P::set<names::OutputTransformation>(options.outputTransformation, args...);
         P::set<names::TextFieldColors>(options.colors, args...);
+        P::set<names::Colors>(options.colors, args...);
         BasicTextField(value, std::move(onValueChange), P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
     }
     template <class... A>
-    static void call(CallSite site, const TextFieldState& state, A&&... args) {
-        using P = Params<names::Modifier, names::Enabled, names::ReadOnly, names::InputTransformation, names::TextStyle, names::KeyboardOptions, names::KeyboardActions, names::LineLimits, names::InteractionSource, names::Decorator, names::OutputTransformation, names::SingleLine, names::MaxLines, names::MinLines, names::VisualTransformation, names::Placeholder, names::OnSubmit, names::TextFieldColors>;
+    static void stateForm(CallSite site, A&&... args) {
+        using P = Params<names::State, names::Modifier, names::Enabled, names::ReadOnly, names::InputTransformation, names::TextStyle, names::KeyboardOptions, names::KeyboardActions, names::LineLimits, names::InteractionSource, names::Decorator, names::OutputTransformation, names::SingleLine, names::MaxLines, names::MinLines, names::VisualTransformation, names::Placeholder, names::OnSubmit, names::TextFieldColors, names::Colors>;
         static_assert(P::check<A...>());
+        const TextFieldState& state = P::arg<names::State>(args...);
         TextFieldOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::ReadOnly>(options.readOnly, args...);
@@ -1829,7 +1877,13 @@ struct BasicTextFieldImpl {
         P::set<names::Placeholder>(options.placeholder, args...);
         P::set<names::OnSubmit>(options.onSubmit, args...);
         P::set<names::TextFieldColors>(options.colors, args...);
+        P::set<names::Colors>(options.colors, args...);
         BasicTextField(state, P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {  // the value's form, or the state's
+        if constexpr (countOf<names::State, A...> > 0 || startsWith<TextFieldState, A...>()) stateForm(site, std::forward<A>(args)...);
+        else valueForm(site, std::forward<A>(args)...);
     }
 };
 } // namespace detail
@@ -1841,9 +1895,11 @@ void OutlinedTextField(const TextFieldState& state, const Modifier& modifier = {
                        CallSite site = CallSite::current());
 struct OutlinedTextFieldImpl {
     template <class... A>
-    static void call(CallSite site, const std::string& value, std::function<void(std::string)> onValueChange, A&&... args) {
-        using P = Params<names::Modifier, names::Enabled, names::ReadOnly, names::TextStyle, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::VisualTransformation, names::KeyboardOptions, names::KeyboardActions, names::SingleLine, names::MaxLines, names::MinLines, names::InteractionSource, names::Shape, names::TextFieldColors, names::LineLimits, names::OnSubmit, names::InputTransformation, names::OutputTransformation, names::LabelPosition>;
+    static void valueForm(CallSite site, A&&... args) {
+        using P = Params<names::Value, names::OnValueChange, names::Modifier, names::Enabled, names::ReadOnly, names::TextStyle, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::VisualTransformation, names::KeyboardOptions, names::KeyboardActions, names::SingleLine, names::MaxLines, names::MinLines, names::InteractionSource, names::Shape, names::TextFieldColors, names::Colors, names::LineLimits, names::OnSubmit, names::InputTransformation, names::OutputTransformation, names::LabelPosition>;
         static_assert(P::check<A...>());
+        const std::string& value = P::arg<names::Value>(args...);
+        std::function<void(std::string)> onValueChange = P::arg<names::OnValueChange>(args...);
         TextFieldOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::ReadOnly>(options.readOnly, args...);
@@ -1865,6 +1921,7 @@ struct OutlinedTextFieldImpl {
         P::set<names::InteractionSource>(options.interactionSource, args...);
         P::set<names::Shape>(options.shape, args...);
         P::set<names::TextFieldColors>(options.colors, args...);
+        P::set<names::Colors>(options.colors, args...);
         P::set<names::LineLimits>(options.lineLimits, args...);
         P::set<names::OnSubmit>(options.onSubmit, args...);
         P::set<names::InputTransformation>(options.inputTransformation, args...);
@@ -1873,9 +1930,10 @@ struct OutlinedTextFieldImpl {
         OutlinedTextField(value, std::move(onValueChange), P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
     }
     template <class... A>
-    static void call(CallSite site, const TextFieldState& state, A&&... args) {
-        using P = Params<names::Modifier, names::Enabled, names::ReadOnly, names::InputTransformation, names::TextStyle, names::LabelPosition, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::KeyboardOptions, names::KeyboardActions, names::LineLimits, names::Shape, names::TextFieldColors, names::InteractionSource, names::OutputTransformation, names::SingleLine, names::MaxLines, names::MinLines, names::VisualTransformation, names::OnSubmit>;
+    static void stateForm(CallSite site, A&&... args) {
+        using P = Params<names::State, names::Modifier, names::Enabled, names::ReadOnly, names::InputTransformation, names::TextStyle, names::LabelPosition, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::KeyboardOptions, names::KeyboardActions, names::LineLimits, names::Shape, names::TextFieldColors, names::Colors, names::InteractionSource, names::OutputTransformation, names::SingleLine, names::MaxLines, names::MinLines, names::VisualTransformation, names::OnSubmit>;
         static_assert(P::check<A...>());
+        const TextFieldState& state = P::arg<names::State>(args...);
         TextFieldOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::ReadOnly>(options.readOnly, args...);
@@ -1895,6 +1953,7 @@ struct OutlinedTextFieldImpl {
         P::set<names::LineLimits>(options.lineLimits, args...);
         P::set<names::Shape>(options.shape, args...);
         P::set<names::TextFieldColors>(options.colors, args...);
+        P::set<names::Colors>(options.colors, args...);
         P::set<names::InteractionSource>(options.interactionSource, args...);
         P::set<names::OutputTransformation>(options.outputTransformation, args...);
         P::set<names::SingleLine>(options.singleLine, args...);
@@ -1903,6 +1962,11 @@ struct OutlinedTextFieldImpl {
         P::set<names::VisualTransformation>(options.visualTransformation, args...);
         P::set<names::OnSubmit>(options.onSubmit, args...);
         OutlinedTextField(state, P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {  // the value's form, or the state's
+        if constexpr (countOf<names::State, A...> > 0 || startsWith<TextFieldState, A...>()) stateForm(site, std::forward<A>(args)...);
+        else valueForm(site, std::forward<A>(args)...);
     }
 };
 } // namespace detail
@@ -1958,9 +2022,10 @@ void SecureTextField(const TextFieldState& state, const Modifier& modifier = {},
                      CallSite site = CallSite::current());
 struct SecureTextFieldImpl {
     template <class... A>
-    static void call(CallSite site, const TextFieldState& state, A&&... args) {
-        using P = Params<names::Modifier, names::Enabled, names::TextStyle, names::LabelPosition, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::InputTransformation, names::TextObfuscationMode, names::TextObfuscationCharacter, names::KeyboardOptions, names::KeyboardActions, names::Shape, names::TextFieldColors, names::InteractionSource, names::OnSubmit>;
+    static void call(CallSite site, A&&... args) {
+        using P = Params<names::State, names::Modifier, names::Enabled, names::TextStyle, names::LabelPosition, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::InputTransformation, names::TextObfuscationMode, names::TextObfuscationCharacter, names::KeyboardOptions, names::KeyboardActions, names::Shape, names::TextFieldColors, names::InteractionSource, names::OnSubmit>;
         static_assert(P::check<A...>());
+        const TextFieldState& state = P::arg<names::State>(args...);
         SecureTextFieldOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::TextStyle>(options.textStyle, args...);
@@ -1992,9 +2057,10 @@ void OutlinedSecureTextField(const TextFieldState& state, const Modifier& modifi
                              CallSite site = CallSite::current());
 struct OutlinedSecureTextFieldImpl {
     template <class... A>
-    static void call(CallSite site, const TextFieldState& state, A&&... args) {
-        using P = Params<names::Modifier, names::Enabled, names::TextStyle, names::LabelPosition, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::InputTransformation, names::TextObfuscationMode, names::TextObfuscationCharacter, names::KeyboardOptions, names::KeyboardActions, names::Shape, names::TextFieldColors, names::InteractionSource, names::OnSubmit>;
+    static void call(CallSite site, A&&... args) {
+        using P = Params<names::State, names::Modifier, names::Enabled, names::TextStyle, names::LabelPosition, names::Label, names::Placeholder, names::LeadingIcon, names::TrailingIcon, names::Prefix, names::Suffix, names::SupportingText, names::IsError, names::InputTransformation, names::TextObfuscationMode, names::TextObfuscationCharacter, names::KeyboardOptions, names::KeyboardActions, names::Shape, names::TextFieldColors, names::InteractionSource, names::OnSubmit>;
         static_assert(P::check<A...>());
+        const TextFieldState& state = P::arg<names::State>(args...);
         SecureTextFieldOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::TextStyle>(options.textStyle, args...);
@@ -2028,9 +2094,10 @@ void BasicSecureTextField(const TextFieldState& state, const Modifier& modifier 
                           CallSite site = CallSite::current());
 struct BasicSecureTextFieldImpl {
     template <class... A>
-    static void call(CallSite site, const TextFieldState& state, A&&... args) {
-        using P = Params<names::Modifier, names::Enabled, names::InputTransformation, names::TextStyle, names::InteractionSource, names::Decorator, names::TextObfuscationMode, names::TextObfuscationCharacter, names::KeyboardOptions, names::KeyboardActions, names::Placeholder, names::OnSubmit, names::TextFieldColors>;
+    static void call(CallSite site, A&&... args) {
+        using P = Params<names::State, names::Modifier, names::Enabled, names::InputTransformation, names::TextStyle, names::InteractionSource, names::Decorator, names::TextObfuscationMode, names::TextObfuscationCharacter, names::KeyboardOptions, names::KeyboardActions, names::Placeholder, names::OnSubmit, names::TextFieldColors>;
         static_assert(P::check<A...>());
+        const TextFieldState& state = P::arg<names::State>(args...);
         SecureTextFieldOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::InputTransformation>(options.inputTransformation, args...);

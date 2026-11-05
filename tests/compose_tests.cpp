@@ -195,6 +195,32 @@ TEST(data_classes) {
     CHECK(rule.onNodeWithText("eşit").exists());
 }
 
+// The arguments a composable needs (onClick, value, checked, ...) by their names too.
+@Composable
+fun NamedHeads() {
+    var on by remember { mutableStateOf(false) }
+    var text by remember { mutableStateOf("") }
+    Column {
+        Checkbox(checked = on, onCheckedChange = { on = it }, modifier = Modifier.testTag("kutu"))
+        TextButton(onClick = { text = "basıldı" }) { Text(text = "düğme") }
+        TextField(value = text, onValueChange = { text = it }, modifier = Modifier.testTag("alan"))
+        Icon(imageVector = Icons.Filled.Star, contentDescription = "yıldız")
+        Text(text = if (on) "açık" else "kapalı")
+        Text("değer: $text")
+    }
+}
+
+TEST(required_arguments_by_name) {
+    ComposeTestRule rule([] { NamedHeads(); });
+    CHECK(rule.onNodeWithText("kapalı").exists());
+    rule.onNodeWithText("düğme").performClick();
+    CHECK(rule.onNodeWithText("değer: basıldı").exists());
+    rule.onNodeWithTag("alan").performTextInput("!");
+    CHECK(rule.onNodeWithText("değer: basıldı!").exists());
+    rule.onNodeWithTag("kutu").performClick();
+    CHECK(rule.onNodeWithText("açık").exists());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

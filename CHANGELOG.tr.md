@@ -706,6 +706,13 @@
   sırada yapılıyor (`Note(title = "x", id = 1)`) ve `copy(pinned = true)` ile değiştiriliyor. Lambdalar Kotlin'inkiler
   gibi değerleri kopyalayarak yakalıyor; kendi başına yeniden çalışan bir blok boşa çıkmış bir başvuru tutamıyor.
   C++ derleyicisinin iletileri kaynağın kendi satırlarını gösteriyor (`#line`).
+- **Bir composable'ın gerek duyduğu her argüman adla verilebilir**: `onClick`, `value` ve `onValueChange`, `checked` ve
+  `onCheckedChange`, `selected`, `expanded`, `onDismissRequest`, `state`, `text`, `imageVector`/`painter`/`bitmap` ve
+  `contentDescription`, … da Compose'daki gibi adlı argüman: `TextButton(onClick = save, [=] { … })`,
+  `TextField(value = text, onValueChange = setText)`; adsız verilince yine ilk yerleri dolduruyorlar. İki biçimi olan
+  bir composable adı verilen biçimi (`Icon(painter = …)`, `TextField(state = …)`, `Card(onClick = …)`) ya da ilk
+  argümanın türünün gösterdiğini alıyor. Metin alanları ve kaydırıcılar Compose'un `colors =`'ını da alıyor (C++'ta
+  `kompoz::arg::colors` diye yazılıyor; `kompoz::colors` renklerin ad alanı).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

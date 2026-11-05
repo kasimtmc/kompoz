@@ -860,9 +860,12 @@ void NavigationBarItem(bool selected, std::function<void()> onClick, const Image
                        CallSite site = CallSite::current());
 struct NavigationBarItemImpl {
     template <class... A>
-    static void call(CallSite site, bool selected, std::function<void()> onClick, const ImageVector& icon, A&&... args) {
-        using P = Params<names::Label>;
+    static void call(CallSite site, A&&... args) {
+        using P = Params<names::Selected, names::OnClick, names::Icon, names::Label>;
         static_assert(P::check<A...>());
+        bool selected = P::arg<names::Selected>(args...);
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
+        const ImageVector& icon = P::arg<names::Icon>(args...);
         NavigationBarItem(selected, std::move(onClick), icon, P::get<names::Label>(std::string(), args...), site);
     }
 };
@@ -910,9 +913,11 @@ void ShortNavigationBarItem(bool selected, std::function<void()> onClick, const 
                             CallSite site = CallSite::current());
 struct ShortNavigationBarItemImpl {
     template <class... A>
-    static void call(CallSite site, bool selected, std::function<void()> onClick, A&&... args) {
-        using P = Params<names::Icon, names::Label, names::Modifier, names::Enabled, names::IconPosition, names::InteractionSource>;
+    static void call(CallSite site, A&&... args) {
+        using P = Params<names::Selected, names::OnClick, names::Icon, names::Label, names::Modifier, names::Enabled, names::IconPosition, names::InteractionSource>;
         static_assert(P::check<A...>());
+        bool selected = P::arg<names::Selected>(args...);
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::given<names::Icon, A...>(), "kompoz: ShortNavigationBarItem takes an icon");
         ShortNavigationBarItemOptions options;
         P::set<names::Enabled>(options.enabled, args...);
@@ -990,9 +995,11 @@ void WideNavigationRailItem(bool selected, std::function<void()> onClick, const 
                             CallSite site = CallSite::current());
 struct WideNavigationRailItemImpl {
     template <class... A>
-    static void call(CallSite site, bool selected, std::function<void()> onClick, A&&... args) {
-        using P = Params<names::Icon, names::Label, names::Modifier, names::Enabled, names::RailExpanded, names::InteractionSource>;
+    static void call(CallSite site, A&&... args) {
+        using P = Params<names::Selected, names::OnClick, names::Icon, names::Label, names::Modifier, names::Enabled, names::RailExpanded, names::InteractionSource>;
         static_assert(P::check<A...>());
+        bool selected = P::arg<names::Selected>(args...);
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::given<names::Icon, A...>(), "kompoz: WideNavigationRailItem takes an icon");
         WideNavigationRailItemOptions options;
         P::set<names::Enabled>(options.enabled, args...);
@@ -1041,10 +1048,11 @@ namespace detail {
 void FloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier = {},
                           CallSite site = CallSite::current());
 struct FloatingActionButtonImpl {
-    using P = Params<names::Modifier, Block>;
+    using P = Params<names::OnClick, names::Modifier, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: FloatingActionButton takes a block: its content");
         FloatingActionButton(std::move(onClick), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
     }
@@ -1055,10 +1063,11 @@ namespace detail {
 void SmallFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier = {},
                                CallSite site = CallSite::current());  // 40 dp
 struct SmallFloatingActionButtonImpl {
-    using P = Params<names::Modifier, Block>;
+    using P = Params<names::OnClick, names::Modifier, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: SmallFloatingActionButton takes a block: its content");
         SmallFloatingActionButton(std::move(onClick), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
     }
@@ -1069,10 +1078,11 @@ namespace detail {
 void LargeFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier = {},
                                CallSite site = CallSite::current());  // 96 dp (its icon 36)
 struct LargeFloatingActionButtonImpl {
-    using P = Params<names::Modifier, Block>;
+    using P = Params<names::OnClick, names::Modifier, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: LargeFloatingActionButton takes a block: its content");
         LargeFloatingActionButton(std::move(onClick), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
     }
@@ -1083,10 +1093,13 @@ namespace detail {
 void ExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text,
                                   const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct ExtendedFloatingActionButtonImpl {
-    using P = Params<names::Modifier>;
+    using P = Params<names::OnClick, names::Icon, names::Text, names::Modifier>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, const ImageVector& icon, std::string text, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
+        const ImageVector& icon = P::arg<names::Icon>(args...);
+        std::string text = P::arg<names::Text>(args...);
         ExtendedFloatingActionButton(std::move(onClick), icon, std::move(text), P::get<names::Modifier>(Modifier{}, args...), site);
     }
 };
@@ -1097,10 +1110,11 @@ namespace detail {
 void MediumFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier = {},
                                 CallSite site = CallSite::current());
 struct MediumFloatingActionButtonImpl {
-    using P = Params<names::Modifier, Block>;
+    using P = Params<names::OnClick, names::Modifier, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: MediumFloatingActionButton takes a block: its content");
         MediumFloatingActionButton(std::move(onClick), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
     }
@@ -1114,10 +1128,13 @@ namespace detail {
 void SmallExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded = true,
                                        const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct SmallExtendedFloatingActionButtonImpl {
-    using P = Params<names::Modifier, names::Expanded>;
+    using P = Params<names::OnClick, names::Icon, names::Text, names::Modifier, names::Expanded>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, const ImageVector& icon, std::string text, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
+        const ImageVector& icon = P::arg<names::Icon>(args...);
+        std::string text = P::arg<names::Text>(args...);
         SmallExtendedFloatingActionButton(std::move(onClick), icon, std::move(text), P::get<names::Expanded>(true, args...), P::get<names::Modifier>(Modifier{}, args...), site);
     }
 };
@@ -1127,10 +1144,13 @@ namespace detail {
 void MediumExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded = true,
                                         const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct MediumExtendedFloatingActionButtonImpl {
-    using P = Params<names::Modifier, names::Expanded>;
+    using P = Params<names::OnClick, names::Icon, names::Text, names::Modifier, names::Expanded>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, const ImageVector& icon, std::string text, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
+        const ImageVector& icon = P::arg<names::Icon>(args...);
+        std::string text = P::arg<names::Text>(args...);
         MediumExtendedFloatingActionButton(std::move(onClick), icon, std::move(text), P::get<names::Expanded>(true, args...), P::get<names::Modifier>(Modifier{}, args...), site);
     }
 };
@@ -1140,10 +1160,13 @@ namespace detail {
 void LargeExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded = true,
                                        const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct LargeExtendedFloatingActionButtonImpl {
-    using P = Params<names::Modifier, names::Expanded>;
+    using P = Params<names::OnClick, names::Icon, names::Text, names::Modifier, names::Expanded>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, const ImageVector& icon, std::string text, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
+        const ImageVector& icon = P::arg<names::Icon>(args...);
+        std::string text = P::arg<names::Text>(args...);
         LargeExtendedFloatingActionButton(std::move(onClick), icon, std::move(text), P::get<names::Expanded>(true, args...), P::get<names::Modifier>(Modifier{}, args...), site);
     }
 };
@@ -1244,19 +1267,21 @@ void StandardFloatingActionButton(std::function<void()> onClick, const Content& 
 void VibrantFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier = {},
                                  CallSite site = CallSite::current());
 struct StandardFloatingActionButtonImpl {
-    using P = Params<names::Modifier, Block>;
+    using P = Params<names::OnClick, names::Modifier, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: StandardFloatingActionButton takes a block: its content");
         StandardFloatingActionButton(std::move(onClick), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
     }
 };
 struct VibrantFloatingActionButtonImpl {
-    using P = Params<names::Modifier, Block>;
+    using P = Params<names::OnClick, names::Modifier, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: VibrantFloatingActionButton takes a block: its content");
         VibrantFloatingActionButton(std::move(onClick), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
     }
@@ -1288,37 +1313,44 @@ void HorizontalFloatingToolbar(bool expanded, const Content& floatingActionButto
                                const FloatingToolbarOptions& options = {}, CallSite site = CallSite::current());
 struct HorizontalFloatingToolbarImpl {
     // Its FAB (Compose's floatingActionButton), named or second without a name.
-    using P = Params<names::Modifier, names::FloatingToolbarColors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, names::FloatingActionButton, Block>;
-    template <class... A>
+    using P = Params<names::Expanded, names::Modifier, names::FloatingToolbarColors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, names::FloatingActionButton, Block>;
+    using FabSecond = Params<names::Expanded, names::FloatingActionButton, names::Modifier, names::FloatingToolbarColors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, Block>;
+    template <class Q, class... A>
     static FloatingToolbarOptions options(A&... args) {
         FloatingToolbarOptions options;
-        P::set<names::FloatingToolbarColors>(options.colors, args...);
-        P::set<names::ScrollBehavior>(options.scrollBehavior, args...);
-        P::set<names::Shape>(options.shape, args...);
-        P::set<names::LeadingContent>(options.leadingContent, args...);
-        P::set<names::TrailingContent>(options.trailingContent, args...);
-        P::set<names::ShadowElevation>(options.shadowElevation, args...);
+        Q::template set<names::FloatingToolbarColors>(options.colors, args...);
+        Q::template set<names::ScrollBehavior>(options.scrollBehavior, args...);
+        Q::template set<names::Shape>(options.shape, args...);
+        Q::template set<names::LeadingContent>(options.leadingContent, args...);
+        Q::template set<names::TrailingContent>(options.trailingContent, args...);
+        Q::template set<names::ShadowElevation>(options.shadowElevation, args...);
         return options;
     }
+    // (expanded, fab, …, block): the FAB second without a name.
     template <class... A>
-        requires(!startsWithClick<A...>())
-    static void call(CallSite site, bool expanded, A&&... args) {
-        static_assert(P::check<A...>());
-        static_assert(P::blockGiven<A...>(), "kompoz: HorizontalFloatingToolbar takes a block: its content");
-        Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
-        if constexpr (P::given<names::FloatingActionButton, A...>())
-            HorizontalFloatingToolbar(expanded, P::get<names::FloatingActionButton>(Content{}, args...), P::block(std::forward<A>(args)...), modifier,
-                options(args...), site);
-        else
-            HorizontalFloatingToolbar(expanded, P::block(std::forward<A>(args)...), modifier, options(args...), site);
+    static constexpr bool fabSecond() {
+        if constexpr (sizeof...(A) < 3) return false;
+        else return !isNamed<std::tuple_element_t<0, std::tuple<A...>>> && isBlock<std::tuple_element_t<1, std::tuple<A...>>> && lastIsBlock<A...>();
     }
-    template <class F, class... A>
-        requires(startsWithClick<F, A...>())
-    static void call(CallSite site, bool expanded, F&& floatingActionButton, A&&... args) {
-        static_assert(P::check<A...>());
-        static_assert(!P::given<names::FloatingActionButton, A...>(), "kompoz: HorizontalFloatingToolbar's floatingActionButton given twice");
-        HorizontalFloatingToolbar(expanded, Content(std::forward<F>(floatingActionButton)), P::block(std::forward<A>(args)...),
-            P::get<names::Modifier>(Modifier{}, args...), options(args...), site);
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (fabSecond<A...>()) {
+            using Q = FabSecond;
+            static_assert(Q::check<A...>());
+            bool expanded = Q::arg<names::Expanded>(args...);
+            HorizontalFloatingToolbar(expanded, Content(Q::arg<names::FloatingActionButton>(args...)), Q::block(std::forward<A>(args)...),
+                Q::get<names::Modifier>(Modifier{}, args...), options<Q>(args...), site);
+        } else {
+            static_assert(P::check<A...>());
+            static_assert(P::blockGiven<A...>(), "kompoz: HorizontalFloatingToolbar takes a block: its content");
+            bool expanded = P::arg<names::Expanded>(args...);
+            Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
+            if constexpr (P::given<names::FloatingActionButton, A...>())
+                HorizontalFloatingToolbar(expanded, P::get<names::FloatingActionButton>(Content{}, args...), P::block(std::forward<A>(args)...), modifier,
+                    options<P>(args...), site);
+            else
+                HorizontalFloatingToolbar(expanded, P::block(std::forward<A>(args)...), modifier, options<P>(args...), site);
+        }
     }
 };
 } // namespace detail
@@ -1330,37 +1362,44 @@ void VerticalFloatingToolbar(bool expanded, const Content& floatingActionButton,
                              const FloatingToolbarOptions& options = {}, CallSite site = CallSite::current());
 struct VerticalFloatingToolbarImpl {
     // Its FAB (Compose's floatingActionButton), named or second without a name.
-    using P = Params<names::Modifier, names::FloatingToolbarColors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, names::FloatingActionButton, Block>;
-    template <class... A>
+    using P = Params<names::Expanded, names::Modifier, names::FloatingToolbarColors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, names::FloatingActionButton, Block>;
+    using FabSecond = Params<names::Expanded, names::FloatingActionButton, names::Modifier, names::FloatingToolbarColors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, Block>;
+    template <class Q, class... A>
     static FloatingToolbarOptions options(A&... args) {
         FloatingToolbarOptions options;
-        P::set<names::FloatingToolbarColors>(options.colors, args...);
-        P::set<names::ScrollBehavior>(options.scrollBehavior, args...);
-        P::set<names::Shape>(options.shape, args...);
-        P::set<names::LeadingContent>(options.leadingContent, args...);
-        P::set<names::TrailingContent>(options.trailingContent, args...);
-        P::set<names::ShadowElevation>(options.shadowElevation, args...);
+        Q::template set<names::FloatingToolbarColors>(options.colors, args...);
+        Q::template set<names::ScrollBehavior>(options.scrollBehavior, args...);
+        Q::template set<names::Shape>(options.shape, args...);
+        Q::template set<names::LeadingContent>(options.leadingContent, args...);
+        Q::template set<names::TrailingContent>(options.trailingContent, args...);
+        Q::template set<names::ShadowElevation>(options.shadowElevation, args...);
         return options;
     }
+    // (expanded, fab, …, block): the FAB second without a name.
     template <class... A>
-        requires(!startsWithClick<A...>())
-    static void call(CallSite site, bool expanded, A&&... args) {
-        static_assert(P::check<A...>());
-        static_assert(P::blockGiven<A...>(), "kompoz: VerticalFloatingToolbar takes a block: its content");
-        Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
-        if constexpr (P::given<names::FloatingActionButton, A...>())
-            VerticalFloatingToolbar(expanded, P::get<names::FloatingActionButton>(Content{}, args...), P::block(std::forward<A>(args)...), modifier,
-                options(args...), site);
-        else
-            VerticalFloatingToolbar(expanded, P::block(std::forward<A>(args)...), modifier, options(args...), site);
+    static constexpr bool fabSecond() {
+        if constexpr (sizeof...(A) < 3) return false;
+        else return !isNamed<std::tuple_element_t<0, std::tuple<A...>>> && isBlock<std::tuple_element_t<1, std::tuple<A...>>> && lastIsBlock<A...>();
     }
-    template <class F, class... A>
-        requires(startsWithClick<F, A...>())
-    static void call(CallSite site, bool expanded, F&& floatingActionButton, A&&... args) {
-        static_assert(P::check<A...>());
-        static_assert(!P::given<names::FloatingActionButton, A...>(), "kompoz: VerticalFloatingToolbar's floatingActionButton given twice");
-        VerticalFloatingToolbar(expanded, Content(std::forward<F>(floatingActionButton)), P::block(std::forward<A>(args)...),
-            P::get<names::Modifier>(Modifier{}, args...), options(args...), site);
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (fabSecond<A...>()) {
+            using Q = FabSecond;
+            static_assert(Q::check<A...>());
+            bool expanded = Q::arg<names::Expanded>(args...);
+            VerticalFloatingToolbar(expanded, Content(Q::arg<names::FloatingActionButton>(args...)), Q::block(std::forward<A>(args)...),
+                Q::get<names::Modifier>(Modifier{}, args...), options<Q>(args...), site);
+        } else {
+            static_assert(P::check<A...>());
+            static_assert(P::blockGiven<A...>(), "kompoz: VerticalFloatingToolbar takes a block: its content");
+            bool expanded = P::arg<names::Expanded>(args...);
+            Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
+            if constexpr (P::given<names::FloatingActionButton, A...>())
+                VerticalFloatingToolbar(expanded, P::get<names::FloatingActionButton>(Content{}, args...), P::block(std::forward<A>(args)...), modifier,
+                    options<P>(args...), site);
+            else
+                VerticalFloatingToolbar(expanded, P::block(std::forward<A>(args)...), modifier, options<P>(args...), site);
+        }
     }
 };
 } // namespace detail
@@ -1450,10 +1489,11 @@ void SnackbarHost(SnackbarHostState state, const Modifier& modifier = {}, CallSi
 void SnackbarHost(SnackbarHostState state, const Modifier& modifier, std::function<void(const SnackbarData&)> snackbar,
                   CallSite site = CallSite::current());
 struct SnackbarHostImpl {
-    using P = Params<names::Modifier, BlockWith<const SnackbarData&>>;
+    using P = Params<names::State, names::Modifier, BlockWith<const SnackbarData&>>;
     template <class... A>
-    static void call(CallSite site, SnackbarHostState state, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        SnackbarHostState state = P::arg<names::State>(args...);
         Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
         if constexpr (P::blockGiven<A...>()) SnackbarHost(std::move(state), modifier, P::block(std::forward<A>(args)...), site);
         else SnackbarHost(std::move(state), modifier, site);
@@ -1484,8 +1524,8 @@ void Snackbar(const SnackbarData& data, const Modifier& modifier = {}, SnackbarO
               CallSite site = CallSite::current());
 struct SnackbarImpl {
     template <class... A>
-    static void call(CallSite site, const SnackbarData& data, A&&... args) {  // a SnackbarData's, as SnackbarHost shows it
-        using P = Params<names::Modifier, names::ActionOnNewLine, names::Shape, names::ContainerColor, names::ContentColor, names::ActionColor, names::ActionContentColor, names::DismissActionContentColor>;
+    static void dataForm(CallSite site, A&&... args) {  // a SnackbarData's, as SnackbarHost shows it
+        using P = Params<names::Data, names::Modifier, names::ActionOnNewLine, names::Shape, names::ContainerColor, names::ContentColor, names::ActionColor, names::ActionContentColor, names::DismissActionContentColor>;
         static_assert(P::check<A...>());
         SnackbarOptions options;
         P::set<names::ActionOnNewLine>(options.actionOnNewLine, args...);
@@ -1495,11 +1535,15 @@ struct SnackbarImpl {
         P::set<names::ActionColor>(options.actionColor, args...);
         P::set<names::ActionContentColor>(options.actionContentColor, args...);
         P::set<names::DismissActionContentColor>(options.dismissActionContentColor, args...);
-        Snackbar(data, P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
+        Snackbar(P::arg<names::Data>(args...), P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);
     }
     template <class... A>
-        requires(!(std::is_convertible_v<A, const SnackbarData&> || ...))
-    static void call(CallSite site, A&&... args) {  // with slots, the block its text
+    static void call(CallSite site, A&&... args) {
+        if constexpr (countOf<names::Data, A...> > 0 || (std::is_convertible_v<A, const SnackbarData&> || ...)) dataForm(site, std::forward<A>(args)...);
+        else slotForm(site, std::forward<A>(args)...);
+    }
+    template <class... A>
+    static void slotForm(CallSite site, A&&... args) {  // with slots, the block its text
         using P = Params<names::Modifier, names::Action, names::DismissAction, names::ActionOnNewLine, names::Shape, names::ContainerColor, names::ContentColor, names::ActionContentColor, names::DismissActionContentColor, Block>;
         static_assert(P::check<A...>());
         static_assert(P::blockGiven<A...>(), "kompoz: Snackbar takes a block (its text), or a SnackbarData");
@@ -1606,10 +1650,12 @@ namespace detail {
 void RadioButton(bool selected, std::function<void()> onClick, const Modifier& modifier = {}, bool enabled = true,
                  std::optional<MutableInteractionSource> interactionSource = {}, CallSite site = CallSite::current());
 struct RadioButtonImpl {
-    using P = Params<names::Modifier, names::Enabled, names::InteractionSource>;
+    using P = Params<names::Selected, names::OnClick, names::Modifier, names::Enabled, names::InteractionSource>;
     template <class... A>
-    static void call(CallSite site, bool selected, std::function<void()> onClick, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        bool selected = P::arg<names::Selected>(args...);
+        std::function<void()> onClick = P::arg<names::OnClick>(args...);
         detail::RadioButton(selected, std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), P::get<names::Enabled>(true, args...),
             P::get<names::InteractionSource>(std::optional<MutableInteractionSource>{}, args...), site);
     }
@@ -1710,13 +1756,16 @@ void Slider(float value, std::function<void(float)> onValueChange, const Modifie
 void Slider(const SliderState& state, const Modifier& modifier = {}, SliderOptions options = {}, CallSite site = CallSite::current());
 struct SliderImpl {
     template <class... A>
-    static void call(CallSite site, float value, std::function<void(float)> onValueChange, A&&... args) {
-        using P = Params<names::Modifier, names::Enabled, names::OnValueChangeFinished, names::SliderColors, names::InteractionSource, names::Steps, names::Thumb, names::Track, names::ValueFrom, names::ValueTo>;
+    static void valueForm(CallSite site, A&&... args) {
+        using P = Params<names::Value, names::OnValueChange, names::Modifier, names::Enabled, names::OnValueChangeFinished, names::SliderColors, names::Colors, names::InteractionSource, names::Steps, names::Thumb, names::Track, names::ValueFrom, names::ValueTo>;
         static_assert(P::check<A...>());
+        float value = P::arg<names::Value>(args...);
+        std::function<void(float)> onValueChange = P::arg<names::OnValueChange>(args...);
         SliderOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::OnValueChangeFinished>(options.onValueChangeFinished, args...);
         P::set<names::SliderColors>(options.colors, args...);
+        P::set<names::Colors>(options.colors, args...);
         P::set<names::InteractionSource>(options.interactionSource, args...);
         P::set<names::Steps>(options.steps, args...);
         P::set<names::Thumb>(options.thumb, args...);
@@ -1726,16 +1775,23 @@ struct SliderImpl {
         detail::Slider(value, std::move(onValueChange), P::get<names::Modifier>(Modifier{}, args...), options, site);
     }
     template <class... A>
-    static void call(CallSite site, const SliderState& state, A&&... args) {  // (its range, steps and onValueChangeFinished: the state's)
-        using P = Params<names::Modifier, names::Enabled, names::SliderColors, names::InteractionSource, names::Thumb, names::Track>;
+    static void stateForm(CallSite site, A&&... args) {  // (its range, steps and onValueChangeFinished: the state's)
+        using P = Params<names::State, names::Modifier, names::Enabled, names::SliderColors, names::Colors, names::InteractionSource, names::Thumb, names::Track>;
         static_assert(P::check<A...>());
+        const SliderState& state = P::arg<names::State>(args...);
         SliderOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::SliderColors>(options.colors, args...);
+        P::set<names::Colors>(options.colors, args...);
         P::set<names::InteractionSource>(options.interactionSource, args...);
         P::set<names::Thumb>(options.thumb, args...);
         P::set<names::Track>(options.track, args...);
         detail::Slider(state, P::get<names::Modifier>(Modifier{}, args...), options, site);
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {  // the value's form, or the state's
+        if constexpr (countOf<names::State, A...> > 0 || startsWith<SliderState, A...>()) stateForm(site, std::forward<A>(args)...);
+        else valueForm(site, std::forward<A>(args)...);
     }
 };
 } // namespace detail
@@ -1785,9 +1841,11 @@ void VerticalSlider(float value, std::function<void(float)> onValueChange, const
                     bool reverseDirection = false, CallSite site = CallSite::current());
 struct VerticalSliderImpl {
     template <class... A>
-    static void call(CallSite site, float value, std::function<void(float)> onValueChange, A&&... args) {
-        using P = Params<names::Modifier, names::Enabled, names::OnValueChangeFinished, names::SliderColors, names::InteractionSource, names::Steps, names::Thumb, names::Track, names::ValueFrom, names::ValueTo, names::ReverseDirection>;
+    static void call(CallSite site, A&&... args) {
+        using P = Params<names::Value, names::OnValueChange, names::Modifier, names::Enabled, names::OnValueChangeFinished, names::SliderColors, names::InteractionSource, names::Steps, names::Thumb, names::Track, names::ValueFrom, names::ValueTo, names::ReverseDirection>;
         static_assert(P::check<A...>());
+        float value = P::arg<names::Value>(args...);
+        std::function<void(float)> onValueChange = P::arg<names::OnValueChange>(args...);
         SliderOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::OnValueChangeFinished>(options.onValueChangeFinished, args...);
@@ -1812,9 +1870,11 @@ void RangeSlider(const RangeSliderState& state, const Modifier& modifier = {}, S
                  CallSite site = CallSite::current());
 struct RangeSliderImpl {
     template <class... A>
-    static void call(CallSite site, std::pair<float, float> value, std::function<void(std::pair<float, float>)> onValueChange, A&&... args) {
-        using P = Params<names::Modifier, names::Enabled, names::ValueFrom, names::ValueTo, names::Steps, names::OnValueChangeFinished, names::SliderColors, names::InteractionSource, names::EndInteractionSource, names::Thumb, names::StartThumb, names::EndThumb, names::RangeTrack>;
+    static void valueForm(CallSite site, A&&... args) {
+        using P = Params<names::Value, names::OnValueChange, names::Modifier, names::Enabled, names::ValueFrom, names::ValueTo, names::Steps, names::OnValueChangeFinished, names::SliderColors, names::Colors, names::InteractionSource, names::EndInteractionSource, names::Thumb, names::StartThumb, names::EndThumb, names::RangeTrack>;
         static_assert(P::check<A...>());
+        std::pair<float, float> value = P::arg<names::Value>(args...);
+        std::function<void(std::pair<float, float>)> onValueChange = P::arg<names::OnValueChange>(args...);
         SliderOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::ValueFrom>(options.valueFrom, args...);
@@ -1822,6 +1882,7 @@ struct RangeSliderImpl {
         P::set<names::Steps>(options.steps, args...);
         P::set<names::OnValueChangeFinished>(options.onValueChangeFinished, args...);
         P::set<names::SliderColors>(options.colors, args...);
+        P::set<names::Colors>(options.colors, args...);
         P::set<names::InteractionSource>(options.interactionSource, args...);
         P::set<names::EndInteractionSource>(options.endInteractionSource, args...);
         P::set<names::Thumb>(options.thumb, args...);
@@ -1831,12 +1892,14 @@ struct RangeSliderImpl {
         detail::RangeSlider(value, std::move(onValueChange), P::get<names::Modifier>(Modifier{}, args...), options, site);
     }
     template <class... A>
-    static void call(CallSite site, const RangeSliderState& state, A&&... args) {
-        using P = Params<names::Modifier, names::Enabled, names::SliderColors, names::InteractionSource, names::EndInteractionSource, names::Thumb, names::StartThumb, names::EndThumb, names::RangeTrack>;
+    static void stateForm(CallSite site, A&&... args) {
+        using P = Params<names::State, names::Modifier, names::Enabled, names::SliderColors, names::Colors, names::InteractionSource, names::EndInteractionSource, names::Thumb, names::StartThumb, names::EndThumb, names::RangeTrack>;
         static_assert(P::check<A...>());
+        const RangeSliderState& state = P::arg<names::State>(args...);
         SliderOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::SliderColors>(options.colors, args...);
+        P::set<names::Colors>(options.colors, args...);
         P::set<names::InteractionSource>(options.interactionSource, args...);
         P::set<names::EndInteractionSource>(options.endInteractionSource, args...);
         P::set<names::Thumb>(options.thumb, args...);
@@ -1844,6 +1907,11 @@ struct RangeSliderImpl {
         P::set<names::EndThumb>(options.endThumb, args...);
         P::set<names::RangeTrack>(options.rangeTrack, args...);
         detail::RangeSlider(state, P::get<names::Modifier>(Modifier{}, args...), options, site);
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {  // the value's form, or the state's
+        if constexpr (countOf<names::State, A...> > 0 || startsWith<RangeSliderState, A...>()) stateForm(site, std::forward<A>(args)...);
+        else valueForm(site, std::forward<A>(args)...);
     }
 };
 } // namespace detail
@@ -2070,10 +2138,11 @@ namespace detail {
 void Dialog(std::function<void()> onDismissRequest, const Content& content, DialogProperties properties = {},
             CallSite site = CallSite::current());
 struct DialogImpl {
-    using P = Params<names::Properties, Block>;
+    using P = Params<names::OnDismissRequest, names::Properties, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onDismissRequest, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onDismissRequest = P::arg<names::OnDismissRequest>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: Dialog takes a block: its content");
         Dialog(std::move(onDismissRequest), P::block(std::forward<A>(args)...), P::get<names::Properties>(DialogProperties{}, args...), site);
     }
@@ -2102,10 +2171,11 @@ namespace detail {
 void AlertDialog(std::function<void()> onDismissRequest, const AlertDialogSlots& slots, const Modifier& modifier = {},
                  DialogProperties properties = {}, CallSite site = CallSite::current());
 struct AlertDialogImpl {
-    using P = Params<names::ConfirmButton, names::Modifier, names::DismissButton, names::Icon, names::Title, names::Text, names::Shape, names::ContainerColor, names::IconContentColor, names::TitleContentColor, names::TextContentColor, names::Properties>;
+    using P = Params<names::OnDismissRequest, names::ConfirmButton, names::Modifier, names::DismissButton, names::Icon, names::Title, names::Text, names::Shape, names::ContainerColor, names::IconContentColor, names::TitleContentColor, names::TextContentColor, names::Properties>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onDismissRequest, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onDismissRequest = P::arg<names::OnDismissRequest>(args...);
         AlertDialogSlots slots;
         P::set<names::ConfirmButton>(slots.confirmButton, args...);
         P::set<names::DismissButton>(slots.dismissButton, args...);
@@ -2128,10 +2198,11 @@ namespace detail {
 void BasicAlertDialog(std::function<void()> onDismissRequest, const Modifier& modifier, const Content& content,
                       DialogProperties properties = {}, CallSite site = CallSite::current());
 struct BasicAlertDialogImpl {
-    using P = Params<names::Modifier, names::Properties, Block>;
+    using P = Params<names::OnDismissRequest, names::Modifier, names::Properties, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onDismissRequest, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onDismissRequest = P::arg<names::OnDismissRequest>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: BasicAlertDialog takes a block: its content");
         BasicAlertDialog(std::move(onDismissRequest), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), P::get<names::Properties>(DialogProperties{}, args...), site);
     }
@@ -2145,10 +2216,12 @@ namespace detail {
 void DropdownMenu(bool expanded, std::function<void()> onDismissRequest, const Content& content,
                   const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct DropdownMenuImpl {
-    using P = Params<names::Modifier, Block>;
+    using P = Params<names::Expanded, names::OnDismissRequest, names::Modifier, Block>;
     template <class... A>
-    static void call(CallSite site, bool expanded, std::function<void()> onDismissRequest, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        bool expanded = P::arg<names::Expanded>(args...);
+        std::function<void()> onDismissRequest = P::arg<names::OnDismissRequest>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: DropdownMenu takes a block: its content");
         DropdownMenu(expanded, std::move(onDismissRequest), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
     }
@@ -2176,10 +2249,12 @@ namespace detail {
 void DropdownMenuPopup(bool expanded, std::function<void()> onDismissRequest, const Content& content, const Modifier& modifier = {},
                        CallSite site = CallSite::current());
 struct DropdownMenuPopupImpl {
-    using P = Params<names::Modifier, Block>;
+    using P = Params<names::Expanded, names::OnDismissRequest, names::Modifier, Block>;
     template <class... A>
-    static void call(CallSite site, bool expanded, std::function<void()> onDismissRequest, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        bool expanded = P::arg<names::Expanded>(args...);
+        std::function<void()> onDismissRequest = P::arg<names::OnDismissRequest>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: DropdownMenuPopup takes a block: its content");
         DropdownMenuPopup(expanded, std::move(onDismissRequest), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
     }
@@ -2189,10 +2264,11 @@ inline constexpr Composable<detail::DropdownMenuPopupImpl> DropdownMenuPopup;
 namespace detail {
 void DropdownMenuGroup(const Shape& shape, const Content& content, const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct DropdownMenuGroupImpl {
-    using P = Params<names::Modifier, Block>;
+    using P = Params<names::Shape, names::Modifier, Block>;
     template <class... A>
-    static void call(CallSite site, const Shape& shape, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        const Shape& shape = P::arg<names::Shape>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: DropdownMenuGroup takes a block: its content");
         DropdownMenuGroup(shape, P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
     }
@@ -2226,31 +2302,37 @@ struct DropdownMenuItemImpl {
         P::template set<names::CheckedLeadingIcon>(options.checkedLeadingIcon, args...);
         return options;
     }
+    // Which form: (text, onClick), on or off (checked, onCheckedChange, text), one of several
+    // (selected, onClick, text); by the names given, or by the first two arguments' types.
     template <class... A>
-        requires(!startsWith<bool, A...>())
-    static void call(CallSite site, A&&... args) {  // (text, onClick)
-        using P = Params<names::Text, names::OnClick, names::LeadingIcon, names::TrailingIcon, names::Enabled, names::SupportingText, names::Shape, names::CheckedLeadingIcon>;
-        static_assert(P::check<A...>());
-        static_assert(P::given<names::Text, A...>() && P::given<names::OnClick, A...>(), "kompoz: DropdownMenuItem takes a text and an onClick");
-        DropdownMenuItem(P::get<names::Text>(Content{}, args...), P::get<names::OnClick>(std::function<void()>{}, args...), options<P>(args...), site);
+    static constexpr int form() {
+        if constexpr (countOf<names::Checked, A...> + countOf<names::OnCheckedChange, A...> > 0) return 1;
+        else if constexpr (countOf<names::Selected, A...> > 0) return 2;
+        else if constexpr (sizeof...(A) >= 2 && startsWith<bool, A...>()) {
+            using F = std::remove_cvref_t<std::tuple_element_t<1, std::tuple<A...>>>;
+            return std::is_invocable_v<F&, bool> ? 1 : 2;
+        } else return 0;
     }
-    template <class F, class... A>
-        requires(std::is_invocable_v<std::remove_cvref_t<F>&, bool>)
-    static void call(CallSite site, bool checked, F&& onCheckedChange, A&&... args) {  // on or off
-        using P = Params<names::Text, names::LeadingIcon, names::TrailingIcon, names::Enabled, names::SupportingText, names::Shape, names::CheckedLeadingIcon>;
-        static_assert(P::check<A...>());
-        static_assert(P::given<names::Text, A...>(), "kompoz: DropdownMenuItem takes a text");
-        DropdownMenuItem(checked, std::function<void(bool)>(std::forward<F>(onCheckedChange)), P::get<names::Text>(Content{}, args...),
-                         options<P>(args...), site);
-    }
-    template <class F, class... A>
-        requires(std::is_invocable_v<std::remove_cvref_t<F>&> && !std::is_invocable_v<std::remove_cvref_t<F>&, bool>)
-    static void call(CallSite site, bool selected, F&& onClick, A&&... args) {  // one of several
-        using P = Params<names::Text, names::LeadingIcon, names::TrailingIcon, names::Enabled, names::SupportingText, names::Shape, names::CheckedLeadingIcon>;
-        static_assert(P::check<A...>());
-        static_assert(P::given<names::Text, A...>(), "kompoz: DropdownMenuItem takes a text");
-        DropdownMenuItem(selected, std::function<void()>(std::forward<F>(onClick)), P::get<names::Text>(Content{}, args...), options<P>(args...),
-                         site);
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (form<A...>() == 0) {
+            using P = Params<names::Text, names::OnClick, names::LeadingIcon, names::TrailingIcon, names::Enabled, names::SupportingText, names::Shape, names::CheckedLeadingIcon>;
+            static_assert(P::check<A...>());
+            static_assert(P::given<names::Text, A...>() && P::given<names::OnClick, A...>(), "kompoz: DropdownMenuItem takes a text and an onClick");
+            DropdownMenuItem(P::get<names::Text>(Content{}, args...), P::get<names::OnClick>(std::function<void()>{}, args...), options<P>(args...), site);
+        } else if constexpr (form<A...>() == 1) {
+            using P = Params<names::Checked, names::OnCheckedChange, names::Text, names::LeadingIcon, names::TrailingIcon, names::Enabled, names::SupportingText, names::Shape, names::CheckedLeadingIcon>;
+            static_assert(P::check<A...>());
+            static_assert(P::given<names::Text, A...>(), "kompoz: DropdownMenuItem takes a text");
+            DropdownMenuItem(bool(P::arg<names::Checked>(args...)), std::function<void(bool)>(P::arg<names::OnCheckedChange>(args...)),
+                             P::get<names::Text>(Content{}, args...), options<P>(args...), site);
+        } else {
+            using P = Params<names::Selected, names::OnClick, names::Text, names::LeadingIcon, names::TrailingIcon, names::Enabled, names::SupportingText, names::Shape, names::CheckedLeadingIcon>;
+            static_assert(P::check<A...>());
+            static_assert(P::given<names::Text, A...>(), "kompoz: DropdownMenuItem takes a text");
+            DropdownMenuItem(bool(P::arg<names::Selected>(args...)), std::function<void()>(P::arg<names::OnClick>(args...)), P::get<names::Text>(Content{}, args...),
+                             options<P>(args...), site);
+        }
     }
 };
 } // namespace detail
@@ -2269,10 +2351,12 @@ namespace detail {
 void ExposedDropdownMenuBox(bool expanded, std::function<void(bool)> onExpandedChange, const Modifier& modifier,
                             const Content& content, CallSite site = CallSite::current());
 struct ExposedDropdownMenuBoxImpl {
-    using P = Params<names::Modifier, Block>;
+    using P = Params<names::Expanded, names::OnExpandedChange, names::Modifier, Block>;
     template <class... A>
-    static void call(CallSite site, bool expanded, std::function<void(bool)> onExpandedChange, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        bool expanded = P::arg<names::Expanded>(args...);
+        std::function<void(bool)> onExpandedChange = P::arg<names::OnExpandedChange>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: ExposedDropdownMenuBox takes a block: its content");
         ExposedDropdownMenuBox(expanded, std::move(onExpandedChange), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
     }
@@ -2284,10 +2368,12 @@ namespace detail {
 void ExposedDropdownMenu(bool expanded, std::function<void()> onDismissRequest, const Content& content,
                          const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct ExposedDropdownMenuImpl {
-    using P = Params<names::Modifier, Block>;
+    using P = Params<names::Expanded, names::OnDismissRequest, names::Modifier, Block>;
     template <class... A>
-    static void call(CallSite site, bool expanded, std::function<void()> onDismissRequest, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        bool expanded = P::arg<names::Expanded>(args...);
+        std::function<void()> onDismissRequest = P::arg<names::OnDismissRequest>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: ExposedDropdownMenu takes a block: its content");
         ExposedDropdownMenu(expanded, std::move(onDismissRequest), P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
     }
@@ -2337,10 +2423,11 @@ void ModalBottomSheet(std::function<void()> onDismissRequest, const Content& con
 void ModalBottomSheet(std::function<void()> onDismissRequest, const ModalBottomSheetState& sheetState, const Content& content,
                       CallSite site = CallSite::current());
 struct ModalBottomSheetImpl {
-    using P = Params<names::SheetState, Block>;
+    using P = Params<names::OnDismissRequest, names::SheetState, Block>;
     template <class... A>
-    static void call(CallSite site, std::function<void()> onDismissRequest, A&&... args) {
+    static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
+        std::function<void()> onDismissRequest = P::arg<names::OnDismissRequest>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: ModalBottomSheet takes a block: its content");
         if constexpr (P::given<names::SheetState, A...>())
             ModalBottomSheet(std::move(onDismissRequest), P::get<names::SheetState>(ModalBottomSheetState{}, args...), P::block(std::forward<A>(args)...), site);
@@ -2489,18 +2576,19 @@ void ModalDrawerSheet(const Modifier& modifier, const Content& content, CallSite
 void ModalDrawerSheet(DrawerState drawerState, const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 struct ModalDrawerSheetImpl {
     using P = Params<names::Modifier, Block>;
+    using WithDrawer = Params<names::DrawerState, names::Modifier, Block>;
     template <class... A>
-        requires(!startsWith<DrawerState, A...>())
     static void call(CallSite site, A&&... args) {
-        static_assert(P::check<A...>());
-        static_assert(P::blockGiven<A...>(), "kompoz: ModalDrawerSheet takes a block: its content");
-        ModalDrawerSheet(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
-    }
-    template <class... A>
-    static void call(CallSite site, DrawerState drawerState, A&&... args) {  // following that drawer's back gesture
-        static_assert(P::check<A...>());
-        static_assert(P::blockGiven<A...>(), "kompoz: ModalDrawerSheet takes a block: its content");
-        ModalDrawerSheet(std::move(drawerState), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+        if constexpr (countOf<names::DrawerState, A...> > 0 || startsWith<DrawerState, A...>()) {  // following that drawer's back gesture
+            using Q = WithDrawer;
+            static_assert(Q::check<A...>());
+            static_assert(Q::blockGiven<A...>(), "kompoz: ModalDrawerSheet takes a block: its content");
+            ModalDrawerSheet(DrawerState(Q::arg<names::DrawerState>(args...)), Q::get<names::Modifier>(Modifier{}, args...), Q::block(std::forward<A>(args)...), site);
+        } else {
+            static_assert(P::check<A...>());
+            static_assert(P::blockGiven<A...>(), "kompoz: ModalDrawerSheet takes a block: its content");
+            ModalDrawerSheet(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+        }
     }
 };
 } // namespace detail
@@ -2531,18 +2619,19 @@ void DismissibleDrawerSheet(DrawerState drawerState, const Modifier& modifier, c
                             CallSite site = CallSite::current());
 struct DismissibleDrawerSheetImpl {
     using P = Params<names::Modifier, Block>;
+    using WithDrawer = Params<names::DrawerState, names::Modifier, Block>;
     template <class... A>
-        requires(!startsWith<DrawerState, A...>())
     static void call(CallSite site, A&&... args) {
-        static_assert(P::check<A...>());
-        static_assert(P::blockGiven<A...>(), "kompoz: DismissibleDrawerSheet takes a block: its content");
-        DismissibleDrawerSheet(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
-    }
-    template <class... A>
-    static void call(CallSite site, DrawerState drawerState, A&&... args) {  // following that drawer's back gesture
-        static_assert(P::check<A...>());
-        static_assert(P::blockGiven<A...>(), "kompoz: DismissibleDrawerSheet takes a block: its content");
-        DismissibleDrawerSheet(std::move(drawerState), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+        if constexpr (countOf<names::DrawerState, A...> > 0 || startsWith<DrawerState, A...>()) {  // following that drawer's back gesture
+            using Q = WithDrawer;
+            static_assert(Q::check<A...>());
+            static_assert(Q::blockGiven<A...>(), "kompoz: DismissibleDrawerSheet takes a block: its content");
+            DismissibleDrawerSheet(DrawerState(Q::arg<names::DrawerState>(args...)), Q::get<names::Modifier>(Modifier{}, args...), Q::block(std::forward<A>(args)...), site);
+        } else {
+            static_assert(P::check<A...>());
+            static_assert(P::blockGiven<A...>(), "kompoz: DismissibleDrawerSheet takes a block: its content");
+            DismissibleDrawerSheet(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+        }
     }
 };
 } // namespace detail
@@ -2633,23 +2722,26 @@ void NavigationRailItem(bool selected, std::function<void()> onClick, const Imag
 void NavigationRailItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier = {},
                         const NavigationRailItemOptions& options = {}, CallSite site = CallSite::current());
 struct NavigationRailItemImpl {
+    using OfVector = Params<names::Selected, names::OnClick, names::Icon, names::Label>;
+    using OfContent = Params<names::Selected, names::OnClick, names::Icon, names::Modifier, names::Enabled, names::Label, names::InteractionSource>;
     template <class... A>
-    static void call(CallSite site, bool selected, std::function<void()> onClick, const ImageVector& icon, A&&... args) {
-        using P = Params<names::Label>;
-        static_assert(P::check<A...>());
-        NavigationRailItem(selected, std::move(onClick), icon, P::get<names::Label>(std::string(), args...), site);
-    }
-    template <class... A>
-        requires(!startsWith<ImageVector, A...>())
-    static void call(CallSite site, bool selected, std::function<void()> onClick, A&&... args) {
-        using P = Params<names::Icon, names::Modifier, names::Enabled, names::Label, names::InteractionSource>;
-        static_assert(P::check<A...>());
-        static_assert(P::given<names::Icon, A...>(), "kompoz: NavigationRailItem takes an icon");
-        NavigationRailItemOptions options;
-        P::set<names::Enabled>(options.enabled, args...);
-        P::set<names::InteractionSource>(options.interactionSource, args...);
-        NavigationRailItem(selected, std::move(onClick), P::get<names::Icon>(Content{}, args...), P::get<names::Label>(Content{}, args...),
-            P::get<names::Modifier>(Modifier{}, args...), options, site);
+    static void call(CallSite site, A&&... args) {
+        if constexpr (std::is_convertible_v<decltype(OfContent::arg<names::Icon>(args...)), const ImageVector&>) {  // an ImageVector's
+            using P = OfVector;
+            static_assert(P::check<A...>());
+            const ImageVector& icon = P::arg<names::Icon>(args...);
+            NavigationRailItem(bool(P::arg<names::Selected>(args...)), std::function<void()>(P::arg<names::OnClick>(args...)), icon,
+                               P::get<names::Label>(std::string(), args...), site);
+        } else {
+            using P = OfContent;
+            static_assert(P::check<A...>());
+            NavigationRailItemOptions options;
+            P::set<names::Enabled>(options.enabled, args...);
+            P::set<names::InteractionSource>(options.interactionSource, args...);
+            NavigationRailItem(bool(P::arg<names::Selected>(args...)), std::function<void()>(P::arg<names::OnClick>(args...)),
+                               Content(P::arg<names::Icon>(args...)), P::get<names::Label>(Content{}, args...), P::get<names::Modifier>(Modifier{}, args...),
+                               options, site);
+        }
     }
 };
 } // namespace detail
