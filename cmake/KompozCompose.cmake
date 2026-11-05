@@ -8,6 +8,10 @@
 #
 # Call it after the target's sources are all added. The compiler's messages point at the
 # sources' own lines.
+# Kompoz's own headers: kompozc reads their structs (made with named arguments).
+set(kompoz_headers ${CMAKE_CURRENT_LIST_DIR}/../include/kompoz)
+cmake_path(NORMAL_PATH kompoz_headers)
+
 function(kompoz_compose target)
     if(NOT TARGET kompozc)
         message(FATAL_ERROR "kompoz_compose(${target}): kompozc isn't built here (KOMPOZ_BUILD_COMPILER)")
@@ -23,8 +27,9 @@ function(kompoz_compose target)
             string(REPLACE "../" "__/" relative "${relative}")  # (sources from outside the target's directory)
             set(output ${out_dir}/${relative})
             add_custom_command(OUTPUT ${output}
-                COMMAND kompozc ${absolute} -o ${output}
+                COMMAND kompozc ${absolute} -o ${output} --headers ${kompoz_headers} --depfile ${output}.d
                 DEPENDS ${absolute} kompozc
+                DEPFILE ${output}.d
                 COMMENT "kompozc ${relative}"
                 VERBATIM)
             list(APPEND translated ${output})

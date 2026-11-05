@@ -4,6 +4,7 @@
 // library is written in (the way Compose's compiler plugin rewrites Kotlin functions).
 
 #include "ast.hpp"
+#include "headers.hpp"
 
 #include <map>
 #include <string>
@@ -16,6 +17,7 @@ namespace kompozc {
 struct Module {
     std::map<std::string, const Function*, std::less<>> functions;
     std::map<std::string, const DataClass*, std::less<>> classes;
+    const Structs* structs = nullptr;  // C++'s, from the headers read
 };
 
 class Output {

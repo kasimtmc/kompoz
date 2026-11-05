@@ -221,6 +221,28 @@ TEST(required_arguments_by_name) {
     CHECK(rule.onNodeWithText("açık").exists());
 }
 
+// A C++ struct (of this file, of a header it includes, of Kompoz's) made with named arguments in
+// any order: designated initializers in its fields' order.
+struct Size2 {
+    int width = 0;
+    int height = 0;
+};
+
+@Composable
+fun StructsByName() {
+    val s = Size2(height = 3, width = 2)
+    Column {
+        Text("${s.width}x${s.height}", modifier = Modifier.testTag("boyut"))
+        Text("stil", style = TextStyle(maxLines = 1, fontSize = 30.sp), modifier = Modifier.testTag("stil"))
+    }
+}
+
+TEST(structs_by_name) {
+    ComposeTestRule rule([] { StructsByName(); });
+    CHECK(rule.onNodeWithTag("boyut").text() == "2x3");
+    CHECK(rule.onNodeWithTag("stil").bounds().height > 30);
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

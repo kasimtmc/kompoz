@@ -9,6 +9,7 @@
 // the debugger show the source's lines.
 
 #include "codegen.hpp"
+#include "headers.hpp"
 #include "parser.hpp"
 
 #include <cstdio>
@@ -142,9 +143,10 @@ std::string passThrough(std::string_view text, const fs::path& dir) {
     return out;
 }
 
-std::string translate(const std::string& src, const fs::path& source, const std::string& lineFile) {
+std::string translate(const std::string& src, const fs::path& source, const std::string& lineFile, const Structs& structs) {
     std::vector<Found> found = scan(src);
     Module module;
+    module.structs = &structs;
     for (const Found& f : found) {
         if (f.function) module.functions[f.function->name] = &*f.function;
         else module.classes[f.dataClass->name] = &*f.dataClass;
@@ -181,10 +183,13 @@ std::string translate(const std::string& src, const fs::path& source, const std:
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::string input, output;
+    std::string input, output, depfile;
+    std::vector<std::string> headerDirs;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "-o" && i + 1 < argc) output = argv[++i];
+        else if (a == "--headers" && i + 1 < argc) headerDirs.push_back(argv[++i]);
+        else if (a == "--depfile" && i + 1 < argc) depfile = argv[++i];
         else if (input.empty()) input = a;
         else {
             std::cerr << "kompozc: unexpected argument " << a << "\n";
@@ -192,7 +197,7 @@ int main(int argc, char** argv) {
         }
     }
     if (input.empty() || output.empty()) {
-        std::cerr << "usage: kompozc SOURCE -o OUTPUT\n";
+        std::cerr << "usage: kompozc SOURCE -o OUTPUT [--headers DIR]... [--depfile FILE]\n";
         return 2;
     }
     std::ifstream in(input, std::ios::binary);
@@ -204,9 +209,19 @@ int main(int argc, char** argv) {
     buffer << in.rdbuf();
     std::string src = buffer.str();
     std::string lineFile = fs::absolute(input).lexically_normal().generic_string();
+    // The structs a call with named arguments may make: those of the headers in DIRs (Kompoz's),
+    // and of the source's own quoted includes.
+    Structs structs;
+    for (const std::string& dir : headerDirs) {
+        std::error_code ec;
+        for (const auto& entry : fs::directory_iterator(dir, ec))
+            if (entry.path().extension() == ".hpp" || entry.path().extension() == ".h") structs.readHeader(entry.path());
+    }
+    structs.readIncludes(src, fs::path(input).parent_path());
+    structs.readText(src);  // (the source's own; its Kotlin has no `struct X {`)
     std::string result;
     try {
-        result = translate(src, fs::path(input), lineFile);
+        result = translate(src, fs::path(input), lineFile, structs);
     } catch (const CompileError& e) {
         std::cerr << lineFile << ":" << e.pos.line << ":" << e.pos.column << ": error: " << e.what() << "\n";
         return 1;
@@ -214,5 +229,16 @@ int main(int argc, char** argv) {
     if (fs::path dir = fs::path(output).parent_path(); !dir.empty()) fs::create_directories(dir);
     std::ofstream out(output, std::ios::binary);
     out << result;
+    if (!depfile.empty()) {  // the headers read: a change in one translates the source again
+        std::ofstream dep(depfile, std::ios::binary);
+        auto escaped = [](std::string p) {
+            std::string e;
+            for (char c : p) e += c == ' ' ? std::string("\\ ") : std::string(1, c);
+            return e;
+        };
+        dep << escaped(output) << ":";
+        for (const fs::path& h : structs.read) dep << " \\\n  " << escaped(h.generic_string());
+        dep << "\n";
+    }
     return out ? 0 : 1;
 }

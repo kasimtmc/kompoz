@@ -703,7 +703,10 @@
   `withIndex`, ...; bir türün aynı adlı kendi üyesi önce gelir); `LaunchedEffect` ya da `launch` bloğu, `delay` ve
   öteki bekleyen çağrıları beklenen bir eşyordam; `Modifier.Companion`, anahtar olarak `Unit` ve `RowScope.() -> Unit`
   içerik. Aynı dosyadaki bir `data class`, `==` ve Kotlin'in `toString()`'iyle bir struct oluyor; adlı argümanlarla her
-  sırada yapılıyor (`Note(title = "x", id = 1)`) ve `copy(pinned = true)` ile değiştiriliyor. Lambdalar Kotlin'inkiler
+  sırada yapılıyor (`Note(title = "x", id = 1)`) ve `copy(pinned = true)` ile değiştiriliyor. Bir C++ yapısı da
+  (Kompoz'unki, dosyanın kendisininki ya da tırnakla içerdiği bir başlığınki) adlı argümanlarla her sırada yapılıyor:
+  `DialogProperties(dismissOnClickOutside = false)`, kompozc'nin başlıklardan okuduğu alan sırasıyla tasarlanmış
+  ilklendiricilere dönüşüyor (birindeki değişiklik dosyayı yeniden çeviriyor). Lambdalar Kotlin'inkiler
   gibi değerleri kopyalayarak yakalıyor; kendi başına yeniden çalışan bir blok boşa çıkmış bir başvuru tutamıyor.
   C++ derleyicisinin iletileri kaynağın kendi satırlarını gösteriyor (`#line`).
 - **Bir composable'ın gerek duyduğu her argüman adla verilebilir**: `onClick`, `value` ve `onValueChange`, `checked` ve

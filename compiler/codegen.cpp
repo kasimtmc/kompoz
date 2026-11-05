@@ -629,6 +629,8 @@ private:
         if (callee.kind == Node::Name && !lookup(callee.text)) {
             if (auto f = module_.functions.find(callee.text); f != module_.functions.end()) return moduleCall(c, *f->second);
             if (auto k = module_.classes.find(callee.text); k != module_.classes.end()) return construct(c, *k->second);
+            if (module_.structs && !c.lambda && c.kids.size() > 1 && capitalized(callee.text))
+                if (const auto* fields = module_.structs->find(callee.text); fields && structCall(c, callee.text, *fields)) return;
             if (kKtFunctions.contains(callee.text) || (suspend_ && callee.text == "delay")) {
                 out_.text("::kompoz::kt::" + callee.text);
                 return arguments(c, calleeName, false);
@@ -722,6 +724,35 @@ private:
             expr(*given[f], &k.fields[f].type);
         }
         out_.text("}");
+    }
+
+    // DialogProperties(dismissOnClickOutside = false): a C++ struct's designated initializers, in
+    // its fields' order. False (nothing written) if a name isn't one of its fields.
+    bool structCall(const Node& c, const std::string& name, const std::vector<std::string>& fields) {
+        std::vector<const Node*> given(fields.size(), nullptr);
+        size_t next = 0;
+        for (size_t i = 0; i + 1 < c.kids.size(); ++i) {
+            const std::string& n = c.names[i];
+            size_t at = next;
+            if (!n.empty()) {
+                at = std::find(fields.begin(), fields.end(), n) - fields.begin();
+                if (at == fields.size()) return false;
+            } else {
+                next = at + 1;
+            }
+            if (at >= fields.size() || given[at]) return false;
+            given[at] = c.kids[i + 1].get();
+        }
+        out_.text(name + "{");
+        bool any = false;
+        for (size_t f = 0; f < fields.size(); ++f) {
+            if (!given[f]) continue;
+            out_.text(std::string(any ? ", " : "") + "." + fields[f] + " = ");
+            any = true;
+            expr(*given[f]);
+        }
+        out_.text("}");
+        return true;
     }
 
     // x.copy(b = 2): a copy with those fields changed, when a data class has them all.

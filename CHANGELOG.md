@@ -665,7 +665,10 @@
   `LaunchedEffect` or `launch` block is a coroutine whose `delay` and other suspending calls are awaited;
   `Modifier.Companion`, `Unit` as a key, and `RowScope.() -> Unit` content. A `data class` in the same file
   becomes a struct with `==` and Kotlin's `toString()`; it is made with named arguments in any order
-  (`Note(title = "x", id = 1)`) and changed with `copy(pinned = true)`. Lambdas capture by value, as Kotlin's do, so a block that runs again on its own
+  (`Note(title = "x", id = 1)`) and changed with `copy(pinned = true)`. A C++ struct (Kompoz's, the file's own or
+  one of a header it includes with quotes) is made with named arguments in any order too:
+  `DialogProperties(dismissOnClickOutside = false)` becomes designated initializers in its fields' order, as kompozc
+  reads them from the headers (a change in one translates the file again). Lambdas capture by value, as Kotlin's do, so a block that runs again on its own
   never holds a dangling reference. The C++ compiler's messages point at the source's own lines (`#line`).
 - **Every argument a composable needs can be named**: `onClick`, `value` and `onValueChange`, `checked` and
   `onCheckedChange`, `selected`, `expanded`, `onDismissRequest`, `state`, `text`, `imageVector`/`painter`/`bitmap` and
