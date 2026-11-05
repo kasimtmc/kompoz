@@ -20,6 +20,19 @@ function(kompoz_compose target)
     get_target_property(source_dir ${target} SOURCE_DIR)
     set(out_dir ${CMAKE_CURRENT_BINARY_DIR}/${target}.kompozc)
     set(translated)
+    # The module: every C++ source of the target, whose @Composable functions and data classes the
+    # others call as Kotlin calls them across files.
+    set(module)
+    foreach(source IN LISTS sources)
+        if(source MATCHES "\\.(cpp|cc|cxx)$" AND NOT source MATCHES "^\\$<")
+            cmake_path(ABSOLUTE_PATH source BASE_DIRECTORY ${source_dir} NORMALIZE OUTPUT_VARIABLE absolute)
+            list(APPEND module ${absolute})
+        endif()
+    endforeach()
+    set(module_args)
+    foreach(m IN LISTS module)
+        list(APPEND module_args --module ${m})
+    endforeach()
     foreach(source IN LISTS sources)
         if(source MATCHES "\\.(cpp|cc|cxx)$" AND NOT source MATCHES "^\\$<")
             cmake_path(ABSOLUTE_PATH source BASE_DIRECTORY ${source_dir} NORMALIZE OUTPUT_VARIABLE absolute)
@@ -27,8 +40,8 @@ function(kompoz_compose target)
             string(REPLACE "../" "__/" relative "${relative}")  # (sources from outside the target's directory)
             set(output ${out_dir}/${relative})
             add_custom_command(OUTPUT ${output}
-                COMMAND kompozc ${absolute} -o ${output} --headers ${kompoz_headers} --depfile ${output}.d
-                DEPENDS ${absolute} kompozc
+                COMMAND kompozc ${absolute} -o ${output} --headers ${kompoz_headers} ${module_args} --depfile ${output}.d
+                DEPENDS ${absolute} ${module} kompozc
                 DEPFILE ${output}.d
                 COMMENT "kompozc ${relative}"
                 VERBATIM)

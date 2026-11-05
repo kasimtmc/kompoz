@@ -17,6 +17,7 @@
 #include <fstream>
 #include <iostream>
 #include <optional>
+#include <set>
 #include <sstream>
 
 namespace fs = std::filesystem;
@@ -143,13 +144,81 @@ std::string passThrough(std::string_view text, const fs::path& dir) {
     return out;
 }
 
-std::string translate(const std::string& src, const fs::path& source, const std::string& lineFile, const Structs& structs) {
+// The names a declaration uses (calls, types): what of the module's other sources it needs.
+void typeNames(const Type& t, std::set<std::string, std::less<>>& out) {
+    if (!t.name.empty()) out.insert(t.name);
+    for (const Type& a : t.args) typeNames(a, out);
+    for (const Type& p : t.params) typeNames(p, out);
+    if (t.result) typeNames(*t.result, out);
+    if (t.receiver) typeNames(*t.receiver, out);
+}
+void names(const Node* n, std::set<std::string, std::less<>>& out) {
+    if (!n) return;
+    if (n->kind == Node::Name) out.insert(n->text);
+    if (n->type) typeNames(*n->type, out);
+    for (const Type& t : n->typeArgs) typeNames(t, out);
+    for (const NodeP& k : n->kids) names(k.get(), out);
+    names(n->lambda.get(), out);
+    for (const auto& b : n->branches) {
+        for (const auto& c : b.conds) names(c.second.get(), out);
+        for (const Type& t : b.types) typeNames(t, out);
+        names(b.body.get(), out);
+    }
+}
+void names(const Found& f, std::set<std::string, std::less<>>& out) {
+    if (f.function) {
+        for (const Param& p : f.function->params) {
+            typeNames(p.type, out);
+            names(p.defaultValue.get(), out);
+        }
+        if (f.function->result) typeNames(*f.function->result, out);
+        names(f.function->body.get(), out);
+    } else {
+        for (const Param& p : f.dataClass->fields) {
+            typeNames(p.type, out);
+            names(p.defaultValue.get(), out);
+        }
+    }
+}
+
+// Another source of the module (the target): its declarations, for the calls to them here.
+struct OtherSource {
+    std::string lineFile;
+    std::vector<Found> found;
+};
+
+std::string translate(const std::string& src, const fs::path& source, const std::string& lineFile, const Structs& structs,
+                      const std::vector<OtherSource>& others) {
     std::vector<Found> found = scan(src);
     Module module;
     module.structs = &structs;
     for (const Found& f : found) {
         if (f.function) module.functions[f.function->name] = &*f.function;
         else module.classes[f.dataClass->name] = &*f.dataClass;
+    }
+    // The other sources' declarations this one uses, and those they use in turn (a data class in
+    // a parameter's type): declared here too, as C++ needs (Kotlin's module needs nothing).
+    std::vector<std::pair<const OtherSource*, const Found*>> imported;
+    {
+        std::set<std::string, std::less<>> used;
+        for (const Found& f : found) names(f, used);
+        std::set<const Found*> taken;
+        for (bool more = true; more;) {
+            more = false;
+            for (const OtherSource& o : others)
+                for (const Found& f : o.found) {
+                    const std::string& name = f.function ? f.function->name : f.dataClass->name;
+                    if (taken.contains(&f) || !used.contains(name) || module.functions.contains(name) || module.classes.contains(name)) continue;
+                    taken.insert(&f);
+                    imported.emplace_back(&o, &f);
+                    names(f, used);
+                    more = true;
+                }
+        }
+        for (auto [o, f] : imported) {
+            if (f->function) module.functions[f->function->name] = &*f->function;
+            else module.classes[f->dataClass->name] = &*f->dataClass;
+        }
     }
     Output out(lineFile);
     out.line(1);
@@ -165,8 +234,20 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             // Before the first: the helpers the translations use, the data classes and every
             // function declared, so that they use each other in any order (as Kotlin's do).
             out.text("\n#include <kompoz/kotlin.hpp>\n");
+            for (auto [o, g] : imported)  // (from their own files: #line says which)
+                if (g->dataClass) {
+                    out.setFile(o->lineFile);
+                    generateClass(out, *g->dataClass, module);
+                }
+            out.setFile(lineFile);
             for (const Found& g : found)
                 if (g.dataClass) generateClass(out, *g.dataClass, module);
+            for (auto [o, g] : imported)
+                if (g->function) {
+                    out.setFile(o->lineFile);
+                    generatePrototype(out, *g->function, module);
+                }
+            out.setFile(lineFile);
             for (const Found& g : found)
                 if (g.function) generatePrototype(out, *g.function, module);
         }
@@ -184,12 +265,13 @@ std::string translate(const std::string& src, const fs::path& source, const std:
 
 int main(int argc, char** argv) {
     std::string input, output, depfile;
-    std::vector<std::string> headerDirs;
+    std::vector<std::string> headerDirs, moduleSources;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "-o" && i + 1 < argc) output = argv[++i];
         else if (a == "--headers" && i + 1 < argc) headerDirs.push_back(argv[++i]);
         else if (a == "--depfile" && i + 1 < argc) depfile = argv[++i];
+        else if (a == "--module" && i + 1 < argc) moduleSources.push_back(argv[++i]);
         else if (input.empty()) input = a;
         else {
             std::cerr << "kompozc: unexpected argument " << a << "\n";
@@ -197,7 +279,7 @@ int main(int argc, char** argv) {
         }
     }
     if (input.empty() || output.empty()) {
-        std::cerr << "usage: kompozc SOURCE -o OUTPUT [--headers DIR]... [--depfile FILE]\n";
+        std::cerr << "usage: kompozc SOURCE -o OUTPUT [--headers DIR]... [--module OTHER_SOURCE]... [--depfile FILE]\n";
         return 2;
     }
     std::ifstream in(input, std::ios::binary);
@@ -220,15 +302,45 @@ int main(int argc, char** argv) {
     structs.readIncludes(src, fs::path(input).parent_path());
     structs.readText(src);  // (the source's own; its Kotlin has no `struct X {`)
     std::string result;
+    std::vector<OtherSource> others;
     try {
-        result = translate(src, fs::path(input), lineFile, structs);
+        // The module's other sources (the target's): their @Composable functions and data classes
+        // are called here as Kotlin calls them across files.
+        for (const std::string& other : moduleSources) {
+            if (fs::equivalent(other, input)) continue;
+            std::ifstream o(other, std::ios::binary);
+            if (!o) continue;
+            std::stringstream text;
+            text << o.rdbuf();
+            OtherSource os;
+            os.lineFile = fs::absolute(other).lexically_normal().generic_string();
+            std::string otherSrc = text.str();
+            try {
+                os.found = scan(otherSrc);
+            } catch (const CompileError&) {
+                continue;  // (its own translation says what is wrong in it)
+            }
+            others.push_back(std::move(os));
+        }
+        result = translate(src, fs::path(input), lineFile, structs, others);
     } catch (const CompileError& e) {
         std::cerr << lineFile << ":" << e.pos.line << ":" << e.pos.column << ": error: " << e.what() << "\n";
         return 1;
     }
     if (fs::path dir = fs::path(output).parent_path(); !dir.empty()) fs::create_directories(dir);
-    std::ofstream out(output, std::ios::binary);
-    out << result;
+    // Written only when it changed: a change in another source of the module translates this one
+    // again, and what it gives most often is the same (the C++ compiler then has nothing to do).
+    bool same = false;
+    if (std::ifstream old(output, std::ios::binary); old) {
+        std::stringstream was;
+        was << old.rdbuf();
+        same = was.str() == result;
+    }
+    std::ofstream out;
+    if (!same) {
+        out.open(output, std::ios::binary);
+        out << result;
+    }
     if (!depfile.empty()) {  // the headers read: a change in one translates the source again
         std::ofstream dep(depfile, std::ios::binary);
         auto escaped = [](std::string p) {
@@ -240,5 +352,5 @@ int main(int argc, char** argv) {
         for (const fs::path& h : structs.read) dep << " \\\n  " << escaped(h.generic_string());
         dep << "\n";
     }
-    return out ? 0 : 1;
+    return same || out ? 0 : 1;
 }

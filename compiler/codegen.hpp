@@ -28,6 +28,11 @@ public:
     void at(Pos pos);
     void text(std::string_view s);
     void line(int n);  // resume the original's text from line n
+    // What follows comes from another file (another source's declarations): #line names it.
+    void setFile(std::string file) {
+        file_ = std::move(file);
+        current_ = 0;
+    }
     std::string str() && { return std::move(out_); }
     const std::string& file() const { return file_; }
 

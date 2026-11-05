@@ -443,6 +443,20 @@ TEST(composes_scaffold_sample) {
     CHECK(rule.onNodeWithText("This is an example of a scaffold.", true).text().starts_with("This is an example"));  // (trimIndent: no indent)
 }
 
+// From compose_tests_other.cpp, as from another Kotlin file of the module.
+@Composable
+fun OtherFile() {
+    Column {
+        StickerRow(suffix = "!", sticker = Sticker(count = 3, label = "yeni"))
+        StickerRow(Sticker("eski"))
+    }
+}
+
+TEST(another_files_composables) {
+    ComposeTestRule rule([] { OtherFile(); });
+    CHECK(rule.onNodeWithText("yeni:3!").exists() && rule.onNodeWithText("eski:0").exists());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

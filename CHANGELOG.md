@@ -669,7 +669,9 @@
   one of a header it includes with quotes) is made with named arguments in any order too:
   `DialogProperties(dismissOnClickOutside = false)` becomes designated initializers in its fields' order, as kompozc
   reads them from the headers (a change in one translates the file again). Lambdas capture by value, as Kotlin's do, so a block that runs again on its own
-  never holds a dangling reference. The C++ compiler's messages point at the source's own lines (`#line`). A file with Windows' line ends (CRLF) translates as one with LF does.
+  never holds a dangling reference. The C++ compiler's messages point at the source's own lines (`#line`). A file with Windows' line ends (CRLF) translates as one with LF does. The target's sources are one module, as Kotlin's: a `@Composable` function or a data class of
+  one file is called from another with named arguments and defaults, no header needed (kompozc declares there what it
+  uses).
 - **Every argument a composable needs can be named**: `onClick`, `value` and `onValueChange`, `checked` and
   `onCheckedChange`, `selected`, `expanded`, `onDismissRequest`, `state`, `text`, `imageVector`/`painter`/`bitmap` and
   `contentDescription`, … are named arguments too, as in Compose: `TextButton(onClick = save, [=] { … })`,
