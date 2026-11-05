@@ -1,0 +1,114 @@
+#pragma once
+
+// kompozc's syntax tree: what the parser reads from a @Composable function's Kotlin.
+
+#include "lexer.hpp"
+
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace kompozc {
+
+// A type as written: Int, String?, List<Item>, (String) -> Unit, @Composable () -> Unit,
+// RowScope.() -> Unit.
+struct Type {
+    std::string name;                  // dotted for qualified names; empty for a function type
+    std::vector<Type> args;            // generic arguments
+    bool nullable = false;
+    bool function = false;
+    bool composable = false;           // @Composable function type
+    std::vector<Type> params;          // a function type's
+    std::unique_ptr<Type> result;      // a function type's
+    std::unique_ptr<Type> receiver;    // RowScope.() -> Unit
+    Pos pos;
+
+    Type() = default;
+    Type(const Type& o);
+    Type& operator=(const Type& o);
+    Type(Type&&) = default;
+    Type& operator=(Type&&) = default;
+};
+
+struct Node;
+using NodeP = std::unique_ptr<Node>;
+
+struct Node {
+    enum Kind {
+        // Expressions
+        Name,      // text
+        Number,    // text as written
+        String,    // parts; expression parts parsed into kids (in order)
+        Char,      // text in C++ escape form
+        Bool,      // text "true" / "false"
+        Null,
+        This,
+        Call,      // kids[0] callee, then the arguments (names: "" or the argument's name), lambda: trailing
+        Member,    // kids[0] . text   (flag: ?.)
+        Index,     // kids[0] [ kids[1..] ]
+        Lambda,    // names: parameters (empty: none written); kids: the body's statements
+        Unary,     // text op, kids[0]; flag: postfix (x++)
+        Binary,    // text op, kids[0], kids[1]; infix functions (until, downTo, step, to) too
+        Is,        // kids[0] is type (flag: !is)
+        As,        // kids[0] as type (flag: as?)
+        If,        // kids: condition, then (a Block), else (a Block or none)
+        When,      // kids[0]: subject or none; branches
+        Paren,     // ( kids[0] )
+        // Statements
+        Block,     // kids: statements
+        ExprStmt,  // kids[0]
+        Decl,      // val/var text = kids[0] (none without one); flag: var; delegated: by; names: destructured
+        Assign,    // kids[0] text(= += ...) kids[1]
+        Return,    // kids[0] or none
+        Break,
+        Continue,
+        For,       // names: the loop variables; kids[0] iterable, kids[1] body (a Block)
+        While,     // kids[0] condition, kids[1] body
+        DoWhile,   // kids[0] body, kids[1] condition
+    };
+
+    // A branch of `when`: conditions (empty: else), each with its kind, and the body.
+    struct WhenBranch {
+        enum CondKind { Expr, In, NotIn, Is, NotIs };
+        std::vector<std::pair<CondKind, NodeP>> conds;
+        std::vector<Type> types;  // for Is / NotIs, by position in conds
+        NodeP body;               // a Block
+        Pos pos;
+    };
+
+    Kind kind;
+    Pos pos;
+    std::string text;
+    std::vector<NodeP> kids;
+    std::vector<std::string> names;
+    std::vector<StringPart> parts;
+    NodeP lambda;                    // a Call's trailing lambda
+    std::optional<Type> type;        // Decl's declared type; Is / As target; Call's generic arguments (first)
+    std::vector<Type> typeArgs;      // a Call's <...>
+    std::vector<WhenBranch> branches;
+    bool flag = false;
+    bool delegated = false;
+
+    Node(Kind k, Pos p) : kind(k), pos(p) {}
+};
+
+struct Param {
+    std::string name;
+    Type type;
+    NodeP defaultValue;
+    Pos pos;
+};
+
+// A @Composable function: fun name(params): result { body }.
+struct Function {
+    std::string name;
+    std::vector<Param> params;
+    std::optional<Type> result;      // none: Unit
+    NodeP body;                      // a Block; or an expression body (= expr) as a Return in a Block
+    std::vector<std::string> annotations;  // besides @Composable (Preview, ...)
+    Pos pos;                         // the @ of @Composable
+    Pos end;                         // just past the closing brace
+};
+
+}  // namespace kompozc

@@ -691,6 +691,16 @@
   yüksek hızını istiyor (Android'in görünümlerinin oy verdiği gibi yüksek kare hızı kategorisi): Android 15, hız
   istemeyen bir uygulamayı 60 Hz'de tutuyordu. Bir Xiaomi 14 Ultra'da (120 Hz) aynı 30 kaydırma 1.565 yerine 2.088 kare
   gösterdi (saniyede 55 yerine 83).
+- **kompozc: C++ kaynaklarında Compose'un kendi yazımıyla @Composable işlevler** (ilk aşama).
+  `kompoz_compose(hedef)` verilen bir hedefin kaynakları, C++ derleyicisi görmeden önce kompozc'den geçiyor; Compose'un
+  derleyici eklentisinin Kotlin'i yeniden yazdığı gibi. Bir `.cpp` dosyasında `@Composable fun Counter(start: Int =
+  0) { var count by remember { mutableStateOf(start) } … }` Kotlin'deki gibi yazılıyor, dosyanın geri kalanı C++.
+  Unit dönen bir işlev yeniden başlatılabilen, atlanabilen bir composable oluyor; dosyanın kendi işlevlerine yapılan
+  çağrılar adlı argümanları her sırada alıyor, varsayılanlar yazılmayabiliyor; sondaki lambdalar, `it`,
+  `val`/`var`/`by`, metin şablonları (sayılar Kotlin'in yazdığı gibi), `16.dp`, değer olarak `if`/`when`, aralıklar
+  (`until`, `downTo`, `step`, `..`) ve listeler üzerinde `for`, `while`, `?:`, `!!` ve `null`. Lambdalar Kotlin'inkiler
+  gibi değerleri kopyalayarak yakalıyor; kendi başına yeniden çalışan bir blok boşa çıkmış bir başvuru tutamıyor.
+  C++ derleyicisinin iletileri kaynağın kendi satırlarını gösteriyor (`#line`).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

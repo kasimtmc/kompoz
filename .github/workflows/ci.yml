@@ -68,6 +68,8 @@ jobs:
         run: cmake --build build
       - name: Tests
         run: build/kompoz_tests
+      - name: Compose syntax tests (kompozc)
+        run: build/kompoz_compose_tests
       - name: Platform tests
         run: build/kompoz_platform_tests
       # Vulkan on lavapipe (Mesa's, on the CPU), which LeakSanitizer can't follow into, with the
@@ -136,6 +138,8 @@ jobs:
         run: cmake --build build
       - name: Tests
         run: build/kompoz_tests.exe
+      - name: Compose syntax tests (kompozc)
+        run: build/kompoz_compose_tests.exe
       - name: Platform tests (UI Automation)
         run: build/kompoz_platform_tests.exe
       - uses: ./.github/actions/angle
@@ -192,6 +196,8 @@ jobs:
         run: cmake --build build
       - name: Tests
         run: build/kompoz_tests
+      - name: Compose syntax tests (kompozc)
+        run: build/kompoz_compose_tests
       - name: GPU renderer tests (Metal, validated, against tests/golden)
         working-directory: build
         env:

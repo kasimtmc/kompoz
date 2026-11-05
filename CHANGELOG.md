@@ -653,6 +653,15 @@
   scroll, a fling or an animation goes on, and for a second after, the app's surface asks for the display's fastest
   rate (the high frame rate category, as Android's views vote): Android 15 kept an app that doesn't ask at 60 Hz.
   On a Xiaomi 14 Ultra (120 Hz) the same 30 swipes showed 2,088 frames instead of 1,565 (83 a second instead of 55).
+- **kompozc: @Composable functions in Compose's own syntax, in C++ sources** (first stage). A target given to
+  `kompoz_compose(target)` has its sources rewritten by kompozc before the C++ compiler sees them, as Compose's
+  compiler plugin rewrites Kotlin: in a `.cpp` file, `@Composable fun Counter(start: Int = 0) { var count by
+  remember { mutableStateOf(start) } … }` is written as in Kotlin, the rest of the file is C++. A Unit function
+  becomes a restartable, skippable composable; calls to the file's own functions take named arguments in any order
+  and leave defaults out; trailing lambdas, `it`, `val`/`var`/`by`, string templates (numbers written as Kotlin
+  writes them), `16.dp`, `if`/`when` as values, `for` over ranges (`until`, `downTo`, `step`, `..`) and lists,
+  `while`, `?:`, `!!` and `null`. Lambdas capture by value, as Kotlin's do, so a block that runs again on its own
+  never holds a dangling reference. The C++ compiler's messages point at the source's own lines (`#line`).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and
