@@ -35,10 +35,14 @@ jobs:
             cc: gcc-14
             cxx: g++-14
             flags: -fsanitize=address,undefined -fno-omit-frame-pointer
+            # GCC's sanitized objects of the showcase take ~2.5 GB each: six at once (ninja's default on
+            # the 4-core runner) ran it out of memory, and the runner was shut down.
+            jobs: 3
           - name: Clang 19
             cc: clang-19
             cxx: clang++-19
             flags: ""
+            jobs: 6
     env:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
@@ -65,7 +69,7 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_VENDORED_DEPS=ON \
             -DKOMPOZ_WITH_JPEG=ON -DKOMPOZ_WITH_WEBP=ON -DKOMPOZ_WITH_CURL=ON -DCMAKE_CXX_FLAGS="${{ matrix.flags }}"
       - name: Build
-        run: cmake --build build
+        run: cmake --build build -j ${{ matrix.jobs }}
       - name: Tests
         run: build/kompoz_tests
       - name: Compose syntax tests (kompozc)

@@ -712,7 +712,7 @@
   class'ı başka bir dosyadan adlı argümanlar ve varsayılanlarla çağrılıyor, başlık gerekmiyor (kompozc kullandığını
   orada bildiriyor). kompozc derlemeyi yapan makinede çalışıyor: Kompoz başka biri için derlenirken (Android, web)
   bu makine için kaynaklarından, bu makinenin C++ derleyicisiyle derleniyor (ya da `KOMPOZC` birini gösteriyor);
-  `cmake --install` onu `kompoz_compose` ve kaynaklarıyla birlikte `find_package(kompoz)` için kuruyor. Gösterimin
+  `cmake --install` onu `kompoz_compose` ve kaynaklarıyla birlikte `find_package(kompoz)` için kuruyor. vcpkg onu araçlarının arasında tutuyor (`tools/kompoz`). Gösterimin
   kaynakları ondan geçiyor. Kılavuzun ```` ```kotlin ```` örnekleri de ondan geçirilerek denetleniyor (`scripts/docs.py --check`),
   her biri sayfadaki kendi satırlarında.
 - **Bir composable'ın gerek duyduğu her argüman adla verilebilir**: `onClick`, `value` ve `onValueChange`, `checked` ve

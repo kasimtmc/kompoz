@@ -24,6 +24,8 @@ vcpkg_cmake_configure(
 )
 vcpkg_cmake_install()
 vcpkg_cmake_config_fixup(CONFIG_PATH lib/cmake/kompoz)
+# kompozc (kompoz_compose's compiler) where vcpkg keeps a port's tools, as the package's targets say.
+vcpkg_copy_tools(TOOL_NAMES kompozc AUTO_CLEAN)
 
 file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include" "${CURRENT_PACKAGES_DIR}/debug/share")
 vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE")
