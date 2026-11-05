@@ -262,6 +262,8 @@ Token Lexer::string(Pos start) {
         } else if (raw && c == '\n') {
             text += "\\n";
             advance();
+        } else if (raw && c == '\r') {
+            advance();  // (a CRLF file's line ends are \n in it, as Kotlin's)
         } else if (c == '?' && peek(1) == '?') {
             text += "?\\?";  // (no trigraph, whatever the C++ compiler's mode)
             advance(2);
