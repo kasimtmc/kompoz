@@ -677,6 +677,16 @@
   composable with two forms takes the one whose name is given (`Icon(painter = …)`, `TextField(state = …)`,
   `Card(onClick = …)`) or the one the first argument's type says. The text fields and sliders take Compose's
   `colors =` as well (written `kompoz::arg::colors` in C++, where `kompoz::colors` is the colors' namespace).
+- **Compose's colors objects and named members**: `CardDefaults.cardColors(…)`, `TextFieldDefaults.colors(…)`,
+  `ButtonDefaults.textButtonColors(…)` (and the other buttons'), `TopAppBarDefaults.topAppBarColors(…)` are the
+  `CardColors`, `TextFieldColors`, `ButtonColors` and `TopAppBarColors` structs (`TextFieldDefaults::colors{…}` in
+  C++), which the cards, text fields, buttons and top app bars take as `colors =`; those left unset are the theme's.
+  The cards take `shape =` and, clickable, `enabled =` (Compose 1.4's disabled colors). `BottomAppBar(…) { … }` with a
+  block is Compose's content form (a row of its own, `contentColor` its container's own). `Color.Red`,
+  `Color.Transparent`, … are `Color`'s constants as well. Modifier's `padding`, `background`, `border`, `size` and
+  `offset` and `Color::copy` take Compose's named arguments (`border(width = 1, color = c, shape = s)`,
+  `copy(alpha = 0.6f)`), written `kompoz::arg::width = …` in C++. With kompozc, the user's own `AddTextDialog` and
+  Compose's Scaffold sample compile as they are written for Android (tests/compose_tests.cpp).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

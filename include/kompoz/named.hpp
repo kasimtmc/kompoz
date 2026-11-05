@@ -210,6 +210,12 @@ struct Params {
     static auto block(A&&... args);
 };
 
+// Whether a Params lists Tag.
+template <class Tag, class Q>
+constexpr bool oneOfParams = false;
+template <class Tag, class... P>
+constexpr bool oneOfParams<Tag, Params<P...>> = oneOf<Tag, P...>;
+
 // The block given last, if it was: its content, run in a scope of its own.
 Content scopedBlock(Content block);
 template <class... A>
@@ -427,6 +433,22 @@ struct Bitmap {};
 struct ContentDescription {};
 struct Data {};
 struct Colors {};
+struct Start {};
+struct Top {};
+struct End {};
+struct Bottom {};
+struct Horizontal {};
+struct Vertical {};
+struct All {};
+struct Width {};
+struct Height {};
+struct X {};
+struct Y {};
+struct Brush {};
+struct Border {};
+struct Red {};
+struct Green {};
+struct Blue {};
 } // namespace detail::names
 inline namespace args {
 inline constexpr Param<detail::names::Modifier> modifier;
@@ -593,6 +615,23 @@ inline constexpr Param<detail::names::Data> data;
 namespace arg {
 using namespace args;
 inline constexpr Param<detail::names::Colors> colors;
+// Members' (Modifier's, Color's): words too common to be names of all of kompoz's (end, x, width).
+inline constexpr Param<detail::names::Start> start;
+inline constexpr Param<detail::names::Top> top;
+inline constexpr Param<detail::names::End> end;
+inline constexpr Param<detail::names::Bottom> bottom;
+inline constexpr Param<detail::names::Horizontal> horizontal;
+inline constexpr Param<detail::names::Vertical> vertical;
+inline constexpr Param<detail::names::All> all;
+inline constexpr Param<detail::names::Width> width;
+inline constexpr Param<detail::names::Height> height;
+inline constexpr Param<detail::names::X> x;
+inline constexpr Param<detail::names::Y> y;
+inline constexpr Param<detail::names::Brush> brush;
+inline constexpr Param<detail::names::Border> border;
+inline constexpr Param<detail::names::Red> red;
+inline constexpr Param<detail::names::Green> green;
+inline constexpr Param<detail::names::Blue> blue;
 } // namespace arg
 
 // A composable taking named arguments: each call's arguments and call site go to Impl::call.

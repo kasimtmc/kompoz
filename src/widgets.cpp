@@ -204,7 +204,8 @@ void buttonImpl(ButtonKind kind, std::function<void()> onClick, const Modifier& 
     contentColor = style.contentColor.value_or(contentColor);
     if (!style.enabled) {
         if (filled) container = cs.onSurface.copy(0.12f);
-        contentColor = cs.onSurface.copy(0.38f);
+        if (style.disabledContainerColor) container = *style.disabledContainerColor;
+        contentColor = style.disabledContentColor.value_or(cs.onSurface.copy(0.38f));
     }
     // Compose 1.4's elevations: filled and tonal ones 1 dp up while hovered, elevated ones 1 dp
     // (3 hovered); back down while pressed; eased in 120 ms, out 150. Read as it is drawn.
@@ -2104,41 +2105,56 @@ std::optional<Color> ColorScheme::contentColorFor(Color c) const {
 
 namespace {
 enum class CardKind { Filled, Elevated, Outlined };
-// A card's container (onSurface content on it, clipped to its shape), clickable if `onClick` is set.
-void card(CardKind kind, std::function<void()> onClick, const Modifier& modifier, const Content& content) {
+// A card's container (its content in the content color, clipped to its shape), clickable if
+// `onClick` is set: Compose 1.4's colors for its kind where `style` leaves them unset.
+void card(CardKind kind, std::function<void()> onClick, const Modifier& modifier, const CardStyle& style, const Content& content) {
     const ColorScheme& cs = colorScheme();
-    Modifier m = kind == CardKind::Elevated ? modifier.shadow(1, kCardShape).background(cs.surfaceContainerLow, kCardShape)
-                 : kind == CardKind::Outlined ? modifier.background(cs.surface, kCardShape).border(1, cs.outlineVariant, kCardShape)
-                                              : modifier.background(cs.surfaceContainerHighest, kCardShape);
-    m = m.clip(kCardShape);
-    if (onClick) m = m.clickable(std::move(onClick));
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] { detail::Column(m, content); });
+    const Shape shape = style.shape.value_or(kCardShape);
+    const CardColors& colors = style.colors;
+    bool enabled = style.enabled || !onClick;  // (only a clickable card can be disabled)
+    Color kindContainer = kind == CardKind::Elevated ? cs.surfaceContainerLow : kind == CardKind::Outlined ? cs.surface : cs.surfaceContainerHighest;
+    Color container = colors.containerColor.value_or(kindContainer);
+    // Compose's contentColorFor(containerColor): onSurface for a container it doesn't know.
+    Color content_ = colors.contentColor.value_or(colors.containerColor ? cs.contentColorFor(container).value_or(cs.onSurface) : cs.onSurface);
+    if (!enabled) {
+        Color disabledKind = kind == CardKind::Elevated ? cs.surface.copy(0.38f)
+                             : kind == CardKind::Outlined ? container
+                                                          : cs.surfaceVariant.copy(0.38f);
+        container = colors.disabledContainerColor.value_or(disabledKind);
+        content_ = colors.disabledContentColor.value_or(content_.copy(0.38f));
+    }
+    Modifier m = kind == CardKind::Elevated ? modifier.shadow(1, shape).background(container, shape)
+                 : kind == CardKind::Outlined ? modifier.background(container, shape).border(1, enabled ? cs.outlineVariant : cs.outline.copy(0.12f), shape)
+                                              : modifier.background(container, shape);
+    m = m.clip(shape);
+    if (onClick) m = m.clickable(std::move(onClick), enabled);
+    CompositionLocalProvider({LocalContentColor.provides(content_)}, [&] { detail::Column(m, content); });
 }
 } // namespace
 
-void detail::Card(const Modifier& modifier, const Content& content, CallSite site) {
+void detail::Card(const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site) {
     ComposableScope scope(site);
-    card(CardKind::Filled, {}, modifier, content);
+    card(CardKind::Filled, {}, modifier, style, content);
 }
-void detail::ElevatedCard(const Modifier& modifier, const Content& content, CallSite site) {
+void detail::ElevatedCard(const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site) {
     ComposableScope scope(site);
-    card(CardKind::Elevated, {}, modifier, content);
+    card(CardKind::Elevated, {}, modifier, style, content);
 }
-void detail::OutlinedCard(const Modifier& modifier, const Content& content, CallSite site) {
+void detail::OutlinedCard(const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site) {
     ComposableScope scope(site);
-    card(CardKind::Outlined, {}, modifier, content);
+    card(CardKind::Outlined, {}, modifier, style, content);
 }
-void detail::Card(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site) {
+void detail::Card(std::function<void()> onClick, const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site) {
     ComposableScope scope(site);
-    card(CardKind::Filled, std::move(onClick), modifier, content);
+    card(CardKind::Filled, std::move(onClick), modifier, style, content);
 }
-void detail::ElevatedCard(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site) {
+void detail::ElevatedCard(std::function<void()> onClick, const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site) {
     ComposableScope scope(site);
-    card(CardKind::Elevated, std::move(onClick), modifier, content);
+    card(CardKind::Elevated, std::move(onClick), modifier, style, content);
 }
-void detail::OutlinedCard(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site) {
+void detail::OutlinedCard(std::function<void()> onClick, const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site) {
     ComposableScope scope(site);
-    card(CardKind::Outlined, std::move(onClick), modifier, content);
+    card(CardKind::Outlined, std::move(onClick), modifier, style, content);
 }
 
 void detail::Surface(const Modifier& modifier, const Content& content, CallSite site) {

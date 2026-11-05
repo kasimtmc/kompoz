@@ -1635,13 +1635,21 @@ void detail::BottomAppBar(const BottomAppBarSlots& slots, const Modifier& modifi
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     PaddingValues insets = bottomBarInsets(slots.windowInsets);
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
+    Color container = slots.containerColor.value_or(cs.surfaceContainer);
+    // The content form's color is its container's own (Compose's contentColorFor), the actions'
+    // onSurfaceVariant (their icons' token).
+    Color content = slots.contentColor.value_or(slots.content ? cs.contentColorFor(container).value_or(cs.onSurface) : cs.onSurfaceVariant);
+    CompositionLocalProvider({LocalContentColor.provides(content)}, [&] {
         detail::Row(exiting(modifier.fillMaxWidth(), slots.scrollBehavior)
-                .background(slots.containerColor.value_or(cs.surfaceContainer))
+                .background(container)
                 .padding(insets.start, 0, insets.end, insets.bottom)
                 .height(80)
                 .padding(4, 4, 4, 0),  // Compose 1.4's ContentPadding
             {.verticalAlignment = Alignment::CenterVertically}, [&] {
+                if (slots.content) {
+                    slots.content();
+                    return;
+                }
                 detail::Row(Modifier().weight(1), {.verticalAlignment = Alignment::CenterVertically}, [&] {
                     if (slots.actions) slots.actions();
                 });

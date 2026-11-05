@@ -5,6 +5,7 @@
 // of it.
 
 #include "coroutines.hpp"
+#include "named_members.hpp"
 #include "runtime.hpp"
 
 #include <algorithm>

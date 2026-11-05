@@ -5,6 +5,7 @@
 #include <kompoz/testing.hpp>
 
 #include <cstdio>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -241,6 +242,205 @@ TEST(structs_by_name) {
     ComposeTestRule rule([] { StructsByName(); });
     CHECK(rule.onNodeWithTag("boyut").text() == "2x3");
     CHECK(rule.onNodeWithTag("stil").bounds().height > 30);
+}
+
+// The user's own Compose code, as written for Android (textSize() is theirs too).
+@Composable
+fun textSize(): TextUnit = 18.sp
+
+@Composable
+fun AddTextDialog(
+    colors: ColorScheme,
+    title: String,
+    backTitle: String,
+    addTitle: String,
+    onDismissRequest: () -> Unit,
+    onCancel: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    Dialog(
+        onDismissRequest = { onDismissRequest() },
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
+    ) {
+        var isBlank by remember { mutableStateOf(false) }
+        Card(
+            modifier = Modifier
+                .background(
+                    brush = Brush.linearGradient(
+                        listOf(
+                            colors.primaryContainer.copy(alpha = 0.6f),
+                            colors.tertiaryContainer.copy(alpha = 0.6f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(28.dp)
+                )
+                .fillMaxWidth()
+                .fillMaxHeight(0.3f)
+                .padding(4.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            shape = RoundedCornerShape(28.dp)
+        ) {
+            var content by remember { mutableStateOf("") }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(6.dp),
+                verticalArrangement = Arrangement.SpaceEvenly,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                TextField (
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.8f)
+                        .border(width = 1.dp, color = colors.onBackground.copy(alpha = 0.4f), shape = RoundedCornerShape(24.dp)),
+                    value = content,
+                    onValueChange = {
+                        content= it
+                    },
+                    textStyle = TextStyle(fontSize = textSize(), color = colors.onBackground),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        errorContainerColor = Color.Transparent,
+                        focusedPlaceholderColor = Color.Transparent,
+                        unfocusedPlaceholderColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent
+                    )
+                )
+                Row {
+                    TextButton(
+                        onClick = { onCancel() },
+                        colors = ButtonDefaults.textButtonColors(
+                            containerColor = colors.primaryContainer.copy(alpha = 0.2f),
+                            contentColor = colors.onPrimaryContainer
+                        ),
+                        modifier = Modifier.Companion
+                            .width(140.dp)
+                            .padding(8.dp),
+                    ) {
+                        Text(text = backTitle, fontSize = textSize())
+                    }
+                    TextButton(
+                        onClick =
+                            {
+                                onSave(content)
+                            },
+                        colors = ButtonDefaults.textButtonColors(
+                            containerColor = colors.primaryContainer.copy(alpha = 0.2f),
+                            contentColor = colors.onPrimaryContainer
+                        ),
+                        modifier = Modifier
+                            .width(140.dp)
+                            .padding(8.dp),
+                    ) {
+                        Text(text = addTitle, fontSize = textSize())
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DialogHost(saved: (String) -> Unit) {
+    var open by remember { mutableStateOf(true) }
+    if (open) {
+        AddTextDialog(
+            colors = MaterialTheme.colorScheme,
+            title = "",
+            backTitle = "Vazgeç",
+            addTitle = "Ekle",
+            onDismissRequest = { open = false },
+            onCancel = { open = false },
+            onSave = {
+                saved(it)
+                open = false
+            }
+        )
+    }
+}
+
+TEST(the_users_add_text_dialog) {
+    auto saved = std::make_shared<std::string>();
+    ComposeTestRule rule([saved] { DialogHost([saved](std::string s) { *saved = s; }); });
+    CHECK(rule.onNodeWithText("Vazgeç").exists() && rule.onNodeWithText("Ekle").exists());
+    *saved = "-";
+    rule.onNodeWithText("Ekle").performClick();
+    CHECK(saved->empty());  // (nothing typed)
+    CHECK(!rule.onNodeWithText("Ekle").exists());
+    ComposeTestRule cancel([saved] { DialogHost([saved](std::string s) { *saved = s; }); });
+    *saved = "-";
+    cancel.onNodeWithText("Vazgeç").performClick();
+    CHECK(*saved == "-" && !cancel.onNodeWithText("Vazgeç").exists());
+}
+
+// Compose's Scaffold sample, as its documentation writes it (an icon of Kompoz's for its own).
+@Composable
+fun ScaffoldExample() {
+    var presses by remember { mutableIntStateOf(0) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.primary,
+                ),
+                title = {
+                    Text("Top app bar")
+                }
+            )
+        },
+        bottomBar = {
+            BottomAppBar(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.primary,
+            ) {
+                Text(
+                    modifier = Modifier
+                        .fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    text = "Bottom app bar",
+                )
+            }
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { presses++ }) {
+                Icon(Icons.Default.Add, contentDescription = "Add")
+            }
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .padding(innerPadding),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                modifier = Modifier.padding(8.dp),
+                text =
+                """
+                    This is an example of a scaffold. It uses the Scaffold composable's parameters to create a screen with a simple top app bar, bottom app bar, and floating action button.
+
+                    It also contains some basic inner content, such as this text.
+
+                    You have pressed the floating action button $presses times.
+                """.trimIndent(),
+            )
+        }
+    }
+}
+
+TEST(composes_scaffold_sample) {
+    ComposeTestRule rule([] { ScaffoldExample(); });
+    CHECK(rule.onNodeWithText("Top app bar").exists() && rule.onNodeWithText("Bottom app bar").exists());
+    CHECK(rule.onNodeWithText("You have pressed the floating action button 0 times.", true).exists());
+    rule.onNodeWithText("Add").performClick();  // (an Icon's description is its node's text here)
+    rule.onNodeWithText("Add").performClick();
+    CHECK(rule.onNodeWithText("You have pressed the floating action button 2 times.", true).exists());
+    CHECK(rule.onNodeWithText("This is an example of a scaffold.", true).text().starts_with("This is an example"));  // (trimIndent: no indent)
 }
 
 int main(int argc, char** argv) {

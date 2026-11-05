@@ -657,6 +657,9 @@ private:
                 return arguments(c, calleeName, false);
             }
             if (callee.text == "copy" && dataClassCopy(c, obj)) return;
+            if (module_.structs && !c.lambda && c.kids.size() > 1 && qualifier(obj)) {  // TextFieldDefaults.colors(…)
+                if (const auto* fields = module_.structs->find(callee.text); fields && structCall(c, qualified(dotted(callee)), *fields)) return;
+            }
             if (kKtMembers.contains(callee.text) && !qualifier(obj)) {
                 out_.text("::kompoz::kt::" + callee.text + "(");
                 expr(obj);

@@ -13,6 +13,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <type_traits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -23,6 +24,20 @@
 #include <kompoz/colorspace.hpp>
 
 namespace kompoz {
+
+// A named argument (named.hpp): what makes a member take Compose's named arguments, as
+// Color::copy(alpha = …) and Modifier::padding(horizontal = …) do (named_members.hpp).
+template <class Tag, class V>
+struct Named;
+namespace detail {
+template <class A>
+constexpr bool namedArgument = false;
+template <class Tag, class V>
+constexpr bool namedArgument<Named<Tag, V>> = true;
+template <class... A>
+constexpr bool anyNamedArgument = (namedArgument<std::remove_cvref_t<A>> || ...);
+} // namespace detail
+
 
 inline constexpr float kInfinity = std::numeric_limits<float>::infinity();
 
@@ -117,6 +132,10 @@ public:
         return Color((value_ & ~(uint64_t(0x3ff) << 6)) | a << 6);
     }
     Color copy(float alpha, float red, float green, float blue) const;  // in its color space
+    // copy(alpha = …, red = …): named, as Compose's (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Color copy(A&&... args) const;
     // This over `background`, in the background's color space (Compose's compositeOver).
     Color compositeOver(Color background) const;
     // Its relative luminance, 0..1 (Compose's luminance: an RGB color space's).
@@ -124,6 +143,8 @@ public:
     uint32_t toArgb() const;  // in sRGB, 0xAARRGGBB (Compose's toArgb)
     constexpr bool isSpecified() const { return value_ != 0x10; }  // (Compose's: not Unspecified)
     constexpr bool isUnspecified() const { return value_ == 0x10; }
+    // Compose's Color.Red, Color.Transparent, …: the colors' constants (colors::Red).
+    static const Color Transparent, Black, DarkGray, Gray, LightGray, White, Red, Green, Blue, Yellow, Cyan, Magenta, Unspecified;
 
     friend constexpr bool operator==(const Color&, const Color&) = default;
 
@@ -147,6 +168,20 @@ inline constexpr Color Cyan = Color::argb(0xFF00FFFF);
 inline constexpr Color Magenta = Color::argb(0xFFFF00FF);
 inline constexpr Color Unspecified = Color(uint64_t(0x10));
 } // namespace colors
+inline const Color Color::Transparent = colors::Transparent;
+inline const Color Color::Black = colors::Black;
+inline const Color Color::DarkGray = colors::DarkGray;
+inline const Color Color::Gray = colors::Gray;
+inline const Color Color::LightGray = colors::LightGray;
+inline const Color Color::White = colors::White;
+inline const Color Color::Red = colors::Red;
+inline const Color Color::Green = colors::Green;
+inline const Color Color::Blue = colors::Blue;
+inline const Color Color::Yellow = colors::Yellow;
+inline const Color Color::Cyan = colors::Cyan;
+inline const Color Color::Magenta = colors::Magenta;
+inline const Color Color::Unspecified = colors::Unspecified;
+
 
 constexpr float lerp(float a, float b, float t) { return a + (b - a) * t; }
 // Between two colors, in Oklab, in `stop`'s color space (Compose's lerp: `t` within 0..1).

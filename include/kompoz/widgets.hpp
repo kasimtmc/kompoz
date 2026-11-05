@@ -684,14 +684,35 @@ struct ButtonStyle {
     bool enabled = true;
     std::optional<Color> containerColor;
     std::optional<Color> contentColor;
+    std::optional<Color> disabledContainerColor, disabledContentColor;  // unset: the theme's (onSurface at 12%, 38%)
     std::optional<MutableInteractionSource> interactionSource;  // told of presses, hovers and focus
     std::optional<ButtonShapes> shapes;                         // set: the corners morph while pressed
     std::optional<PaddingValues> contentPadding;                // unset: ButtonDefaults' for its kind
 };
 
+// A button's colors (Compose's ButtonColors: ButtonDefaults.textButtonColors(contentColor = …)),
+// those left unset its kind's.
+struct ButtonColors {
+    std::optional<Color> containerColor, contentColor, disabledContainerColor, disabledContentColor;
+    friend bool operator==(const ButtonColors&, const ButtonColors&) = default;
+};
+namespace detail {
+inline void applyColors(ButtonStyle& style, const ButtonColors& colors) {
+    if (colors.containerColor) style.containerColor = colors.containerColor;
+    if (colors.contentColor) style.contentColor = colors.contentColor;
+    if (colors.disabledContainerColor) style.disabledContainerColor = colors.disabledContainerColor;
+    if (colors.disabledContentColor) style.disabledContentColor = colors.disabledContentColor;
+}
+} // namespace detail
+
 // Compose 1.4's ButtonDefaults sizes: an icon before the label takes ButtonWithIconContentPadding
 // (TextButtonWithIconContentPadding for a TextButton), IconSize big and IconSpacing from it.
 namespace ButtonDefaults {
+using buttonColors = ButtonColors;
+using textButtonColors = ButtonColors;
+using outlinedButtonColors = ButtonColors;
+using filledTonalButtonColors = ButtonColors;
+using elevatedButtonColors = ButtonColors;
 inline const PaddingValues ContentPadding{24, 8, 24, 8};
 inline const PaddingValues ButtonWithIconContentPadding{16, 8, 24, 8};
 inline const PaddingValues TextButtonContentPadding{12, 8, 12, 8};
@@ -706,7 +727,7 @@ void Button(std::function<void()> onClick, const Modifier& modifier, const Conte
 void Button(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style, const Content& content,
             CallSite site = CallSite::current());
 struct ButtonImpl {
-    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
+    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, names::Colors, Block>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -719,6 +740,7 @@ struct ButtonImpl {
         P::set<names::ContentColor>(style.contentColor, args...);
         P::set<names::ContentPadding>(style.contentPadding, args...);
         P::set<names::InteractionSource>(style.interactionSource, args...);
+        if constexpr (P::given<names::Colors, A...>()) detail::applyColors(style, P::get<names::Colors>(ButtonColors{}, args...));
         detail::Button(std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
     }
 };
@@ -730,7 +752,7 @@ void OutlinedButton(std::function<void()> onClick, const Content& content, CallS
 void OutlinedButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                     const Content& content, CallSite site = CallSite::current());
 struct OutlinedButtonImpl {
-    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
+    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, names::Colors, Block>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -743,6 +765,7 @@ struct OutlinedButtonImpl {
         P::set<names::ContentColor>(style.contentColor, args...);
         P::set<names::ContentPadding>(style.contentPadding, args...);
         P::set<names::InteractionSource>(style.interactionSource, args...);
+        if constexpr (P::given<names::Colors, A...>()) detail::applyColors(style, P::get<names::Colors>(ButtonColors{}, args...));
         detail::OutlinedButton(std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
     }
 };
@@ -754,7 +777,7 @@ void FilledTonalButton(std::function<void()> onClick, const Content& content, Ca
 void FilledTonalButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                        const Content& content, CallSite site = CallSite::current());
 struct FilledTonalButtonImpl {
-    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
+    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, names::Colors, Block>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -767,6 +790,7 @@ struct FilledTonalButtonImpl {
         P::set<names::ContentColor>(style.contentColor, args...);
         P::set<names::ContentPadding>(style.contentPadding, args...);
         P::set<names::InteractionSource>(style.interactionSource, args...);
+        if constexpr (P::given<names::Colors, A...>()) detail::applyColors(style, P::get<names::Colors>(ButtonColors{}, args...));
         detail::FilledTonalButton(std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
     }
 };
@@ -778,7 +802,7 @@ void ElevatedButton(std::function<void()> onClick, const Content& content, CallS
 void ElevatedButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                     const Content& content, CallSite site = CallSite::current());
 struct ElevatedButtonImpl {
-    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
+    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, names::Colors, Block>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -791,6 +815,7 @@ struct ElevatedButtonImpl {
         P::set<names::ContentColor>(style.contentColor, args...);
         P::set<names::ContentPadding>(style.contentPadding, args...);
         P::set<names::InteractionSource>(style.interactionSource, args...);
+        if constexpr (P::given<names::Colors, A...>()) detail::applyColors(style, P::get<names::Colors>(ButtonColors{}, args...));
         detail::ElevatedButton(std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
     }
 };
@@ -802,7 +827,7 @@ void TextButton(std::function<void()> onClick, const Content& content, CallSite 
 void TextButton(std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                 const Content& content, CallSite site = CallSite::current());
 struct TextButtonImpl {
-    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, Block>;
+    using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shapes, names::ContainerColor, names::ContentColor, names::ContentPadding, names::InteractionSource, names::Colors, Block>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -815,6 +840,7 @@ struct TextButtonImpl {
         P::set<names::ContentColor>(style.contentColor, args...);
         P::set<names::ContentPadding>(style.contentPadding, args...);
         P::set<names::InteractionSource>(style.interactionSource, args...);
+        if constexpr (P::given<names::Colors, A...>()) detail::applyColors(style, P::get<names::Colors>(ButtonColors{}, args...));
         detail::TextButton(std::move(onClick), P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
     }
 };
@@ -1345,62 +1371,105 @@ void ContainedLoadingIndicator(const Modifier& modifier = {}, std::optional<Colo
 void ContainedLoadingIndicator(float progress, const Modifier& modifier = {}, std::optional<Color> indicatorColor = {},
                                std::optional<Color> containerColor = {}, CallSite site = CallSite::current());
 
+// A card's colors (Compose's CardColors, CardDefaults.cardColors(containerColor = …)): those
+// left unset are its kind's, from the theme; its content's color goes with its container's
+// (contentColorFor), its disabled ones are those at 38%.
+struct CardColors {
+    std::optional<Color> containerColor, contentColor, disabledContainerColor, disabledContentColor;
+    friend bool operator==(const CardColors&, const CardColors&) = default;
+};
+namespace CardDefaults {
+using cardColors = CardColors;
+using elevatedCardColors = CardColors;
+using outlinedCardColors = CardColors;
+} // namespace CardDefaults
+// What a card's shape and colors are, and whether a clickable one can be clicked.
+struct CardStyle {
+    std::optional<Shape> shape;  // unset: 12 dp corners
+    CardColors colors;
+    bool enabled = true;
+};
+
 // Clickable cards (Compose's Card(onClick = ...)): the ripple keeps to their shape.
 namespace detail {
-void Card(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
-void Card(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
+void Card(const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site = CallSite::current());
+void Card(std::function<void()> onClick, const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site = CallSite::current());
 struct CardImpl {
-    using P = Params<names::Modifier, Block>;
-    using Clickable = Params<names::OnClick, names::Modifier, Block>;
+    using P = Params<names::Modifier, names::Shape, names::Colors, Block>;
+    using Clickable = Params<names::OnClick, names::Modifier, names::Enabled, names::Shape, names::Colors, Block>;
+    template <class Q, class... A>
+    static CardStyle style(A&... args) {
+        CardStyle style;
+        Q::template set<names::Shape>(style.shape, args...);
+        Q::template set<names::Colors>(style.colors, args...);
+        if constexpr (oneOfParams<names::Enabled, Q>) Q::template set<names::Enabled>(style.enabled, args...);
+        return style;
+    }
     template <class... A>
     static void call(CallSite site, A&&... args) {
         if constexpr (countOf<names::OnClick, A...> > 0 || startsWithClick<A...>()) {  // a clickable one
             static_assert(Clickable::check<A...>());
             detail::Card(std::function<void()>(Clickable::arg<names::OnClick>(args...)), Clickable::get<names::Modifier>(Modifier{}, args...),
-                         Clickable::block(std::forward<A>(args)...), site);
+                         style<Clickable>(args...), Clickable::block(std::forward<A>(args)...), site);
         } else {
             static_assert(P::check<A...>());
-            detail::Card(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+            detail::Card(P::get<names::Modifier>(Modifier{}, args...), style<P>(args...), P::block(std::forward<A>(args)...), site);
         }
     }
 };
 } // namespace detail
 inline constexpr Composable<detail::CardImpl> Card;
 namespace detail {
-void ElevatedCard(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
-void ElevatedCard(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
+void ElevatedCard(const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site = CallSite::current());
+void ElevatedCard(std::function<void()> onClick, const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site = CallSite::current());
 struct ElevatedCardImpl {
-    using P = Params<names::Modifier, Block>;
-    using Clickable = Params<names::OnClick, names::Modifier, Block>;
+    using P = Params<names::Modifier, names::Shape, names::Colors, Block>;
+    using Clickable = Params<names::OnClick, names::Modifier, names::Enabled, names::Shape, names::Colors, Block>;
+    template <class Q, class... A>
+    static CardStyle style(A&... args) {
+        CardStyle style;
+        Q::template set<names::Shape>(style.shape, args...);
+        Q::template set<names::Colors>(style.colors, args...);
+        if constexpr (oneOfParams<names::Enabled, Q>) Q::template set<names::Enabled>(style.enabled, args...);
+        return style;
+    }
     template <class... A>
     static void call(CallSite site, A&&... args) {
         if constexpr (countOf<names::OnClick, A...> > 0 || startsWithClick<A...>()) {  // a clickable one
             static_assert(Clickable::check<A...>());
             detail::ElevatedCard(std::function<void()>(Clickable::arg<names::OnClick>(args...)), Clickable::get<names::Modifier>(Modifier{}, args...),
-                         Clickable::block(std::forward<A>(args)...), site);
+                         style<Clickable>(args...), Clickable::block(std::forward<A>(args)...), site);
         } else {
             static_assert(P::check<A...>());
-            detail::ElevatedCard(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+            detail::ElevatedCard(P::get<names::Modifier>(Modifier{}, args...), style<P>(args...), P::block(std::forward<A>(args)...), site);
         }
     }
 };
 } // namespace detail
 inline constexpr Composable<detail::ElevatedCardImpl> ElevatedCard;
 namespace detail {
-void OutlinedCard(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
-void OutlinedCard(std::function<void()> onClick, const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
+void OutlinedCard(const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site = CallSite::current());
+void OutlinedCard(std::function<void()> onClick, const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site = CallSite::current());
 struct OutlinedCardImpl {
-    using P = Params<names::Modifier, Block>;
-    using Clickable = Params<names::OnClick, names::Modifier, Block>;
+    using P = Params<names::Modifier, names::Shape, names::Colors, Block>;
+    using Clickable = Params<names::OnClick, names::Modifier, names::Enabled, names::Shape, names::Colors, Block>;
+    template <class Q, class... A>
+    static CardStyle style(A&... args) {
+        CardStyle style;
+        Q::template set<names::Shape>(style.shape, args...);
+        Q::template set<names::Colors>(style.colors, args...);
+        if constexpr (oneOfParams<names::Enabled, Q>) Q::template set<names::Enabled>(style.enabled, args...);
+        return style;
+    }
     template <class... A>
     static void call(CallSite site, A&&... args) {
         if constexpr (countOf<names::OnClick, A...> > 0 || startsWithClick<A...>()) {  // a clickable one
             static_assert(Clickable::check<A...>());
             detail::OutlinedCard(std::function<void()>(Clickable::arg<names::OnClick>(args...)), Clickable::get<names::Modifier>(Modifier{}, args...),
-                         Clickable::block(std::forward<A>(args)...), site);
+                         style<Clickable>(args...), Clickable::block(std::forward<A>(args)...), site);
         } else {
             static_assert(P::check<A...>());
-            detail::OutlinedCard(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+            detail::OutlinedCard(P::get<names::Modifier>(Modifier{}, args...), style<P>(args...), P::block(std::forward<A>(args)...), site);
         }
     }
 };
@@ -1602,6 +1671,14 @@ struct TextFieldColors {
     std::optional<Color> focusedPrefixColor, unfocusedPrefixColor, disabledPrefixColor, errorPrefixColor;
     std::optional<Color> focusedSuffixColor, unfocusedSuffixColor, disabledSuffixColor, errorSuffixColor;
 };
+// Compose's TextFieldDefaults.colors(focusedContainerColor = …, …): a TextFieldColors, those left
+// out the theme's (OutlinedTextFieldDefaults.colors for an outlined field).
+namespace TextFieldDefaults {
+using colors = TextFieldColors;
+} // namespace TextFieldDefaults
+namespace OutlinedTextFieldDefaults {
+using colors = TextFieldColors;
+} // namespace OutlinedTextFieldDefaults
 
 // Where a field's label goes (Compose's TextFieldLabelPosition): Attached, inside it, floating
 // up while it is focused or filled — or always up (alwaysMinimize: the placeholder, prefix and

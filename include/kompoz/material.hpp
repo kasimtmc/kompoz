@@ -109,7 +109,18 @@ struct TopAppBarScrollBehavior {
     friend bool operator==(const TopAppBarScrollBehavior&, const TopAppBarScrollBehavior&) = default;
 };
 
+// A top app bar's colors (Compose's TopAppBarColors: TopAppBarDefaults.topAppBarColors(containerColor = …)),
+// those left unset the theme's.
+struct TopAppBarColors {
+    std::optional<Color> containerColor, scrolledContainerColor, navigationIconContentColor, titleContentColor, actionIconContentColor,
+        subtitleContentColor;
+    friend bool operator==(const TopAppBarColors&, const TopAppBarColors&) = default;
+};
 namespace TopAppBarDefaults {
+using topAppBarColors = TopAppBarColors;
+using centerAlignedTopAppBarColors = TopAppBarColors;
+using mediumTopAppBarColors = TopAppBarColors;
+using largeTopAppBarColors = TopAppBarColors;
 // Never moves; takes the scrolled container color once content is under it.
 TopAppBarScrollBehavior pinnedScrollBehavior(CallSite site = CallSite::current());
 TopAppBarScrollBehavior pinnedScrollBehavior(const TopAppBarState& state, CallSite site = CallSite::current());
@@ -148,12 +159,23 @@ struct TopAppBarSlots {
     // the large row (Compose's titleHorizontalAlignment; the collapsed one is centered or at the start).
     HorizontalAlignment titleHorizontalAlignment = Alignment::Start;
 };
+namespace detail {
+inline void applyColors(TopAppBarSlots& slots, const TopAppBarColors& colors) {
+    for (auto [field, color] : {std::pair{&TopAppBarSlots::containerColor, colors.containerColor},
+                                std::pair{&TopAppBarSlots::scrolledContainerColor, colors.scrolledContainerColor},
+                                std::pair{&TopAppBarSlots::navigationIconContentColor, colors.navigationIconContentColor},
+                                std::pair{&TopAppBarSlots::titleContentColor, colors.titleContentColor},
+                                std::pair{&TopAppBarSlots::actionIconContentColor, colors.actionIconContentColor},
+                                std::pair{&TopAppBarSlots::subtitleContentColor, colors.subtitleContentColor}})
+        if (color) slots.*field = color;
+}
+} // namespace detail
 
 // Includes the status bar inset.
 namespace detail {
 void TopAppBar(const TopAppBarSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct TopAppBarImpl {
-    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment>;
+    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment, names::Colors>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -169,6 +191,7 @@ struct TopAppBarImpl {
         P::set<names::ScrolledContainerColor>(slots.scrolledContainerColor, args...);
         P::set<names::NavigationIconContentColor>(slots.navigationIconContentColor, args...);
         P::set<names::TitleContentColor>(slots.titleContentColor, args...);
+        if constexpr (P::given<names::Colors, A...>()) detail::applyColors(slots, P::get<names::Colors>(TopAppBarColors{}, args...));
         P::set<names::ActionIconContentColor>(slots.actionIconContentColor, args...);
         P::set<names::SubtitleContentColor>(slots.subtitleContentColor, args...);
         P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
@@ -183,7 +206,7 @@ inline constexpr Composable<detail::TopAppBarImpl> TopAppBar;
 namespace detail {
 void MediumTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct MediumTopAppBarImpl {
-    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment>;
+    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment, names::Colors>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -199,6 +222,7 @@ struct MediumTopAppBarImpl {
         P::set<names::ScrolledContainerColor>(slots.scrolledContainerColor, args...);
         P::set<names::NavigationIconContentColor>(slots.navigationIconContentColor, args...);
         P::set<names::TitleContentColor>(slots.titleContentColor, args...);
+        if constexpr (P::given<names::Colors, A...>()) detail::applyColors(slots, P::get<names::Colors>(TopAppBarColors{}, args...));
         P::set<names::ActionIconContentColor>(slots.actionIconContentColor, args...);
         P::set<names::SubtitleContentColor>(slots.subtitleContentColor, args...);
         P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
@@ -211,7 +235,7 @@ inline constexpr Composable<detail::MediumTopAppBarImpl> MediumTopAppBar;
 namespace detail {
 void LargeTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct LargeTopAppBarImpl {
-    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment>;
+    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment, names::Colors>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -227,6 +251,7 @@ struct LargeTopAppBarImpl {
         P::set<names::ScrolledContainerColor>(slots.scrolledContainerColor, args...);
         P::set<names::NavigationIconContentColor>(slots.navigationIconContentColor, args...);
         P::set<names::TitleContentColor>(slots.titleContentColor, args...);
+        if constexpr (P::given<names::Colors, A...>()) detail::applyColors(slots, P::get<names::Colors>(TopAppBarColors{}, args...));
         P::set<names::ActionIconContentColor>(slots.actionIconContentColor, args...);
         P::set<names::SubtitleContentColor>(slots.subtitleContentColor, args...);
         P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
@@ -242,7 +267,7 @@ inline constexpr Composable<detail::LargeTopAppBarImpl> LargeTopAppBar;
 namespace detail {
 void MediumFlexibleTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct MediumFlexibleTopAppBarImpl {
-    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment>;
+    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment, names::Colors>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -258,6 +283,7 @@ struct MediumFlexibleTopAppBarImpl {
         P::set<names::ScrolledContainerColor>(slots.scrolledContainerColor, args...);
         P::set<names::NavigationIconContentColor>(slots.navigationIconContentColor, args...);
         P::set<names::TitleContentColor>(slots.titleContentColor, args...);
+        if constexpr (P::given<names::Colors, A...>()) detail::applyColors(slots, P::get<names::Colors>(TopAppBarColors{}, args...));
         P::set<names::ActionIconContentColor>(slots.actionIconContentColor, args...);
         P::set<names::SubtitleContentColor>(slots.subtitleContentColor, args...);
         P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
@@ -270,7 +296,7 @@ inline constexpr Composable<detail::MediumFlexibleTopAppBarImpl> MediumFlexibleT
 namespace detail {
 void LargeFlexibleTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct LargeFlexibleTopAppBarImpl {
-    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment>;
+    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment, names::Colors>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -286,6 +312,7 @@ struct LargeFlexibleTopAppBarImpl {
         P::set<names::ScrolledContainerColor>(slots.scrolledContainerColor, args...);
         P::set<names::NavigationIconContentColor>(slots.navigationIconContentColor, args...);
         P::set<names::TitleContentColor>(slots.titleContentColor, args...);
+        if constexpr (P::given<names::Colors, A...>()) detail::applyColors(slots, P::get<names::Colors>(TopAppBarColors{}, args...));
         P::set<names::ActionIconContentColor>(slots.actionIconContentColor, args...);
         P::set<names::SubtitleContentColor>(slots.subtitleContentColor, args...);
         P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
@@ -306,7 +333,7 @@ namespace detail {
 void TwoRowsTopAppBar(const std::function<void(bool expanded)>& title, const TopAppBarSlots& slots, const Modifier& modifier = {},
                       const std::function<void(bool expanded)>& subtitle = {}, CallSite site = CallSite::current());
 struct TwoRowsTopAppBarImpl {
-    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment>;
+    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment, names::Colors>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -321,6 +348,7 @@ struct TwoRowsTopAppBarImpl {
         P::set<names::ScrolledContainerColor>(slots.scrolledContainerColor, args...);
         P::set<names::NavigationIconContentColor>(slots.navigationIconContentColor, args...);
         P::set<names::TitleContentColor>(slots.titleContentColor, args...);
+        if constexpr (P::given<names::Colors, A...>()) detail::applyColors(slots, P::get<names::Colors>(TopAppBarColors{}, args...));
         P::set<names::ActionIconContentColor>(slots.actionIconContentColor, args...);
         P::set<names::SubtitleContentColor>(slots.subtitleContentColor, args...);
         P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
@@ -335,7 +363,7 @@ inline constexpr Composable<detail::TwoRowsTopAppBarImpl> TwoRowsTopAppBar;
 namespace detail {
 void CenterAlignedTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct CenterAlignedTopAppBarImpl {
-    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment>;
+    using P = Params<names::Title, names::Modifier, names::Subtitle, names::NavigationIcon, names::Actions, names::ExpandedHeight, names::CollapsedHeight, names::WindowInsets, names::ContainerColor, names::ScrolledContainerColor, names::NavigationIconContentColor, names::TitleContentColor, names::ActionIconContentColor, names::SubtitleContentColor, names::ScrollBehavior, names::TitleHorizontalAlignment, names::Colors>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -351,6 +379,7 @@ struct CenterAlignedTopAppBarImpl {
         P::set<names::ScrolledContainerColor>(slots.scrolledContainerColor, args...);
         P::set<names::NavigationIconContentColor>(slots.navigationIconContentColor, args...);
         P::set<names::TitleContentColor>(slots.titleContentColor, args...);
+        if constexpr (P::given<names::Colors, A...>()) detail::applyColors(slots, P::get<names::Colors>(TopAppBarColors{}, args...));
         P::set<names::ActionIconContentColor>(slots.actionIconContentColor, args...);
         P::set<names::SubtitleContentColor>(slots.subtitleContentColor, args...);
         P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
@@ -2070,24 +2099,41 @@ BottomAppBarScrollBehavior exitAlwaysScrollBehavior(BottomAppBarState state, Cal
 
 struct BottomAppBarSlots {
     Content actions, floatingActionButton;
+    // Compose's BottomAppBar(…) { content }: a row of its own instead of the actions and the FAB.
+    Content content;
     std::optional<Color> containerColor;
+    std::optional<Color> contentColor;  // unset: onSurfaceVariant (the content's: its container's own)
     bool windowInsets = true;  // pad by the navigation bar
     std::optional<BottomAppBarScrollBehavior> scrollBehavior;
 };
 namespace detail {
 void BottomAppBar(const BottomAppBarSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct BottomAppBarImpl {
-    using P = Params<names::Actions, names::Modifier, names::FloatingActionButton, names::ContainerColor, names::WindowInsets, names::ScrollBehavior>;
+    using P = Params<names::Actions, names::Modifier, names::FloatingActionButton, names::ContainerColor, names::ContentColor, names::WindowInsets, names::ScrollBehavior>;
+    using WithContent = Params<names::Modifier, names::ContainerColor, names::ContentColor, names::WindowInsets, names::ScrollBehavior, Block>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
-        static_assert(P::check<A...>());
-        BottomAppBarSlots slots;
-        P::set<names::Actions>(slots.actions, args...);
-        P::set<names::FloatingActionButton>(slots.floatingActionButton, args...);
-        P::set<names::ContainerColor>(slots.containerColor, args...);
-        P::set<names::WindowInsets>(slots.windowInsets, args...);
-        P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
-        BottomAppBar(slots, P::get<names::Modifier>(Modifier{}, args...), site);
+        if constexpr (countOf<names::Actions, A...> == 0 && WithContent::blockGiven<A...>()) {  // BottomAppBar(…) { content }
+            using Q = WithContent;
+            static_assert(Q::check<A...>());
+            BottomAppBarSlots slots;
+            slots.content = Q::block(std::forward<A>(args)...);
+            Q::set<names::ContainerColor>(slots.containerColor, args...);
+            Q::set<names::ContentColor>(slots.contentColor, args...);
+            Q::set<names::WindowInsets>(slots.windowInsets, args...);
+            Q::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
+            BottomAppBar(slots, Q::get<names::Modifier>(Modifier{}, args...), site);
+        } else {
+            static_assert(P::check<A...>());
+            BottomAppBarSlots slots;
+            P::set<names::Actions>(slots.actions, args...);
+            P::set<names::FloatingActionButton>(slots.floatingActionButton, args...);
+            P::set<names::ContainerColor>(slots.containerColor, args...);
+            P::set<names::ContentColor>(slots.contentColor, args...);
+            P::set<names::WindowInsets>(slots.windowInsets, args...);
+            P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
+            BottomAppBar(slots, P::get<names::Modifier>(Modifier{}, args...), site);
+        }
     }
 };
 } // namespace detail

@@ -716,6 +716,16 @@
   bir composable adı verilen biçimi (`Icon(painter = …)`, `TextField(state = …)`, `Card(onClick = …)`) ya da ilk
   argümanın türünün gösterdiğini alıyor. Metin alanları ve kaydırıcılar Compose'un `colors =`'ını da alıyor (C++'ta
   `kompoz::arg::colors` diye yazılıyor; `kompoz::colors` renklerin ad alanı).
+- **Compose'un renk nesneleri ve adlı üyeler**: `CardDefaults.cardColors(…)`, `TextFieldDefaults.colors(…)`,
+  `ButtonDefaults.textButtonColors(…)` (ve öteki düğmelerinki), `TopAppBarDefaults.topAppBarColors(…)`; kartların,
+  metin alanlarının, düğmelerin ve üst uygulama çubuklarının `colors =` ile aldığı `CardColors`, `TextFieldColors`,
+  `ButtonColors` ve `TopAppBarColors` yapıları (C++'ta `TextFieldDefaults::colors{…}`); verilmeyenler temanınki.
+  Kartlar `shape =` ve tıklanabilirken `enabled =` alıyor (Compose 1.4'ün devre dışı renkleri). Blok verilen
+  `BottomAppBar(…) { … }` Compose'un içerik biçimi (kendi satırı; `contentColor` kabının kendi rengi). `Color.Red`,
+  `Color.Transparent`, … `Color`'ın sabitleri de. Modifier'ın `padding`, `background`, `border`, `size` ve `offset`'i
+  ile `Color::copy` Compose'un adlı argümanlarını alıyor (`border(width = 1, color = c, shape = s)`,
+  `copy(alpha = 0.6f)`); C++'ta `kompoz::arg::width = …` diye yazılıyor. kompozc ile kullanıcının kendi
+  `AddTextDialog`'u ve Compose'un Scaffold örneği Android için yazıldıkları gibi derleniyor (tests/compose_tests.cpp).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

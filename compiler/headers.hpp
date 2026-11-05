@@ -17,6 +17,8 @@ struct Structs {
     std::map<std::string, std::vector<std::string>, std::less<>> fields;  // by the struct's name
     std::set<std::string, std::less<>> ambiguous;  // two structs of that name with other fields: neither is used
     std::set<std::filesystem::path> read;          // the headers read (for the build's dependencies)
+    // using colors = TextFieldColors;: a struct under another name (TextFieldDefaults.colors(…)).
+    std::map<std::string, std::set<std::string>, std::less<>> aliases;
 
     const std::vector<std::string>* find(std::string_view name) const;
     // A header's structs, and those of the headers it includes with quotes, found next to it.

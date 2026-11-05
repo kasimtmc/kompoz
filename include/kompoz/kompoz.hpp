@@ -25,6 +25,7 @@
 #include "media_query.hpp"
 #include "scrollbar.hpp"
 #include "named.hpp"
+#include "named_members.hpp"
 #include "nav_host.hpp"
 #include "nested_scroll.hpp"
 #include "pager.hpp"

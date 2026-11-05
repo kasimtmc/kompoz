@@ -140,8 +140,19 @@ std::vector<std::string> fieldsOf(const std::string& statement, const std::strin
 
 const std::vector<std::string>* Structs::find(std::string_view name) const {
     if (ambiguous.contains(name)) return nullptr;
-    auto f = fields.find(name);
-    return f == fields.end() ? nullptr : &f->second;
+    if (auto f = fields.find(name); f != fields.end()) return &f->second;
+    // An alias: of one struct, or of several with the same fields.
+    auto a = aliases.find(name);
+    if (a == aliases.end()) return nullptr;
+    const std::vector<std::string>* found = nullptr;
+    for (const std::string& target : a->second) {
+        if (ambiguous.contains(target)) return nullptr;
+        auto f = fields.find(target);
+        if (f == fields.end()) continue;
+        if (found && *found != f->second) return nullptr;
+        found = &f->second;
+    }
+    return found;
 }
 
 void Structs::readIncludes(std::string_view source, const fs::path& dir) {
@@ -178,6 +189,20 @@ void Structs::readHeader(const fs::path& header) {
 
 void Structs::readText(std::string_view src) {
     std::string text = stripped(src);
+    // using Name = Some::Struct;
+    for (size_t i = 0; (i = text.find("using", i)) != std::string::npos; i += 5) {
+        if ((i > 0 && identChar(text[i - 1])) || (i + 5 < text.size() && identChar(text[i + 5]))) continue;
+        size_t semi = text.find(';', i);
+        if (semi == std::string::npos) break;
+        std::string decl = trim(std::string_view(text).substr(i + 5, semi - i - 5));
+        size_t eq = decl.find('=');
+        if (eq == std::string::npos || decl.find_first_of("<(") != std::string::npos) continue;
+        std::string alias = trim(std::string_view(decl).substr(0, eq)), target = trim(std::string_view(decl).substr(eq + 1));
+        if (size_t colon = target.rfind("::"); colon != std::string::npos) target = target.substr(colon + 2);
+        bool plain = !alias.empty() && !target.empty();
+        for (char c : alias + target) plain = plain && identChar(c);
+        if (plain) aliases[alias].insert(target);
+    }
 
     for (size_t i = 0; (i = text.find("struct", i)) != std::string::npos; i += 6) {
         if ((i > 0 && identChar(text[i - 1])) || (i + 6 < text.size() && identChar(text[i + 6]))) continue;

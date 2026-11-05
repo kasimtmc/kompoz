@@ -1801,6 +1801,24 @@ public:
     Modifier border(float width, Color color, Shape shape) const;
     // A BorderStroke's: a color, or a brush (a gradient border), `width` inside the shape.
     Modifier border(const BorderStroke& border, Shape shape = RectangleShape) const;
+    // Compose's named arguments (named_members.hpp): padding(horizontal = 16, vertical = 8),
+    // padding(start = 8, top = 4), background(brush = b, shape = s), border(width = 1, color = c,
+    // shape = s), size(width = 40, height = 20), offset(x = 4, y = 0).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier padding(A&&... args) const;
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier background(A&&... args) const;
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier border(A&&... args) const;
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier size(A&&... args) const;
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier offset(A&&... args) const;
     // Clips what follows to `shape` (rounded shapes render through an offscreen layer).
     Modifier clip(Shape shape) const;
     // Draws what follows with `alpha` opacity (through an offscreen layer when 0 < alpha < 1).
