@@ -1,7 +1,9 @@
 #include "codegen.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <set>
+#include <utility>
 #include <vector>
 
 namespace kompozc {
@@ -57,6 +59,30 @@ const std::map<std::string, std::string, std::less<>> kObjectProperties = {
     {"MaterialTheme.shapes", "::kompoz::shapes()"},
 };
 
+// Kotlin's standard functions, from kotlin.hpp: listOf(1, 2) -> kt::listOf(1, 2).
+const std::set<std::string, std::less<>> kKtFunctions = {
+    "listOf", "mutableListOf", "emptyList", "arrayListOf", "setOf", "mutableSetOf", "emptySet", "mapOf", "mutableMapOf",
+    "emptyMap", "repeat", "println", "maxOf", "minOf", "require", "check", "error", "TODO"};
+
+// Members of Kotlin's standard types, from kotlin.hpp: text.trim() -> kt::trim(text). Each uses the
+// value's own member of that name where it has one.
+const std::set<std::string, std::less<>> kKtMembers = {
+    "forEach", "forEachIndexed", "map", "mapIndexed", "filter", "filterNot", "isEmpty", "isNotEmpty", "isBlank",
+    "isNotBlank", "trim", "trimIndent", "uppercase", "lowercase", "toInt", "toFloat", "toDouble", "toLong", "toString",
+    "first", "last", "firstOrNull", "lastOrNull", "joinToString", "startsWith", "endsWith", "contains", "substring",
+    "take", "drop", "reversed", "sorted", "sortedBy", "any", "all", "none", "count", "sum", "sumOf", "indexOf",
+    "getOrNull", "let", "also", "takeIf", "withIndex", "toList", "toMutableList", "distinct", "split", "replace",
+    "coerceIn", "coerceAtLeast", "coerceAtMost", "roundToInt", "find"};
+
+// Calls whose lambda is a coroutine (Kotlin's suspend lambdas): [=]() -> Task { ...; co_return; }.
+const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "async", "produceState"};
+
+// Suspending functions: in a coroutine, awaited (co_await).
+const std::set<std::string, std::less<>> kSuspendCalls = {
+    "delay", "withFrameNanos", "withFrameMillis", "awaitFrame", "animateTo", "snapTo", "animateScrollToItem",
+    "scrollToItem", "animateScrollToPage", "scrollToPage", "animateScrollBy", "scrollBy", "show", "hide", "open", "close",
+    "expand", "partialExpand", "showSnackbar", "collect", "collectLatest", "emit", "join", "await", "withBackground"};
+
 const std::set<std::string, std::less<>> kCppKeywords = {
     "alignas", "alignof", "and", "asm", "auto", "bitand", "bitor", "bool", "case", "catch", "char", "compl", "concept", "const",
     "consteval", "constexpr", "constinit", "const_cast", "co_await", "co_return", "co_yield", "decltype", "default", "delete",
@@ -102,7 +128,7 @@ public:
     std::string type(const Type& t) {
         std::string s;
         if (t.function) {
-            if (t.receiver) throw CompileError(t.pos, "function types with a receiver (" + t.receiver->name + ".() -> ...) aren't supported yet");
+            // RowScope.() -> Unit: what the receiver gives (weight, items, ...) Kompoz has on its own.
             if (t.composable && t.params.empty() && t.result && t.result->name == "Unit") return "::kompoz::Content";
             s = "std::function<" + (t.result ? type(*t.result) : std::string("void")) + "(";
             for (size_t i = 0; i < t.params.size(); ++i) s += (i ? ", " : "") + type(t.params[i]);
@@ -215,7 +241,7 @@ private:
             case Node::Decl: return declaration(s);
             case Node::Assign: return assignment(s);
             case Node::Return:
-                out_.text("return");
+                out_.text(suspend_ ? "co_return" : "return");
                 if (!s.kids.empty()) {
                     out_.text(" ");
                     expr(*s.kids[0]);
@@ -286,10 +312,9 @@ private:
         auto rhs = [&] {
             if (op == "=") {
                 expr(*a.kids[1]);
-            } else {
-                out_.text("::kompoz::kt::value(");
+            } else {  // x += v: x's value (a state's read through) and v
                 expr(target);
-                out_.text(") " + op.substr(0, 1) + " (");
+                out_.text(" " + op.substr(0, 1) + " (");
                 expr(*a.kids[1]);
                 out_.text(")");
             }
@@ -457,6 +482,10 @@ private:
             out_.text("::kompoz::Modifier()");
             return;
         }
+        if (e.text == "Unit") {
+            out_.text("::kompoz::kt::Unit");
+            return;
+        }
         out_.text(cppName(e.text));
     }
 
@@ -509,8 +538,15 @@ private:
     }
 
     void member(const Node& e) {
-        const Node& obj = *e.kids[0];
-        if (e.flag) throw CompileError(e.pos, "?. isn't supported yet");
+        if (e.text == "Companion") return expr(companionless(e));
+        const Node& obj = companionless(*e.kids[0]);
+        if (e.flag) {  // a?.b
+            out_.text("::kompoz::kt::safe(");
+            expr(obj);
+            out_.text(e.text == "size" || e.text == "length" ? ", [&](auto&& kompoz_safe) { return ::kompoz::kt::size(kompoz_safe); })"
+                                                               : ", [&](auto&& kompoz_safe) { return kompoz_safe." + cppName(e.text) + "; })");
+            return;
+        }
         if (obj.kind == Node::Member || obj.kind == Node::Name) {
             if (qualifier(obj)) {
                 auto special = kObjectProperties.find(dotted(obj) + "." + e.text);
@@ -556,37 +592,74 @@ private:
         out_.text("." + cppName(e.text));
     }
 
+    // X.Companion is X.
+    static const Node& companionless(const Node& n) {
+        return n.kind == Node::Member && n.text == "Companion" ? companionless(*n.kids[0]) : n;
+    }
+
     void call(const Node& c) {
-        const Node& callee = *c.kids[0];
+        const Node& callee = companionless(*c.kids[0]);
         std::string calleeName = callee.kind == Node::Name ? callee.text : callee.kind == Node::Member ? callee.text : "";
-        bool valueLambda = kValueLambdas.contains(calleeName);
+        if (suspend_ && kSuspendCalls.contains(calleeName)) out_.text("co_await ");
         // A @Composable kompozc translates: arguments by position, defaults filled in.
         if (callee.kind == Node::Name && !lookup(callee.text)) {
             if (auto f = module_.find(callee.text); f != module_.end()) return moduleCall(c, *f->second);
+            if (kKtFunctions.contains(callee.text) || (suspend_ && callee.text == "delay")) {
+                out_.text("::kompoz::kt::" + callee.text);
+                return arguments(c, calleeName, false);
+            }
         }
-        if (callee.kind == Node::Member && callee.kids[0]->kind == Node::Name && callee.kids[0]->text == "Modifier" && !lookup("Modifier")) {
-            out_.text("::kompoz::Modifier()." + cppName(callee.text));
-        } else {
-            expr(callee);
+        if (callee.kind == Node::Member) {
+            const Node& obj = companionless(*callee.kids[0]);
+            if (callee.flag) {  // a?.f(x): f called only when a isn't null
+                out_.text("::kompoz::kt::safe(");
+                expr(obj);
+                out_.text(", [&](auto&& kompoz_safe) { return ");
+                if (kKtMembers.contains(callee.text)) {
+                    out_.text("::kompoz::kt::" + callee.text + "(kompoz_safe");
+                    arguments(c, calleeName, true, true);
+                } else {
+                    out_.text("kompoz_safe." + cppName(callee.text));
+                    arguments(c, calleeName, false);
+                }
+                out_.text("; })");
+                return;
+            }
+            if (obj.kind == Node::Name && obj.text == "Modifier" && !lookup("Modifier")) {
+                out_.text("::kompoz::Modifier()." + cppName(callee.text));
+                return arguments(c, calleeName, false);
+            }
+            if (kKtMembers.contains(callee.text) && !qualifier(obj)) {
+                out_.text("::kompoz::kt::" + callee.text + "(");
+                expr(obj);
+                return arguments(c, calleeName, true, true);
+            }
         }
+        expr(callee);
         if (!c.typeArgs.empty()) {
             out_.text("<");
             for (size_t i = 0; i < c.typeArgs.size(); ++i) out_.text((i ? ", " : "") + type(c.typeArgs[i]));
             out_.text(">");
         }
-        out_.text("(");
-        bool any = false;
-        // As written; named ones as kompoz's named arguments; the trailing lambda last.
+        arguments(c, calleeName, false);
+    }
+
+    // (args): as written, named ones as kompoz's named arguments, the trailing lambda last.
+    // `positional`: names dropped (kotlin.hpp's functions take their arguments by position);
+    // `after`: the parenthesis is open and the first argument written.
+    void arguments(const Node& c, const std::string& calleeName, bool positional, bool after = false) {
+        if (!after) out_.text("(");
+        bool any = after;
         for (size_t i = 0; i < c.kids.size() - 1; ++i) {
             if (any) out_.text(", ");
             any = true;
             const std::string& n = c.names[i];
-            if (!n.empty()) out_.text("::kompoz::" + n + " = ");
+            if (!n.empty() && !positional) out_.text("::kompoz::" + n + " = ");
             expr(*c.kids[i + 1]);
         }
         if (c.lambda) {
             if (any) out_.text(", ");
-            lambda(*c.lambda, valueLambda);
+            lambda(*c.lambda, kValueLambdas.contains(calleeName), kSuspendLambdas.contains(calleeName));
         }
         out_.text(")");
     }
@@ -627,24 +700,29 @@ private:
         out_.text(")");
     }
 
-    void lambda(const Node& l, bool value) {
+    void lambda(const Node& l, bool value, bool suspend = false) {
+        bool wasSuspend = std::exchange(suspend_, suspend);
         out_.text("[=](");
         scopes_.emplace_back();
-        if (l.flag) {
+        if (suspend) {
+            // A coroutine (Kotlin's suspend lambda): its CoroutineScope receiver has no name here.
+        } else if (l.flag) {
             for (size_t i = 0; i < l.names.size(); ++i) {
                 out_.text((i ? ", " : "") + std::string("auto ") + cppName(l.names[i]));
                 declare(l.names[i], Local);
             }
-        } else if (usesIt(&l)) {
+        } else if (std::any_of(l.kids.begin(), l.kids.end(), [](const NodeP& k) { return usesIt(k.get()); })) {
             out_.text("auto it");
             declare("it", Local);
         } else {
             out_.text("auto&&...");  // { ... } where the type has parameters it doesn't use
         }
-        out_.text(") {");
+        out_.text(suspend ? ") -> ::kompoz::Task {" : ") {");
         for (size_t i = 0; i < l.kids.size(); ++i) statement(*l.kids[i], value && i + 1 == l.kids.size());
+        if (suspend) out_.text(" co_return;");
         scopes_.pop_back();
         out_.text(" }");
+        suspend_ = wasSuspend;
     }
 
     void unary(const Node& u) {
@@ -734,6 +812,7 @@ private:
 
     Output& out_;
     const Module& module_;
+    bool suspend_ = false;  // in a coroutine
     std::vector<std::map<std::string, VarKind, std::less<>>> scopes_;
 };
 

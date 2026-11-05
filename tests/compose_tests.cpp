@@ -120,6 +120,55 @@ TEST(string_templates_write_numbers_as_kotlin_does) {
     CHECK(rule.onNodeWithTag("t").text() == "6 harf, 2.5, 3.0, 5.0");
 }
 
+@Composable
+fun Collections() {
+    val names = listOf("ayla", "ali", "veli")
+    Column {
+        names.filter { it.startsWith("a") }.forEach { Text(it.uppercase()) }
+        Text(names.map { it.length }.joinToString("+"), modifier = Modifier.Companion.testTag("lengths"))
+        val text = """
+            bir
+              iki
+        """.trimIndent()
+        Text(text, modifier = Modifier.testTag("indent"))
+        val maybe: String? = null
+        val some: String? = "dört"
+        Text(maybe?.length?.toString() ?: "yok")
+        Text("var: ${some?.length ?: 0}")
+        for ((i, name) in names.withIndex()) {
+            if (i == 2) Text("son: $name")
+        }
+    }
+}
+
+TEST(kotlin_standard_functions) {
+    ComposeTestRule rule([] { Collections(); });
+    CHECK(rule.onNodeWithText("AYLA").exists() && rule.onNodeWithText("ALI").exists() && !rule.onNodeWithText("VELI").exists());
+    CHECK(rule.onNodeWithTag("lengths").text() == "4+3+4");
+    CHECK(rule.onNodeWithTag("indent").text() == "bir\n  iki");
+    CHECK(rule.onNodeWithText("yok").exists() && rule.onNodeWithText("var: 4").exists() && rule.onNodeWithText("son: veli").exists());
+}
+
+@Composable
+fun Ticker() {
+    var ticks by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (ticks < 3) {
+            delay(100)
+            ticks += 1
+        }
+    }
+    Text("tik $ticks")
+}
+
+TEST(launched_effect_is_a_coroutine) {
+    ComposeTestRule rule([] { Ticker(); });
+    rule.advanceTimeBy(150);
+    CHECK(rule.onNodeWithText("tik 1").exists());
+    rule.advanceTimeBy(500);
+    CHECK(rule.onNodeWithText("tik 3").exists());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

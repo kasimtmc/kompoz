@@ -698,7 +698,11 @@
   Unit dönen bir işlev yeniden başlatılabilen, atlanabilen bir composable oluyor; dosyanın kendi işlevlerine yapılan
   çağrılar adlı argümanları her sırada alıyor, varsayılanlar yazılmayabiliyor; sondaki lambdalar, `it`,
   `val`/`var`/`by`, metin şablonları (sayılar Kotlin'in yazdığı gibi), `16.dp`, değer olarak `if`/`when`, aralıklar
-  (`until`, `downTo`, `step`, `..`) ve listeler üzerinde `for`, `while`, `?:`, `!!` ve `null`. Lambdalar Kotlin'inkiler
+  (`until`, `downTo`, `step`, `..`) ve listeler üzerinde `for`, `while`, `?:`, `?.`, `!!` ve `null`; Kotlin'in
+  standart işlevleri (`listOf`, `filter`, `map`, `forEach`, `joinToString`, `trimIndent`, `isNotBlank`,
+  `withIndex`, ...; bir türün aynı adlı kendi üyesi önce gelir); `LaunchedEffect` ya da `launch` bloğu, `delay` ve
+  öteki bekleyen çağrıları beklenen bir eşyordam; `Modifier.Companion`, anahtar olarak `Unit` ve `RowScope.() -> Unit`
+  içerik. Lambdalar Kotlin'inkiler
   gibi değerleri kopyalayarak yakalıyor; kendi başına yeniden çalışan bir blok boşa çıkmış bir başvuru tutamıyor.
   C++ derleyicisinin iletileri kaynağın kendi satırlarını gösteriyor (`#line`).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez

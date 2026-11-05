@@ -4,16 +4,23 @@
 // templates, null, ranges, `in`, `?:`, `!!`, a state's value. Code written by hand has no need
 // of it.
 
+#include "coroutines.hpp"
 #include "runtime.hpp"
 
+#include <algorithm>
 #include <charconv>
+#include <chrono>
 #include <cmath>
 #include <functional>
+#include <map>
 #include <optional>
+#include <set>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace kompoz::kt {
 
@@ -94,16 +101,21 @@ std::string str(const T&... parts) {
 
 // ---- null ----
 
-// Kotlin's null: an empty optional, an empty function, a null pointer.
+// Kotlin's null: an empty optional, an empty function. (No pointer: a std::string would take it
+// for a const char*.)
 struct Null {
     template <class T>
     operator std::optional<T>() const { return std::nullopt; }
     template <class F>
     operator std::function<F>() const { return nullptr; }
-    template <class T>
-    operator T*() const { return nullptr; }
 };
 inline constexpr Null null{};
+
+// Kotlin's Unit as a value: LaunchedEffect(Unit) { ... }.
+struct UnitValue {
+    bool operator==(const UnitValue&) const = default;
+};
+inline constexpr UnitValue Unit{};
 
 template <class T>
 bool isNull(const T& v) {
@@ -218,6 +230,498 @@ int size(const C& c) {
         return int(c.length);
     }
 }
+
+// a?.f(): f(a) when a isn't null; a nullable of what it gives (nothing, for a Unit f).
+template <class T, class F>
+auto safe(const T& a, F&& f) {
+    using R = decltype(f(notNull(a)));
+    if constexpr (std::is_void_v<R>) {
+        if (!isNull(a)) f(notNull(a));
+    } else if constexpr (requires(R r) { r.has_value(); }) {  // (a nullable already: not wrapped twice)
+        if (isNull(a)) return R{};
+        return R(f(notNull(a)));
+    } else {
+        using O = std::optional<std::decay_t<R>>;
+        if (isNull(a)) return O{};
+        return O(f(notNull(a)));
+    }
+}
+
+// ---- Coroutines: delay(300) in a LaunchedEffect ----
+
+inline auto delay(long long milliseconds) { return ::kompoz::delay(std::chrono::milliseconds(milliseconds)); }
+
+// ---- Collections: listOf, mapOf, ... ----
+
+template <class T, class... R>
+std::vector<std::decay_t<T>> listOf(T&& first, R&&... rest) {
+    return {std::forward<T>(first), std::forward<R>(rest)...};
+}
+template <class T = int>
+std::vector<T> listOf() {
+    return {};
+}
+template <class... T>
+auto mutableListOf(T&&... v) {
+    return listOf(std::forward<T>(v)...);
+}
+template <class... T>
+auto arrayListOf(T&&... v) {
+    return listOf(std::forward<T>(v)...);
+}
+template <class T = int>
+std::vector<T> emptyList() {
+    return {};
+}
+template <class T, class... R>
+std::set<std::decay_t<T>> setOf(T&& first, R&&... rest) {
+    return {std::forward<T>(first), std::forward<R>(rest)...};
+}
+template <class... T>
+auto mutableSetOf(T&&... v) {
+    return setOf(std::forward<T>(v)...);
+}
+template <class T = int>
+std::set<T> emptySet() {
+    return {};
+}
+template <class K, class V, class... R>
+std::map<K, V> mapOf(std::pair<K, V> first, R&&... rest) {
+    return {std::move(first), std::forward<R>(rest)...};
+}
+template <class... T>
+auto mutableMapOf(T&&... v) {
+    return mapOf(std::forward<T>(v)...);
+}
+template <class K = int, class V = int>
+std::map<K, V> emptyMap() {
+    return {};
+}
+
+template <class F>
+void repeat(int times, F&& action) {
+    for (int i = 0; i < times; ++i) action(i);
+}
+template <class... T>
+void println(const T&... v) {
+    std::fputs((str(v...) + "\n").c_str(), stdout);
+}
+template <class A, class B>
+auto maxOf(const A& a, const B& b) {
+    return a < b ? b : a;
+}
+template <class A, class B>
+auto minOf(const A& a, const B& b) {
+    return b < a ? b : a;
+}
+template <class F = int>
+void require(bool condition, F&& message = 0) {
+    if (!condition) throw std::invalid_argument(str(message));
+}
+template <class F = int>
+void check(bool condition, F&& message = 0) {
+    if (!condition) throw std::logic_error(str(message));
+}
+[[noreturn]] inline void error(const std::string& message) { throw std::logic_error(message); }
+[[noreturn]] inline void TODO(const std::string& reason = "") { throw std::logic_error("not implemented: " + reason); }
+
+// ---- Members of Kotlin's standard types: kt::trim(text) for text.trim() ----
+//
+// Each uses the value's own member of the same name where it has one (a Kompoz type's).
+
+#define KOMPOZ_KT_OWN(...)                   \
+    if constexpr (requires { c.__VA_ARGS__; }) \
+        return c.__VA_ARGS__;                  \
+    else
+
+namespace detail {
+inline bool space(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v'; }
+template <class C>
+using Element = std::decay_t<decltype(*std::begin(std::declval<const C&>()))>;
+}  // namespace detail
+
+template <class C, class F, class... A>
+void forEach(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(forEach(f)) for (const auto& v : c) f(v);
+}
+template <class C, class F, class... A>
+void forEachIndexed(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(forEachIndexed(f)) {
+        int i = 0;
+        for (const auto& v : c) f(i++, v);
+    }
+}
+template <class C, class F, class... A>
+auto map(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(map(f)) {
+        std::vector<std::decay_t<decltype(f(*std::begin(c)))>> out;
+        for (const auto& v : c) out.push_back(f(v));
+        return out;
+    }
+}
+template <class C, class F, class... A>
+auto mapIndexed(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(mapIndexed(f)) {
+        std::vector<std::decay_t<decltype(f(0, *std::begin(c)))>> out;
+        int i = 0;
+        for (const auto& v : c) out.push_back(f(i++, v));
+        return out;
+    }
+}
+template <class C, class F, class... A>
+auto filter(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(filter(f)) {
+        std::vector<detail::Element<C>> out;
+        for (const auto& v : c)
+            if (f(v)) out.push_back(v);
+        return out;
+    }
+}
+template <class C, class F, class... A>
+auto filterNot(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(filterNot(f)) return filter(c, [&](const auto& v) { return !f(v); });
+}
+template <class C, class... A>
+bool isEmpty(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(isEmpty()) return size(c) == 0;
+}
+template <class C, class... A>
+bool isNotEmpty(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(isNotEmpty()) return size(c) != 0;
+}
+template <class C, class... A>
+bool isBlank(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(isBlank()) return std::all_of(std::string_view(c).begin(), std::string_view(c).end(), detail::space);
+}
+template <class C, class... A>
+bool isNotBlank(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(isNotBlank()) return !isBlank(c);
+}
+template <class C, class... A>
+std::string trim(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(trim()) {
+        std::string_view v(c);
+        while (!v.empty() && detail::space(v.front())) v.remove_prefix(1);
+        while (!v.empty() && detail::space(v.back())) v.remove_suffix(1);
+        return std::string(v);
+    }
+}
+// """...""".trimIndent(): the first and last lines dropped if blank, the indent all lines share removed.
+template <class C, class... A>
+std::string trimIndent(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(trimIndent()) {
+        std::vector<std::string_view> lines;
+        std::string_view v(c);
+        for (size_t at = 0;;) {
+            size_t nl = v.find('\n', at);
+            lines.push_back(v.substr(at, nl == std::string_view::npos ? std::string_view::npos : nl - at));
+            if (nl == std::string_view::npos) break;
+            at = nl + 1;
+        }
+        auto blank = [](std::string_view l) { return std::all_of(l.begin(), l.end(), detail::space); };
+        if (!lines.empty() && blank(lines.front())) lines.erase(lines.begin());
+        if (!lines.empty() && blank(lines.back())) lines.pop_back();
+        size_t indent = std::string_view::npos;
+        for (auto l : lines)
+            if (!blank(l)) indent = std::min(indent, l.find_first_not_of(" \t"));
+        std::string out;
+        for (size_t i = 0; i < lines.size(); ++i) {
+            if (i) out += '\n';
+            if (!blank(lines[i])) out += lines[i].substr(indent);
+        }
+        return out;
+    }
+}
+template <class C, class... A>
+std::string uppercase(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(uppercase()) {
+        std::string s(c);
+        for (char& ch : s)
+            if (ch >= 'a' && ch <= 'z') ch = char(ch - 'a' + 'A');
+        return s;
+    }
+}
+template <class C, class... A>
+std::string lowercase(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(lowercase()) {
+        std::string s(c);
+        for (char& ch : s)
+            if (ch >= 'A' && ch <= 'Z') ch = char(ch - 'A' + 'a');
+        return s;
+    }
+}
+template <class C, class... A>
+auto toInt(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(toInt()) if constexpr (std::is_arithmetic_v<C>) return int(c);
+    else return std::stoi(std::string(c));
+}
+template <class C, class... A>
+auto toLong(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(toLong()) if constexpr (std::is_arithmetic_v<C>) return (long long)(c);
+    else return std::stoll(std::string(c));
+}
+template <class C, class... A>
+auto toFloat(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(toFloat()) if constexpr (std::is_arithmetic_v<C>) return float(c);
+    else return std::stof(std::string(c));
+}
+template <class C, class... A>
+auto toDouble(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(toDouble()) if constexpr (std::is_arithmetic_v<C>) return double(c);
+    else return std::stod(std::string(c));
+}
+template <class C, class... A>
+std::string toString(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(toString()) return str(c);
+}
+template <class C, class... A>
+decltype(auto) first(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(first()) {
+        if (std::begin(c) == std::end(c)) throw std::out_of_range("the list is empty");
+        return *std::begin(c);
+    }
+}
+template <class C, class... A>
+decltype(auto) last(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(last()) {
+        if (std::begin(c) == std::end(c)) throw std::out_of_range("the list is empty");
+        return *std::prev(std::end(c));
+    }
+}
+template <class C, class... A>
+auto firstOrNull(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(firstOrNull()) {
+        if (std::begin(c) == std::end(c)) return std::optional<detail::Element<C>>{};
+        return std::optional<detail::Element<C>>(*std::begin(c));
+    }
+}
+template <class C, class... A>
+auto lastOrNull(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(lastOrNull()) {
+        if (std::begin(c) == std::end(c)) return std::optional<detail::Element<C>>{};
+        return std::optional<detail::Element<C>>(*std::prev(std::end(c)));
+    }
+}
+template <class C, class... A>
+std::string joinToString(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(joinToString(args...)) {
+        std::string separator = ", ";
+        if constexpr (sizeof...(A) > 0) separator = std::string(std::get<0>(std::forward_as_tuple(args...)));
+        std::string out;
+        bool any = false;
+        for (const auto& v : c) {
+            if (any) out += separator;
+            any = true;
+            out += str(v);
+        }
+        return out;
+    }
+}
+template <class C, class X, class... A>
+bool startsWith(const C& c, const X& x, A&&... args) {
+    KOMPOZ_KT_OWN(startsWith(x)) return std::string_view(c).starts_with(std::string_view(x));
+}
+template <class C, class X, class... A>
+bool endsWith(const C& c, const X& x, A&&... args) {
+    KOMPOZ_KT_OWN(endsWith(x)) return std::string_view(c).ends_with(std::string_view(x));
+}
+template <class C, class... A>
+std::string substring(const C& c, int from, A&&... args) {
+    KOMPOZ_KT_OWN(substring(from, args...)) {
+        std::string_view v(c);
+        if constexpr (sizeof...(A) > 0) return std::string(v.substr(size_t(from), size_t(int(std::get<0>(std::forward_as_tuple(args...))) - from)));
+        else return std::string(v.substr(size_t(from)));
+    }
+}
+template <class C, class... A>
+auto reversed(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(reversed()) {
+        std::vector<detail::Element<C>> out(std::begin(c), std::end(c));
+        std::reverse(out.begin(), out.end());
+        return out;
+    }
+}
+template <class C, class... A>
+auto sorted(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(sorted()) {
+        std::vector<detail::Element<C>> out(std::begin(c), std::end(c));
+        std::stable_sort(out.begin(), out.end());
+        return out;
+    }
+}
+template <class C, class F, class... A>
+auto sortedBy(const C& c, F&& key, A&&... args) {
+    KOMPOZ_KT_OWN(sortedBy(key)) {
+        std::vector<detail::Element<C>> out(std::begin(c), std::end(c));
+        std::stable_sort(out.begin(), out.end(), [&](const auto& a, const auto& b) { return key(a) < key(b); });
+        return out;
+    }
+}
+template <class C, class F, class... A>
+bool any(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(any(f)) return std::any_of(std::begin(c), std::end(c), f);
+}
+template <class C, class F, class... A>
+bool all(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(all(f)) return std::all_of(std::begin(c), std::end(c), f);
+}
+template <class C, class F, class... A>
+bool none(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(none(f)) return std::none_of(std::begin(c), std::end(c), f);
+}
+template <class C, class... A>
+int count(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(count(args...)) if constexpr (sizeof...(A) == 0) return size(c);
+    else return int(std::count_if(std::begin(c), std::end(c), args...));
+}
+template <class C, class... A>
+int indexOf(const C& c, const A&... args) {
+    if constexpr (requires { c.indexOf(args...); }) {
+        return c.indexOf(args...);
+    } else if constexpr (std::is_convertible_v<const C&, std::string_view>) {
+        size_t at = std::string_view(c).find(args...);
+        return at == std::string_view::npos ? -1 : int(at);
+    } else {
+        int i = 0;
+        for (const auto& v : c) {
+            if (((v == args) && ...)) return i;
+            ++i;
+        }
+        return -1;
+    }
+}
+template <class C, class... A>
+auto getOrNull(const C& c, int i, A&&... args) {
+    KOMPOZ_KT_OWN(getOrNull(i)) {
+        if (i < 0 || i >= size(c)) return std::optional<detail::Element<C>>{};
+        return std::optional<detail::Element<C>>(*std::next(std::begin(c), i));
+    }
+}
+template <class C, class... A>
+auto withIndex(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(withIndex()) {
+        std::vector<std::pair<int, detail::Element<C>>> out;
+        int i = 0;
+        for (const auto& v : c) out.emplace_back(i++, v);
+        return out;
+    }
+}
+template <class C, class... A>
+auto toList(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(toList()) return std::vector<detail::Element<C>>(std::begin(c), std::end(c));
+}
+template <class C, class... A>
+auto toMutableList(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(toMutableList()) return std::vector<detail::Element<C>>(std::begin(c), std::end(c));
+}
+template <class T, class F, class... A>
+auto let(const T& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(let(f)) return f(c);
+}
+template <class T, class F, class... A>
+T also(const T& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(also(f)) {
+        f(c);
+        return c;
+    }
+}
+template <class T, class F, class... A>
+std::optional<T> takeIf(const T& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(takeIf(f)) return f(c) ? std::optional<T>(c) : std::nullopt;
+}
+template <class T, class L, class H, class... A>
+T coerceIn(T c, L low, H high, A&&... args) {
+    KOMPOZ_KT_OWN(coerceIn(low, high)) return c < T(low) ? T(low) : T(high) < c ? T(high) : c;
+}
+template <class T, class L, class... A>
+T coerceAtLeast(T c, L low, A&&... args) {
+    KOMPOZ_KT_OWN(coerceAtLeast(low)) return c < T(low) ? T(low) : c;
+}
+template <class T, class H, class... A>
+T coerceAtMost(T c, H high, A&&... args) {
+    KOMPOZ_KT_OWN(coerceAtMost(high)) return T(high) < c ? T(high) : c;
+}
+template <class T, class... A>
+int roundToInt(T c, A&&... args) {
+    KOMPOZ_KT_OWN(roundToInt()) return int(std::lround(c));
+}
+
+template <class C, class... A>
+auto take(const C& c, int n, A&&... args) {
+    KOMPOZ_KT_OWN(take(n)) {
+        if constexpr (std::is_convertible_v<const C&, std::string_view>) return std::string(std::string_view(c).substr(0, size_t(std::max(n, 0))));
+        else return std::vector<detail::Element<C>>(std::begin(c), std::next(std::begin(c), std::clamp(n, 0, size(c))));
+    }
+}
+template <class C, class... A>
+auto drop(const C& c, int n, A&&... args) {
+    KOMPOZ_KT_OWN(drop(n)) {
+        if constexpr (std::is_convertible_v<const C&, std::string_view>) {
+            std::string_view v(c);
+            return std::string(v.substr(std::min(size_t(std::max(n, 0)), v.size())));
+        } else {
+            return std::vector<detail::Element<C>>(std::next(std::begin(c), std::clamp(n, 0, size(c))), std::end(c));
+        }
+    }
+}
+template <class C, class... A>
+auto sum(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(sum()) {
+        detail::Element<C> total{};
+        for (const auto& v : c) total += v;
+        return total;
+    }
+}
+template <class C, class F, class... A>
+auto sumOf(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(sumOf(f)) {
+        std::decay_t<decltype(f(*std::begin(c)))> total{};
+        for (const auto& v : c) total += f(v);
+        return total;
+    }
+}
+template <class C, class F, class... A>
+auto find(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(find(f)) {
+        for (const auto& v : c)
+            if (f(v)) return std::optional<detail::Element<C>>(v);
+        return std::optional<detail::Element<C>>{};
+    }
+}
+template <class C, class... A>
+auto distinct(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(distinct()) {
+        std::vector<detail::Element<C>> out;
+        for (const auto& v : c)
+            if (std::find(out.begin(), out.end(), v) == out.end()) out.push_back(v);
+        return out;
+    }
+}
+template <class C, class S, class... A>
+std::vector<std::string> split(const C& c, const S& separator, A&&... args) {
+    KOMPOZ_KT_OWN(split(separator)) {
+        std::string_view v(c), sep(separator);
+        std::vector<std::string> out;
+        for (size_t at = 0;;) {
+            size_t next = sep.empty() ? std::string_view::npos : v.find(sep, at);
+            out.emplace_back(v.substr(at, next == std::string_view::npos ? std::string_view::npos : next - at));
+            if (next == std::string_view::npos) return out;
+            at = next + sep.size();
+        }
+    }
+}
+template <class C, class O, class N, class... A>
+std::string replace(const C& c, const O& oldValue, const N& newValue, A&&... args) {
+    KOMPOZ_KT_OWN(replace(oldValue, newValue)) {
+        std::string s(c);
+        std::string_view o(oldValue), n(newValue);
+        if (o.empty()) return s;
+        for (size_t at = 0; (at = s.find(o, at)) != std::string::npos; at += n.size()) s.replace(at, o.size(), n);
+        return s;
+    }
+}
+
+#undef KOMPOZ_KT_OWN
 
 template <class A, class B>
 std::pair<A, B> to(A a, B b) {

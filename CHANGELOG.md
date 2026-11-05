@@ -660,7 +660,10 @@
   becomes a restartable, skippable composable; calls to the file's own functions take named arguments in any order
   and leave defaults out; trailing lambdas, `it`, `val`/`var`/`by`, string templates (numbers written as Kotlin
   writes them), `16.dp`, `if`/`when` as values, `for` over ranges (`until`, `downTo`, `step`, `..`) and lists,
-  `while`, `?:`, `!!` and `null`. Lambdas capture by value, as Kotlin's do, so a block that runs again on its own
+  `while`, `?:`, `?.`, `!!` and `null`; Kotlin's standard functions (`listOf`, `filter`, `map`, `forEach`,
+  `joinToString`, `trimIndent`, `isNotBlank`, `withIndex`, ...; a type's own member of that name wins); a
+  `LaunchedEffect` or `launch` block is a coroutine whose `delay` and other suspending calls are awaited;
+  `Modifier.Companion`, `Unit` as a key, and `RowScope.() -> Unit` content. Lambdas capture by value, as Kotlin's do, so a block that runs again on its own
   never holds a dangling reference. The C++ compiler's messages point at the source's own lines (`#line`).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
