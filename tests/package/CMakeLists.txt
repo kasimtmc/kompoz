@@ -5,6 +5,7 @@ project(kompoz_package_test LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 
 find_package(kompoz 0.1 REQUIRED)
-add_executable(demo main.cpp)
+add_executable(demo main.cpp greeting.cpp)
 target_link_libraries(demo PRIVATE kompoz::app)
+kompoz_compose(demo)  # greeting.cpp's @Composable function, in Compose's syntax
 kompoz_copy_assets(demo)

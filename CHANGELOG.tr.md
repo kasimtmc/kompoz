@@ -710,7 +710,10 @@
   gibi değerleri kopyalayarak yakalıyor; kendi başına yeniden çalışan bir blok boşa çıkmış bir başvuru tutamıyor.
   C++ derleyicisinin iletileri kaynağın kendi satırlarını gösteriyor (`#line`). Windows'un satır sonlarıyla (CRLF) bir dosya LF'li biri gibi çevriliyor. Hedefin kaynakları Kotlin'deki gibi tek bir modül: bir dosyanın `@Composable` işlevi ya da data
   class'ı başka bir dosyadan adlı argümanlar ve varsayılanlarla çağrılıyor, başlık gerekmiyor (kompozc kullandığını
-  orada bildiriyor).
+  orada bildiriyor). kompozc derlemeyi yapan makinede çalışıyor: Kompoz başka biri için derlenirken (Android, web)
+  bu makine için kaynaklarından, bu makinenin C++ derleyicisiyle derleniyor (ya da `KOMPOZC` birini gösteriyor);
+  `cmake --install` onu `kompoz_compose` ve kaynaklarıyla birlikte `find_package(kompoz)` için kuruyor. Gösterimin
+  kaynakları ondan geçiyor.
 - **Bir composable'ın gerek duyduğu her argüman adla verilebilir**: `onClick`, `value` ve `onValueChange`, `checked` ve
   `onCheckedChange`, `selected`, `expanded`, `onDismissRequest`, `state`, `text`, `imageVector`/`painter`/`bitmap` ve
   `contentDescription`, … da Compose'daki gibi adlı argüman: `TextButton(onClick = save, [=] { … })`,
