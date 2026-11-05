@@ -12,6 +12,8 @@ public:
 
     // @Composable [@Other...] fun name(params)[: Type] { body } (or = expression).
     Function function();
+    // data class Name(val a: T, var b: U = d)
+    DataClass dataClass();
     // One expression and then `}`: a string template's ${...}.
     NodeP templateExpression();
 

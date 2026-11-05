@@ -83,6 +83,21 @@ void append(std::string& out, const T& v) {
     } else if constexpr (requires { v.has_value(); *v; }) {  // a nullable: its value, or "null"
         if (v.has_value()) append(out, *v);
         else out += "null";
+    } else if constexpr (requires { v.first; v.second; }) {  // a Pair: (a, b)
+        out += '(';
+        append(out, v.first);
+        out += ", ";
+        append(out, v.second);
+        out += ')';
+    } else if constexpr (requires { std::begin(v); std::end(v); }) {  // a list: [a, b]
+        out += '[';
+        bool any = false;
+        for (const auto& e : v) {
+            if (any) out += ", ";
+            any = true;
+            append(out, e);
+        }
+        out += ']';
     } else if constexpr (requires { v.toString(); }) {
         out += v.toString();
     } else {
@@ -257,7 +272,17 @@ template <class T, class... R>
 std::vector<std::decay_t<T>> listOf(T&& first, R&&... rest) {
     return {std::forward<T>(first), std::forward<R>(rest)...};
 }
-template <class T = int>
+// listOf(), emptyList(), ... without a type: whichever empty collection it goes to.
+struct EmptyCollection {
+    template <class T, class A>
+    operator std::vector<T, A>() const { return {}; }
+    template <class T, class C, class A>
+    operator std::set<T, C, A>() const { return {}; }
+    template <class K, class V, class C, class A>
+    operator std::map<K, V, C, A>() const { return {}; }
+};
+inline EmptyCollection listOf() { return {}; }
+template <class T>
 std::vector<T> listOf() {
     return {};
 }
@@ -265,11 +290,16 @@ template <class... T>
 auto mutableListOf(T&&... v) {
     return listOf(std::forward<T>(v)...);
 }
+template <class T>
+std::vector<T> mutableListOf() {
+    return {};
+}
 template <class... T>
 auto arrayListOf(T&&... v) {
     return listOf(std::forward<T>(v)...);
 }
-template <class T = int>
+inline EmptyCollection emptyList() { return {}; }
+template <class T>
 std::vector<T> emptyList() {
     return {};
 }
@@ -281,7 +311,9 @@ template <class... T>
 auto mutableSetOf(T&&... v) {
     return setOf(std::forward<T>(v)...);
 }
-template <class T = int>
+inline EmptyCollection setOf() { return {}; }
+inline EmptyCollection emptySet() { return {}; }
+template <class T>
 std::set<T> emptySet() {
     return {};
 }
@@ -293,7 +325,9 @@ template <class... T>
 auto mutableMapOf(T&&... v) {
     return mapOf(std::forward<T>(v)...);
 }
-template <class K = int, class V = int>
+inline EmptyCollection mapOf() { return {}; }
+inline EmptyCollection emptyMap() { return {}; }
+template <class K, class V>
 std::map<K, V> emptyMap() {
     return {};
 }
@@ -722,6 +756,14 @@ std::string replace(const C& c, const O& oldValue, const N& newValue, A&&... arg
 }
 
 #undef KOMPOZ_KT_OWN
+
+// x.copy(b = 2) on a data class: a copy, changed by `change`.
+template <class T, class F>
+T copy(const T& value, F&& change) {
+    T c = value;
+    change(c);
+    return c;
+}
 
 template <class A, class B>
 std::pair<A, B> to(A a, B b) {

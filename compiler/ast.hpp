@@ -111,4 +111,13 @@ struct Function {
     Pos end;                         // just past the closing brace
 };
 
+// A data class: data class Name(val a: Int, var b: String = "").
+struct DataClass {
+    std::string name;
+    std::vector<Param> fields;
+    std::vector<bool> mutableFields;  // var (else val)
+    Pos pos;
+    Pos end;
+};
+
 }  // namespace kompozc

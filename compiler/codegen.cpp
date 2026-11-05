@@ -174,6 +174,30 @@ public:
         out_.text(")");
     }
 
+    void classDefinition(const DataClass& k) {
+        out_.at(k.pos);
+        out_.text("struct " + k.name + " {");
+        scopes_.emplace_back();
+        for (const Param& f : k.fields) {
+            out_.at(f.pos);
+            out_.text(" " + type(f.type) + " " + cppName(f.name));
+            if (f.defaultValue) {
+                out_.text(" = ");
+                expr(*f.defaultValue, &f.type);
+            } else {
+                out_.text("{}");
+            }
+            out_.text(";");
+        }
+        scopes_.pop_back();
+        out_.text(" bool operator==(const " + k.name + "&) const = default;");
+        // (a template: built only where it is used, so a field without a text form doesn't stop the rest)
+        out_.text(" template <class = void> std::string toString() const { return ::kompoz::kt::str(\"" + k.name + "(\"");
+        for (size_t i = 0; i < k.fields.size(); ++i)
+            out_.text(", \"" + std::string(i ? ", " : "") + k.fields[i].name + "=\", " + cppName(k.fields[i].name));
+        out_.text(", \")\"); } };\n");
+    }
+
     void definition(const Function& f) {
         bool unit = !f.result || f.result->name == "Unit";
         signature(f, false);
@@ -603,7 +627,8 @@ private:
         if (suspend_ && kSuspendCalls.contains(calleeName)) out_.text("co_await ");
         // A @Composable kompozc translates: arguments by position, defaults filled in.
         if (callee.kind == Node::Name && !lookup(callee.text)) {
-            if (auto f = module_.find(callee.text); f != module_.end()) return moduleCall(c, *f->second);
+            if (auto f = module_.functions.find(callee.text); f != module_.functions.end()) return moduleCall(c, *f->second);
+            if (auto k = module_.classes.find(callee.text); k != module_.classes.end()) return construct(c, *k->second);
             if (kKtFunctions.contains(callee.text) || (suspend_ && callee.text == "delay")) {
                 out_.text("::kompoz::kt::" + callee.text);
                 return arguments(c, calleeName, false);
@@ -629,6 +654,7 @@ private:
                 out_.text("::kompoz::Modifier()." + cppName(callee.text));
                 return arguments(c, calleeName, false);
             }
+            if (callee.text == "copy" && dataClassCopy(c, obj)) return;
             if (kKtMembers.contains(callee.text) && !qualifier(obj)) {
                 out_.text("::kompoz::kt::" + callee.text + "(");
                 expr(obj);
@@ -662,6 +688,64 @@ private:
             lambda(*c.lambda, kValueLambdas.contains(calleeName), kSuspendLambdas.contains(calleeName));
         }
         out_.text(")");
+    }
+
+    // Name(a = 1, b = "x"): the struct, its fields in their order (designated, defaults left out).
+    void construct(const Node& c, const DataClass& k) {
+        if (c.lambda) throw CompileError(c.lambda->pos, k.name + " takes no lambda");
+        std::vector<const Node*> given(k.fields.size(), nullptr);
+        size_t next = 0;
+        for (size_t i = 0; i + 1 < c.kids.size(); ++i) {
+            const std::string& n = c.names[i];
+            size_t at = next;
+            if (!n.empty()) {
+                at = k.fields.size();
+                for (size_t f = 0; f < k.fields.size(); ++f)
+                    if (k.fields[f].name == n) at = f;
+                if (at == k.fields.size()) throw CompileError(c.kids[i + 1]->pos, k.name + " has no field named " + n);
+            } else {
+                next = at + 1;
+            }
+            if (at >= k.fields.size()) throw CompileError(c.kids[i + 1]->pos, "too many arguments for " + k.name);
+            if (given[at]) throw CompileError(c.kids[i + 1]->pos, k.fields[at].name + " is given twice");
+            given[at] = c.kids[i + 1].get();
+        }
+        out_.text(k.name + "{");
+        bool any = false;
+        for (size_t f = 0; f < k.fields.size(); ++f) {
+            if (!given[f]) {
+                if (!k.fields[f].defaultValue) throw CompileError(c.pos, k.name + " needs " + k.fields[f].name);
+                continue;
+            }
+            out_.text(std::string(any ? ", " : "") + "." + cppName(k.fields[f].name) + " = ");
+            any = true;
+            expr(*given[f], &k.fields[f].type);
+        }
+        out_.text("}");
+    }
+
+    // x.copy(b = 2): a copy with those fields changed, when a data class has them all.
+    bool dataClassCopy(const Node& c, const Node& obj) {
+        if (c.lambda || c.kids.size() < 2) return false;
+        for (size_t i = 1; i < c.kids.size(); ++i)
+            if (c.names[i - 1].empty()) return false;
+        bool known = std::any_of(module_.classes.begin(), module_.classes.end(), [&](const auto& k) {
+            for (size_t i = 1; i < c.kids.size(); ++i)
+                if (std::none_of(k.second->fields.begin(), k.second->fields.end(), [&](const Param& f) { return f.name == c.names[i - 1]; }))
+                    return false;
+            return true;
+        });
+        if (!known) return false;
+        out_.text("::kompoz::kt::copy(");
+        expr(obj);
+        out_.text(", [&](auto& kompoz_copy) {");
+        for (size_t i = 1; i < c.kids.size(); ++i) {
+            out_.text(" kompoz_copy." + cppName(c.names[i - 1]) + " = ");
+            expr(*c.kids[i]);
+            out_.text(";");
+        }
+        out_.text(" })");
+        return true;
     }
 
     void moduleCall(const Node& c, const Function& f) {
@@ -817,6 +901,11 @@ private:
 };
 
 }  // namespace
+
+void generateClass(Output& out, const DataClass& c, const Module& module) {
+    Generator g(out, module);
+    g.classDefinition(c);
+}
 
 void generatePrototype(Output& out, const Function& f, const Module& module) {
     Generator g(out, module);

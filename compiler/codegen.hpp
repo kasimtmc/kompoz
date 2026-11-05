@@ -10,9 +10,13 @@
 
 namespace kompozc {
 
-// The @Composable functions kompozc knows (by name): calls to them pass their arguments by
-// position, named ones put in place and defaults filled in.
-using Module = std::map<std::string, const Function*, std::less<>>;
+// What kompozc knows of the code it translates: the @Composable functions (calls to them pass
+// their arguments by position, named ones put in place and defaults filled in) and the data
+// classes (made with their fields in the order they are declared).
+struct Module {
+    std::map<std::string, const Function*, std::less<>> functions;
+    std::map<std::string, const DataClass*, std::less<>> classes;
+};
 
 class Output {
 public:
@@ -31,6 +35,8 @@ private:
     int current_ = 0;  // the original line the output's current line stands for (0: none yet)
 };
 
+// A data class: a struct with its fields, == and toString().
+void generateClass(Output& out, const DataClass& c, const Module& module);
 // Declarations: what every @Composable becomes before any is defined, defaults included.
 void generatePrototype(Output& out, const Function& f, const Module& module);
 // The definition: void name(params, CallSite site) { composable(site, params..., [=] { body }); }

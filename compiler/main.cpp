@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <sstream>
 
 namespace fs = std::filesystem;
@@ -22,8 +23,10 @@ using namespace kompozc;
 
 namespace {
 
+// A Kotlin declaration in the C++: a @Composable function or a data class.
 struct Found {
-    Function function;
+    std::optional<Function> function;
+    std::optional<DataClass> dataClass;
     size_t begin, end;  // offsets in the source
 };
 
@@ -82,8 +85,24 @@ std::vector<Found> scan(std::string_view src) {
             Parser parser(src, positionOf(src, i));
             Function f = parser.function();
             size_t end = f.end.offset;
-            found.push_back({std::move(f), i, end});
+            found.push_back({std::move(f), std::nullopt, i, end});
             i = end;
+        } else if (c == 'd' && (i == 0 || !identChar(src[i - 1])) && src.substr(i, 4) == "data" && i + 4 < src.size() &&
+                   std::isspace(static_cast<unsigned char>(src[i + 4]))) {
+            // data class: never C++ (a name, then the class keyword)
+            size_t k = i + 4;
+            while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
+            if (src.substr(k, 5) == "class" && (k + 5 >= src.size() || !identChar(src[k + 5]))) {
+                Parser parser(src, positionOf(src, i));
+                DataClass d = parser.dataClass();
+                size_t end = d.end.offset;
+                found.push_back({std::nullopt, std::move(d), i, end});
+                i = end;
+            } else {
+                i += 4;
+            }
+        } else if (identChar(c)) {
+            while (i < src.size() && identChar(src[i])) ++i;  // (a name: "data" inside one isn't a declaration)
         } else {
             ++i;
         }
@@ -126,7 +145,10 @@ std::string passThrough(std::string_view text, const fs::path& dir) {
 std::string translate(const std::string& src, const fs::path& source, const std::string& lineFile) {
     std::vector<Found> found = scan(src);
     Module module;
-    for (const Found& f : found) module[f.function.name] = &f.function;
+    for (const Found& f : found) {
+        if (f.function) module.functions[f.function->name] = &*f.function;
+        else module.classes[f.dataClass->name] = &*f.dataClass;
+    }
     Output out(lineFile);
     out.line(1);
     fs::path dir = source.parent_path();
@@ -138,12 +160,15 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             out.text(passThrough(std::string_view(src).substr(done, f.begin - done), dir));
         }
         if (k == 0) {
-            // Before the first: the helpers the translations use, and every function declared, so
-            // that they call each other in any order (as Kotlin's do).
+            // Before the first: the helpers the translations use, the data classes and every
+            // function declared, so that they use each other in any order (as Kotlin's do).
             out.text("\n#include <kompoz/kotlin.hpp>\n");
-            for (const Found& g : found) generatePrototype(out, g.function, module);
+            for (const Found& g : found)
+                if (g.dataClass) generateClass(out, *g.dataClass, module);
+            for (const Found& g : found)
+                if (g.function) generatePrototype(out, *g.function, module);
         }
-        generateDefinition(out, f.function, module);
+        if (f.function) generateDefinition(out, *f.function, module);
         done = f.end;
     }
     if (done < src.size()) {

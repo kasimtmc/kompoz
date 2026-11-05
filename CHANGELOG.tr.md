@@ -702,7 +702,8 @@
   standart işlevleri (`listOf`, `filter`, `map`, `forEach`, `joinToString`, `trimIndent`, `isNotBlank`,
   `withIndex`, ...; bir türün aynı adlı kendi üyesi önce gelir); `LaunchedEffect` ya da `launch` bloğu, `delay` ve
   öteki bekleyen çağrıları beklenen bir eşyordam; `Modifier.Companion`, anahtar olarak `Unit` ve `RowScope.() -> Unit`
-  içerik. Lambdalar Kotlin'inkiler
+  içerik. Aynı dosyadaki bir `data class`, `==` ve Kotlin'in `toString()`'iyle bir struct oluyor; adlı argümanlarla her
+  sırada yapılıyor (`Note(title = "x", id = 1)`) ve `copy(pinned = true)` ile değiştiriliyor. Lambdalar Kotlin'inkiler
   gibi değerleri kopyalayarak yakalıyor; kendi başına yeniden çalışan bir blok boşa çıkmış bir başvuru tutamıyor.
   C++ derleyicisinin iletileri kaynağın kendi satırlarını gösteriyor (`#line`).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez

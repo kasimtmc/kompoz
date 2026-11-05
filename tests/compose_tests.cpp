@@ -169,6 +169,32 @@ TEST(launched_effect_is_a_coroutine) {
     CHECK(rule.onNodeWithText("tik 3").exists());
 }
 
+data class Note(val id: Int, val title: String, val pinned: Boolean = false, val tags: List<String> = listOf())
+
+@Composable
+fun NoteRow(note: Note) {
+    Text("${note.id}: ${note.title}${if (note.pinned) " *" else ""}")
+}
+
+@Composable
+fun Notes() {
+    val a = Note(title = "alışveriş", id = 1)
+    val b = a.copy(pinned = true, title = "iş")
+    Column {
+        NoteRow(a)
+        NoteRow(note = b)
+        Text("$b", modifier = Modifier.testTag("str"))
+        Text(if (a == b.copy(pinned = false, title = "alışveriş")) "eşit" else "farklı")
+    }
+}
+
+TEST(data_classes) {
+    ComposeTestRule rule([] { Notes(); });
+    CHECK(rule.onNodeWithText("1: alışveriş").exists() && rule.onNodeWithText("1: iş *").exists());
+    CHECK(rule.onNodeWithTag("str").text() == "Note(id=1, title=iş, pinned=true, tags=[])");
+    CHECK(rule.onNodeWithText("eşit").exists());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

@@ -663,7 +663,9 @@
   `while`, `?:`, `?.`, `!!` and `null`; Kotlin's standard functions (`listOf`, `filter`, `map`, `forEach`,
   `joinToString`, `trimIndent`, `isNotBlank`, `withIndex`, ...; a type's own member of that name wins); a
   `LaunchedEffect` or `launch` block is a coroutine whose `delay` and other suspending calls are awaited;
-  `Modifier.Companion`, `Unit` as a key, and `RowScope.() -> Unit` content. Lambdas capture by value, as Kotlin's do, so a block that runs again on its own
+  `Modifier.Companion`, `Unit` as a key, and `RowScope.() -> Unit` content. A `data class` in the same file
+  becomes a struct with `==` and Kotlin's `toString()`; it is made with named arguments in any order
+  (`Note(title = "x", id = 1)`) and changed with `copy(pinned = true)`. Lambdas capture by value, as Kotlin's do, so a block that runs again on its own
   never holds a dangling reference. The C++ compiler's messages point at the source's own lines (`#line`).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to

@@ -158,6 +158,37 @@ Function Parser::function() {
     return f;
 }
 
+DataClass Parser::dataClass() {
+    DataClass c;
+    c.pos = cur().pos;
+    if (!isIdent("data")) fail("expected 'data class'");
+    take();
+    if (!isIdent("class")) fail("expected 'class' after 'data'");
+    take();
+    c.name = expectIdent();
+    NewlineMode mode(newlines_, false);
+    expectOp("(");
+    while (!isOp(")")) {
+        annotations(nullptr);
+        bool isVar = isIdent("var");
+        if (!isVar && !isIdent("val")) fail("a data class's parameters are val or var");
+        take();
+        Param p;
+        p.pos = cur().pos;
+        p.name = expectIdent();
+        expectOp(":");
+        p.type = type();
+        if (acceptOp("=")) p.defaultValue = expression();
+        c.fields.push_back(std::move(p));
+        c.mutableFields.push_back(isVar);
+        if (!acceptOp(",")) break;
+    }
+    expectOp(")");
+    c.end = tokens_[index_ - 1].end;
+    if (c.fields.empty()) fail(c.pos, "a data class needs a parameter");
+    return c;
+}
+
 std::vector<Param> Parser::params() {
     NewlineMode mode(newlines_, false);
     expectOp("(");
