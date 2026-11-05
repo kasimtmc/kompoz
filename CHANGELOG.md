@@ -692,6 +692,14 @@
   `offset` and `Color::copy` take Compose's named arguments (`border(width = 1, color = c, shape = s)`,
   `copy(alpha = 0.6f)`), written `kompoz::arg::width = …` in C++. With kompozc, the user's own `AddTextDialog` and
   Compose's Scaffold sample compile as they are written for Android (tests/compose_tests.cpp).
+- **What Compose code says most, through kompozc**: `MaterialTheme(colorScheme = …, motionScheme = …) { … }` (a
+  composable taking named arguments now; its content still runs in its caller's scope), `Surface(shape = …)` (its
+  content clipped to it), `CompositionLocalProvider(LocalX provides x) { … }` with one to three values,
+  `DisposableEffect(key) { …; onDispose { … } }`, `contentDescription = null`. A composable is never skipped when an
+  argument only looks comparable: a list of a struct without `==` (std::vector's `==` doesn't compile then) counts
+  as not comparable, for skipping as for a state's structural equality. kompozc declares each function just before
+  its definition (and those it calls before it), not at the top of the file, so a parameter's type may be a struct
+  the file declares above it.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

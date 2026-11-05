@@ -41,7 +41,8 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "filterIndexed", "sortedBy", "sortedByDescending", "any", "all", "none", "count", "first", "firstOrNull",
     "last", "lastOrNull", "find", "groupBy", "associateBy", "associateWith", "flatMap", "sumOf", "maxOf", "minOf",
     "maxByOrNull", "minByOrNull", "let", "run", "with", "takeIf", "takeUnless", "getOrElse", "lazy", "snapshotFlow",
-    "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked"};
+    "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked",
+    "DisposableEffect"};
 
 // Kotlin types the C++ way.
 const std::map<std::string, std::string, std::less<>> kTypes = {
@@ -62,7 +63,7 @@ const std::map<std::string, std::string, std::less<>> kObjectProperties = {
 // Kotlin's standard functions, from kotlin.hpp: listOf(1, 2) -> kt::listOf(1, 2).
 const std::set<std::string, std::less<>> kKtFunctions = {
     "listOf", "mutableListOf", "emptyList", "arrayListOf", "setOf", "mutableSetOf", "emptySet", "mapOf", "mutableMapOf",
-    "emptyMap", "repeat", "println", "maxOf", "minOf", "require", "check", "error", "TODO"};
+    "emptyMap", "repeat", "println", "maxOf", "minOf", "require", "check", "error", "TODO", "onDispose"};
 
 // Members of Kotlin's standard types, from kotlin.hpp: text.trim() -> kt::trim(text). Each uses the
 // value's own member of that name where it has one.

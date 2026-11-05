@@ -457,6 +457,41 @@ TEST(another_files_composables) {
     CHECK(rule.onNodeWithText("yeni:3!").exists() && rule.onNodeWithText("eski:0").exists());
 }
 
+// What Compose code says most: a lazy list's items, DisposableEffect, providing a local, a themed surface.
+struct Mail {
+    std::string from;  // (no ==: a list of it is never compared, so its composable isn't skipped)
+};
+
+@Composable
+fun Inbox(mails: List<Mail>, log: (String) -> Unit) {
+    DisposableEffect(mails.size) {
+        log("açıldı ${mails.size}")
+        onDispose { log("kapandı") }
+    }
+    MaterialTheme(colorScheme = darkColorScheme()) {
+        Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surface) {
+            CompositionLocalProvider(LocalContentColor provides Color.Red) {
+                LazyColumn(modifier = Modifier.height(300.dp)) {
+                    item { Text("Gelen kutusu") }
+                    itemsIndexed(mails) { index, mail -> Text("$index: ${mail.from}", color = LocalContentColor.current) }
+                }
+            }
+        }
+    }
+}
+
+TEST(lazy_items_effects_and_locals) {
+    auto log = std::make_shared<std::vector<std::string>>();
+    auto show = mutableStateOf(true);
+    ComposeTestRule rule([log, show] {
+        if (show.get()) Inbox({Mail{"ayşe"}, Mail{"ali"}}, [log](std::string s) { log->push_back(std::move(s)); });
+    });
+    CHECK(rule.onNodeWithText("Gelen kutusu").exists() && rule.onNodeWithText("1: ali").exists());
+    show.set(false);
+    rule.waitForIdle();
+    CHECK((*log == std::vector<std::string>{"açıldı 2", "kapandı"}));
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

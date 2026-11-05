@@ -224,6 +224,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
     out.line(1);
     fs::path dir = source.parent_path();
     size_t done = 0;
+    std::set<std::string, std::less<>> declared;  // the functions declared so far
     for (size_t k = 0; k < found.size(); ++k) {
         const Found& f = found[k];
         if (f.begin > done) {
@@ -231,8 +232,8 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             out.text(passThrough(std::string_view(src).substr(done, f.begin - done), dir));
         }
         if (k == 0) {
-            // Before the first: the helpers the translations use, the data classes and every
-            // function declared, so that they use each other in any order (as Kotlin's do).
+            // Before the first: the helpers the translations use, and the data classes, so that
+            // every function may use them (as Kotlin's do, in any order).
             out.text("\n#include <kompoz/kotlin.hpp>\n");
             for (auto [o, g] : imported)  // (from their own files: #line says which)
                 if (g->dataClass) {
@@ -242,16 +243,25 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             out.setFile(lineFile);
             for (const Found& g : found)
                 if (g.dataClass) generateClass(out, *g.dataClass, module);
+        }
+        if (f.function) {
+            // Declared where needed, as late as can be (a parameter's type may be a struct of the
+            // file's declared above the function, not at its top): the function itself, and those it
+            // calls, of this file or another, not declared yet.
+            std::set<std::string, std::less<>> used;
+            names(f, used);
+            used.insert(f.function->name);
             for (auto [o, g] : imported)
-                if (g->function) {
+                if (g->function && used.contains(g->function->name) && declared.insert(g->function->name).second) {
                     out.setFile(o->lineFile);
                     generatePrototype(out, *g->function, module);
                 }
             out.setFile(lineFile);
             for (const Found& g : found)
-                if (g.function) generatePrototype(out, *g.function, module);
+                if (g.function && used.contains(g.function->name) && declared.insert(g.function->name).second)
+                    generatePrototype(out, *g.function, module);
+            generateDefinition(out, *f.function, module);
         }
-        if (f.function) generateDefinition(out, *f.function, module);
         done = f.end;
     }
     if (done < src.size()) {

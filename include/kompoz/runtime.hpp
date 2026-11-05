@@ -55,6 +55,28 @@ struct RememberObserver {
 
 namespace detail {
 
+// Whether values of T can be compared with ==, all the way down: a std::vector of a struct without
+// == has an == that doesn't compile (std::equality_comparable says yes all the same).
+template <class T>
+constexpr bool deeplyComparable();
+template <class T>
+constexpr bool deeplyComparableElements() {
+    if constexpr (requires { typename T::value_type; } && !std::is_same_v<T, std::string>) {
+        if constexpr (requires { typename T::mapped_type; typename T::key_type; })
+            return deeplyComparable<typename T::key_type>() && deeplyComparable<typename T::mapped_type>();
+        else return deeplyComparable<typename T::value_type>();
+    } else if constexpr (requires { typename T::first_type; typename T::second_type; }) {
+        return deeplyComparable<typename T::first_type>() && deeplyComparable<typename T::second_type>();
+    } else {
+        return true;
+    }
+}
+template <class T>
+constexpr bool deeplyComparable() {
+    if constexpr (!std::equality_comparable<T>) return false;
+    else return deeplyComparableElements<T>();
+}
+
 uint64_t keyOf(const CallSite& site);
 uint64_t mixKey(uint64_t a, uint64_t b);
 
@@ -104,7 +126,7 @@ struct Args final : ArgsBase {
     std::tuple<Ts...> values;
 
     bool equals(const ArgsBase& other) const override {
-        if constexpr ((std::equality_comparable<Ts> && ...)) {
+        if constexpr ((deeplyComparable<Ts>() && ...)) {
             auto* o = dynamic_cast<const Args*>(&other);
             return o && o->values == values;
         } else {
@@ -406,7 +428,7 @@ SnapshotMutationPolicy<T> neverEqualPolicy() {
 namespace detail {
 template <class T>
 SnapshotMutationPolicy<T> defaultPolicy() {
-    if constexpr (std::equality_comparable<T>) return structuralEqualityPolicy<T>();
+    if constexpr (deeplyComparable<T>()) return structuralEqualityPolicy<T>();
     else return neverEqualPolicy<T>();
 }
 // A MutableState's value, kept per snapshot.
@@ -731,7 +753,7 @@ public:
 
     detail::Provided provides(T value) const {
         return {this, std::make_shared<const T>(std::move(value)), [](const void* a, const void* b) {
-                    if constexpr (std::equality_comparable<T>)
+                    if constexpr (detail::deeplyComparable<T>())
                         return *static_cast<const T*>(a) == *static_cast<const T*>(b);
                     else
                         return a == b;
@@ -799,6 +821,19 @@ CompositionLocal<std::decay_t<std::invoke_result_t<F&>>> staticCompositionLocalO
 inline void CompositionLocalProvider(std::initializer_list<detail::Provided> values, const Content& content,
                                      CallSite site = CallSite::current()) {
     detail::Composer::require().provide(detail::keyOf(site), std::vector<detail::Provided>(values), content);
+}
+
+// Compose's CompositionLocalProvider(LocalX provides x, LocalY provides y) { … }: one to three of them.
+inline void CompositionLocalProvider(const detail::Provided& a, const Content& content, CallSite site = CallSite::current()) {
+    CompositionLocalProvider({a}, content, site);
+}
+inline void CompositionLocalProvider(const detail::Provided& a, const detail::Provided& b, const Content& content,
+                                     CallSite site = CallSite::current()) {
+    CompositionLocalProvider({a, b}, content, site);
+}
+inline void CompositionLocalProvider(const detail::Provided& a, const detail::Provided& b, const detail::Provided& c,
+                                     const Content& content, CallSite site = CallSite::current()) {
+    CompositionLocalProvider({a, b, c}, content, site);
 }
 
 // Every local provided where it is read (Compose's CompositionLocalContext), to provide them all

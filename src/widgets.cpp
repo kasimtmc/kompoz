@@ -278,11 +278,11 @@ void toggleButtonImpl(ToggleKind kind, bool checked, std::function<void(bool)> o
 
 } // namespace
 
-void MaterialTheme(const ColorScheme& scheme, const Content& content, CallSite site) {
-    MaterialTheme(scheme, LocalMotionScheme.current(), content, site);
+void detail::MaterialTheme(const ColorScheme& scheme, const Content& content, CallSite site) {
+    detail::MaterialTheme(scheme, LocalMotionScheme.current(), content, site);
 }
 
-void MaterialTheme(const ColorScheme& scheme, const MotionScheme& motion, const Content& content, CallSite site) {
+void detail::MaterialTheme(const ColorScheme& scheme, const MotionScheme& motion, const Content& content, CallSite site) {
     // Scrollbars in the scheme's onSurface (as Compose Multiplatform's Material theme gives
     // them): seen on a dark theme too.
     ScrollbarStyle scrollbars = LocalScrollbarStyle.current();
@@ -300,7 +300,7 @@ void MaterialExpressiveTheme(std::optional<ColorScheme> scheme, const Content& c
 }
 
 void MaterialExpressiveTheme(std::optional<ColorScheme> scheme, const MotionScheme& motion, const Content& content, CallSite site) {
-    MaterialTheme(scheme.value_or(LocalColorScheme.current()), motion, content, site);
+    detail::MaterialTheme(scheme.value_or(LocalColorScheme.current()), motion, content, site);
 }
 
 Shape detail::morphingShape(const Shape& target, CallSite site) {
@@ -2165,6 +2165,13 @@ void detail::Surface(const Modifier& modifier, Color color, Color contentColor, 
     ComposableScope scope(site);
     CompositionLocalProvider({LocalContentColor.provides(contentColor)},
                              [&] { detail::Box(modifier.background(color), content); });
+}
+
+void detail::Surface(const Modifier& modifier, Color color, Color contentColor, const Shape& shape, const Content& content,
+                     CallSite site) {
+    ComposableScope scope(site);
+    CompositionLocalProvider({LocalContentColor.provides(contentColor)},
+                             [&] { detail::Box(modifier.background(color, shape).clip(shape), content); });
 }
 
 void HorizontalDivider(const Modifier& modifier, CallSite site) {

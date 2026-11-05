@@ -124,6 +124,7 @@ struct Null {
     operator std::optional<T>() const { return std::nullopt; }
     template <class F>
     operator std::function<F>() const { return nullptr; }
+    static constexpr bool kompozNull = true;  // (contentDescription = null: what takes none says so)
 };
 inline constexpr Null null{};
 
@@ -261,6 +262,12 @@ auto safe(const T& a, F&& f) {
         if (isNull(a)) return O{};
         return O(f(notNull(a)));
     }
+}
+
+// DisposableEffect(key) { …; onDispose { … } }: what the effect gives back, run when it leaves.
+template <class F>
+std::function<void()> onDispose(F&& f) {
+    return std::function<void()>(std::forward<F>(f));
 }
 
 // ---- Coroutines: delay(300) in a LaunchedEffect ----
@@ -418,11 +425,11 @@ auto filterNot(const C& c, F&& f, A&&... args) {
 }
 template <class C, class... A>
 bool isEmpty(const C& c, A&&... args) {
-    KOMPOZ_KT_OWN(isEmpty()) return size(c) == 0;
+    KOMPOZ_KT_OWN(isEmpty()) return kt::size(c) == 0;
 }
 template <class C, class... A>
 bool isNotEmpty(const C& c, A&&... args) {
-    KOMPOZ_KT_OWN(isNotEmpty()) return size(c) != 0;
+    KOMPOZ_KT_OWN(isNotEmpty()) return kt::size(c) != 0;
 }
 template <class C, class... A>
 bool isBlank(const C& c, A&&... args) {
@@ -606,7 +613,7 @@ bool none(const C& c, F&& f, A&&... args) {
 }
 template <class C, class... A>
 int count(const C& c, A&&... args) {
-    KOMPOZ_KT_OWN(count(args...)) if constexpr (sizeof...(A) == 0) return size(c);
+    KOMPOZ_KT_OWN(count(args...)) if constexpr (sizeof...(A) == 0) return kt::size(c);
     else return int(std::count_if(std::begin(c), std::end(c), args...));
 }
 template <class C, class... A>
@@ -628,7 +635,7 @@ int indexOf(const C& c, const A&... args) {
 template <class C, class... A>
 auto getOrNull(const C& c, int i, A&&... args) {
     KOMPOZ_KT_OWN(getOrNull(i)) {
-        if (i < 0 || i >= size(c)) return std::optional<detail::Element<C>>{};
+        if (i < 0 || i >= kt::size(c)) return std::optional<detail::Element<C>>{};
         return std::optional<detail::Element<C>>(*std::next(std::begin(c), i));
     }
 }
@@ -685,7 +692,7 @@ template <class C, class... A>
 auto take(const C& c, int n, A&&... args) {
     KOMPOZ_KT_OWN(take(n)) {
         if constexpr (std::is_convertible_v<const C&, std::string_view>) return std::string(std::string_view(c).substr(0, size_t(std::max(n, 0))));
-        else return std::vector<detail::Element<C>>(std::begin(c), std::next(std::begin(c), std::clamp(n, 0, size(c))));
+        else return std::vector<detail::Element<C>>(std::begin(c), std::next(std::begin(c), std::clamp(n, 0, kt::size(c))));
     }
 }
 template <class C, class... A>
@@ -695,7 +702,7 @@ auto drop(const C& c, int n, A&&... args) {
             std::string_view v(c);
             return std::string(v.substr(std::min(size_t(std::max(n, 0)), v.size())));
         } else {
-            return std::vector<detail::Element<C>>(std::next(std::begin(c), std::clamp(n, 0, size(c))), std::end(c));
+            return std::vector<detail::Element<C>>(std::next(std::begin(c), std::clamp(n, 0, kt::size(c))), std::end(c));
         }
     }
 }

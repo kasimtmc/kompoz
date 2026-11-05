@@ -181,10 +181,26 @@ struct MotionScheme {
 inline const CompositionLocal<MotionScheme> LocalMotionScheme{MotionScheme::standard()};
 inline const MotionScheme& motionScheme() { return LocalMotionScheme.current(); }
 
-// The motion stays the one around it (standard() at the top).
+// MaterialTheme(colorScheme, motionScheme, content): the motion left out stays the one around it
+// (standard() at the top). Its content runs as a call's own, in its caller's scope.
+namespace detail {
 void MaterialTheme(const ColorScheme& colorScheme, const Content& content, CallSite site = CallSite::current());
 void MaterialTheme(const ColorScheme& colorScheme, const MotionScheme& motionScheme, const Content& content,
                    CallSite site = CallSite::current());
+struct MaterialThemeImpl {
+    using P = Params<names::ColorScheme, names::MotionScheme, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: MaterialTheme takes a block: its content");
+        const ColorScheme& colorScheme = P::arg<names::ColorScheme>(args...);
+        if constexpr (P::given<names::MotionScheme, A...>())
+            MaterialTheme(colorScheme, P::get<names::MotionScheme>(MotionScheme::standard(), args...), P::plainBlock(std::forward<A>(args)...), site);
+        else MaterialTheme(colorScheme, P::plainBlock(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::MaterialThemeImpl> MaterialTheme;
 // Material 3 Expressive's theme (Compose's MaterialExpressiveTheme): MaterialTheme with the
 // expressive motion (unless told another), in `colorScheme` or the one around it.
 void MaterialExpressiveTheme(std::optional<ColorScheme> colorScheme, const Content& content, CallSite site = CallSite::current());
@@ -1004,6 +1020,14 @@ Painter rememberAnimatedVectorPainter(const AnimatedImageVector& vector, bool at
 // down to fit), placed in it by `alignment` and `contentScale` and clipped to it.
 //   Image(painterResource("images/photo.jpg"), "Fotoğraf", Modifier().size(120), Alignment::Center, ContentScale::Crop);
 namespace detail {
+// A content description as given: a text, or none (Kotlin's null, kompozc's kt::null).
+template <class T>
+std::string descriptionOf(T&& text) {
+    if constexpr (requires { std::remove_cvref_t<T>::kompozNull; }) return {};
+    else return std::string(std::forward<T>(text));
+}
+} // namespace detail
+namespace detail {
 void Image(const ImageBitmap& bitmap, std::string contentDescription, const Modifier& modifier = {},
            ContentScale contentScale = ContentScale::Fit, float alpha = 1, std::optional<ColorFilter> colorFilter = {},
            CallSite site = CallSite::current());
@@ -1019,14 +1043,14 @@ struct ImageImpl {
             using P = OfBitmap;
             static_assert(P::check<A...>());
             const ImageBitmap& bitmap = P::arg<names::Bitmap>(args...);
-            detail::Image(bitmap, std::string(P::arg<names::ContentDescription>(args...)), P::get<names::Modifier>(Modifier{}, args...),
+            detail::Image(bitmap, descriptionOf(P::arg<names::ContentDescription>(args...)), P::get<names::Modifier>(Modifier{}, args...),
                           P::get<names::ContentScale>(ContentScale::Fit, args...), P::get<names::Alpha>(1.f, args...),
                           P::get<names::ColorFilter>(std::optional<ColorFilter>{}, args...), site);
         } else {
             using P = OfPainter;
             static_assert(P::check<A...>());
             const Painter& painter = P::arg<names::Painter>(args...);
-            detail::Image(painter, std::string(P::arg<names::ContentDescription>(args...)), P::get<names::Modifier>(Modifier{}, args...),
+            detail::Image(painter, descriptionOf(P::arg<names::ContentDescription>(args...)), P::get<names::Modifier>(Modifier{}, args...),
                           P::get<names::Alignment>(Alignment{Alignment::Center}, args...), P::get<names::ContentScale>(ContentScale::Fit, args...),
                           P::get<names::Alpha>(1.f, args...), P::get<names::ColorFilter>(std::optional<ColorFilter>{}, args...), site);
         }
@@ -1086,13 +1110,13 @@ struct IconImpl {
             using P = OfPainter;
             static_assert(P::check<A...>());
             const Painter& painter = P::arg<names::Painter>(args...);
-            detail::Icon(painter, std::string(P::arg<names::ContentDescription>(args...)), P::get<names::Modifier>(Modifier{}, args...),
+            detail::Icon(painter, descriptionOf(P::arg<names::ContentDescription>(args...)), P::get<names::Modifier>(Modifier{}, args...),
                          P::get<names::Tint>(std::optional<Color>{}, args...), site);
         } else {
             using P = OfVector;
             static_assert(P::check<A...>());
             const ImageVector& icon = P::arg<names::ImageVector>(args...);
-            detail::Icon(icon, std::string(P::arg<names::ContentDescription>(args...)), P::get<names::Modifier>(Modifier{}, args...),
+            detail::Icon(icon, descriptionOf(P::arg<names::ContentDescription>(args...)), P::get<names::Modifier>(Modifier{}, args...),
                          P::get<names::Tint>(std::optional<Color>{}, args...), site);
         }
     }
@@ -1480,17 +1504,23 @@ namespace detail {
 void Surface(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 void Surface(const Modifier& modifier, Color color, Color contentColor, const Content& content,
              CallSite site = CallSite::current());
+// With a shape: its color in that shape, the content clipped to it (Compose's Surface(shape = …)).
+void Surface(const Modifier& modifier, Color color, Color contentColor, const Shape& shape, const Content& content,
+             CallSite site = CallSite::current());
 struct SurfaceImpl {
-    using P = Params<names::Modifier, names::Color, names::ContentColor, Block>;
+    using P = Params<names::Modifier, names::Shape, names::Color, names::ContentColor, Block>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
         Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
-        if constexpr (!P::given<names::Color, A...>() && !P::given<names::ContentColor, A...>()) {
+        if constexpr (!P::given<names::Color, A...>() && !P::given<names::ContentColor, A...>() && !P::given<names::Shape, A...>()) {
             detail::Surface(modifier, P::block(std::forward<A>(args)...), site);
         } else {
             Color color = P::get<names::Color>(colorScheme().surface, args...);
-            detail::Surface(modifier, color, P::get<names::ContentColor>(contentColorFor(color), args...), P::block(std::forward<A>(args)...), site);
+            Color content = P::get<names::ContentColor>(contentColorFor(color), args...);
+            if constexpr (P::given<names::Shape, A...>())
+                detail::Surface(modifier, color, content, P::get<names::Shape>(Shape(RectangleShape), args...), P::block(std::forward<A>(args)...), site);
+            else detail::Surface(modifier, color, content, P::block(std::forward<A>(args)...), site);
         }
     }
 };

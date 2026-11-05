@@ -208,6 +208,13 @@ struct Params {
     // The block given last, in a scope of its own; empty if none was.
     template <class... A>
     static auto block(A&&... args);
+    // The block given last as it is, run in its caller's scope (MaterialTheme's content, which
+    // C++ callers give capturing by reference): empty if none was.
+    template <class... A>
+    static Content plainBlock(A&&... args) {
+        if constexpr (blockGiven<A...>()) return Content(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...)));
+        else return Content();
+    }
 };
 
 // Whether a Params lists Tag.
@@ -433,6 +440,8 @@ struct Bitmap {};
 struct ContentDescription {};
 struct Data {};
 struct Colors {};
+struct ColorScheme {};
+struct MotionScheme {};
 struct Start {};
 struct Top {};
 struct End {};
@@ -615,6 +624,9 @@ inline constexpr Param<detail::names::Data> data;
 namespace arg {
 using namespace args;
 inline constexpr Param<detail::names::Colors> colors;
+// (kompoz::colorScheme() and motionScheme() read the theme's: these are MaterialTheme's names)
+inline constexpr Param<detail::names::ColorScheme> colorScheme;
+inline constexpr Param<detail::names::MotionScheme> motionScheme;
 // Members' (Modifier's, Color's): words too common to be names of all of kompoz's (end, x, width).
 inline constexpr Param<detail::names::Start> start;
 inline constexpr Param<detail::names::Top> top;

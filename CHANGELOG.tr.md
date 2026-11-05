@@ -732,6 +732,14 @@
   ile `Color::copy` Compose'un adlı argümanlarını alıyor (`border(width = 1, color = c, shape = s)`,
   `copy(alpha = 0.6f)`); C++'ta `kompoz::arg::width = …` diye yazılıyor. kompozc ile kullanıcının kendi
   `AddTextDialog`'u ve Compose'un Scaffold örneği Android için yazıldıkları gibi derleniyor (tests/compose_tests.cpp).
+- **Compose kodunun en çok söylediği, kompozc ile**: `MaterialTheme(colorScheme = …, motionScheme = …) { … }`
+  (artık adlı argüman alan bir composable; içeriği yine çağıranın kapsamında çalışıyor), `Surface(shape = …)`
+  (içeriği ona kırpılıyor), bir ile üç değerle `CompositionLocalProvider(LocalX provides x) { … }`,
+  `DisposableEffect(key) { …; onDispose { … } }`, `contentDescription = null`. Bir argüman yalnızca karşılaştırılabilir
+  göründüğünde composable artık atlanmıyor: `==`'su olmayan bir yapının listesi (std::vector'ün `==`'su o zaman
+  derlenmez) atlama için de bir durumun yapısal eşitliği için de karşılaştırılamaz sayılıyor. kompozc her işlevi
+  tanımından hemen önce (çağırdıklarını da ondan önce) bildiriyor, dosyanın başında değil; böylece bir parametrenin
+  türü dosyanın üstte bildirdiği bir yapı olabiliyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine
