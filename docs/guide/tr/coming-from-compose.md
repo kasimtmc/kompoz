@@ -1,221 +1,163 @@
-# Compose'dan gelenler için
+# Compose'dan geliyorsanız
 
-Jetpack Compose'u biliyorsanız Kompoz'u zaten biliyorsunuz: aynı model, çoğunlukla aynı isimler. Bu sayfa Kotlin'deki yapıların C++'a nasıl karşılık geldiğini gösteriyor.
-
-Kompoz, Material 3'ün ölçülerine ve Android'in fling eğrisine kadar Compose'un davranışını yakından izler. Değişen dildir: C++'ta compiler plugin, isimli argümanlar ve parantez dışında sondaki lambdalar yok; bu yüzden her birinin bir C++ biçimi var. Aşağıdaki birkaç kalıbı öğrendikten sonra Compose'un belgeleri neredeyse kelimesi kelimesine geçerli olur.
-
-## Composable fonksiyonlar
-
-Kotlin'de `@Composable` ve Compose compiler plugin'i her çağrıya kimliğini verir. C++'ta bir composable sıradan bir fonksiyondur. Onu kompozisyon içinden çağırmak yeterlidir:
+Jetpack Compose'u biliyorsanız Kompoz'u zaten biliyorsunuz: aynı model, aynı adlar ve aynı yazım. Bir composable, Compose'un kendi yazımıyla bir `.cpp` dosyasına yazılan bir `@Composable fun`'dır:
 
 ```kotlin
 @Composable
-fun Greeting(name: String) {
-    Text("Hello, $name!")
+fun Greeting(name: String, modifier: Modifier = Modifier) {
+    Text("Merhaba, $name!", modifier = modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
 }
 ```
 
-```cpp
-void Greeting(const std::string& name) {
-    Text("Hello, " + name + "!");
+Kompoz, Material 3'ün ölçülerine ve Android'in fling eğrisine kadar Compose'un davranışını yakından izler. Yeni olan yalnızca kodun durduğu yerdir: C++ kaynaklarında, C++'ın yanında.
+
+## Nasıl çalışır
+
+Compose'un derleyici eklentisi Kotlin'i Kotlin derleyicisi görmeden önce yeniden yazar; Kompoz'un derleyicisi kompozc da aynısını C++ için yapar. `kompoz_compose`'a verilen bir hedefin kaynakları, C++ derleyicisi görmeden önce yeniden yazılır:
+
+```cmake
+add_executable(app main.cpp screens.cpp)
+target_link_libraries(app PRIVATE kompoz::app)
+kompoz_compose(app)
+```
+
+Her kaynakta bir `@Composable fun` (ve bir `data class`) Kotlin'dir; dosyadaki geri kalan her şey C++'tır ve olduğu gibi geçer. C++ derleyicisinin iletileri sizin kendi satırlarınızı gösterir. Bir hedefin kaynakları, Kotlin'deki gibi tek bir modüldür: bir dosyanın composable'ı başka bir dosyadan adlı argümanlarla çağrılır, başlık gerekmez.
+
+Uygulamanın giriş noktası C++'tır; composable'larınızın çevresine yazdığınız her şey de öyle:
+
+```kotlin continued
+@Composable
+fun App() {
+    MaterialTheme(colorScheme = lightColorScheme()) {
+        Greeting("Kompoz")
+    }
+}
+
+kompoz::Application kompoz::createApplication(int, char**) {
+    return {.title = "Merhaba", .content = [] { App(); }};
 }
 ```
 
-Böyle sıradan bir fonksiyonun kendine ait bir scope'u yoktur: okuduğu durum onu hangi composable çağırdıysa ona aittir ve durum değişince o composable yeniden çalışır. Küçük yardımcıların çoğu için bu yeterlidir.
+## Kotlin'deki gibi okunanlar
 
-Bir Kotlin composable'ı gibi kendi başına yeniden kompoze olması ve argümanları değişmediğinde atlanması gereken bir bileşen için, gövdesini `composable` ile yazın ve bir `CallSite` alın:
-
-```cpp
-void Greeting(const std::string& name, CallSite site = CallSite::current()) {
-    composable(site, name, [=] {
-        Text("Hello, " + name + "!");
-    });
-}
-```
-
-- `CallSite`, `std::source_location`'dır. Varsayılan argümanı `Greeting`'in nereden çağrıldığını kaydeder; çağrının ebeveyni içindeki sırasıyla birlikte bu, çağrının kimliğidir; Kotlin'de compiler plugin'in hesapladığı da budur.
-- Lambdadan önceki argümanlar atlamaya karar verir: geçen seferkilere eşit (`==`) olduklarında ve gövdenin okuduğu hiçbir şey değişmediğinde gövde çalışmaz.
-- Gövde değerle yakalar (`[=]`), çünkü daha sonra, çağıranı olmadan, kendi başına yeniden çalışabilir.
-
-Bir composable'ın bloğu, bir Compose lambdası gibi, kendine ait bir kapsamda çalışır: yalnızca bloğun okuduğu değişince yalnızca blok yeniden çalışır. [Yaşam döngüsü ve kimlik](lifecycle.md) sayfasına bakın.
-
-## Parametreler
-
-Kotlin'in adlı ve varsayılan parametreleri burada da adlı argümanlardır: `ad = değer`, adsız verilen argümanlardan sonra, istenen sırayla ve yalnızca gerekenler:
+Argümanlar adla, istenen sırayla, varsayılanlar yazılmadan, sonuncusu için sondaki lambda; Kompoz'un composable'ları için de sizinkiler için de:
 
 ```kotlin
-Text("Title", fontSize = 24.sp, maxLines = 1)
-Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { … }
+@Composable
+fun Labeled(label: String, value: Int = 0, onClick: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("$label: $value", modifier = Modifier.weight(1f))
+        TextButton(onClick = onClick) { Text("Daha fazla") }
+    }
+}
+
+@Composable
+fun Screen() {
+    Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Labeled(label = "İletiler", value = 3) { println("daha fazla") }
+        Labeled("Taslaklar", onClick = {})
+    }
+}
 ```
 
-```cpp body
-Text("Title", fontSize = 24, maxLines = 1);
-Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
-    Text("…");
+Durum Kotlin'deki gibi devredilir; bir lambdanın parametresi `it` ya da adlıdır; `if` ve `when` değer verir:
+
+```kotlin
+@Composable
+fun Counter() {
+    var count by remember { mutableStateOf(0) }
+    var name by remember { mutableStateOf("") }
+    Column {
+        Text(if (count == 0) "Henüz değil" else "$count kez tıklandı")
+        Button(onClick = { count++ }) { Text("Tıkla") }
+        TextField(value = name, onValueChange = { name = it }, singleLine = true)
+        Text(when {
+            name.isBlank() -> "Kimsiniz?"
+            name.length < 3 -> "Selam!"
+            else -> "Merhaba, ${name.trim()}"
+        })
+    }
+}
+```
+
+Listeler ve tembel yerleşimler, Kotlin'in standart işlevleriyle (`listOf`, `filter`, `map`, `joinToString`, `forEach`…):
+
+```kotlin
+data class Mail(val from: String, val subject: String, val unread: Boolean = false)
+
+@Composable
+fun Inbox(mails: List<Mail>) {
+    val unread = mails.filter { it.unread }
+    LazyColumn(contentPadding = PaddingValues(16.dp)) {
+        item { Text("${unread.size} okunmamış", style = MaterialTheme.typography.titleMedium) }
+        items(mails) { mail ->
+            ListItem(
+                headlineContent = { Text(mail.subject) },
+                supportingContent = { Text(mail.from) },
+            )
+        }
+    }
+}
+```
+
+Bir `data class`'ın `==`'su, `toString()`'i ve `copy(…)`'si vardır; adlı argümanlarla istenen sırayla yapılır (`Mail(subject = "Selam", from = "Ayşe")`).
+
+Eşyordamlar: bir `LaunchedEffect` ya da `launch` bloğu bir eşyordamdır; içindeki `delay`, `animateScrollToItem` ve öteki bekleyen çağrılar beklenir:
+
+```kotlin
+@Composable
+fun Clock() {
+    var seconds by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            seconds++
+        }
+    }
+    val list = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    Column {
+        Text("$seconds sn")
+        Button(onClick = { scope.launch { list.animateScrollToItem(0) } }) { Text("Başa") }
+    }
+}
+```
+
+Gerisi bildiğiniz gibi: `16.dp`, `14.sp`, `Modifier`'dan başlayan değiştirici zincirleri, `Color.Red`, `MaterialTheme.colorScheme.primary`, `LocalContentColor.current`, `CompositionLocalProvider(LocalContentColor provides Color.Red) { … }`, `DisposableEffect(key) { …; onDispose { … } }`, `null`, `?.`, `?:` ve `!!`, aralıklar (`0 until n`, `1..10`, `10 downTo 0 step 2`) ve listeler üzerinde `for`, metin şablonları (sayılar Kotlin'in yazdığı gibi), `CardDefaults.cardColors(containerColor = …)`, `TextFieldDefaults.colors(…)` ve öteki renk nesneleri.
+
+## Composable'larınızın çevresindeki C++
+
+Kotlin'in türleri çevrilen kodda C++ türleridir: `String` `std::string`, `Int` `int`, `Float` `float`, `Boolean` `bool`, `List<T>` `std::vector<T>`, `T?` `std::optional<T>`, bir işlev türü `std::function` (`@Composable () -> Unit`: `Content`). Kendi C++ türleriniz adlarıyla kullanılır; sizin bir yapınız adlı argümanlarla istenen sırayla yapılır, alanları bildirildikleri sırayla atanır:
+
+```kotlin
+struct Point {
+    float x = 0;
+    float y = 0;
 };
-```
 
-Adsız argümanlar parametreleri Compose'un sırasıyla doldurur (`Text(text, modifier, color, fontSize, …)`, `Box(modifier, contentAlignment)`). Composable'ın almadığı bir ad, iki kez verilen bir ad ya da alamayacağı bir değer derleme hatasıdır, hiçbir zaman yok sayılmaz. Adlar (`modifier`, `color`, `fontSize`, …) `kompoz`'un sabitleridir: sizin aynı adlı bir değişkeniniz adı gizler, bu da yine derleme hatası verir; orada `kompoz::color = …` yazın. Sizin ad alanı düzeyindeki bir adınız (genel bir `selected`, bir `badge()` işlevi), `using namespace kompoz` geçerli olan yerde adı belirsiz yapar: `kompoz::selected = …` yazın ya da kendinizinkine başka bir ad verin. Adsız bir argümanın kendi türü olmalıdır: verilmeyen bir geri çağırma `nullptr` olur (`Checkbox(checked, nullptr)`; `{}`'nin türü yoktur), bir çift `std::pair{1.f, 3.f}`. Composable'ın gerek duyduğu argümanlar (`onClick`, `value`, `onValueChange`, `checked`, `state`, …) da adla verilebilir: `TextButton(onClick = save, [=] { … })`, `TextField(value = text, onValueChange = setText)`. İki biçimi olan bir composable (bir `ImageVector`'ün ya da bir `Painter`'ın `Icon`'u, bir değerin ya da bir `TextFieldState`'in metin alanı) adı verilen biçimi (`imageVector =`, `painter =`, `state =`) ya da ilk argümanın türünün gösterdiğini alır. Compose'un renk nesneleri burada tasarlanmış ilklendiricilerle yapılan yapılardır: `TextFieldDefaults::colors{.focusedContainerColor = colors::Transparent}`, `CardDefaults::cardColors{.containerColor = …}`, `ButtonDefaults::textButtonColors{…}`, `TopAppBarDefaults::topAppBarColors{…}`; `kompoz::arg::colors = …` ile verilir (`kompoz::colors` renklerin ad alanıdır); verilmeyen alanlar temanınkidir.
+float distance(Point a, Point b);
 
-Şimdilik `Box`, `Column`, `Row`, `Spacer`, `Text`, düğmeler, simge düğmeleri ve simge açma kapama düğmeleri, kartlar, `Surface`, `Icon`, `Image`, `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, kaydırıcılar, metin alanları, `Scaffold`, üst ve alt uygulama çubukları, kayan eylem düğmeleri ve araç çubukları, `SnackbarHost`, `Snackbar`, gezinme çubukları, rayları ve çekmeceleri, iletişim kutuları, menüler, alt sayfalar, tembel listeler ve ızgaralar ve sayfalayıcılar adlı argüman alıyor. Diğer bileşenler sıraları gelene kadar, alanların bildirildiği sırayla tasarlanmış ilklendiricilerle bir *seçenek yapısı* almaya devam ediyor:
-
-```cpp body
-ListItem({.headline = [] { Text("Wi-Fi"); }, .supporting = [] { Text("Bağlı"); }});
-```
-
-## Sondaki lambdalar
-
-`<kompoz/blocks.hpp>` eklendiğinde (diğer başlıklardan sonra, en sona), Kotlin'in sondaki lambdası çağrıdan sonra, küme parantezlerinde gelir; kapanan parantezden sonra noktalı virgül konur:
-
-```kotlin
-Column(Modifier.padding(16.dp)) {
-    Text("One")
-    Text("Two")
+@Composable
+fun Path(points: List<Point>) {
+    val start = Point(y = 4f, x = 2f)
+    Text("${points.size} nokta, ilki ${distance(start, points.first())} uzakta")
 }
 ```
 
-```cpp body
-Column(Modifier().padding(16)) {
-    Text("One");
-    Text("Two");
-};
-```
+C++ işlevleriniz ve üyeleri oldukları gibi, yerleriyle çağrılır. C++ bir composable'ı kompozc'nin ondan yaptığı işlev olarak çağırır: yukarıdaki `Greeting`, `void Greeting(const std::string& name, const Modifier& modifier = Modifier(), CallSite site = CallSite::current())`'tir.
 
-Başlık, blok alan composable'ların adlarını makro yapar; böylece `Column(…) { … };`, parantezleri bloğu olan çağrıdır: değerle yakalayan (`[=]`) bir lambda. Başlık olmadan ya da bir şeyi başvuruyla yakalaması gereken bir blok için blok son argümandır; başlık ekliyse ad, makro dokunmasın diye parantez içinde yazılır: `(Column)(Modifier(), [=, &log] { … })`. İçeriği olmayan bir `Box`'ın bloğu boştur: `Box(Modifier().size(24)) {};`.
+Unit dönen bir `@Composable fun`, derleyici eklentisinin yaptığı gibi yeniden başlatılabilir ve atlanabilirdir: argümanları geçen seferkiyle eşit (`==`) olduğunda atlanır. Bir `data class`'ın `==`'su vardır; bir C++ yapısının ise bir taneye ihtiyacı vardır (`bool operator==(const Point&) const = default;`), yoksa composable'ı her seferinde çağıranıyla birlikte yeniden çalışır.
 
-Bir değer alan blok, `Scaffold`'un iç boşluğu gibi (Kotlin'in `{ padding -> … }`'si), çağrıdan sonra yazılan, parametresi orada adlandırılan bir lambdadır:
+Lambdalar, Kotlin'inkiler gibi değerleri kopyalayarak yakalar: bir blok daha sonra kendi başına yeniden çalışabilir, bu yüzden hiçbir zaman yok olmuş bir şeye başvuru tutmaz. Bir lambda içinde değiştirilen bir `var`, değişkeni değil lambdanın kopyasını değiştirir: değişeni bir durumda (`mutableStateOf`) tutun, Compose da zaten bunu ister.
 
-```kotlin
-Scaffold(topBar = { TopAppBar(title = { Text("Inbox") }) }) { padding ->
-    Column(Modifier.padding(padding)) { Text("…") }
-}
-```
+## Henüz yok
 
-```cpp body
-Scaffold(topBar = [] { TopAppBar(title = [] { Text("Inbox"); }); }) [=](PaddingValues padding) {
-    Column(Modifier().padding(padding)) { Text("…"); };
-};
-```
+kompozc, bir composable'ın gerek duyduğu Kotlin'i okur. Henüz okumadıkları onun yanında C++ ile yazılır: data class dışındaki sınıflar, `object`, `sealed` sınıflar ve `is`, eklenti işlevleri, etiketler (`return@forEach`) ve `@Composable` olmayan işlevler. Editörünüzün C++ araçları (clangd) da bir `.cpp` dosyasındaki Kotlin'i okumaz; derlemenin iletileri ise onun satırlarını gösterir.
 
-Bir blok kendine ait bir kapsamda çalışır: onu yapan işlev döndükten sonra, tek başına yeniden çalışabilir. Bu yüzden `onClick` gibi geri çağrılar gibi kullandığını **değerle** yakalar; bir başvuru, composable'dan uzun yaşayan bir şeye olmalıdır, asla onun yerel değişkenlerinden birine değil:
+kompozc olmadan Kompoz'un composable'ları C++ ile yazılır: [C++ ile yazmak](cpp.md), Kotlin'in her yapısının orada nasıl okunduğunu gösterir.
 
-```cpp
-void LikeButton() {
-    auto likes = remember([] { return mutableStateOf(0); });
-    Column() {                                                      // bir blok: değerle
-        Button([likes] { likes.set(likes.get() + 1); }) {        // geri çağrı: değerle
-            Text(std::to_string(likes.get()) + " likes");
-        };
-    };
-}
-```
+## Farklı olanlar
 
-Tembel bir düzenin bloğunda, Compose'un alıcısındaki gibi, `item`, `items`, `itemsIndexed` ve `stickyHeader` öğelerini ekler: `LazyColumn(modifier) { items(list, [=](const T& x) { … }); };`. Bu blok hemen, çağrının içinde çalışır ve saklanmaz; bu yüzden referansla yakalar (`items`'a verilen liste kopyalanmaz). Bir öğenin lambdası ise sonra, öğe görünür oldukça çalışır ve değerle yakalar. Sizin `items` adlı bir değişkeniniz işlevi gizler: orada `kompoz::items(items, …)` yazın.
-
-## Durum
-
-```kotlin
-var count by remember { mutableStateOf(0) }
-count++
-```
-
-```cpp body
-auto count = remember([] { return mutableStateOf(0); });
-count.set(count.get() + 1);
-```
-
-C++'ta property delegate'leri yoktur, bu yüzden bir durum `get()` ile okunur ve `set()` ile yazılır. `MutableState<T>` bir handle'dır: kopyalar aynı değeri paylaşır; callback'lerin onu değerle yakalayabilmesi bundandır. `update` değeri yerinde değiştirir:
-
-```cpp body
-auto todos = remember([] { return mutableStateOf(std::vector<std::string>{}); });
-todos.update([](std::vector<std::string>& list) { list.push_back("Buy milk"); });
-```
-
-`remember(key, init)`, `rememberSaveable`, `derivedStateOf`, `mutableStateListOf`, `rememberUpdatedState` ve `produceState` Compose'daki isimlerini taşır. [Durum](state.md) sayfasına bakın.
-
-## Modifier'lar
-
-```kotlin
-Modifier.fillMaxWidth().padding(16.dp).background(Color.Red, RoundedCornerShape(8.dp))
-```
-
-```cpp body
-Box(Modifier().fillMaxWidth().padding(16).background(Color::hex(0xE53935), RoundedCornerShape(8))) {};
-```
-
-Zincir `Modifier()`'dan başlar. Sıra Compose'daki gibi önemlidir. [Modifier'lar](modifiers.md) sayfasına bakın.
-
-## Birimler
-
-Kotlin'deki `16.dp` yalnızca `16`'dır: her uzunluk dp cinsinden bir `float`'tur. Yazı boyutları `TextUnit`'tir; bir sp sayısından dönüşür (`.fontSize = 24`) ya da `TextUnit::sp(24)` ve `TextUnit::em(1.5f)` olarak yazılır. Süreler `std::chrono` kullanır: `delay(300ms)`, `debounce(300ms)`. Bir `Color` Compose'un 64 bitidir: sRGB'de 0 ile 1 arasındaki bileşenlerden (`Color{1, 0, 0, 1}`), onaltılık bir değerden (`Color::hex(0xE53935)`, `Color::hex(0x000000, 0.5f)`), bir ARGB değerinden (`Color::argb(0xFFE53935)`, Compose'un `Color(0xFFE53935)`'i) ya da başka bir renk uzayında (`Color(0.2f, 0.6f, 0.9f, 1, ColorSpaces::DisplayP3)`) yapılır, `red()`, `green()`, `blue()` ve `alpha()` ile okunur; `colors::Black`, `White` ve `Transparent` isimlidir, `color.copy(0.38f)` de Compose'un `copy(alpha = …)`'su gibi alfayı değiştirir.
-
-## Coroutine'ler
-
-Kotlin'in coroutine'leri, `Task` döndüren C++20 coroutine'lerine dönüşür. Compose'dakiler gibi UI thread'inde, kare saatine göre çalışırlar.
-
-```kotlin
-LaunchedEffect(userId) {
-    delay(1000)
-    user = repository.load(userId)
-}
-val scope = rememberCoroutineScope()
-Button(onClick = { scope.launch { listState.animateScrollToItem(0) } }) { Text("Top") }
-```
-
-```cpp body
-#! int userId = 0;
-using namespace std::chrono_literals;
-auto user = remember([] { return mutableStateOf(std::string()); });
-LaunchedEffect(userId, [user, userId]() -> Task {
-    co_await delay(1000ms);
-    user.set("user " + std::to_string(userId));
-});
-auto list = rememberLazyListState();
-auto scope = rememberCoroutineScope();
-Button([scope, list] { scope.launch([list]() -> Task { co_await list.animateScrollToItem(0); }); }) { Text("Top"); };
-```
-
-`suspend` fonksiyonlar, `co_await` ettiğiniz coroutine'lerdir. `Flow`, `StateFlow` ve `SharedFlow` operatörleriyle birlikte vardır (`map`, `filter`, `debounce`, `flatMapLatest`, `stateIn`…) ve `collectAsState()` kompozisyonda birini okur. [Yan etkiler](side-effects.md) ve [Mimari](architecture.md) sayfalarına bakın.
-
-## Composition local'ler
-
-```kotlin
-val color = LocalContentColor.current
-CompositionLocalProvider(LocalContentColor provides Color.Red) { … }
-```
-
-```cpp body
-Color color = LocalContentColor.current();
-CompositionLocalProvider({LocalContentColor.provides(Color::hex(0xE53935))}, [&] { Text("Red"); });
-```
-
-`MaterialTheme.colorScheme`, `MaterialTheme.typography` ve `MaterialTheme.motionScheme`, `colorScheme()`, `typography()` ve `motionScheme()`'dır. Tema genelinde bir `Shapes` yoktur: bileşenlerde Material'ın şekilleri yerleşiktir; bir bileşen şekil alıyorsa kendi şeklinizi verirsiniz (`RoundedCornerShape(12)`, `CircleShape`). [CompositionLocal](composition-local.md) sayfasına bakın.
-
-## Hızlı başvuru
-
-| Compose | Kompoz |
-|---|---|
-| `@Composable fun F()` | `void F()`, ya da `composable(site, args…, [=] { … })` ile `void F(CallSite site = CallSite::current())` |
-| `remember { x }`, `remember(key) { x }` | `remember([] { return x; })`, `remember(key, [] { return x; })` |
-| `var v by mutableStateOf(0)` | `auto v = mutableStateOf(0);` `v.get()`, `v.set(1)` |
-| `key(id) { … }` | `key(id, [&] { … })` |
-| `Modifier.padding(8.dp)` | `Modifier().padding(8)` |
-| İsimli argümanlar | Adlı argümanlar: `Text("…", maxLines = 1)` (henüz çevrilmemiş bileşenler için seçenek yapıları) |
-| `LaunchedEffect(k) { … }` | `LaunchedEffect(k, [=]() -> Task { … })` |
-| `scope.launch { … }` | `scope.launch([=]() -> Task { … })` |
-| `DisposableEffect(k) { onDispose { … } }` | `DisposableEffect(k, [=] { return [=] { … }; })` |
-| `LocalX.current` | `LocalX.current()` |
-| `MaterialTheme.colorScheme.primary` | `colorScheme().primary` |
-| `LazyColumn { items(list) { … } }` | `LazyColumn(Modifier()) { items(list, [=](const T& x) { … }); };` |
-| `val vm: MyViewModel = viewModel()` | `auto vm = viewModel<MyViewModel>();` |
-| `@Preview` | `KOMPOZ_PREVIEW(Name) { … }` |
-| `createComposeRule()` | `kompoz::testing::ComposeTestRule` |
-
-README'deki daha uzun tablo gezinmeyi, animasyonu, hareketleri, metin alanlarını ve fazlasını kapsar; [API sayfası](api.md) da her Compose API'sini Kompoz'daki durumuyla listeler.
-
-## Neler farklı
-
-- **Compiler plugin yok.** Kimlik çağrı noktalarından gelir; bu yüzden aynı satırdaki iki çağrı sıralarıyla ayırt edilir. Öğeleri yer değiştiren döngülerde `key` kullanın ([Yaşam döngüsü](lifecycle.md) sayfasına bakın).
-- **`by` delegasyonu yok.** Durumlar `get()` ile okunur, `set()` ile yazılır.
-- **Atlamak `==` gerektirir.** Bir composable ancak argümanları eşit çıkarsa atlanır. `std::function` karşılaştırılamaz; bu yüzden onu alan bir composable yeniden başlatılabilir ama hiç atlanmaz.
 - **Platformlar.** Kompoz her şeyi kendisi çizer: Android'de kendi etkinliğinin bir görünümünde, Linux, Windows ve macOS'ta kendi pencerelerinde, web'de bir tuvalde; birlikte çalışılacak Android View'ları yoktur.
+- **Kimlik.** Bir çağrının kimliği, kaynaktaki yeri ve ebeveyninin çağrıları arasındaki sırasıdır; derleyici eklentisinin çıkardığı gibi. Öğeleri yer değiştiren döngülerde `key` kullanın (bkz. [Yaşam döngüsü](lifecycle.md)).
+- **API.** Compose'un ve Material 3'ün çoğu aynı adlarla vardır; [API sayfası](api.md) her Compose API'sini Kompoz'daki durumuyla listeler.

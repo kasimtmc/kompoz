@@ -6,6 +6,7 @@ Get started | Başlarken
     setup
     tutorial
     coming-from-compose
+    cpp
 
 Foundation | Temeller
     thinking
