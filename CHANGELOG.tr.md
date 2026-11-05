@@ -713,7 +713,8 @@
   orada bildiriyor). kompozc derlemeyi yapan makinede çalışıyor: Kompoz başka biri için derlenirken (Android, web)
   bu makine için kaynaklarından, bu makinenin C++ derleyicisiyle derleniyor (ya da `KOMPOZC` birini gösteriyor);
   `cmake --install` onu `kompoz_compose` ve kaynaklarıyla birlikte `find_package(kompoz)` için kuruyor. Gösterimin
-  kaynakları ondan geçiyor.
+  kaynakları ondan geçiyor. Kılavuzun ```` ```kotlin ```` örnekleri de ondan geçirilerek denetleniyor (`scripts/docs.py --check`),
+  her biri sayfadaki kendi satırlarında.
 - **Bir composable'ın gerek duyduğu her argüman adla verilebilir**: `onClick`, `value` ve `onValueChange`, `checked` ve
   `onCheckedChange`, `selected`, `expanded`, `onDismissRequest`, `state`, `text`, `imageVector`/`painter`/`bitmap` ve
   `contentDescription`, … da Compose'daki gibi adlı argüman: `TextButton(onClick = save, [=] { … })`,

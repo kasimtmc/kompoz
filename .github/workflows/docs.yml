@@ -1,11 +1,12 @@
-# The guide (docs/guide, docs/components*.md), its C++ examples compiled against the headers, built
+# The guide (docs/guide, docs/components*.md), its examples compiled against the headers (the Kotlin ones
+# through kompozc, built from compiler/), built
 # by scripts/docs.py and published on GitHub Pages.
 name: Documentation
 
 on:
   push:
     branches: [main]
-    paths: ['docs/**', 'scripts/docs.py', 'include/**', 'CMakeLists.txt', '.github/workflows/docs.yml']
+    paths: ['docs/**', 'scripts/docs.py', 'include/**', 'compiler/**', 'CMakeLists.txt', '.github/workflows/docs.yml']
   workflow_dispatch:
 
 permissions:

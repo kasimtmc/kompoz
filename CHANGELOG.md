@@ -673,7 +673,8 @@
   one file is called from another with named arguments and defaults, no header needed (kompozc declares there what it
   uses). kompozc runs on the machine that builds: where Kompoz is built for another (Android, the web) it is built
   for this one from its sources, with this machine's C++ compiler (or `KOMPOZC` names one); `cmake --install` installs
-  it with `kompoz_compose` and its sources, for `find_package(kompoz)`. The showcase's sources go through it.
+  it with `kompoz_compose` and its sources, for `find_package(kompoz)`. The showcase's sources go through it. The guide's ```` ```kotlin ```` examples are
+  checked through it too (`scripts/docs.py --check`), each at its own lines of the page.
 - **Every argument a composable needs can be named**: `onClick`, `value` and `onValueChange`, `checked` and
   `onCheckedChange`, `selected`, `expanded`, `onDismissRequest`, `state`, `text`, `imageVector`/`painter`/`bitmap` and
   `contentDescription`, … are named arguments too, as in Compose: `TextButton(onClick = save, [=] { … })`,

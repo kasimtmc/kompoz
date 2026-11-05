@@ -4,14 +4,18 @@
   scripts/docs.py [out]              builds the site into out (default build-docs/); open out/index.html
   scripts/docs.py --check [page.md]  compiles every C++ snippet (all pages, or the ones named)
 
-Pages are Markdown (the subset below), listed in docs/guide/nav.txt. A ```cpp block is compiled on
-its own after `#include <kompoz/kompoz.hpp>`, `<kompoz/testing.hpp>`, `<kompoz/blocks.hpp>` and `using namespace kompoz;`:
-  ```cpp            at namespace scope (functions, types)
-  ```cpp body       inside a function: statements, as in a composable's body
-  ```cpp continued  appended to the block before it (and that one's), as one translation unit
-  ```cpp nocheck    shown, not compiled (a sketch, or what not to do)
-Lines starting with "#! " are compiled but not shown (setup a snippet needs, as a declaration); in a
-`cpp body` block the ones it starts with go before the function, at namespace scope.
+Pages are Markdown (the subset below), listed in docs/guide/nav.txt. A ```kotlin block is Compose code
+as an app writes it in a .cpp file: kompozc translates it (KOMPOZC, or one built from compiler/) and
+the result is compiled after `#include <kompoz/kompoz.hpp>`, `<kompoz/testing.hpp>` and
+`using namespace kompoz;`. A ```cpp block is C++ compiled on its own after those and `<kompoz/blocks.hpp>`:
+  ```kotlin            at namespace scope (@Composable functions, data classes, C++ around them)
+  ```kotlin body       inside a @Composable function: statements, as in a composable's body
+  ```kotlin continued  appended to the block before it (and that one's), as one translation unit
+  ```kotlin nocheck    shown, not compiled (a sketch, or what not to do)
+and the same for ```cpp. Lines starting with "#! " are compiled but not shown (setup a snippet needs,
+C++ declarations); in a `body` block the ones it starts with go before the function, at namespace
+scope. Each Kotlin block stands on its own lines of the page in what kompozc reads, so its messages
+and the C++ compiler's point at the page's lines.
 
 Markdown: # ## ### headings, paragraphs, - and 1. lists (nested by indenting), ``` fences, tables,
 > quotes (> **Note:** / **Warning:** become callouts), ![alt](image) (a line of pictures alone: side by
@@ -71,6 +75,53 @@ def code_blocks(text):
     return blocks
 
 
+KOTLIN_PRELUDE = '#include <kompoz/kompoz.hpp>\n#include <kompoz/testing.hpp>\nusing namespace kompoz;\n'
+
+
+def kotlin_units(path):
+    """The translation units a page's Kotlin blocks make: (first line, source), each block on the
+    lines it has in the page (blank lines before it), so that line numbers are the page's."""
+    units = []
+    for line, info, body in code_blocks(open(path, encoding='utf-8').read()):
+        words = info.split()
+        if not words or words[0] != 'kotlin' or 'nocheck' in words:
+            continue
+        lines = [l[3:] if l.startswith('#! ') else l for l in body]
+        if 'body' in words:  # its hidden lines first, at namespace scope; then the statements in a function
+            lead = 0
+            while lead < len(body) and body[lead].startswith('#! '):
+                lead += 1
+            rest = lines[lead:] or ['']
+            lines = lines[:lead] + [f'@Composable fun kompozSnippet{line}() {{ ' + rest[0]] + rest[1:] + ['}']
+        if 'continued' in words and units:
+            first, source = units[-1]
+        else:
+            first, source = line, KOTLIN_PRELUDE
+        have = source.count('\n')
+        source += '\n' * max(0, line - have) + '\n'.join(lines) + '\n'  # (its first line is the page's line + 1)
+        if 'continued' in words and units:
+            units[-1] = (first, source)
+        else:
+            units.append((first, source))
+    return units
+
+
+def kompozc_path():
+    """KOMPOZC, or kompozc built from compiler/ (into build-docs-kompozc/)."""
+    if os.environ.get('KOMPOZC'):
+        return os.environ['KOMPOZC']
+    out = os.path.join(ROOT, 'build-docs-kompozc')
+    for cmd in (['cmake', '-S', os.path.join(ROOT, 'compiler'), '-B', out, '-DCMAKE_BUILD_TYPE=Release'],
+                ['cmake', '--build', out, '--config', 'Release']):
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit(f'kompozc: {" ".join(cmd)} failed\n{r.stdout}{r.stderr}')
+    for name in ('kompozc', 'kompozc.exe', os.path.join('Release', 'kompozc.exe')):
+        if os.path.exists(os.path.join(out, name)):
+            return os.path.join(out, name)
+    sys.exit('kompozc: built, but not found in ' + out)
+
+
 def snippet_units(path):
     """The translation units a page's C++ blocks make: (first line, source)."""
     units = []
@@ -100,21 +151,34 @@ def check(paths):
     jobs = []
     for path in paths:
         for line, source in snippet_units(path):
-            jobs.append((path, line, source))
+            jobs.append((path, line, source, False))
+        for line, source in kotlin_units(path):
+            jobs.append((path, line, source, True))
+    kompozc = kompozc_path() if any(job[3] for job in jobs) else None
     tmp = tempfile.mkdtemp(prefix='kompoz-docs-')
 
     def compile_one(job):
-        path, line, source = job
-        name = os.path.join(tmp, f'{os.path.basename(path)}-{line}.cpp')
+        path, line, source, kotlin = job
+        name = os.path.join(tmp, f'{os.path.basename(path)}-{line}{"-kt" if kotlin else ""}.cpp')
         with open(name, 'w', encoding='utf-8') as f:
             f.write(source)
+        if kotlin:  # translated first; messages about name's lines are the page's
+            translated = name + '.out.cpp'
+            r = subprocess.run([kompozc, name, '-o', translated, '--headers', os.path.join(ROOT, 'include', 'kompoz')],
+                               capture_output=True, text=True)
+            if r.returncode == 0:
+                r = subprocess.run([compiler, '-std=c++20', '-fsyntax-only', '-I', os.path.join(ROOT, 'include'), translated],
+                                   capture_output=True, text=True)
+            page = os.path.relpath(path, ROOT)
+            err = r.stderr.replace(os.path.abspath(name).replace(os.sep, '/'), page).replace(name, page)
+            return job, r.returncode, err
         r = subprocess.run([compiler, '-std=c++20', '-fsyntax-only', '-I', os.path.join(ROOT, 'include'), name],
                            capture_output=True, text=True)
         return job, r.returncode, r.stderr
 
     failed = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=int(os.environ.get('DOCS_JOBS', min(6, os.cpu_count() or 4)))) as pool:
-        for (path, line, _), code, err in pool.map(compile_one, jobs):
+        for (path, line, _, _), code, err in pool.map(compile_one, jobs):
             if code != 0:
                 failed += 1
                 print(f'--- {os.path.relpath(path, ROOT)}:{line}: does not compile\n{err}')
