@@ -1067,6 +1067,37 @@ struct SemanticsProperties {
                a.contentType == b.contentType;
     }
 };
+// Compose's semantics role (Role.Button, …).
+using Role = SemanticsRole;
+// Compose's SemanticsPropertyReceiver: the receiver of semantics { … } and clearAndSetSemantics
+// { … }, which sets what a node says: semantics { heading(); contentDescription = "…" }.
+class SemanticsPropertyReceiver {
+public:
+    explicit SemanticsPropertyReceiver(SemanticsProperties& properties)
+        : contentDescription(properties.contentDescription), stateDescription(properties.stateDescription), role(properties.role),
+          selected(properties.checked), liveRegion(properties.liveRegion), progressBarRangeInfo(properties.progressBarRangeInfo),
+          customActions(properties.customActions), traversalIndex(properties.traversalIndex), properties_(properties) {}
+    std::string& contentDescription;
+    std::string& stateDescription;
+    SemanticsRole& role;
+    std::optional<bool>& selected;  // (a selected tab's or radio button's)
+    LiveRegionMode& liveRegion;
+    std::optional<ProgressBarRangeInfo>& progressBarRangeInfo;
+    std::vector<CustomAccessibilityAction>& customActions;
+    float& traversalIndex;
+    void heading() const { properties_.heading = true; }
+    void selectableGroup() const { properties_.selectableGroup = true; }
+    void hideFromAccessibility() const { properties_.hidden = true; }
+    // What a screen reader's gesture to set the value does (a slider's): true if it was set.
+    void setProgress(std::function<bool(float)> action) const { properties_.setProgress = std::move(action); }
+    void setProgress(const std::string& label, std::function<bool(float)> action) const {
+        (void)label;  // (Compose's name for the action: none here)
+        setProgress(std::move(action));
+    }
+
+private:
+    SemanticsProperties& properties_;
+};
 struct SemanticsElement final : ModifierElement {
     std::string description;  // = properties.contentDescription
     SemanticsProperties properties;
@@ -2130,6 +2161,27 @@ public:
     // accessibility services), this node says `properties` (a rating of five star icons read
     // as "4 / 5").
     Modifier clearAndSetSemantics(SemanticsProperties properties) const;
+    // Compose's forms, set on a receiver: semantics { heading() }, clearAndSetSemantics {
+    // contentDescription = "Rating: 4 of 5" }, semantics(mergeDescendants = true) { } (named_members.hpp).
+    template <class F>
+        requires std::is_invocable_v<F&, SemanticsPropertyReceiver&>
+    Modifier semantics(F&& properties) const {
+        SemanticsProperties p;
+        SemanticsPropertyReceiver receiver(p);
+        properties(receiver);
+        return semantics(std::move(p));
+    }
+    template <class F>
+        requires std::is_invocable_v<F&, SemanticsPropertyReceiver&>
+    Modifier clearAndSetSemantics(F&& properties) const {
+        SemanticsProperties p;
+        SemanticsPropertyReceiver receiver(p);
+        properties(receiver);
+        return clearAndSetSemantics(std::move(p));
+    }
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier semantics(A&&... args) const;
     // Leaves it and what is inside out of the semantics tree (a decoration, a duplicate).
     Modifier hideFromAccessibility() const;
     Modifier onFocusChanged(std::function<void(FocusState)> onFocusChanged) const;

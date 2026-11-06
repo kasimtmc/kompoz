@@ -569,6 +569,7 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 342. `PathEffect` and `PathMeasure` as Skia's: dashes, corners, stamps and chains as Skia makes them, applied where a path is drawn at its pixels; lengths, positions and pieces of curves as `SkContourMeasure` measures and cuts them ✅
 343. `Canvas` takes Compose's named arguments and its other form, `Canvas(modifier, contentDescription) { … }` (what a screen reader says of it) ✅
 344. Compose's `Modifier.layout { measurable, constraints -> layout(w, h) { placeable.placeRelative(x, y) } }` and `layout(w, h) { … }` in a `Layout` (`MeasureScope`, `PlacementScope`, `placeRelative` mirrored right to left) ✅
+345. `Modifier.semantics { … }`, `semantics(mergeDescendants = true) { … }` and `clearAndSetSemantics { … }` set on Compose's `SemanticsPropertyReceiver` (`heading()`, `contentDescription`, `role = Role.Button`, …) ✅
 
 ## Next
 

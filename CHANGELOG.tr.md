@@ -791,6 +791,10 @@
   `layout(width, height) { placeable.placeRelative(x, y) }` (alıcısı bir `MeasureScope`, bloğunki bir
   `PlacementScope`) ve bir `Layout`'un ölçüm politikasında `layout(width, height) { … }`. `placeRelative` baştan,
   sağdan sola düzende aynalanarak yerleştiriyor; `place` soldan.
+- **Compose'daki gibi bir alıcıda ayarlanan semantik**: `Modifier.semantics { heading(); contentDescription = "…" }`,
+  `semantics(mergeDescendants = true) { … }`, `clearAndSetSemantics { contentDescription = "…" }`; `stateDescription`,
+  `role` (`Role.Button`, …), `selected`, `liveRegion`, `progressBarRangeInfo`, `customActions`, `traversalIndex`,
+  `selectableGroup()`, `hideFromAccessibility()` ve `setProgress { … }` ile.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

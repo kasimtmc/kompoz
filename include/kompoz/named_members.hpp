@@ -135,6 +135,22 @@ Modifier Modifier::graphicsLayer(A&&... args) const {
     return graphicsLayer(l);
 }
 
+// semantics(mergeDescendants = true) { … }: what is inside said as one, with what its block sets.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::semantics(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::MergeDescendants, detail::BlockWith<SemanticsPropertyReceiver&>>;
+    static_assert(P::check<A...>());
+    SemanticsProperties p;
+    p.mergeDescendants = P::get<n::MergeDescendants>(false, args...);
+    if constexpr (P::blockGiven<A...>()) {
+        SemanticsPropertyReceiver receiver(p);
+        std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...))(receiver);
+    }
+    return semantics(std::move(p));
+}
+
 // animateFloat(initialValue, targetValue, animationSpec, label) and animateColor's: the label is
 // Compose's name for its tools (none here).
 template <class... A>

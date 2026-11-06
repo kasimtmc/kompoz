@@ -469,6 +469,7 @@ struct InitialValue {};
 struct TargetValue {};
 struct AnimationSpec {};
 struct Content {};
+struct MergeDescendants {};
 struct ScaleX {};
 struct ScaleY {};
 struct TranslationX {};
@@ -683,6 +684,7 @@ inline constexpr Param<detail::names::TargetValue> targetValue;
 inline constexpr Param<detail::names::AnimationSpec> animationSpec;
 // (a composable's block, given by name as Compose's content = … : kompoz::Content is its type)
 inline constexpr Param<detail::names::Content> content;
+inline constexpr Param<detail::names::MergeDescendants> mergeDescendants;
 inline constexpr Param<detail::names::ScaleX> scaleX;
 inline constexpr Param<detail::names::ScaleY> scaleY;
 inline constexpr Param<detail::names::TranslationX> translationX;

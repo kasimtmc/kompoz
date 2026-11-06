@@ -750,6 +750,10 @@
   `layout(width, height) { placeable.placeRelative(x, y) }` (a `MeasureScope` its receiver, a `PlacementScope` the
   block's), and `layout(width, height) { … }` in a `Layout`'s measure policy. `placeRelative` places from the start,
   mirrored right to left; `place` from the left.
+- **Semantics set on a receiver, as Compose's**: `Modifier.semantics { heading(); contentDescription = "…" }`,
+  `semantics(mergeDescendants = true) { … }`, `clearAndSetSemantics { contentDescription = "…" }`, with
+  `stateDescription`, `role` (`Role.Button`, …), `selected`, `liveRegion`, `progressBarRangeInfo`, `customActions`,
+  `traversalIndex`, `selectableGroup()`, `hideFromAccessibility()` and `setProgress { … }`.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

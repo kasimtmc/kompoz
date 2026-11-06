@@ -25193,6 +25193,32 @@ TEST(what_shows_past_a_scroll_container_across_counts_as_shown) {
     CHECK(std::any_of(canvas.clips.begin(), canvas.clips.end(), [](Rect r) { return sameRect(r, {40, 390 - 30, 200, 160}); }));  // the inner row at 390
 }
 
+TEST(semantics_set_on_a_receiver) {
+    // Compose's semantics { … }, semantics(mergeDescendants = true) { … }, clearAndSetSemantics { … }.
+    ComposeTestRule rule([] {
+        Column([] {
+            Text("Ayarlar", Modifier().semantics([](SemanticsPropertyReceiver& s) { s.heading(); }));
+            Row(Modifier().semantics(arg::mergeDescendants = true, [](SemanticsPropertyReceiver& s) { s.stateDescription = "açık"; }), [] {
+                Text("Wi-Fi");
+                Text("Bağlı");
+            });
+            Box(Modifier().clearAndSetSemantics([](SemanticsPropertyReceiver& s) { s.contentDescription = "Puan: 4 / 5"; }), [] { Text("4/5"); });
+        });
+    });
+    auto tree = rule.host().semanticsTree();
+    auto find = [&](const std::string& label) -> const SemanticsNode* {
+        for (const auto& n : tree)
+            if (n.label == label) return &n;
+        return nullptr;
+    };
+    CHECK(find("Ayarlar") && find("Ayarlar")->heading);
+    const SemanticsNode* merged = nullptr;
+    for (const auto& n : tree)
+        if (n.label.find("Wi-Fi") != std::string::npos && n.label.find("Bağlı") != std::string::npos) merged = &n;
+    CHECK(merged && merged->stateDescription == "açık");
+    CHECK(find("Puan: 4 / 5") && !find("4/5"));
+}
+
 TEST(semantics_merge_clear_and_hide) {
     ComposeTestRule rule([&] {
         Column([=] {
