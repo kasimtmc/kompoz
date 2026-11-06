@@ -512,6 +512,34 @@ TEST(list_items_by_name) {
     CHECK(rule.onNodeWithText("Açık").exists() && rule.onNodeWithText("1 kez").exists());
 }
 
+// A lazy list's items with Compose's key = { … }: an item's state follows it when the list changes.
+data class Row2(val id: Int, val label: String)
+
+@Composable
+fun KeyedRow(row: Row2) {
+    var taps by remember { mutableStateOf(0) }
+    Text("${row.label}:$taps", modifier = Modifier.clickable { taps++ })
+}
+
+@Composable
+fun KeyedList(rows: List<Row2>) {
+    LazyColumn(modifier = Modifier.height(400.dp)) {
+        item(key = "başlık") { Text("Satırlar") }
+        items(rows, key = { it.id }) { row -> KeyedRow(row) }
+        item { Text(if (rows.size > 1) "çok" else "${Int.MAX_VALUE > 0}") }
+    }
+}
+
+TEST(lazy_keys_by_name) {
+    auto rows = mutableStateOf(std::vector<Row2>{Row2{1, "bir"}, Row2{2, "iki"}});
+    ComposeTestRule rule([rows] { KeyedList(rows.get()); });
+    rule.onNodeWithText("iki:0").performClick();
+    CHECK(rule.onNodeWithText("iki:1").exists());
+    rows.set({Row2{2, "iki"}});  // the first one gone: "iki" keeps its taps
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("iki:1").exists() && rule.onNodeWithText("true").exists());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

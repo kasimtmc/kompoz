@@ -444,6 +444,8 @@ struct Bitmap {};
 struct ContentDescription {};
 struct Data {};
 struct Colors {};
+struct Key {};
+struct ContentType {};
 struct ColorScheme {};
 struct MotionScheme {};
 struct Start {};
@@ -632,6 +634,9 @@ inline constexpr Param<detail::names::Data> data;
 namespace arg {
 using namespace args;
 inline constexpr Param<detail::names::Colors> colors;
+// (kompoz::key(id) { … } is the composable that gives an identity: these are a lazy item's)
+inline constexpr Param<detail::names::Key> key;
+inline constexpr Param<detail::names::ContentType> contentType;
 // (kompoz::colorScheme() and motionScheme() read the theme's: these are MaterialTheme's names)
 inline constexpr Param<detail::names::ColorScheme> colorScheme;
 inline constexpr Param<detail::names::MotionScheme> motionScheme;

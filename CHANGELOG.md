@@ -705,6 +705,10 @@
   block: `ListItem(onClick = …) { Text("…") }`, `ListItem(selected = …, onClick = …) { … }`,
   `ListItem(checked = …, onCheckedChange = …) { … }` (`enabled`, `onLongClick`, `shapes`, `colors`, `interactionSource`
   by name). The `ListItemSlots` forms (`ListItem({.headline = …})`) take their arguments as before.
+- **A lazy layout's items take Compose's named `key` and `contentType`**: `items(list, key = { it.id }) { … }`,
+  `item(key = "header") { … }`, put in their places (written `kompoz::arg::key` in C++, where `kompoz::key` is the
+  composable that gives an identity). kompozc gives such a lambda its value, and reads `Int.MAX_VALUE` and Kotlin's
+  other number limits.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

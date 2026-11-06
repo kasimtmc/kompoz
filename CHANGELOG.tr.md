@@ -745,6 +745,10 @@
   `ListItem(onClick = …) { Text("…") }`, `ListItem(selected = …, onClick = …) { … }`,
   `ListItem(checked = …, onCheckedChange = …) { … }` (`enabled`, `onLongClick`, `shapes`, `colors`, `interactionSource`
   adla). `ListItemSlots` biçimleri (`ListItem({.headline = …})`) argümanlarını eskisi gibi alıyor.
+- **Tembel yerleşimin öğeleri Compose'un adlı `key` ve `contentType`'ını alıyor**: `items(list, key = { it.id }) { … }`,
+  `item(key = "başlık") { … }` yerlerine konuyor (C++'ta `kompoz::arg::key` diye yazılıyor; `kompoz::key` kimlik veren
+  composable). kompozc böyle bir lambdaya değerini verdiriyor; `Int.MAX_VALUE`'yu ve Kotlin'in öteki sayı sınırlarını
+  okuyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

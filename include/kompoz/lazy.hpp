@@ -638,33 +638,80 @@ inline constexpr Composable<detail::LazyHorizontalStaggeredGridImpl> LazyHorizon
 // kompoz::items(items, …) there.
 
 
+namespace detail {
+template <class Tag, class A>
+auto namedOf(A&& a) {
+    if constexpr (std::is_same_v<TagOf<A>, Tag>) return std::forward_as_tuple(std::forward<A>(a).value);
+    else return std::tuple<>{};
+}
+template <class A>
+auto unnamedOf(A&& a) {
+    if constexpr (!isNamed<A>) return std::forward_as_tuple(std::forward<A>(a));
+    else return std::tuple<>{};
+}
+// Compose's items(list, key = { … }, contentType = { … }) { … }: the named key and content type
+// put in their places, after what comes first (the list, the count) and before the content.
+template <class F, class... A>
+void withLazyNames(F&& f, A&&... args) {
+    static_assert(((!isNamed<A> || std::is_same_v<TagOf<A>, names::Key> || std::is_same_v<TagOf<A>, names::ContentType>) && ...),
+                  "kompoz: a lazy layout's items take key = … and contentType = … by name");
+    auto unnamed = std::tuple_cat(unnamedOf(std::forward<A>(args))...);
+    constexpr size_t n = std::tuple_size_v<decltype(unnamed)>;
+    static_assert(n >= 1, "kompoz: a lazy layout's items take their content last");
+    auto key = std::tuple_cat(namedOf<names::Key>(std::forward<A>(args))...);
+    auto type = std::tuple_cat(namedOf<names::ContentType>(std::forward<A>(args))...);
+    auto head = [&]<size_t... I>(std::index_sequence<I...>) { return std::forward_as_tuple(std::get<I>(std::move(unnamed))...); }(
+        std::make_index_sequence<n - 1>{});
+    std::apply(std::forward<F>(f), std::tuple_cat(std::move(head), std::move(key), std::move(type),
+                                                  std::forward_as_tuple(std::get<n - 1>(std::move(unnamed)))));
+}
+
 template <class... A>
-void item(A&&... args) {
-    detail::LazyReceiver& r = detail::lazyReceiver();
+void itemPositional(A&&... args) {
+    LazyReceiver& r = lazyReceiver();
     if constexpr (requires(LazyGridScope& g) { g.item(std::forward<A>(args)...); })
         if (r.grid) return r.grid->item(std::forward<A>(args)...);
     if constexpr (requires(LazyListScope& l) { l.item(std::forward<A>(args)...); })
         if (r.list) return r.list->item(std::forward<A>(args)...);
-    detail::outsideLazyBlock("item");
+    outsideLazyBlock("item");
 }
 template <class... A>
-void items(A&&... args) {
-    detail::LazyReceiver& r = detail::lazyReceiver();
+void itemsPositional(A&&... args) {
+    LazyReceiver& r = lazyReceiver();
     if constexpr (requires(LazyGridScope& g) { g.items(std::forward<A>(args)...); })
         if (r.grid) return r.grid->items(std::forward<A>(args)...);
     if constexpr (requires(LazyListScope& l) { l.items(std::forward<A>(args)...); })
         if (r.list) return r.list->items(std::forward<A>(args)...);
-    detail::outsideLazyBlock("items");
+    outsideLazyBlock("items");
+}
+template <class... A>
+void itemsIndexedPositional(A&&... args) {
+    if (LazyListScope* l = lazyReceiver().list) return l->itemsIndexed(std::forward<A>(args)...);
+    outsideLazyBlock("itemsIndexed");
+}
+template <class... A>
+void stickyHeaderPositional(A&&... args) {
+    if (LazyListScope* l = lazyReceiver().list) return l->stickyHeader(std::forward<A>(args)...);
+    outsideLazyBlock("stickyHeader");
+}
+
+} // namespace detail
+
+template <class... A>
+void item(A&&... args) {
+    detail::withLazyNames([](auto&&... a) { detail::itemPositional(std::forward<decltype(a)>(a)...); }, std::forward<A>(args)...);
+}
+template <class... A>
+void items(A&&... args) {
+    detail::withLazyNames([](auto&&... a) { detail::itemsPositional(std::forward<decltype(a)>(a)...); }, std::forward<A>(args)...);
 }
 template <class... A>
 void itemsIndexed(A&&... args) {
-    if (LazyListScope* l = detail::lazyReceiver().list) return l->itemsIndexed(std::forward<A>(args)...);
-    detail::outsideLazyBlock("itemsIndexed");
+    detail::withLazyNames([](auto&&... a) { detail::itemsIndexedPositional(std::forward<decltype(a)>(a)...); }, std::forward<A>(args)...);
 }
 template <class... A>
 void stickyHeader(A&&... args) {
-    if (LazyListScope* l = detail::lazyReceiver().list) return l->stickyHeader(std::forward<A>(args)...);
-    detail::outsideLazyBlock("stickyHeader");
+    detail::withLazyNames([](auto&&... a) { detail::stickyHeaderPositional(std::forward<decltype(a)>(a)...); }, std::forward<A>(args)...);
 }
 
 } // namespace kompoz

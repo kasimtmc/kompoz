@@ -58,7 +58,16 @@ const std::map<std::string, std::string, std::less<>> kObjectProperties = {
     {"MaterialTheme.colorScheme", "::kompoz::colorScheme()"},
     {"MaterialTheme.typography", "::kompoz::typography()"},
     {"MaterialTheme.shapes", "::kompoz::shapes()"},
+    {"Int.MAX_VALUE", "std::numeric_limits<int>::max()"},
+    {"Int.MIN_VALUE", "std::numeric_limits<int>::min()"},
+    {"Long.MAX_VALUE", "std::numeric_limits<long long>::max()"},
+    {"Float.MAX_VALUE", "std::numeric_limits<float>::max()"},
+    {"Float.POSITIVE_INFINITY", "std::numeric_limits<float>::infinity()"},
+    {"Float.NaN", "std::numeric_limits<float>::quiet_NaN()"},
 };
+
+// Named arguments whose lambda gives a value: items(list, key = { it.id }, contentType = { … }).
+const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType", "selector", "comparator"};
 
 // Kotlin's standard functions, from kotlin.hpp: listOf(1, 2) -> kt::listOf(1, 2).
 const std::set<std::string, std::less<>> kKtFunctions = {
@@ -687,7 +696,8 @@ private:
             any = true;
             const std::string& n = c.names[i];
             if (!n.empty() && !positional) out_.text("::kompoz::arg::" + n + " = ");
-            expr(*c.kids[i + 1]);
+            if (c.kids[i + 1]->kind == Node::Lambda && kValueArguments.contains(n)) lambda(*c.kids[i + 1], true);
+            else expr(*c.kids[i + 1]);
         }
         if (c.lambda) {
             if (any) out_.text(", ");
