@@ -573,6 +573,7 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 345. Compose'un `SemanticsPropertyReceiver`'ında ayarlanan `Modifier.semantics { … }`, `semantics(mergeDescendants = true) { … }` ve `clearAndSetSemantics { … }` (`heading()`, `contentDescription`, `role = Role.Button`, …) ✅
 346. Compose'un `Modifier.flex { … }` ile `FlexBox(config = { … })`'u, `gridItem(row = …, column = …)` ile `Grid(config = { column(1.fr); … })`'i, `FlowRow`'un düzenlemeleri ve `BoxWithConstraintsScope` (`maxWidth`, …), hepsi adlı argümanlarla ✅
 347. Compose'un `Layout(content, modifier) { measurables, constraints -> layout(w, h) { … } }`, `SubcomposeLayout(modifier) { constraints -> … }`, `LookaheadScope(modifier)`, ayırıcıların `thickness` ve `color`'ı, `Constraints.copy(minWidth = …)` ve `placeRelative(x = …, y = …)` ✅
+348. Compose'un tembel ızgara `span = { GridItemSpan(maxLineSpan) }`'i, `rememberPagerState { count }`, `rememberCarouselState { count }`, karusellerin adlı argümanları ve `CarouselItemScope.(Int)` içeriği, Coil'in `AsyncImage(model, …)`'ı, kaydırma çubukları ve adla `PullToRefreshBox` ✅
 
 ## Sıradakiler
 

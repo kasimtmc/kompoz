@@ -164,12 +164,12 @@ std::shared_ptr<ScrollbarAdapter> rememberScrollbarAdapter(const LazyListState& 
     return remember(state, [state] { return std::shared_ptr<ScrollbarAdapter>(std::make_shared<LazyListAdapter>(state)); }, site);
 }
 
-void VerticalScrollbar(std::shared_ptr<ScrollbarAdapter> adapter, const Modifier& modifier, const ScrollbarOptions& options, CallSite site) {
+void detail::VerticalScrollbar(std::shared_ptr<ScrollbarAdapter> adapter, const Modifier& modifier, const ScrollbarOptions& options, CallSite site) {
     ComposableScope scope(site);
     scrollbar(true, adapter, modifier, options);
 }
 
-void HorizontalScrollbar(std::shared_ptr<ScrollbarAdapter> adapter, const Modifier& modifier, const ScrollbarOptions& options, CallSite site) {
+void detail::HorizontalScrollbar(std::shared_ptr<ScrollbarAdapter> adapter, const Modifier& modifier, const ScrollbarOptions& options, CallSite site) {
     ComposableScope scope(site);
     scrollbar(false, adapter, modifier, options);
 }

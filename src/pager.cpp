@@ -81,7 +81,7 @@ Task PagerState::animateScrollToPage(int page, float pageOffsetFraction, Animati
     return animatePager(data_, to, data_->pageAt(to), spec);
 }
 
-PagerState rememberPagerState(int initialPage, std::function<int()> pageCount, CallSite site) {
+PagerState detail::rememberPagerState(int initialPage, std::function<int()> pageCount, CallSite site) {
     auto& state = rememberSaveable([&] { return PagerState(initialPage, pageCount); }, site);
     state.data_->count = std::move(pageCount);  // the latest count function
     return state;

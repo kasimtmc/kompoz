@@ -276,7 +276,7 @@ Image(imageResource("images/cover.jpg"), "Album cover", Modifier().size(160).cli
 
 ```cpp body
 AsyncImage("https://example.com/photo.webp", "A photo", Modifier().size(200),
-           {.placeholder = [] { CircularProgressIndicator(); },
+           AsyncImageOptions{.placeholder = [] { CircularProgressIndicator(); },
             .error = [] { Icon(Icons::Filled::Info, "Couldn't load"); },
             .contentScale = ContentScale::Crop,
             .crossfadeMillis = 200});

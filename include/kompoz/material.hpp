@@ -853,8 +853,28 @@ struct PullToRefreshOptions {
 //   PullToRefreshBox(refreshing.get(), [=] { reload(); }, Modifier().fillMaxSize(), [&] {
 //       LazyColumn(Modifier().fillMaxSize(), ...);
 //   });
+namespace detail {
 void PullToRefreshBox(bool isRefreshing, std::function<void()> onRefresh, const Modifier& modifier, const Content& content,
-                      PullToRefreshOptions options = {}, CallSite site = CallSite::current());
+                      PullToRefreshOptions options, CallSite site);
+// PullToRefreshBox(isRefreshing, onRefresh, modifier, state = …, contentAlignment = …, enabled = …) { … },
+// as Compose's (indicator: Kompoz's, given the state and whether it is refreshing).
+struct PullToRefreshBoxImpl {
+    using P = Params<names::IsRefreshing, names::OnRefresh, names::Modifier, names::State, names::ContentAlignment, names::Enabled,
+                     names::Indicator, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        PullToRefreshOptions options;
+        P::set<names::State>(options.state, args...);
+        P::set<names::ContentAlignment>(options.contentAlignment, args...);
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::Indicator>(options.indicator, args...);
+        PullToRefreshBox(bool(P::arg<names::IsRefreshing>(args...)), std::function<void()>(P::arg<names::OnRefresh>(args...)),
+                         P::get<names::Modifier>(Modifier{}, args...), P::plainBlock(std::forward<A>(args)...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::PullToRefreshBoxImpl> PullToRefreshBox;
 
 namespace PullToRefreshDefaults {
 // The circle an indicator sits in: it comes out from under the top edge of where it is placed

@@ -41,7 +41,7 @@ Task CarouselState::animateScrollToItem(int item) const {
     return data_->position.animateTo(data_->clamp(float(item)), spring(Spring::DampingRatioNoBouncy, Spring::StiffnessMediumLow));
 }
 
-CarouselState rememberCarouselState(int initialItem, std::function<int()> itemCount, CallSite site) {
+CarouselState detail::rememberCarouselState(int initialItem, std::function<int()> itemCount, CallSite site) {
     auto& state = rememberSaveable([&] { return CarouselState(initialItem, itemCount); }, site);
     state.data_->count = std::move(itemCount);  // the latest
     return state;
@@ -327,37 +327,37 @@ Modifier CarouselItemScope::maskBorder(const BorderStroke& border, Shape shape) 
     return Modifier().then(e);
 }
 
-void HorizontalMultiBrowseCarousel(const CarouselState& state, float preferredItemWidth, const Modifier& modifier, const CarouselOptions& options,
+void detail::HorizontalMultiBrowseCarousel(const CarouselState& state, float preferredItemWidth, const Modifier& modifier, const CarouselOptions& options,
                                    const std::function<void(int item)>& content, CallSite site) {
     ComposableScope scope(site);
     carousel(state, preferredItemWidth, Kind::MultiBrowse, modifier, options, [&](const CarouselItemScope& item) { content(item.index); });
 }
 
-void HorizontalMultiBrowseCarousel(const CarouselState& state, float preferredItemWidth, const Modifier& modifier, const CarouselOptions& options,
+void detail::HorizontalMultiBrowseCarousel(const CarouselState& state, float preferredItemWidth, const Modifier& modifier, const CarouselOptions& options,
                                    const std::function<void(const CarouselItemScope& item)>& content, CallSite site) {
     ComposableScope scope(site);
     carousel(state, preferredItemWidth, Kind::MultiBrowse, modifier, options, content);
 }
 
-void HorizontalUncontainedCarousel(const CarouselState& state, float itemWidth, const Modifier& modifier, const CarouselOptions& options,
+void detail::HorizontalUncontainedCarousel(const CarouselState& state, float itemWidth, const Modifier& modifier, const CarouselOptions& options,
                                    const std::function<void(int item)>& content, CallSite site) {
     ComposableScope scope(site);
     carousel(state, itemWidth, Kind::Uncontained, modifier, options, [&](const CarouselItemScope& item) { content(item.index); });
 }
 
-void HorizontalUncontainedCarousel(const CarouselState& state, float itemWidth, const Modifier& modifier, const CarouselOptions& options,
+void detail::HorizontalUncontainedCarousel(const CarouselState& state, float itemWidth, const Modifier& modifier, const CarouselOptions& options,
                                    const std::function<void(const CarouselItemScope& item)>& content, CallSite site) {
     ComposableScope scope(site);
     carousel(state, itemWidth, Kind::Uncontained, modifier, options, content);
 }
 
-void HorizontalCenteredHeroCarousel(const CarouselState& state, float maxItemWidth, const Modifier& modifier, const CarouselOptions& options,
+void detail::HorizontalCenteredHeroCarousel(const CarouselState& state, float maxItemWidth, const Modifier& modifier, const CarouselOptions& options,
                                     const std::function<void(int item)>& content, CallSite site) {
     ComposableScope scope(site);
     carousel(state, maxItemWidth, Kind::Hero, modifier, options, [&](const CarouselItemScope& item) { content(item.index); });
 }
 
-void HorizontalCenteredHeroCarousel(const CarouselState& state, float maxItemWidth, const Modifier& modifier, const CarouselOptions& options,
+void detail::HorizontalCenteredHeroCarousel(const CarouselState& state, float maxItemWidth, const Modifier& modifier, const CarouselOptions& options,
                                     const std::function<void(const CarouselItemScope& item)>& content, CallSite site) {
     ComposableScope scope(site);
     carousel(state, maxItemWidth, Kind::Hero, modifier, options, content);

@@ -108,7 +108,7 @@ Modifier Modifier::pullToRefresh(bool isRefreshing, const PullToRefreshState& st
     return nestedScroll(connection);
 }
 
-void PullToRefreshBox(bool isRefreshing, std::function<void()> onRefresh, const Modifier& modifier, const Content& content,
+void detail::PullToRefreshBox(bool isRefreshing, std::function<void()> onRefresh, const Modifier& modifier, const Content& content,
                       PullToRefreshOptions options, CallSite site) {
     ComposableScope scope(site);
     PullToRefreshState state = options.state ? *options.state : rememberPullToRefreshState();

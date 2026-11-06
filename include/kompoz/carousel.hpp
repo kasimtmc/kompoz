@@ -11,10 +11,11 @@
 // settles with an item large.
 //
 //   auto state = rememberCarouselState(0, [&] { return int(photos.size()); });
-//   HorizontalMultiBrowseCarousel(state, 186, Modifier().fillMaxWidth().height(221), {.itemSpacing = 8},
+//   HorizontalMultiBrowseCarousel(state, 186, Modifier().fillMaxWidth().height(221), CarouselOptions{.itemSpacing = 8},
 //                                 [&](int i) { Image(photos[i], "", Modifier().fillMaxSize(), ContentScale::Crop); });
 
 #include "layout.hpp"
+#include "named.hpp"
 #include "runtime.hpp"
 
 #include <functional>
@@ -44,7 +45,19 @@ struct Saver<CarouselState> {
     }
 };
 // Saveable; the latest itemCount is used.
-CarouselState rememberCarouselState(int initialItem, std::function<int()> itemCount, CallSite site = CallSite::current());
+namespace detail {
+CarouselState rememberCarouselState(int initialItem, std::function<int()> itemCount, CallSite site);
+// rememberCarouselState(initialItem = 0) { itemCount }, as Compose's.
+struct RememberCarouselStateImpl {
+    template <class... A>
+    static CarouselState call(CallSite site, A&&... args) {
+        return rememberWithCount<names::InitialItem, names::ItemCount, CarouselState>(
+            [](int first, std::function<int()> count, CallSite s) { return rememberCarouselState(first, std::move(count), s); }, site,
+            std::forward<A>(args)...);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::RememberCarouselStateImpl> rememberCarouselState;
 
 namespace CarouselDefaults {
 inline constexpr float MinSmallItemSize = 40, MaxSmallItemSize = 56;
@@ -86,18 +99,63 @@ struct CarouselItemScope {
     Modifier maskBorder(const BorderStroke& border, Shape shape) const;
 };
 
+namespace detail {
 void HorizontalMultiBrowseCarousel(const CarouselState& state, float preferredItemWidth, const Modifier& modifier, const CarouselOptions& options,
-                                   const std::function<void(int item)>& content, CallSite site = CallSite::current());
+                                   const std::function<void(int item)>& content, CallSite site);
 void HorizontalMultiBrowseCarousel(const CarouselState& state, float preferredItemWidth, const Modifier& modifier, const CarouselOptions& options,
-                                   const std::function<void(const CarouselItemScope& item)>& content, CallSite site = CallSite::current());
+                                   const std::function<void(const CarouselItemScope& item)>& content, CallSite site);
 void HorizontalUncontainedCarousel(const CarouselState& state, float itemWidth, const Modifier& modifier, const CarouselOptions& options,
-                                   const std::function<void(int item)>& content, CallSite site = CallSite::current());
+                                   const std::function<void(int item)>& content, CallSite site);
 void HorizontalUncontainedCarousel(const CarouselState& state, float itemWidth, const Modifier& modifier, const CarouselOptions& options,
-                                   const std::function<void(const CarouselItemScope& item)>& content, CallSite site = CallSite::current());
+                                   const std::function<void(const CarouselItemScope& item)>& content, CallSite site);
 // maxItemWidth caps the large item (0: as wide as the small ones leave); what it leaves widens them.
 void HorizontalCenteredHeroCarousel(const CarouselState& state, float maxItemWidth, const Modifier& modifier, const CarouselOptions& options,
-                                    const std::function<void(int item)>& content, CallSite site = CallSite::current());
+                                    const std::function<void(int item)>& content, CallSite site);
 void HorizontalCenteredHeroCarousel(const CarouselState& state, float maxItemWidth, const Modifier& modifier, const CarouselOptions& options,
-                                    const std::function<void(const CarouselItemScope& item)>& content, CallSite site = CallSite::current());
+                                    const std::function<void(const CarouselItemScope& item)>& content, CallSite site);
+// The carousels as Compose's: (state, size, modifier, itemSpacing = …, contentPadding = …,
+// minSmallItemWidth = …, maxSmallItemWidth = …, userScrollEnabled = …) { index -> … }, the content
+// taking the item's index, its CarouselItemScope, or both (Compose's CarouselItemScope.(Int)); or
+// with a CarouselOptions after the modifier.
+template <int Kind, class SizeTag>
+struct CarouselImpl {
+    using P = Params<names::State, SizeTag, names::Modifier, names::Options, names::ItemSpacing, names::ContentPadding,
+                     names::MinSmallItemWidth, names::MaxSmallItemWidth, names::UserScrollEnabled>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        splitLast(
+            [&](auto&& content, auto&&... rest) {
+                static_assert(P::template check<decltype(rest)...>());
+                CarouselOptions options = P::template get<names::Options>(CarouselOptions{}, rest...);
+                P::template set<names::ItemSpacing>(options.itemSpacing, rest...);
+                P::template set<names::ContentPadding>(options.contentPadding, rest...);
+                P::template set<names::MinSmallItemWidth>(options.minSmallItemWidth, rest...);
+                P::template set<names::MaxSmallItemWidth>(options.maxSmallItemWidth, rest...);
+                P::template set<names::UserScrollEnabled>(options.userScrollEnabled, rest...);
+                const CarouselState& state = P::template arg<names::State>(rest...);
+                float size = P::template get<SizeTag>(0.f, rest...);
+                Modifier modifier = P::template get<names::Modifier>(Modifier{}, rest...);
+                auto run = [&](const auto& f) {
+                    if constexpr (Kind == 0) HorizontalMultiBrowseCarousel(state, size, modifier, options, f, site);
+                    else if constexpr (Kind == 1) HorizontalUncontainedCarousel(state, size, modifier, options, f, site);
+                    else HorizontalCenteredHeroCarousel(state, size, modifier, options, f, site);
+                };
+                using C = std::remove_cvref_t<decltype(content)>;
+                if constexpr (std::is_invocable_v<C&, const CarouselItemScope&, int>)
+                    run(std::function<void(const CarouselItemScope&)>([content](const CarouselItemScope& item) mutable { content(item, item.index); }));
+                else if constexpr (std::is_invocable_v<C&, const CarouselItemScope&>)
+                    run(std::function<void(const CarouselItemScope&)>(content));
+                else
+                    run(std::function<void(int)>(content));
+            },
+            std::forward<A>(args)...);
+    }
+};
+} // namespace detail
+// preferredItemWidth: the large items'; the small ones take what is left, between their min and max.
+inline constexpr Composable<detail::CarouselImpl<0, detail::names::PreferredItemWidth>> HorizontalMultiBrowseCarousel;
+inline constexpr Composable<detail::CarouselImpl<1, detail::names::ItemWidth>> HorizontalUncontainedCarousel;
+// maxItemWidth caps the large item (0: as wide as the small ones leave); what it leaves widens them.
+inline constexpr Composable<detail::CarouselImpl<2, detail::names::MaxItemWidth>> HorizontalCenteredHeroCarousel;
 
 } // namespace kompoz

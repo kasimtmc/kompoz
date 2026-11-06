@@ -922,7 +922,7 @@ LazyGridState rememberLazyGridState(int initialFirstVisibleItemIndex, float init
 
 int LazyGridScope::spanAt(int index, int columns) const {
     for (const Span& s : spans_)
-        if (index >= s.start && index < s.start + s.count) return std::clamp(s.span, 1, columns);
+        if (index >= s.start && index < s.start + s.count) return std::clamp(s.spanOf ? s.spanOf(index - s.start, columns) : s.span, 1, columns);
     return 1;
 }
 

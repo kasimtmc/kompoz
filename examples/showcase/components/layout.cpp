@@ -258,28 +258,28 @@ void CarouselSection(CallSite site) {
                              browse.currentItem() + 1),
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             // The name fades with the item's size (carouselItemInfo, read while drawing).
-            HorizontalMultiBrowseCarousel(browse, 186, Modifier().fillMaxWidth().height(200), {.itemSpacing = 8}, [&](const CarouselItemScope& item) {
+            HorizontalMultiBrowseCarousel(browse, 186, Modifier().fillMaxWidth().height(200), CarouselOptions{.itemSpacing = 8}, [&](const CarouselItemScope& item) {
                 int i = item.index;
                 CarouselItemInfo info = item.carouselItemInfo;
                 // maskBorder: a thin light line along the part of the photo the item shows.
                 Box(Modifier().fillMaxSize().background(hueColor(i * 7)).then(item.maskBorder(BorderStroke(2, colors::White.copy(0.7f)), RoundedCornerShape(28))),
                     Alignment::BottomStart) {
-                    AsyncImage(photos[i % 3], names[i], Modifier().fillMaxSize(), {.contentScale = ContentScale::Crop});
+                    AsyncImage(photos[i % 3], names[i], Modifier().fillMaxSize(), AsyncImageOptions{.contentScale = ContentScale::Crop});
                     Text(names[i], Modifier().graphicsLayer([info](GraphicsLayerScope& l) {
                         float span = info.maxSize() - info.minSize();
                         l.alpha = span > 0 ? std::clamp((info.size() - info.minSize()) / span, 0.f, 1.f) : 1.f;
                     }).padding(16, 12), color = colors::White, style = typography().titleMedium);
                 };
             });
-            HorizontalUncontainedCarousel(free, 120, Modifier().fillMaxWidth().height(120), {.itemSpacing = 8, .itemShape = RoundedCornerShape(16)},
+            HorizontalUncontainedCarousel(free, 120, Modifier().fillMaxWidth().height(120), CarouselOptions{.itemSpacing = 8, .itemShape = RoundedCornerShape(16)},
                                           [&](int i) {
                                               Box(Modifier().fillMaxSize().background(hueColor(i * 5)), Alignment::Center) { Text(std::to_string(i + 1), color = colors::White, style = typography().headlineSmall); };
                                           });
             // One large in the middle, a small one either side (the first and the last large at the ends).
             Text(std::format("Ortada büyük olan: {}", names[hero.currentItem()]), color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            HorizontalCenteredHeroCarousel(hero, 0, Modifier().fillMaxWidth().height(180), {.itemSpacing = 8}, [&](int i) {
+            HorizontalCenteredHeroCarousel(hero, 0, Modifier().fillMaxWidth().height(180), CarouselOptions{.itemSpacing = 8}, [&](int i) {
                 Box(Modifier().fillMaxSize().background(hueColor(i * 9)), Alignment::BottomStart) {
-                    AsyncImage(photos[(i + 1) % 3], names[i], Modifier().fillMaxSize(), {.contentScale = ContentScale::Crop});
+                    AsyncImage(photos[(i + 1) % 3], names[i], Modifier().fillMaxSize(), AsyncImageOptions{.contentScale = ContentScale::Crop});
                     Text(names[i], Modifier().padding(16, 12), color = colors::White, style = typography().titleMedium);
                 };
             });

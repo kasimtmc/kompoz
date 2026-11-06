@@ -480,7 +480,7 @@ void ShapesSection(CallSite site) {
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::SpaceEvenly, verticalAlignment = Alignment::CenterVertically) {
                     AsyncImage("images/mountains.jpg", "Yıldız dağlar", Modifier().size(96).clip(OutlineShape(starOutline())),
-                               {.contentScale = ContentScale::Crop});
+                               AsyncImageOptions{.contentScale = ContentScale::Crop});
                     Box(Modifier()
                             .size(88)
                             .shadow(6, OutlineShape(starOutline()))

@@ -1348,8 +1348,28 @@ struct AsyncImageOptions {
     int crossfadeMillis = 0;  // from the placeholder to the image (Coil's crossfade(true) is 200)
     std::function<void(const AsyncImageState&)> onState;  // after each change (Coil's onState)
 };
-void AsyncImage(std::string model, std::string contentDescription, const Modifier& modifier = {},
-                const AsyncImageOptions& options = {}, CallSite site = CallSite::current());
+namespace detail {
+void AsyncImage(std::string model, std::string contentDescription, const Modifier& modifier, const AsyncImageOptions& options, CallSite site);
+// AsyncImage(model, contentDescription, modifier, contentScale = …, alpha = …, colorFilter = …, onState = …)
+// as Coil's, or with an AsyncImageOptions after the modifier (placeholder and error as content).
+struct AsyncImageImpl {
+    using P = Params<names::Model, names::ContentDescription, names::Modifier, names::Options, names::ContentScale, names::Alpha,
+                     names::ColorFilter, names::OnState>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        AsyncImageOptions options = P::get<names::Options>(AsyncImageOptions{}, args...);
+        P::set<names::ContentScale>(options.contentScale, args...);
+        P::set<names::Alpha>(options.alpha, args...);
+        P::set<names::ColorFilter>(options.colorFilter, args...);
+        P::set<names::OnState>(options.onState, args...);
+        std::string description;
+        if constexpr (P::given<names::ContentDescription, A...>()) description = descriptionOf(P::arg<names::ContentDescription>(args...));
+        AsyncImage(std::string(P::arg<names::Model>(args...)), std::move(description), P::get<names::Modifier>(Modifier{}, args...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::AsyncImageImpl> AsyncImage;
 
 // The loading itself, for a UI of your own (Coil's rememberAsyncImagePainter(...).state);
 // `size`: what it is decoded for (by default the whole image, at most maxImageDimension).

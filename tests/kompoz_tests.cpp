@@ -11199,6 +11199,42 @@ TEST(custom_layouts_take_compose_forms) {
     CHECK(c.offset(-20, -10) == (Constraints{0, 80, 0, 40}) && c.constrainWidth(150) == 100);
 }
 
+TEST(lists_pagers_and_carousels_take_compose_arguments) {
+    // A grid's span = { GridItemSpan(maxLineSpan) }, pager and carousel states with their count last,
+    // a carousel's content on its item scope and index, AsyncImage, scrollbars and PullToRefreshBox by name.
+    auto pages = std::make_shared<int>(0), byName = std::make_shared<int>(0), indices = std::make_shared<int>(0);
+    ComposeTestRule rule([=] {
+        Column([=] {
+            LazyVerticalGrid(GridCells::Fixed(3), Modifier().width(300).height(200), [] {
+                item(arg::span = [](LazyGridItemSpanScope& s) { return GridItemSpan{s.maxLineSpan}; }, [] {
+                    Box(Modifier().fillMaxWidth().height(20).testTag("başlık"));
+                });
+                items(3, arg::span = [](LazyGridItemSpanScope&, int i) { return GridItemSpan{i == 0 ? 2 : 1}; },
+                      [](int i) { Box(Modifier().fillMaxWidth().height(20).testTag("hücre" + std::to_string(i))); });
+            });
+            *pages = rememberPagerState([] { return 4; }).pageCount();
+            *byName = rememberPagerState(arg::initialPage = 1, arg::pageCount = [] { return 5; }).currentPage();
+            auto carousel = rememberCarouselState(arg::itemCount = [] { return 3; });
+            HorizontalMultiBrowseCarousel(arg::state = carousel, arg::preferredItemWidth = 100.f, arg::modifier = Modifier().width(300).height(80),
+                                          arg::itemSpacing = 8.f, [=](const CarouselItemScope& item, int index) {
+                                              if (item.index == index) ++*indices;
+                                          });
+            AsyncImage(arg::model = std::string("yok.png"), arg::contentDescription = std::string("resim"),
+                       arg::modifier = Modifier().size(10).testTag("resim"), arg::contentScale = ContentScale::Crop);
+            auto scroll = rememberScrollState();
+            Box(Modifier().height(50), [=] {
+                Column(Modifier().verticalScroll(scroll), [] { Box(Modifier().size(10, 500)); });
+                VerticalScrollbar(arg::adapter = rememberScrollbarAdapter(scroll), arg::modifier = Modifier().fillMaxHeight().testTag("çubuk"));
+            });
+            PullToRefreshBox(arg::isRefreshing = false, arg::onRefresh = [] {}, arg::modifier = Modifier().size(50), [] { Text("içerik"); });
+        });
+    });
+    Rect header = rule.onNodeWithTag("başlık").bounds(), wide = rule.onNodeWithTag("hücre0").bounds();
+    CHECK(near(header.width, 300) && near(wide.width, 200));
+    CHECK(*pages == 4 && *byName == 1 && *indices > 0);
+    CHECK(rule.onNodeWithTag("resim").exists() && rule.onNodeWithTag("çubuk").exists() && rule.onNodeWithText("içerik").exists());
+}
+
 TEST(intrinsic_height_and_flow_row) {
     ComposeTestRule rule([] {
         Column([] {
@@ -11680,7 +11716,7 @@ TEST(async_image_is_decoded_at_the_size_its_layout_gets) {
         Column(Modifier().fillMaxSize().verticalScroll(scroll), [=, &states] {
             if (small.get())
                 AsyncImage("photo.jpg", "küçük", Modifier().size(100, 60).testTag("small"),
-                           {.contentScale = ContentScale::Crop, .onState = [&](const AsyncImageState& s) { states.push_back(s); }});
+                           AsyncImageOptions{.contentScale = ContentScale::Crop, .onState = [&](const AsyncImageState& s) { states.push_back(s); }});
             // Fitted to the width in a column that scrolls: only the width counts.
             if (big.get()) AsyncImage("photo.jpg", "büyük", Modifier().fillMaxWidth().testTag("big"));
             if (whole.get()) {
@@ -12755,7 +12791,7 @@ TEST(multi_browse_carousel_grows_and_shrinks_its_items_as_they_move) {
     ComposeTestRule rule([&] {
         auto state = rememberCarouselState(0, [] { return 10; });
         carousel = state;
-        HorizontalMultiBrowseCarousel(state, 186, Modifier().fillMaxWidth().height(200), {.itemSpacing = 8, .itemShape = RectangleShape},
+        HorizontalMultiBrowseCarousel(state, 186, Modifier().fillMaxWidth().height(200), CarouselOptions{.itemSpacing = 8, .itemShape = RectangleShape},
                                       [](int i) { Box(Modifier().fillMaxSize().testTag(std::format("c{}", i))); });
     }, {400, 800});
     // Each item's mask, on the screen: {x, width}, left to right.
@@ -12800,7 +12836,7 @@ TEST(multi_browse_carousel_grows_and_shrinks_its_items_as_they_move) {
 TEST(carousel_items_clip_and_border_their_masks) {
     ComposeTestRule rule([&] {
         auto state = rememberCarouselState(0, [] { return 10; });
-        HorizontalMultiBrowseCarousel(state, 186, Modifier().fillMaxWidth().height(200), {.itemSpacing = 8, .itemShape = RectangleShape},
+        HorizontalMultiBrowseCarousel(state, 186, Modifier().fillMaxWidth().height(200), CarouselOptions{.itemSpacing = 8, .itemShape = RectangleShape},
                                       [](const CarouselItemScope& item) {
                                           Box(Modifier()
                                                   .fillMaxSize()
@@ -12833,7 +12869,7 @@ TEST(centered_hero_carousel_keeps_a_large_item_between_two_small_ones) {
     ComposeTestRule rule([&] {
         auto state = rememberCarouselState(0, [] { return 6; });
         carousel = state;
-        HorizontalCenteredHeroCarousel(state, cap.get(), Modifier().fillMaxWidth().height(200), {.itemSpacing = 8, .itemShape = RectangleShape},
+        HorizontalCenteredHeroCarousel(state, cap.get(), Modifier().fillMaxWidth().height(200), CarouselOptions{.itemSpacing = 8, .itemShape = RectangleShape},
                                        [](int i) { Box(Modifier().fillMaxSize().testTag(std::format("h{}", i))); });
     }, {400, 800});
     auto masks = [&] {  // each item's mask on the screen: {x, width}, left to right
@@ -12887,7 +12923,7 @@ TEST(centered_hero_carousel_keeps_a_large_item_between_two_small_ones) {
     ComposeTestRule two([&] {
         auto state = rememberCarouselState(0, [] { return 2; });
         pair = state;
-        HorizontalCenteredHeroCarousel(state, 0, Modifier().fillMaxWidth().height(200), {.itemSpacing = 8, .itemShape = RectangleShape},
+        HorizontalCenteredHeroCarousel(state, 0, Modifier().fillMaxWidth().height(200), CarouselOptions{.itemSpacing = 8, .itemShape = RectangleShape},
                                        [](int) { Box(Modifier().fillMaxSize()); });
     }, {400, 800});
     auto pairMasks = [&] {
@@ -12922,7 +12958,7 @@ TEST(carousel_items_know_their_size_while_they_are_drawn) {
     ComposeTestRule rule([&] {
         auto state = rememberCarouselState(0, [] { return 6; });
         carousel = state;
-        HorizontalCenteredHeroCarousel(state, 0, Modifier().fillMaxWidth().height(200), {.itemSpacing = 8},
+        HorizontalCenteredHeroCarousel(state, 0, Modifier().fillMaxWidth().height(200), CarouselOptions{.itemSpacing = 8},
                                        [seen](const CarouselItemScope& item) {
                                            CarouselItemInfo info = item.carouselItemInfo;
                                            int i = item.index;
@@ -12957,7 +12993,7 @@ TEST(carousel_items_know_their_size_while_they_are_drawn) {
     // The others report too (multi-browse: 186 large, 56 small).
     ComposeTestRule browse([&] {
         auto state = rememberCarouselState(0, [] { return 10; });
-        HorizontalMultiBrowseCarousel(state, 186, Modifier().fillMaxWidth().height(200), {.itemSpacing = 8},
+        HorizontalMultiBrowseCarousel(state, 186, Modifier().fillMaxWidth().height(200), CarouselOptions{.itemSpacing = 8},
                                       [seen](const CarouselItemScope& item) {
                                           CarouselItemInfo info = item.carouselItemInfo;
                                           int i = item.index;
@@ -12978,7 +13014,7 @@ TEST(uncontained_carousel_keeps_its_item_width_and_scrolls_freely) {
     ComposeTestRule rule([&] {
         auto state = rememberCarouselState(0, [] { return 10; });
         carousel = state;
-        HorizontalUncontainedCarousel(state, 150, Modifier().fillMaxWidth().height(120), {.itemSpacing = 8, .contentPadding = {16, 0, 16, 0}},
+        HorizontalUncontainedCarousel(state, 150, Modifier().fillMaxWidth().height(120), CarouselOptions{.itemSpacing = 8, .contentPadding = {16, 0, 16, 0}},
                                       [](int i) { Box(Modifier().fillMaxSize().testTag(std::format("u{}", i))); });
     }, {400, 800});
     CHECK(sameRect(rule.onNodeWithTag("u0").bounds(), {16, 0, 150, 120}) && sameRect(rule.onNodeWithTag("u1").bounds(), {174, 0, 150, 120}));
@@ -13012,7 +13048,7 @@ TEST(scaffold_bodies_and_carousel_items_leave_content_its_own_size_as_compose) {
         case 3: NavigationSuiteScaffoldLayout(bar, NavigationSuiteType::NavigationRail, body); break;
         case 4: NavigationSuiteScaffoldLayout(bar, NavigationSuiteType::None, body); break;
         default:
-            HorizontalMultiBrowseCarousel(carousel, 186, Modifier().fillMaxWidth().height(200), {.itemSpacing = 8}, [&](int i) {
+            HorizontalMultiBrowseCarousel(carousel, 186, Modifier().fillMaxWidth().height(200), CarouselOptions{.itemSpacing = 8}, [&](int i) {
                 if (i == 0) body();
             });
         }
@@ -13908,7 +13944,7 @@ TEST(what_lays_out_by_a_scaffolds_padding_follows_it_without_recomposing) {
                          HorizontalPager(pager, Modifier().fillMaxWidth().height(150).testTag("pager"), contentPadding = padding,
                                          [](int p) { Box(Modifier().fillMaxSize().testTag("p" + std::to_string(p))); });
                          HorizontalUncontainedCarousel(carousel, 100, Modifier().fillMaxWidth().height(150).testTag("carousel"),
-                                                       {.contentPadding = padding},
+                                                       CarouselOptions{.contentPadding = padding},
                                                        [](int i) { Box(Modifier().fillMaxSize().testTag("c" + std::to_string(i))); });
                          Button([] {}, Modifier().testTag("button"), contentPadding = padding, [] { Text("Düğme", Modifier().testTag("label")); });
                          // Read while composing: this one is composed again.
@@ -20562,11 +20598,11 @@ TEST(pull_to_refresh_refreshes_past_the_threshold) {
         PullToRefreshBox(refreshing.get(), [&] {
             ++*refreshes;
             refreshing.set(true);
-        }, Modifier().fillMaxSize(), [&] {
+        }, Modifier().fillMaxSize(), arg::state = s, [&] {
             LazyColumn(Modifier().fillMaxSize(), kompoz::state = list, [] {
                 items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
             });
-        }, {.state = s});
+        });
     }, {400, 800});
     // 100 dp of pull (the indicator half that, after the slop): short of 80 dp, it springs back.
     slowDrag(rule, {200, 100}, {200, 200});
@@ -20595,11 +20631,11 @@ TEST(pull_to_refresh_goes_back_in_before_the_list_scrolls) {
     ComposeTestRule rule([&] {
         auto s = rememberPullToRefreshState();
         state = s;
-        PullToRefreshBox(false, [refreshes] { ++*refreshes; }, Modifier().fillMaxSize(), [&] {
+        PullToRefreshBox(false, [refreshes] { ++*refreshes; }, Modifier().fillMaxSize(), arg::state = s, [&] {
             LazyColumn(Modifier().fillMaxSize(), kompoz::state = list, [] {
                 items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
             });
-        }, {.state = s});
+        });
     }, {400, 800});
     ComposeHost& h = rule.host();
     h.pointerDown({200, 100});
@@ -20770,11 +20806,11 @@ TEST(pull_to_refresh_box_can_be_turned_off) {
     PullToRefreshState state;
     auto refreshes = std::make_shared<int>(0);
     ComposeTestRule rule([&] {
-        PullToRefreshBox(false, [refreshes] { ++*refreshes; }, Modifier().fillMaxSize(), [&] {
+        PullToRefreshBox(false, [refreshes] { ++*refreshes; }, Modifier().fillMaxSize(), arg::state = state, arg::enabled = false, [&] {
             LazyColumn(Modifier().fillMaxSize(), [] {
                 items(50, [](int i) { Text("Satır " + std::to_string(i), Modifier().height(50)); });
             });
-        }, {.state = state, .enabled = false});
+        });
     }, {400, 800});
     slowDrag(rule, {200, 100}, {200, 300});
     CHECK(near(state.distanceFraction(), 0));

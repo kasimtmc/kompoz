@@ -829,6 +829,14 @@
   `y += h`, Kotlin'deki gibi dışarıdaki `y`'yi değiştiriyor. `Layout`'un ölçüm politikasının alıcısı bir
   `MeasureScope` ve değerini veriyor, `SubcomposeLayout`'unki bir `SubcomposeMeasureScope`. `list.maxOf { }`,
   `minOf { }`, `maxOfOrNull { }` ve `minOfOrNull { }`.
+- **Listeler, sayfalayıcılar ve karuseller Compose'un argümanlarını alıyor**: tembel bir ızgaranın
+  `item(span = { GridItemSpan(maxLineSpan) })` ve `items(list, span = { item -> GridItemSpan(2) })`'i;
+  `rememberPagerState(initialPage = 0) { 3 }` ve `rememberCarouselState { images.size }` (sayı adıyla ya da sondaki
+  lambda olarak); karusellerin `(state, preferredItemWidth, modifier, itemSpacing = …, contentPadding = …) { index -> … }`
+  biçimi, içerik Compose'daki gibi `CarouselItemScope`'unda ve sırasıyla; Coil'in `AsyncImage(model, contentDescription,
+  modifier, contentScale = …, alpha = …)`'ı; `VerticalScrollbar(adapter, modifier, reverseLayout = …)` ve yatayı;
+  `PullToRefreshBox(isRefreshing, onRefresh, modifier, state = …, contentAlignment = …, enabled = …) { … }`. C++'ta
+  süslü parantezle verilen bir seçenek yapısı türünü adlandırıyor (`CarouselOptions{…}`, `AsyncImageOptions{…}`).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

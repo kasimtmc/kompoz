@@ -1779,7 +1779,7 @@ void clearImageCache() {
     cache.total = 0;
 }
 
-void AsyncImage(std::string model, std::string contentDescription, const Modifier& modifier, const AsyncImageOptions& options,
+void detail::AsyncImage(std::string model, std::string contentDescription, const Modifier& modifier, const AsyncImageOptions& options,
                 CallSite site) {
     ComposableScope scope(site);
     using Status = AsyncImageState::Status;

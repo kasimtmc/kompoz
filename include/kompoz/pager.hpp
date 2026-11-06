@@ -66,7 +66,19 @@ struct Saver<PagerState> {
     }
 };
 
-PagerState rememberPagerState(int initialPage, std::function<int()> pageCount, CallSite site = CallSite::current());
+namespace detail {
+PagerState rememberPagerState(int initialPage, std::function<int()> pageCount, CallSite site);
+// rememberPagerState(initialPage = 0, pageCount = { 3 }) or rememberPagerState { 3 }, as Compose's.
+struct RememberPagerStateImpl {
+    template <class... A>
+    static PagerState call(CallSite site, A&&... args) {
+        return rememberWithCount<names::InitialPage, names::PageCount, PagerState>(
+            [](int first, std::function<int()> count, CallSite s) { return rememberPagerState(first, std::move(count), s); }, site,
+            std::forward<A>(args)...);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::RememberPagerStateImpl> rememberPagerState;
 
 // How long a page is along the pager (Compose's PageSize): all the room there is (Fill: the
 // pager less its content padding), a fixed size (dp), or what `calculateMainAxisPageSize` says

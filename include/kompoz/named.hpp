@@ -223,6 +223,39 @@ constexpr bool oneOfParams = false;
 template <class Tag, class... P>
 constexpr bool oneOfParams<Tag, Params<P...>> = oneOf<Tag, P...>;
 
+// f(last, the others…): a call whose last argument (a trailing lambda) isn't one of its Params'.
+template <class F, class... A>
+decltype(auto) splitLast(F&& f, A&&... args) {
+    auto all = std::forward_as_tuple(std::forward<A>(args)...);
+    return [&]<size_t... I>(std::index_sequence<I...>) -> decltype(auto) {
+        return f(std::get<sizeof...(A) - 1>(std::move(all)), std::get<I>(std::move(all))...);
+    }(std::make_index_sequence<sizeof...(A) - 1>{});
+}
+template <class... A>
+constexpr bool lastIsCallable() {
+    if constexpr (sizeof...(A) == 0) return false;
+    else {
+        using L = std::tuple_element_t<sizeof...(A) - 1, std::tuple<A...>>;
+        return !isNamed<L> && std::is_invocable_v<std::remove_cvref_t<L>&>;
+    }
+}
+// rememberPagerState(initialPage = 0) { count } and the like: `First` (by name or first) and a
+// count, by name or as the trailing lambda.
+template <class First, class Count, class R, class Make, class... A>
+R rememberWithCount(Make make, CallSite site, A&&... args) {
+    if constexpr (lastIsCallable<A...>()) {
+        return splitLast([&](auto&& count, auto&&... rest) {
+            using P = Params<First>;
+            static_assert(P::template check<decltype(rest)...>());
+            return make(P::template get<First>(0, rest...), std::function<int()>(count), site);
+        }, std::forward<A>(args)...);
+    } else {
+        using P = Params<First, Count>;
+        static_assert(P::template check<A...>());
+        return make(P::template get<First>(0, args...), std::function<int()>(P::template arg<Count>(args...)), site);
+    }
+}
+
 // The block given last, if it was: its content, run in a scope of its own.
 Content scopedBlock(Content block);
 template <class... A>
@@ -470,6 +503,26 @@ struct TargetValue {};
 struct AnimationSpec {};
 struct Content {};
 struct MergeDescendants {};
+struct Model {};
+struct OnState {};
+struct Error {};
+struct InitialPage {};
+struct InitialPageOffsetFraction {};
+struct PageCount {};
+struct InitialItem {};
+struct ItemCount {};
+struct PreferredItemWidth {};
+struct ItemWidth {};
+struct MaxItemWidth {};
+struct ItemSpacing {};
+struct MinSmallItemWidth {};
+struct MaxSmallItemWidth {};
+struct Adapter {};
+struct IsRefreshing {};
+struct OnRefresh {};
+struct Indicator {};
+struct Span {};
+struct Options {};
 struct MeasurePolicy {};
 struct Thickness {};
 struct ZIndex {};
@@ -698,6 +751,26 @@ inline constexpr Param<detail::names::AnimationSpec> animationSpec;
 // (a composable's block, given by name as Compose's content = … : kompoz::Content is its type)
 inline constexpr Param<detail::names::Content> content;
 inline constexpr Param<detail::names::MergeDescendants> mergeDescendants;
+inline constexpr Param<detail::names::Model> model;
+inline constexpr Param<detail::names::OnState> onState;
+inline constexpr Param<detail::names::Error> error;
+inline constexpr Param<detail::names::InitialPage> initialPage;
+inline constexpr Param<detail::names::InitialPageOffsetFraction> initialPageOffsetFraction;
+inline constexpr Param<detail::names::PageCount> pageCount;
+inline constexpr Param<detail::names::InitialItem> initialItem;
+inline constexpr Param<detail::names::ItemCount> itemCount;
+inline constexpr Param<detail::names::PreferredItemWidth> preferredItemWidth;
+inline constexpr Param<detail::names::ItemWidth> itemWidth;
+inline constexpr Param<detail::names::MaxItemWidth> maxItemWidth;
+inline constexpr Param<detail::names::ItemSpacing> itemSpacing;
+inline constexpr Param<detail::names::MinSmallItemWidth> minSmallItemWidth;
+inline constexpr Param<detail::names::MaxSmallItemWidth> maxSmallItemWidth;
+inline constexpr Param<detail::names::Adapter> adapter;
+inline constexpr Param<detail::names::IsRefreshing> isRefreshing;
+inline constexpr Param<detail::names::OnRefresh> onRefresh;
+inline constexpr Param<detail::names::Indicator> indicator;
+inline constexpr Param<detail::names::Span> span;
+inline constexpr Param<detail::names::Options> options;
 inline constexpr Param<detail::names::MeasurePolicy> measurePolicy;
 inline constexpr Param<detail::names::Thickness> thickness;
 inline constexpr Param<detail::names::ZIndex> zIndex;

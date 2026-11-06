@@ -327,6 +327,25 @@ struct GridCells {
     int count(float width, float spacing) const;
 };
 
+// Compose's GridItemSpan: how many cells of its line an item takes; and what a span lambda sees
+// (item(span = { GridItemSpan(maxLineSpan) }): a header across the grid).
+struct GridItemSpan {
+    int currentLineSpan = 1;
+};
+struct LazyGridItemSpanScope {
+    int maxLineSpan = 1;  // the line's cells
+};
+namespace detail {
+// A span lambda given by name to item or items, passed on to the grid marked as one.
+template <class F>
+struct SpanArg {
+    F span;
+};
+template <class A>
+constexpr bool isSpanArg = false;
+template <class F>
+constexpr bool isSpanArg<SpanArg<F>> = true;
+} // namespace detail
 class LazyGridScope {
 public:
     static constexpr int FullLine = 1 << 20;  // a span as wide as the grid (headers)
@@ -342,7 +361,29 @@ public:
     }
     template <class... Args>
     void items(Args&&... args) {
-        items_.items(std::forward<Args>(args)...);
+        if constexpr (sizeof...(Args) > 0 && detail::isSpanArg<std::remove_cvref_t<std::tuple_element_t<sizeof...(Args) - 1, std::tuple<Args...>>>>) {
+            detail::splitLast([&](auto&& span, auto&&... rest) { itemsSpanned(std::move(span.span), std::forward<decltype(rest)>(rest)...); },
+                              std::forward<Args>(args)...);
+        } else {
+            items_.items(std::forward<Args>(args)...);
+        }
+    }
+    // item(content, span) and item(key, content, span) with Compose's span lambda.
+    template <class F>
+    void item(const Content& content, detail::SpanArg<F> span) {
+        spanned(items_.size(), 1, [f = std::move(span.span)](int, int columns) mutable {
+            LazyGridItemSpanScope scope{columns};
+            return GridItemSpan(f(scope)).currentLineSpan;
+        });
+        items_.item(content);
+    }
+    template <class K, class F>
+    void item(const K& key, const Content& content, detail::SpanArg<F> span) {
+        spanned(items_.size(), 1, [f = std::move(span.span)](int, int columns) mutable {
+            LazyGridItemSpanScope scope{columns};
+            return GridItemSpan(f(scope)).currentLineSpan;
+        });
+        items_.item(key, content);
     }
 
     int size() const { return items_.size(); }
@@ -352,8 +393,29 @@ public:
     int spanAt(int index, int columns) const;
 
 private:
+    // items(count or list, …, span = { item -> GridItemSpan(…) }): the span of each, by its index or
+    // its element (the list kept for it).
+    template <class F, class First, class... Rest>
+    void itemsSpanned(F span, First&& first, Rest&&... rest) {
+        int start = items_.size();
+        if constexpr (std::is_integral_v<std::remove_cvref_t<First>>) {
+            spanned(start, int(first), [span](int i, int columns) mutable {
+                LazyGridItemSpanScope scope{columns};
+                return GridItemSpan(span(scope, i)).currentLineSpan;
+            });
+        } else {
+            std::vector<std::remove_cvref_t<decltype(*std::begin(first))>> list(std::begin(first), std::end(first));
+            spanned(start, int(list.size()), [span, list](int i, int columns) mutable {
+                LazyGridItemSpanScope scope{columns};
+                return GridItemSpan(span(scope, list[size_t(i)])).currentLineSpan;
+            });
+        }
+        items_.items(std::forward<First>(first), std::forward<Rest>(rest)...);
+    }
+    void spanned(int start, int count, std::function<int(int index, int columns)> span) { spans_.push_back({start, count, 1, std::move(span)}); }
     struct Span {
         int start, count, span;
+        std::function<int(int index, int columns)> spanOf;  // (Compose's span lambda: from the item and the line)
     };
     LazyListScope items_;
     std::vector<Span> spans_;
@@ -653,17 +715,20 @@ auto unnamedOf(A&& a) {
 // put in their places, after what comes first (the list, the count) and before the content.
 template <class F, class... A>
 void withLazyNames(F&& f, A&&... args) {
-    static_assert(((!isNamed<A> || std::is_same_v<TagOf<A>, names::Key> || std::is_same_v<TagOf<A>, names::ContentType>) && ...),
-                  "kompoz: a lazy layout's items take key = … and contentType = … by name");
+    static_assert(((!isNamed<A> || std::is_same_v<TagOf<A>, names::Key> || std::is_same_v<TagOf<A>, names::ContentType> ||
+                    std::is_same_v<TagOf<A>, names::Span>) && ...),
+                  "kompoz: a lazy layout's items take key = …, contentType = … and (a grid's) span = … by name");
     auto unnamed = std::tuple_cat(unnamedOf(std::forward<A>(args))...);
     constexpr size_t n = std::tuple_size_v<decltype(unnamed)>;
     static_assert(n >= 1, "kompoz: a lazy layout's items take their content last");
     auto key = std::tuple_cat(namedOf<names::Key>(std::forward<A>(args))...);
     auto type = std::tuple_cat(namedOf<names::ContentType>(std::forward<A>(args))...);
+    auto span = std::apply([](auto&&... s) { return std::tuple<SpanArg<std::decay_t<decltype(s)>>...>{SpanArg<std::decay_t<decltype(s)>>{s}...}; },
+                           std::tuple_cat(namedOf<names::Span>(std::forward<A>(args))...));
     auto head = [&]<size_t... I>(std::index_sequence<I...>) { return std::forward_as_tuple(std::get<I>(std::move(unnamed))...); }(
         std::make_index_sequence<n - 1>{});
     std::apply(std::forward<F>(f), std::tuple_cat(std::move(head), std::move(key), std::move(type),
-                                                  std::forward_as_tuple(std::get<n - 1>(std::move(unnamed)))));
+                                                  std::forward_as_tuple(std::get<n - 1>(std::move(unnamed))), std::move(span)));
 }
 
 template <class... A>

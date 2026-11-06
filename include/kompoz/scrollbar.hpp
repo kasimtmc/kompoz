@@ -11,6 +11,7 @@
 #include "interaction.hpp"
 #include "lazy.hpp"
 #include "layout.hpp"
+#include "named.hpp"
 #include "runtime.hpp"
 
 #include <memory>
@@ -51,9 +52,27 @@ struct ScrollbarOptions {
 };
 // The scrollbar fills the length its modifier gives it (fillMaxHeight beside the content) and is
 // style.thickness thick; without anything to scroll it shows no thumb.
-void VerticalScrollbar(std::shared_ptr<ScrollbarAdapter> adapter, const Modifier& modifier = {}, const ScrollbarOptions& options = {},
-                       CallSite site = CallSite::current());
-void HorizontalScrollbar(std::shared_ptr<ScrollbarAdapter> adapter, const Modifier& modifier = {}, const ScrollbarOptions& options = {},
-                         CallSite site = CallSite::current());
+namespace detail {
+void VerticalScrollbar(std::shared_ptr<ScrollbarAdapter> adapter, const Modifier& modifier, const ScrollbarOptions& options, CallSite site);
+void HorizontalScrollbar(std::shared_ptr<ScrollbarAdapter> adapter, const Modifier& modifier, const ScrollbarOptions& options, CallSite site);
+// VerticalScrollbar(adapter, modifier, reverseLayout = …, style = …, interactionSource = …), as
+// Compose Multiplatform's.
+template <bool Vertical>
+struct ScrollbarImpl {
+    using P = Params<names::Adapter, names::Modifier, names::ReverseLayout, names::Style, names::InteractionSource>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::template check<A...>());
+        ScrollbarOptions options;
+        P::template set<names::ReverseLayout>(options.reverseLayout, args...);
+        P::template set<names::Style>(options.style, args...);
+        P::template set<names::InteractionSource>(options.interactionSource, args...);
+        (Vertical ? VerticalScrollbar : HorizontalScrollbar)(P::template arg<names::Adapter>(args...),
+                                                             P::template get<names::Modifier>(Modifier{}, args...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ScrollbarImpl<true>> VerticalScrollbar;
+inline constexpr Composable<detail::ScrollbarImpl<false>> HorizontalScrollbar;
 
 } // namespace kompoz

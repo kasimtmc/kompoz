@@ -788,6 +788,14 @@
   the `y` outside, as in Kotlin. `Layout`'s measure policy has a `MeasureScope` receiver and gives its value,
   `SubcomposeLayout`'s a `SubcomposeMeasureScope`. `list.maxOf { }`, `minOf { }`, `maxOfOrNull { }` and
   `minOfOrNull { }`.
+- **Lists, pagers and carousels take Compose's arguments**: a lazy grid's `item(span = { GridItemSpan(maxLineSpan) })`
+  and `items(list, span = { item -> GridItemSpan(2) })`; `rememberPagerState(initialPage = 0) { 3 }` and
+  `rememberCarouselState { images.size }` (the count by name or as the trailing lambda); the carousels'
+  `(state, preferredItemWidth, modifier, itemSpacing = …, contentPadding = …) { index -> … }`, the content on its
+  `CarouselItemScope` and index as Compose's; Coil's `AsyncImage(model, contentDescription, modifier,
+  contentScale = …, alpha = …)`; `VerticalScrollbar(adapter, modifier, reverseLayout = …)` and the horizontal one;
+  `PullToRefreshBox(isRefreshing, onRefresh, modifier, state = …, contentAlignment = …, enabled = …) { … }`. In C++ a
+  braced options struct names its type (`CarouselOptions{…}`, `AsyncImageOptions{…}`).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and
