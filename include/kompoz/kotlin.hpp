@@ -24,7 +24,24 @@
 #include <utility>
 #include <vector>
 
+// a.b in Kotlin: a's property b, which is a member function here (listState.firstVisibleItemIndex is
+// firstVisibleItemIndex()) or a field (a data class's). (A macro: a member's name can't be passed.)
+#define KOMPOZ_KT_GET(object, name)                                          \
+    ::kompoz::kt::detail::get(                                               \
+        [](auto&& kompoz_o) -> decltype(auto) {                              \
+            if constexpr (requires { kompoz_o.name(); }) return kompoz_o.name(); \
+            else return (kompoz_o.name);                                     \
+        },                                                                   \
+        object)
+
 namespace kompoz::kt {
+
+namespace detail {
+template <class F, class T>
+decltype(auto) get(F&& f, T&& object) {
+    return f(std::forward<T>(object));
+}
+}  // namespace detail
 
 // ---- Strings: "Count: $count" ----
 
@@ -761,6 +778,39 @@ std::string replace(const C& c, const O& oldValue, const N& newValue, A&&... arg
         if (o.empty()) return s;
         for (size_t at = 0; (at = s.find(o, at)) != std::string::npos; at += n.size()) s.replace(at, o.size(), n);
         return s;
+    }
+}
+
+// MutableList's: a std::vector's push_back, insert, erase.
+template <class C, class X, class... A>
+decltype(auto) add(C& c, X&& x, A&&... args) {
+    KOMPOZ_KT_OWN(add(std::forward<X>(x))) {
+        c.push_back(std::forward<X>(x));
+        return bool(true);
+    }
+}
+template <class C, class X, class... A>
+decltype(auto) addAll(C& c, const X& more, A&&... args) {
+    KOMPOZ_KT_OWN(addAll(more)) {
+        c.insert(c.end(), std::begin(more), std::end(more));
+        return std::begin(more) != std::end(more);
+    }
+}
+template <class C, class... A>
+decltype(auto) removeAt(C& c, int i, A&&... args) {
+    KOMPOZ_KT_OWN(removeAt(i)) {
+        auto v = c.at(size_t(i));
+        c.erase(c.begin() + i);
+        return v;
+    }
+}
+template <class C, class X, class... A>
+decltype(auto) remove(C& c, const X& x, A&&... args) {
+    KOMPOZ_KT_OWN(remove(x)) {
+        auto at = std::find(c.begin(), c.end(), x);
+        if (at == c.end()) return false;
+        c.erase(at);
+        return true;
     }
 }
 

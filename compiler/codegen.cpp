@@ -82,7 +82,7 @@ const std::set<std::string, std::less<>> kKtMembers = {
     "first", "last", "firstOrNull", "lastOrNull", "joinToString", "startsWith", "endsWith", "contains", "substring",
     "take", "drop", "reversed", "sorted", "sortedBy", "any", "all", "none", "count", "sum", "sumOf", "indexOf",
     "getOrNull", "let", "also", "takeIf", "withIndex", "toList", "toMutableList", "distinct", "split", "replace",
-    "coerceIn", "coerceAtLeast", "coerceAtMost", "roundToInt", "find"};
+    "coerceIn", "coerceAtLeast", "coerceAtMost", "roundToInt", "find", "add", "addAll", "removeAt", "remove"};
 
 // Calls whose lambda is a coroutine (Kotlin's suspend lambdas): [=]() -> Task { ...; co_return; }.
 const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "async", "produceState"};
@@ -622,8 +622,11 @@ private:
             out_.text(qualified(dotted(obj)) + "::" + cppName(e.text));
             return;
         }
+        // A property: a getter of the same name where the type has one (listState.firstVisibleItemIndex is
+        // firstVisibleItemIndex() here), else the field.
+        out_.text("KOMPOZ_KT_GET((");
         expr(obj);
-        out_.text("." + cppName(e.text));
+        out_.text("), " + cppName(e.text) + ")");
     }
 
     // X.Companion is X.
@@ -676,7 +679,12 @@ private:
                 return arguments(c, calleeName, true, true);
             }
         }
-        expr(callee);
+        if (callee.kind == Node::Member && !callee.flag && !qualifier(companionless(*callee.kids[0])) && callee.text != "Companion") {
+            expr(companionless(*callee.kids[0]));  // a member called: obj.f(…), not a property
+            out_.text("." + cppName(callee.text));
+        } else {
+            expr(callee);
+        }
         if (!c.typeArgs.empty()) {
             out_.text("<");
             for (size_t i = 0; i < c.typeArgs.size(); ++i) out_.text((i ? ", " : "") + type(c.typeArgs[i]));
@@ -837,11 +845,11 @@ private:
             // A coroutine (Kotlin's suspend lambda): its CoroutineScope receiver has no name here.
         } else if (l.flag) {
             for (size_t i = 0; i < l.names.size(); ++i) {
-                out_.text((i ? ", " : "") + std::string("auto ") + cppName(l.names[i]));
+                out_.text((i ? ", " : "") + std::string("auto&& ") + cppName(l.names[i]));
                 declare(l.names[i], Local);
             }
         } else if (std::any_of(l.kids.begin(), l.kids.end(), [](const NodeP& k) { return usesIt(k.get()); })) {
-            out_.text("auto it");
+            out_.text("auto&& it");  // (update { it.add(x) } changes what it is given)
             declare("it", Local);
         } else {
             out_.text("auto&&...");  // { ... } where the type has parameters it doesn't use

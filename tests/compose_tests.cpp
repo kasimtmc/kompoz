@@ -540,6 +540,45 @@ TEST(lazy_keys_by_name) {
     CHECK(rule.onNodeWithText("iki:1").exists() && rule.onNodeWithText("true").exists());
 }
 
+// Compose's state forms: a getter read as a property, update { it.add(…) } in place, a list made
+// item by item, a policy without a type, a saver by name.
+struct Town {
+    std::string name;
+};
+const auto townSaver = mapSaver<Town>([](const Town& t) { return SavedValue::Map{{"name", t.name}}; },
+                                      [](const SavedValue::Map& m) -> std::optional<Town> {
+                                          auto n = m.at("name").string();
+                                          return n ? std::optional(Town{*n}) : std::nullopt;
+                                      });
+
+@Composable
+fun StateForms() {
+    val list = rememberLazyListState()
+    val todos = remember { mutableStateOf(listOf("bir")) }
+    val tags = remember { mutableStateListOf("a", "b") }
+    var runs by remember { mutableStateOf(0, neverEqualPolicy()) }
+    val town by rememberSaveable(saver = townSaver) { mutableStateOf(Town("İzmir")) }
+    Column {
+        Text("ilk görünen ${list.firstVisibleItemIndex}")
+        Text("yapılacak ${todos.value.size}")
+        Text("etiket ${tags.size}")
+        Text("${town.name} $runs")
+        Button(onClick = {
+            todos.update { it.add("iki") }
+            tags.add("c")
+            runs = runs
+        }) { Text("ekle") }
+    }
+}
+
+TEST(state_forms_as_compose_writes_them) {
+    ComposeTestRule rule([] { StateForms(); });
+    CHECK(rule.onNodeWithText("ilk görünen 0").exists() && rule.onNodeWithText("yapılacak 1").exists());
+    CHECK(rule.onNodeWithText("etiket 2").exists() && rule.onNodeWithText("İzmir 0").exists());
+    rule.onNodeWithText("ekle").performClick();
+    CHECK(rule.onNodeWithText("yapılacak 2").exists() && rule.onNodeWithText("etiket 3").exists());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

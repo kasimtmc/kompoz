@@ -424,6 +424,18 @@ template <class T>
 SnapshotMutationPolicy<T> neverEqualPolicy() {
     return {};
 }
+// Compose's structuralEqualityPolicy() and neverEqualPolicy() without a type: the policy of the
+// state they are given to (mutableStateOf(list, neverEqualPolicy())).
+struct StructuralEqualityPolicy {
+    template <class T>
+    operator SnapshotMutationPolicy<T>() const { return structuralEqualityPolicy<T>(); }
+};
+struct NeverEqualPolicy {
+    template <class T>
+    operator SnapshotMutationPolicy<T>() const { return neverEqualPolicy<T>(); }
+};
+inline StructuralEqualityPolicy structuralEqualityPolicy() { return {}; }
+inline NeverEqualPolicy neverEqualPolicy() { return {}; }
 
 namespace detail {
 template <class T>
@@ -538,9 +550,9 @@ template <class T>
 MutableState<T> mutableStateOf(T initial) {
     return MutableState<T>(std::move(initial));
 }
-// With a policy: mutableStateOf(list, neverEqualPolicy<List>()).
+// With a policy: mutableStateOf(list, neverEqualPolicy()).
 template <class T>
-MutableState<T> mutableStateOf(T initial, SnapshotMutationPolicy<T> policy) {
+MutableState<T> mutableStateOf(T initial, std::type_identity_t<SnapshotMutationPolicy<T>> policy) {
     return MutableState<T>(std::move(initial), policy);
 }
 inline MutableState<std::string> mutableStateOf(const char* initial) {

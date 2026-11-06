@@ -444,6 +444,7 @@ struct Bitmap {};
 struct ContentDescription {};
 struct Data {};
 struct Colors {};
+struct Saver {};
 struct Key {};
 struct ContentType {};
 struct ColorScheme {};
@@ -634,6 +635,7 @@ inline constexpr Param<detail::names::Data> data;
 namespace arg {
 using namespace args;
 inline constexpr Param<detail::names::Colors> colors;
+inline constexpr Param<detail::names::Saver> saver;
 // (kompoz::key(id) { … } is the composable that gives an identity: these are a lazy item's)
 inline constexpr Param<detail::names::Key> key;
 inline constexpr Param<detail::names::ContentType> contentType;
@@ -658,6 +660,18 @@ inline constexpr Param<detail::names::Red> red;
 inline constexpr Param<detail::names::Green> green;
 inline constexpr Param<detail::names::Blue> blue;
 } // namespace arg
+
+// Compose's rememberSaveable(saver = …) { … } and rememberSaveable(inputs, saver = …) { … }.
+template <class S, class F>
+auto rememberSaveable(const Named<detail::names::Saver, CustomSaver<S>>& saver, F&& init, CallSite site = CallSite::current())
+    -> std::decay_t<std::invoke_result_t<F&>>& {
+    return rememberSaveable(saver.value, std::forward<F>(init), site);
+}
+template <class K, class S, class F>
+auto rememberSaveable(const K& inputs, const Named<detail::names::Saver, CustomSaver<S>>& saver, F&& init,
+                      CallSite site = CallSite::current()) -> std::decay_t<std::invoke_result_t<F&>>& {
+    return rememberSaveable(inputs, saver.value, std::forward<F>(init), site);
+}
 
 // A composable taking named arguments: each call's arguments and call site go to Impl::call.
 template <class Impl>

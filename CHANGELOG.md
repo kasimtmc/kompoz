@@ -709,6 +709,12 @@
   `item(key = "header") { … }`, put in their places (written `kompoz::arg::key` in C++, where `kompoz::key` is the
   composable that gives an identity). kompozc gives such a lambda its value, and reads `Int.MAX_VALUE` and Kotlin's
   other number limits.
+- **Compose's state forms through kompozc**: a property is read as Compose reads it, through a getter where Kompoz
+  has one (`listState.firstVisibleItemIndex`, `pagerState.currentPage`), else the field. A lambda's parameters are
+  references, so `todos.update { it.add(x) }` changes the list itself. Kotlin's `add`, `addAll`, `remove` and
+  `removeAt` are there for lists. `mutableStateOf(v, neverEqualPolicy())` and `structuralEqualityPolicy()` take no
+  type, `mutableStateListOf("a", "b")` takes its items one by one, and `rememberSaveable(saver = …) { … }` takes its
+  saver by name.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

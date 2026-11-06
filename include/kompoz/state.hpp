@@ -11,6 +11,8 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace kompoz {
@@ -134,6 +136,14 @@ private:
 template <class T>
 SnapshotStateList<T> mutableStateListOf(std::initializer_list<T> items = {}) {
     return SnapshotStateList<T>(items);
+}
+// Compose's mutableStateListOf("red", "green"): the items one by one (a text as a std::string).
+template <class T, class... R>
+    requires(!std::is_same_v<std::remove_cvref_t<T>, std::initializer_list<std::remove_cvref_t<T>>>)
+auto mutableStateListOf(T&& first, R&&... rest) {
+    using E = std::conditional_t<std::is_convertible_v<std::decay_t<T>, std::string_view> && !std::is_same_v<std::decay_t<T>, std::string_view>,
+                                 std::string, std::decay_t<T>>;
+    return SnapshotStateList<E>({E(std::forward<T>(first)), E(std::forward<R>(rest))...});
 }
 
 // An observable map (Compose's SnapshotStateMap): reading it subscribes, changing it recomposes

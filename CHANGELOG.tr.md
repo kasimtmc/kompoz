@@ -749,6 +749,12 @@
   `item(key = "başlık") { … }` yerlerine konuyor (C++'ta `kompoz::arg::key` diye yazılıyor; `kompoz::key` kimlik veren
   composable). kompozc böyle bir lambdaya değerini verdiriyor; `Int.MAX_VALUE`'yu ve Kotlin'in öteki sayı sınırlarını
   okuyor.
+- **Compose'un durum biçimleri kompozc ile**: bir özellik Compose'un okuduğu gibi okunuyor; Kompoz'da bir alıcısı
+  varsa onunla (`listState.firstVisibleItemIndex`, `pagerState.currentPage`), yoksa alanın kendisi. Bir lambdanın
+  parametreleri başvuru; böylece `todos.update { it.add(x) }` listenin kendisini değiştiriyor. Listeler için Kotlin'in
+  `add`, `addAll`, `remove` ve `removeAt`'i var. `mutableStateOf(v, neverEqualPolicy())` ve
+  `structuralEqualityPolicy()` tür almıyor, `mutableStateListOf("a", "b")` öğelerini tek tek alıyor,
+  `rememberSaveable(saver = …) { … }` saver'ını adla alıyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine
