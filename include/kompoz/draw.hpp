@@ -9,6 +9,7 @@
 //   });
 
 #include "layout.hpp"
+#include "named.hpp"
 
 #include <optional>
 #include <string_view>
@@ -470,8 +471,25 @@ private:
     LayoutDirection layoutDirection_;
 };
 
-// A space to draw in: Canvas(Modifier().size(100), [](DrawScope& draw) { ... });
-void Canvas(const Modifier& modifier, std::function<void(DrawScope&)> onDraw, CallSite site = CallSite::current());
+namespace detail {
+void Canvas(const Modifier& modifier, std::function<void(DrawScope&)> onDraw, CallSite site);
+struct CanvasImpl {
+    using P = Params<names::Modifier, names::ContentDescription, BlockWith<DrawScope&>>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: a Canvas draws with its block: Canvas(modifier, [](DrawScope& d) { … })");
+        Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
+        if constexpr (P::given<names::ContentDescription, A...>())
+            modifier = modifier.semantics(std::string(P::arg<names::ContentDescription>(args...)));
+        auto&& onDraw = std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...));
+        Canvas(modifier, std::function<void(DrawScope&)>(std::forward<decltype(onDraw)>(onDraw)), site);
+    }
+};
+} // namespace detail
+// A space to draw in (Compose's Canvas): Canvas(Modifier().size(100), [](DrawScope& draw) { ... }),
+// and Canvas(modifier, contentDescription, …) for what a screen reader says of it.
+inline constexpr Composable<detail::CanvasImpl> Canvas;
 
 // Something drawn into whatever size it is given (Compose's Painter): a bitmap (BitmapPainter),
 // a vector (VectorPainter, black unless a color filter tints it), a color, a brush or drawing

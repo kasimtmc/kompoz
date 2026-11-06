@@ -568,6 +568,7 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 340. `Offset` `==` ile karşılaştırılır, böylece onlardan oluşan bir durum (bir çizimin noktaları) `set()` alır; Windows'un vurgu rengi (Ayarlar > Kişiselleştirme > Renkler, DWM'nin kayıt defteri değeri, değiştikçe izlenir) orada sistemin paletidir (`dynamicLightColorScheme()`), Linux'ta XDG portalınınki gibi ✅
 341. Compose'unki gibi 64 bitlik `Color`, renk uzaylarıyla (`ColorSpace`, `ColorSpaces`, `Rgb`, connector'lar, adaptasyon), Oklab'da `lerp` ve Compose'un `Color.VectorConverter`'ı gibi canlandırılan renkler ✅
 342. Skia'nınki gibi `PathEffect` ve `PathMeasure`: kesikler, köşeler, damgalar ve zincirler Skia'nın yaptığı gibi, bir yol çizildiği yerde piksellerinde uygulanır; uzunluklar, konumlar ve eğri parçaları `SkContourMeasure`'ın ölçüp kestiği gibi ✅
+343. `Canvas`, Compose'un adlı argümanlarını ve öteki biçimini alır: `Canvas(modifier, contentDescription) { … }` (bir ekran okuyucunun onun için söylediği) ✅
 
 ## Sıradakiler
 

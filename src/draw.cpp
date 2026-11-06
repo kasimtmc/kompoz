@@ -1436,7 +1436,7 @@ Modifier Modifier::paint(const Painter& painter, bool sizeToIntrinsics, Alignmen
     return then(std::move(e));
 }
 
-void Canvas(const Modifier& modifier, std::function<void(DrawScope&)> onDraw, CallSite site) {
+void detail::Canvas(const Modifier& modifier, std::function<void(DrawScope&)> onDraw, CallSite site) {
     detail::Spacer(modifier.drawBehind(std::move(onDraw)), site);
 }
 

@@ -7608,6 +7608,18 @@ TEST(canvas_and_draw_modifiers_draw_in_local_coordinates) {
     }
 }
 
+TEST(canvas_takes_compose_named_arguments) {
+    // Canvas(modifier = …, contentDescription = …) { … }: the description is what a screen reader says.
+    ComposeTestRule rule([] {
+        Canvas(modifier = Modifier().size(30).testTag("tuval"), contentDescription = "bir daire",
+               [](DrawScope& d) { d.drawCircle(colors::Black); });
+    });
+    testing::RecordingCanvas canvas;
+    rule.host().draw(canvas);
+    CHECK(rule.onNodeWithTag("tuval").exists() && rule.onNodeWithContentDescription("bir daire").exists());
+    CHECK(canvas.rects.size() == 1);
+}
+
 TEST(draw_scope_strokes_sit_on_the_outline) {
     // As Compose's: half of the stroke each side of the rect or circle.
     ComposeTestRule rule([] {

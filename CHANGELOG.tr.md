@@ -768,6 +768,8 @@
   (C++'ta `kompoz::arg::initialValue`); böylece `val pulse by rememberInfiniteTransition().animateFloat(…)`, Android
   için yazıldığı gibi kompozc'den geçiyor. Durumları veren `animateFloatState` ve `animateColorState` kalktı: artık
   onlar `animateFloat` ve `animateColor`.
+- **Canvas, Compose'un adlı argümanlarını alıyor**: `Canvas(modifier = …) { … }` ve Compose'un öteki biçimi
+  `Canvas(modifier, contentDescription = "…") { … }`; açıklaması, bir ekran okuyucunun onun için söylediği.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

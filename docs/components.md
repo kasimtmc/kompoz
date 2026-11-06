@@ -567,6 +567,7 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 340. `Offset` compares with `==`, so a state of them (a drawing's points) takes `set()`; Windows' accent color (Settings > Personalization > Colors, DWM's registry value, followed as it changes) is the system's palette there (`dynamicLightColorScheme()`), as the XDG portal's is on Linux ✅
 341. `Color` as Compose's 64 bits, with its color spaces (`ColorSpace`, `ColorSpaces`, `Rgb`, connectors, adaptation), `lerp` in Oklab and colors animated as Compose's `Color.VectorConverter` ✅
 342. `PathEffect` and `PathMeasure` as Skia's: dashes, corners, stamps and chains as Skia makes them, applied where a path is drawn at its pixels; lengths, positions and pieces of curves as `SkContourMeasure` measures and cuts them ✅
+343. `Canvas` takes Compose's named arguments and its other form, `Canvas(modifier, contentDescription) { … }` (what a screen reader says of it) ✅
 
 ## Next
 
