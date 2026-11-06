@@ -8,12 +8,13 @@ In an imperative toolkit you build a tree of widgets once and then change it as 
 
 In Kompoz you write functions that turn data into UI. When the data changes, the functions run again with the new data, and Kompoz works out what changed on the screen:
 
-```cpp
-void Inbox(int unread) {
+```kotlin
+@Composable
+fun Inbox(unread: Int) {
     if (unread == 0) {
-        Text("No new messages");
+        Text("No new messages")
     } else {
-        Text(std::to_string(unread) + " new messages", fontWeight = FontWeight::Bold);
+        Text("$unread new messages", fontWeight = FontWeight.Bold)
     }
 }
 ```
@@ -22,24 +23,23 @@ There is no step that "updates" the label: the function always describes the who
 
 ## Composable functions
 
-A composable function is a C++ function that emits UI by calling other composables:
+A composable function is a `@Composable fun` that emits UI by calling other composables:
 
 - It takes the data it shows as parameters.
 - It returns nothing: it *emits* UI by calling `Text`, `Row`, `Button` and so on.
 - It can be called from other composables, in loops and conditions, like any function.
 
-```cpp
-struct Contact {
-    std::string name, phone;
-};
+```kotlin
+data class Contact(val name: String, val phone: String)
 
-void ContactList(const std::vector<Contact>& contacts) {
-    Column() {
-        for (const Contact& c : contacts) {
-            Text(c.name, style = typography().bodyLarge);
-            Text(c.phone, color = colorScheme().onSurfaceVariant);
+@Composable
+fun ContactList(contacts: List<Contact>) {
+    Column {
+        for (c in contacts) {
+            Text(c.name, style = MaterialTheme.typography.bodyLarge)
+            Text(c.phone, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    };
+    }
 }
 ```
 
@@ -52,24 +52,24 @@ When data changes, Kompoz runs the composables that depend on it again: this is 
 - A state remembers who read it. When it changes, only the composables that read it run again, not their parents.
 - When a parent does run, a child whose arguments are equal to last time, and that read nothing that changed, is *skipped*: it doesn't run, and its part of the screen stays as it is.
 
-```cpp
-void NameTag(const std::string& name, CallSite site = CallSite::current()) {
-    composable(site, name, [=] {   // skipped while `name` stays the same
-        Text("Hello, " + name);
-    });
+```kotlin
+@Composable
+fun NameTag(name: String) {  // skipped while `name` stays the same
+    Text("Hello, $name")
 }
 
-void Screen() {
-    auto clicks = remember([] { return mutableStateOf(0); });
-    Column() {
-        NameTag("Ada");                                   // not run again when clicks change
-        Text("Clicks: " + std::to_string(clicks.get()));  // Screen read clicks
-        Button([clicks] { clicks.set(clicks.get() + 1); }) { Text("Click"); };
-    };
+@Composable
+fun Screen() {
+    var clicks by remember { mutableStateOf(0) }
+    Column {
+        NameTag("Ada")             // not run again when clicks change
+        Text("Clicks: $clicks")    // Screen read clicks
+        Button(onClick = { clicks++ }) { Text("Click") }
+    }
 }
 ```
 
-`Screen` read `clicks`, so it runs again on every click. `NameTag` is a scope of its own whose argument didn't change, so it is skipped. See [Lifecycle and identity](lifecycle.md) for how scopes and skipping work in C++.
+`Screen` read `clicks`, so it runs again on every click. `NameTag` is a scope of its own whose argument didn't change, so it is skipped, as in Compose: every `@Composable fun` is restartable and skippable. See [Lifecycle and identity](lifecycle.md) for how scopes and skipping work.
 
 ## Rules that follow
 
@@ -83,10 +83,11 @@ A composable may run on every frame of an animation. Keep its body fast: no file
 
 Running a composable should only describe UI. Writing a file, sending a request or changing a variable from inside its body happens again every time it recomposes, and in an order you don't control.
 
-```cpp nocheck
-void Bad(int& counter) {
-    counter++;              // runs on every recomposition: don't
-    Text(std::to_string(counter));
+```kotlin nocheck
+@Composable
+fun Bad(counter: MutableList<Int>) {
+    counter.add(1)          // runs on every recomposition: don't
+    Text("${counter.size}")
 }
 ```
 
@@ -104,13 +105,14 @@ Write each composable so that it doesn't depend on another having run first. Sha
 
 Since the UI is a function of data, changing the UI means changing data. Kompoz watches *state*, values made with `mutableStateOf` and the other state holders, and recomposes what read it:
 
-```cpp
-void Toggle() {
-    auto on = remember([] { return mutableStateOf(false); });
-    Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
-        Switch(on.get(), [on](bool v) { on.set(v); });
-        Text(on.get() ? "On" : "Off");
-    };
+```kotlin
+@Composable
+fun Toggle() {
+    var on by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Switch(checked = on, onCheckedChange = { on = it })
+        Text(if (on) "On" else "Off")
+    }
 }
 ```
 

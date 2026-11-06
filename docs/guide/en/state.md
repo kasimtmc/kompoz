@@ -6,33 +6,35 @@ State is any value that can change over time and that the UI shows. This page co
 
 Kompoz recomposes when *observable* state changes. `mutableStateOf` makes the basic kind, a `MutableState<T>`:
 
-```cpp body
-auto name = mutableStateOf(std::string("Ada"));
-Text(name.get());         // reading it subscribes the running composable
-name.set("Grace");        // writing it recomposes the readers
+```kotlin body
+val name = remember { mutableStateOf("Ada") }
+Text(name.value)                                                // reading it subscribes the running composable
+Button(onClick = { name.value = "Grace" }) { Text("Rename") }   // writing it recomposes the readers
 ```
 
-- `get()` reads the value and records that the running composable depends on it.
-- `set(v)` stores a new value. If `T` can be compared with `==` and the value is the same, nothing happens; otherwise every composable that read it recomposes. A policy, Compose's `SnapshotMutationPolicy`, can say otherwise: `mutableStateOf(v, neverEqualPolicy<T>())` recomposes the readers on every `set`, the same value too, and `SnapshotMutationPolicy<T>{[](const T& a, const T& b) { … }}` decides by a function of your own (without captures). `structuralEqualityPolicy<T>()` is the default, `==`; `derivedStateOf(policy, calc)` takes one as well.
-- `update(f)` changes the value in place, for containers: `todos.update([](auto& v) { v.push_back(item); })`.
+- Reading `value` records that the running composable depends on the state.
+- Writing it stores a new value. If `T` can be compared with `==` and the value is the same, nothing happens; otherwise every composable that read it recomposes. A policy, Compose's `SnapshotMutationPolicy`, can say otherwise: `mutableStateOf(v, neverEqualPolicy())` recomposes the readers on every write, the same value too; `structuralEqualityPolicy()` is the default, `==`; one of your own is a C++ `SnapshotMutationPolicy<T>{[](const T& a, const T& b) { … }}` (a function without captures). `derivedStateOf(policy, calc)` takes one as well.
+- `update { }` changes the value in place, for containers: `todos.update { it.add(item) }`.
 - `peek()` reads without subscribing, for code that must not recompose when the value changes.
 
-A plain variable is not observable: changing it doesn't recompose anything, and a local variable is gone the moment the composable returns.
+With `var x by mutableStateOf(…)` (or `by remember { mutableStateOf(…) }`), `x` reads and writes the state's value, as in Kotlin. A plain variable is not observable: changing it doesn't recompose anything, and a local variable is gone the moment the composable returns.
 
-`MutableState<T>` is a handle to a shared value. Copies are cheap and all see the same value, so you pass states around and capture them **by value** in callbacks:
+A state is shared: copies of it see the same value, so a lambda that captures it (by value, as every lambda does here) reads and writes the same state:
 
-```cpp
-void NameField() {
-    auto name = remember([] { return mutableStateOf(std::string()); });
-    OutlinedTextField(name.get(), [name](std::string v) { name.set(std::move(v)); });
+```kotlin
+@Composable
+fun NameField() {
+    var name by remember { mutableStateOf("") }
+    OutlinedTextField(value = name, onValueChange = { name = it })
 }
 ```
 
-A composable that only reads a state can take a `State<T>`, Compose's read-only `State`: a `MutableState<T>` or a derived state (`derivedStateOf`) converts to it. It has `get()`, `peek()` and `*`, but no `set`, and compares by which state it is, so the composable is skipped when it is given the same one again:
+A composable that only reads a state can take a `State<T>`, Compose's read-only `State`: a `MutableState<T>` or a derived state (`derivedStateOf`) converts to it. It has `value` and `peek()`, but can't be written, and compares by which state it is, so the composable is skipped when it is given the same one again:
 
-```cpp
-void Progress(State<float> fraction, CallSite site = CallSite::current()) {
-    composable(site, fraction, [fraction] { LinearProgressIndicator(fraction.get()); });
+```kotlin
+@Composable
+fun Progress(fraction: State<Float>) {
+    LinearProgressIndicator(fraction.value)
 }
 ```
 
@@ -40,10 +42,11 @@ void Progress(State<float> fraction, CallSite site = CallSite::current()) {
 
 A composable's body runs on every recomposition, so a state created in it would start over each time. `remember` keeps a value across recompositions:
 
-```cpp
-void Counter() {
-    auto count = remember([] { return mutableStateOf(0); });   // made once
-    Button([count] { count.set(count.get() + 1); }) { Text(std::to_string(count.get())); };
+```kotlin
+@Composable
+fun Counter() {
+    var count by remember { mutableStateOf(0) }   // made once
+    Button(onClick = { count++ }) { Text("$count") }
 }
 ```
 
@@ -53,17 +56,19 @@ The lambda runs the first time the composable is composed; after that, `remember
 
 ### Remembering with a key
 
-`remember(key, init)` computes the value again when `key` changes:
+`remember(key) { … }` computes the value again when `key` changes:
 
-```cpp
-#! struct User { std::string first, last; };
-void Greeting(const User& user) {
-    auto fullName = remember(user.first + " " + user.last, [&] { return "Dear " + user.first + " " + user.last; });
-    Text(fullName);
+```kotlin
+data class User(val first: String, val last: String)
+
+@Composable
+fun Greeting(user: User) {
+    val fullName = remember(user.first, user.last) { "Dear ${user.first} ${user.last}" }
+    Text(fullName)
 }
 ```
 
-The key can be any value that compares with `==`. Two or three keys can be given, as in Compose: `remember(a, b, init)` computes it again when either changes; for more, use a `std::tuple` or a struct.
+The key can be any value that compares with `==`. Two or three keys can be given, as here, and the value is computed again when any of them changes; for more, use a `data class` or a `std::tuple`.
 
 ## rememberSaveable
 
@@ -72,15 +77,16 @@ The key can be any value that compares with `==`. Two or three keys can be given
 - when the composable leaves and comes back inside a `SaveableStateHolder`, as the screens of a `NavHost` do when you go back to them;
 - when Android ends the app's process in the background and brings it back, and on the desktop across runs with `KOMPOZ_STATE_FILE`.
 
-```cpp body
-auto query = rememberSaveable([] { return mutableStateOf(std::string()); });
+```kotlin body
+var query by rememberSaveable { mutableStateOf("") }
+Text(query)
 ```
 
-Given inputs first, as Compose's `rememberSaveable(inputs)`, it makes the value again when they change, dropping the one it had and its saved one: `rememberSaveable(userId, [] { return mutableStateOf(std::string()); })`. Several inputs go in a `std::tuple`; a saver of its own goes after them.
+Given inputs first, as Compose's `rememberSaveable(inputs)`, it makes the value again when they change, dropping the one it had and its saved one: `rememberSaveable(userId) { mutableStateOf("") }`.
 
-To survive the process ending, the value must be *saveable*. Numbers, `bool`, enums, strings, and `std::vector` and `std::optional` of saveable types are; so are `MutableState` of a saveable value and the library's own state objects (scroll and lazy list states, `TextFieldState`, `NavController`). For your own type, specialize `Saver`:
+To survive the process ending, the value must be *saveable*. Numbers, `Boolean`, enums, strings, and lists and nullables of saveable types are; so are states of a saveable value and the library's own state objects (scroll and lazy list states, `TextFieldState`, `NavController`). For your own type, specialize `Saver`, next to your composables in C++:
 
-```cpp
+```kotlin
 struct Point {
     float x = 0, y = 0;
 };
@@ -97,15 +103,16 @@ struct kompoz::Saver<Point> {
     }
 };
 
-void Pin() {
-    auto where = rememberSaveable([] { return mutableStateOf(Point{}); });
-    Text(std::to_string(where.get().x));
+@Composable
+fun Pin() {
+    val where by rememberSaveable { mutableStateOf(Point()) }
+    Text("${where.x}")
 }
 ```
 
 Or pass a saver made with `listSaver` or `mapSaver`, as Compose's `rememberSaveable(saver = …)`:
 
-```cpp
+```kotlin
 struct City {
     std::string name, country;
 };
@@ -117,9 +124,10 @@ const auto citySaver = mapSaver<City>(
         return name && country ? std::optional(City{*name, *country}) : std::nullopt;
     });
 
-void CityScreen() {
-    auto city = rememberSaveable(citySaver, [] { return mutableStateOf(City{"Madrid", "Spain"}); });
-    Text(city.get().name);
+@Composable
+fun CityScreen() {
+    val city by rememberSaveable(saver = citySaver) { mutableStateOf(City("Madrid", "Spain")) }
+    Text(city.name)
 }
 ```
 
@@ -131,56 +139,58 @@ A value that isn't saveable is still kept by a `SaveableStateHolder`, but starts
 
 When a state is computed from others and changes less often than they do, wrap the computation in `derivedStateOf`. Its readers recompose only when the result changes, not on every change of its inputs:
 
-```cpp
-void ScrollToTop() {
-    auto list = rememberLazyListState();
-    auto showButton = remember([list] { return derivedStateOf([list] { return list.firstVisibleItemIndex() > 0; }); });
+```kotlin
+@Composable
+fun ScrollToTop() {
+    val list = rememberLazyListState()
+    val showButton by remember { derivedStateOf { list.firstVisibleItemIndex > 0 } }
 
-    Box(Modifier().fillMaxSize()) {
-        LazyColumn(Modifier().fillMaxSize(), state = list) {
-            items(100, [](int i) { Text("Row " + std::to_string(i)); });
-        };
-        if (showButton.get()) Text("Back to top");
-    };
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(modifier = Modifier.fillMaxSize(), state = list) {
+            items(100) { Text("Row $it") }
+        }
+        if (showButton) Text("Back to top")
+    }
 }
 ```
 
-Without `derivedStateOf`, reading `firstVisibleItemIndex()` directly would recompose on every item scrolled past. Create a derived state inside `remember`, so it is made once and can observe its inputs.
+Without `derivedStateOf`, reading `firstVisibleItemIndex` directly would recompose on every item scrolled past. Create a derived state inside `remember`, so it is made once and can observe its inputs.
 
 ### Snapshots and threads
 
 States are kept per *snapshot*, as in Compose: code sees each state as of the snapshot it runs in. Outside any, it runs in the global snapshot, whose writes are told to their readers at the next frame. A composition runs in a snapshot of its own, so it sees one consistent state whatever other threads write meanwhile, and what it writes is seen once it is done.
 
-`Snapshot::withMutableSnapshot` writes several states at once: nothing sees one change without the others. If one of them was written meanwhile elsewhere to a value its policy doesn't count as the same, it throws `SnapshotApplyConflictException` and none of its writes is kept:
+`Snapshot.withMutableSnapshot` writes several states at once: nothing sees one change without the others. If one of them was written meanwhile elsewhere to a value its policy doesn't count as the same, it throws `SnapshotApplyConflictException` and none of its writes is kept:
 
-```cpp body
-auto from = remember([] { return mutableStateOf(100); });
-auto to = remember([] { return mutableStateOf(0); });
-Button([from, to] {
-    Snapshot::withMutableSnapshot([&] {  // a transfer: never seen half done
-        from.set(from.peek() - 10);
-        to.set(to.peek() + 10);
-    });
-}) { Text("Move 10"); };
+```kotlin body
+var from by remember { mutableStateOf(100) }
+var to by remember { mutableStateOf(0) }
+Button(onClick = {
+    Snapshot.withMutableSnapshot {  // a transfer: never seen half done
+        from -= 10
+        to += 10
+    }
+}) { Text("Move 10") }
 ```
 
-On the UI thread, states are read and written freely. Another thread may write them, and reads them inside a snapshot: `Snapshot::takeSnapshot()` gives a view of them as they are, read in its `enter(block)`, and `dispose()` lets it go. `takeMutableSnapshot()` gives one to write in too, applied with `apply()`; taken inside another, it is applied to that one. Snapshots take read and write observers, and `Snapshot::registerApplyObserver` hears what every applied snapshot changed.
+On the UI thread, states are read and written freely. Another thread may write them, and reads them inside a snapshot: `Snapshot.takeSnapshot()` gives a view of them as they are, read in its `enter { }`, and `dispose()` lets it go. `takeMutableSnapshot()` gives one to write in too, applied with `apply()`; taken inside another, it is applied to that one. Snapshots take read and write observers, and `Snapshot.registerApplyObserver` hears what every applied snapshot changed.
 
 ### State lists and maps
 
 `mutableStateListOf` and `mutableStateMapOf` are observable containers, like Compose's `SnapshotStateList` and `SnapshotStateMap`. Reading one subscribes; adding, removing or changing items recomposes the readers:
 
-```cpp
-void Tags() {
-    auto tags = remember([] { return mutableStateListOf<std::string>({"red", "green"}); });
-    Column() {
-        for (const std::string& tag : tags) Text(tag);
-        Button([tags] { tags.add("blue"); }) { Text("Add"); };
-    };
+```kotlin
+@Composable
+fun Tags() {
+    val tags = remember { mutableStateListOf("red", "green") }
+    Column {
+        for (tag in tags) Text(tag)
+        Button(onClick = { tags.add("blue") }) { Text("Add") }
+    }
 }
 ```
 
-A list has `add`, `set`, `removeAt`, `removeIf`, `clear` and `update`; a map has `put`, `remove`, `getOrDefault` and the like. A `MutableState<std::vector<T>>` changed with `update` works just as well.
+A list has `add`, `set`, `removeAt`, `removeIf`, `clear` and `update`; a map has `put`, `remove`, `getOrDefault` and the like. A state of a list changed with `update` works just as well.
 
 ### rememberUpdatedState
 
@@ -194,19 +204,21 @@ A long-running effect that must not restart, but should use the latest value of 
 
 A composable that holds its own state is easy to use but hard to control from outside: its caller can't read the state, set it, or share it with others. *Hoisting* moves the state up to the caller: the composable takes the value and a callback instead.
 
-```cpp
+```kotlin
 // Stateless: shows `name`, reports edits. Easy to reuse, preview and test.
-void NameInput(const std::string& name, std::function<void(std::string)> onNameChange) {
-    OutlinedTextField(name, std::move(onNameChange), Modifier(), label = "Name");
+@Composable
+fun NameInput(name: String, onNameChange: (String) -> Unit) {
+    OutlinedTextField(value = name, onValueChange = onNameChange, singleLine = true)
 }
 
 // Stateful: owns the state and hands it down.
-void Profile() {
-    auto name = rememberSaveable([] { return mutableStateOf(std::string()); });
-    Column() {
-        NameInput(name.get(), [name](std::string v) { name.set(std::move(v)); });
-        Text("Hello, " + name.get());
-    };
+@Composable
+fun Profile() {
+    var name by rememberSaveable { mutableStateOf("") }
+    Column {
+        NameInput(name = name, onNameChange = { name = it })
+        Text("Hello, $name")
+    }
 }
 ```
 
@@ -218,9 +230,9 @@ The rule of thumb, as in Compose:
 
 ### State holders
 
-When a screen's state and logic grow, gather them in a class: a *state holder*. A plain class kept with `remember` suits UI logic (which panel is open, a form's fields); a `ViewModel` suits state that outlives the screen and talks to the rest of the app. Kompoz's own components do this: `LazyListState`, `DrawerState` and `SnackbarHostState` are state holders made by `rememberLazyListState()` and friends.
+When a screen's state and logic grow, gather them in a class: a *state holder*. A plain class kept with `remember` suits UI logic (which panel is open, a form's fields); a `ViewModel` suits state that outlives the screen and talks to the rest of the app. Kompoz's own components do this: `LazyListState`, `DrawerState` and `SnackbarHostState` are state holders made by `rememberLazyListState()` and friends. Such a class is written in C++, next to your composables:
 
-```cpp
+```kotlin
 class SearchState {
 public:
     MutableState<std::string> query = mutableStateOf(std::string());
@@ -231,9 +243,10 @@ public:
     }
 };
 
-void SearchScreen() {
-    auto& search = remember([] { return SearchState(); });
-    Text(search.query.get());
+@Composable
+fun SearchScreen() {
+    val search = remember { SearchState() }
+    Text(search.query.value)
 }
 ```
 

@@ -8,12 +8,13 @@ Kompoz deklaratiftir: arayüzün mevcut veriye göre nasıl görünmesi gerekti�
 
 Kompoz'da veriyi arayüze çeviren fonksiyonlar yazarsınız. Veri değişince fonksiyonlar yeni veriyle yeniden çalışır ve ekranda neyin değiştiğini Kompoz kendisi bulur:
 
-```cpp
-void Inbox(int unread) {
+```kotlin
+@Composable
+fun Inbox(unread: Int) {
     if (unread == 0) {
-        Text("No new messages");
+        Text("Yeni ileti yok")
     } else {
-        Text(std::to_string(unread) + " new messages", fontWeight = FontWeight::Bold);
+        Text("$unread yeni ileti", fontWeight = FontWeight.Bold)
     }
 }
 ```
@@ -22,24 +23,23 @@ Etiketi "güncelleyen" bir adım yoktur: fonksiyon her zaman sonucun tamamını 
 
 ## Composable fonksiyonlar
 
-Composable fonksiyon, başka composable'ları çağırarak arayüz üreten bir C++ fonksiyonudur:
+Composable fonksiyon, başka composable'ları çağırarak arayüz üreten bir `@Composable fun`'dır:
 
 - Gösterdiği veriyi parametre olarak alır.
 - Hiçbir şey döndürmez: `Text`, `Row`, `Button` gibi fonksiyonları çağırarak arayüz *üretir*.
 - Her fonksiyon gibi başka composable'lardan, döngülerin ve koşulların içinden çağrılabilir.
 
-```cpp
-struct Contact {
-    std::string name, phone;
-};
+```kotlin
+data class Contact(val name: String, val phone: String)
 
-void ContactList(const std::vector<Contact>& contacts) {
-    Column() {
-        for (const Contact& c : contacts) {
-            Text(c.name, style = typography().bodyLarge);
-            Text(c.phone, color = colorScheme().onSurfaceVariant);
+@Composable
+fun ContactList(contacts: List<Contact>) {
+    Column {
+        for (c in contacts) {
+            Text(c.name, style = MaterialTheme.typography.bodyLarge)
+            Text(c.phone, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    };
+    }
 }
 ```
 
@@ -52,24 +52,24 @@ Veri değişince Kompoz ona bağlı composable'ları yeniden çalıştırır: bu
 - Bir durum, onu kimin okuduğunu hatırlar. Değiştiğinde yalnız onu okuyan composable'lar yeniden çalışır, ebeveynleri değil.
 - Bir ebeveyn yeniden çalıştığında, argümanları geçen seferkine eşit olan ve değişen hiçbir şeyi okumamış bir çocuk *atlanır*: çalışmaz, ekrandaki bölümü olduğu gibi kalır.
 
-```cpp
-void NameTag(const std::string& name, CallSite site = CallSite::current()) {
-    composable(site, name, [=] {   // `name` aynı kaldıkça atlanır
-        Text("Hello, " + name);
-    });
+```kotlin
+@Composable
+fun NameTag(name: String) {  // `name` aynı kaldıkça atlanır
+    Text("Merhaba, $name")
 }
 
-void Screen() {
-    auto clicks = remember([] { return mutableStateOf(0); });
-    Column() {
-        NameTag("Ada");                                   // clicks değişince yeniden çalışmaz
-        Text("Clicks: " + std::to_string(clicks.get()));  // Screen clicks'i okudu
-        Button([clicks] { clicks.set(clicks.get() + 1); }) { Text("Click"); };
-    };
+@Composable
+fun Screen() {
+    var clicks by remember { mutableStateOf(0) }
+    Column {
+        NameTag("Ada")             // clicks değişince yeniden çalışmaz
+        Text("Tıklama: $clicks")    // Screen clicks'i okudu
+        Button(onClick = { clicks++ }) { Text("Tıkla") }
+    }
 }
 ```
 
-`Screen` `clicks`'i okudu, bu yüzden her tıklamada yeniden çalışır. `NameTag` kendi başına bir scope'tur ve argümanı değişmedi, bu yüzden atlanır. Scope'ların ve atlamanın C++'ta nasıl işlediği için [Yaşam döngüsü ve kimlik](lifecycle.md) sayfasına bakın.
+`Screen` `clicks`'i okudu, bu yüzden her tıklamada yeniden çalışır. `NameTag` kendi başına bir scope'tur ve argümanı değişmedi, bu yüzden Compose'daki gibi atlanır: her `@Composable fun` yeniden başlatılabilir ve atlanabilirdir. Scope'ların ve atlamanın nasıl işlediği için [Yaşam döngüsü ve kimlik](lifecycle.md) sayfasına bakın.
 
 ## Bundan çıkan kurallar
 
@@ -83,10 +83,11 @@ Bir composable bir animasyonun her karesinde çalışabilir. Gövdesini hızlı 
 
 Bir composable'ı çalıştırmak yalnızca arayüzü tarif etmeli. Gövdesinin içinden dosya yazmak, istek göndermek ya da bir değişkeni değiştirmek her recomposition'da yeniden olur, üstelik sizin kontrol etmediğiniz bir sırayla.
 
-```cpp nocheck
-void Bad(int& counter) {
-    counter++;              // her recomposition'da çalışır: yapmayın
-    Text(std::to_string(counter));
+```kotlin nocheck
+@Composable
+fun Bad(counter: MutableList<Int>) {
+    counter.add(1)          // her recomposition'da çalışır: yapmayın
+    Text("${counter.size}")
 }
 ```
 
@@ -104,13 +105,14 @@ Her composable'ı, bir başkasının önce çalışmış olmasına bağlı olmay
 
 Arayüz verinin bir fonksiyonu olduğuna göre, arayüzü değiştirmek veriyi değiştirmek demektir. Kompoz *durumu*, yani `mutableStateOf` ve diğer durum tutucularla yapılan değerleri izler ve onları okuyanları yeniden kompoze eder:
 
-```cpp
-void Toggle() {
-    auto on = remember([] { return mutableStateOf(false); });
-    Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
-        Switch(on.get(), [on](bool v) { on.set(v); });
-        Text(on.get() ? "On" : "Off");
-    };
+```kotlin
+@Composable
+fun Toggle() {
+    var on by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Switch(checked = on, onCheckedChange = { on = it })
+        Text(if (on) "Açık" else "Kapalı")
+    }
 }
 ```
 

@@ -6,33 +6,35 @@ Durum, zamanla değişebilen ve arayüzün gösterdiği her değerdir. Bu sayfa 
 
 Kompoz, *izlenebilir* bir durum değiştiğinde yeniden kompoze eder. En temel türü `mutableStateOf` yapar, bir `MutableState<T>`:
 
-```cpp body
-auto name = mutableStateOf(std::string("Ada"));
-Text(name.get());         // okumak, çalışan composable'ı abone yapar
-name.set("Grace");        // yazmak, okuyanları yeniden kompoze eder
+```kotlin body
+val name = remember { mutableStateOf("Ada") }
+Text(name.value)                                                // okumak çalışan composable'ı abone yapar
+Button(onClick = { name.value = "Grace" }) { Text("Yeniden adlandır") }   // yazmak okuyanları yeniden kompoze eder
 ```
 
-- `get()` değeri okur ve çalışan composable'ın ona bağlı olduğunu kaydeder.
-- `set(v)` yeni bir değer saklar. `T` `==` ile karşılaştırılabiliyorsa ve değer aynıysa hiçbir şey olmaz; değilse onu okuyan her composable yeniden kompoze edilir. Bir kural, Compose'un `SnapshotMutationPolicy`'si, bunu değiştirebilir: `mutableStateOf(v, neverEqualPolicy<T>())` her `set`'te, aynı değerde de, okuyucuları yeniden kompoze eder; `SnapshotMutationPolicy<T>{[](const T& a, const T& b) { … }}` sizin bir işlevinizle (yakalamasız) karar verir. Varsayılan `structuralEqualityPolicy<T>()`, yani `==`; `derivedStateOf(policy, calc)` da bir kural alır.
-- `update(f)` değeri yerinde değiştirir, kapsayıcılar için: `todos.update([](auto& v) { v.push_back(item); })`.
+- `value`'yu okumak, çalışan composable'ın duruma bağlı olduğunu kaydeder.
+- Ona yazmak yeni bir değer saklar. `T` `==` ile karşılaştırılabiliyorsa ve değer aynıysa hiçbir şey olmaz; değilse onu okuyan her composable yeniden kompoze edilir. Bir kural, Compose'un `SnapshotMutationPolicy`'si, bunu değiştirebilir: `mutableStateOf(v, neverEqualPolicy())` her yazmada, aynı değerde de, okuyucuları yeniden kompoze eder; varsayılan `structuralEqualityPolicy()`, yani `==`; sizin bir kuralınız C++'ta bir `SnapshotMutationPolicy<T>{[](const T& a, const T& b) { … }}`'dir (yakalamasız bir işlev). `derivedStateOf(policy, calc)` da bir kural alır.
+- `update { }` değeri yerinde değiştirir, kapsayıcılar için: `todos.update { it.add(item) }`.
 - `peek()` abone olmadan okur; değer değişince yeniden kompoze edilmemesi gereken kod için.
 
-Düz bir değişken izlenebilir değildir: onu değiştirmek hiçbir şeyi yeniden kompoze etmez, yerel bir değişken de composable döndüğü anda yok olur.
+`var x by mutableStateOf(…)` ile (ya da `by remember { mutableStateOf(…) }`), Kotlin'deki gibi `x` durumun değerini okur ve yazar. Düz bir değişken izlenebilir değildir: onu değiştirmek hiçbir şeyi yeniden kompoze etmez, yerel bir değişken de composable döndüğü anda yok olur.
 
-`MutableState<T>` paylaşılan bir değere bir tutamaçtır (handle). Kopyalar ucuzdur ve hepsi aynı değeri görür; bu yüzden durumları elden ele geçirir, callback'lerde **değerle** yakalarsınız:
+Bir durum paylaşılır: kopyaları aynı değeri görür; bu yüzden onu yakalayan bir lambda (burada her lambda gibi değerle) aynı durumu okur ve yazar:
 
-```cpp
-void NameField() {
-    auto name = remember([] { return mutableStateOf(std::string()); });
-    OutlinedTextField(name.get(), [name](std::string v) { name.set(std::move(v)); });
+```kotlin
+@Composable
+fun NameField() {
+    var name by remember { mutableStateOf("") }
+    OutlinedTextField(value = name, onValueChange = { name = it })
 }
 ```
 
-Bir durumu yalnızca okuyan bir composable, Compose'un salt okunur `State`'i olan bir `State<T>` alabilir: bir `MutableState<T>` ya da türetilmiş bir durum (`derivedStateOf`) ona dönüşür. `get()`, `peek()` ve `*` vardır ama `set` yoktur; hangi durum olduğuna göre karşılaştırılır, bu yüzden composable aynısı yeniden verildiğinde atlanır:
+Bir durumu yalnızca okuyan bir composable, Compose'un salt okunur `State`'i olan bir `State<T>` alabilir: bir `MutableState<T>` ya da türetilmiş bir durum (`derivedStateOf`) ona dönüşür. `value`'su ve `peek()`'i vardır ama ona yazılamaz; hangi durum olduğuna göre karşılaştırılır, bu yüzden composable aynısı yeniden verildiğinde atlanır:
 
-```cpp
-void Progress(State<float> fraction, CallSite site = CallSite::current()) {
-    composable(site, fraction, [fraction] { LinearProgressIndicator(fraction.get()); });
+```kotlin
+@Composable
+fun Progress(fraction: State<Float>) {
+    LinearProgressIndicator(fraction.value)
 }
 ```
 
@@ -40,10 +42,11 @@ void Progress(State<float> fraction, CallSite site = CallSite::current()) {
 
 Bir composable'ın gövdesi her recomposition'da çalışır, yani içinde oluşturulan bir durum her seferinde baştan başlar. `remember` bir değeri recomposition'lar boyunca korur:
 
-```cpp
-void Counter() {
-    auto count = remember([] { return mutableStateOf(0); });   // bir kez yapılır
-    Button([count] { count.set(count.get() + 1); }) { Text(std::to_string(count.get())); };
+```kotlin
+@Composable
+fun Counter() {
+    var count by remember { mutableStateOf(0) }   // bir kez yapılır
+    Button(onClick = { count++ }) { Text("$count") }
 }
 ```
 
@@ -53,17 +56,19 @@ Lambda, composable ilk kez kompoze edildiğinde çalışır; ondan sonra `rememb
 
 ### Bir anahtarla hatırlamak
 
-`remember(key, init)`, `key` değişince değeri yeniden hesaplar:
+`remember(key) { … }`, `key` değişince değeri yeniden hesaplar:
 
-```cpp
-#! struct User { std::string first, last; };
-void Greeting(const User& user) {
-    auto fullName = remember(user.first + " " + user.last, [&] { return "Dear " + user.first + " " + user.last; });
-    Text(fullName);
+```kotlin
+data class User(val first: String, val last: String)
+
+@Composable
+fun Greeting(user: User) {
+    val fullName = remember(user.first, user.last) { "Sayın ${user.first} ${user.last}" }
+    Text(fullName)
 }
 ```
 
-Anahtar `==` ile karşılaştırılabilen herhangi bir değer olabilir. Compose'daki gibi iki ya da üç anahtar verilebilir: `remember(a, b, init)` biri değiştiğinde değeri yeniden hesaplar; daha fazlası için bir `std::tuple` ya da bir struct kullanın.
+Anahtar `==` ile karşılaştırılabilen herhangi bir değer olabilir. Buradaki gibi iki ya da üç anahtar verilebilir; biri değiştiğinde değer yeniden hesaplanır. Daha fazlası için bir `data class` ya da bir `std::tuple` kullanın.
 
 ## rememberSaveable
 
@@ -72,15 +77,16 @@ Anahtar `==` ile karşılaştırılabilen herhangi bir değer olabilir. Compose'
 - composable bir `SaveableStateHolder`'ın içinde çıkıp geri geldiğinde; bir `NavHost`'un ekranlarına geri döndüğünüzde olduğu gibi;
 - Android uygulamanın sürecini arka planda sonlandırıp geri getirdiğinde, masaüstünde de `KOMPOZ_STATE_FILE` ile çalıştırmalar arasında.
 
-```cpp body
-auto query = rememberSaveable([] { return mutableStateOf(std::string()); });
+```kotlin body
+var query by rememberSaveable { mutableStateOf("") }
+Text(query)
 ```
 
-Compose'un `rememberSaveable(inputs)`'u gibi önce girdiler verilirse, girdiler değiştiğinde değeri yeniden yapar; elindekini de kaydedilmiş olanı da bırakır: `rememberSaveable(userId, [] { return mutableStateOf(std::string()); })`. Birden fazla girdi bir `std::tuple`'a girer; kendine ait bir saver onlardan sonra gelir.
+Compose'un `rememberSaveable(inputs)`'u gibi önce girdiler verilirse, girdiler değiştiğinde değeri yeniden yapar; elindekini de kaydedilmiş olanı da bırakır: `rememberSaveable(userId) { mutableStateOf("") }`.
 
-Sürecin sonlanmasından sağ çıkmak için değerin *kaydedilebilir* olması gerekir. Sayılar, `bool`, enum'lar, string'ler ve kaydedilebilir türlerin `std::vector`'ı ve `std::optional`'ı kaydedilebilirdir; kaydedilebilir bir değerin `MutableState`'i ve kütüphanenin kendi durum nesneleri de (kaydırma ve tembel liste durumları, `TextFieldState`, `NavController`) öyledir. Kendi türünüz için `Saver`'ı özelleştirin:
+Sürecin sonlanmasından sağ çıkmak için değerin *kaydedilebilir* olması gerekir. Sayılar, `Boolean`, enum'lar, string'ler ve kaydedilebilir türlerin listeleri ve null olabilenleri kaydedilebilirdir; kaydedilebilir bir değerin durumları ve kütüphanenin kendi durum nesneleri de (kaydırma ve tembel liste durumları, `TextFieldState`, `NavController`) öyledir. Kendi türünüz için composable'larınızın yanında, C++'ta `Saver`'ı özelleştirin:
 
-```cpp
+```kotlin
 struct Point {
     float x = 0, y = 0;
 };
@@ -97,15 +103,16 @@ struct kompoz::Saver<Point> {
     }
 };
 
-void Pin() {
-    auto where = rememberSaveable([] { return mutableStateOf(Point{}); });
-    Text(std::to_string(where.get().x));
+@Composable
+fun Pin() {
+    val where by rememberSaveable { mutableStateOf(Point()) }
+    Text("${where.x}")
 }
 ```
 
 Ya da Compose'un `rememberSaveable(saver = …)`'ı gibi, `listSaver` veya `mapSaver` ile yapılmış bir saver verin:
 
-```cpp
+```kotlin
 struct City {
     std::string name, country;
 };
@@ -117,9 +124,10 @@ const auto citySaver = mapSaver<City>(
         return name && country ? std::optional(City{*name, *country}) : std::nullopt;
     });
 
-void CityScreen() {
-    auto city = rememberSaveable(citySaver, [] { return mutableStateOf(City{"Madrid", "Spain"}); });
-    Text(city.get().name);
+@Composable
+fun CityScreen() {
+    val city by rememberSaveable(saver = citySaver) { mutableStateOf(City("Madrid", "Spain")) }
+    Text(city.name)
 }
 ```
 
@@ -131,56 +139,58 @@ Kaydedilebilir olmayan bir değeri de bir `SaveableStateHolder` korur, ama süre
 
 Bir durum başkalarından hesaplanıyorsa ve onlardan daha seyrek değişiyorsa, hesabı `derivedStateOf` ile sarın. Okuyanları girdilerinin her değişiminde değil, yalnız sonuç değişince yeniden kompoze edilir:
 
-```cpp
-void ScrollToTop() {
-    auto list = rememberLazyListState();
-    auto showButton = remember([list] { return derivedStateOf([list] { return list.firstVisibleItemIndex() > 0; }); });
+```kotlin
+@Composable
+fun ScrollToTop() {
+    val list = rememberLazyListState()
+    val showButton by remember { derivedStateOf { list.firstVisibleItemIndex > 0 } }
 
-    Box(Modifier().fillMaxSize()) {
-        LazyColumn(Modifier().fillMaxSize(), state = list) {
-            items(100, [](int i) { Text("Row " + std::to_string(i)); });
-        };
-        if (showButton.get()) Text("Back to top");
-    };
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(modifier = Modifier.fillMaxSize(), state = list) {
+            items(100) { Text("Satır $it") }
+        }
+        if (showButton) Text("Başa dön")
+    }
 }
 ```
 
-`derivedStateOf` olmadan `firstVisibleItemIndex()`'i doğrudan okumak, kaydırırken geçilen her öğede yeniden kompoze ederdi. Türetilmiş durumu `remember`'ın içinde oluşturun ki bir kez yapılsın ve girdilerini izleyebilsin.
+`derivedStateOf` olmadan `firstVisibleItemIndex`'i doğrudan okumak, kaydırırken geçilen her öğede yeniden kompoze ederdi. Türetilmiş durumu `remember`'ın içinde oluşturun ki bir kez yapılsın ve girdilerini izleyebilsin.
 
 ### Anlık görüntüler ve iş parçacıkları
 
 Durumlar, Compose'daki gibi, *anlık görüntü* başına tutulur: kod her durumu, içinde çalıştığı anlık görüntüdeki haliyle görür. Hiçbirinin içinde değilse küresel anlık görüntüde çalışır; onun yazmaları okuyucularına bir sonraki karede bildirilir. Bir kompozisyon kendine ait bir anlık görüntüde çalışır: başka iş parçacıkları bu arada ne yazarsa yazsın tek ve tutarlı bir durum görür, onun yazdıkları da o bitince görülür.
 
-`Snapshot::withMutableSnapshot` birkaç durumu birden yazar: hiçbir şey bir değişikliği ötekiler olmadan görmez. Bunlardan biri bu arada başka bir yerde, kuralının aynı saymadığı bir değere yazıldıysa `SnapshotApplyConflictException` atar ve yazdıklarının hiçbiri kalmaz:
+`Snapshot.withMutableSnapshot` birkaç durumu birden yazar: hiçbir şey bir değişikliği ötekiler olmadan görmez. Bunlardan biri bu arada başka bir yerde, kuralının aynı saymadığı bir değere yazıldıysa `SnapshotApplyConflictException` atar ve yazdıklarının hiçbiri kalmaz:
 
-```cpp body
-auto from = remember([] { return mutableStateOf(100); });
-auto to = remember([] { return mutableStateOf(0); });
-Button([from, to] {
-    Snapshot::withMutableSnapshot([&] {  // bir aktarım: hiç yarım görülmez
-        from.set(from.peek() - 10);
-        to.set(to.peek() + 10);
-    });
-}) { Text("10 aktar"); };
+```kotlin body
+var from by remember { mutableStateOf(100) }
+var to by remember { mutableStateOf(0) }
+Button(onClick = {
+    Snapshot.withMutableSnapshot {  // bir aktarım: hiç yarım görülmez
+        from -= 10
+        to += 10
+    }
+}) { Text("10 aktar") }
 ```
 
-Arayüz iş parçacığında durumlar serbestçe okunur ve yazılır. Başka bir iş parçacığı onları yazabilir, okumayı ise bir anlık görüntünün içinde yapar: `Snapshot::takeSnapshot()` onların o anki halinin bir görünümünü verir; `enter(block)`'unda okunur, `dispose()` onu bırakır. `takeMutableSnapshot()` içine yazılabilen bir tane verir, `apply()` ile uygulanır; bir başkasının içinde alınırsa ona uygulanır. Anlık görüntüler okuma ve yazma gözlemcileri alır; `Snapshot::registerApplyObserver` uygulanan her anlık görüntünün neyi değiştirdiğini duyar.
+Arayüz iş parçacığında durumlar serbestçe okunur ve yazılır. Başka bir iş parçacığı onları yazabilir, okumayı ise bir anlık görüntünün içinde yapar: `Snapshot.takeSnapshot()` onların o anki halinin bir görünümünü verir; `enter { }`'inde okunur, `dispose()` onu bırakır. `takeMutableSnapshot()` içine yazılabilen bir tane verir, `apply()` ile uygulanır; bir başkasının içinde alınırsa ona uygulanır. Anlık görüntüler okuma ve yazma gözlemcileri alır; `Snapshot.registerApplyObserver` uygulanan her anlık görüntünün neyi değiştirdiğini duyar.
 
 ### Durum listeleri ve haritaları
 
 `mutableStateListOf` ve `mutableStateMapOf`, Compose'un `SnapshotStateList` ve `SnapshotStateMap`'i gibi izlenebilir kapsayıcılardır. Birini okumak abone yapar; öğe eklemek, kaldırmak ya da değiştirmek okuyanları yeniden kompoze eder:
 
-```cpp
-void Tags() {
-    auto tags = remember([] { return mutableStateListOf<std::string>({"red", "green"}); });
-    Column() {
-        for (const std::string& tag : tags) Text(tag);
-        Button([tags] { tags.add("blue"); }) { Text("Add"); };
-    };
+```kotlin
+@Composable
+fun Tags() {
+    val tags = remember { mutableStateListOf("kırmızı", "yeşil") }
+    Column {
+        for (tag in tags) Text(tag)
+        Button(onClick = { tags.add("mavi") }) { Text("Ekle") }
+    }
 }
 ```
 
-Listede `add`, `set`, `removeAt`, `removeIf`, `clear` ve `update`; haritada `put`, `remove`, `getOrDefault` ve benzerleri vardır. `update` ile değiştirilen bir `MutableState<std::vector<T>>` da aynı şekilde iş görür.
+Listede `add`, `set`, `removeAt`, `removeIf`, `clear` ve `update`; haritada `put`, `remove`, `getOrDefault` ve benzerleri vardır. `update` ile değiştirilen bir listenin durumu da aynı şekilde iş görür.
 
 ### rememberUpdatedState
 
@@ -194,19 +204,21 @@ Yeniden başlamaması gereken ama bir parametrenin en son değerini kullanması 
 
 Kendi durumunu tutan bir composable'ı kullanmak kolaydır ama dışarıdan kontrol etmek zordur: çağıran durumu okuyamaz, ayarlayamaz, başkalarıyla paylaşamaz. *Durumu yukarı taşıma* (hoisting) durumu çağırana taşır: composable onun yerine değeri ve bir callback alır.
 
-```cpp
-// Durumsuz: `name`'i gösterir, düzenlemeleri bildirir. Yeniden kullanması, önizlemesi ve test etmesi kolay.
-void NameInput(const std::string& name, std::function<void(std::string)> onNameChange) {
-    OutlinedTextField(name, std::move(onNameChange), Modifier(), label = "Name");
+```kotlin
+// Durumsuz: `name`'i gösterir, düzenlemeleri bildirir. Yeniden kullanmak, önizlemek ve sınamak kolay.
+@Composable
+fun NameInput(name: String, onNameChange: (String) -> Unit) {
+    OutlinedTextField(value = name, onValueChange = onNameChange, singleLine = true)
 }
 
 // Durumlu: durumun sahibidir ve onu aşağı verir.
-void Profile() {
-    auto name = rememberSaveable([] { return mutableStateOf(std::string()); });
-    Column() {
-        NameInput(name.get(), [name](std::string v) { name.set(std::move(v)); });
-        Text("Hello, " + name.get());
-    };
+@Composable
+fun Profile() {
+    var name by rememberSaveable { mutableStateOf("") }
+    Column {
+        NameInput(name = name, onNameChange = { name = it })
+        Text("Merhaba, $name")
+    }
 }
 ```
 
@@ -218,9 +230,9 @@ Compose'daki gibi temel kural:
 
 ### Durum tutucular
 
-Bir ekranın durumu ve mantığı büyüdükçe onları bir sınıfta toplayın: bir *durum tutucu*. `remember` ile tutulan düz bir sınıf arayüz mantığına uyar (hangi panelin açık olduğu, bir formun alanları); ekrandan uzun yaşayan ve uygulamanın geri kalanıyla konuşan durum için `ViewModel` uygundur. Kompoz'un kendi bileşenleri de bunu yapar: `LazyListState`, `DrawerState` ve `SnackbarHostState`, `rememberLazyListState()` ve benzerlerinin yaptığı durum tutuculardır.
+Bir ekranın durumu ve mantığı büyüdükçe onları bir sınıfta toplayın: bir *durum tutucu*. `remember` ile tutulan düz bir sınıf arayüz mantığına uyar (hangi panelin açık olduğu, bir formun alanları); ekrandan uzun yaşayan ve uygulamanın geri kalanıyla konuşan durum için `ViewModel` uygundur. Kompoz'un kendi bileşenleri de bunu yapar: `LazyListState`, `DrawerState` ve `SnackbarHostState`, `rememberLazyListState()` ve benzerlerinin yaptığı durum tutuculardır. Böyle bir sınıf composable'larınızın yanında C++ ile yazılır:
 
-```cpp
+```kotlin
 class SearchState {
 public:
     MutableState<std::string> query = mutableStateOf(std::string());
@@ -231,9 +243,10 @@ public:
     }
 };
 
-void SearchScreen() {
-    auto& search = remember([] { return SearchState(); });
-    Text(search.query.get());
+@Composable
+fun SearchScreen() {
+    val search = remember { SearchState() }
+    Text(search.query.value)
 }
 ```
 
