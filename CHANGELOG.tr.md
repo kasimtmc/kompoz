@@ -714,7 +714,7 @@
   bu makine için kaynaklarından, bu makinenin C++ derleyicisiyle derleniyor (ya da `KOMPOZC` birini gösteriyor);
   `cmake --install` onu `kompoz_compose` ve kaynaklarıyla birlikte `find_package(kompoz)` için kuruyor. vcpkg onu araçlarının arasında tutuyor (`tools/kompoz`). Gösterimin
   kaynakları ondan geçiyor. Kılavuzun ```` ```kotlin ```` örnekleri de ondan geçirilerek denetleniyor (`scripts/docs.py --check`),
-  her biri sayfadaki kendi satırlarında. Kılavuzun "Compose'dan geliyorsanız", ilk sayfası, "Kurulum" (`kompoz_compose`, kompozc'nin nerede derlendiği), eğitim, "Kompoz'da düşünmek" ve "Durum" kompozc'ye göre yazıldı; C++ biçimleri kendi sayfalarına, "C++ ile yazmak"a taşındı.
+  her biri sayfadaki kendi satırlarında. Kılavuzun "Compose'dan geliyorsanız", ilk sayfası, "Kurulum" (`kompoz_compose`, kompozc'nin nerede derlendiği), eğitim, "Kompoz'da düşünmek", "Durum" ve "Yaşam döngüsü ve kimlik" kompozc'ye göre yazıldı; C++ biçimleri kendi sayfalarına, "C++ ile yazmak"a taşındı.
 - **Bir composable'ın gerek duyduğu her argüman adla verilebilir**: `onClick`, `value` ve `onValueChange`, `checked` ve
   `onCheckedChange`, `selected`, `expanded`, `onDismissRequest`, `state`, `text`, `imageVector`/`painter`/`bitmap` ve
   `contentDescription`, … da Compose'daki gibi adlı argüman: `TextButton(onClick = save, [=] { … })`,
