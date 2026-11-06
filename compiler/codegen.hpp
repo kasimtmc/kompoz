@@ -17,6 +17,7 @@ namespace kompozc {
 struct Module {
     std::map<std::string, const Function*, std::less<>> functions;
     std::map<std::string, const DataClass*, std::less<>> classes;
+    std::map<std::string, const Property*, std::less<>> properties;  // top-level vals
     const Structs* structs = nullptr;  // C++'s, from the headers read
 };
 
@@ -44,6 +45,8 @@ private:
 
 // A data class: a struct with its fields, == and toString().
 void generateClass(Output& out, const DataClass& c, const Module& module);
+// A top-level val: a constant of the namespace.
+void generateProperty(Output& out, const Property& p, const Module& module);
 // Declarations: what every @Composable becomes before any is defined, defaults included.
 void generatePrototype(Output& out, const Function& f, const Module& module);
 // The definition: void name(params, CallSite site) { composable(site, params..., [=] { body }); }

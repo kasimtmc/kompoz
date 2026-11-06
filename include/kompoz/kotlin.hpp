@@ -422,8 +422,16 @@ template <class F = int>
 void check(bool condition, F&& message = 0) {
     if (!condition) throw std::logic_error(str(message));
 }
-[[noreturn]] inline void error(const std::string& message) { throw std::logic_error(message); }
-[[noreturn]] inline void TODO(const std::string& reason = "") { throw std::logic_error("not implemented: " + reason); }
+// Kotlin's Nothing: what error() and TODO() give, as they never return. It goes for a value of any
+// type: compositionLocalOf<User> { error("…") }, x ?: error("…").
+struct Nothing {
+    template <class T>
+    [[noreturn]] operator T() const {
+        throw std::logic_error("kompoz: Nothing has no value");
+    }
+};
+[[noreturn]] inline Nothing error(const std::string& message) { throw std::logic_error(message); }
+[[noreturn]] inline Nothing TODO(const std::string& reason = "") { throw std::logic_error("not implemented: " + reason); }
 
 // ---- Members of Kotlin's standard types: kt::trim(text) for text.trim() ----
 //

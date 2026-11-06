@@ -111,6 +111,15 @@ struct Function {
     Pos end;                         // just past the closing brace
 };
 
+// A top-level property: [private] val name[: Type] = value.
+struct Property {
+    std::string name;
+    NodeP decl;  // a Decl
+    bool isPrivate = false;
+    Pos pos;
+    Pos end;
+};
+
 // A data class: data class Name(val a: Int, var b: String = "").
 struct DataClass {
     std::string name;

@@ -42,7 +42,8 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "last", "lastOrNull", "find", "groupBy", "associateBy", "associateWith", "flatMap", "sumOf", "maxOf", "minOf",
     "maxByOrNull", "minByOrNull", "let", "run", "with", "takeIf", "takeUnless", "getOrElse", "lazy", "snapshotFlow",
     "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked",
-    "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache"};
+    "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "compositionLocalOf",
+    "staticCompositionLocalOf"};
 
 // Kotlin types the C++ way.
 const std::map<std::string, std::string, std::less<>> kTypes = {
@@ -58,6 +59,7 @@ const std::map<std::string, std::string, std::less<>> kObjectProperties = {
     {"MaterialTheme.colorScheme", "::kompoz::colorScheme()"},
     {"MaterialTheme.typography", "::kompoz::typography()"},
     {"MaterialTheme.shapes", "::kompoz::shapes()"},
+    {"MaterialTheme.motionScheme", "::kompoz::motionScheme()"},
     {"Int.MAX_VALUE", "std::numeric_limits<int>::max()"},
     {"Int.MIN_VALUE", "std::numeric_limits<int>::min()"},
     {"Long.MAX_VALUE", "std::numeric_limits<long long>::max()"},
@@ -65,6 +67,10 @@ const std::map<std::string, std::string, std::less<>> kObjectProperties = {
     {"Float.POSITIVE_INFINITY", "std::numeric_limits<float>::infinity()"},
     {"Float.NaN", "std::numeric_limits<float>::quiet_NaN()"},
 };
+
+// Compose's @Composable properties read by a name alone: calls here.
+const std::map<std::string, std::string, std::less<>> kComposableProperties = {
+    {"currentCompositionLocalContext", "::kompoz::currentCompositionLocalContext()"}};
 
 // Named arguments whose lambda gives a value: items(list, key = { it.id }, contentType = { … }).
 const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType", "selector", "comparator"};
@@ -215,6 +221,21 @@ public:
         out_.text(", \")\"); } };\n");
     }
 
+    // val name = value at the top: a constant of the namespace (private: of the file), its type the
+    // value's unless one is written.
+    void property(const Property& p) {
+        const Node& d = *p.decl;
+        out_.at(p.pos);
+        out_.text(std::string(p.isPrivate ? "static" : "inline") + " const " + (d.type ? type(*d.type) : std::string("auto")) + " " +
+                  cppName(p.name) + " = ");
+        global_ = true;
+        scopes_.emplace_back();
+        expr(*d.kids[0], d.type ? &*d.type : nullptr);
+        scopes_.pop_back();
+        global_ = false;
+        out_.text(";\n");
+    }
+
     void definition(const Function& f) {
         bool unit = !f.result || f.result->name == "Unit";
         signature(f, false);
@@ -253,6 +274,16 @@ private:
             if (module_.structs->member(receivers_[r - 1], name)) return r;
         return 0;
     }
+
+    // A lambda's capture: none at namespace scope (a top-level val's value), where there is nothing to
+    // capture and C++ takes no default. What is inside it is in a block scope (Scoped).
+    std::string capture(const char* captureDefault) const { return global_ ? "[]" : captureDefault; }
+    struct Scoped {
+        explicit Scoped(bool& global) : global_(global), was_(std::exchange(global, false)) {}
+        ~Scoped() { global_ = was_; }
+        bool& global_;
+        bool was_;
+    };
 
     // ---- Statements ----
 
@@ -523,8 +554,11 @@ private:
             case Node::If: return ifExpression(e);
             case Node::When:
                 // A when as a value: run where it stands, each branch giving its value.
-                out_.text("[&]() {");
-                whenStatement(e, true);
+                out_.text(capture("[&]") + "() {");
+                {
+                    Scoped inside(global_);
+                    whenStatement(e, true);
+                }
                 out_.text(" }()");
                 return;
             default: throw CompileError(e.pos, "unexpected expression");
@@ -543,6 +577,10 @@ private:
         }
         if (e.text == "Modifier") {
             out_.text("::kompoz::Modifier()");
+            return;
+        }
+        if (auto p = kComposableProperties.find(e.text); p != kComposableProperties.end()) {
+            out_.text(p->second);
             return;
         }
         if (e.text == "Unit") {
@@ -606,8 +644,8 @@ private:
         if (e.flag) {  // a?.b
             out_.text("::kompoz::kt::safe(");
             expr(obj);
-            out_.text(e.text == "size" || e.text == "length" ? ", [&](auto&& kompoz_safe) { return ::kompoz::kt::size(kompoz_safe); })"
-                                                               : ", [&](auto&& kompoz_safe) { return kompoz_safe." + cppName(e.text) + "; })");
+            out_.text(", " + capture("[&]") + (e.text == "size" || e.text == "length" ? "(auto&& kompoz_safe) { return ::kompoz::kt::size(kompoz_safe); })"
+                                                                                    : "(auto&& kompoz_safe) { return kompoz_safe." + cppName(e.text) + "; })"));
             return;
         }
         if (obj.kind == Node::Member || obj.kind == Node::Name) {
@@ -699,7 +737,8 @@ private:
             if (callee.flag) {  // a?.f(x): f called only when a isn't null
                 out_.text("::kompoz::kt::safe(");
                 expr(obj);
-                out_.text(", [&](auto&& kompoz_safe) { return ");
+                out_.text(", " + capture("[&]") + "(auto&& kompoz_safe) { return ");
+                Scoped inside(global_);
                 if (kKtMembers.contains(callee.text)) {
                     out_.text("::kompoz::kt::" + callee.text + "(kompoz_safe");
                     arguments(c, calleeName, true, true);
@@ -840,7 +879,8 @@ private:
         if (!known) return false;
         out_.text("::kompoz::kt::copy(");
         expr(obj);
-        out_.text(", [&](auto& kompoz_copy) {");
+        out_.text(", " + capture("[&]") + "(auto& kompoz_copy) {");
+        Scoped inside(global_);
         for (size_t i = 1; i < c.kids.size(); ++i) {
             out_.text(" kompoz_copy." + cppName(c.names[i - 1]) + " = ");
             expr(*c.kids[i]);
@@ -890,7 +930,8 @@ private:
     // to it (a pointer, so a lambda inside that keeps it sees the same one, as Kotlin's would).
     void lambda(const Node& l, bool value, bool suspend = false, bool produceState = false, const std::string* receiver = nullptr) {
         bool wasSuspend = std::exchange(suspend_, suspend);
-        out_.text("[=](");
+        out_.text(capture("[=]") + "(");
+        Scoped inside(global_);
         scopes_.emplace_back();
         std::string self;
         if (receiver) {
@@ -970,7 +1011,8 @@ private:
         if (op == "?:") {
             out_.text("::kompoz::kt::elvis(");
             expr(l);
-            out_.text(", [&] { return ");
+            out_.text(", " + capture("[&]") + " { return ");
+            Scoped inside(global_);
             expr(r);
             out_.text("; })");
             return;
@@ -1009,7 +1051,8 @@ private:
             return;
         }
         if (n.kids.size() < 3) throw CompileError(n.pos, "an if used as a value needs an else");
-        out_.text("[&]() {");
+        out_.text(capture("[&]") + "() {");
+        Scoped inside(global_);
         ifStatement(n, true);
         out_.text(" }()");
     }
@@ -1018,6 +1061,7 @@ private:
     const Module& module_;
     bool suspend_ = false;  // in a coroutine
     std::vector<std::string> receivers_;  // the receivers' types of the lambdas it is in, innermost last
+    bool global_ = false;  // at namespace scope: a top-level val's value
     std::vector<std::map<std::string, VarKind, std::less<>>> scopes_;
 };
 
@@ -1032,6 +1076,11 @@ void generatePrototype(Output& out, const Function& f, const Module& module) {
     Generator g(out, module);
     g.signature(f, true);
     out.text(";\n");
+}
+
+void generateProperty(Output& out, const Property& p, const Module& module) {
+    Generator g(out, module);
+    g.property(p);
 }
 
 void generateDefinition(Output& out, const Function& f, const Module& module) {

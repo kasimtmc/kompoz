@@ -780,6 +780,13 @@
   (`MaterialTheme(colorScheme = c, content = content)`, `Box(modifier = m, content = { … })`), adlı argümanlar
   arasında nerede durursa dursun her composable'ın aldığı blok (C++'ta `kompoz::arg::content`);
   `CompositionLocalProvider(LocalX provides x, content = content)` da öyle.
+- **kompozc: en üst düzey val'ler**: Compose'un Color.kt'sinin ve local'lerinin yazıldığı gibi `val LocalSpacing =
+  staticCompositionLocalOf { Spacing() }`, `val Purple80 = Color(0xFFD0BCFF)`, `private val …`: isim alanının bir
+  sabiti (`private`: dosyanın), nerede durursa dursun onu kullanan ilk fonksiyondan önce ve değerinin kullandığı
+  val'lerden sonra tanımlanıyor; modülün başka bir dosyasındaki bir val, Kotlin'deki gibi başlık gerekmeden
+  kullanılıyor. `error("…")` ve `TODO()` Kotlin'in `Nothing`'ini veriyor; o da her türden bir değerin yerine geçiyor
+  (`compositionLocalOf<User> { error("…") }`, `x ?: error("…")`). `MaterialTheme.motionScheme` ve
+  `currentCompositionLocalContext` Compose'daki gibi okunuyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

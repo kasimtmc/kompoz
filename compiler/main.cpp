@@ -12,6 +12,7 @@
 #include "headers.hpp"
 #include "parser.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -25,11 +26,14 @@ using namespace kompozc;
 
 namespace {
 
-// A Kotlin declaration in the C++: a @Composable function or a data class.
+// A Kotlin declaration in the C++: a @Composable function, a data class or a top-level val.
 struct Found {
     std::optional<Function> function;
     std::optional<DataClass> dataClass;
+    std::optional<Property> property;
     size_t begin, end;  // offsets in the source
+
+    const std::string& name() const { return function ? function->name : dataClass ? dataClass->name : property->name; }
 };
 
 bool identChar(char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; }
@@ -47,6 +51,72 @@ Pos positionOf(std::string_view src, size_t offset) {
     }
     p.offset = offset;
     return p;
+}
+
+// Whether only blanks come before `at` on its line.
+bool startsLine(std::string_view src, size_t at) {
+    while (at > 0 && (src[at - 1] == ' ' || src[at - 1] == '\t')) --at;
+    return at == 0 || src[at - 1] == '\n';
+}
+
+// Whether a top-level val starts at `at`: [private | internal | public | const]... val name, then
+// `:`, `=` or `by` (C++ has no `val`; a variable named so is followed by none of those).
+bool startsVal(std::string_view src, size_t at) {
+    auto word = [&](size_t& k) {
+        while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+        size_t b = k;
+        while (k < src.size() && identChar(src[k])) ++k;
+        return src.substr(b, k - b);
+    };
+    size_t k = at;
+    std::string_view w = word(k);
+    while (w == "private" || w == "internal" || w == "public" || w == "const") w = word(k);
+    if (w != "val" && w != "var") return false;
+    if (word(k).empty()) return false;
+    while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+    if (k < src.size() && (src[k] == ':' || (src[k] == '=' && (k + 1 >= src.size() || src[k + 1] != '=')))) return true;
+    return src.substr(k, 2) == "by" && (k + 2 >= src.size() || !identChar(src[k + 2]));
+}
+
+// Where a top-level val's Kotlin ends: the end of the line its brackets close on, unless the next
+// line goes on with it (.member, ?.member, ?: x, && x, || x), as Kotlin reads it. (The C++ after it
+// is never read: it may hold what Kotlin's lexer takes for an error, a #.)
+size_t valEnd(std::string_view src, size_t at) {
+    int depth = 0;
+    size_t i = at;
+    while (i < src.size()) {
+        char c = src[i];
+        if (c == '/' && i + 1 < src.size() && src[i + 1] == '/') {
+            while (i < src.size() && src[i] != '\n') ++i;
+            continue;
+        }
+        if (c == '/' && i + 1 < src.size() && src[i + 1] == '*') {
+            size_t e = src.find("*/", i + 2);
+            i = e == std::string_view::npos ? src.size() : e + 2;
+            continue;
+        }
+        if (src.substr(i, 3) == "\"\"\"") {
+            size_t e = src.find("\"\"\"", i + 3);
+            i = e == std::string_view::npos ? src.size() : e + 3;
+            continue;
+        }
+        if (c == '"' || c == '\'') {
+            ++i;
+            while (i < src.size() && src[i] != c && src[i] != '\n') i += src[i] == '\\' ? 2 : 1;
+            ++i;
+            continue;
+        }
+        if (c == '(' || c == '[' || c == '{') ++depth;
+        else if (c == ')' || c == ']' || c == '}') --depth;
+        else if (c == '\n' && depth <= 0) {
+            size_t k = i;
+            while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
+            std::string_view next = src.substr(k, 2);
+            if (!(next.starts_with('.') || next == "?." || next == "?:" || next == "&&" || next == "||")) return i;
+        }
+        ++i;
+    }
+    return src.size();
 }
 
 // Walks the C++ around the functions: skips comments, strings, characters and raw strings, and
@@ -87,7 +157,7 @@ std::vector<Found> scan(std::string_view src) {
             Parser parser(src, positionOf(src, i));
             Function f = parser.function();
             size_t end = f.end.offset;
-            found.push_back({std::move(f), std::nullopt, i, end});
+            found.push_back({std::move(f), std::nullopt, std::nullopt, i, end});
             i = end;
         } else if (c == 'd' && (i == 0 || !identChar(src[i - 1])) && src.substr(i, 4) == "data" && i + 4 < src.size() &&
                    std::isspace(static_cast<unsigned char>(src[i + 4]))) {
@@ -98,11 +168,17 @@ std::vector<Found> scan(std::string_view src) {
                 Parser parser(src, positionOf(src, i));
                 DataClass d = parser.dataClass();
                 size_t end = d.end.offset;
-                found.push_back({std::nullopt, std::move(d), i, end});
+                found.push_back({std::nullopt, std::move(d), std::nullopt, i, end});
                 i = end;
             } else {
                 i += 4;
             }
+        } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsVal(src, i)) {
+            Parser parser(src.substr(0, valEnd(src, i)), positionOf(src, i));
+            Property p = parser.property();
+            size_t end = p.end.offset;
+            found.push_back({std::nullopt, std::nullopt, std::move(p), i, end});
+            i = end;
         } else if (identChar(c)) {
             while (i < src.size() && identChar(src[i])) ++i;  // (a name: "data" inside one isn't a declaration)
         } else {
@@ -173,6 +249,9 @@ void names(const Found& f, std::set<std::string, std::less<>>& out) {
         }
         if (f.function->result) typeNames(*f.function->result, out);
         names(f.function->body.get(), out);
+    } else if (f.property) {
+        if (f.property->decl->type) typeNames(*f.property->decl->type, out);
+        names(f.property->decl.get(), out);
     } else {
         for (const Param& p : f.dataClass->fields) {
             typeNames(p.type, out);
@@ -194,7 +273,8 @@ std::string translate(const std::string& src, const fs::path& source, const std:
     module.structs = &structs;
     for (const Found& f : found) {
         if (f.function) module.functions[f.function->name] = &*f.function;
-        else module.classes[f.dataClass->name] = &*f.dataClass;
+        else if (f.dataClass) module.classes[f.dataClass->name] = &*f.dataClass;
+        else module.properties[f.property->name] = &*f.property;
     }
     // The other sources' declarations this one uses, and those they use in turn (a data class in
     // a parameter's type): declared here too, as C++ needs (Kotlin's module needs nothing).
@@ -207,8 +287,18 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             more = false;
             for (const OtherSource& o : others)
                 for (const Found& f : o.found) {
-                    const std::string& name = f.function ? f.function->name : f.dataClass->name;
-                    if (taken.contains(&f) || !used.contains(name) || module.functions.contains(name) || module.classes.contains(name)) continue;
+                    const std::string& name = f.name();
+                    if (taken.contains(&f) || !used.contains(name) || module.functions.contains(name) || module.classes.contains(name) ||
+                        module.properties.contains(name))
+                        continue;
+                    // A private val only for what is taken from its own file (a val's value there uses it).
+                    if (f.property && f.property->isPrivate && std::none_of(imported.begin(), imported.end(), [&](const auto& i) {
+                            if (i.first != &o) return false;
+                            std::set<std::string, std::less<>> its;
+                            names(*i.second, its);
+                            return its.contains(name);
+                        }))
+                        continue;
                     taken.insert(&f);
                     imported.emplace_back(&o, &f);
                     names(f, used);
@@ -217,7 +307,8 @@ std::string translate(const std::string& src, const fs::path& source, const std:
         }
         for (auto [o, f] : imported) {
             if (f->function) module.functions[f->function->name] = &*f->function;
-            else module.classes[f->dataClass->name] = &*f->dataClass;
+            else if (f->dataClass) module.classes[f->dataClass->name] = &*f->dataClass;
+            else module.properties[f->property->name] = &*f->property;
         }
     }
     Output out(lineFile);
@@ -225,6 +316,24 @@ std::string translate(const std::string& src, const fs::path& source, const std:
     fs::path dir = source.parent_path();
     size_t done = 0;
     std::set<std::string, std::less<>> declared;  // the functions declared so far
+    // A top-level val, defined where it is or before the first function that uses it (C++ reads in
+    // order, Kotlin doesn't), after the vals its value uses; one of another file, from its file.
+    std::map<std::string, std::pair<std::string, const Found*>, std::less<>> vals;
+    for (const Found& g : found)
+        if (g.property) vals[g.property->name] = {lineFile, &g};
+    for (auto [o, g] : imported)
+        if (g->property) vals[g->property->name] = {o->lineFile, g};
+    std::set<std::string, std::less<>> defined;
+    auto define = [&](auto&& self, const std::string& name) -> void {
+        auto v = vals.find(name);
+        if (v == vals.end() || !defined.insert(name).second) return;
+        std::set<std::string, std::less<>> used;
+        names(*v->second.second, used);
+        for (const std::string& u : used) self(self, u);
+        out.setFile(v->second.first);
+        generateProperty(out, *v->second.second->property, module);
+        out.setFile(lineFile);
+    };
     for (size_t k = 0; k < found.size(); ++k) {
         const Found& f = found[k];
         if (f.begin > done) {
@@ -244,12 +353,14 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             for (const Found& g : found)
                 if (g.dataClass) generateClass(out, *g.dataClass, module);
         }
+        if (f.property && !defined.contains(f.property->name)) define(define, f.property->name);
         if (f.function) {
             // Declared where needed, as late as can be (a parameter's type may be a struct of the
             // file's declared above the function, not at its top): the function itself, and those it
             // calls, of this file or another, not declared yet.
             std::set<std::string, std::less<>> used;
             names(f, used);
+            for (const std::string& u : used) define(define, u);
             used.insert(f.function->name);
             for (auto [o, g] : imported)
                 if (g->function && used.contains(g->function->name) && declared.insert(g->function->name).second) {

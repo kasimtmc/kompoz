@@ -189,6 +189,22 @@ DataClass Parser::dataClass() {
     return c;
 }
 
+Property Parser::property() {
+    Property p;
+    p.pos = cur().pos;
+    while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("const"))
+        if (take().text == "private") p.isPrivate = true;
+    if (isIdent("var")) fail("a top-level var isn't supported: keep state in a composable (remember) or a state holder");
+    if (!isIdent("val")) fail("expected 'val'");
+    p.decl = declaration();
+    if (p.decl->delegated) fail(p.decl->pos, "a top-level val by … isn't supported");
+    if (!p.decl->names.empty()) fail(p.decl->pos, "a top-level val can't be destructured");
+    if (p.decl->kids.empty()) fail(p.decl->pos, "a top-level val needs a value");
+    p.name = p.decl->text;
+    p.end = tokens_[index_ - 1].end;
+    return p;
+}
+
 std::vector<Param> Parser::params() {
     NewlineMode mode(newlines_, false);
     expectOp("(");

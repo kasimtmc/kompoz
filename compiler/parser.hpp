@@ -14,6 +14,8 @@ public:
     Function function();
     // data class Name(val a: T, var b: U = d)
     DataClass dataClass();
+    // [private | internal | const] val name[: Type] = value, at the top of a file.
+    Property property();
     // One expression and then `}`: a string template's ${...}.
     NodeP templateExpression();
 

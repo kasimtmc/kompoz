@@ -635,6 +635,51 @@ TEST(lambdas_with_receivers) {
     CHECK(!canvas.transforms.empty());
 }
 
+// Top-level vals, as Compose's Color.kt and locals are written: defined before what uses them,
+// wherever they stand in the file (or in another file of the module). content = … given by name.
+data class Spacing(val small: Dp = 4.dp, val large: Dp = 16.dp)
+data class Account(val name: String)
+
+@Composable
+fun SpacedTitle(title: String) {
+    Text("$title ${LocalSpacing.current.large} $StickerGreeting")
+}
+
+val LocalSpacing = staticCompositionLocalOf { Spacing() }
+val LocalAccount = compositionLocalOf<Account> { error("LocalAccount was not provided") }
+private val Purple = Color(0xFF6650A4)
+
+@Composable
+fun AppTheme(content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = lightColorScheme(), content = content)
+}
+
+@Composable
+fun Locals() {
+    AppTheme {
+        Column {
+            SpacedTitle("geniş")
+            CompositionLocalProvider(LocalSpacing provides Spacing(2.dp, 8.dp), content = { SpacedTitle("dar") })
+            CompositionLocalProvider(LocalAccount provides Account("Ada")) {
+                Box(modifier = Modifier.background(Purple), content = { Text(LocalAccount.current.name) })
+            }
+        }
+    }
+}
+
+TEST(top_level_vals_and_content_by_name) {
+    ComposeTestRule rule([] { Locals(); });
+    CHECK(rule.onNodeWithText("geniş 16.0 selam !").exists() && rule.onNodeWithText("dar 8.0 selam !").exists());
+    CHECK(rule.onNodeWithText("Ada").exists());
+    bool threw = false;
+    try {
+        LocalAccount.current();  // (no provider, outside a composition: its default)
+    } catch (const std::logic_error&) {
+        threw = true;
+    }
+    CHECK(threw);
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;
