@@ -15,8 +15,8 @@ The phases normally go in that order, but each can be skipped. When a state chan
 | Where the state was read | What runs again |
 |---|---|
 | In a composable's body | Composition of the scopes that read it, then layout and drawing of what changed. |
-| While measuring or placing (`Modifier().offset([] { … })`, a `Layout`'s measure policy) | Layout and drawing; no composition. |
-| While drawing (`graphicsLayer([] (GraphicsLayerScope&) { … })`, `drawBehind`, a `Canvas`) | Drawing of the nodes that read it; a layout pass looks, but measures nothing. |
+| While measuring or placing (`Modifier.offset { … }`, a `Layout`'s measure policy) | Layout and drawing; no composition. |
+| While drawing (`Modifier.graphicsLayer { … }`, `drawBehind`, a `Canvas`) | Drawing of the nodes that read it; a layout pass looks, but measures nothing. |
 
 ## Deferring state reads
 
@@ -24,26 +24,37 @@ The later the phase that reads a changing value, the less work each change costs
 
 Reading an animated value in composition recomposes on every frame:
 
-```cpp
-void Pulse() {
-    auto pulse = rememberInfiniteTransition().animateFloatState(0.8f, 1.f, infiniteRepeatable(tween(600), RepeatMode::Reverse));
+```kotlin
+@Composable
+fun Pulse() {
+    val pulse by rememberInfiniteTransition().animateFloat(
+        initialValue = 0.8f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
+    )
     // read while drawing: only drawn again each frame, never recomposed or measured
-    Box(Modifier().size(48).graphicsLayer([pulse](GraphicsLayerScope& l) { l.scaleX = l.scaleY = pulse.get(); })
-            .background(colorScheme().primary, CircleShape)) {};
+    Box(
+        modifier = Modifier.size(48.dp)
+            .graphicsLayer { scaleX = pulse; scaleY = pulse }
+            .background(MaterialTheme.colorScheme.primary, CircleShape)
+    )
 }
 ```
 
-The lambda form of `graphicsLayer` is evaluated while drawing, so the scale changes without composition or layout. The value form, `graphicsLayer({.alpha = 0.5f})`, is read in composition, which is fine for values that don't change often.
+The lambda form of `graphicsLayer` is evaluated while drawing, so the scale changes without composition or layout. The value form, `graphicsLayer(alpha = 0.5f)`, is read in composition, which is fine for values that don't change often.
 
-The same goes for moving something. `offset(x, y)` takes values read in composition; `offset([] { … })` takes a lambda read during layout:
+The same goes for moving something. `offset(x, y)` takes values read in composition; `offset { … }` takes a lambda read during layout:
 
-```cpp
-void DraggableBall() {
-    auto x = remember([] { return mutableStateOf(0.f); });
-    Box(Modifier().offset([x] { return Offset{x.get(), 0}; })        // read during layout
-            .draggable(rememberDraggableState([x](float delta) { x.set(x.get() + delta); }), Orientation::Horizontal)
-            .size(56)
-            .background(colorScheme().tertiary, CircleShape)) {};
+```kotlin
+@Composable
+fun DraggableBall() {
+    var x by remember { mutableStateOf(0f) }
+    Box(
+        modifier = Modifier.offset { IntOffset(x.roundToInt(), 0) }   // read during layout
+            .draggable(rememberDraggableState { delta -> x += delta }, Orientation.Horizontal)
+            .size(56.dp)
+            .background(MaterialTheme.colorScheme.tertiary, CircleShape)
+    )
 }
 ```
 
@@ -69,17 +80,15 @@ Nor is a node's drawing run again when nothing it draws from changed, as in Comp
 
 Anything a composable computes runs again on each recomposition. Compute it once with `remember`, keyed to its inputs:
 
-```cpp
-#! struct Contact { std::string name; friend bool operator==(const Contact&, const Contact&) = default; };
-void Contacts(const std::vector<Contact>& contacts) {
-    auto sorted = remember(contacts, [&] {   // sorted again only when the contacts change
-        std::vector<Contact> s = contacts;
-        std::ranges::sort(s, {}, &Contact::name);
-        return s;
-    });
-    LazyColumn(Modifier().fillMaxSize()) {
-        items(sorted, [](const Contact& c) { Text(c.name); });
-    };
+```kotlin
+data class Contact(val name: String)
+
+@Composable
+fun Contacts(contacts: List<Contact>) {
+    val sorted = remember(contacts) { contacts.sortedBy { it.name } }   // sorted again only when the contacts change
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        items(sorted) { Text(it.name) }
+    }
 }
 ```
 
@@ -95,7 +104,7 @@ A scroll position changes on every frame of a scroll, but "is the list scrolled 
 
 ### Let skipping work
 
-A scope is skipped only when its arguments compare equal. Pass values that compare cheaply and correctly: structs with `operator==`, states (which compare by identity) rather than copies of big containers. A composable that takes a `std::function` is never skipped.
+A scope is skipped only when its arguments compare equal. Pass values that compare cheaply and correctly: data classes (or C++ structs with `operator==`), states (which compare by identity) rather than copies of big containers. A composable that takes a function (`() -> Unit`) is never skipped.
 
 ### Don't write state you just read
 

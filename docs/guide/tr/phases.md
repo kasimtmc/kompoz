@@ -15,8 +15,8 @@ Aşamalar normalde bu sırayla gider, ama her biri atlanabilir. Bir durum deği�
 | Durumun okunduğu yer | Yeniden çalışan |
 |---|---|
 | Bir composable'ın gövdesinde | Onu okuyan scope'ların kompozisyonu, ardından değişen şeyin yerleşimi ve çizimi. |
-| Ölçerken ya da yerleştirirken (`Modifier().offset([] { … })`, bir `Layout`'un ölçüm politikası) | Yerleşim ve çizim; kompozisyon yok. |
-| Çizerken (`graphicsLayer([] (GraphicsLayerScope&) { … })`, `drawBehind`, bir `Canvas`) | Onu okuyan düğümlerin çizimi; bir yerleşim geçişi bakar ama hiçbir şey ölçmez. |
+| Ölçerken ya da yerleştirirken (`Modifier.offset { … }`, bir `Layout`'un ölçüm politikası) | Yerleşim ve çizim; kompozisyon yok. |
+| Çizerken (`Modifier.graphicsLayer { … }`, `drawBehind`, bir `Canvas`) | Onu okuyan düğümlerin çizimi; bir yerleşim geçişi bakar ama hiçbir şey ölçmez. |
 
 ## Durum okumalarını ertelemek
 
@@ -24,26 +24,37 @@ Değişen bir değeri okuyan aşama ne kadar geçse, her değişiklik o kadar az
 
 Animasyonlu bir değeri kompozisyonda okumak her karede yeniden kompoze eder:
 
-```cpp
-void Pulse() {
-    auto pulse = rememberInfiniteTransition().animateFloatState(0.8f, 1.f, infiniteRepeatable(tween(600), RepeatMode::Reverse));
+```kotlin
+@Composable
+fun Pulse() {
+    val pulse by rememberInfiniteTransition().animateFloat(
+        initialValue = 0.8f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
+    )
     // çizerken okunur: her karede yalnız yeniden çizilir, hiç yeniden kompoze edilmez ya da ölçülmez
-    Box(Modifier().size(48).graphicsLayer([pulse](GraphicsLayerScope& l) { l.scaleX = l.scaleY = pulse.get(); })
-            .background(colorScheme().primary, CircleShape)) {};
+    Box(
+        modifier = Modifier.size(48.dp)
+            .graphicsLayer { scaleX = pulse; scaleY = pulse }
+            .background(MaterialTheme.colorScheme.primary, CircleShape)
+    )
 }
 ```
 
-`graphicsLayer`'ın lambda biçimi çizerken değerlendirilir, bu yüzden ölçek kompozisyon ya da yerleşim olmadan değişir. Değer biçimi, `graphicsLayer({.alpha = 0.5f})`, kompozisyonda okunur; sık değişmeyen değerler için bu gayet iyidir.
+`graphicsLayer`'ın lambda biçimi çizerken değerlendirilir, bu yüzden ölçek kompozisyon ya da yerleşim olmadan değişir. Değer biçimi, `graphicsLayer(alpha = 0.5f)`, kompozisyonda okunur; sık değişmeyen değerler için bu gayet iyidir.
 
-Bir şeyi hareket ettirmek için de aynısı geçerli. `offset(x, y)` kompozisyonda okunan değerler alır; `offset([] { … })` yerleşim sırasında okunan bir lambda alır:
+Bir şeyi hareket ettirmek için de aynısı geçerli. `offset(x, y)` kompozisyonda okunan değerler alır; `offset { … }` yerleşim sırasında okunan bir lambda alır:
 
-```cpp
-void DraggableBall() {
-    auto x = remember([] { return mutableStateOf(0.f); });
-    Box(Modifier().offset([x] { return Offset{x.get(), 0}; })        // yerleşim sırasında okunur
-            .draggable(rememberDraggableState([x](float delta) { x.set(x.get() + delta); }), Orientation::Horizontal)
-            .size(56)
-            .background(colorScheme().tertiary, CircleShape)) {};
+```kotlin
+@Composable
+fun DraggableBall() {
+    var x by remember { mutableStateOf(0f) }
+    Box(
+        modifier = Modifier.offset { IntOffset(x.roundToInt(), 0) }   // yerleşim sırasında okunur
+            .draggable(rememberDraggableState { delta -> x += delta }, Orientation.Horizontal)
+            .size(56.dp)
+            .background(MaterialTheme.colorScheme.tertiary, CircleShape)
+    )
 }
 ```
 
@@ -69,17 +80,15 @@ Compose'daki gibi, çizdiği şeylerden hiçbiri değişmeyen bir düğümün ç
 
 Bir composable'ın hesapladığı her şey her recomposition'da yeniden çalışır. Onu girdilerine bağlı bir anahtarla, `remember` ile bir kez hesaplayın:
 
-```cpp
-#! struct Contact { std::string name; friend bool operator==(const Contact&, const Contact&) = default; };
-void Contacts(const std::vector<Contact>& contacts) {
-    auto sorted = remember(contacts, [&] {   // yalnız kişiler değişince yeniden sıralanır
-        std::vector<Contact> s = contacts;
-        std::ranges::sort(s, {}, &Contact::name);
-        return s;
-    });
-    LazyColumn(Modifier().fillMaxSize()) {
-        items(sorted, [](const Contact& c) { Text(c.name); });
-    };
+```kotlin
+data class Contact(val name: String)
+
+@Composable
+fun Contacts(contacts: List<Contact>) {
+    val sorted = remember(contacts) { contacts.sortedBy { it.name } }   // yalnız kişiler değişince yeniden sıralanır
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        items(sorted) { Text(it.name) }
+    }
 }
 ```
 
@@ -95,7 +104,7 @@ Bir kaydırma konumu kaydırmanın her karesinde değişir, ama "liste hiç kayd
 
 ### Atlamanın işlemesine izin verin
 
-Bir scope yalnız argümanları eşit olduğunda atlanır. Ucuz ve doğru karşılaştırılan değerler geçirin: `operator==`'ı olan struct'lar, büyük kapsayıcıların kopyaları yerine durumlar (kimlikle karşılaştırılırlar). `std::function` alan bir composable hiçbir zaman atlanmaz.
+Bir scope yalnız argümanları eşit olduğunda atlanır. Ucuz ve doğru karşılaştırılan değerler geçirin: data class'lar (ya da `operator==`'ı olan C++ struct'ları), büyük kapsayıcıların kopyaları yerine durumlar (kimlikle karşılaştırılırlar). Bir fonksiyon (`() -> Unit`) alan bir composable hiçbir zaman atlanmaz.
 
 ### Az önce okuduğunuz durumu yazmayın
 
