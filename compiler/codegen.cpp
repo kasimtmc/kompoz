@@ -40,11 +40,12 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "remember", "rememberSaveable", "derivedStateOf", "map", "mapNotNull", "mapIndexed", "filter", "filterNot",
     "filterIndexed", "sortedBy", "sortedByDescending", "any", "all", "none", "count", "first", "firstOrNull",
     "last", "lastOrNull", "find", "groupBy", "associateBy", "associateWith", "flatMap", "sumOf", "maxOf", "minOf",
+    "maxOfOrNull", "minOfOrNull",
     "maxByOrNull", "minByOrNull", "let", "run", "with", "takeIf", "takeUnless", "getOrElse", "lazy", "snapshotFlow",
     "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked",
     "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "compositionLocalOf",
     "staticCompositionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent", "mediaQuery",
-    "derivedMediaQuery"};
+    "derivedMediaQuery", "SubcomposeLayout"};
 
 // Kotlin types the C++ way.
 const std::map<std::string, std::string, std::less<>> kTypes = {
@@ -103,7 +104,7 @@ const std::set<std::string, std::less<>> kKtMembers = {
     "forEach", "forEachIndexed", "map", "mapIndexed", "filter", "filterNot", "isEmpty", "isNotEmpty", "isBlank",
     "isNotBlank", "trim", "trimIndent", "uppercase", "lowercase", "toInt", "toFloat", "toDouble", "toLong", "toString",
     "first", "last", "firstOrNull", "lastOrNull", "joinToString", "startsWith", "endsWith", "contains", "substring",
-    "take", "drop", "reversed", "sorted", "sortedBy", "any", "all", "none", "count", "sum", "sumOf", "indexOf",
+    "take", "drop", "reversed", "sorted", "sortedBy", "any", "all", "none", "count", "sum", "sumOf", "maxOf", "minOf", "maxOfOrNull", "minOfOrNull", "indexOf",
     "getOrNull", "let", "also", "takeIf", "withIndex", "toList", "toMutableList", "distinct", "split", "replace",
     "coerceIn", "coerceAtLeast", "coerceAtMost", "roundToInt", "toPx", "roundToPx", "toDp", "find", "add", "addAll", "removeAt", "remove"};
 
@@ -121,7 +122,17 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"semantics", "SemanticsPropertyReceiver"}, {"clearAndSetSemantics", "SemanticsPropertyReceiver"},
     {"flex", "FlexConfigScope"},             {"BoxWithConstraints", "BoxWithConstraintsScope"},
     // ("const ": a receiver only read)
-    {"mediaQuery", "const UiMediaScope"},    {"derivedMediaQuery", "const UiMediaScope"}};
+    {"mediaQuery", "const UiMediaScope"},    {"derivedMediaQuery", "const UiMediaScope"},
+    {"SubcomposeLayout", "SubcomposeMeasureScope"}};
+
+// Kotlin's inline functions: their lambda runs before they return, so it reaches the locals around
+// it by reference ([&]), and `x += 1` in forEach { } changes the x outside, as in Kotlin.
+const std::set<std::string, std::less<>> kInlineLambdas = {
+    "forEach", "forEachIndexed", "map", "mapIndexed", "mapNotNull", "filter", "filterNot", "filterIndexed", "any", "all",
+    "none", "count", "first", "firstOrNull", "last", "lastOrNull", "find", "sumOf", "maxOf", "minOf", "maxOfOrNull",
+    "minOfOrNull", "maxByOrNull", "minByOrNull", "sortedBy", "sortedByDescending", "groupBy", "associateBy", "associateWith", "flatMap", "partition",
+    "distinctBy", "indexOfFirst", "indexOfLast", "takeIf", "takeUnless", "let", "also", "run", "apply", "with",
+    "repeat", "getOrElse", "buildString", "buildList", "chunked"};
 
 // Named arguments whose lambda has a receiver: FlexBox(config = { gap(8.dp) }).
 const std::map<std::string, std::string, std::less<>> kReceiverArguments = {
@@ -869,8 +880,10 @@ private:
             // layout: Modifier.layout { measurable, constraints -> … } measures (its value the size),
             // layout(width, height) { … } in it places.
             static const std::string measureScope = "MeasureScope", placementScope = "PlacementScope";
-            bool measures = calleeName == "layout" && c.lambda->flag && !c.lambda->names.empty();
-            if (calleeName == "layout") type = measures ? &measureScope : &placementScope;
+            // (Layout(content) { measurables, constraints -> } measures as Compose's measure policy does)
+            bool measures = (calleeName == "layout" || calleeName == "Layout") && c.lambda->flag && !c.lambda->names.empty();
+            if (calleeName == "layout" || measures) type = measures ? &measureScope : &placementScope;
+            inline_ = kInlineLambdas.contains(calleeName);
             lambda(*c.lambda, kValueLambdas.contains(calleeName) || measures, kSuspendLambdas.contains(calleeName), calleeName == "produceState",
                    type);
         }
@@ -1013,7 +1026,7 @@ private:
     // to it (a pointer, so a lambda inside that keeps it sees the same one, as Kotlin's would).
     void lambda(const Node& l, bool value, bool suspend = false, bool produceState = false, const std::string* receiver = nullptr) {
         bool wasSuspend = std::exchange(suspend_, suspend);
-        out_.text(capture("[=]") + "(");
+        out_.text(capture(std::exchange(inline_, false) ? "[&]" : "[=]") + "(");
         Scoped inside(global_);
         scopes_.emplace_back();
         std::string self;
@@ -1147,6 +1160,7 @@ private:
     bool suspend_ = false;  // in a coroutine
     std::vector<std::string> receivers_;  // the receivers' types of the lambdas it is in, innermost last
     bool global_ = false;  // at namespace scope: a top-level val's value
+    bool inline_ = false;  // the lambda written next is an inline function's (kInlineLambdas)
     std::vector<std::map<std::string, VarKind, std::less<>>> scopes_;
 };
 

@@ -756,6 +756,65 @@ TEST(layouts_as_compose_writes_them) {
     CHECK(rule.onNodeWithText("wide").exists() && rule.onNodeWithText("has a window").exists());
 }
 
+// Compose's custom layouts: Layout's measure policy with layout(w, h) { … }, a var changed in
+// forEach { } (an inline function's lambda reaches it by reference), SubcomposeLayout.
+@Composable
+fun Staircase(indent: Dp, content: @Composable () -> Unit) {
+    Layout(content = content, modifier = Modifier.testTag("stairs")) { measurables, constraints ->
+        val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0f, minHeight = 0f)) }
+        var width = 0f
+        var height = 0f
+        placeables.forEachIndexed { i, p ->
+            width = maxOf(width, i * indent + p.width)
+            height += p.height
+        }
+        layout(width, height) {
+            var x = 0f
+            var y = 0f
+            placeables.forEach { placeable ->
+                placeable.placeRelative(x = x, y = y)
+                x += indent
+                y += placeable.height
+            }
+        }
+    }
+}
+
+@Composable
+fun Underlined(content: @Composable () -> Unit) {
+    SubcomposeLayout(modifier = Modifier.testTag("underlined")) { constraints ->
+        val main = subcompose("main", content).map { it.measure(constraints.copy(minWidth = 0f, minHeight = 0f)) }
+        val width = main.maxOfOrNull { it.width } ?: 0f  // (none on the first pass: composed after it)
+        val height = main.sumOf { it.height }
+        val line = subcompose("line", width) { Box(modifier = Modifier.size(width, 2.dp)) }.map { it.measure(constraints) }
+        layout(width, height + 2f) {
+            main.forEach { it.placeRelative(0f, 0f) }
+            line.forEach { it.placeRelative(0f, height) }
+        }
+    }
+}
+
+@Composable
+fun CustomLayouts() {
+    Column {
+        Staircase(24.dp) {
+            Box(modifier = Modifier.size(20.dp).testTag("step0"))
+            Box(modifier = Modifier.size(20.dp).testTag("step1"))
+            Box(modifier = Modifier.size(20.dp).testTag("step2"))
+        }
+        Underlined { Box(modifier = Modifier.size(50.dp, 10.dp)) }
+    }
+}
+
+TEST(custom_layouts_as_compose_writes_them) {
+    ComposeTestRule rule([] { CustomLayouts(); });
+    Rect stairs = rule.onNodeWithTag("stairs").bounds(), last = rule.onNodeWithTag("step2").bounds();
+    CHECK(std::abs(last.x - stairs.x - 48) < 0.5f && std::abs(last.y - stairs.y - 40) < 0.5f);
+    CHECK(std::abs(stairs.width - 68) < 0.5f && std::abs(stairs.height - 60) < 0.5f);
+    Rect under = rule.onNodeWithTag("underlined").bounds();
+    CHECK(std::abs(under.width - 50) < 0.5f && std::abs(under.height - 12) < 0.5f);
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

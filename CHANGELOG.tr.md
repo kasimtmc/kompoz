@@ -824,6 +824,11 @@
   `constraints.copy(minWidth = 0, minHeight = 0)`, `constrainWidth`, `constrainHeight` ve `offset`, ve adla
   `placeable.placeRelative(x = …, y = …)`. Bir `SubcomposeLayout` slot'u hâlâ onu ilk isteyen geçişten sonra kompoze
   ediliyor (Compose onu hemen kompoze eder): politikası o zaman boş bir liste alıyor.
+- **kompozc: Kotlin'in inline fonksiyonları ve ölçüm politikaları**: `forEach`, `map`, `let`, `repeat` ve Kotlin'in
+  öteki inline fonksiyonlarının lambdası çevresindeki yerellere başvuruyla ulaşıyor; böylece `forEach { }` içindeki
+  `y += h`, Kotlin'deki gibi dışarıdaki `y`'yi değiştiriyor. `Layout`'un ölçüm politikasının alıcısı bir
+  `MeasureScope` ve değerini veriyor, `SubcomposeLayout`'unki bir `SubcomposeMeasureScope`. `list.maxOf { }`,
+  `minOf { }`, `maxOfOrNull { }` ve `minOfOrNull { }`.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

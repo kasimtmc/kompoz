@@ -407,10 +407,12 @@ void println(const T&... v) {
     std::fputs((str(v...) + "\n").c_str(), stdout);
 }
 template <class A, class B>
+    requires requires(const A& a, const B& b) { a < b; }
 auto maxOf(const A& a, const B& b) {
     return a < b ? b : a;
 }
 template <class A, class B>
+    requires requires(const A& a, const B& b) { b < a; }
 auto minOf(const A& a, const B& b) {
     return b < a ? b : a;
 }
@@ -800,6 +802,52 @@ auto sumOf(const C& c, F&& f, A&&... args) {
         std::decay_t<decltype(f(*std::begin(c)))> total{};
         for (const auto& v : c) total += f(v);
         return total;
+    }
+}
+// list.maxOfOrNull { it.width }: the largest of what f gives, null for an empty list.
+template <class C, class F, class... A>
+    requires std::invocable<F&, detail::Element<C>>
+auto maxOfOrNull(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(maxOfOrNull(f)) {
+        std::optional<std::decay_t<std::invoke_result_t<F&, detail::Element<C>>>> best;
+        for (const auto& e : c)
+            if (auto v = f(e); !best || *best < v) best = v;
+        return best;
+    }
+}
+template <class C, class F, class... A>
+    requires std::invocable<F&, detail::Element<C>>
+auto minOfOrNull(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(minOfOrNull(f)) {
+        std::optional<std::decay_t<std::invoke_result_t<F&, detail::Element<C>>>> best;
+        for (const auto& e : c)
+            if (auto v = f(e); !best || v < *best) best = v;
+        return best;
+    }
+}
+// list.maxOf { it.width }: the largest of what f gives (an empty list has none: it throws, as Kotlin's).
+template <class C, class F, class... A>
+    requires std::invocable<F&, detail::Element<C>>
+auto maxOf(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(maxOf(f)) {
+        auto it = std::begin(c);
+        if (it == std::end(c)) throw std::out_of_range("maxOf of an empty collection");
+        auto best = f(*it);
+        for (++it; it != std::end(c); ++it)
+            if (auto v = f(*it); best < v) best = v;
+        return best;
+    }
+}
+template <class C, class F, class... A>
+    requires std::invocable<F&, detail::Element<C>>
+auto minOf(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(minOf(f)) {
+        auto it = std::begin(c);
+        if (it == std::end(c)) throw std::out_of_range("minOf of an empty collection");
+        auto best = f(*it);
+        for (++it; it != std::end(c); ++it)
+            if (auto v = f(*it); v < best) best = v;
+        return best;
     }
 }
 template <class C, class F, class... A>

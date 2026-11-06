@@ -783,6 +783,11 @@
   `constraints.copy(minWidth = 0, minHeight = 0)`, `constrainWidth`, `constrainHeight` and `offset`, and
   `placeable.placeRelative(x = …, y = …)` by name, as Compose's. A slot of a `SubcomposeLayout` is still composed
   after the pass that first asks for it (Compose composes it at once): its policy takes an empty list then.
+- **kompozc: Kotlin's inline functions and measure policies**: the lambda of `forEach`, `map`, `let`, `repeat` and
+  Kotlin's other inline functions reaches the locals around it by reference, so `y += h` in `forEach { }` changes
+  the `y` outside, as in Kotlin. `Layout`'s measure policy has a `MeasureScope` receiver and gives its value,
+  `SubcomposeLayout`'s a `SubcomposeMeasureScope`. `list.maxOf { }`, `minOf { }`, `maxOfOrNull { }` and
+  `minOfOrNull { }`.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and
