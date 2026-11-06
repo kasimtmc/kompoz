@@ -220,7 +220,7 @@ Lambda alan biçimi çizim sırasında değerlendirilir; bu yüzden orada okunan
 
 ```cpp
 void Spinner() {
-    auto angle = rememberInfiniteTransition().animateFloatState(0, 360, infiniteRepeatable(tween(1200, 0, LinearEasing)));
+    auto angle = rememberInfiniteTransition().animateFloat(0, 360, infiniteRepeatable(tween(1200, 0, LinearEasing)));
     Icon(Icons::Filled::Refresh, "Loading", Modifier().graphicsLayer([angle](GraphicsLayerScope& l) { l.rotationZ = angle.get(); }));
 }
 ```

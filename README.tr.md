@@ -187,7 +187,7 @@ Compose'daki gibi çalışır:
 - Bir `CompositionLocalProvider` farklı bir değer vermeye başlarsa, altında o değeri okuyan scope'lar (aradaki atlanan
   scope'lardan bağımsız olarak) yeniden çalışır.
 - Animasyonlar her karede yalnız kendi scope'larını yeniden çalıştırır; çizimde ya da yerleşimde okunan değerler
-  (`graphicsLayer` lambdası, `Modifier.offset { }`, `InfiniteTransition::animateFloatState`) hiç recompose etmez.
+  (`graphicsLayer` lambdası, `Modifier.offset { }`, `InfiniteTransition::animateFloat`) hiç recompose etmez.
 
 ```cpp
 void TodoRow(const Todo& todo, MutableState<std::vector<Todo>> todos, CallSite site = CallSite::current()) {

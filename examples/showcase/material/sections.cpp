@@ -742,7 +742,7 @@ void FrameRateSection(CallSite site) {
         const ColorScheme& cs = colorScheme();
         auto choice = remember([] { return mutableStateOf(0); });
         // (Read while laying out: the dot is placed again, nothing composed again.)
-        auto x = rememberInfiniteTransition().animateFloatState(0, 1, infiniteRepeatable(tween(1600, 0, LinearEasing), RepeatMode::Reverse));
+        auto x = rememberInfiniteTransition().animateFloat(0, 1, infiniteRepeatable(tween(1600, 0, LinearEasing), RepeatMode::Reverse));
         static const char* const labels[] = {"Yok", "30 Hz", "Normal", "En yüksek"};
         Modifier wish = choice.get() == 1   ? Modifier().preferredFrameRate(30)
                         : choice.get() == 2 ? Modifier().preferredFrameRate(FrameRateCategory::Normal)

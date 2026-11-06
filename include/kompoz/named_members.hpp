@@ -1,8 +1,9 @@
 #pragma once
 
-// Compose's named arguments for Modifier's and Color's members, as kompozc writes them:
+// Compose's named arguments for Modifier's, Color's and InfiniteTransition's members, as kompozc writes them:
 //   Modifier().padding(arg::horizontal = 16, arg::vertical = 8).border(arg::width = 1, arg::color = c, arg::shape = s)
 //   color.copy(arg::alpha = 0.5f)
+//   transition.animateFloat(arg::initialValue = 0, arg::targetValue = 1, arg::animationSpec = tween(600))
 // The names are arg's (kompoz::arg::width, ...): end, x or width as names of all of kompoz's would
 // take those words from code that says `using namespace kompoz`.
 
@@ -97,6 +98,29 @@ Modifier Modifier::offset(A&&... args) const {
     using P = detail::Params<n::X, n::Y>;
     static_assert(P::check<A...>());
     return offset(P::get<n::X>(0.f, args...), P::get<n::Y>(0.f, args...));
+}
+
+// animateFloat(initialValue, targetValue, animationSpec, label) and animateColor's: the label is
+// Compose's name for its tools (none here).
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+InfiniteState<float> InfiniteTransition::animateFloat(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::InitialValue, n::TargetValue, n::AnimationSpec, n::Label>;
+    static_assert(P::check<A...>());
+    P::get<n::Label>(std::string(), args...);
+    return animateFloat(float(P::arg<n::InitialValue>(args...)), float(P::arg<n::TargetValue>(args...)),
+                        AnimationSpec(P::arg<n::AnimationSpec>(args...)));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+InfiniteState<Color> InfiniteTransition::animateColor(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::InitialValue, n::TargetValue, n::AnimationSpec, n::Label>;
+    static_assert(P::check<A...>());
+    P::get<n::Label>(std::string(), args...);
+    return animateColor(Color(P::arg<n::InitialValue>(args...)), Color(P::arg<n::TargetValue>(args...)),
+                        AnimationSpec(P::arg<n::AnimationSpec>(args...)));
 }
 
 } // namespace kompoz

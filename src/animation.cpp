@@ -244,15 +244,6 @@ AnimationSpec infiniteRepeatable(AnimationSpec spec, RepeatMode mode) {
     return spec;
 }
 
-float InfiniteTransition::progress(const AnimationSpec& spec) const {
-    auto& c = detail::Composer::require();
-    int64_t now = c.frameTimeNanos();
-    if (*start_ < 0) *start_ = now;
-    bool finished = false;
-    float p = spec.progress(float(now - *start_) / 1e6f, finished);
-    if (!finished) c.requestFrame();
-    return p;
-}
 
 float detail::DrawClock::millis(const LayoutNode& node) const {
     ComposeHost* host = node.host();
@@ -314,24 +305,16 @@ float detail::infiniteProgress(const std::shared_ptr<int64_t>& start, const Anim
     return p;
 }
 
-InfiniteState<float> InfiniteTransition::animateFloatState(float from, float to, const AnimationSpec& spec) const {
+InfiniteState<float> InfiniteTransition::animateFloat(float initialValue, float targetValue, const AnimationSpec& animationSpec) const {
     InfiniteState<float> s;
-    s.start_ = start_, s.from_ = from, s.to_ = to, s.spec_ = spec, s.host_ = &detail::Composer::require().host();
+    s.start_ = start_, s.from_ = initialValue, s.to_ = targetValue, s.spec_ = animationSpec, s.host_ = &detail::Composer::require().host();
     return s;
 }
 
-InfiniteState<Color> InfiniteTransition::animateColorState(Color from, Color to, const AnimationSpec& spec) const {
+InfiniteState<Color> InfiniteTransition::animateColor(Color initialValue, Color targetValue, const AnimationSpec& animationSpec) const {
     InfiniteState<Color> s;
-    s.start_ = start_, s.from_ = from, s.to_ = to, s.spec_ = spec, s.host_ = &detail::Composer::require().host();
+    s.start_ = start_, s.from_ = initialValue, s.to_ = targetValue, s.spec_ = animationSpec, s.host_ = &detail::Composer::require().host();
     return s;
-}
-
-float InfiniteTransition::animateFloat(float from, float to, const AnimationSpec& spec) const {
-    return lerp(from, to, progress(spec));
-}
-
-Color InfiniteTransition::animateColor(Color from, Color to, const AnimationSpec& spec) const {
-    return detail::animatedColor(from, to, progress(spec));
 }
 
 } // namespace kompoz

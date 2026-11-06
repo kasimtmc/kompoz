@@ -188,7 +188,7 @@ It works as in Compose:
 - When a `CompositionLocalProvider` starts giving a different value, the scopes below it that read it run again
   (whatever was skipped in between).
 - Animations run only their own scope each frame; values read while drawing or laying out (a `graphicsLayer`
-  lambda, `Modifier.offset { }`, `InfiniteTransition::animateFloatState`) don't recompose at all.
+  lambda, `Modifier.offset { }`, `InfiniteTransition::animateFloat`) don't recompose at all.
 
 ```cpp
 void TodoRow(const Todo& todo, MutableState<std::vector<Todo>> todos, CallSite site = CallSite::current()) {

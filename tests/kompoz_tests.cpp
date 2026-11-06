@@ -3127,6 +3127,25 @@ TEST(infinite_transition_keeps_its_scope_animating) {
     CHECK(*std::max_element(values.begin(), values.end()) > 0.9f);
 }
 
+TEST(infinite_transition_takes_compose_named_arguments) {
+    // animateFloat(initialValue = …, targetValue = …, animationSpec = …, label = …): a state, read
+    // as a float where it is taken as one.
+    float seen = -1;
+    Color tint;
+    ComposeTestRule rule([&] {
+        auto t = rememberInfiniteTransition();
+        auto v = t.animateFloat(arg::initialValue = 2.f, arg::targetValue = 4.f,
+                                arg::animationSpec = infiniteRepeatable(tween(100, 0, LinearEasing)), arg::label = "size");
+        tint = t.animateColor(colors::Black, colors::White, arg::animationSpec = infiniteRepeatable(tween(100)));
+        seen = v;
+    });
+    float first = seen;
+    CHECK(first >= 2 && first <= 4);
+    rule.advanceTimeBy(30);
+    CHECK(seen != first && seen >= 2 && seen <= 4);
+    CHECK(tint.red() > 0);
+}
+
 TEST(coroutine_exception_is_reported_not_fatal) {
     auto after = mutableStateOf(0);
     ComposeTestRule rule([&] {
@@ -14712,8 +14731,8 @@ TEST(infinite_transition_states_are_read_where_they_are_needed) {
     ComposeTestRule rule([&] {
         ++composed;
         auto t = rememberInfiniteTransition();
-        auto angle = t.animateFloatState(0, 100000, tween(100000, 0, LinearEasing));  // a unit a millisecond, for long
-        auto tint = t.animateColorState(colors::Black, colors::White, infiniteRepeatable(tween(1000, 0, LinearEasing)));  // (a quarter on: another)
+        auto angle = t.animateFloat(0, 100000, tween(100000, 0, LinearEasing));  // a unit a millisecond, for long
+        auto tint = t.animateColor(colors::Black, colors::White, infiniteRepeatable(tween(1000, 0, LinearEasing)));  // (a quarter on: another)
         Column([=, &composed, &drawn, &labels, &tints] {
             Box(Modifier().size(40).graphicsLayer([angle, &drawn](GraphicsLayerScope& l) { drawn.push_back(l.rotationZ = angle.get()); }));
             Box(Modifier().size(40).drawBehind([tint, &tints](DrawScope&) { tints.push_back(tint.get()); }));
@@ -14741,7 +14760,7 @@ TEST(infinite_transition_states_are_read_where_they_are_needed) {
     CHECK(rule.onNodeWithTag("kayan").node()->contentBounds().x > x0 + 1);  // laid out again where it is now
     // Read only while drawing: idle until drawn, then the next frame is asked for.
     ComposeTestRule drawnOnly([&] {
-        auto angle = rememberInfiniteTransition().animateFloatState(0, 360, infiniteRepeatable(tween(1000, 0, LinearEasing)));
+        auto angle = rememberInfiniteTransition().animateFloat(0, 360, infiniteRepeatable(tween(1000, 0, LinearEasing)));
         Box(Modifier().size(40).graphicsLayer([angle](GraphicsLayerScope& l) { l.rotationZ = angle.get(); }));
     });
     CHECK(!drawnOnly.host().hasPendingWork());
@@ -14757,7 +14776,7 @@ TEST(what_is_drawn_out_of_view_asks_for_no_frames) {
     ScrollState scroll;
     std::vector<float> drawn;
     ComposeTestRule rule([&] {
-        auto phase = rememberInfiniteTransition().animateFloatState(0, 1000, infiniteRepeatable(tween(1000, 0, LinearEasing)));
+        auto phase = rememberInfiniteTransition().animateFloat(0, 1000, infiniteRepeatable(tween(1000, 0, LinearEasing)));
         Column(Modifier().height(200).verticalScroll(scroll), [=, &drawn] {
             Box(Modifier().size(100, 300));
             Canvas(Modifier().size(40), [phase, &drawn](DrawScope& d) {  // at 300: out of view
@@ -14795,7 +14814,7 @@ TEST(what_is_drawn_out_of_view_asks_for_no_frames) {
 
     // What it draws past its bounds counts: a node of no size out of view, drawing into it.
     ComposeTestRule past([&] {
-        auto phase = rememberInfiniteTransition().animateFloatState(0, 10, infiniteRepeatable(tween(1000, 0, LinearEasing)));
+        auto phase = rememberInfiniteTransition().animateFloat(0, 10, infiniteRepeatable(tween(1000, 0, LinearEasing)));
         Column(Modifier().height(200).verticalScroll(rememberScrollState()), [=] {
             Box(Modifier().size(100, 300));
             Canvas(Modifier().size(0), [phase](DrawScope& d) { d.drawCircle(Color{1, 0, 0, 1}, 10, Offset{20 + phase.get(), -150}); });
@@ -28568,7 +28587,7 @@ TEST(colors_animate_in_oklab_as_composes_vector_converter) {
     auto stateDarker = std::make_shared<bool>(false), valueDarker = std::make_shared<bool>(false);
     ComposeTestRule endless([&, stateDarker, valueDarker] {
         auto t = rememberInfiniteTransition();
-        auto shade = t.animateColorState(colors::White, gray, infiniteRepeatable(tween(400, 0, beyond)));
+        auto shade = t.animateColor(colors::White, gray, infiniteRepeatable(tween(400, 0, beyond)));
         Color value = t.animateColor(colors::White, gray, infiniteRepeatable(tween(400, 0, beyond)));
         *valueDarker = *valueDarker || value.red() < gray.red();
         Box(Modifier().size(10).drawBehind([shade, stateDarker, gray](DrawScope&) { *stateDarker = *stateDarker || shade.get().red() < gray.red(); }));

@@ -474,16 +474,18 @@ namespace detail {
 float infiniteProgress(const std::shared_ptr<int64_t>& start, const AnimationSpec& spec, ComposeHost* host);
 } // namespace detail
 
-// An InfiniteTransition's value as a state (Compose's animateFloat returns a State): read in a
-// composition, the reader composes again every frame; read while drawing (graphicsLayer { },
-// drawBehind, a Canvas) it is only drawn again, and while laying out (offset { }) laid out again.
-//   auto pulse = rememberInfiniteTransition().animateFloatState(0.8f, 1.f, infiniteRepeatable(tween(600), RepeatMode::Reverse));
+// An InfiniteTransition's value, a state as Compose's animateFloat gives: read in a composition, the
+// reader composes again every frame; read while drawing (graphicsLayer { }, drawBehind, a Canvas)
+// it is only drawn again, and while laying out (offset { }) laid out again.
+//   auto pulse = rememberInfiniteTransition().animateFloat(0.8f, 1.f, infiniteRepeatable(tween(600), RepeatMode::Reverse));
 //   Box(Modifier().graphicsLayer([pulse](GraphicsLayerScope& l) { l.scaleX = l.scaleY = pulse.get(); }));
+//   float now = pulse;  // (read here: in the composition)
 template <class T>
 class InfiniteState {
 public:
     T get() const { return detail::animationLerp(from_, to_, detail::infiniteProgress(start_, spec_, host_)); }
     T value() const { return get(); }
+    operator T() const { return get(); }
 
 private:
     friend class InfiniteTransition;
@@ -496,15 +498,21 @@ private:
 // Values that animate for as long as they are in the composition (loading spinners, pulses).
 class InfiniteTransition {
 public:
-    float animateFloat(float from, float to, const AnimationSpec& spec) const;
-    Color animateColor(Color from, Color to, const AnimationSpec& spec) const;
-    // The same as states, to read where they are needed (in a composition only to create them).
-    InfiniteState<float> animateFloatState(float from, float to, const AnimationSpec& spec) const;
-    InfiniteState<Color> animateColorState(Color from, Color to, const AnimationSpec& spec) const;
+    // States, read where they are needed (in a composition only to create them, or to recompose
+    // each frame).
+    InfiniteState<float> animateFloat(float initialValue, float targetValue, const AnimationSpec& animationSpec) const;
+    InfiniteState<Color> animateColor(Color initialValue, Color targetValue, const AnimationSpec& animationSpec) const;
+    // Compose's named arguments (named_members.hpp): animateFloat(initialValue = 0, targetValue = 1,
+    // animationSpec = …, label = "…"), written kompoz::arg::initialValue = … in C++.
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    InfiniteState<float> animateFloat(A&&... args) const;
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    InfiniteState<Color> animateColor(A&&... args) const;
     friend bool operator==(const InfiniteTransition& a, const InfiniteTransition& b) { return a.start_ == b.start_; }
 
 private:
-    float progress(const AnimationSpec& spec) const;
     std::shared_ptr<int64_t> start_ = std::make_shared<int64_t>(-1);
 };
 

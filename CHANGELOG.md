@@ -720,6 +720,13 @@
   suspending function of your own (a C++ coroutine returning `TaskOf<T>`) needs no list. Any other call gives its
   value at once. `async { … }` and `withBackground { … }` give their block's value. `produceState(initial, key) { … }`'s
   block sets `value`, and `val x by produceState(…)` reads it. A snackbar is `showSnackbar`, as Compose suspends on it.
+- **An infinite transition's values are states, as Compose's**: `InfiniteTransition::animateFloat` and
+  `animateColor` give an `InfiniteState`, read where it is read (while drawing, it is only drawn again each frame) or
+  taken as a `float` or `Color` (read then, in the composition). They take Compose's named arguments too:
+  `animateFloat(initialValue = 0.8f, targetValue = 1f, animationSpec = …, label = "…")` (`kompoz::arg::initialValue`
+  in C++), so `val pulse by rememberInfiniteTransition().animateFloat(…)` goes through kompozc as written for
+  Android. `animateFloatState` and `animateColorState`, which gave the states, are gone: `animateFloat` and
+  `animateColor` are them now.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

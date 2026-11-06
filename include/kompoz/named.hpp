@@ -465,6 +465,9 @@ struct Border {};
 struct Red {};
 struct Green {};
 struct Blue {};
+struct InitialValue {};
+struct TargetValue {};
+struct AnimationSpec {};
 } // namespace detail::names
 inline namespace args {
 inline constexpr Param<detail::names::Modifier> modifier;
@@ -642,7 +645,7 @@ inline constexpr Param<detail::names::ContentType> contentType;
 // (kompoz::colorScheme() and motionScheme() read the theme's: these are MaterialTheme's names)
 inline constexpr Param<detail::names::ColorScheme> colorScheme;
 inline constexpr Param<detail::names::MotionScheme> motionScheme;
-// Members' (Modifier's, Color's): words too common to be names of all of kompoz's (end, x, width).
+// Members' (Modifier's, Color's, InfiniteTransition's): words too common to be names of all of kompoz's (end, x, width).
 inline constexpr Param<detail::names::Start> start;
 inline constexpr Param<detail::names::Top> top;
 inline constexpr Param<detail::names::End> end;
@@ -659,6 +662,9 @@ inline constexpr Param<detail::names::Border> border;
 inline constexpr Param<detail::names::Red> red;
 inline constexpr Param<detail::names::Green> green;
 inline constexpr Param<detail::names::Blue> blue;
+inline constexpr Param<detail::names::InitialValue> initialValue;
+inline constexpr Param<detail::names::TargetValue> targetValue;
+inline constexpr Param<detail::names::AnimationSpec> animationSpec;
 } // namespace arg
 
 // Compose's rememberSaveable(saver = …) { … } and rememberSaveable(inputs, saver = …) { … }.

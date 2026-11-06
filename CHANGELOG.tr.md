@@ -761,6 +761,13 @@
   Öteki her çağrı değerini hemen veriyor. `async { … }` ve `withBackground { … }` bloklarının değerini veriyor.
   `produceState(initial, key) { … }`'un bloğu `value`'yu ayarlıyor, `val x by produceState(…)` onu okuyor. Bir snackbar,
   Compose'daki gibi `showSnackbar` ile bekleniyor.
+- **Sonsuz bir geçişin değerleri, Compose'unkiler gibi durumlar**: `InfiniteTransition::animateFloat` ve
+  `animateColor` bir `InfiniteState` veriyor; okunduğu yerde okunuyor (çizerken okunursa her karede yalnız yeniden
+  çiziliyor) ya da `float` veya `Color` olarak alınıyor (o zaman, kompozisyonda okunuyor). Compose'un adlı
+  argümanlarını da alıyorlar: `animateFloat(initialValue = 0.8f, targetValue = 1f, animationSpec = …, label = "…")`
+  (C++'ta `kompoz::arg::initialValue`); böylece `val pulse by rememberInfiniteTransition().animateFloat(…)`, Android
+  için yazıldığı gibi kompozc'den geçiyor. Durumları veren `animateFloatState` ve `animateColorState` kalktı: artık
+  onlar `animateFloat` ve `animateColor`.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

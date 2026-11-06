@@ -64,7 +64,7 @@ void DrawingSection(CallSite site) {
             // PathEffect (dashes, rounded corners), drawPoints, and a wave drawn bit by bit through
             // PathMeasure (getSegment up to a share of its length, getPosition for its tip).
             // (The phases are read while drawing: the Canvas is drawn again, nothing composed again.)
-            auto tracing = rememberInfiniteTransition().animateFloatState(0, 1, infiniteRepeatable(tween(2400, 0, LinearEasing), RepeatMode::Reverse));
+            auto tracing = rememberInfiniteTransition().animateFloat(0, 1, infiniteRepeatable(tween(2400, 0, LinearEasing), RepeatMode::Reverse));
             Canvas(Modifier().fillMaxWidth().height(84).background(cs.surfaceContainerHigh, 12),
                    [c = cs.primary, o = cs.outline, t = cs.tertiary, tracing](DrawScope& d) {
                        Size s = d.size();
@@ -92,7 +92,7 @@ void DrawingSection(CallSite site) {
                    });
             // stampedPathEffect: arrows turned along a wave (Rotate), and a short bar bent round a
             // circle (Morph) sliding with the phase.
-            auto sliding = rememberInfiniteTransition().animateFloatState(0, 24, infiniteRepeatable(tween(1200, 0, LinearEasing)));
+            auto sliding = rememberInfiniteTransition().animateFloat(0, 24, infiniteRepeatable(tween(1200, 0, LinearEasing)));
             Canvas(Modifier().fillMaxWidth().height(84).background(cs.surfaceContainerHigh, 12),
                    [c = cs.primary, t = cs.tertiary, sliding](DrawScope& d) {
                        Size s = d.size();

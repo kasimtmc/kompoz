@@ -146,14 +146,14 @@ void TransitionBox() {
 
 ```cpp
 void Pulse() {
-    auto pulse = rememberInfiniteTransition().animateFloatState(0.85f, 1.f, infiniteRepeatable(tween(800), RepeatMode::Reverse));
+    auto pulse = rememberInfiniteTransition().animateFloat(0.85f, 1.f, infiniteRepeatable(tween(800), RepeatMode::Reverse));
     Box(Modifier().size(64)
             .graphicsLayer([pulse](GraphicsLayerScope& l) { l.scaleX = l.scaleY = pulse.get(); })
             .background(colorScheme().primary, CircleShape)) {};
 }
 ```
 
-`animateFloatState` ve `animateColorState`, gereken yerde okunacak bir durum döndürür: buradaki gibi çizim sırasında okunursa her karede yalnızca yeniden çizilir. `animateFloat` ve `animateColor` ise değeri doğrudan döndürür ve okuyanı her karede yeniden kompoze eder.
+`animateFloat` ve `animateColor`, Compose'unkiler gibi, gereken yerde okunacak bir durum döndürür: buradaki gibi çizim sırasında okunursa her karede yalnızca yeniden çizilir; bir kompozisyonda okunursa (ya da `float` olarak alınırsa) okuyan her karede yeniden kompoze edilir.
 
 ## Animatable
 

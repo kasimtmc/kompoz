@@ -146,14 +146,14 @@ void TransitionBox() {
 
 ```cpp
 void Pulse() {
-    auto pulse = rememberInfiniteTransition().animateFloatState(0.85f, 1.f, infiniteRepeatable(tween(800), RepeatMode::Reverse));
+    auto pulse = rememberInfiniteTransition().animateFloat(0.85f, 1.f, infiniteRepeatable(tween(800), RepeatMode::Reverse));
     Box(Modifier().size(64)
             .graphicsLayer([pulse](GraphicsLayerScope& l) { l.scaleX = l.scaleY = pulse.get(); })
             .background(colorScheme().primary, CircleShape)) {};
 }
 ```
 
-`animateFloatState` and `animateColorState` return a state to read where it is needed: read while drawing, as here, it is only drawn again each frame. `animateFloat` and `animateColor` return the value directly, recomposing the reader each frame.
+`animateFloat` and `animateColor` return a state, as Compose's do, to read where it is needed: read while drawing, as here, it is only drawn again each frame; read in a composition (or taken as a `float`), the reader recomposes each frame.
 
 ## Animatable
 
