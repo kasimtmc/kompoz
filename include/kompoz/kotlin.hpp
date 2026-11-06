@@ -753,6 +753,20 @@ template <class T, class... A>
 int roundToInt(T c, A&&... args) {
     KOMPOZ_KT_OWN(roundToInt()) return int(std::lround(c));
 }
+// Density's conversions (in a scope that is a Density: a DrawScope, a FlexBox's config): Kompoz's
+// lengths are dp already, so a dp is its own "px" (16.dp.toPx() is 16), as are sp's.
+template <class T, class... A>
+float toPx(T c, A&&... args) {
+    KOMPOZ_KT_OWN(toPx()) return float(c);
+}
+template <class T, class... A>
+int roundToPx(T c, A&&... args) {
+    KOMPOZ_KT_OWN(roundToPx()) return int(std::lround(float(c)));
+}
+template <class T, class... A>
+float toDp(T c, A&&... args) {
+    KOMPOZ_KT_OWN(toDp()) return float(c);
+}
 
 template <class C, class... A>
 auto take(const C& c, int n, A&&... args) {

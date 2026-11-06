@@ -720,6 +720,42 @@ TEST(plain_and_extension_functions) {
     CHECK(heading);
 }
 
+// Layouts as Compose writes them: FlexBox's and Grid's config = { … } on their scopes, flex { … },
+// 1.fr, FlowRow's arrangements, BoxWithConstraints' maxWidth, mediaQuery { … }.
+@Composable
+fun ComposeLayouts() {
+    Column {
+        FlexBox(modifier = Modifier.width(200.dp).testTag("flex"), config = { columnGap(10.dp) }) {
+            Box(modifier = Modifier.size(40.dp))
+            Box(modifier = Modifier.height(40.dp).flex { grow(1f) }.testTag("grows"))
+        }
+        Grid(config = {
+            column(50.dp)
+            column(1.fr)
+            gap(row = 4.dp, column = 10.dp)
+        }, modifier = Modifier.width(200.dp)) {
+            Box(modifier = Modifier.height(20.dp).fillMaxWidth().gridItem(row = 1, column = 2).testTag("cell"))
+        }
+        FlowRow(modifier = Modifier.width(100.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            for (i in 0 until 3) Box(modifier = Modifier.size(40.dp).testTag("flow$i"))
+        }
+        BoxWithConstraints(modifier = Modifier.width(150.dp)) {
+            Text(if (maxWidth > 100.dp) "wide" else "narrow")
+        }
+        if (mediaQuery { windowWidth > 0.dp }) Text("has a window")
+    }
+}
+
+TEST(layouts_as_compose_writes_them) {
+    ComposeTestRule rule([] { ComposeLayouts(); });
+    Rect box = rule.onNodeWithTag("flex").bounds(), grown = rule.onNodeWithTag("grows").bounds();
+    CHECK(std::abs(grown.x - box.x - 50) < 0.5f && std::abs(grown.width - 150) < 0.5f);
+    Rect cell = rule.onNodeWithTag("cell").bounds();
+    CHECK(std::abs(cell.x - 60) < 0.5f && std::abs(cell.width - 140) < 0.5f);
+    CHECK(std::abs(rule.onNodeWithTag("flow1").bounds().x - 50) < 0.5f && std::abs(rule.onNodeWithTag("flow2").bounds().x) < 0.5f);
+    CHECK(rule.onNodeWithText("wide").exists() && rule.onNodeWithText("has a window").exists());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

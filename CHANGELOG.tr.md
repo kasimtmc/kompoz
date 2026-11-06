@@ -813,6 +813,10 @@
   `BoxWithConstraints(modifier) { if (maxWidth > 400.dp) … }` (bir `BoxWithConstraintsScope`). Hepsi adlı argüman
   alıyor; C++'ta süslü parantezle verilen bir yapılandırma türünü adlandırıyor (`FlexBoxConfig{…}`, `GridConfig{…}`,
   `FlowStyle{…}`). `UiMediaScope.PointerPrecision` ve öteki iç adları Compose'unki gibi.
+- **kompozc: yerleşimlerin ve ortam sorgularının lambdaları**: `FlexBox(config = { … })` ve `Grid(config = { … })`
+  (alıcılı bir adlı argüman lambdası), `flex { }`, `BoxWithConstraints { }`, yalnız okunan bir `UiMediaScope` üzerinde
+  `mediaQuery { }` ve `derivedMediaQuery { }`; `1.fr`; burada dp kendi pikseli olduğundan `16.dp.toPx()`,
+  `roundToPx()` ve `toDp()`; Compose'da özellik olan `WindowInsets.systemBars` ve öteki kenar boşlukları.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

@@ -43,7 +43,8 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "maxByOrNull", "minByOrNull", "let", "run", "with", "takeIf", "takeUnless", "getOrElse", "lazy", "snapshotFlow",
     "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked",
     "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "compositionLocalOf",
-    "staticCompositionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent"};
+    "staticCompositionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent", "mediaQuery",
+    "derivedMediaQuery"};
 
 // Kotlin types the C++ way.
 const std::map<std::string, std::string, std::less<>> kTypes = {
@@ -60,6 +61,22 @@ const std::map<std::string, std::string, std::less<>> kObjectProperties = {
     {"MaterialTheme.typography", "::kompoz::typography()"},
     {"MaterialTheme.shapes", "::kompoz::shapes()"},
     {"MaterialTheme.motionScheme", "::kompoz::motionScheme()"},
+    // (Compose's insets are properties: WindowInsets.systemBars)
+    {"WindowInsets.statusBars", "::kompoz::WindowInsets::statusBars()"},
+    {"WindowInsets.navigationBars", "::kompoz::WindowInsets::navigationBars()"},
+    {"WindowInsets.systemBars", "::kompoz::WindowInsets::systemBars()"},
+    {"WindowInsets.captionBar", "::kompoz::WindowInsets::captionBar()"},
+    {"WindowInsets.mandatorySystemGestures", "::kompoz::WindowInsets::mandatorySystemGestures()"},
+    {"WindowInsets.tappableElement", "::kompoz::WindowInsets::tappableElement()"},
+    {"WindowInsets.waterfall", "::kompoz::WindowInsets::waterfall()"},
+    {"WindowInsets.ime", "::kompoz::WindowInsets::ime()"},
+    {"WindowInsets.imeAnimationSource", "::kompoz::WindowInsets::imeAnimationSource()"},
+    {"WindowInsets.imeAnimationTarget", "::kompoz::WindowInsets::imeAnimationTarget()"},
+    {"WindowInsets.displayCutout", "::kompoz::WindowInsets::displayCutout()"},
+    {"WindowInsets.systemGestures", "::kompoz::WindowInsets::systemGestures()"},
+    {"WindowInsets.safeGestures", "::kompoz::WindowInsets::safeGestures()"},
+    {"WindowInsets.safeDrawing", "::kompoz::WindowInsets::safeDrawing()"},
+    {"WindowInsets.safeContent", "::kompoz::WindowInsets::safeContent()"},
     {"Int.MAX_VALUE", "std::numeric_limits<int>::max()"},
     {"Int.MIN_VALUE", "std::numeric_limits<int>::min()"},
     {"Long.MAX_VALUE", "std::numeric_limits<long long>::max()"},
@@ -88,7 +105,7 @@ const std::set<std::string, std::less<>> kKtMembers = {
     "first", "last", "firstOrNull", "lastOrNull", "joinToString", "startsWith", "endsWith", "contains", "substring",
     "take", "drop", "reversed", "sorted", "sortedBy", "any", "all", "none", "count", "sum", "sumOf", "indexOf",
     "getOrNull", "let", "also", "takeIf", "withIndex", "toList", "toMutableList", "distinct", "split", "replace",
-    "coerceIn", "coerceAtLeast", "coerceAtMost", "roundToInt", "find", "add", "addAll", "removeAt", "remove"};
+    "coerceIn", "coerceAtLeast", "coerceAtMost", "roundToInt", "toPx", "roundToPx", "toDp", "find", "add", "addAll", "removeAt", "remove"};
 
 // Calls whose lambda has a receiver, Kotlin's T.() -> R: the C++ lambda takes it
 // first, and the names the body doesn't declare that are the receiver's members are the receiver's
@@ -101,7 +118,14 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"translate", "DrawScope"},              {"inset", "DrawScope"},            {"clipRect", "DrawScope"},
     {"clipPath", "DrawScope"},               {"rotate", "DrawScope"},           {"rotateRad", "DrawScope"},
     {"scale", "DrawScope"},                  {"withTransform", "DrawScope"},
-    {"semantics", "SemanticsPropertyReceiver"}, {"clearAndSetSemantics", "SemanticsPropertyReceiver"}};
+    {"semantics", "SemanticsPropertyReceiver"}, {"clearAndSetSemantics", "SemanticsPropertyReceiver"},
+    {"flex", "FlexConfigScope"},             {"BoxWithConstraints", "BoxWithConstraintsScope"},
+    // ("const ": a receiver only read)
+    {"mediaQuery", "const UiMediaScope"},    {"derivedMediaQuery", "const UiMediaScope"}};
+
+// Named arguments whose lambda has a receiver: FlexBox(config = { gap(8.dp) }).
+const std::map<std::string, std::string, std::less<>> kReceiverArguments = {
+    {"FlexBox.config", "FlexBoxConfigScope"}, {"Grid.config", "GridConfigurationScope"}};
 
 // Calls whose lambda is a coroutine (Kotlin's suspend lambdas): [=]() -> Task { ...; co_return; }.
 const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "produceState"};
@@ -697,6 +721,12 @@ private:
             out_.text(")");
             return;
         }
+        if (e.text == "fr") {  // a grid track's share (1.fr)
+            out_.text("::kompoz::Fr{float(");
+            expr(obj);
+            out_.text(")}");
+            return;
+        }
         if (e.text == "sp" || e.text == "em") {
             out_.text("::kompoz::TextUnit::" + e.text + "(float(");
             expr(obj);
@@ -826,7 +856,10 @@ private:
             any = true;
             const std::string& n = c.names[i];
             if (!n.empty() && !positional) out_.text("::kompoz::arg::" + n + " = ");
+            auto receiver = kReceiverArguments.find(calleeName + "." + n);
             if (c.kids[i + 1]->kind == Node::Lambda && kValueArguments.contains(n)) lambda(*c.kids[i + 1], true);
+            else if (c.kids[i + 1]->kind == Node::Lambda && receiver != kReceiverArguments.end())
+                lambda(*c.kids[i + 1], false, false, false, &receiver->second);
             else expr(*c.kids[i + 1]);
         }
         if (c.lambda) {
@@ -985,10 +1018,11 @@ private:
         scopes_.emplace_back();
         std::string self;
         if (receiver) {
-            receivers_.push_back(*receiver);
+            receivers_.push_back(receiver->starts_with("const ") ? receiver->substr(6) : *receiver);
             self = std::to_string(receivers_.size());
             // (typed: an overload taking other parameters is never tried with it)
-            out_.text("::kompoz::" + *receiver + "& kompoz_receiver_" + self + std::string(l.flag && !l.names.empty() ? ", " : ""));
+            std::string type = receiver->starts_with("const ") ? "const ::kompoz::" + receiver->substr(6) : "::kompoz::" + *receiver;
+            out_.text(type + "& kompoz_receiver_" + self + std::string(l.flag && !l.names.empty() ? ", " : ""));
         }
         if (suspend) {
             // A coroutine (Kotlin's suspend lambda): its CoroutineScope receiver has no name here;
