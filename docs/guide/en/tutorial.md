@@ -2,23 +2,24 @@
 
 Build a small app step by step: text, layout, state, a scrolling list and Material 3 styling. Each step adds a little to the one before.
 
-This tutorial assumes you have built Kompoz once (see [Setup](setup.md)) and can run your own app with it. Every snippet is complete C++: copy it into your `main.cpp`.
+This tutorial assumes you have built Kompoz once and added it to your CMake project with `kompoz_compose` (see [Setup](setup.md)). Every snippet is complete: copy it into your `main.cpp`, after `#include <kompoz/kompoz.hpp>` and `using namespace kompoz;`.
 
 ## Step 1: a composable function
 
-A Kompoz app is made of *composable functions*: plain C++ functions that describe part of the UI by calling other composables. `Text` is the simplest one.
+A Kompoz app is made of *composable functions*: functions marked `@Composable` that describe part of the UI by calling other composables. They are written as in Kotlin, in your `.cpp` file. `Text` is the simplest one.
 
-```cpp
-void Greeting(const std::string& name) {
-    Text("Hello, " + name + "!");
+```kotlin
+@Composable
+fun Greeting(name: String) {
+    Text("Hello, $name!")
 }
 
-Application kompoz::createApplication(int, char**) {
+kompoz::Application kompoz::createApplication(int, char**) {
     return {.title = "Tutorial", .content = [] { Greeting("Kompoz"); }};
 }
 ```
 
-`createApplication` is the app's entry point: the platform backend owns `main` and calls it once. The `Application` it returns has the window's title, its size on the desktop, and `content`, the composable that fills the window.
+`createApplication` is the app's entry point, in C++: the platform backend owns `main` and calls it once. The `Application` it returns has the window's title, its size on the desktop, and `content`, the composable that fills the window.
 
 There is no XML, no view objects and no `setText`: to change what is on the screen, you call composables with different data, and Kompoz updates the screen to match.
 
@@ -26,25 +27,24 @@ There is no XML, no view objects and no `setText`: to change what is on the scre
 
 Composables placed one after another are drawn on top of each other unless you say how to arrange them. `Column` puts its children in a column, `Row` in a row, `Box` on top of each other.
 
-```cpp
-struct Message {
-    std::string author, body;
-};
+```kotlin
+data class Message(val author: String, val body: String)
 
-void MessageCard(const Message& msg) {
-    Row(Modifier().padding(8)) {
-        Icon(Icons::Filled::AccountCircle, "Profile picture", Modifier().size(40));
-        Spacer(Modifier().width(8));
-        Column() {
-            Text(msg.author, style = typography().titleSmall);
-            Spacer(Modifier().height(4));
-            Text(msg.body, style = typography().bodyMedium);
-        };
-    };
+@Composable
+fun MessageCard(msg: Message) {
+    Row(modifier = Modifier.padding(8.dp)) {
+        Icon(Icons.Filled.AccountCircle, contentDescription = "Profile picture", modifier = Modifier.size(40.dp))
+        Spacer(Modifier.width(8.dp))
+        Column {
+            Text(msg.author, style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            Text(msg.body, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
 }
 ```
 
-The children go in a block after the call, in braces, like Compose's trailing lambda (with `<kompoz/blocks.hpp>` included; mind the semicolon after it). A block runs in a scope of its own and can run again later on its own, so it captures what it uses by value.
+The children go in the trailing lambda, as in Compose. A lambda can run again later on its own, so it captures what it uses by value, as Kotlin's do.
 
 `Modifier` decorates a composable: size, padding, background, clicks and much more. Modifiers chain, and their order matters (`padding` then `background` is not the same as `background` then `padding`). See [Modifiers](modifiers.md).
 
@@ -52,48 +52,61 @@ The children go in a block after the call, in braces, like Compose's trailing la
 
 A UI that never changes is not much of an app. Kompoz redraws a composable when a *state* it read changes. `mutableStateOf` makes one; `remember` keeps it across recompositions, so it isn't created anew each time the function runs.
 
-```cpp
-void Counter() {
-    auto count = remember([] { return mutableStateOf(0); });
+```kotlin
+@Composable
+fun Counter() {
+    var count by remember { mutableStateOf(0) }
 
-    Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
-        Text("You clicked " + std::to_string(count.get()) + " times");
-        Button([count] { count.set(count.get() + 1); }) { Text("Click me"); };
-    };
+    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("You clicked $count times")
+        Button(onClick = { count++ }) { Text("Click me") }
+    }
 }
 ```
 
-- `count.get()` reads the state. Because `Counter` read it, `Counter` runs again when it changes.
-- `count.set(...)` writes it, here from the button's `onClick`.
-- `MutableState<T>` is a small handle you can copy. The click callback runs later, after composition, so it captures `count` **by value** (`[count]`), never by reference.
+- Reading `count` reads the state. Because `Counter` read it, `Counter` runs again when it changes.
+- `count++` writes it, here from the button's `onClick`.
+- `by` delegates `count` to the state, as in Kotlin: it reads and writes the state's value.
 
-`verticalArrangement = …` is a named argument, as in Kotlin: after the ones given without a name, in any order. See [State](state.md) for more.
+See [State](state.md) for more.
 
 ## Step 4: a scrolling list
 
 A `Column` composes and lays out every child, even those out of view. For long lists use `LazyColumn`: it composes only the items on the screen, plus a small margin, as you scroll.
 
-```cpp
-#! struct Message { std::string author, body; };
-#! void MessageCard(const Message&) {}
-void Conversation(const std::vector<Message>& messages) {
-    LazyColumn(Modifier().fillMaxSize()) {
-        items(messages, [](const Message& msg) { MessageCard(msg); });
-    };
+```kotlin
+data class Message(val author: String, val body: String)
+
+@Composable
+fun MessageCard(msg: Message) {
+    Text("${msg.author}: ${msg.body}")
+}
+
+@Composable
+fun Conversation(messages: List<Message>) {
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        items(messages) { message ->
+            MessageCard(message)
+        }
+    }
 }
 ```
 
-The block describes the items, as `LazyColumn`'s receiver does in Compose: `item` adds one, `items` a whole list. Item content is composed later, as each item comes into view, so the item lambda captures nothing by reference that might be gone by then. Here it only uses its argument.
+The block describes the items, as `LazyColumn`'s receiver does in Compose: `item` adds one, `items` a whole list. Item content is composed later, as each item comes into view.
 
 When items can be added, removed or moved, give each a stable key so its state follows it:
 
-```cpp body
-#! struct Message { int id; std::string author, body; };
-#! void MessageCard(const Message&) {}
-#! std::vector<Message> messages;
-LazyColumn(Modifier().fillMaxSize()) {
-    items(messages, [](const Message& msg) { return msg.id; }, [](const Message& msg) { MessageCard(msg); });
-};
+```kotlin
+data class Message(val id: Int, val author: String, val body: String)
+
+@Composable
+fun Conversation(messages: List<Message>) {
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        items(messages, key = { it.id }) { message ->
+            Text("${message.author}: ${message.body}")
+        }
+    }
+}
 ```
 
 See [Lists and grids](lists.md) for grids, pagers, sticky headers and scrolling from code.
@@ -102,21 +115,31 @@ See [Lists and grids](lists.md) for grids, pagers, sticky headers and scrolling 
 
 Kompoz implements Material 3, as Compose Material 3 does. `MaterialTheme` gives everything inside it a color scheme, a typography and shapes; `Scaffold` lays out a screen with its app bar, floating action button and snackbars.
 
-```cpp
-#! struct Message { std::string author, body; };
-#! void Conversation(const std::vector<Message>&) {}
-void ConversationScreen(const std::vector<Message>& messages) {
-    Scaffold(Modifier(), topBar = [] { TopAppBar(title = [] { Text("Messages"); }); }) [=](PaddingValues padding) {
-        Box(Modifier().padding(padding)) { Conversation(messages); };
-    };
+```kotlin
+data class Message(val author: String, val body: String)
+
+@Composable
+fun Conversation(messages: List<Message>) {
+    LazyColumn { items(messages) { Text("${it.author}: ${it.body}") } }
 }
 
-Application kompoz::createApplication(int, char**) {
-    return {.title = "Tutorial", .content = [] {
-                static const std::vector<Message> messages = {{"Ada", "Hello!"}, {"Linus", "Hi Ada."}};
-                bool dark = isSystemInDarkTheme();
-                MaterialTheme(dark ? darkColorScheme() : lightColorScheme(), [] { ConversationScreen(messages); });
-            }};
+@Composable
+fun ConversationScreen(messages: List<Message>) {
+    Scaffold(topBar = { TopAppBar(title = { Text("Messages") }) }) { padding ->
+        Box(modifier = Modifier.padding(padding)) { Conversation(messages) }
+    }
+}
+
+@Composable
+fun TutorialApp() {
+    val messages = remember { listOf(Message("Ada", "Hello!"), Message("Linus", "Hi Ada.")) }
+    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
+        ConversationScreen(messages)
+    }
+}
+
+kompoz::Application kompoz::createApplication(int, char**) {
+    return {.title = "Tutorial", .content = [] { TutorialApp(); }};
 }
 ```
 
@@ -126,24 +149,31 @@ Application kompoz::createApplication(int, char**) {
 
 Let's make each message a card that shows its whole text when clicked. The expanded flag is state that belongs to one card, so each card remembers its own.
 
-```cpp
-#! struct Message { std::string author, body; };
-void MessageCard(const Message& msg) {
-    auto expanded = remember([] { return mutableStateOf(false); });
+```kotlin
+data class Message(val author: String, val body: String)
 
-    Card([expanded] { expanded.set(!expanded.get()); }, Modifier().fillMaxWidth().padding(8, 4)) {
-        Column(Modifier().padding(16).animateContentSize()) {
-            Text(msg.author, color = colorScheme().primary, style = typography().titleSmall);
-            Spacer(Modifier().height(4));
-            Text(msg.body, maxLines = expanded.get() ? 0 : 1, overflow = TextOverflow::Ellipsis, style = typography().bodyMedium);
-        };
-    };
+@Composable
+fun MessageCard(msg: Message) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+        Column(modifier = Modifier.padding(16.dp).animateContentSize()) {
+            Text(msg.author, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                msg.body,
+                maxLines = if (expanded) Int.MAX_VALUE else 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
 }
 ```
 
-- `Card(onClick, modifier, content)` is a clickable card with Material's ripple.
-- `colorScheme()` and `typography()` read the current theme's colors and type styles.
-- `maxLines = 0` means no limit; with one line the text ends in an ellipsis.
+- `Card(onClick = …)` is a clickable card with Material's ripple.
+- `MaterialTheme.colorScheme` and `MaterialTheme.typography` read the current theme's colors and type styles.
+- With one line, the text ends in an ellipsis; `Int.MAX_VALUE` lifts the limit.
 - `animateContentSize()` animates the column's size when the text grows or shrinks.
 
 Inside a lazy list, `remember` is per item: each card keeps its own `expanded`. With keys, it stays with the message when the list changes.
@@ -151,6 +181,6 @@ Inside a lazy list, `remember` is per item: each card keeps its own `expanded`. 
 ## Where to go next
 
 - [Thinking in Kompoz](thinking.md): the ideas behind declarative UI and recomposition.
-- [Coming from Compose](coming-from-compose.md): how Kotlin's Compose maps to C++.
+- [Coming from Compose](coming-from-compose.md): what kompozc reads, and the C++ around your composables.
 - [Layouts](layouts.md), [Material components](material.md) and [Animation](animation.md) for building real screens.
 - [Tools](tools.md): previews and rebuilding on save while you work.
