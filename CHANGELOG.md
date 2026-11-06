@@ -688,9 +688,9 @@
   C++), which the cards, text fields, buttons and top app bars take as `colors =`; those left unset are the theme's.
   The cards take `shape =` and, clickable, `enabled =` (Compose 1.4's disabled colors). `BottomAppBar(…) { … }` with a
   block is Compose's content form (a row of its own, `contentColor` its container's own). `Color.Red`,
-  `Color.Transparent`, … are `Color`'s constants as well. Modifier's `padding`, `background`, `border`, `size` and
-  `offset` and `Color::copy` take Compose's named arguments (`border(width = 1, color = c, shape = s)`,
-  `copy(alpha = 0.6f)`), written `kompoz::arg::width = …` in C++. With kompozc, the user's own `AddTextDialog` and
+  `Color.Transparent`, … are `Color`'s constants as well. Modifier's `padding`, `background`, `border`, `size`,
+  `offset` and `graphicsLayer` and `Color::copy` take Compose's named arguments (`border(width = 1, color = c, shape = s)`,
+  `graphicsLayer(alpha = 0.5f, rotationZ = 30f)`, `copy(alpha = 0.6f)`), written `kompoz::arg::width = …` in C++. With kompozc, the user's own `AddTextDialog` and
   Compose's Scaffold sample compile as they are written for Android (tests/compose_tests.cpp).
 - **What Compose code says most, through kompozc**: `MaterialTheme(colorScheme = …, motionScheme = …) { … }` (a
   composable taking named arguments now; its content still runs in its caller's scope), `Surface(shape = …)` (its

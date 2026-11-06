@@ -468,6 +468,21 @@ struct Blue {};
 struct InitialValue {};
 struct TargetValue {};
 struct AnimationSpec {};
+struct ScaleX {};
+struct ScaleY {};
+struct TranslationX {};
+struct TranslationY {};
+struct RotationX {};
+struct RotationY {};
+struct RotationZ {};
+struct CameraDistance {};
+struct TransformOrigin {};
+struct Clip {};
+struct RenderEffect {};
+struct AmbientShadowColor {};
+struct SpotShadowColor {};
+struct CompositingStrategy {};
+struct BlendMode {};
 } // namespace detail::names
 inline namespace args {
 inline constexpr Param<detail::names::Modifier> modifier;
@@ -665,6 +680,21 @@ inline constexpr Param<detail::names::Blue> blue;
 inline constexpr Param<detail::names::InitialValue> initialValue;
 inline constexpr Param<detail::names::TargetValue> targetValue;
 inline constexpr Param<detail::names::AnimationSpec> animationSpec;
+inline constexpr Param<detail::names::ScaleX> scaleX;
+inline constexpr Param<detail::names::ScaleY> scaleY;
+inline constexpr Param<detail::names::TranslationX> translationX;
+inline constexpr Param<detail::names::TranslationY> translationY;
+inline constexpr Param<detail::names::RotationX> rotationX;
+inline constexpr Param<detail::names::RotationY> rotationY;
+inline constexpr Param<detail::names::RotationZ> rotationZ;
+inline constexpr Param<detail::names::CameraDistance> cameraDistance;
+inline constexpr Param<detail::names::TransformOrigin> transformOrigin;
+inline constexpr Param<detail::names::Clip> clip;
+inline constexpr Param<detail::names::RenderEffect> renderEffect;
+inline constexpr Param<detail::names::AmbientShadowColor> ambientShadowColor;
+inline constexpr Param<detail::names::SpotShadowColor> spotShadowColor;
+inline constexpr Param<detail::names::CompositingStrategy> compositingStrategy;
+inline constexpr Param<detail::names::BlendMode> blendMode;
 } // namespace arg
 
 // Compose's rememberSaveable(saver = …) { … } and rememberSaveable(inputs, saver = …) { … }.

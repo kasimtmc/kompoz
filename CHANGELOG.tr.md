@@ -728,9 +728,9 @@
   `ButtonColors` ve `TopAppBarColors` yapıları (C++'ta `TextFieldDefaults::colors{…}`); verilmeyenler temanınki.
   Kartlar `shape =` ve tıklanabilirken `enabled =` alıyor (Compose 1.4'ün devre dışı renkleri). Blok verilen
   `BottomAppBar(…) { … }` Compose'un içerik biçimi (kendi satırı; `contentColor` kabının kendi rengi). `Color.Red`,
-  `Color.Transparent`, … `Color`'ın sabitleri de. Modifier'ın `padding`, `background`, `border`, `size` ve `offset`'i
-  ile `Color::copy` Compose'un adlı argümanlarını alıyor (`border(width = 1, color = c, shape = s)`,
-  `copy(alpha = 0.6f)`); C++'ta `kompoz::arg::width = …` diye yazılıyor. kompozc ile kullanıcının kendi
+  `Color.Transparent`, … `Color`'ın sabitleri de. Modifier'ın `padding`, `background`, `border`, `size`, `offset`
+  ve `graphicsLayer`'ı ile `Color::copy` Compose'un adlı argümanlarını alıyor (`border(width = 1, color = c, shape = s)`,
+  `graphicsLayer(alpha = 0.5f, rotationZ = 30f)`, `copy(alpha = 0.6f)`); C++'ta `kompoz::arg::width = …` diye yazılıyor. kompozc ile kullanıcının kendi
   `AddTextDialog`'u ve Compose'un Scaffold örneği Android için yazıldıkları gibi derleniyor (tests/compose_tests.cpp).
 - **Compose kodunun en çok söylediği, kompozc ile**: `MaterialTheme(colorScheme = …, motionScheme = …) { … }`
   (artık adlı argüman alan bir composable; içeriği yine çağıranın kapsamında çalışıyor), `Surface(shape = …)`

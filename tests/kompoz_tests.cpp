@@ -7703,6 +7703,21 @@ TEST(graphics_layer_transforms_without_a_layer_and_fades_through_one) {
     if (after.transforms.size() == 2) CHECK(near(placedOf(after.transforms[1]).turn, 30, 0.01f));
 }
 
+TEST(graphics_layer_takes_compose_named_arguments) {
+    // graphicsLayer(alpha = 0.5f), graphicsLayer(rotationZ = 45, clip = true, shape = …): the struct's form.
+    ComposeTestRule rule([] {
+        Column([] {
+            Box(Modifier().size(40).graphicsLayer(arg::rotationZ = 45));
+            Box(Modifier().size(40).graphicsLayer(arg::alpha = 0.5f, arg::clip = true, arg::shape = CircleShape));
+        });
+    });
+    testing::RecordingCanvas canvas;
+    rule.host().draw(canvas);
+    CHECK(canvas.layers == 1 && canvas.transforms.size() == 1 && canvas.layerAlphas.size() == 1);
+    if (canvas.transforms.size() == 1) CHECK(near(placedOf(canvas.transforms[0]).turn, 45, 0.01f));
+    if (canvas.layerAlphas.size() == 1) CHECK(canvas.layerAlphas[0] == 0.5f);
+}
+
 TEST(tap_gestures_tap_double_tap_and_long_press) {
     Log log = std::make_shared<std::vector<std::string>>();
     ComposeTestRule rule([log] {

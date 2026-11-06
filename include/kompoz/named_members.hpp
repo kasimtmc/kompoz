@@ -100,6 +100,41 @@ Modifier Modifier::offset(A&&... args) const {
     return offset(P::get<n::X>(0.f, args...), P::get<n::Y>(0.f, args...));
 }
 
+// graphicsLayer(scaleX, scaleY, alpha, translationX, translationY, shadowElevation, rotationX, rotationY,
+// rotationZ, cameraDistance, transformOrigin, shape, clip, renderEffect, ambientShadowColor,
+// spotShadowColor, compositingStrategy, blendMode, colorFilter), as Compose's: a layer of those values,
+// the others GraphicsLayerScope's own, read in the composition.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::graphicsLayer(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::ScaleX, n::ScaleY, n::Alpha, n::TranslationX, n::TranslationY, n::ShadowElevation, n::RotationX,
+                             n::RotationY, n::RotationZ, n::CameraDistance, n::TransformOrigin, n::Shape, n::Clip, n::RenderEffect,
+                             n::AmbientShadowColor, n::SpotShadowColor, n::CompositingStrategy, n::BlendMode, n::ColorFilter>;
+    static_assert(P::check<A...>());
+    GraphicsLayerScope l;
+    P::set<n::ScaleX>(l.scaleX, args...);
+    P::set<n::ScaleY>(l.scaleY, args...);
+    P::set<n::Alpha>(l.alpha, args...);
+    P::set<n::TranslationX>(l.translationX, args...);
+    P::set<n::TranslationY>(l.translationY, args...);
+    P::set<n::ShadowElevation>(l.shadowElevation, args...);
+    P::set<n::RotationX>(l.rotationX, args...);
+    P::set<n::RotationY>(l.rotationY, args...);
+    P::set<n::RotationZ>(l.rotationZ, args...);
+    P::set<n::CameraDistance>(l.cameraDistance, args...);
+    P::set<n::TransformOrigin>(l.transformOrigin, args...);
+    P::set<n::Shape>(l.shape, args...);
+    P::set<n::Clip>(l.clip, args...);
+    P::set<n::RenderEffect>(l.renderEffect, args...);
+    P::set<n::AmbientShadowColor>(l.ambientShadowColor, args...);
+    P::set<n::SpotShadowColor>(l.spotShadowColor, args...);
+    P::set<n::CompositingStrategy>(l.compositingStrategy, args...);
+    P::set<n::BlendMode>(l.blendMode, args...);
+    P::set<n::ColorFilter>(l.colorFilter, args...);
+    return graphicsLayer(l);
+}
+
 // animateFloat(initialValue, targetValue, animationSpec, label) and animateColor's: the label is
 // Compose's name for its tools (none here).
 template <class... A>
