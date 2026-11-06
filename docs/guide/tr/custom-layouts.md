@@ -152,7 +152,7 @@ void Underlined(const Content& content) {
 ```cpp
 void Chips(bool wide) {
     LookaheadScope(Modifier().fillMaxWidth(), [&] {
-        FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .maxItemsInEachLine = wide ? 4 : 2}, [&] {
+        FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .maxItemsInEachLine = wide ? 4 : 2}, [&] {
             for (const char* name : {"One", "Two", "Three", "Four"})
                 AssistChip([] {}, [&] { Text(name); }, {}, Modifier().animateBounds());
         });

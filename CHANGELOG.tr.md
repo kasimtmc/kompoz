@@ -804,6 +804,15 @@
   lambdaları Compose'un yaptığı gibi. Dosyanın kendi fonksiyonlarına ya da val'lerine bir çağrı onun C++ isim alanını
   adlandırıyor (`::label(1)`); böylece `label` ya da `shape` adlı biri hiçbir zaman `using namespace kompoz`'un
   getirdiği bir Kompoz adı olmuyor.
+- **Compose'un yazdığı gibi yerleşimler**: `Modifier.flex { grow(1f); basis(80.dp) }` ile
+  `FlexBox(modifier, config = { wrap(FlexWrap.Wrap); gap(8.dp) }) { … }` ve `Modifier.gridItem(row = 3, column = 1)`
+  ile `Grid(config = { column(96.dp); column(1.fr); gap(row = 8.dp, column = 16.dp); area("header", row = 1,
+  columnSpan = 2) }, modifier) { … }`: yapılandırmaları yerleştirilirken, `constraints` ile Compose'un scope'larında
+  çalışıyor. `GridTrackSize.Auto`, `MinContent` ve `MaxContent` artık sabit, `Fr` bir izin payı.
+  `FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = …, maxItemsInEachLine = …)` ve
+  `BoxWithConstraints(modifier) { if (maxWidth > 400.dp) … }` (bir `BoxWithConstraintsScope`). Hepsi adlı argüman
+  alıyor; C++'ta süslü parantezle verilen bir yapılandırma türünü adlandırıyor (`FlexBoxConfig{…}`, `GridConfig{…}`,
+  `FlowStyle{…}`). `UiMediaScope.PointerPrecision` ve öteki iç adları Compose'unki gibi.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

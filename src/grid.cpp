@@ -203,7 +203,7 @@ private:
     float sizeTracks(bool rows, const std::vector<GridTrackSize>& specs, std::vector<float>& sizes, float available, float gap) {
         const int count = int(sizes.size());
         if (count == 0) return 0;
-        auto spec = [&](int i) { return i < int(specs.size()) ? specs[i] : GridTrackSize::Auto(); };
+        auto spec = [&](int i) { return i < int(specs.size()) ? specs[i] : GridTrackSize::Auto; };
         const bool bounded = available < kInfinity;
         const float room = bounded ? std::max(0.f, available - float(count - 1) * gap) : kInfinity;
         float totalWeight = 0;
@@ -301,11 +301,11 @@ void grid(const CallSite& site, const Modifier& modifier, std::function<GridConf
 
 } // namespace
 
-void Grid(const Modifier& modifier, const GridConfig& config, const Content& content, CallSite site) {
+void detail::Grid(const Modifier& modifier, const GridConfig& config, const Content& content, CallSite site) {
     grid(site, modifier, [config](const Constraints&) { return config; }, content);
 }
 
-void Grid(const Modifier& modifier, std::function<GridConfig(const Constraints&)> config, const Content& content, CallSite site) {
+void detail::Grid(const Modifier& modifier, std::function<GridConfig(const Constraints&)> config, const Content& content, CallSite site) {
     grid(site, modifier, std::move(config), content);
 }
 

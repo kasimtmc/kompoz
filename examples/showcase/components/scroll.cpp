@@ -578,7 +578,7 @@ void PullToRefreshSection(CallSite site) {
         Section("Modifier.pullToRefresh · IndicatorBox", [=] {
             Text("Listeyi en üstteyken aşağı çekin: eşikten sonra gösterge yavaşlar, eşiği geçip bırakınca yenilenir.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8}, [&] {
                 FilterChip(enabled.get(), [enabled] { enabled.set(!enabled.peek()); }, [] { Text("Açık (enabled)"); });
                 FilterChip(custom.get(), [custom] { custom.set(!custom.peek()); }, [] { Text("Kendi göstergemiz"); });
             });

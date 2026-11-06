@@ -374,15 +374,42 @@ struct FlowStyle {
     float horizontalSpacing = 0, verticalSpacing = 0;
     int maxItemsInEachLine = 0;  // 0: as many as fit
 };
-void FlowRow(const Modifier& modifier, const FlowStyle& style, const Content& content, CallSite site = CallSite::current());
-void FlowColumn(const Modifier& modifier, const FlowStyle& style, const Content& content, CallSite site = CallSite::current());
+namespace detail {
+void FlowRow(const Modifier& modifier, const FlowStyle& style, const Content& content, CallSite site);
+void FlowColumn(const Modifier& modifier, const FlowStyle& style, const Content& content, CallSite site);
+// FlowRow(modifier, horizontalArrangement, verticalArrangement, maxItemsInEachLine) { … }, as
+// Compose's (the arrangements' spacing between items and lines), or FlowRow(modifier, FlowStyle{…}).
+template <bool Row>
+struct FlowImpl {
+    using P = std::conditional_t<Row, Params<names::Modifier, names::HorizontalArrangement, names::VerticalArrangement, names::MaxItemsInEachLine, Block>,
+                                 Params<names::Modifier, names::VerticalArrangement, names::HorizontalArrangement, names::MaxItemsInEachLine, Block>>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        constexpr bool styled = sizeof...(A) == 3 && std::is_same_v<std::remove_cvref_t<std::tuple_element_t<1, std::tuple<A..., void, void>>>, FlowStyle>;
+        if constexpr (styled) {
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            (Row ? FlowRow : FlowColumn)(std::get<0>(all), std::get<1>(all), Content(std::get<2>(all)), site);
+        } else {
+            static_assert(P::template check<A...>());
+            FlowStyle style;
+            style.horizontalSpacing = P::template get<names::HorizontalArrangement>(Arrangement{}, args...).spacing;
+            style.verticalSpacing = P::template get<names::VerticalArrangement>(Arrangement{}, args...).spacing;
+            int max = P::template get<names::MaxItemsInEachLine>(0, args...);
+            style.maxItemsInEachLine = max == std::numeric_limits<int>::max() ? 0 : max;
+            (Row ? FlowRow : FlowColumn)(P::template get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+        }
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::FlowImpl<true>> FlowRow;
+inline constexpr Composable<detail::FlowImpl<false>> FlowColumn;
 
 // A layout of CSS's flexbox (Compose 1.12's FlexBox, a superset of Row, Column, FlowRow and
 // FlowColumn): its children along the main axis (direction), wrapping to more lines or not,
 // spread along it (justifyContent), lined up across their line (alignItems; a child's own
 // alignSelf), the lines spread across (alignContent, when wrapping), rowGap and columnGap
 // between them. Each child takes its share with Modifier().flex({.grow, .shrink, .basis, ...}).
-//   FlexBox(Modifier().fillMaxWidth(), {.wrap = FlexWrap::Wrap, .justifyContent = FlexJustifyContent::SpaceBetween, .columnGap = 8}, [] {
+//   FlexBox(Modifier().fillMaxWidth(), FlexBoxConfig{.wrap = FlexWrap::Wrap, .justifyContent = FlexJustifyContent::SpaceBetween, .columnGap = 8}, [] {
 //       Text("Ad", Modifier().flex({.grow = 1}));
 //       Button(save, [] { Text("Kaydet"); });
 //   });
@@ -401,16 +428,73 @@ struct FlexBoxConfig {
     std::optional<AlignmentLine> baselineLine;  // alignItems Baseline by this line (unset: FirstBaseline)
     friend bool operator==(const FlexBoxConfig&, const FlexBoxConfig&) = default;
 };
-void FlexBox(const Modifier& modifier, const FlexBoxConfig& config, const Content& content, CallSite site = CallSite::current());
-// The config by the constraints it is laid out with (Compose's FlexBoxConfig reading
-// `constraints`): wrap only when narrow, say.
-void FlexBox(const Modifier& modifier, std::function<FlexBoxConfig(const Constraints&)> config, const Content& content,
-             CallSite site = CallSite::current());
+// Compose's FlexBoxConfigScope: the receiver of FlexBox's config = { direction(…); gap(8.dp) }, run
+// while it is laid out (a state read there lays it out again), `constraints` the box's.
+class FlexBoxConfigScope {
+public:
+    explicit FlexBoxConfigScope(const Constraints& constraints) : constraints(constraints) {}
+    Constraints constraints;
+    void direction(FlexDirection value) { config_.direction = value; }
+    void wrap(FlexWrap value) { config_.wrap = value; }
+    void justifyContent(FlexJustifyContent value) { config_.justifyContent = value; }
+    void alignItems(FlexAlignItems value) { config_.alignItems = value; }
+    void alignItems(AlignmentLine line) { config_.alignItems = FlexAlignItems::Baseline, config_.baselineLine = line; }
+    void alignContent(FlexAlignContent value) { config_.alignContent = value; }
+    void rowGap(float value) { config_.rowGap = value; }
+    void columnGap(float value) { config_.columnGap = value; }
+    void gap(float all) { config_.rowGap = config_.columnGap = all; }
+    void gap(float row, float column) { config_.rowGap = row, config_.columnGap = column; }
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void gap(A&&... args) {  // gap(row = 8.dp, column = 16.dp)
+        using P = detail::Params<detail::names::Row, detail::names::Column>;
+        static_assert(P::check<A...>());
+        gap(float(P::arg<detail::names::Row>(args...)), float(P::arg<detail::names::Column>(args...)));
+    }
+    const FlexBoxConfig& flexBoxConfig() const { return config_; }
+
+private:
+    FlexBoxConfig config_;
+};
+namespace detail {
+void FlexBox(const Modifier& modifier, const FlexBoxConfig& config, const Content& content, CallSite site);
+// The config by the constraints it is laid out with: wrap only when narrow, say.
+void FlexBox(const Modifier& modifier, std::function<FlexBoxConfig(const Constraints&)> config, const Content& content, CallSite site);
+// FlexBox(modifier, config) { … }: config a FlexBoxConfig, Compose's lambda on a FlexBoxConfigScope,
+// or a function of the constraints giving a FlexBoxConfig.
+struct FlexBoxImpl {
+    using P = Params<names::Modifier, names::Config, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
+        if constexpr (!P::given<names::Config, A...>()) {
+            FlexBox(modifier, FlexBoxConfig{}, P::block(std::forward<A>(args)...), site);
+        } else {
+            auto&& config = P::arg<names::Config>(args...);
+            using C = std::remove_cvref_t<decltype(config)>;
+            if constexpr (std::is_convertible_v<const C&, const FlexBoxConfig&>) {
+                FlexBox(modifier, config, P::block(std::forward<A>(args)...), site);
+            } else if constexpr (std::is_invocable_v<C&, FlexBoxConfigScope&>) {
+                FlexBox(modifier, std::function<FlexBoxConfig(const Constraints&)>([config](const Constraints& c) mutable {
+                            FlexBoxConfigScope scope(c);
+                            config(scope);
+                            return scope.flexBoxConfig();
+                        }),
+                        P::block(std::forward<A>(args)...), site);
+            } else {
+                FlexBox(modifier, std::function<FlexBoxConfig(const Constraints&)>(config), P::block(std::forward<A>(args)...), site);
+            }
+        }
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::FlexBoxImpl> FlexBox;
 
 // A layout of rows and columns (Compose 1.12's Grid, CSS's grid): the tracks it's configured
 // with, more Auto ones as its children need; each child in the cells it asks for
 // (Modifier().gridItem), else in the next free ones along the flow.
-//   Grid(Modifier().fillMaxWidth(), {.columns = {GridTrackSize::Fixed(72), GridTrackSize::Flex(1)}, .rowGap = 8, .columnGap = 8,
+//   Grid(Modifier().fillMaxWidth(), GridConfig{.columns = {GridTrackSize::Fixed(72), GridTrackSize::Flex(1)}, .rowGap = 8, .columnGap = 8,
 //                                    .areas = {{"başlık", 1, 1, 1, 2}}}, [] {
 //       Text("Başlık", Modifier().gridItem("başlık"));
 //       Icon(icons::Person, "");
@@ -419,6 +503,10 @@ void FlexBox(const Modifier& modifier, std::function<FlexBoxConfig(const Constra
 // A track's size: Fixed dp; a Percentage of the grid after the gaps (the content's, unbounded);
 // Flex: a share of the room left, by weight, from its min content (MinMax: from `minDp`);
 // MinContent / MaxContent of its items; Auto: from min towards max content in the room left.
+// A flexible track's share (Compose's Fr, 1.fr).
+struct Fr {
+    float weight = 1;
+};
 struct GridTrackSize {
     enum class Kind { Fixed, Percentage, Flex, MinContent, MaxContent, Auto, MinMax };
     Kind kind = Kind::Auto;
@@ -427,11 +515,14 @@ struct GridTrackSize {
     static constexpr GridTrackSize Percentage(float fraction) { return {Kind::Percentage, fraction < 0 ? 0 : fraction}; }
     static constexpr GridTrackSize Flex(float weight) { return {Kind::Flex, weight < 0 ? 0 : weight}; }
     static constexpr GridTrackSize MinMax(float minDp, float weight) { return {Kind::MinMax, minDp < 0 ? 0 : minDp, weight < 0 ? 0 : weight}; }
-    static constexpr GridTrackSize MinContent() { return {Kind::MinContent}; }
-    static constexpr GridTrackSize MaxContent() { return {Kind::MaxContent}; }
-    static constexpr GridTrackSize Auto() { return {}; }
+    static constexpr GridTrackSize Flex(Fr weight) { return Flex(weight.weight); }
+    static constexpr GridTrackSize MinMax(float minDp, Fr weight) { return MinMax(minDp, weight.weight); }
+    static const GridTrackSize MinContent, MaxContent, Auto;
     friend constexpr bool operator==(const GridTrackSize&, const GridTrackSize&) = default;
 };
+inline constexpr GridTrackSize GridTrackSize::MinContent{GridTrackSize::Kind::MinContent};
+inline constexpr GridTrackSize GridTrackSize::MaxContent{GridTrackSize::Kind::MaxContent};
+inline constexpr GridTrackSize GridTrackSize::Auto{};
 // Where children without cells go: along the row, onto the next (Row), or down the column (Column).
 enum class GridFlow { Row, Column };
 // Named cells for gridItem(area): 1-based row and column as gridItem's; one of them 0: the first
@@ -448,16 +539,117 @@ struct GridConfig {
     std::vector<GridArea> areas;
     friend bool operator==(const GridConfig&, const GridConfig&) = default;
 };
-void Grid(const Modifier& modifier, const GridConfig& config, const Content& content, CallSite site = CallSite::current());
+// Compose's GridConfigurationScope: the receiver of Grid's config = { column(100.dp); column(1.fr);
+// gap(8.dp) }, run while it is laid out, `constraints` the grid's. (A Dp is a float here, so a
+// percentage track is GridTrackSize.Percentage(0.5f), not column(0.5f).)
+class GridConfigurationScope {
+public:
+    explicit GridConfigurationScope(const Constraints& constraints) : constraints(constraints) {}
+    Constraints constraints;
+    GridFlow& flow = config_.flow;
+    void column(float size) { config_.columns.push_back(GridTrackSize::Fixed(size)); }
+    void column(Fr weight) { config_.columns.push_back(GridTrackSize::Flex(weight)); }
+    void column(GridTrackSize size) { config_.columns.push_back(size); }
+    void row(float size) { config_.rows.push_back(GridTrackSize::Fixed(size)); }
+    void row(Fr weight) { config_.rows.push_back(GridTrackSize::Flex(weight)); }
+    void row(GridTrackSize size) { config_.rows.push_back(size); }
+    template <class... T>
+    void columns(const T&... sizes) { (column(sizes), ...); }
+    template <class... T>
+    void rows(const T&... sizes) { (row(sizes), ...); }
+    void rowGap(float gap) { config_.rowGap = gap; }
+    void columnGap(float gap) { config_.columnGap = gap; }
+    void gap(float all) { config_.rowGap = config_.columnGap = all; }
+    void gap(float row, float column) { config_.rowGap = row, config_.columnGap = column; }
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void gap(A&&... args) {  // gap(row = 8.dp, column = 16.dp)
+        using P = detail::Params<detail::names::Row, detail::names::Column>;
+        static_assert(P::check<A...>());
+        gap(float(P::arg<detail::names::Row>(args...)), float(P::arg<detail::names::Column>(args...)));
+    }
+    GridTrackSize minmax(float min, Fr max) const { return GridTrackSize::MinMax(min, max); }
+    void area(std::string id, int row = 0, int column = 0, int rowSpan = 1, int columnSpan = 1) {
+        config_.areas.push_back({std::move(id), row, column, rowSpan, columnSpan});
+    }
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void area(std::string id, A&&... args) {  // area("header", row = 1, columnSpan = 2)
+        namespace n = detail::names;
+        using P = detail::Params<n::Row, n::Column, n::RowSpan, n::ColumnSpan>;
+        static_assert(P::check<A...>());
+        area(std::move(id), P::get<n::Row>(0, args...), P::get<n::Column>(0, args...), P::get<n::RowSpan>(1, args...),
+             P::get<n::ColumnSpan>(1, args...));
+    }
+    const GridConfig& gridConfig() const { return config_; }
+    GridConfigurationScope(const GridConfigurationScope&) = delete;  // (flow refers into it)
+
+private:
+    GridConfig config_;
+};
+namespace detail {
+void Grid(const Modifier& modifier, const GridConfig& config, const Content& content, CallSite site);
 // The config by the constraints it is laid out with: fewer columns when narrow, say.
-void Grid(const Modifier& modifier, std::function<GridConfig(const Constraints&)> config, const Content& content,
-          CallSite site = CallSite::current());
+void Grid(const Modifier& modifier, std::function<GridConfig(const Constraints&)> config, const Content& content, CallSite site);
+// Grid(config, modifier) { … } as Compose's (or Grid(modifier, config) { … } with a GridConfig):
+// config a GridConfig, Compose's lambda on a GridConfigurationScope, or a function of the constraints.
+struct GridImpl {
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        using P = std::conditional_t<startsWith<Modifier, A...>(), Params<names::Modifier, names::Config, Block>,
+                                     Params<names::Config, names::Modifier, Block>>;
+        static_assert(P::template check<A...>());
+        static_assert(P::template given<names::Config, A...>(), "kompoz: Grid needs its config");
+        Modifier modifier = P::template get<names::Modifier>(Modifier{}, args...);
+        auto&& config = P::template arg<names::Config>(args...);
+        using C = std::remove_cvref_t<decltype(config)>;
+        if constexpr (std::is_convertible_v<const C&, const GridConfig&>) {
+            Grid(modifier, config, P::block(std::forward<A>(args)...), site);
+        } else if constexpr (std::is_invocable_v<C&, GridConfigurationScope&>) {
+            Grid(modifier, std::function<GridConfig(const Constraints&)>([config](const Constraints& c) mutable {
+                     GridConfigurationScope scope(c);
+                     config(scope);
+                     return scope.gridConfig();
+                 }),
+                 P::block(std::forward<A>(args)...), site);
+        } else {
+            Grid(modifier, std::function<GridConfig(const Constraints&)>(config), P::block(std::forward<A>(args)...), site);
+        }
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::GridImpl> Grid;
 
 // A Box whose content knows the constraints it is laid out with (to pick a layout by width).
 // The layout reports them and the content recomposes in the same frame; the very first
 // composition sees unbounded constraints.
-void BoxWithConstraints(const Modifier& modifier, const std::function<void(const Constraints&)>& content,
-                        Alignment contentAlignment = Alignment::TopStart, CallSite site = CallSite::current());
+// Compose's BoxWithConstraintsScope: what its content has as its receiver, the constraints and their
+// dp (if (maxWidth > 400.dp) …). A content taking the Constraints takes it too.
+struct BoxWithConstraintsScope {
+    Constraints constraints;
+    float minWidth = 0, maxWidth = 0, minHeight = 0, maxHeight = 0;
+    operator const Constraints&() const { return constraints; }
+};
+namespace detail {
+void BoxWithConstraints(const Modifier& modifier, const std::function<void(const Constraints&)>& content, Alignment contentAlignment,
+                        CallSite site);
+struct BoxWithConstraintsImpl {
+    using P = Params<names::Modifier, names::ContentAlignment, BlockWith<BoxWithConstraintsScope&>>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: BoxWithConstraints(modifier) { … }: its content is needed");
+        auto&& content = std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...));
+        BoxWithConstraints(P::get<names::Modifier>(Modifier{}, args...),
+                           [content](const Constraints& c) mutable {
+                               BoxWithConstraintsScope scope{c, c.minWidth, c.maxWidth, c.minHeight, c.maxHeight};
+                               content(scope);
+                           },
+                           P::get<names::ContentAlignment>(Alignment{Alignment::TopStart}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::BoxWithConstraintsImpl> BoxWithConstraints;
 
 // Content shown above everything else (see OverlaySpec): the building block of dialogs and menus.
 void Popup(OverlaySpec spec, const Content& content, CallSite site = CallSite::current());

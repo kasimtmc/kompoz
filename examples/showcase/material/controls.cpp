@@ -69,7 +69,7 @@ void ButtonsSection(CallSite site) {
                     DropdownMenuItem([] { Text("Taslak olarak kaydet"); }, [saveMenu] { saveMenu.set(false); });
                 };
             };
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 const auto& on = styles.get();
                 ToggleButton(on[0], flip(0), [] { Text("Kalın"); });
                 ElevatedToggleButton(on[1], flip(1), [] { Text("İtalik"); });
@@ -87,7 +87,7 @@ void ChipsSection(CallSite site) {
         auto people = remember([] { return mutableStateListOf<std::string>({"Ayşe", "Mehmet"}); });
         auto openOnly = remember([] { return mutableStateOf(false); });
         Section("Chip'ler", [=] {
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 for (const char* drink : {"Kahve", "Çay", "Su", "Ayran"}) {
                     bool on = std::find(drinks.begin(), drinks.end(), drink) != drinks.end();
                     FilterChip(on,
@@ -102,7 +102,7 @@ void ChipsSection(CallSite site) {
                                                   : Content()});
                 }
             });
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 AssistChip([] {}, [] { Text("Yol tarifi"); },
                            {.leadingIcon = [] { Icon(Icons::Filled::Place, "Konum", Modifier().size(18)); }});
                 SuggestionChip([] {}, [] { Text("Bugün"); });
@@ -161,7 +161,7 @@ void SelectionControlsSection(CallSite site) {
                     Text("Hepsi (TriStateCheckbox)");
                 };
                 // Each box with its label, onto the next line together where the row is narrow.
-                FlowRow(Modifier().padding(24, 0, 0, 0), {}, [&] {
+                FlowRow(Modifier().padding(24, 0, 0, 0), FlowStyle{}, [&] {
                     const char* names[] = {"Peynir", "Zeytin", "Mantar"};
                     for (int i = 0; i < 3; ++i)
                         Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
@@ -234,7 +234,7 @@ void SelectionControlsSection(CallSite site) {
                 auto picked = remember([] { return mutableStateOf(40.f); });
                 Text("Slider imleci", style = typography().titleSmall);
                 const char* thumbs[] = {"Daire", "M3 çubuk", "Kare", "Elmas", "Kurabiye", "Güneş", "Simge", "Değer"};
-                FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 0}, [&] {
+                FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 0}, [&] {
                     for (int i = 0; i < 8; ++i)
                         FilterChip(thumbKind.get() == i, [thumbKind, i] { thumbKind.set(i); }, [&, i] { Text(thumbs[i]); });
                 });

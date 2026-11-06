@@ -763,6 +763,15 @@
   `semantics { }`, `layout { }` and `onKeyEvent { }` are what Compose makes them. A call to one of the file's own
   functions or vals names its C++ namespace (`::label(1)`), so one called `label` or `shape` is never a name of
   Kompoz's that `using namespace kompoz` brings in.
+- **Layouts as Compose writes them**: `FlexBox(modifier, config = { wrap(FlexWrap.Wrap); gap(8.dp) }) { … }` with
+  `Modifier.flex { grow(1f); basis(80.dp) }`, and `Grid(config = { column(96.dp); column(1.fr); gap(row = 8.dp,
+  column = 16.dp); area("header", row = 1, columnSpan = 2) }, modifier) { … }` with
+  `Modifier.gridItem(row = 3, column = 1)`: their configs run on Compose's scopes while they are laid out, with the
+  `constraints`. `GridTrackSize.Auto`, `MinContent` and `MaxContent` are constants, and `Fr` a track's share.
+  `FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = …, maxItemsInEachLine = …)` and
+  `BoxWithConstraints(modifier) { if (maxWidth > 400.dp) … }` (a `BoxWithConstraintsScope`). All of them take named
+  arguments; in C++ a config given in braces names its type (`FlexBoxConfig{…}`, `GridConfig{…}`, `FlowStyle{…}`).
+  `UiMediaScope.PointerPrecision` and its other nested names are Compose's.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

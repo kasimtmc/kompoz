@@ -45,6 +45,10 @@ struct MediaInfo {
 // window is resized. Copies share it.
 class UiMediaScope {
 public:
+    // (Compose's nested names: UiMediaScope.PointerPrecision.Fine)
+    using PointerPrecision = kompoz::PointerPrecision;
+    using KeyboardKind = kompoz::KeyboardKind;
+    using ViewingDistance = kompoz::ViewingDistance;
     UiMediaScope() : data_(std::make_shared<Data>()) {}
     Posture windowPosture() const { return data_->info.get().windowPosture; }
     float windowWidth() const { return data_->width.get(); }  // dp; changes often: query it in derivedMediaQuery

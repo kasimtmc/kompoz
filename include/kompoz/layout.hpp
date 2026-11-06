@@ -1200,6 +1200,23 @@ struct FlexConfig {
     friend bool operator==(const FlexConfig&, const FlexConfig&) = default;
 };
 
+// Compose's FlexConfigScope: the receiver of Modifier.flex { grow(1f); basis(80.dp) }. (A Dp is a
+// float here: a fraction of the box is basis(FlexBasis.Percent(0.5f)), not basis(0.5f).)
+class FlexConfigScope {
+public:
+    void grow(float value) { config_.grow = value; }
+    void shrink(float value) { config_.shrink = value; }
+    void basis(float dp) { config_.basis = FlexBasis::Dp(dp); }
+    void basis(FlexBasis value) { config_.basis = value; }
+    void alignSelf(FlexAlignSelf value) { config_.alignSelf = value; }
+    void alignSelf(AlignmentLine line) { config_.alignSelf = FlexAlignSelf::Baseline, config_.baselineLine = line; }
+    void order(int value) { config_.order = value; }
+    const FlexConfig& flexConfig() const { return config_; }
+
+private:
+    FlexConfig config_;
+};
+
 // A Grid child's cells (Compose's GridScope.gridItem): its row and column, 1-based (negative:
 // from the end of the configured tracks, -1 the last; 0: wherever there's room), how many it
 // spans and where it sits in them. Or a named area of the Grid's config.
@@ -2081,6 +2098,18 @@ public:
                            bool enabled = true, float threshold = 80, CallSite site = CallSite::current()) const;
     Modifier weight(float weight, bool fill = true) const;  // in Row / Column
     Modifier flex(const FlexConfig& config) const;          // in a FlexBox
+    // Compose's form, on a FlexConfigScope: flex { grow(1f); basis(80.dp) }.
+    template <class F>
+        requires std::is_invocable_v<F&, FlexConfigScope&>
+    Modifier flex(F&& config) const {
+        FlexConfigScope scope;
+        config(scope);
+        return flex(scope.flexConfig());
+    }
+    // Compose's gridItem(row = 1, column = 2, rowSpan, columnSpan, alignment) by name (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier gridItem(A&&... args) const;
     // In a Grid: these cells (row, column: 1-based, negative from the end, 0 where there's room).
     Modifier gridItem(int row = 0, int column = 0, int rowSpan = 1, int columnSpan = 1, Alignment alignment = Alignment::TopStart) const;
     Modifier gridItem(GridRange rows, GridRange columns, Alignment alignment = Alignment::TopStart) const;

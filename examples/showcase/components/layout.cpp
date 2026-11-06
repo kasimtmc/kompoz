@@ -467,7 +467,7 @@ void FlexBoxSection(CallSite site) {
             const char* names[] = {"Start", "Center", "SpaceBetween", "SpaceEvenly"};
             const FlexJustifyContent values[] = {FlexJustifyContent::Start, FlexJustifyContent::Center, FlexJustifyContent::SpaceBetween,
                                                  FlexJustifyContent::SpaceEvenly};
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8}, [&] {
                 for (int i = 0; i < 4; ++i) FilterChip(justify.get() == i, [justify, i] { justify.set(i); }, [&, i] { Text(names[i]); });
                 FilterChip(wrap.get(), [wrap] { wrap.set(!wrap.get()); }, [] { Text("Wrap"); });
                 FilterChip(baseline.get(), [baseline] { baseline.set(!baseline.get()); }, [] { Text("Baseline"); });
@@ -501,14 +501,14 @@ void GridSection(CallSite site) {
         auto gaps = remember([] { return mutableStateOf(true); });
         const ColorScheme& cs = colorScheme();
         Section("Grid · gridItem (satır, sütun, yayılma, alan)", [=] {
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8}, [&] {
                 FilterChip(byColumn.get(), [byColumn] { byColumn.set(!byColumn.get()); }, [] { Text("Sütun akışı"); });
                 FilterChip(gaps.get(), [gaps] { gaps.set(!gaps.get()); }, [] { Text("Boşluk 8 dp"); });
             });
             using T = GridTrackSize;
             float gap = gaps.get() ? 8 : 0;
             GridConfig config{.columns = {T::Fixed(72), T::Flex(1), T::Flex(2)},
-                              .rows = {T::Auto(), T::Fixed(56), T::Fixed(56)},
+                              .rows = {T::Auto, T::Fixed(56), T::Fixed(56)},
                               .rowGap = gap,
                               .columnGap = gap,
                               .flow = byColumn.get() ? GridFlow::Column : GridFlow::Row,
@@ -607,7 +607,7 @@ void LayoutSection(CallSite site) {
                         Box(Modifier().fillMaxWidth().padding(0, 4).height(2).background(cs.tertiary)) {};  // as wide as the column came out
                     };
             };
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 for (const char* tag : {"C++20", "Compose", "Vulkan", "FreeType", "coroutine", "slot table", "Android", "Linux"})
                     SuggestionChip([] {}, [tag] { Text(tag); });
             });
@@ -629,7 +629,7 @@ void LayoutSection(CallSite site) {
             const char* words[] = {"bir", "iki", "üç", "dört", "beş", "altı", "yedi"};
             AnimationSpec glide = spring(Spring::DampingRatioLowBouncy, Spring::StiffnessLow);  // slow enough to follow
             LookaheadScope(Modifier().fillMaxWidth(), [&] {
-                FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
+                FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                     for (int id : order.get())
                         key(id, [&, id] { SuggestionChip([] {}, [&, id] { Text(words[id]); }, {}, Modifier().animateBounds(glide)); });
                 });

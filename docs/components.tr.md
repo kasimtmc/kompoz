@@ -571,6 +571,7 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 343. `Canvas`, Compose'un adlı argümanlarını ve öteki biçimini alır: `Canvas(modifier, contentDescription) { … }` (bir ekran okuyucunun onun için söylediği) ✅
 344. Compose'un `Modifier.layout { measurable, constraints -> layout(w, h) { placeable.placeRelative(x, y) } }` biçimi ve bir `Layout` içinde `layout(w, h) { … }` (`MeasureScope`, `PlacementScope`, sağdan sola aynalanan `placeRelative`) ✅
 345. Compose'un `SemanticsPropertyReceiver`'ında ayarlanan `Modifier.semantics { … }`, `semantics(mergeDescendants = true) { … }` ve `clearAndSetSemantics { … }` (`heading()`, `contentDescription`, `role = Role.Button`, …) ✅
+346. Compose'un `Modifier.flex { … }` ile `FlexBox(config = { … })`'u, `gridItem(row = …, column = …)` ile `Grid(config = { column(1.fr); … })`'i, `FlowRow`'un düzenlemeleri ve `BoxWithConstraintsScope` (`maxWidth`, …), hepsi adlı argümanlarla ✅
 
 ## Sıradakiler
 

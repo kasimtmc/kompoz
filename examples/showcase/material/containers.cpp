@@ -8,7 +8,7 @@ void AnimateItemSection(CallSite site) {
         auto nextTask = remember([] { return std::make_shared<int>(6); });
         auto shuffles = remember([] { return std::make_shared<unsigned>(1); });
         Section("animateItem · SwipeToDismissBox", [=] {
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 FilledTonalButton([tasks, shuffles] {
                     tasks.update([&](std::vector<int>& v) {
                         std::mt19937 rng((*shuffles)++);
@@ -94,7 +94,7 @@ void DialogsSection(NavController nav, CallSite site) {
         auto format = remember([] { return mutableStateOf(std::array<bool, 2>{true, false}); });  // bold, italic
         auto alignment = remember([] { return mutableStateOf(0); });
         Section("Dialog, menü ve alt sayfa", [=] {
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 FilledTonalButton([dialog] { dialog.set(true); }) { Text("Dialog"); };
                 FilledTonalButton([basicDialog] { basicDialog.set(true); }) { Text("BasicAlertDialog"); };
                 FilledTonalButton([sheet] { sheet.set(true); }) { Text("Alt sayfa"); };

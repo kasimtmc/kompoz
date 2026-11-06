@@ -570,6 +570,7 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 343. `Canvas` takes Compose's named arguments and its other form, `Canvas(modifier, contentDescription) { … }` (what a screen reader says of it) ✅
 344. Compose's `Modifier.layout { measurable, constraints -> layout(w, h) { placeable.placeRelative(x, y) } }` and `layout(w, h) { … }` in a `Layout` (`MeasureScope`, `PlacementScope`, `placeRelative` mirrored right to left) ✅
 345. `Modifier.semantics { … }`, `semantics(mergeDescendants = true) { … }` and `clearAndSetSemantics { … }` set on Compose's `SemanticsPropertyReceiver` (`heading()`, `contentDescription`, `role = Role.Button`, …) ✅
+346. Compose's `FlexBox(config = { … })` with `Modifier.flex { … }`, `Grid(config = { column(1.fr); … })` with `gridItem(row = …, column = …)`, `FlowRow`'s arrangements and `BoxWithConstraintsScope` (`maxWidth`, …), all with named arguments ✅
 
 ## Next
 

@@ -395,11 +395,11 @@ void flexBox(const CallSite& site, const Modifier& modifier, std::function<FlexB
 
 } // namespace
 
-void FlexBox(const Modifier& modifier, const FlexBoxConfig& config, const Content& content, CallSite site) {
+void detail::FlexBox(const Modifier& modifier, const FlexBoxConfig& config, const Content& content, CallSite site) {
     flexBox(site, modifier, [config](const Constraints&) { return config; }, content);
 }
 
-void FlexBox(const Modifier& modifier, std::function<FlexBoxConfig(const Constraints&)> config, const Content& content, CallSite site) {
+void detail::FlexBox(const Modifier& modifier, std::function<FlexBoxConfig(const Constraints&)> config, const Content& content, CallSite site) {
     flexBox(site, modifier, std::move(config), content);
 }
 

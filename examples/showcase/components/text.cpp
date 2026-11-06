@@ -180,7 +180,7 @@ void TextSection(CallSite site) {
                  textAlign = TextAlign::Justify, style = TextStyle{.font = typography().bodyMedium, .textIndent = {24, 0}});
             // FontWeight 100..900: the bundled font has 400, 500 and 700; the rest come in the nearest
             // (as CSS picks), Black emboldened, as Android does.
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 12, .verticalSpacing = 4}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 12, .verticalSpacing = 4}, [&] {
                 std::pair<const char*, FontWeight> weights[] = {{"Light", FontWeight::Light},       {"Normal", FontWeight::Normal},
                                                                 {"Medium", FontWeight::Medium},     {"SemiBold", FontWeight::SemiBold},
                                                                 {"Bold", FontWeight::Bold},         {"Black", FontWeight::Black}};

@@ -207,7 +207,7 @@ void FlowSearchSection(CallSite site) {
                               singleLine = true, placeholder = "örn. an", label = "Şehir ara");
             if (results.searching) Text("aranıyor…", color = colorScheme().primary, style = typography().bodyMedium);
             else if (!query.empty() && results.cities.empty()) Text("bulunamadı", style = typography().bodyMedium);
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8},
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8},
                     [&] {
                         for (const std::string& city : results.cities) SuggestionChip([] {}, [&] { Text(city); });
                     });
@@ -499,7 +499,7 @@ void PlatformServicesSection(CallSite site) {
                  "Titreşim Android'de sistemin dokunma geri bildirimi ayarına uyar; uzun basışlar ve seçim tutamaçları "
                  "kendileri titreşir.",
                  color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 OutlinedButton([links] { links.openUri("https://developer.android.com/compose"); }) { Text("Compose belgeleri"); };
                 OutlinedButton([links] { links.openUri("kompoz://item/7"); }) { Text("kompoz://item/7"); };
             });
@@ -507,7 +507,7 @@ void PlatformServicesSection(CallSite site) {
                               singleLine = true,
                               label = "Not (Bitti klavyeyi gizler)",
                               keyboardActions = KeyboardActions{.onDone = [keyboard] { keyboard.hide(); }});
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 TextButton([keyboard] { keyboard.hide(); }) { Text("Klavyeyi gizle"); };
                 TextButton([keyboard] { keyboard.show(); }) { Text("Klavyeyi göster"); };
             });
@@ -552,13 +552,13 @@ void PlatformServicesSection(CallSite site) {
             Text(std::format("ViewConfiguration: uzun basma {} ms · çift dokunma {} ms · eşik {:.1f} dp · en hızlı fırlatma {:.0f} dp/s",
                              gestures.longPressTimeout.count(), gestures.doubleTapTimeout.count(), gestures.touchSlop, gestures.maximumFlingVelocity),
                  color = cs.onSurfaceVariant, style = typography().bodySmall);
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 using H = HapticFeedbackType;
                 for (auto [type, label] : {std::pair{H::LongPress, "Uzun basma"}, std::pair{H::Confirm, "Onay"},
                                            std::pair{H::Reject, "Ret"}, std::pair{H::SegmentTick, "Tık"}, std::pair{H::ToggleOn, "Açma"}})
                     FilledTonalButton([haptics, type] { haptics.performHapticFeedback(type); }) { Text(label); };
             });
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 Button([clipboard, note] { clipboard.setText(note.peek()); }) { Text("Notu kopyala"); };
                 OutlinedButton([clipboard, pasted] { pasted.set(clipboard.hasText() ? clipboard.getText() : "(boş)"); }) { Text("Panoda ne var?"); };
                 // Clipboard / ClipEntry, in a coroutine: the entry into the note.

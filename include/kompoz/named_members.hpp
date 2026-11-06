@@ -151,6 +151,17 @@ Modifier Modifier::semantics(A&&... args) const {
     return semantics(std::move(p));
 }
 
+// gridItem(row = 1, column = 2, rowSpan = 1, columnSpan = 2, alignment = …), as Compose's.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::gridItem(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::Row, n::Column, n::RowSpan, n::ColumnSpan, n::Alignment>;
+    static_assert(P::check<A...>());
+    return gridItem(P::get<n::Row>(0, args...), P::get<n::Column>(0, args...), P::get<n::RowSpan>(1, args...),
+                    P::get<n::ColumnSpan>(1, args...), P::get<n::Alignment>(Alignment{Alignment::TopStart}, args...));
+}
+
 // animateFloat(initialValue, targetValue, animationSpec, label) and animateColor's: the label is
 // Compose's name for its tools (none here).
 template <class... A>

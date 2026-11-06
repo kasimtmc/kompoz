@@ -466,14 +466,14 @@ MeasurePolicy flowPolicy(bool horizontal, FlowStyle style) {
 
 } // namespace
 
-void FlowRow(const Modifier& modifier, const FlowStyle& style, const Content& content, CallSite site) {
+void detail::FlowRow(const Modifier& modifier, const FlowStyle& style, const Content& content, CallSite site) {
     layoutNode(site, modifier, flowPolicy(true, style), content);
 }
-void FlowColumn(const Modifier& modifier, const FlowStyle& style, const Content& content, CallSite site) {
+void detail::FlowColumn(const Modifier& modifier, const FlowStyle& style, const Content& content, CallSite site) {
     layoutNode(site, modifier, flowPolicy(false, style), content);
 }
 
-void BoxWithConstraints(const Modifier& modifier, const std::function<void(const Constraints&)>& content,
+void detail::BoxWithConstraints(const Modifier& modifier, const std::function<void(const Constraints&)>& content,
                         Alignment contentAlignment, CallSite site) {
     ComposableScope scope(site);
     auto constraints = remember([] { return mutableStateOf(Constraints{}); });

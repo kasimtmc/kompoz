@@ -11130,6 +11130,41 @@ TEST(compose_forms_of_measuring_and_placing) {
     }
 }
 
+TEST(layouts_take_compose_arguments_and_config_scopes) {
+    // FlexBox(config = { … }) with Modifier.flex { … }, Grid(config = { … }) with 1.fr and gridItem by
+    // name, FlowRow's arrangements, BoxWithConstraints' scope.
+    ComposeTestRule rule([] {
+        Column([] {
+            FlexBox(arg::modifier = Modifier().width(200).testTag("esnek"), arg::config = [](FlexBoxConfigScope& c) {
+                c.columnGap(10);
+                if (c.constraints.maxWidth < 300) c.justifyContent(FlexJustifyContent::Start);
+            }, [] {
+                Box(Modifier().size(40).testTag("sabit"));
+                Box(Modifier().height(40).flex([](FlexConfigScope& f) { f.grow(1); }).testTag("büyüyen"));
+            });
+            Grid(arg::config = [](GridConfigurationScope& g) {
+                g.column(50);
+                g.column(Fr{1});
+                g.gap(arg::row = 4, arg::column = 10);
+            }, arg::modifier = Modifier().width(200), [] {
+                Box(Modifier().height(20).fillMaxWidth().gridItem(arg::row = 1, arg::column = 2).testTag("hücre"));
+            });
+            FlowRow(arg::modifier = Modifier().width(100), arg::horizontalArrangement = Arrangement::spacedBy(10), [] {
+                for (int i = 0; i < 3; ++i) Box(Modifier().size(40).testTag("akış" + std::to_string(i)));
+            });
+            BoxWithConstraints(arg::modifier = Modifier().width(150), [](BoxWithConstraintsScope& scope) {
+                Text(scope.maxWidth > 100 ? "geniş" : "dar");
+            });
+        });
+    });
+    Rect box = rule.onNodeWithTag("esnek").bounds(), grown = rule.onNodeWithTag("büyüyen").bounds();
+    CHECK(near(grown.x - box.x, 50) && near(grown.width, 150));
+    Rect cell = rule.onNodeWithTag("hücre").bounds();
+    CHECK(near(cell.x, 60) && near(cell.width, 140));
+    CHECK(near(rule.onNodeWithTag("akış1").bounds().x, 50) && near(rule.onNodeWithTag("akış2").bounds().x, 0));
+    CHECK(rule.onNodeWithText("geniş").exists());
+}
+
 TEST(intrinsic_height_and_flow_row) {
     ComposeTestRule rule([] {
         Column([] {
@@ -11139,10 +11174,10 @@ TEST(intrinsic_height_and_flow_row) {
                 Box(Modifier().width(2).fillMaxHeight().testTag("divider"));
                 Box(Modifier().size(40, 70));
             });
-            FlowRow(Modifier().width(200).testTag("flow"), {.horizontalSpacing = 10, .verticalSpacing = 5}, [] {
+            FlowRow(Modifier().width(200).testTag("flow"), FlowStyle{.horizontalSpacing = 10, .verticalSpacing = 5}, [] {
                 for (int i = 0; i < 5; ++i) Box(Modifier().size(60, 20).testTag("chip" + std::to_string(i)));
             });
-            FlowRow(Modifier().width(400), {.maxItemsInEachLine = 2}, [] {
+            FlowRow(Modifier().width(400), FlowStyle{.maxItemsInEachLine = 2}, [] {
                 for (int i = 0; i < 3; ++i) Box(Modifier().size(30).testTag("limited" + std::to_string(i)));
             });
         });
@@ -14425,7 +14460,7 @@ TEST(flex_box_lines_and_shrinking) {
                 for (const char* tag : {"x", "y", "z"}) Box(Modifier().size(50, 20).testTag(tag));
             });
             // Too wide for a line: on the first line on its own, not after an empty one.
-            FlexBox(Modifier().width(120).testTag("geniş"), {.wrap = FlexWrap::Wrap, .rowGap = 5}, [] {
+            FlexBox(Modifier().width(120).testTag("geniş"), FlexBoxConfig{.wrap = FlexWrap::Wrap, .rowGap = 5}, [] {
                 Box(Modifier().size(150, 20).testTag("iri"));
                 Box(Modifier().size(50, 20).testTag("ufak"));
             });
@@ -14466,17 +14501,17 @@ TEST(flex_box_stretches_aligns_lines_and_baselines) {
     ComposeTestRule rule([&] {
         Column([=] {
             // Stretch: a child without a height takes its line's.
-            FlexBox(Modifier().width(200), {.alignItems = FlexAlignItems::Stretch}, [] {
+            FlexBox(Modifier().width(200), FlexBoxConfig{.alignItems = FlexAlignItems::Stretch}, [] {
                 Box(Modifier().size(50, 40));
                 Box(Modifier().width(50).testTag("uzar"));
             });
             // Two lines in 200 dp of height, spread by SpaceBetween.
-            FlexBox(Modifier().size(100, 200).testTag("yayık"), {.wrap = FlexWrap::Wrap, .alignContent = FlexAlignContent::SpaceBetween}, [] {
+            FlexBox(Modifier().size(100, 200).testTag("yayık"), FlexBoxConfig{.wrap = FlexWrap::Wrap, .alignContent = FlexAlignContent::SpaceBetween}, [] {
                 Box(Modifier().size(60, 20).testTag("üst"));
                 Box(Modifier().size(60, 20).testTag("alt"));
             });
             // Texts of two sizes on one baseline.
-            FlexBox(Modifier().width(300), {.alignItems = FlexAlignItems::Baseline}, [] {
+            FlexBox(Modifier().width(300), FlexBoxConfig{.alignItems = FlexAlignItems::Baseline}, [] {
                 Text("küçük", Modifier().testTag("k"), fontSize = 10);
                 Text("büyük", Modifier().testTag("b"), fontSize = 24);
             });
@@ -14945,36 +14980,36 @@ TEST(grid_sizes_tracks_as_compose) {
     ComposeTestRule rule([&] {
         Column([=] {
             // Fixed, then two flexible columns sharing what's left after their min content.
-            Grid(Modifier().width(300).testTag("g"), {.columns = {T::Fixed(50), T::Flex(1), T::Flex(2)}, .rows = {T::Fixed(40), T::Auto()}, .rowGap = 5, .columnGap = 10}, [] {
+            Grid(Modifier().width(300).testTag("g"), GridConfig{.columns = {T::Fixed(50), T::Flex(1), T::Flex(2)}, .rows = {T::Fixed(40), T::Auto}, .rowGap = 5, .columnGap = 10}, [] {
                 Box(Modifier().size(20, 20).testTag("a"));
                 Box(Modifier().size(30, 30).testTag("b"));
                 Box(Modifier().size(30, 30).testTag("c"));
                 Box(Modifier().size(10, 60).testTag("d"));
             });
             // A percentage of the room after the gaps; MinMax from its minimum.
-            Grid(Modifier().width(210), {.columns = {T::Percentage(0.5f), T::MinMax(40, 1)}, .columnGap = 10}, [] {
+            Grid(Modifier().width(210), GridConfig{.columns = {T::Percentage(0.5f), T::MinMax(40, 1)}, .columnGap = 10}, [] {
                 Box(Modifier().fillMaxWidth().height(10).testTag("yarım"));
                 Box(Modifier().fillMaxWidth().height(10).testTag("kalan"));
             });
             // Auto columns grow from min towards max content by how much they can.
-            Grid(Modifier().width(200), {.columns = {T::Auto(), T::Auto()}}, [] {
+            Grid(Modifier().width(200), GridConfig{.columns = {T::Auto, T::Auto}}, [] {
                 GridLeaf(20, 100, 1000, Modifier().testTag("oto1"));
                 GridLeaf(40, 200, 1000, Modifier().testTag("oto2"));
             });
             // Rows are as tall as their items at their column's width.
-            Grid(Modifier(), {.columns = {T::Fixed(40), T::MinContent(), T::MaxContent()}}, [] {
+            Grid(Modifier(), GridConfig{.columns = {T::Fixed(40), T::MinContent, T::MaxContent}}, [] {
                 GridLeaf(10, 400, 2000, Modifier().testTag("metin"));
                 GridLeaf(10, 400, 2000, Modifier().testTag("dar"));
                 GridLeaf(10, 400, 2000, Modifier().testTag("geniş"));
             });
             // One across a fixed and a content column grows only the content one.
-            Grid(Modifier().testTag("yayılan"), {.columns = {T::Fixed(30), T::MinContent()}}, [] {
+            Grid(Modifier().testTag("yayılan"), GridConfig{.columns = {T::Fixed(30), T::MinContent}}, [] {
                 Box(Modifier().size(100, 10).gridItem(1, 1, 1, 2));
                 Box(Modifier().size(5, 10).gridItem(2, 2).testTag("büyüyen"));
             });
             // Unbounded: a percentage is the content's size; flexible tracks keep their minimum.
             Row(Modifier().horizontalScroll(rememberScrollState()), [] {
-                Grid(Modifier().testTag("sınırsız"), {.columns = {T::Percentage(0.5f), T::Flex(1)}}, [] {
+                Grid(Modifier().testTag("sınırsız"), GridConfig{.columns = {T::Percentage(0.5f), T::Flex(1)}}, [] {
                     Box(Modifier().size(70, 10));
                     GridLeaf(15, 90, 150, Modifier().testTag("esnek"));
                 });
@@ -15002,7 +15037,7 @@ TEST(grid_places_items_as_compose) {
     std::vector<GridTrackSize> three(3, T::Fixed(10));
     ComposeTestRule rule([&] {
         Column([=, &three] {
-            Grid(Modifier().testTag("g"), {.columns = three}, [] {
+            Grid(Modifier().testTag("g"), GridConfig{.columns = three}, [] {
                 Box(Modifier().size(10).gridItem(2, 3).testTag("a"));  // where asked
                 Box(Modifier().size(10).gridItem(0, 0, 1, 2).testTag("b"));  // the first free cells
                 Box(Modifier().size(10).gridItem(0, 0, 1, 2).testTag("c"));  // doesn't fit after b: the next row
@@ -15011,7 +15046,7 @@ TEST(grid_places_items_as_compose) {
                 Box(Modifier().size(10).gridItem(0, 1).testTag("f"));  // the first free row of the first column
                 Box(Modifier().size(10).gridItem("yok").testTag("g1"));  // an unknown area: placed automatically
             });
-            Grid(Modifier().testTag("h"), {.columns = three, .rows = {T::Fixed(10), T::Fixed(10)}, .flow = GridFlow::Column,
+            Grid(Modifier().testTag("h"), GridConfig{.columns = three, .rows = {T::Fixed(10), T::Fixed(10)}, .flow = GridFlow::Column,
                                            .areas = {{"başlık", 1, 1, 1, 3}, {"sağ", 0, 3}}}, [] {
                 Box(Modifier().fillMaxWidth().height(10).gridItem("başlık").testTag("başlık"));
                 Box(Modifier().size(10).testTag("s1"));  // down the first column, under the header
@@ -15022,7 +15057,7 @@ TEST(grid_places_items_as_compose) {
                 Box(Modifier().size(4).gridItem(2, 1, 1, 1, Alignment::BottomEnd).testTag("köşe"));
             });
             // A row's first free column from where the last one placed automatically ended.
-            Grid(Modifier().testTag("i"), {.columns = {T::Fixed(10), T::Fixed(10), T::Fixed(10), T::Fixed(10)}}, [] {
+            Grid(Modifier().testTag("i"), GridConfig{.columns = {T::Fixed(10), T::Fixed(10), T::Fixed(10), T::Fixed(10)}}, [] {
                 Box(Modifier().size(10).gridItem(1, 2));
                 Box(Modifier().size(10).gridItem(0, 0, 1, 2));  // past the one in the second column: a hole before it
                 Box(Modifier().size(10).gridItem(1, 0).testTag("imleç"));

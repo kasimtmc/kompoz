@@ -411,7 +411,7 @@ void MaterialShapesSection(CallSite site) {
                         Alignment::Center) { Text(cycle[size_t(i) % cycle.size()] == cycle[0] ? "Dokun" : "", color = cs.onTertiaryContainer); };
                     Text("Seçilen: " + picked.get(), Modifier().weight(1), style = typography().titleMedium);
                 };
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 10, .verticalSpacing = 10}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 10, .verticalSpacing = 10}, [&] {
                 for (const auto& shape : all()) {
                     Box(Modifier()
                             .size(44)

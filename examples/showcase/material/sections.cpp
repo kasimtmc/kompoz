@@ -157,7 +157,7 @@ void TooltipSection(CallSite site) {
                     rich, Modifier(), [rich] { IconButton([rich] { rich.show(); }) { Icon(Icons::Filled::Info, "Bilgi"); }; });
             };
             // TooltipAnchorPosition: the share tooltip's side.
-            FlowRow(Modifier().fillMaxWidth(), {.horizontalSpacing = 8}, [&] {
+            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8}, [&] {
                 for (int i = 0; i < 4; ++i)
                     FilterChip(side.get() == i, [side, i] { side.set(i); }, [i] { Text(sides[i].second); });
             });
