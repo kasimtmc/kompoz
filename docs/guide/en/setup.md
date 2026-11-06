@@ -6,6 +6,7 @@ Build Kompoz, add it to your own CMake project, and run your app on Linux, Windo
 
 - A C++20 compiler: GCC 13 or newer, or Clang 17 or newer (Kompoz is tested with GCC 16 and Clang 22). GCC 13 crashes on some coroutine lambdas, with an internal compiler error that GCC 14 doesn't have.
 - CMake 3.24 or newer.
+- For Android and the web, a C++ compiler for the machine that builds as well: Kompoz's compiler, kompozc, runs there (see [below](#kompozc)).
 - FreeType and libpng.
 - Optional: HarfBuzz for text shaping (Arabic joining, Indic scripts, ligatures, emoji sequences). Without it, text is drawn character by character.
 - Optional on Linux: libcurl, libwebp and libturbojpeg (3.0 or later), which `AsyncImage` uses to download images and decode WebP and JPEG. libdbus is loaded at run time, if present, to read the desktop's accent color and its light or dark preference.
@@ -21,7 +22,7 @@ cmake --build build -j
 ./build/showcase
 ```
 
-This builds the core library (`kompoz_core`), the platform layer apps run on (`kompoz_app`), the showcase app, and the headless tests (`./build/kompoz_tests`).
+This builds the core library (`kompoz_core`), the platform layer apps run on (`kompoz_app`), kompozc (the compiler that turns the Compose code in your `.cpp` files into C++), the showcase app, and the headless tests (`./build/kompoz_tests`, `./build/kompoz_compose_tests`).
 
 Useful options:
 
@@ -31,12 +32,14 @@ Useful options:
 | `KOMPOZ_BUILD_EXAMPLES` | `ON` | Build the showcase. |
 | `KOMPOZ_BUILD_TESTS` | `ON` (`OFF` on Android, iOS and the web) | Build the headless tests. |
 | `KOMPOZ_VENDORED_DEPS` | `ON` on Android, iOS, the web and Windows | Build FreeType, HarfBuzz, zlib and libpng from `third_party/` instead of using the system's. |
+| `KOMPOZ_BUILD_COMPILER` | `ON` (`OFF` when cross-compiling) | Build kompozc with Kompoz. Where it's off, `kompoz_compose` builds it for the machine that builds. |
+| `KOMPOZC` | empty | A kompozc of yours to use instead (one built from `compiler/`, or an installed one). |
 
 On desktops that have lld, Kompoz links with it unless you chose another linker: about one second instead of GNU ld's twenty-five for the showcase.
 
 ## Use Kompoz in your project
 
-Add Kompoz as a subdirectory, a clone or a git submodule, and link its platform layer, `kompoz::app`, which brings the program's entry point.
+Add Kompoz as a subdirectory, a clone or a git submodule, link its platform layer, `kompoz::app`, which brings the program's entry point, and give your target to `kompoz_compose`, so that its composables can be written in Compose's syntax.
 
 ```cmake
 cmake_minimum_required(VERSION 3.24)
@@ -49,10 +52,11 @@ add_subdirectory(kompoz)        # a clone or a git submodule
 
 add_executable(myapp main.cpp)
 target_link_libraries(myapp PRIVATE kompoz::app)
+kompoz_compose(myapp)           # its sources through kompozc: @Composable functions in Compose's syntax
 kompoz_copy_assets(myapp)       # the fonts and the licenses next to the binary
 ```
 
-`kompoz_copy_assets` copies what every app ships, the bundled Noto Sans fonts and the licenses, next to your binary each time it is built.
+`kompoz_compose` runs kompozc on the target's sources before the C++ compiler, as Compose's compiler plugin rewrites Kotlin: call it after the target's sources are all added. `kompoz_copy_assets` copies what every app ships, the bundled Noto Sans fonts and the licenses, next to your binary each time it is built.
 
 Or install Kompoz once and find it as a package, on Linux, macOS or Windows. Built with the system's FreeType,
 HarfBuzz and libpng, it finds them there again; built with its own (`scripts/fetch-deps.sh`: Windows, or
@@ -68,8 +72,11 @@ cmake --install kompoz/build --prefix ~/.local
 find_package(kompoz 0.1 REQUIRED)  # -DCMAKE_PREFIX_PATH=~/.local, if that isn't searched already
 add_executable(myapp main.cpp)
 target_link_libraries(myapp PRIVATE kompoz::app)
+kompoz_compose(myapp)
 kompoz_copy_assets(myapp)
 ```
+
+The package installs kompozc with it, and its sources, for an app built for another machine.
 
 With vcpkg or Conan, from a clone of the repository (its overlay port and its recipe build that clone, with the
 package manager's FreeType, HarfBuzz and libpng), then `find_package(kompoz)` as above:
@@ -84,24 +91,29 @@ libcurl (Windows, Android and the web have their own). Each is used when found; 
 `CURL`) requires it, `OFF` leaves it out. vcpkg's features `jpeg`, `webp`, `curl` and Conan's options `with_jpeg`,
 `with_webp`, `with_curl` (all on by default) are the same.
 
-Your `main.cpp` defines `kompoz::createApplication` instead of `main`:
+Your `main.cpp` has your composables, in Compose's syntax, and defines `kompoz::createApplication` instead of `main`:
 
-```cpp
-void Counter() {
-    auto count = remember([] { return mutableStateOf(0); });
+```kotlin
+@Composable
+fun Counter() {
+    var count by remember { mutableStateOf(0) }
 
-    Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
-        Text("Count: " + std::to_string(count.get()), style = typography().titleLarge);
-        Button([count] { count.set(count.get() + 1); }) { Text("Add"); };
-    };
+    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Count: $count", style = MaterialTheme.typography.titleLarge)
+        Button(onClick = { count++ }) { Text("Add") }
+    }
 }
 
-Application kompoz::createApplication(int, char**) {
-    return {.title = "Demo", .content = [] { MaterialTheme(lightColorScheme(), Counter); }};
+kompoz::Application kompoz::createApplication(int, char**) {
+    return {.title = "Demo", .content = [] { MaterialTheme(lightColorScheme(), [] { Counter(); }); }};
 }
 ```
 
-All of Kompoz is in one header, `#include <kompoz/kompoz.hpp>`, and in the `kompoz` namespace.
+All of Kompoz is in one header, `#include <kompoz/kompoz.hpp>`, and in the `kompoz` namespace; a file with composables says `using namespace kompoz;` after it, as a Kotlin file imports Compose's packages. [Coming from Compose](coming-from-compose.md) shows what kompozc reads and how it meets the C++ around it.
+
+### kompozc
+
+kompozc runs on the machine that builds. Built for that machine, Kompoz builds it with itself; built for another (Android, the web), `kompoz_compose` builds it on its own from `compiler/`, with this machine's C++ compiler, the first time it is needed. Where there is no such compiler (Android Studio on Windows without Visual Studio's), set `KOMPOZC` to a kompozc built elsewhere from Kompoz's `compiler/` (`cmake -S kompoz/compiler -B build-kompozc && cmake --build build-kompozc`) or installed with Kompoz.
 
 ### The Application
 
@@ -146,7 +158,7 @@ scripts/fetch-deps.sh
 cd examples/showcase/android && ./gradlew installDebug
 ```
 
-`fetch-deps.sh` downloads FreeType, HarfBuzz, zlib and libpng into `third_party/` at pinned versions and checks their SHA-256 sums. Gradle builds Kompoz's CMake project with the NDK into your app's `libmain.so`.
+`fetch-deps.sh` downloads FreeType, HarfBuzz, zlib and libpng into `third_party/` at pinned versions and checks their SHA-256 sums. Gradle builds Kompoz's CMake project with the NDK into your app's `libmain.so`, and kompozc for your computer on the way (see [kompozc](#kompozc)).
 
 To make your own app, start from the showcase's `android/` folder: it has only the manifest, a theme and a `MainActivity` that extends Kompoz's `KompozActivity` (which loads `libmain.so`, runs your app on its UI thread and draws each frame on the display's beat). The fonts go into the APK from Kompoz's `assets/` folder. On Android, Kompoz supports the soft keyboard with suggestions, edge-to-edge insets, the back gesture and predictive back, the system's dark mode and font size, dynamic color on Android 12+ and TalkBack.
 

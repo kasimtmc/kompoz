@@ -2,36 +2,38 @@
 
 Kompoz is a declarative UI library for C++20 in the style of Jetpack Compose, with Material 3 components, running on Linux, Windows, Android and the web from one codebase.
 
-If you know Compose, you know Kompoz: the same way of thinking (composable functions, state, recomposition, modifiers), the same names where C++ allows, and Material 3 components that look and behave like Compose's. Kompoz 0.1.1 is licensed under the Apache License 2.0.
+If you know Compose, you know Kompoz: the same way of thinking (composable functions, state, recomposition, modifiers), the same names, and the same way of writing it. A composable is a `@Composable fun` in Compose's own syntax, written in a `.cpp` file; Kompoz's compiler, kompozc, turns it into C++ as the build goes, the way Compose's compiler plugin rewrites Kotlin, and everything around it is C++. Kompoz 0.1.1 is licensed under the Apache License 2.0.
 
 ![The showcase's home screen](../../screenshots/home.png)
 
-```cpp
-void Counter() {
-    auto count = remember([] { return mutableStateOf(0); });
+```kotlin
+@Composable
+fun Counter() {
+    var count by remember { mutableStateOf(0) }
 
-    Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
-        Text("Count: " + std::to_string(count.get()), style = typography().titleLarge);
-        Button([count] { count.set(count.get() + 1); }) { Text("Add"); };
-    };
+    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Count: $count", style = MaterialTheme.typography.titleLarge)
+        Button(onClick = { count++ }) { Text("Add") }
+    }
 }
 
-Application kompoz::createApplication(int, char**) {
-    return {.title = "Demo", .content = [] { MaterialTheme(lightColorScheme(), Counter); }};
+kompoz::Application kompoz::createApplication(int, char**) {
+    return {.title = "Demo", .content = [] { MaterialTheme(lightColorScheme(), [] { Counter(); }); }};
 }
 ```
 
 ## Get started
 
-- [Setup](setup.md): build Kompoz, add it to your CMake project, and run on each platform.
+- [Setup](setup.md): build Kompoz, add it to your CMake project with `kompoz_compose`, and run on each platform.
 - [Tutorial](tutorial.md): build a first app step by step, from a line of text to a Material list.
-- [Coming from Compose](coming-from-compose.md): how Kotlin's Compose maps to C++, at a glance.
+- [Coming from Compose](coming-from-compose.md): Compose code in `.cpp` files, what kompozc reads, and the C++ around it.
+- [Writing in C++](cpp.md): Kompoz's composables written in C++ itself, without kompozc.
 
 ## Foundation
 
 - [Thinking in Kompoz](thinking.md): declarative UI, composable functions and recomposition.
 - [State](state.md): observable state, `remember`, `rememberSaveable`, hoisting and state holders.
-- [Lifecycle and identity](lifecycle.md): how calls are identified without a compiler plugin, and what makes them skip.
+- [Lifecycle and identity](lifecycle.md): how calls are identified, and what makes them skip.
 - [Side effects](side-effects.md): coroutines, `LaunchedEffect`, `DisposableEffect` and the other effect APIs.
 - [Phases](phases.md): composition, layout and drawing, and how to keep each one cheap.
 - [CompositionLocal](composition-local.md): handing values down the tree, and the built-in locals.

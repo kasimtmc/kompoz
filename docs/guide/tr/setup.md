@@ -6,6 +6,7 @@ Kompoz'u derleyin, kendi CMake projenize ekleyin ve uygulamanızı Linux, Window
 
 - Bir C++20 derleyicisi: GCC 13 ya da daha yenisi, veya Clang 17 ya da daha yenisi (Kompoz GCC 16 ve Clang 22 ile test ediliyor). GCC 13 bazı coroutine lambda'larında dahili derleyici hatasıyla çöküyor; GCC 14'te bu yok.
 - CMake 3.24 ya da daha yenisi.
+- Android ve web için derlemeyi yapan makinenin de bir C++ derleyicisi: Kompoz'un derleyicisi kompozc orada çalışır (bkz. [aşağısı](#kompozc)).
 - FreeType ve libpng.
 - İsteğe bağlı: metin şekillendirme için HarfBuzz (Arapça harf bağlama, Hint yazıları, bitişik harfler, emoji dizileri). Olmadan metin karakter karakter çizilir.
 - Linux'ta isteğe bağlı: `AsyncImage`'ın resim indirmek ve WebP ile JPEG çözmek için kullandığı libcurl, libwebp ve libturbojpeg (3.0 ya da sonrası). libdbus, varsa, masaüstünün vurgu rengini ve açık ya da koyu tercihini okumak için çalışma anında yüklenir.
@@ -21,7 +22,7 @@ cmake --build build -j
 ./build/showcase
 ```
 
-Bu; çekirdek kütüphaneyi (`kompoz_core`), uygulamaların üzerinde çalıştığı platform katmanını (`kompoz_app`), vitrin uygulamasını ve pencere açmadan çalışan testleri (`./build/kompoz_tests`) derler.
+Bu; çekirdek kütüphaneyi (`kompoz_core`), uygulamaların üzerinde çalıştığı platform katmanını (`kompoz_app`), kompozc'yi (`.cpp` dosyalarınızdaki Compose kodunu C++'a çeviren derleyici), vitrin uygulamasını ve pencere açmadan çalışan testleri (`./build/kompoz_tests`, `./build/kompoz_compose_tests`) derler.
 
 İşe yarayan seçenekler:
 
@@ -31,12 +32,14 @@ Bu; çekirdek kütüphaneyi (`kompoz_core`), uygulamaların üzerinde çalışt�
 | `KOMPOZ_BUILD_EXAMPLES` | `ON` | Vitrini derler. |
 | `KOMPOZ_BUILD_TESTS` | `ON` (Android, iOS ve web'de `OFF`) | Pencere açmadan çalışan testleri derler. |
 | `KOMPOZ_VENDORED_DEPS` | Android, iOS, web ve Windows'ta `ON` | FreeType, HarfBuzz, zlib ve libpng'yi sistemdekileri kullanmak yerine `third_party/`'den derler. |
+| `KOMPOZ_BUILD_COMPILER` | `ON` (çapraz derlemede `OFF`) | kompozc'yi Kompoz'la birlikte derler. Kapalıysa `kompoz_compose` onu derlemeyi yapan makine için derler. |
+| `KOMPOZC` | boş | Onun yerine kullanılacak sizin bir kompozc'niz (`compiler/`'dan derlenmiş ya da kurulmuş biri). |
 
 lld bulunan masaüstlerinde, siz başka bir bağlayıcı seçmediyseniz Kompoz onunla bağlar: vitrin için GNU ld'nin yirmi beş saniyesi yerine yaklaşık bir saniye.
 
 ## Kompoz'u projenizde kullanmak
 
-Kompoz'u bir alt dizin olarak (bir klon ya da git submodule) ekleyin ve programın giriş noktasını getiren platform katmanına, `kompoz::app`'e bağlayın.
+Kompoz'u bir alt dizin olarak (bir klon ya da git submodule) ekleyin, programın giriş noktasını getiren platform katmanına, `kompoz::app`'e bağlayın ve hedefinizi `kompoz_compose`'a verin; böylece composable'ları Compose'un yazımıyla yazılabilir.
 
 ```cmake
 cmake_minimum_required(VERSION 3.24)
@@ -49,10 +52,11 @@ add_subdirectory(kompoz)        # a clone or a git submodule
 
 add_executable(myapp main.cpp)
 target_link_libraries(myapp PRIVATE kompoz::app)
-kompoz_copy_assets(myapp)       # the fonts and the licenses next to the binary
+kompoz_compose(myapp)           # kaynakları kompozc'den geçer: Compose yazımıyla @Composable işlevler
+kompoz_copy_assets(myapp)       # fontlar ve lisanslar programın yanına
 ```
 
-`kompoz_copy_assets`, her uygulamanın birlikte dağıttığı şeyleri, yani gömülü Noto Sans fontlarını ve lisansları, her derlemede programınızın yanına kopyalar.
+`kompoz_compose`, Compose'un derleyici eklentisinin Kotlin'i yeniden yazdığı gibi, hedefin kaynaklarını C++ derleyicisinden önce kompozc'den geçirir: hedefin bütün kaynakları eklendikten sonra çağırın. `kompoz_copy_assets`, her uygulamanın birlikte dağıttığı şeyleri, yani gömülü Noto Sans fontlarını ve lisansları, her derlemede programınızın yanına kopyalar.
 
 Ya da Kompoz'u bir kez kurup paket olarak bulun; Linux'ta, macOS'ta ya da Windows'ta. Sistemin FreeType,
 HarfBuzz ve libpng'siyle derlendiyse onları yine orada bulur; kendi derlediğiyle derlendiyse (`scripts/fetch-deps.sh`: Windows ya
@@ -68,8 +72,11 @@ cmake --install kompoz/build --prefix ~/.local
 find_package(kompoz 0.1 REQUIRED)  # -DCMAKE_PREFIX_PATH=~/.local, orası zaten aranmıyorsa
 add_executable(myapp main.cpp)
 target_link_libraries(myapp PRIVATE kompoz::app)
+kompoz_compose(myapp)
 kompoz_copy_assets(myapp)
 ```
+
+Paket kompozc'yi de kaynaklarıyla birlikte kurar; başka bir makine için derlenen bir uygulama için.
 
 vcpkg ya da Conan ile, deponun bir klonundan (overlay port'u ve reçetesi o klonu, paket yöneticisinin FreeType,
 HarfBuzz ve libpng'siyle derler), ardından yukarıdaki gibi `find_package(kompoz)`:
@@ -84,24 +91,29 @@ indirir (Windows, Android ve web kendilerininkini kullanır). Her biri bulunursa
 da `WEBP`, `CURL`) onu zorunlu kılar, `OFF` dışarıda bırakır. vcpkg'nin `jpeg`, `webp`, `curl` özellikleri ve Conan'ın
 `with_jpeg`, `with_webp`, `with_curl` seçenekleri (hepsi varsayılan olarak açık) aynı şeydir.
 
-`main.cpp`'niz `main` yerine `kompoz::createApplication`'ı tanımlar:
+`main.cpp`'nizde Compose yazımıyla composable'larınız bulunur ve `main` yerine `kompoz::createApplication`'ı tanımlar:
 
-```cpp
-void Counter() {
-    auto count = remember([] { return mutableStateOf(0); });
+```kotlin
+@Composable
+fun Counter() {
+    var count by remember { mutableStateOf(0) }
 
-    Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
-        Text("Count: " + std::to_string(count.get()), style = typography().titleLarge);
-        Button([count] { count.set(count.get() + 1); }) { Text("Add"); };
-    };
+    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Sayı: $count", style = MaterialTheme.typography.titleLarge)
+        Button(onClick = { count++ }) { Text("Ekle") }
+    }
 }
 
-Application kompoz::createApplication(int, char**) {
-    return {.title = "Demo", .content = [] { MaterialTheme(lightColorScheme(), Counter); }};
+kompoz::Application kompoz::createApplication(int, char**) {
+    return {.title = "Demo", .content = [] { MaterialTheme(lightColorScheme(), [] { Counter(); }); }};
 }
 ```
 
-Kompoz'un tamamı tek bir başlık dosyasında, `#include <kompoz/kompoz.hpp>`, ve `kompoz` isim alanındadır.
+Kompoz'un tamamı tek bir başlık dosyasında, `#include <kompoz/kompoz.hpp>`, ve `kompoz` isim alanındadır; composable'ları olan bir dosya, bir Kotlin dosyasının Compose'un paketlerini içe aktardığı gibi, ondan sonra `using namespace kompoz;` der. [Compose'dan geliyorsanız](coming-from-compose.md), kompozc'nin neyi okuduğunu ve çevresindeki C++ ile nasıl buluştuğunu gösterir.
+
+### kompozc
+
+kompozc derlemeyi yapan makinede çalışır. Kompoz o makine için derlenirken onu kendisiyle birlikte derler; başka biri için derlenirken (Android, web) `kompoz_compose` onu ilk gerektiğinde `compiler/`'dan, bu makinenin C++ derleyicisiyle kendi başına derler. Öyle bir derleyicinin olmadığı yerde (Visual Studio'nunki olmadan Windows'ta Android Studio), `KOMPOZC`'yi başka yerde Kompoz'un `compiler/`'ından derlenmiş (`cmake -S kompoz/compiler -B build-kompozc && cmake --build build-kompozc`) ya da Kompoz'la kurulmuş bir kompozc'ye ayarlayın.
 
 ### Application
 
@@ -146,7 +158,7 @@ scripts/fetch-deps.sh
 cd examples/showcase/android && ./gradlew installDebug
 ```
 
-`fetch-deps.sh`, FreeType, HarfBuzz, zlib ve libpng'yi sabitlenmiş sürümlerde `third_party/`'ye indirir ve SHA-256 özetlerini doğrular. Gradle, Kompoz'un CMake projesini NDK ile uygulamanızın `libmain.so`'suna derler.
+`fetch-deps.sh`, FreeType, HarfBuzz, zlib ve libpng'yi sabitlenmiş sürümlerde `third_party/`'ye indirir ve SHA-256 özetlerini doğrular. Gradle, Kompoz'un CMake projesini NDK ile uygulamanızın `libmain.so`'suna derler; yol üstünde de bilgisayarınız için kompozc'yi (bkz. [kompozc](#kompozc)).
 
 Kendi uygulamanızı yapmak için vitrinin `android/` klasöründen başlayın: içinde yalnızca manifest, bir tema ve Kompoz'un `KompozActivity`'sini genişleten bir `MainActivity` var (`KompozActivity` `libmain.so`'yu yükler, uygulamanızı kendi UI iş parçacığında çalıştırır ve her kareyi ekranın ritminde çizer). Fontlar APK'ya Kompoz'un `assets/` klasöründen girer. Android'de Kompoz; önerili yazılım klavyesini, kenardan kenara (edge-to-edge) kenar boşluklarını, geri hareketini ve tahmine dayalı geriyi, sistemin koyu modunu ve yazı boyutunu, Android 12+'da dinamik rengi ve TalkBack'i destekler.
 
