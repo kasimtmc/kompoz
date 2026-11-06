@@ -10,7 +10,7 @@ class Parser {
 public:
     Parser(std::string_view source, Pos start);
 
-    // @Composable [@Other...] fun name(params)[: Type] { body } (or = expression).
+    // [@Composable] [@Other...] [private] fun [Receiver.]name(params)[: Type] { body } (or = expression).
     Function function();
     // data class Name(val a: T, var b: U = d)
     DataClass dataClass();

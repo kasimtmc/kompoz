@@ -754,6 +754,15 @@
   `semantics(mergeDescendants = true) { … }`, `clearAndSetSemantics { contentDescription = "…" }`, with
   `stateDescription`, `role` (`Role.Button`, …), `selected`, `liveRegion`, `progressBarRangeInfo`, `customActions`,
   `traversalIndex`, `selectableGroup()`, `hideFromAccessibility()` and `setProgress { … }`.
+- **kompozc: plain and extension functions**: `fun shout(text: String) = text.uppercase()`, `private fun …`, and
+  `fun Modifier.cardSurface(color: Color) = shadow(…).background(color, …)`, as Compose's own modifiers are written:
+  `Modifier.fillMaxWidth().cardSurface(c)` is `cardSurface(Modifier.fillMaxWidth(), c)`, and in its body the
+  receiver's members are reached by their names. A function's type is its body's when none is written; each is
+  defined before the first function that uses it, and one of another file of the module where it is used. An
+  expression body or a val may go on after `=` or an operator at the end of a line. The lambdas of
+  `semantics { }`, `layout { }` and `onKeyEvent { }` are what Compose makes them. A call to one of the file's own
+  functions or vals names its C++ namespace (`::label(1)`), so one called `label` or `shape` is never a name of
+  Kompoz's that `using namespace kompoz` brings in.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

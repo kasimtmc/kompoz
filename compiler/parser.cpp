@@ -131,24 +131,46 @@ Function Parser::function() {
     Function f;
     f.pos = cur().pos;
     std::vector<std::string> names;
-    annotations(&names);
-    bool composable = false;
+    for (bool more = true; more;) {
+        annotations(&names);
+        more = false;
+        while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("inline")) {
+            if (take().text == "private") f.isPrivate = true;
+            more = true;
+        }
+    }
+    f.composable = false;
     for (auto& n : names) {
-        if (n == "Composable") composable = true;
+        if (n == "Composable") f.composable = true;
         else f.annotations.push_back(n);
     }
-    if (!composable) fail(f.pos, "expected @Composable");
-    if (!isIdent("fun")) fail("expected 'fun' after @Composable");
+    if (isIdent("suspend")) fail("a suspend fun isn't supported yet: write it in C++, a coroutine returning TaskOf<T>");
+    if (!isIdent("fun")) fail("expected 'fun'");
     take();
-    f.name = expectIdent();
+    // fun name, or fun Receiver.name (an extension)
+    Pos at = cur().pos;
+    std::vector<std::string> parts{expectIdent()};
+    while (isOp(".") && peekRaw(1).kind == Tok::Ident) {
+        take();
+        parts.push_back(take().text);
+    }
+    f.name = parts.back();
+    parts.pop_back();
+    if (!parts.empty()) {
+        f.receiver.emplace();
+        f.receiver->pos = at;
+        for (size_t i = 0; i < parts.size(); ++i) f.receiver->name += (i ? "." : "") + parts[i];
+    }
     f.params = params();
     if (acceptOp(":")) f.result = type();
     if (isOp("=")) {  // fun x() = expression
         Pos at = take().pos;
+        skipNewlines();
         auto ret = make(Node::Return, at);
         ret->kids.push_back(expression());
         f.body = make(Node::Block, at);
         f.body->kids.push_back(std::move(ret));
+        f.expressionBody = true;
     } else {
         skipNewlines();
         if (!isOp("{")) fail("expected the function's body");

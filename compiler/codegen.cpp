@@ -43,7 +43,7 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "maxByOrNull", "minByOrNull", "let", "run", "with", "takeIf", "takeUnless", "getOrElse", "lazy", "snapshotFlow",
     "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked",
     "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "compositionLocalOf",
-    "staticCompositionLocalOf"};
+    "staticCompositionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent"};
 
 // Kotlin types the C++ way.
 const std::map<std::string, std::string, std::less<>> kTypes = {
@@ -100,7 +100,8 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     // DrawScope's own: what they draw is drawn moved, clipped, ... (rotate(45f) { drawRect(…) })
     {"translate", "DrawScope"},              {"inset", "DrawScope"},            {"clipRect", "DrawScope"},
     {"clipPath", "DrawScope"},               {"rotate", "DrawScope"},           {"rotateRad", "DrawScope"},
-    {"scale", "DrawScope"},                  {"withTransform", "DrawScope"}};
+    {"scale", "DrawScope"},                  {"withTransform", "DrawScope"},
+    {"semantics", "SemanticsPropertyReceiver"}, {"clearAndSetSemantics", "SemanticsPropertyReceiver"}};
 
 // Calls whose lambda is a coroutine (Kotlin's suspend lambdas): [=]() -> Task { ...; co_return; }.
 const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "produceState"};
@@ -179,7 +180,15 @@ public:
     void signature(const Function& f, bool defaults) {
         bool unit = !f.result || f.result->name == "Unit";
         out_.at(f.pos);
-        out_.text((unit ? std::string("void") : type(*f.result)) + " " + f.name + "(");
+        if (!f.composable) {
+            // A plain function: defined in each file that uses it (inline), its type the body's when
+            // it is an expression and none is written; an extension's receiver comes first.
+            out_.text(std::string(f.isPrivate ? "static " : "inline ") + (f.result ? type(*f.result) : f.expressionBody ? "auto" : "void") +
+                      " " + cppName(f.name) + "(");
+            if (f.receiver) out_.text("const " + type(*f.receiver) + "& kompoz_receiver_1" + (f.params.empty() ? "" : ", "));
+        } else {
+            out_.text((unit ? std::string("void") : type(*f.result)) + " " + f.name + "(");
+        }
         // Defaults: those at the end (C++ takes no others), where kompozc's calls leave them out.
         size_t firstDefault = f.params.size();
         while (firstDefault > 0 && f.params[firstDefault - 1].defaultValue) --firstDefault;
@@ -193,7 +202,8 @@ public:
                 scopes_.pop_back();
             }
         }
-        if (unit) out_.text(std::string(f.params.empty() ? "" : ", ") + "::kompoz::CallSite site" + (defaults ? " = ::kompoz::CallSite::current()" : ""));
+        if (unit && f.composable)
+            out_.text(std::string(f.params.empty() ? "" : ", ") + "::kompoz::CallSite site" + (defaults ? " = ::kompoz::CallSite::current()" : ""));
         out_.text(")");
     }
 
@@ -238,6 +248,21 @@ public:
 
     void definition(const Function& f) {
         bool unit = !f.result || f.result->name == "Unit";
+        if (!f.composable) {  // (no declaration before it: its defaults are here)
+            signature(f, true);
+            out_.text(" {");
+            scopes_.emplace_back();
+            for (const Param& p : f.params) declare(p.name, Local);
+            if (f.receiver) {  // its members reached by their names, as a lambda's receiver's
+                receivers_.push_back(qualified(f.receiver->name));
+                out_.text(" [[maybe_unused]] auto* kompoz_this_1 = &kompoz_receiver_1;");
+            }
+            statements(*f.body, false);
+            receivers_.clear();
+            scopes_.pop_back();
+            out_.text(" }\n");
+            return;
+        }
         signature(f, false);
         out_.text(" {");
         scopes_.emplace_back();
@@ -284,6 +309,11 @@ private:
         bool& global_;
         bool was_;
     };
+
+    std::string qualifierOf(const std::string& name) const {
+        auto q = module_.qualifiers.find(name);
+        return q == module_.qualifiers.end() ? std::string() : q->second;
+    }
 
     // ---- Statements ----
 
@@ -575,6 +605,10 @@ private:
             out_.text("KOMPOZ_KT_GET((*kompoz_this_" + std::to_string(r) + "), " + cppName(e.text) + ")");
             return;
         }
+        if (module_.properties.contains(e.text)) {  // a top-level val (after a receiver's members, as in Kotlin)
+            out_.text(qualifierOf(e.text) + cppName(e.text));
+            return;
+        }
         if (e.text == "Modifier") {
             out_.text("::kompoz::Modifier()");
             return;
@@ -749,6 +783,8 @@ private:
                 out_.text("; })");
                 return;
             }
+            if (auto f = module_.functions.find(callee.text); f != module_.functions.end() && f->second->receiver && !qualifier(obj))
+                return moduleCall(c, *f->second, &obj);  // an extension: x.card() is card(x)
             if (obj.kind == Node::Name && obj.text == "Modifier" && !lookup("Modifier")) {
                 out_.text("::kompoz::Modifier()." + cppName(callee.text));
                 return arguments(c, calleeName, false);
@@ -796,8 +832,14 @@ private:
         if (c.lambda) {
             if (any) out_.text(", ");
             auto receiver = kReceiverLambdas.find(calleeName);
-            lambda(*c.lambda, kValueLambdas.contains(calleeName), kSuspendLambdas.contains(calleeName), calleeName == "produceState",
-                   receiver != kReceiverLambdas.end() ? &receiver->second : nullptr);
+            const std::string* type = receiver != kReceiverLambdas.end() ? &receiver->second : nullptr;
+            // layout: Modifier.layout { measurable, constraints -> … } measures (its value the size),
+            // layout(width, height) { … } in it places.
+            static const std::string measureScope = "MeasureScope", placementScope = "PlacementScope";
+            bool measures = calleeName == "layout" && c.lambda->flag && !c.lambda->names.empty();
+            if (calleeName == "layout") type = measures ? &measureScope : &placementScope;
+            lambda(*c.lambda, kValueLambdas.contains(calleeName) || measures, kSuspendLambdas.contains(calleeName), calleeName == "produceState",
+                   type);
         }
         out_.text(")");
     }
@@ -890,7 +932,9 @@ private:
         return true;
     }
 
-    void moduleCall(const Node& c, const Function& f) {
+    // `receiver`: an extension's, written before it (x.card()); else an extension called by its
+    // name alone has the receiver it is called in (this).
+    void moduleCall(const Node& c, const Function& f, const Node* receiver = nullptr) {
         std::vector<const Node*> given(f.params.size(), nullptr);
         size_t next = 0;
         for (size_t i = 0; i + 1 < c.kids.size(); ++i) {
@@ -914,7 +958,13 @@ private:
         }
         size_t last = given.size();  // the defaults left at the end: C++'s
         while (last > 0 && !given[last - 1] && f.params[last - 1].defaultValue) --last;
-        out_.text(f.name + "(");
+        out_.text(qualifierOf(f.name) + cppName(f.name) + "(");
+        if (f.receiver) {
+            if (receiver) expr(*receiver);
+            else if (!receivers_.empty()) out_.text("(*kompoz_this_" + std::to_string(receivers_.size()) + ")");
+            else throw CompileError(c.pos, f.name + " is an extension: it needs a receiver");
+            if (last > 0) out_.text(", ");
+        }
         for (size_t i = 0; i < last; ++i) {
             if (i) out_.text(", ");
             const Param& p = f.params[i];
@@ -926,7 +976,7 @@ private:
         out_.text(")");
     }
 
-    // `receiver`: the type of its receiver (Kotlin's T.() -> R), taken first; kompoz_this_N points
+    // `receiver`: the type of its receiver (Kotlin's T.() -> R, one of Kompoz's), taken first; kompoz_this_N points
     // to it (a pointer, so a lambda inside that keeps it sees the same one, as Kotlin's would).
     void lambda(const Node& l, bool value, bool suspend = false, bool produceState = false, const std::string* receiver = nullptr) {
         bool wasSuspend = std::exchange(suspend_, suspend);
@@ -937,7 +987,8 @@ private:
         if (receiver) {
             receivers_.push_back(*receiver);
             self = std::to_string(receivers_.size());
-            out_.text("auto&& kompoz_receiver_" + self + std::string(l.flag && !l.names.empty() ? ", " : ""));
+            // (typed: an overload taking other parameters is never tried with it)
+            out_.text("::kompoz::" + *receiver + "& kompoz_receiver_" + self + std::string(l.flag && !l.names.empty() ? ", " : ""));
         }
         if (suspend) {
             // A coroutine (Kotlin's suspend lambda): its CoroutineScope receiver has no name here;

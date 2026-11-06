@@ -100,14 +100,18 @@ struct Param {
     Pos pos;
 };
 
-// A @Composable function: fun name(params): result { body }.
+// A function: [@Composable] fun [Receiver.]name(params): result { body }.
 struct Function {
     std::string name;
+    bool composable = true;
+    bool isPrivate = false;
+    std::optional<Type> receiver;    // an extension's: fun Modifier.card()
     std::vector<Param> params;
     std::optional<Type> result;      // none: Unit
     NodeP body;                      // a Block; or an expression body (= expr) as a Return in a Block
+    bool expressionBody = false;
     std::vector<std::string> annotations;  // besides @Composable (Preview, ...)
-    Pos pos;                         // the @ of @Composable
+    Pos pos;                         // the @ of @Composable (or where it starts)
     Pos end;                         // just past the closing brace
 };
 

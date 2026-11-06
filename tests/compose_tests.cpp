@@ -5,6 +5,7 @@
 #include <kompoz/testing.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -678,6 +679,45 @@ TEST(top_level_vals_and_content_by_name) {
         threw = true;
     }
     CHECK(threw);
+}
+
+// Plain and extension functions: x.framed(c) is framed(x, c), and an extension's receiver is
+// reached by its members' names, as a lambda's is; a function's type is its body's.
+fun Modifier.framed(color: Color): Modifier =
+    border(1.dp, color).padding(4.dp)
+
+fun Modifier.tallerBy(extra: Dp) = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    layout(placeable.width, placeable.height + extra) {
+        placeable.placeRelative(0f, extra)
+    }
+}
+
+private fun label(count: Int): String {
+    if (count == 1) return "one item"
+    return "$count items"
+}
+
+fun shout(text: String) = text.uppercase() + "!"
+
+@Composable
+fun Extensions() {
+    Column {
+        Box(modifier = Modifier.testTag("framed").framed(Color.Red).tallerBy(8.dp)) { Text(label(1)) }
+        Text(shout(label(3)), modifier = Modifier.semantics { heading() })
+    }
+}
+
+TEST(plain_and_extension_functions) {
+    ComposeTestRule rule([] { Extensions(); });
+    CHECK(rule.onNodeWithText("one item").exists() && rule.onNodeWithText("3 ITEMS!").exists());
+    Rect box = rule.onNodeWithTag("framed").bounds(), text = rule.onNodeWithText("one item").bounds();
+    // (a border takes no room: 4 dp of padding each side, 8 more above)
+    CHECK(std::abs(box.height - (text.height + 16)) < 0.5f && std::abs(text.y - box.y - 12) < 0.5f);
+    bool heading = false;
+    for (const auto& n : rule.host().semanticsTree())
+        if (n.label == "3 ITEMS!") heading = n.heading;
+    CHECK(heading);
 }
 
 int main(int argc, char** argv) {

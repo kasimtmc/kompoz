@@ -18,6 +18,9 @@ struct Module {
     std::map<std::string, const Function*, std::less<>> functions;
     std::map<std::string, const DataClass*, std::less<>> classes;
     std::map<std::string, const Property*, std::less<>> properties;  // top-level vals
+    // How a call names each of the file's (or another file's, defined here) functions and vals: its
+    // namespace, "::" at the top (a name of all of Kompoz's, label or shape, is not it then).
+    std::map<std::string, std::string, std::less<>> qualifiers;
     const Structs* structs = nullptr;  // C++'s, from the headers read
 };
 

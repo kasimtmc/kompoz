@@ -394,8 +394,13 @@ void Structs::readText(std::string_view src) {
                 }
                 statement += c;
             }
+            // (An empty one, a named argument's tag, names::Modifier, gives way to one with members.)
+            bool empty = members.names.empty() && members.bases.empty();
             auto [at, added] = classes.emplace(name, members);
-            if (!added && (at->second.names != members.names || at->second.bases != members.bases)) ambiguousClasses.insert(name);
+            if (!added && !empty) {
+                if (at->second.names.empty() && at->second.bases.empty()) at->second = std::move(members);
+                else if (at->second.names != members.names || at->second.bases != members.bases) ambiguousClasses.insert(name);
+            }
         }
     }
 }

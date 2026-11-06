@@ -795,6 +795,15 @@
   `semantics(mergeDescendants = true) { … }`, `clearAndSetSemantics { contentDescription = "…" }`; `stateDescription`,
   `role` (`Role.Button`, …), `selected`, `liveRegion`, `progressBarRangeInfo`, `customActions`, `traversalIndex`,
   `selectableGroup()`, `hideFromAccessibility()` ve `setProgress { … }` ile.
+- **kompozc: düz ve uzantı fonksiyonları**: `fun shout(text: String) = text.uppercase()`, `private fun …` ve Compose'un
+  kendi modifier'larının yazıldığı gibi `fun Modifier.cardSurface(color: Color) = shadow(…).background(color, …)`:
+  `Modifier.fillMaxWidth().cardSurface(c)`, `cardSurface(Modifier.fillMaxWidth(), c)`'dir ve gövdesinde alıcının
+  üyelerine adlarıyla ulaşılıyor. Bir tür yazılmamışsa fonksiyonun türü gövdesininki; her biri onu kullanan ilk
+  fonksiyondan önce, modülün başka bir dosyasındaki de kullanıldığı yerde tanımlanıyor. Bir ifade gövdesi ya da bir
+  val, satır sonundaki `=` ya da bir işleçten sonra sürebiliyor. `semantics { }`, `layout { }` ve `onKeyEvent { }`
+  lambdaları Compose'un yaptığı gibi. Dosyanın kendi fonksiyonlarına ya da val'lerine bir çağrı onun C++ isim alanını
+  adlandırıyor (`::label(1)`); böylece `label` ya da `shape` adlı biri hiçbir zaman `using namespace kompoz`'un
+  getirdiği bir Kompoz adı olmuyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine
