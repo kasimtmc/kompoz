@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <charconv>
 #include <chrono>
+#include <coroutine>
 #include <cmath>
 #include <functional>
 #include <limits>
@@ -186,7 +187,8 @@ template <class S>
 decltype(auto) value(const S& s) {
     if constexpr (requires { s.get(); }) return s.get();
     else if constexpr (requires { s.value(); }) return s.value();
-    else return (s.value);
+    else if constexpr (requires { s.value; }) return (s.value);
+    else return (s);  // (produceState's value: delegated to as it is)
 }
 
 // ---- Ranges: 0 until n, 1..10, 10 downTo 1, r step 2, x in r ----
@@ -289,6 +291,44 @@ std::function<void()> onDispose(F&& f) {
 }
 
 // ---- Coroutines: delay(300) in a LaunchedEffect ----
+
+// In a coroutine, each call is written co_await kt::await((call, kt::VoidMark{})): a suspending one
+// (a Task, a TaskOf<T>, an awaiter: Kotlin's suspend functions) is awaited, any other gives its
+// value at once. (A void call keeps the built-in comma, so it gives the VoidMark.)
+struct VoidMark {};
+// The call's result, as a reference: a temporary lives to the end of the full expression, the
+// co_await too, so an awaiter that can't be moved (a snackbar's) is awaited where it is.
+template <class T>
+struct Held {
+    T&& value;
+};
+template <class T>
+Held<T> operator,(T&& v, VoidMark) {
+    return {std::forward<T>(v)};
+}
+template <class T>
+struct Ready {
+    T value;
+    bool await_ready() const noexcept { return true; }
+    void await_suspend(std::coroutine_handle<>) const noexcept {}
+    T await_resume() { return std::move(value); }
+};
+template <>
+struct Ready<void> {
+    bool await_ready() const noexcept { return true; }
+    void await_suspend(std::coroutine_handle<>) const noexcept {}
+    void await_resume() const noexcept {}
+};
+template <class T>
+concept Awaitable = requires(T& t) { t.await_ready(); } || requires(T&& t) { std::move(t).operator co_await(); } ||
+                    requires(T&& t) { operator co_await(std::move(t)); };
+template <class T>
+decltype(auto) await(Held<T> held) {
+    if constexpr (Awaitable<std::remove_cvref_t<T>>) return std::forward<T>(held.value);  // (T&&: awaited in place)
+    else return Ready<std::remove_cvref_t<T>>{std::forward<T>(held.value)};
+}
+inline Ready<void> await(VoidMark) { return {}; }
+
 
 inline auto delay(long long milliseconds) { return ::kompoz::delay(std::chrono::milliseconds(milliseconds)); }
 

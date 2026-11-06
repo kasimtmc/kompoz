@@ -755,6 +755,12 @@
   `add`, `addAll`, `remove` ve `removeAt`'i var. `mutableStateOf(v, neverEqualPolicy())` ve
   `structuralEqualityPolicy()` tür almıyor, `mutableStateListOf("a", "b")` öğelerini tek tek alıyor,
   `rememberSaveable(saver = …) { … }` saver'ını adla alıyor.
+- **kompozc bir coroutine'de bekleyen her şeyi bekliyor**: bir `LaunchedEffect`, `launch` ya da `produceState`
+  bloğunda, `Task`, `TaskOf<T>` ya da başka bir bekletici veren her çağrı, Kotlin'in bir `suspend fun`'ı beklediği gibi
+  bekleniyor. Sizin bekleyen bir fonksiyonunuz (`TaskOf<T>` döndüren bir C++ coroutine'i) bir liste gerektirmiyor.
+  Öteki her çağrı değerini hemen veriyor. `async { … }` ve `withBackground { … }` bloklarının değerini veriyor.
+  `produceState(initial, key) { … }`'un bloğu `value`'yu ayarlıyor, `val x by produceState(…)` onu okuyor. Bir snackbar,
+  Compose'daki gibi `showSnackbar` ile bekleniyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

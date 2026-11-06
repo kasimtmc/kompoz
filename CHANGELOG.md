@@ -715,6 +715,11 @@
   `removeAt` are there for lists. `mutableStateOf(v, neverEqualPolicy())` and `structuralEqualityPolicy()` take no
   type, `mutableStateListOf("a", "b")` takes its items one by one, and `rememberSaveable(saver = …) { … }` takes its
   saver by name.
+- **kompozc awaits whatever suspends in a coroutine**: in a `LaunchedEffect`, `launch` or `produceState` block, every
+  call that gives a `Task`, a `TaskOf<T>` or another awaiter is awaited, as Kotlin awaits a `suspend fun`. A
+  suspending function of your own (a C++ coroutine returning `TaskOf<T>`) needs no list. Any other call gives its
+  value at once. `async { … }` and `withBackground { … }` give their block's value. `produceState(initial, key) { … }`'s
+  block sets `value`, and `val x by produceState(…)` reads it. A snackbar is `showSnackbar`, as Compose suspends on it.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

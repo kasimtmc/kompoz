@@ -42,7 +42,7 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "last", "lastOrNull", "find", "groupBy", "associateBy", "associateWith", "flatMap", "sumOf", "maxOf", "minOf",
     "maxByOrNull", "minByOrNull", "let", "run", "with", "takeIf", "takeUnless", "getOrElse", "lazy", "snapshotFlow",
     "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked",
-    "DisposableEffect"};
+    "DisposableEffect", "async", "withBackground"};
 
 // Kotlin types the C++ way.
 const std::map<std::string, std::string, std::less<>> kTypes = {
@@ -85,13 +85,8 @@ const std::set<std::string, std::less<>> kKtMembers = {
     "coerceIn", "coerceAtLeast", "coerceAtMost", "roundToInt", "find", "add", "addAll", "removeAt", "remove"};
 
 // Calls whose lambda is a coroutine (Kotlin's suspend lambdas): [=]() -> Task { ...; co_return; }.
-const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "async", "produceState"};
+const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "produceState"};
 
-// Suspending functions: in a coroutine, awaited (co_await).
-const std::set<std::string, std::less<>> kSuspendCalls = {
-    "delay", "withFrameNanos", "withFrameMillis", "awaitFrame", "animateTo", "snapTo", "animateScrollToItem",
-    "scrollToItem", "animateScrollToPage", "scrollToPage", "animateScrollBy", "scrollBy", "show", "hide", "open", "close",
-    "expand", "partialExpand", "showSnackbar", "collect", "collectLatest", "emit", "join", "await", "withBackground"};
 
 const std::set<std::string, std::less<>> kCppKeywords = {
     "alignas", "alignof", "and", "asm", "auto", "bitand", "bitor", "bool", "case", "catch", "char", "compl", "concept", "const",
@@ -475,7 +470,14 @@ private:
                 expr(*e.kids[0]);
                 out_.text(")");
                 return;
-            case Node::Call: return call(e);
+            case Node::Call:
+                if (suspend_ && awaitable(e)) {  // in a coroutine: awaited if it suspends (kotlin.hpp's kt::await)
+                    out_.text("(co_await ::kompoz::kt::await((");
+                    call(e);
+                    out_.text(", ::kompoz::kt::VoidMark{})))");
+                    return;
+                }
+                return call(e);
             case Node::Member: return member(e);
             case Node::Index:
                 expr(*e.kids[0]);
@@ -629,6 +631,16 @@ private:
         out_.text("), " + cppName(e.text) + ")");
     }
 
+    // Whether a call in a coroutine may suspend: not a type's construction (Point(…), a data class,
+    // a capitalized name), not a function given its coroutine (launch { } is the coroutine's).
+    bool awaitable(const Node& c) const {
+        const Node& callee = companionless(*c.kids[0]);
+        std::string name = callee.kind == Node::Name ? callee.text : callee.kind == Node::Member ? callee.text : "";
+        if (callee.kind == Node::Name && capitalized(callee.text) && !lookup(callee.text)) return false;
+        if (kSuspendLambdas.contains(name)) return false;
+        return true;
+    }
+
     // X.Companion is X.
     static const Node& companionless(const Node& n) {
         return n.kind == Node::Member && n.text == "Companion" ? companionless(*n.kids[0]) : n;
@@ -637,7 +649,6 @@ private:
     void call(const Node& c) {
         const Node& callee = companionless(*c.kids[0]);
         std::string calleeName = callee.kind == Node::Name ? callee.text : callee.kind == Node::Member ? callee.text : "";
-        if (suspend_ && kSuspendCalls.contains(calleeName)) out_.text("co_await ");
         // A @Composable kompozc translates: arguments by position, defaults filled in.
         if (callee.kind == Node::Name && !lookup(callee.text)) {
             if (auto f = module_.functions.find(callee.text); f != module_.functions.end()) return moduleCall(c, *f->second);
@@ -681,7 +692,9 @@ private:
         }
         if (callee.kind == Node::Member && !callee.flag && !qualifier(companionless(*callee.kids[0])) && callee.text != "Companion") {
             expr(companionless(*callee.kids[0]));  // a member called: obj.f(…), not a property
-            out_.text("." + cppName(callee.text));
+            // In a coroutine, Compose's suspending forms where Kompoz's C++ has a separate one.
+            std::string member = suspend_ && callee.text == "showSnackbar" ? "showSnackbarAsync" : cppName(callee.text);
+            out_.text("." + member);
         } else {
             expr(callee);
         }
@@ -709,7 +722,7 @@ private:
         }
         if (c.lambda) {
             if (any) out_.text(", ");
-            lambda(*c.lambda, kValueLambdas.contains(calleeName), kSuspendLambdas.contains(calleeName));
+            lambda(*c.lambda, kValueLambdas.contains(calleeName), kSuspendLambdas.contains(calleeName), calleeName == "produceState");
         }
         out_.text(")");
     }
@@ -837,12 +850,18 @@ private:
         out_.text(")");
     }
 
-    void lambda(const Node& l, bool value, bool suspend = false) {
+    void lambda(const Node& l, bool value, bool suspend = false, bool produceState = false) {
         bool wasSuspend = std::exchange(suspend_, suspend);
         out_.text("[=](");
         scopes_.emplace_back();
         if (suspend) {
-            // A coroutine (Kotlin's suspend lambda): its CoroutineScope receiver has no name here.
+            // A coroutine (Kotlin's suspend lambda): its CoroutineScope receiver has no name here;
+            // produceState's gives it the state, `value` (a copy: a coroutine's parameters outlive
+            // their call).
+            if (produceState) {
+                out_.text("auto value");
+                declare("value", Delegated);
+            }
         } else if (l.flag) {
             for (size_t i = 0; i < l.names.size(); ++i) {
                 out_.text((i ? ", " : "") + std::string("auto&& ") + cppName(l.names[i]));

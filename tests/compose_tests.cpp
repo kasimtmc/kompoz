@@ -579,6 +579,36 @@ TEST(state_forms_as_compose_writes_them) {
     CHECK(rule.onNodeWithText("yapılacak 2").exists() && rule.onNodeWithText("etiket 3").exists());
 }
 
+// In a coroutine, a call that suspends (a TaskOf<T> of yours, a Deferred's await()) is awaited,
+// any other gives its value at once; produceState's block sets `value`.
+TaskOf<int> slowDouble(int x) {
+    co_await delay(std::chrono::milliseconds(200));
+    co_return x * 2;
+}
+
+@Composable
+fun Awaits() {
+    val produced by produceState(0, 21) { value = slowDouble(21) }
+    var both by remember { mutableStateOf("…") }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {
+        val a = scope.async { slowDouble(1) }
+        val b = scope.async { slowDouble(2) }
+        both = "${a.await() + b.await()} ${"x".uppercase()}"
+    }
+    Column {
+        Text("üretilen $produced")
+        Text("ikisi $both")
+    }
+}
+
+TEST(coroutines_await_what_suspends) {
+    ComposeTestRule rule([] { Awaits(); });
+    CHECK(rule.onNodeWithText("üretilen 0").exists() && rule.onNodeWithText("ikisi …").exists());
+    rule.advanceTimeBy(400);
+    CHECK(rule.onNodeWithText("üretilen 42").exists() && rule.onNodeWithText("ikisi 6 X").exists());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;
