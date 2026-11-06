@@ -417,7 +417,7 @@ void detail::twoPanes(const Content& first, const Content& second, bool firstFix
                       const std::optional<PaneExpansionState>& expansion, const std::function<void(PaneExpansionState)>& handle,
                       const Modifier& modifier) {
     std::shared_ptr<PaneExpansionState::Data> d = expansion ? expansion->data_ : nullptr;
-    Layout(
+    kompoz::Layout(
         modifier.fillMaxSize(),
         [&] {
             detail::Box(Modifier(), first);

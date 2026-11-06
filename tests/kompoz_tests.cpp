@@ -11165,6 +11165,40 @@ TEST(layouts_take_compose_arguments_and_config_scopes) {
     CHECK(rule.onNodeWithText("geniş").exists());
 }
 
+TEST(custom_layouts_take_compose_forms) {
+    // Layout(content, modifier) { measurables, constraints -> layout(w, h) { … } }, SubcomposeLayout's
+    // layout(w, h), Constraints::copy by name, placeRelative(x = …, y = …), dividers' thickness.
+    ComposeTestRule rule([] {
+        Column([] {
+            Layout([] {
+                Box(Modifier().size(20).testTag("bir"));
+                Box(Modifier().size(20).testTag("iki"));
+            }, arg::modifier = Modifier().testTag("merdiven"),
+                   [](MeasureScope& scope, const std::vector<Measurable>& children, const Constraints& c) {
+                       std::vector<Placeable> placed;
+                       for (const Measurable& m : children) placed.push_back(m.measure(c.copy(arg::minWidth = 0.f, arg::minHeight = 0.f)));
+                       return scope.layout(60, 40, [&](PlacementScope&) {
+                           placed[0].placeRelative(arg::x = 0.f, arg::y = 0.f);
+                           placed[1].placeRelative(arg::x = 30.f, arg::y = 20.f);
+                       });
+                   });
+            SubcomposeLayout(arg::modifier = Modifier().testTag("alt"), [](SubcomposeMeasureScope& s, const Constraints& c) {
+                auto parts = s.subcompose(std::string("kutu"), [] { Box(Modifier().size(10, 30)); });
+                if (parts.empty()) return Size{};  // (composed after this pass, measured in the next)
+                Placeable p = parts[0].measure(c.loosen());
+                return s.layout(p.width, p.height, [&] { p.placeRelative(0, 0); });
+            });
+            HorizontalDivider(arg::thickness = 3.f, arg::modifier = Modifier().testTag("çizgi"));
+        });
+    });
+    Rect stairs = rule.onNodeWithTag("merdiven").bounds(), two = rule.onNodeWithTag("iki").bounds();
+    CHECK(near(stairs.width, 60) && near(stairs.height, 40) && near(two.x - stairs.x, 30) && near(two.y - stairs.y, 20));
+    CHECK(near(rule.onNodeWithTag("alt").bounds().height, 30));
+    CHECK(near(rule.onNodeWithTag("çizgi").bounds().height, 3));
+    Constraints c{0, 100, 0, 50};
+    CHECK(c.offset(-20, -10) == (Constraints{0, 80, 0, 40}) && c.constrainWidth(150) == 100);
+}
+
 TEST(intrinsic_height_and_flow_row) {
     ComposeTestRule rule([] {
         Column([] {

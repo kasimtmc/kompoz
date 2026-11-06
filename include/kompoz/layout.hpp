@@ -75,6 +75,18 @@ struct Constraints {
     constexpr bool hasBoundedWidth() const { return maxWidth != kInfinity; }
     constexpr bool hasBoundedHeight() const { return maxHeight != kInfinity; }
     constexpr Constraints loosen() const { return {0, maxWidth, 0, maxHeight}; }
+    // Compose's: a width or height brought within them, and them moved by dp (offset(-16, 0): 16
+    // less room across), never under 0.
+    constexpr float constrainWidth(float width) const { return std::clamp(width, minWidth, maxWidth); }
+    constexpr float constrainHeight(float height) const { return std::clamp(height, minHeight, maxHeight); }
+    constexpr Constraints offset(float horizontal = 0, float vertical = 0) const {
+        auto by = [](float v, float d) { return v == kInfinity ? v : std::max(0.f, v + d); };
+        return {by(minWidth, horizontal), by(maxWidth, horizontal), by(minHeight, vertical), by(maxHeight, vertical)};
+    }
+    // Compose's copy(minWidth = 0, …) (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Constraints copy(A&&... args) const;
     constexpr Size constrain(Size s) const {
         return {std::clamp(s.width, minWidth, maxWidth), std::clamp(s.height, minHeight, maxHeight)};
     }
@@ -419,6 +431,13 @@ struct LayoutModifierPlaceable {
         bool mirrored = detail::placementWidth >= 0 && detail::measuringRtl();
         *placeAt = {mirrored ? detail::placementWidth - x - width : x, y};
     }
+    // By name, as Compose's: placeRelative(x = 0, y = top) (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void placeRelative(A&&... args) const;
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void place(A&&... args) const;
 };
 struct LayoutModifierMeasurable {
     const MeasureNext* next = nullptr;

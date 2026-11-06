@@ -184,7 +184,7 @@ void detail::BasicAlertDialog(std::function<void()> onDismissRequest, const Modi
         std::move(onDismissRequest),
         [&] {
             // Its children get its least width too (Compose's propagateMinConstraints).
-            Layout(modifier.widthIn(kDialogMinWidth, kDialogMaxWidth), content,
+            kompoz::Layout(modifier.widthIn(kDialogMinWidth, kDialogMaxWidth), content,
                    [](const std::vector<Measurable>& children, const Constraints& c) {
                        Size size{c.minWidth, c.minHeight};
                        std::vector<Placeable> placed;

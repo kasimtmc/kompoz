@@ -220,8 +220,19 @@ inline const Typography& typography() { return LocalTypography.current(); }
 
 // ---- Layouts ---------------------------------------------------------------------------
 
+namespace detail {
+void LookaheadScope(const Modifier& modifier, const Content& content, CallSite site);
+struct LookaheadScopeImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        LookaheadScope(P::get<names::Modifier>(Modifier{}, args...), P::plainBlock(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
 // A Box whose content's animateBounds measure their places from it (Compose's LookaheadScope).
-void LookaheadScope(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
+inline constexpr Composable<detail::LookaheadScopeImpl> LookaheadScope;
 
 namespace detail {
 // What the composables below make. The library's own composables call these, with content of
@@ -312,6 +323,23 @@ struct Placeable {
     }
     // Compose's placeRelative: x from the start, mirrored right to left.
     void placeRelative(float x, float y, float zIndex = 0) const { node->place(x, y, zIndex); }
+    // By name, as Compose's: placeRelative(x = 0, y = top), place(x = …, y = …, zIndex = …).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void place(A&&... args) const {
+        namespace n = detail::names;
+        using P = detail::Params<n::X, n::Y, n::ZIndex>;
+        static_assert(P::check<A...>());
+        place(float(P::arg<n::X>(args...)), float(P::arg<n::Y>(args...)), P::get<n::ZIndex>(0.f, args...));
+    }
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void placeRelative(A&&... args) const {
+        namespace n = detail::names;
+        using P = detail::Params<n::X, n::Y, n::ZIndex>;
+        static_assert(P::check<A...>());
+        placeRelative(float(P::arg<n::X>(args...)), float(P::arg<n::Y>(args...)), P::get<n::ZIndex>(0.f, args...));
+    }
     // Where an alignment line of it is, from its top (Compose's placeable[FirstBaseline]); NaN: none.
     float operator[](AlignmentLine line) const { return node->alignmentLine(line); }
 };
@@ -328,9 +356,36 @@ struct Measurable {
     }
 };
 using LayoutMeasurePolicy = std::function<Size(const std::vector<Measurable>& children, const Constraints& constraints)>;
+namespace detail {
 // One node per child of `content` (each child's own nodes, as emitted).
-void Layout(const Modifier& modifier, const Content& content, LayoutMeasurePolicy measurePolicy,
-            CallSite site = CallSite::current());
+void Layout(const Modifier& modifier, const Content& content, LayoutMeasurePolicy measurePolicy, CallSite site);
+// Layout(content, modifier) { measurables, constraints -> layout(w, h) { … } } as Compose's (a
+// MeasureScope the policy's receiver), or Layout(modifier, content, policy) with a LayoutMeasurePolicy.
+struct LayoutImpl {
+    static constexpr bool takesContentByName = true;  // (its content isn't its block: the policy is)
+    using Policy = BlockWith<MeasureScope&, const std::vector<Measurable>&, const Constraints&>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (startsWith<Modifier, A...>()) {
+            static_assert(sizeof...(A) == 3, "kompoz: Layout(modifier, content, measurePolicy)");
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            Layout(std::get<0>(all), Content(std::get<1>(all)), LayoutMeasurePolicy(std::get<2>(all)), site);
+        } else {
+            using P = Params<names::Content, names::Modifier, Policy>;
+            static_assert(P::template check<A...>());
+            static_assert(P::template blockGiven<A...>(), "kompoz: Layout(content, modifier) { measurables, constraints -> … }");
+            auto&& policy = std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...));
+            Layout(P::template get<names::Modifier>(Modifier{}, args...), Content(P::template arg<names::Content>(args...)),
+                   [policy](const std::vector<Measurable>& children, const Constraints& c) mutable {
+                       MeasureScope scope;
+                       return Size(policy(scope, children, c));
+                   },
+                   site);
+        }
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::LayoutImpl> Layout;
 namespace detail {
 // A menu's rows, one under another: as wide as the widest (112 dp to `maxWidth`), each that wide.
 LayoutMeasurePolicy menuRows(float maxWidth);
@@ -348,7 +403,7 @@ LayoutMeasurePolicy menuRows(float maxWidth);
 //       for (auto& m : s.subcompose("badge", size, [size] { Badge(size); })) ...
 //       return size;
 //   });
-class SubcomposeMeasureScope {
+class SubcomposeMeasureScope : public MeasureScope {  // (layout(w, h) { … } too)
 public:
     struct Data;
     SubcomposeMeasureScope(Data& data, LayoutNode& node) : data_(&data), node_(&node) {}
@@ -367,7 +422,21 @@ private:
     LayoutNode* node_;
 };
 using SubcomposeMeasurePolicy = std::function<Size(SubcomposeMeasureScope& scope, const Constraints& constraints)>;
-void SubcomposeLayout(const Modifier& modifier, SubcomposeMeasurePolicy measurePolicy, CallSite site = CallSite::current());
+namespace detail {
+void SubcomposeLayout(const Modifier& modifier, SubcomposeMeasurePolicy measurePolicy, CallSite site);
+struct SubcomposeLayoutImpl {
+    using P = Params<names::Modifier, BlockWith<SubcomposeMeasureScope&, const Constraints&>>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: SubcomposeLayout(modifier) { constraints -> … }");
+        auto&& policy = std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...));
+        SubcomposeLayout(P::get<names::Modifier>(Modifier{}, args...),
+                         [policy](SubcomposeMeasureScope& scope, const Constraints& c) mutable { return Size(policy(scope, c)); }, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::SubcomposeLayoutImpl> SubcomposeLayout;
 
 // Rows (columns) that wrap to the next line when full, e.g. for chips.
 struct FlowStyle {
@@ -1726,8 +1795,25 @@ struct SurfaceImpl {
 } // namespace detail
 inline constexpr Composable<detail::SurfaceImpl> Surface;
 
-void HorizontalDivider(const Modifier& modifier = {}, CallSite site = CallSite::current());
-void VerticalDivider(const Modifier& modifier = {}, CallSite site = CallSite::current());
+namespace detail {
+void HorizontalDivider(const Modifier& modifier, float thickness, std::optional<Color> color, CallSite site);
+void VerticalDivider(const Modifier& modifier, float thickness, std::optional<Color> color, CallSite site);
+// HorizontalDivider(modifier, thickness = 1.dp, color = …) and VerticalDivider's, as Compose's
+// (unset color: the theme's outlineVariant).
+template <bool Horizontal>
+struct DividerImpl {
+    using P = Params<names::Modifier, names::Thickness, names::Color>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::template check<A...>());
+        (Horizontal ? HorizontalDivider : VerticalDivider)(P::template get<names::Modifier>(Modifier{}, args...),
+                                                         P::template get<names::Thickness>(1.f, args...),
+                                                         P::template get<names::Color>(std::optional<Color>(), args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::DividerImpl<true>> HorizontalDivider;
+inline constexpr Composable<detail::DividerImpl<false>> VerticalDivider;
 
 namespace detail {
 void Checkbox(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier = {},

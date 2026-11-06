@@ -776,6 +776,13 @@
   argument's lambda with a receiver), `flex { }`, `BoxWithConstraints { }`, and `mediaQuery { }` and
   `derivedMediaQuery { }` on a `UiMediaScope` only read; `1.fr`; `16.dp.toPx()`, `roundToPx()` and `toDp()`, a dp
   being its own pixel here; `WindowInsets.systemBars` and the other insets, which are properties in Compose.
+- **Custom layouts as Compose writes them**: `Layout(content, modifier) { measurables, constraints -> layout(w, h)
+  { … } }` (its measure policy on a `MeasureScope`), `SubcomposeLayout(modifier) { constraints -> … }` (its
+  `SubcomposeMeasureScope` gives `layout(w, h) { … }` too), `LookaheadScope(modifier) { … }`, and
+  `HorizontalDivider` / `VerticalDivider` with `thickness` and `color`, all taking named arguments.
+  `constraints.copy(minWidth = 0, minHeight = 0)`, `constrainWidth`, `constrainHeight` and `offset`, and
+  `placeable.placeRelative(x = …, y = …)` by name, as Compose's. A slot of a `SubcomposeLayout` is still composed
+  after the pass that first asks for it (Compose composes it at once): its policy takes an empty list then.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

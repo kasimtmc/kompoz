@@ -1033,7 +1033,7 @@ void detail::Snackbar(const Content& content, const Modifier& modifier, const Sn
                 });
                 return;
             }
-            Layout(Modifier().padding(kSnackbarStart, 0, o.dismissAction ? 0.f : kSnackbarButtonSide, 0), [&] {
+            kompoz::Layout(Modifier().padding(kSnackbarStart, 0, o.dismissAction ? 0.f : kSnackbarButtonSide, 0), [&] {
                 detail::Box(Modifier().padding(0, 6), content);
                 if (o.action) detail::Box(Modifier().layoutId("action"), action);
                 if (o.dismissAction) detail::Box(Modifier().layoutId("dismiss"), dismiss);

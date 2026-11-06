@@ -320,7 +320,7 @@ Shape detail::morphingShape(const Shape& target, CallSite site) {
 }
 
 void detail::Box(const Content& content, CallSite site) { detail::Box(Modifier{}, Alignment::TopStart, content, site); }
-void LookaheadScope(const Modifier& modifier, const Content& content, CallSite site) {
+void detail::LookaheadScope(const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     detail::Box(modifier.then(std::make_shared<LookaheadScopeElement>()), content);
 }
@@ -363,7 +363,7 @@ LayoutMeasurePolicy detail::menuRows(float maxWidth) {
     };
 }
 
-void Layout(const Modifier& modifier, const Content& content, LayoutMeasurePolicy measurePolicy, CallSite site) {
+void detail::Layout(const Modifier& modifier, const Content& content, LayoutMeasurePolicy measurePolicy, CallSite site) {
     ComposableScope scope(site);
     layoutNode(
         CallSite::current(), modifier,
@@ -398,7 +398,7 @@ std::vector<Measurable> SubcomposeMeasureScope::slot(size_t id, Content content,
     return {};  // composed for the next pass of this frame
 }
 
-void SubcomposeLayout(const Modifier& modifier, SubcomposeMeasurePolicy measurePolicy, CallSite site) {
+void detail::SubcomposeLayout(const Modifier& modifier, SubcomposeMeasurePolicy measurePolicy, CallSite site) {
     ComposableScope scope(site);
     auto d = remember([] { return std::make_shared<SubcomposeMeasureScope::Data>(); });
     d->version.get();  // composed again when the slots asked for change
@@ -2174,12 +2174,12 @@ void detail::Surface(const Modifier& modifier, Color color, Color contentColor, 
                              [&] { detail::Box(modifier.background(color, shape).clip(shape), content); });
 }
 
-void HorizontalDivider(const Modifier& modifier, CallSite site) {
-    layoutNode(site, modifier.fillMaxWidth().height(1).background(colorScheme().outlineVariant), {}, {});
+void detail::HorizontalDivider(const Modifier& modifier, float thickness, std::optional<Color> color, CallSite site) {
+    layoutNode(site, modifier.fillMaxWidth().height(thickness).background(color.value_or(colorScheme().outlineVariant)), {}, {});
 }
 
-void VerticalDivider(const Modifier& modifier, CallSite site) {
-    layoutNode(site, modifier.fillMaxHeight().width(1).background(colorScheme().outlineVariant), {}, {});
+void detail::VerticalDivider(const Modifier& modifier, float thickness, std::optional<Color> color, CallSite site) {
+    layoutNode(site, modifier.fillMaxHeight().width(thickness).background(color.value_or(colorScheme().outlineVariant)), {}, {});
 }
 
 void SystemBarsAppearance(bool lightStatusBars, bool lightNavigationBars, CallSite site) {

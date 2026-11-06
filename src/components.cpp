@@ -109,7 +109,7 @@ void detail::ListItem(const ListItemSlots& slots, const Modifier& modifier, Call
     };
     Color container = slots.containerColor.value_or(cs.surface);
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
-        Layout(modifier.semantics({.mergeDescendants = true}).fillMaxWidth().background(container), [&] {
+        kompoz::Layout(modifier.semantics({.mergeDescendants = true}).fillMaxWidth().background(container), [&] {
             if (leading) detail::Box(Modifier().padding(0, 0, 16, 0), [&] { provide(cs.onSurfaceVariant, LocalTextStyle.current(), slots.leading); });
             if (overline) detail::Box(Modifier(), [&] { provide(cs.onSurfaceVariant, t.labelSmall, slots.overline); });
             detail::Box(Modifier(), [&] { provide(cs.onSurface, t.bodyLarge, slots.headline); });

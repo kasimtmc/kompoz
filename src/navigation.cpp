@@ -257,7 +257,7 @@ void detail::DismissibleNavigationDrawer(const Content& drawerContent, DrawerSta
     Modifier root = Modifier().fillMaxSize();
     if (options.gesturesEnabled) root = root.pointerInput(rtl, drawerDrag(state, coroutines, rtl));
     // The drawer is measured first; the content moves over by as much of it as shows.
-    Layout(
+    kompoz::Layout(
         root,
         [&] {
             if (visible) detail::Box(Modifier().fillMaxHeight(), [&] { CompositionLocalProvider({LocalDrawer.provides(d)}, drawerContent); });

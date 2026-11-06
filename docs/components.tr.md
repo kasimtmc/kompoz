@@ -572,6 +572,7 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 344. Compose'un `Modifier.layout { measurable, constraints -> layout(w, h) { placeable.placeRelative(x, y) } }` biçimi ve bir `Layout` içinde `layout(w, h) { … }` (`MeasureScope`, `PlacementScope`, sağdan sola aynalanan `placeRelative`) ✅
 345. Compose'un `SemanticsPropertyReceiver`'ında ayarlanan `Modifier.semantics { … }`, `semantics(mergeDescendants = true) { … }` ve `clearAndSetSemantics { … }` (`heading()`, `contentDescription`, `role = Role.Button`, …) ✅
 346. Compose'un `Modifier.flex { … }` ile `FlexBox(config = { … })`'u, `gridItem(row = …, column = …)` ile `Grid(config = { column(1.fr); … })`'i, `FlowRow`'un düzenlemeleri ve `BoxWithConstraintsScope` (`maxWidth`, …), hepsi adlı argümanlarla ✅
+347. Compose'un `Layout(content, modifier) { measurables, constraints -> layout(w, h) { … } }`, `SubcomposeLayout(modifier) { constraints -> … }`, `LookaheadScope(modifier)`, ayırıcıların `thickness` ve `color`'ı, `Constraints.copy(minWidth = …)` ve `placeRelative(x = …, y = …)` ✅
 
 ## Sıradakiler
 

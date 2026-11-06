@@ -162,6 +162,32 @@ Modifier Modifier::gridItem(A&&... args) const {
                     P::get<n::ColumnSpan>(1, args...), P::get<n::Alignment>(Alignment{Alignment::TopStart}, args...));
 }
 
+// Constraints::copy(minWidth = 0, minHeight = 0): the others as they were.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Constraints Constraints::copy(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::MinWidth, n::MaxWidth, n::MinHeight, n::MaxHeight>;
+    static_assert(P::check<A...>());
+    return {P::get<n::MinWidth>(minWidth, args...), P::get<n::MaxWidth>(maxWidth, args...), P::get<n::MinHeight>(minHeight, args...),
+            P::get<n::MaxHeight>(maxHeight, args...)};
+}
+
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+void LayoutModifierPlaceable::placeRelative(A&&... args) const {
+    using P = detail::Params<detail::names::X, detail::names::Y>;
+    static_assert(P::check<A...>());
+    placeRelative(float(P::arg<detail::names::X>(args...)), float(P::arg<detail::names::Y>(args...)));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+void LayoutModifierPlaceable::place(A&&... args) const {
+    using P = detail::Params<detail::names::X, detail::names::Y>;
+    static_assert(P::check<A...>());
+    place(float(P::arg<detail::names::X>(args...)), float(P::arg<detail::names::Y>(args...)));
+}
+
 // animateFloat(initialValue, targetValue, animationSpec, label) and animateColor's: the label is
 // Compose's name for its tools (none here).
 template <class... A>

@@ -470,6 +470,13 @@ struct TargetValue {};
 struct AnimationSpec {};
 struct Content {};
 struct MergeDescendants {};
+struct MeasurePolicy {};
+struct Thickness {};
+struct ZIndex {};
+struct MinWidth {};
+struct MaxWidth {};
+struct MinHeight {};
+struct MaxHeight {};
 struct Config {};
 struct MaxItemsInEachLine {};
 struct Row {};
@@ -691,6 +698,13 @@ inline constexpr Param<detail::names::AnimationSpec> animationSpec;
 // (a composable's block, given by name as Compose's content = … : kompoz::Content is its type)
 inline constexpr Param<detail::names::Content> content;
 inline constexpr Param<detail::names::MergeDescendants> mergeDescendants;
+inline constexpr Param<detail::names::MeasurePolicy> measurePolicy;
+inline constexpr Param<detail::names::Thickness> thickness;
+inline constexpr Param<detail::names::ZIndex> zIndex;
+inline constexpr Param<detail::names::MinWidth> minWidth;
+inline constexpr Param<detail::names::MaxWidth> maxWidth;
+inline constexpr Param<detail::names::MinHeight> minHeight;
+inline constexpr Param<detail::names::MaxHeight> maxHeight;
 inline constexpr Param<detail::names::Config> config;
 inline constexpr Param<detail::names::MaxItemsInEachLine> maxItemsInEachLine;
 inline constexpr Param<detail::names::Row> row;
@@ -754,7 +768,7 @@ namespace detail {
 // MaterialTheme(colorScheme = c, content = content)): the block, last, as the composable takes it.
 template <class Impl, class... A>
 decltype(auto) callImpl(CallSite site, A&&... args) {
-    if constexpr (countOf<names::Content, A...> == 0) {
+    if constexpr (countOf<names::Content, A...> == 0 || requires { Impl::takesContentByName; }) {
         return Impl::call(site, std::forward<A>(args)...);
     } else {
         static_assert(countOf<names::Content, A...> == 1, "kompoz: content given twice");

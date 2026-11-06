@@ -45,7 +45,7 @@ void detail::ShortNavigationBar(const Modifier& modifier, const Content& content
             return;
         }
         // Centered: as wide as the widest, together in the middle.
-        Layout(m.height(kBarHeight), content, [](const std::vector<Measurable>& items, const Constraints& c) {
+        kompoz::Layout(m.height(kBarHeight), content, [](const std::vector<Measurable>& items, const Constraints& c) {
             float width = c.hasBoundedWidth() ? c.maxWidth : 0, height = c.hasBoundedHeight() ? c.maxHeight : kBarHeight;
             float widest = 0;
             {
