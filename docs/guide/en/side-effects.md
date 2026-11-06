@@ -4,85 +4,87 @@ A side effect is a change to the world outside a composable: starting a timer, r
 
 ## Coroutines
 
-Kompoz's asynchronous code uses C++20 coroutines. A coroutine here is a lambda that returns `Task` and uses `co_await` where it waits:
+A `LaunchedEffect` or `launch` block is a coroutine, as Kotlin's suspend lambda is: kompozc makes it a C++20 coroutine and awaits each call in it that suspends:
 
-```cpp body
-using namespace std::chrono_literals;
-auto seconds = remember([] { return mutableStateOf(0); });
-LaunchedEffect(0, [seconds]() -> Task {
+```kotlin body
+var seconds by remember { mutableStateOf(0) }
+LaunchedEffect(Unit) {
     while (true) {
-        co_await delay(1s);
-        seconds.set(seconds.get() + 1);
+        delay(1000)
+        seconds++
     }
-});
-Text(std::to_string(seconds.get()) + " s");
+}
+Text("$seconds s")
 ```
 
-Coroutines run on the UI thread, driven by the frame clock, so they can read and write state directly. They are *cancelled* when their scope ends: the coroutine is destroyed at the `co_await` where it waits, running the destructors of what it holds. That is why the loop above can be endless: it stops when the composable leaves.
+Coroutines run on the UI thread, driven by the frame clock, so they can read and write state directly. They are *cancelled* when their scope ends: the coroutine is destroyed where it waits, running the destructors of what it holds. That is why the loop above can be endless: it stops when the composable leaves.
 
-Things you can wait for:
+Things you can wait for, in a coroutine:
 
-| Await | Like Compose's | Waits |
+| Call | Like Compose's | Waits |
 |---|---|---|
-| `co_await delay(300ms)` | `delay(300)` | For a time, on the frame clock. |
-| `co_await awaitFrame()` | `withFrameNanos { }` | Until the next frame; returns its time in nanoseconds. |
-| `co_await withBackground(work)` | `withContext(Dispatchers.IO) { }` | While `work` runs on a worker thread; returns what it returned. |
-| `co_await anim.animateTo(1.f)` | `animateTo(1f)` | Until an animation ends (see [Animation](animation.md)). |
-| `co_await f()`, where `f` returns `TaskOf<T>` | a `suspend fun` | Until another coroutine gives its result. |
+| `delay(300)` | `delay(300)` | For a time in milliseconds, on the frame clock. |
+| `awaitFrame()` | `withFrameNanos { }` | Until the next frame; gives its time in nanoseconds. |
+| `withBackground { work }` | `withContext(Dispatchers.IO) { }` | While `work` runs on a worker thread; gives what it returned. |
+| `anim.animateTo(1f)` | `animateTo(1f)` | Until an animation ends (see [Animation](animation.md)). |
+| a function returning `TaskOf<T>` | a `suspend fun` | Until it gives its result. |
 
-A coroutine that gives back a value returns `TaskOf<T>` and uses `co_return`; another coroutine awaits it, and it runs as part of the caller and is cancelled with it:
+A suspending function of your own is written in C++ for now: a coroutine returning `TaskOf<T>` (or `Task`), with `co_await` and `co_return`. A coroutine block calls it as Kotlin calls a `suspend fun`, and kompozc awaits it; it runs as part of the caller and is cancelled with it:
 
-```cpp
+```kotlin
 TaskOf<std::string> loadName(int id) {
     co_await delay(std::chrono::milliseconds(300));
     co_return "User " + std::to_string(id);
 }
 
-void UserName(int id) {
-    auto name = remember([] { return mutableStateOf(std::string("…")); });
-    LaunchedEffect(id, [id, name]() -> Task { name.set(co_await loadName(id)); });
-    Text(name.get());
+@Composable
+fun UserName(id: Int) {
+    var name by remember { mutableStateOf("…") }
+    LaunchedEffect(id) { name = loadName(id) }
+    Text(name)
 }
 ```
 
-A coroutine's captures are kept alive while it runs, so capture **by value**. A lambda that captures by reference outlives the composable that made it, and its references dangle.
+A coroutine block captures what it uses by value, as every lambda does here, so it never holds a reference to something gone; what it captured is kept while it runs.
 
 ### Jobs, async and structured scopes
 
-`launch` gives back a `Job`: `cancel()` it, ask `isActive()`, `isCompleted()` or `isCancelled()`, or wait in another coroutine with `co_await job.join()` for it to end. `async` starts a coroutine that returns `TaskOf<T>` and gives back a `Deferred<T>`, whose `co_await deferred.await()` gives its value or throws what it threw, so two pieces of work can run at once:
+`launch` gives back a `Job`: `cancel()` it, ask `isActive()`, `isCompleted()` or `isCancelled()`, or wait in a coroutine with `job.join()` for it to end. `async { … }` starts a coroutine (its block calls a suspending function) and gives back a `Deferred<T>`, whose `await()` gives its value or throws what it threw, so two pieces of work can run at once:
 
-```cpp
+```kotlin
 #! struct User { std::string name; }; struct Posts { int count = 0; };
 #! TaskOf<User> loadUser(int) { co_return User{"Ada"}; }
 #! TaskOf<Posts> loadPosts(int) { co_return Posts{3}; }
-void Profile(int id) {
-    auto line = remember([] { return mutableStateOf(std::string("…")); });
-    auto scope = rememberCoroutineScope();
-    LaunchedEffect(id, [id, line, scope]() -> Task {
-        auto user = scope.async([id] { return loadUser(id); });
-        auto posts = scope.async([id] { return loadPosts(id); });  // loading at the same time
-        line.set((co_await user.await()).name + ": " + std::to_string((co_await posts.await()).count));
-    });
-    Text(line.get());
+@Composable
+fun Profile(id: Int) {
+    var line by remember { mutableStateOf("…") }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(id) {
+        val user = scope.async { loadUser(id) }
+        val posts = scope.async { loadPosts(id) }  // loading at the same time
+        line = "${user.await().name}: ${posts.await().count}"
+    }
+    Text(line)
 }
 ```
 
-`co_await coroutineScope([](CoroutineScope scope) -> Task { … })`, as Kotlin's, runs a block that launches in a scope of its own, and goes on only when the block and everything it launched are done, with the block's value if it returns `TaskOf<T>`. A child failing cancels the others and the `co_await` throws what it threw; the coroutine awaiting it cancelled, they are all cancelled. `supervisorScope` is the same, but its children fail on their own: a child's failure is reported and cancels nothing.
+`coroutineScope`, as Kotlin's, runs a block that launches in a scope of its own (the block is written in C++ for now: a coroutine lambda given the `CoroutineScope`, see [Writing in C++](cpp.md)), and goes on only when the block and everything it launched are done, with the block's value if it returns `TaskOf<T>`. A child failing cancels the others and the call throws what it threw; the coroutine awaiting it cancelled, they are all cancelled. `supervisorScope` is the same, but its children fail on their own: a child's failure is reported and cancels nothing.
 
-`withTimeout(limit, block)` is a `coroutineScope` with a time limit: when it runs out, all of it is cancelled and the `co_await` throws `TimeoutCancellationException`. `withTimeoutOrNull` gives an empty `std::optional` instead (for a block that gives no value, `false`). A coroutine that ends with a `CancellationException` it didn't catch was cancelled, not failed: it isn't reported.
+`withTimeout(limit, block)` is a `coroutineScope` with a time limit: when it runs out, all of it is cancelled and the call throws `TimeoutCancellationException`. `withTimeoutOrNull` gives an empty `std::optional` instead (for a block that gives no value, `false`). A coroutine that ends with a `CancellationException` it didn't catch was cancelled, not failed: it isn't reported.
 
 ### Heavy work
 
-Coroutines run on the UI thread: a long computation in one freezes the UI just as it would anywhere else. Put reading files, decoding and heavy sums on a worker thread with `withBackground`, and come back to the UI thread with the result:
+Coroutines run on the UI thread: a long computation in one freezes the UI just as it would anywhere else. Put reading files, decoding and heavy sums on a worker thread with `withBackground { … }` (Compose's `withContext(Dispatchers.IO) { … }`), and come back to the UI thread with the result:
 
-```cpp
+```kotlin
 #! std::string readFile(const std::string& path) { return path; }
-void FileView(const std::string& path) {
-    auto text = remember([] { return mutableStateOf(std::string()); });
-    LaunchedEffect(path, [path, text]() -> Task {
-        text.set(co_await withBackground([path] { return readFile(path); }));
-    });
-    Text(text.get());
+@Composable
+fun FileView(path: String) {
+    var text by remember { mutableStateOf("") }
+    LaunchedEffect(path) {
+        text = withBackground { readFile(path) }
+    }
+    Text(text)
 }
 ```
 
@@ -90,59 +92,61 @@ The work on the worker thread returns its result, and the coroutine, back on the
 
 ## LaunchedEffect
 
-`LaunchedEffect(key, coroutine)` runs a coroutine when the composable enters the composition, and again whenever `key` changes, cancelling the previous run first. It is cancelled when the composable leaves.
+`LaunchedEffect(key) { … }` runs its block, a coroutine, when the composable enters the composition, and again whenever `key` changes, cancelling the previous run first. It is cancelled when the composable leaves.
 
-```cpp
-void Greeting(const std::string& user, SnackbarHostState snackbar) {
-    LaunchedEffect(user, [user, snackbar]() -> Task {
-        co_await snackbar.showSnackbarAsync("Welcome back, " + user);
-    });
+```kotlin
+@Composable
+fun Greeting(user: String, snackbar: SnackbarHostState) {
+    LaunchedEffect(user) {
+        snackbar.showSnackbar("Welcome back, $user")
+    }
 }
 ```
 
-- Use a key that changes exactly when the effect should restart: an id, a URL. For an effect that should run once, use a constant (`0`), like Compose's `LaunchedEffect(Unit)`.
-- The key must compare with `==`. `LaunchedEffect`, `DisposableEffect` and `produceState` take two or three keys too, as in Compose (`LaunchedEffect(userId, query, …)`: restarted when either changes); for more, use a `std::tuple`.
+- Use a key that changes exactly when the effect should restart: an id, a URL. For an effect that should run once, use a constant: `LaunchedEffect(Unit)`.
+- The key must compare with `==`. `LaunchedEffect`, `DisposableEffect` and `produceState` take two or three keys too, as in Compose (`LaunchedEffect(userId, query) { … }`: restarted when either changes); for more, use a `data class`.
 
 ## rememberCoroutineScope
 
 `LaunchedEffect` starts work from composition. To start work from an event, such as a click, use a `CoroutineScope` from `rememberCoroutineScope`. Its coroutines are cancelled when the composable that made it leaves.
 
-```cpp
-void ScrollUpButton(LazyListState list) {
-    auto scope = rememberCoroutineScope();
-    Button([scope, list] {
-        scope.launch([list]() -> Task { co_await list.animateScrollToItem(0); });
-    }) { Text("Top"); };
+```kotlin
+@Composable
+fun ScrollUpButton(list: LazyListState) {
+    val scope = rememberCoroutineScope()
+    Button(onClick = { scope.launch { list.animateScrollToItem(0) } }) { Text("Top") }
 }
 ```
 
 ## DisposableEffect
 
-For effects that need cleaning up, such as registering and unregistering a listener, `DisposableEffect(key, effect)` runs `effect` after composition when it enters or when `key` changes. The function it returns runs when it leaves, or before it runs again for a new key:
+For effects that need cleaning up, such as registering and unregistering a listener, `DisposableEffect(key) { … }` runs its block after composition when it enters or when `key` changes. Its `onDispose { … }` runs when it leaves, or before it runs again for a new key:
 
-```cpp
+```kotlin
 #! struct Sensor { void subscribe(std::function<void(float)>) {} void unsubscribe() {} };
 #! Sensor& sensor();
-void Compass() {
-    auto heading = remember([] { return mutableStateOf(0.f); });
-    DisposableEffect(0, [heading] {
-        sensor().subscribe([heading](float h) { heading.set(h); });
-        return [] { sensor().unsubscribe(); };   // like Compose's onDispose { }
-    });
-    Text(std::to_string(int(heading.get())) + "°");
+@Composable
+fun Compass() {
+    var heading by remember { mutableStateOf(0f) }
+    DisposableEffect(Unit) {
+        sensor().subscribe { h -> heading = h }
+        onDispose { sensor().unsubscribe() }
+    }
+    Text("${heading.toInt()}°")
 }
 ```
 
 ## SideEffect
 
-`SideEffect(effect)` runs after every successful composition of the enclosing scope, once what entered it was told so. Use it to hand state to something that isn't managed by Kompoz, such as an analytics library, after the UI it describes was composed:
+`SideEffect { … }` runs after every successful composition of the enclosing scope, once what entered it was told so. Use it to hand state to something that isn't managed by Kompoz, such as an analytics library, after the UI it describes was composed:
 
-```cpp
+```kotlin
 #! struct Analytics { void setUserType(const std::string&) {} };
 #! Analytics& analytics();
-void Shop(const std::string& userType) {
-    SideEffect([userType] { analytics().setUserType(userType); });
-    Text("Shop");
+@Composable
+fun Shop(userType: String) {
+    SideEffect { analytics().setUserType(userType) }
+    Text("Shop")
 }
 ```
 
@@ -150,42 +154,45 @@ void Shop(const std::string& userType) {
 
 A long-running effect keyed to a constant doesn't restart when the composable's parameters change, so it would keep using the values it captured first. `rememberUpdatedState` holds the latest value for it to read:
 
-```cpp
-void SplashScreen(std::function<void()> onTimeout) {
-    auto currentOnTimeout = rememberUpdatedState(onTimeout);
-    LaunchedEffect(0, [currentOnTimeout]() -> Task {   // not restarted when onTimeout changes
-        co_await delay(std::chrono::seconds(3));
-        currentOnTimeout.get()();                       // the latest one
-    });
-    Text("Loading…");
+```kotlin
+@Composable
+fun SplashScreen(onTimeout: () -> Unit) {
+    val currentOnTimeout by rememberUpdatedState(onTimeout)
+    LaunchedEffect(Unit) {  // not restarted when onTimeout changes
+        delay(3000)
+        currentOnTimeout()   // the latest one
+    }
+    Text("Loading…")
 }
 ```
 
 ## produceState
 
-`produceState(initial, key, producer)` turns the result of a coroutine into a value that composition reads. The coroutine gets a `MutableState` to set, and is restarted when `key` changes:
+`produceState(initial, key) { … }` turns the result of a coroutine into a value that composition reads. The coroutine sets `value`, and is restarted when `key` changes:
 
-```cpp
+```kotlin
 #! TaskOf<int> fetchCount(const std::string&) { co_return 3; }
-void Downloads(const std::string& url) {
-    int count = produceState(0, url, [url](MutableState<int> state) -> Task {
-        state.set(co_await fetchCount(url));
-    });
-    Text(std::to_string(count) + " files");
+@Composable
+fun Downloads(url: String) {
+    val count by produceState(0, url) {
+        value = fetchCount(url)
+    }
+    Text("$count files")
 }
 ```
 
 ## snapshotFlow
 
-`snapshotFlow(block)` watches states from inside a coroutine: it calls you with the block's value now, and again each time a state the block read changes it to a different value. It goes on until the coroutine is cancelled.
+`snapshotFlow { … }.collect { … }` watches states from inside a coroutine: it calls you with the block's value now, and again each time a state the block read changes it to a different value. It goes on until the coroutine is cancelled.
 
-```cpp
-void ScrollLogger(LazyListState list) {
-    LaunchedEffect(0, [list]() -> Task {
-        co_await snapshotFlow([list] { return list.firstVisibleItemIndex(); }).collect([](int first) {
-            std::printf("first visible: %d\n", first);
-        });
-    });
+```kotlin
+@Composable
+fun ScrollLogger(list: LazyListState) {
+    LaunchedEffect(Unit) {
+        snapshotFlow { list.firstVisibleItemIndex }.collect { first ->
+            println("first visible: $first")
+        }
+    }
 }
 ```
 
