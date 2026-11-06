@@ -8,86 +8,99 @@ A parent measures each child with `Constraints`: a minimum and maximum width and
 
 | | |
 |---|---|
-| `Constraints::fixed(w, h)` | Exactly this size. |
-| `c.loosen()` | The same maximums, with minimums of zero: the child may be smaller. |
-| `c.constrain(size)` | `size` clamped into the constraints. |
-| `c.hasBoundedWidth()`, `c.hasBoundedHeight()` | Whether the maximum is finite: inside a vertical scroll, the height isn't. |
-| `c.deflate(h, v)` | The constraints with `h` and `v` dp taken off, for padding. |
+| `Constraints.fixed(w, h)` | Exactly this size. |
+| `constraints.copy(minWidth = 0, minHeight = 0)` | The same maximums, with minimums of zero: the child may be smaller. |
+| `constraints.constrainWidth(w)`, `constrainHeight(h)` | A width or height clamped into the constraints. |
+| `constraints.hasBoundedWidth`, `hasBoundedHeight` | Whether the maximum is finite: inside a vertical scroll, the height isn't. |
+| `constraints.offset(-h, -v)` | The constraints with `h` and `v` dp taken off, for padding. |
+
+They are in dp, and floats: where Compose's are whole pixels (`indent.roundToPx()`), here they are the dp themselves.
 
 ## Layout
 
-`Layout(modifier, content, measurePolicy)` composes `content` and gives each of its children to `measurePolicy` as a `Measurable`. The policy measures them, places them and returns the layout's own size:
+`Layout(content, modifier) { measurables, constraints -> … }` composes `content` and gives each of its children to the measure policy, its lambda, as a `Measurable`. The policy measures them, and `layout(width, height) { … }` gives the layout's own size and places them:
 
-```cpp
-// Children one under another, each pushed right by `indent` dp more than the one before.
-void Staircase(float indent, const Content& content) {
-    Layout(Modifier(), content, [indent](const std::vector<Measurable>& children, const Constraints& c) {
-        float x = 0, y = 0, width = 0;
-        for (const Measurable& child : children) {
-            Placeable p = child.measure(c.loosen());
-            p.place(x, y);
-            width = std::max(width, x + p.width);
-            x += indent;
-            y += p.height;
+```kotlin
+// Children one under another, each pushed right by `indent` more than the one before.
+@Composable
+fun Staircase(indent: Dp, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Layout(content = content, modifier = modifier) { measurables, constraints ->
+        val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
+        var width = 0f
+        var height = 0f
+        placeables.forEachIndexed { i, placeable ->
+            width = maxOf(width, i * indent + placeable.width)
+            height += placeable.height
         }
-        return c.constrain(Size{width, y});
-    });
+        layout(constraints.constrainWidth(width), constraints.constrainHeight(height)) {
+            var y = 0f
+            placeables.forEachIndexed { i, placeable ->
+                placeable.placeRelative(x = i * indent, y = y)
+                y += placeable.height
+            }
+        }
+    }
 }
 
-void Steps() {
-    Staircase(24, [] {
-        Text("Wake up");
-        Text("Make coffee");
-        Text("Write code");
-    });
+@Composable
+fun Steps() {
+    Staircase(24.dp) {
+        Text("Wake up")
+        Text("Make coffee")
+        Text("Write code")
+    }
 }
 ```
 
 - `measure(constraints)` measures a child and returns a `Placeable` with its `width` and `height`. Measure each child once per pass.
-- `place(x, y)` puts it at that offset from the layout's start and top; an optional third argument is its z-index. In a right-to-left layout Kompoz mirrors what you placed, as Compose's `placeRelative` does: write the policy as if the layout were left to right.
-- Return a size within the constraints you were given; `c.constrain` makes sure of it.
+- In `layout`'s block, `placeRelative(x, y)` puts a child at that offset from the layout's start and top, mirrored in a right-to-left layout: write the policy as if the layout were left to right. `place(x, y)` places from the left whatever the direction; both take a `zIndex`.
+- Give a size within the constraints you were given; `constrainWidth` and `constrainHeight` make sure of it.
+- `forEach { }`, `map { }` and Kotlin's other inline functions run their lambda at once, so it changes the `var`s around it (`y` here), as in Kotlin.
 
 The policy runs during layout, not composition. A state it reads lays the layout out again when it changes, without recomposing.
 
 ### Telling children apart
 
-A policy sees its children in order. To tell them apart by role, tag them with `Modifier().layoutId("name")` and read `child.layoutId()`:
+A policy sees its children in order. To tell them apart by role, tag them with `Modifier.layoutId("name")` and read `layoutId`:
 
-```cpp
-void LabeledValue(const std::string& label, const std::string& value) {
-    Layout(Modifier().fillMaxWidth(), [&] {
-        Text(label, Modifier().layoutId("label"));
-        Text(value, Modifier().layoutId("value"), fontWeight = FontWeight::Bold);
-    }, [](const std::vector<Measurable>& children, const Constraints& c) {
-        float height = 0;
-        for (const Measurable& child : children) {
-            Placeable p = child.measure(c.loosen());
+```kotlin
+@Composable
+fun LabeledValue(label: String, value: String) {
+    Layout(
+        content = {
+            Text(label, modifier = Modifier.layoutId("label"))
+            Text(value, modifier = Modifier.layoutId("value"), fontWeight = FontWeight.Bold)
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val labelPlaceable = measurables.first { it.layoutId == "label" }.measure(loose)
+        val valuePlaceable = measurables.first { it.layoutId == "value" }.measure(loose)
+        layout(constraints.maxWidth, maxOf(labelPlaceable.height, valuePlaceable.height)) {
             // The label at the start, the value at the end.
-            p.place(child.layoutId() == "value" ? c.maxWidth - p.width : 0, 0);
-            height = std::max(height, p.height);
+            labelPlaceable.placeRelative(0, 0)
+            valuePlaceable.placeRelative(constraints.maxWidth - valuePlaceable.width, 0)
         }
-        return c.constrain(Size{c.maxWidth, height});
-    });
+    }
 }
 ```
 
 ### Alignment lines
 
-A `Placeable` knows where its text baselines are: `p[AlignmentLine::FirstBaseline]` is the first baseline's distance from its top, or NaN if it has none. Use it to line up text of different sizes. The `alignByBaseline()` and `paddingFromBaseline(top, bottom)` modifiers cover the common cases without a custom layout.
+A `Placeable` knows where its text baselines are: `placeable[FirstBaseline]` is the first baseline's distance from its top, or NaN if it has none (Compose's `AlignmentLine.Unspecified`). Use it to line up text of different sizes. The `alignByBaseline()` and `paddingFromBaseline(top, bottom)` modifiers cover the common cases without a custom layout.
 
 ## The layout modifier
 
-To change how a single composable is measured or placed, use `Modifier().layout` instead of wrapping it in a `Layout`. It measures the content through `measure`, returns the node's size, and sets `placeAt` to where the content goes inside it:
+To change how a single composable is measured or placed, use `Modifier.layout { measurable, constraints -> … }` instead of wrapping it in a `Layout`: it measures the content, and `layout(width, height) { … }` gives the node's size and places the content in it:
 
-```cpp
-// At least `min` dp tall, the content centered vertically in that.
-Modifier atLeastHeight(float min) {
-    return Modifier().layout([min](const MeasureNext& measure, const Constraints& c, Offset& placeAt) {
-        Size content = measure(c);
-        float height = std::max(content.height, std::min(min, c.maxHeight));
-        placeAt = {0, (height - content.height) / 2};
-        return Size{content.width, height};
-    });
+```kotlin
+// At least `min` tall, the content centered vertically in that.
+fun Modifier.atLeastHeight(min: Dp) = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    val height = maxOf(placeable.height, minOf(min, constraints.maxHeight))
+    layout(placeable.width, height) {
+        placeable.placeRelative(0f, (height - placeable.height) / 2)
+    }
 }
 ```
 
@@ -97,15 +110,15 @@ Layout measures each child once, so a parent can't measure a child twice to find
 
 The typical use is making siblings as tall as the tallest one:
 
-```cpp body
-Row(Modifier().height(IntrinsicSize::Min)) {
-    Text("A short label", Modifier().weight(1));
-    VerticalDivider(Modifier().fillMaxHeight());   // as tall as the taller text
-    Text("A label that wraps onto more than one line", Modifier().weight(1));
-};
+```kotlin body
+Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+    Text("A short label", modifier = Modifier.weight(1f))
+    VerticalDivider(modifier = Modifier.fillMaxHeight())   // as tall as the taller text
+    Text("A label that wraps onto more than one line", modifier = Modifier.weight(1f))
+}
 ```
 
-`height(IntrinsicSize::Min)` and `width(IntrinsicSize::Min)` (or `Max`) size the node to its content's intrinsic size, and children that fill it then fill that.
+`height(IntrinsicSize.Min)` and `width(IntrinsicSize.Min)` (or `Max`) size the node to its content's intrinsic size, and children that fill it then fill that.
 
 > **Note:** Kompoz's intrinsics are an approximation of Compose's: both `Min` and `Max` measure the content with that axis unbounded, and a `Layout` can't override how its intrinsic sizes are computed. For a min intrinsic width, text breaks at every space, so it comes out as wide as its widest word.
 
@@ -113,50 +126,54 @@ Row(Modifier().height(IntrinsicSize::Min)) {
 
 Sometimes what to compose depends on a measurement: a header sized to match a body, a different layout for narrow constraints, a badge sized by the text it decorates. `SubcomposeLayout` composes parts of its content *while* it measures:
 
-```cpp
+```kotlin
 // The content, with a line under it exactly as wide as the content turned out to be.
-void Underlined(const Content& content) {
-    SubcomposeLayout(Modifier(), [content](SubcomposeMeasureScope& s, const Constraints& c) {
-        float width = 0, height = 0;
-        for (const Measurable& m : s.subcompose(std::string("main"), content)) {
-            Placeable p = m.measure(c.loosen());
-            p.place(0, height);
-            width = std::max(width, p.width);
-            height += p.height;
-        }
+@Composable
+fun Underlined(content: @Composable () -> Unit) {
+    SubcomposeLayout { constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val main = subcompose("main", content).map { it.measure(loose) }
+        val width = main.maxOfOrNull { it.width } ?: 0f
+        val height = main.sumOf { it.height }
         // Composed with the width it has to match; composed again when that changes.
-        for (const Measurable& m : s.subcompose(std::string("line"), width, [width] {
-                 Box(Modifier().size(width, 2).background(colorScheme().primary)) {};
-             })) {
-            Placeable line = m.measure(c.loosen());
-            line.place(0, height);
-            height += line.height;
+        val line = subcompose("line", width) {
+            Box(modifier = Modifier.size(width, 2.dp).background(MaterialTheme.colorScheme.primary))
+        }.map { it.measure(loose) }
+        layout(width, height + line.sumOf { it.height }) {
+            var y = 0f
+            main.forEach { it.placeRelative(0, y); y += it.height }
+            line.forEach { it.placeRelative(0, y) }
         }
-        return c.constrain(Size{width, height});
-    });
+    }
 }
 ```
 
-- `subcompose(slotId, content)` composes a slot and returns its measurables. A slot is composed the first time it is asked for, and the layout runs again in the same frame.
-- `subcompose(slotId, dependency, content)` composes the slot again when `dependency` changes.
-- The content runs later, during composition, so capture by value.
+- `subcompose(slotId, content)` composes a slot and returns its measurables. A slot is composed after the pass that first asks for it, and the layout runs again in the same frame: until then it has no measurables, so the policy takes an empty list (`maxOfOrNull { … } ?: 0f`, not `maxOf`). Compose composes it at once.
+- `subcompose(slotId, dependency, content)`, Kompoz's, composes the slot again when `dependency` changes (Compose's composes a slot again whenever it is given new content).
+- The content runs later, during composition; it captures what it uses by value, as every lambda here does.
 
 `SubcomposeLayout` costs more than `Layout`; use it only when composition really depends on measurement. `BoxWithConstraints` is the common case of it, ready-made.
 
 ## Animating layout changes
 
-`Modifier().animateContentSize()` animates a node's size when its content grows or shrinks.
+`Modifier.animateContentSize()` animates a node's size when its content grows or shrinks.
 
-For a node that moves or resizes because the layout around it changed, `Modifier().animateBounds()` makes it glide from where it was drawn to where it is now, as Compose's `animateBounds`. Its position is measured from the nearest `LookaheadScope`:
+For a node that moves or resizes because the layout around it changed, `Modifier.animateBounds()` makes it glide from where it was drawn to where it is now, as Compose's `animateBounds`. Its position is measured from the nearest `LookaheadScope` (Compose's names it, `animateBounds(this@LookaheadScope)`):
 
-```cpp
-void Chips(bool wide) {
-    LookaheadScope(Modifier().fillMaxWidth(), [&] {
-        FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .maxItemsInEachLine = wide ? 4 : 2}, [&] {
-            for (const char* name : {"One", "Two", "Three", "Four"})
-                AssistChip([] {}, [&] { Text(name); }, {}, Modifier().animateBounds());
-        });
-    });
+```kotlin
+@Composable
+fun Chips(wide: Boolean) {
+    LookaheadScope(modifier = Modifier.fillMaxWidth()) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            maxItemsInEachLine = if (wide) 4 else 2,
+        ) {
+            for (name in listOf("One", "Two", "Three", "Four")) {
+                Text(name, modifier = Modifier.animateBounds().padding(8.dp))
+            }
+        }
+    }
 }
 ```
 
