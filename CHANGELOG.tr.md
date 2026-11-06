@@ -776,6 +776,10 @@
   ulaşılıyor: `graphicsLayer { scaleX = pulse; alpha = 0.5f }`, `Canvas(m) { drawCircle(c, size.width / 4) }`. Aynı
   adlı bir yerel değişken önce gelir, `this` alıcıdır. kompozc üyeleri (alanları ve fonksiyonları, taban sınıflarınkiler
   de) başlıklardan okuyor. `Modifier.offset { IntOffset(x.roundToInt(), 0) }` lambdasının değerini veriyor.
+- **Bir composable'ın bloğu adıyla verilebiliyor**: Compose kodunun içeriği aktardığı gibi `content = …`
+  (`MaterialTheme(colorScheme = c, content = content)`, `Box(modifier = m, content = { … })`), adlı argümanlar
+  arasında nerede durursa dursun her composable'ın aldığı blok (C++'ta `kompoz::arg::content`);
+  `CompositionLocalProvider(LocalX provides x, content = content)` da öyle.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

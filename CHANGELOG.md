@@ -736,6 +736,10 @@
   / 4) }`. A local of the same name comes first, `this` is the receiver. kompozc reads the members (fields and
   functions, those of base classes too) from the headers. `Modifier.offset { IntOffset(x.roundToInt(), 0) }` gives
   its lambda's value.
+- **A composable's block given by name**: `content = …`, as Compose code passes content on
+  (`MaterialTheme(colorScheme = c, content = content)`, `Box(modifier = m, content = { … })`), is the block every
+  composable takes (`kompoz::arg::content` in C++), wherever it stands among the named arguments;
+  `CompositionLocalProvider(LocalX provides x, content = content)` too.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

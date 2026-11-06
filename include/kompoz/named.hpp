@@ -468,6 +468,7 @@ struct Blue {};
 struct InitialValue {};
 struct TargetValue {};
 struct AnimationSpec {};
+struct Content {};
 struct ScaleX {};
 struct ScaleY {};
 struct TranslationX {};
@@ -680,6 +681,8 @@ inline constexpr Param<detail::names::Blue> blue;
 inline constexpr Param<detail::names::InitialValue> initialValue;
 inline constexpr Param<detail::names::TargetValue> targetValue;
 inline constexpr Param<detail::names::AnimationSpec> animationSpec;
+// (a composable's block, given by name as Compose's content = … : kompoz::Content is its type)
+inline constexpr Param<detail::names::Content> content;
 inline constexpr Param<detail::names::ScaleX> scaleX;
 inline constexpr Param<detail::names::ScaleY> scaleY;
 inline constexpr Param<detail::names::TranslationX> translationX;
@@ -697,6 +700,29 @@ inline constexpr Param<detail::names::CompositingStrategy> compositingStrategy;
 inline constexpr Param<detail::names::BlendMode> blendMode;
 } // namespace arg
 
+// CompositionLocalProvider(LocalX provides x, content = content), with one to three values or a
+// CompositionLocalContext.
+template <class F>
+void CompositionLocalProvider(const detail::Provided& a, const Named<detail::names::Content, F>& content,
+                              CallSite site = CallSite::current()) {
+    CompositionLocalProvider({a}, Content(content.value), site);
+}
+template <class F>
+void CompositionLocalProvider(const detail::Provided& a, const detail::Provided& b, const Named<detail::names::Content, F>& content,
+                              CallSite site = CallSite::current()) {
+    CompositionLocalProvider({a, b}, Content(content.value), site);
+}
+template <class F>
+void CompositionLocalProvider(const detail::Provided& a, const detail::Provided& b, const detail::Provided& c,
+                              const Named<detail::names::Content, F>& content, CallSite site = CallSite::current()) {
+    CompositionLocalProvider({a, b, c}, Content(content.value), site);
+}
+template <class F>
+void CompositionLocalProvider(const CompositionLocalContext& context, const Named<detail::names::Content, F>& content,
+                              CallSite site = CallSite::current()) {
+    CompositionLocalProvider(context, Content(content.value), site);
+}
+
 // Compose's rememberSaveable(saver = …) { … } and rememberSaveable(inputs, saver = …) { … }.
 template <class S, class F>
 auto rememberSaveable(const Named<detail::names::Saver, CustomSaver<S>>& saver, F&& init, CallSite site = CallSite::current())
@@ -709,43 +735,61 @@ auto rememberSaveable(const K& inputs, const Named<detail::names::Saver, CustomS
     return rememberSaveable(inputs, saver.value, std::forward<F>(init), site);
 }
 
+namespace detail {
+// content = { … } given by name (Compose's content parameter, often passed on, as in
+// MaterialTheme(colorScheme = c, content = content)): the block, last, as the composable takes it.
+template <class Impl, class... A>
+decltype(auto) callImpl(CallSite site, A&&... args) {
+    if constexpr (countOf<names::Content, A...> == 0) {
+        return Impl::call(site, std::forward<A>(args)...);
+    } else {
+        static_assert(countOf<names::Content, A...> == 1, "kompoz: content given twice");
+        constexpr size_t at = indexOf<names::Content, TagOf<A>...>;
+        auto all = std::forward_as_tuple(std::forward<A>(args)...);
+        return [&]<size_t... I>(std::index_sequence<I...>) -> decltype(auto) {
+            return Impl::call(site, std::get<(I < at ? I : I + 1)>(std::move(all))..., std::get<at>(std::move(all)).value);
+        }(std::make_index_sequence<sizeof...(A) - 1>{});
+    }
+}
+} // namespace detail
+
 // A composable taking named arguments: each call's arguments and call site go to Impl::call.
 template <class Impl>
 struct Composable {
     // (One overload for each count of arguments, up to sixteen: a default argument can't follow a pack.)
-    decltype(auto) operator()(CallSite site = CallSite::current()) const { return Impl::call(site); }
+    decltype(auto) operator()(CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site); }
     template <class A1>
-    decltype(auto) operator()(A1&& a1, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1)); }
+    decltype(auto) operator()(A1&& a1, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1)); }
     template <class A1, class A2>
-    decltype(auto) operator()(A1&& a1, A2&& a2, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2)); }
+    decltype(auto) operator()(A1&& a1, A2&& a2, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1), std::forward<A2>(a2)); }
     template <class A1, class A2, class A3>
-    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3)); }
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3)); }
     template <class A1, class A2, class A3, class A4>
-    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4)); }
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4)); }
     template <class A1, class A2, class A3, class A4, class A5>
-    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5)); }
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5)); }
     template <class A1, class A2, class A3, class A4, class A5, class A6>
-    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6)); }
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6)); }
     template <class A1, class A2, class A3, class A4, class A5, class A6, class A7>
-    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7)); }
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7)); }
     template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8>
-    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8)); }
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8)); }
     template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9>
-    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9)); }
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9)); }
     template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10>
-    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10)); }
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10)); }
     template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11>
-    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11)); }
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11)); }
     template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11, class A12>
-    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12)); }
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12)); }
     template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11, class A12, class A13>
-    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, A13&& a13, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12), std::forward<A13>(a13)); }
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, A13&& a13, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12), std::forward<A13>(a13)); }
     template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11, class A12, class A13, class A14>
-    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, A13&& a13, A14&& a14, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12), std::forward<A13>(a13), std::forward<A14>(a14)); }
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, A13&& a13, A14&& a14, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12), std::forward<A13>(a13), std::forward<A14>(a14)); }
     template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11, class A12, class A13, class A14, class A15>
-    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, A13&& a13, A14&& a14, A15&& a15, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12), std::forward<A13>(a13), std::forward<A14>(a14), std::forward<A15>(a15)); }
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, A13&& a13, A14&& a14, A15&& a15, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12), std::forward<A13>(a13), std::forward<A14>(a14), std::forward<A15>(a15)); }
     template <class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10, class A11, class A12, class A13, class A14, class A15, class A16>
-    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, A13&& a13, A14&& a14, A15&& a15, A16&& a16, CallSite site = CallSite::current()) const { return Impl::call(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12), std::forward<A13>(a13), std::forward<A14>(a14), std::forward<A15>(a15), std::forward<A16>(a16)); }
+    decltype(auto) operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, A8&& a8, A9&& a9, A10&& a10, A11&& a11, A12&& a12, A13&& a13, A14&& a14, A15&& a15, A16&& a16, CallSite site = CallSite::current()) const { return detail::callImpl<Impl>(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5), std::forward<A6>(a6), std::forward<A7>(a7), std::forward<A8>(a8), std::forward<A9>(a9), std::forward<A10>(a10), std::forward<A11>(a11), std::forward<A12>(a12), std::forward<A13>(a13), std::forward<A14>(a14), std::forward<A15>(a15), std::forward<A16>(a16)); }
 
     // The call without its block yet, for <kompoz/blocks.hpp>: the block comes after it with +.
     detail::BlockCall<Impl> withBlock(CallSite site = CallSite::current()) const { return {site, std::forward_as_tuple()}; }

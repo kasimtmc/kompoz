@@ -7608,6 +7608,18 @@ TEST(canvas_and_draw_modifiers_draw_in_local_coordinates) {
     }
 }
 
+TEST(a_block_given_by_name_as_content) {
+    // content = … wherever it stands among the named arguments: the composable's block.
+    static const CompositionLocal<std::string> LocalWord{std::string("yok")};
+    ComposeTestRule rule([] {
+        Column(arg::content = [] {
+            Box(arg::content = [] { Text("kutu"); }, modifier = Modifier().testTag("kutu"));
+            CompositionLocalProvider(LocalWord.provides("var"), arg::content = [] { Text(LocalWord.current()); });
+        });
+    });
+    CHECK(rule.onNodeWithText("kutu").exists() && rule.onNodeWithTag("kutu").exists() && rule.onNodeWithText("var").exists());
+}
+
 TEST(canvas_takes_compose_named_arguments) {
     // Canvas(modifier = …, contentDescription = …) { … }: the description is what a screen reader says.
     ComposeTestRule rule([] {
