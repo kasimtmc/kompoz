@@ -136,6 +136,37 @@ std::vector<std::string> fieldsOf(const std::string& statement, const std::strin
     return names;
 }
 
+// A function's declaration (or definition): its name, the first name called outside brackets and
+// angles that isn't a keyword (template <class A> requires(…) Modifier padding(A&&...) const is
+// padding). Empty for an operator.
+std::string functionName(std::string_view st) {
+    int depth = 0, angle = 0;
+    for (size_t k = 0; k < st.size(); ++k) {
+        char c = st[k];
+        if (c == '(' || c == '[') {
+            if (c == '(' && depth == 0 && angle == 0) {
+                size_t e = k;
+                while (e > 0 && std::isspace(static_cast<unsigned char>(st[e - 1]))) --e;
+                size_t b = e;
+                while (b > 0 && identChar(st[b - 1])) --b;
+                std::string word(st.substr(b, e - b));
+                if (word == "operator") return {};
+                if (!word.empty() && word != "requires" && word != "decltype" && word != "noexcept" && word != "alignas" &&
+                    word != "sizeof" && word != "explicit")
+                    return word;
+            }
+            ++depth;
+        } else if (c == ')' || c == ']') {
+            --depth;
+        } else if (c == '<' && depth == 0) {
+            ++angle;
+        } else if (c == '>' && depth == 0 && angle > 0) {
+            --angle;
+        }
+    }
+    return {};
+}
+
 }  // namespace
 
 const std::vector<std::string>* Structs::find(std::string_view name) const {
@@ -153,6 +184,22 @@ const std::vector<std::string>* Structs::find(std::string_view name) const {
         found = &f->second;
     }
     return found;
+}
+
+bool Structs::member(std::string_view type, std::string_view name) const {
+    for (int depth = 0; depth < 16; ++depth) {  // (bases: one at a time, as deep as they go)
+        if (ambiguousClasses.contains(type)) return false;
+        auto c = classes.find(type);
+        if (c == classes.end()) return false;
+        if (c->second.names.contains(name)) return true;
+        if (c->second.bases.size() != 1) {
+            for (const std::string& base : c->second.bases)
+                if (member(base, name)) return true;
+            return false;
+        }
+        type = c->second.bases[0];
+    }
+    return false;
 }
 
 void Structs::readIncludes(std::string_view source, const fs::path& dir) {
@@ -263,6 +310,93 @@ void Structs::readText(std::string_view src) {
         if (constructor || hidden || names.empty()) continue;
         auto [at, added] = fields.emplace(name, names);
         if (!added && at->second != names) ambiguous.insert(name);
+    }
+
+    // Every class's public members (its fields and functions) and bases.
+    for (std::string_view keyword : {"struct", "class"}) {
+        for (size_t i = 0; (i = text.find(keyword, i)) != std::string::npos; i += keyword.size()) {
+            if ((i > 0 && identChar(text[i - 1])) || (i + keyword.size() < text.size() && identChar(text[i + keyword.size()]))) continue;
+            size_t back = text.find_last_of(";{}", i == 0 ? 0 : i - 1);
+            std::string before = trim(std::string_view(text).substr(back == std::string::npos ? 0 : back + 1, i - (back == std::string::npos ? 0 : back + 1)));
+            if (before.ends_with("enum")) continue;
+            size_t k = i + keyword.size();
+            while (k < text.size() && std::isspace(static_cast<unsigned char>(text[k]))) ++k;
+            size_t nameStart = k;
+            while (k < text.size() && identChar(text[k])) ++k;
+            std::string name = text.substr(nameStart, k - nameStart);
+            if (name.empty()) continue;
+            size_t open = text.find_first_of("{;()<>=", k);
+            if (open == std::string::npos || text[open] != '{') continue;  // a declaration, a template's parameter, ...
+            // Bases: what comes after `:`, each one's last name (public Base, virtual detail::Other<T>).
+            std::string head = trim(std::string_view(text).substr(k, open - k));
+            if (head.starts_with("final")) head = trim(std::string_view(head).substr(5));
+            Members members;
+            if (!head.empty()) {
+                if (head[0] != ':') continue;
+                int angle = 0;
+                std::string current;
+                auto flush = [&] {
+                    std::string t = trim(current);
+                    if (size_t lt = t.find('<'); lt != std::string::npos) t = trim(std::string_view(t).substr(0, lt));
+                    size_t e = t.size(), b = e;
+                    while (b > 0 && identChar(t[b - 1])) --b;
+                    if (e > b) members.bases.push_back(t.substr(b, e - b));
+                    current.clear();
+                };
+                for (char c : head.substr(1)) {
+                    if (c == '<') ++angle;
+                    else if (c == '>' && angle > 0) --angle;
+                    if (c == ',' && angle == 0) flush();
+                    else current += c;
+                }
+                flush();
+            }
+            bool visible = keyword == "struct", constructor = false;
+            int depth = 1;
+            std::string statement;
+            auto take = [&] {
+                std::string st = trim(statement);
+                statement.clear();
+                if (!visible || st.empty()) return;
+                for (std::string_view word : {"using", "typedef", "friend", "enum", "struct", "class", "union", "static_assert"})
+                    if (startsWithWord(st, word)) return;
+                if (looksLikeFunction(st) || startsWithWord(st, "template")) {
+                    std::string f = functionName(st);
+                    if (!f.empty() && f != name) members.names.insert(f);
+                } else {
+                    for (auto& n : fieldsOf(st, name, constructor)) members.names.insert(n);
+                }
+            };
+            for (size_t b = open + 1; b < text.size() && depth > 0; ++b) {
+                char c = text[b];
+                if (c == '{') {
+                    ++depth;
+                    statement += c;
+                    continue;
+                }
+                if (c == '}') {
+                    if (--depth == 0) break;
+                    statement += c;
+                    if (depth == 1 && looksLikeFunction(statement)) take();  // a function's body ends it
+                    continue;
+                }
+                if (depth == 1 && c == ';') {
+                    take();
+                    continue;
+                }
+                if (depth == 1 && c == ':' && b + 1 < text.size() && text[b + 1] != ':' && text[b - 1] != ':') {
+                    std::string label = trim(statement);
+                    if (label == "private" || label == "protected" || label == "public") {
+                        visible = label == "public";
+                        statement.clear();
+                        continue;
+                    }
+                }
+                statement += c;
+            }
+            auto [at, added] = classes.emplace(name, members);
+            if (!added && (at->second.names != members.names || at->second.bases != members.bases)) ambiguousClasses.insert(name);
+        }
     }
 }
 

@@ -729,6 +729,13 @@
   `animateColor` are them now.
 - **Canvas takes Compose's named arguments**: `Canvas(modifier = …) { … }`, and Compose's other form,
   `Canvas(modifier, contentDescription = "…") { … }`, whose description is what a screen reader says of it.
+- **kompozc: lambdas with receivers**: in the lambda of `Modifier.graphicsLayer { }`, `drawBehind { }`,
+  `drawWithContent { }`, `drawWithCache { }` (and its `onDrawBehind { }`), a `Canvas`, and DrawScope's `rotate`,
+  `scale`, `translate`, `inset`, `clipRect`, `clipPath` and `withTransform`, the receiver's members are reached by
+  their names, as in Kotlin: `graphicsLayer { scaleX = pulse; alpha = 0.5f }`, `Canvas(m) { drawCircle(c, size.width
+  / 4) }`. A local of the same name comes first, `this` is the receiver. kompozc reads the members (fields and
+  functions, those of base classes too) from the headers. `Modifier.offset { IntOffset(x.roundToInt(), 0) }` gives
+  its lambda's value.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

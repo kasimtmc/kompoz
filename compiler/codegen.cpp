@@ -42,7 +42,7 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "last", "lastOrNull", "find", "groupBy", "associateBy", "associateWith", "flatMap", "sumOf", "maxOf", "minOf",
     "maxByOrNull", "minByOrNull", "let", "run", "with", "takeIf", "takeUnless", "getOrElse", "lazy", "snapshotFlow",
     "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked",
-    "DisposableEffect", "async", "withBackground"};
+    "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache"};
 
 // Kotlin types the C++ way.
 const std::map<std::string, std::string, std::less<>> kTypes = {
@@ -83,6 +83,18 @@ const std::set<std::string, std::less<>> kKtMembers = {
     "take", "drop", "reversed", "sorted", "sortedBy", "any", "all", "none", "count", "sum", "sumOf", "indexOf",
     "getOrNull", "let", "also", "takeIf", "withIndex", "toList", "toMutableList", "distinct", "split", "replace",
     "coerceIn", "coerceAtLeast", "coerceAtMost", "roundToInt", "find", "add", "addAll", "removeAt", "remove"};
+
+// Calls whose lambda has a receiver, Kotlin's T.() -> R: the C++ lambda takes it
+// first, and the names the body doesn't declare that are the receiver's members are the receiver's
+// (Modifier.graphicsLayer { scaleX = 2f }, Canvas(m) { drawCircle(Color.Red) }).
+const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
+    {"graphicsLayer", "GraphicsLayerScope"}, {"drawBehind", "DrawScope"},       {"Canvas", "DrawScope"},
+    {"drawWithContent", "ContentDrawScope"}, {"drawWithCache", "CacheDrawScope"},
+    {"onDrawBehind", "DrawScope"},           {"onDrawWithContent", "ContentDrawScope"},
+    // DrawScope's own: what they draw is drawn moved, clipped, ... (rotate(45f) { drawRect(…) })
+    {"translate", "DrawScope"},              {"inset", "DrawScope"},            {"clipRect", "DrawScope"},
+    {"clipPath", "DrawScope"},               {"rotate", "DrawScope"},           {"rotateRad", "DrawScope"},
+    {"scale", "DrawScope"},                  {"withTransform", "DrawScope"}};
 
 // Calls whose lambda is a coroutine (Kotlin's suspend lambdas): [=]() -> Task { ...; co_return; }.
 const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "produceState"};
@@ -231,6 +243,15 @@ private:
         for (auto s = scopes_.rbegin(); s != scopes_.rend(); ++s)
             if (auto f = s->find(name); f != s->end()) return &f->second;
         return nullptr;
+    }
+
+    // Which receiver (1 for the outermost) has `name` as a member, nearest first; 0 for none. (Kotlin
+    // looks at local names first, then at the implicit receivers, then at what is declared at the top.)
+    size_t receiverOf(const std::string& name) const {
+        if (!module_.structs) return 0;
+        for (size_t r = receivers_.size(); r > 0; --r)
+            if (module_.structs->member(receivers_[r - 1], name)) return r;
+        return 0;
     }
 
     // ---- Statements ----
@@ -464,7 +485,9 @@ private:
             case Node::Char: out_.text("U'" + e.text + "'"); return;
             case Node::Bool: out_.text(e.text); return;
             case Node::Null: out_.text("::kompoz::kt::null"); return;
-            case Node::This: out_.text("(*this)"); return;
+            case Node::This:  // in a lambda with a receiver: the receiver
+                out_.text(receivers_.empty() ? std::string("(*this)") : "(*kompoz_this_" + std::to_string(receivers_.size()) + ")");
+                return;
             case Node::Paren:
                 out_.text("(");
                 expr(*e.kids[0]);
@@ -512,6 +535,10 @@ private:
         if (const VarKind* k = lookup(e.text)) {
             if (*k == Delegated) out_.text("::kompoz::kt::value(" + cppName(e.text) + ")");
             else out_.text(cppName(e.text));
+            return;
+        }
+        if (size_t r = receiverOf(e.text)) {  // a receiver's member: its getter, or the field
+            out_.text("KOMPOZ_KT_GET((*kompoz_this_" + std::to_string(r) + "), " + cppName(e.text) + ")");
             return;
         }
         if (e.text == "Modifier") {
@@ -649,6 +676,13 @@ private:
     void call(const Node& c) {
         const Node& callee = companionless(*c.kids[0]);
         std::string calleeName = callee.kind == Node::Name ? callee.text : callee.kind == Node::Member ? callee.text : "";
+        // A receiver's member (drawCircle(…) in a Canvas's lambda): before the file's and Kotlin's own.
+        if (callee.kind == Node::Name && !lookup(callee.text)) {
+            if (size_t r = receiverOf(callee.text)) {
+                out_.text("(*kompoz_this_" + std::to_string(r) + ")." + cppName(callee.text));
+                return arguments(c, calleeName, false);
+            }
+        }
         // A @Composable kompozc translates: arguments by position, defaults filled in.
         if (callee.kind == Node::Name && !lookup(callee.text)) {
             if (auto f = module_.functions.find(callee.text); f != module_.functions.end()) return moduleCall(c, *f->second);
@@ -722,7 +756,9 @@ private:
         }
         if (c.lambda) {
             if (any) out_.text(", ");
-            lambda(*c.lambda, kValueLambdas.contains(calleeName), kSuspendLambdas.contains(calleeName), calleeName == "produceState");
+            auto receiver = kReceiverLambdas.find(calleeName);
+            lambda(*c.lambda, kValueLambdas.contains(calleeName), kSuspendLambdas.contains(calleeName), calleeName == "produceState",
+                   receiver != kReceiverLambdas.end() ? &receiver->second : nullptr);
         }
         out_.text(")");
     }
@@ -850,10 +886,18 @@ private:
         out_.text(")");
     }
 
-    void lambda(const Node& l, bool value, bool suspend = false, bool produceState = false) {
+    // `receiver`: the type of its receiver (Kotlin's T.() -> R), taken first; kompoz_this_N points
+    // to it (a pointer, so a lambda inside that keeps it sees the same one, as Kotlin's would).
+    void lambda(const Node& l, bool value, bool suspend = false, bool produceState = false, const std::string* receiver = nullptr) {
         bool wasSuspend = std::exchange(suspend_, suspend);
         out_.text("[=](");
         scopes_.emplace_back();
+        std::string self;
+        if (receiver) {
+            receivers_.push_back(*receiver);
+            self = std::to_string(receivers_.size());
+            out_.text("auto&& kompoz_receiver_" + self + std::string(l.flag && !l.names.empty() ? ", " : ""));
+        }
         if (suspend) {
             // A coroutine (Kotlin's suspend lambda): its CoroutineScope receiver has no name here;
             // produceState's gives it the state, `value` (a copy: a coroutine's parameters outlive
@@ -867,6 +911,8 @@ private:
                 out_.text((i ? ", " : "") + std::string("auto&& ") + cppName(l.names[i]));
                 declare(l.names[i], Local);
             }
+        } else if (receiver) {
+            // (its `it` is a lambda's around it)
         } else if (std::any_of(l.kids.begin(), l.kids.end(), [](const NodeP& k) { return usesIt(k.get()); })) {
             out_.text("auto&& it");  // (update { it.add(x) } changes what it is given)
             declare("it", Local);
@@ -874,9 +920,11 @@ private:
             out_.text("auto&&...");  // { ... } where the type has parameters it doesn't use
         }
         out_.text(suspend ? ") -> ::kompoz::Task {" : ") {");
+        if (receiver) out_.text(" [[maybe_unused]] auto* kompoz_this_" + self + " = &kompoz_receiver_" + self + ";");
         for (size_t i = 0; i < l.kids.size(); ++i) statement(*l.kids[i], value && i + 1 == l.kids.size());
         if (suspend) out_.text(" co_return;");
         scopes_.pop_back();
+        if (receiver) receivers_.pop_back();
         out_.text(" }");
         suspend_ = wasSuspend;
     }
@@ -969,6 +1017,7 @@ private:
     Output& out_;
     const Module& module_;
     bool suspend_ = false;  // in a coroutine
+    std::vector<std::string> receivers_;  // the receivers' types of the lambdas it is in, innermost last
     std::vector<std::map<std::string, VarKind, std::less<>>> scopes_;
 };
 

@@ -4,6 +4,7 @@
 #include <kompoz/kompoz.hpp>
 #include <kompoz/testing.hpp>
 
+#include <algorithm>
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -607,6 +608,31 @@ TEST(coroutines_await_what_suspends) {
     CHECK(rule.onNodeWithText("üretilen 0").exists() && rule.onNodeWithText("ikisi …").exists());
     rule.advanceTimeBy(400);
     CHECK(rule.onNodeWithText("üretilen 42").exists() && rule.onNodeWithText("ikisi 6 X").exists());
+}
+
+// A lambda with a receiver (Kotlin's T.() -> R): what its body doesn't declare is the receiver's,
+// a local of the same name first, as in Kotlin; `this` is the receiver.
+@Composable
+fun Receivers(tint: Color) {
+    val alpha = 0.5f
+    Column {
+        Box(modifier = Modifier.size(20.dp).graphicsLayer { this.alpha = alpha; rotationZ += 30f }) { Text("katman") }
+        Canvas(modifier = Modifier.size(40.dp)) {
+            drawRect(tint, Offset(0f, 0f), Size(size.width / 2, size.height))
+            rotate(45f) { drawCircle(tint, center.x / 4) }
+        }
+    }
+}
+
+TEST(lambdas_with_receivers) {
+    Color tint = Color(0xFF123456);
+    ComposeTestRule rule([=] { Receivers(tint); });
+    testing::RecordingCanvas canvas;
+    rule.host().draw(canvas);
+    CHECK(std::count(canvas.layerAlphas.begin(), canvas.layerAlphas.end(), 0.5f) == 1);
+    auto rect = std::find(canvas.rectColors.begin(), canvas.rectColors.end(), tint);
+    CHECK(rect != canvas.rectColors.end() && canvas.rects[rect - canvas.rectColors.begin()].width == 20);
+    CHECK(!canvas.transforms.empty());
 }
 
 int main(int argc, char** argv) {
