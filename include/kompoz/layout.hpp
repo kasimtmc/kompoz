@@ -19,6 +19,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace kompoz {
@@ -381,6 +383,51 @@ struct Velocity {
 enum class NestedScrollSource { UserInput, SideEffect, Wheel, Drag = UserInput, Fling = SideEffect };
 
 using MeasureNext = std::function<Size(const Constraints&)>;
+
+namespace detail {
+// The width of what layout(width, height) { … } places in, while its block runs (placeRelative
+// mirrors in it right to left); -1 outside one.
+inline thread_local float placementWidth = -1;
+// Whether the node being measured is laid out right to left.
+bool measuringRtl();
+} // namespace detail
+// Compose's PlacementScope: the receiver of layout(width, height) { … }'s block, in which what was
+// measured is placed (place, placeRelative).
+struct PlacementScope {};
+// Compose's MeasureScope: what a measure lambda has as its receiver. layout(width, height) { … }
+// places what its block says (at once: Kompoz places while it measures) and gives the size.
+struct MeasureScope {
+    template <class F>
+    Size layout(float width, float height, F&& placement) const {
+        float was = std::exchange(detail::placementWidth, width);
+        PlacementScope scope;
+        if constexpr (std::is_invocable_v<F&, PlacementScope&>) placement(scope);
+        else placement();
+        detail::placementWidth = was;
+        return {width, height};
+    }
+};
+// Compose's Modifier.layout { measurable, constraints -> … }: the content, measured with the
+// constraints given, then placed in layout(width, height) { … }.
+struct LayoutModifierPlaceable {
+    float width = 0, height = 0;
+    Offset* placeAt = nullptr;
+    // From the start: mirrored right to left, as the content's offset is.
+    void placeRelative(float x, float y) const { *placeAt = {x, y}; }
+    // From the left, whatever the layout direction.
+    void place(float x, float y) const {
+        bool mirrored = detail::placementWidth >= 0 && detail::measuringRtl();
+        *placeAt = {mirrored ? detail::placementWidth - x - width : x, y};
+    }
+};
+struct LayoutModifierMeasurable {
+    const MeasureNext* next = nullptr;
+    Offset* placeAt = nullptr;
+    LayoutModifierPlaceable measure(const Constraints& constraints) const {
+        Size s = (*next)(constraints);
+        return {s.width, s.height, placeAt};
+    }
+};
 // What approachLayout's measure knows: the size its content is going to and the constraints it
 // was measured with for it.
 struct ApproachMeasureScope {
@@ -1793,6 +1840,17 @@ public:
     // A custom layout step: measure the wrapped content with `measure`, return this layer's size
     // and set where the content goes (Compose's Modifier.layout { measurable, constraints -> }).
     Modifier layout(std::function<Size(const MeasureNext& measure, const Constraints& constraints, Offset& placeAt)> fn) const;
+    // Compose's form: layout { measurable, constraints -> val p = measurable.measure(constraints);
+    // layout(p.width, p.height) { p.placeRelative(0, 0) } } (a MeasureScope its receiver).
+    template <class F>
+        requires std::is_invocable_r_v<Size, F&, MeasureScope&, const LayoutModifierMeasurable&, const Constraints&>
+    Modifier layout(F fn) const {
+        return layout(std::function<Size(const MeasureNext&, const Constraints&, Offset&)>(
+            [fn = std::move(fn)](const MeasureNext& next, const Constraints& c, Offset& placeAt) mutable {
+                MeasureScope scope;
+                return Size(fn(scope, LayoutModifierMeasurable{&next, &placeAt}, c));
+            }));
+    }
     Modifier layoutId(std::string id) const;
     Modifier background(Color color, float cornerRadius = 0) const;
     Modifier background(Color color, Shape shape) const;

@@ -569,6 +569,7 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 341. Compose'unki gibi 64 bitlik `Color`, renk uzaylarıyla (`ColorSpace`, `ColorSpaces`, `Rgb`, connector'lar, adaptasyon), Oklab'da `lerp` ve Compose'un `Color.VectorConverter`'ı gibi canlandırılan renkler ✅
 342. Skia'nınki gibi `PathEffect` ve `PathMeasure`: kesikler, köşeler, damgalar ve zincirler Skia'nın yaptığı gibi, bir yol çizildiği yerde piksellerinde uygulanır; uzunluklar, konumlar ve eğri parçaları `SkContourMeasure`'ın ölçüp kestiği gibi ✅
 343. `Canvas`, Compose'un adlı argümanlarını ve öteki biçimini alır: `Canvas(modifier, contentDescription) { … }` (bir ekran okuyucunun onun için söylediği) ✅
+344. Compose'un `Modifier.layout { measurable, constraints -> layout(w, h) { placeable.placeRelative(x, y) } }` biçimi ve bir `Layout` içinde `layout(w, h) { … }` (`MeasureScope`, `PlacementScope`, sağdan sola aynalanan `placeRelative`) ✅
 
 ## Sıradakiler
 

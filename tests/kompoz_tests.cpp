@@ -11087,6 +11087,49 @@ TEST(custom_layout_layout_modifier_and_layout_id) {
     CHECK(sameRect(box->bounds(), {0, 0, 50, 58}) && sameRect(box->contentBounds(), {0, 8, 50, 50}));
 }
 
+TEST(compose_forms_of_measuring_and_placing) {
+    // Modifier.layout { measurable, constraints -> layout(w, h) { … } } and layout(w, h) { … } in a
+    // Layout: placeRelative from the start (mirrored right to left), place from the left.
+    auto moved = [](bool fromLeft) {
+        return Modifier().layout([fromLeft](MeasureScope& scope, const LayoutModifierMeasurable& m, const Constraints& c) {
+            LayoutModifierPlaceable p = m.measure(c.loosen());
+            return scope.layout(60, p.height, [&](PlacementScope&) {
+                if (fromLeft) p.place(10, 0);
+                else p.placeRelative(10, 0);
+            });
+        });
+    };
+    for (bool rtl : {false, true}) {
+        ComposeTestRule rule([=] {
+            CompositionLocalProvider({LocalLayoutDirection.provides(rtl ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [=] {
+                Column([=] {
+                    Box(Modifier().testTag("göreli").then(moved(false)).size(20));
+                    Box(Modifier().testTag("soldan").then(moved(true)).size(20));
+                    Layout(Modifier().testTag("yerleşim"), [] { Box(Modifier().size(20).testTag("çocuk")); },
+                           [](const std::vector<Measurable>& children, const Constraints& c) {
+                               Placeable p = children[0].measure(c.loosen());
+                               return MeasureScope{}.layout(100, 20, [&] { p.placeRelative(10, 0); });
+                           });
+                    Layout(Modifier().testTag("soldan yerleşim"), [] { Box(Modifier().size(20).testTag("soldaki")); },
+                           [](const std::vector<Measurable>& children, const Constraints& c) {
+                               Placeable p = children[0].measure(c.loosen());
+                               return MeasureScope{}.layout(100, 20, [&] { p.place(10, 0); });
+                           });
+                });
+            });
+        });
+        LayoutNode* relative = rule.onNodeWithTag("göreli").node();
+        LayoutNode* fromLeft = rule.onNodeWithTag("soldan").node();
+        CHECK(near(relative->bounds().width, 60) && near(relative->bounds().height, 20));
+        CHECK(near(relative->contentBounds().x - relative->bounds().x, rtl ? 30 : 10));
+        CHECK(near(fromLeft->contentBounds().x - fromLeft->bounds().x, 10));
+        Rect layout = rule.onNodeWithTag("yerleşim").bounds(), child = rule.onNodeWithTag("çocuk").bounds();
+        CHECK(near(layout.width, 100) && near(child.x - layout.x, rtl ? 70 : 10));
+        Rect left = rule.onNodeWithTag("soldan yerleşim").bounds(), leftChild = rule.onNodeWithTag("soldaki").bounds();
+        CHECK(near(leftChild.x - left.x, 10));
+    }
+}
+
 TEST(intrinsic_height_and_flow_row) {
     ComposeTestRule rule([] {
         Column([] {

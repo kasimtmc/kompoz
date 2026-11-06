@@ -304,7 +304,14 @@ inline constexpr Composable<detail::SpacerImpl> Spacer;
 struct Placeable {
     LayoutNode* node;
     float width = 0, height = 0;
-    void place(float x, float y, float zIndex = 0) const { node->place(x, y, zIndex); }
+    // x from the start: a layout laid out right to left mirrors what it placed. Inside layout(width,
+    // height) { … } (Compose's PlacementScope), from the left, as Compose's place is.
+    void place(float x, float y, float zIndex = 0) const {
+        bool fromLeft = node->rtl && detail::placementWidth >= 0;  // (mirrored back by the layout)
+        node->place(fromLeft ? detail::placementWidth - x - width : x, y, zIndex);
+    }
+    // Compose's placeRelative: x from the start, mirrored right to left.
+    void placeRelative(float x, float y, float zIndex = 0) const { node->place(x, y, zIndex); }
     // Where an alignment line of it is, from its top (Compose's placeable[FirstBaseline]); NaN: none.
     float operator[](AlignmentLine line) const { return node->alignmentLine(line); }
 };

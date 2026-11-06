@@ -568,6 +568,7 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 341. `Color` as Compose's 64 bits, with its color spaces (`ColorSpace`, `ColorSpaces`, `Rgb`, connectors, adaptation), `lerp` in Oklab and colors animated as Compose's `Color.VectorConverter` ✅
 342. `PathEffect` and `PathMeasure` as Skia's: dashes, corners, stamps and chains as Skia makes them, applied where a path is drawn at its pixels; lengths, positions and pieces of curves as `SkContourMeasure` measures and cuts them ✅
 343. `Canvas` takes Compose's named arguments and its other form, `Canvas(modifier, contentDescription) { … }` (what a screen reader says of it) ✅
+344. Compose's `Modifier.layout { measurable, constraints -> layout(w, h) { placeable.placeRelative(x, y) } }` and `layout(w, h) { … }` in a `Layout` (`MeasureScope`, `PlacementScope`, `placeRelative` mirrored right to left) ✅
 
 ## Next
 

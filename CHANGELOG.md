@@ -746,6 +746,10 @@
   its value uses; one of another file of the module is used as Kotlin uses it, no header needed. `error("…")` and
   `TODO()` give Kotlin's `Nothing`, which goes for a value of any type (`compositionLocalOf<User> { error("…") }`,
   `x ?: error("…")`). `MaterialTheme.motionScheme` and `currentCompositionLocalContext` are read as in Compose.
+- **Compose's way of measuring and placing**: `Modifier.layout { measurable, constraints -> … }` with
+  `layout(width, height) { placeable.placeRelative(x, y) }` (a `MeasureScope` its receiver, a `PlacementScope` the
+  block's), and `layout(width, height) { … }` in a `Layout`'s measure policy. `placeRelative` places from the start,
+  mirrored right to left; `place` from the left.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

@@ -1431,6 +1431,10 @@ Modifier Modifier::width(IntrinsicSize size) const {
         e.minimum = size == IntrinsicSize::Min;
     });
 }
+bool detail::measuringRtl() {
+    LayoutNode* node = measuringNode();
+    return node && node->rtl;
+}
 Modifier Modifier::layout(std::function<Size(const MeasureNext&, const Constraints&, Offset&)> fn) const {
     return with<LayoutElement>(*this, [&](auto& e) { e.fn = std::move(fn); });
 }

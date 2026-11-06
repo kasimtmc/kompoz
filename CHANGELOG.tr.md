@@ -787,6 +787,10 @@
   kullanılıyor. `error("…")` ve `TODO()` Kotlin'in `Nothing`'ini veriyor; o da her türden bir değerin yerine geçiyor
   (`compositionLocalOf<User> { error("…") }`, `x ?: error("…")`). `MaterialTheme.motionScheme` ve
   `currentCompositionLocalContext` Compose'daki gibi okunuyor.
+- **Compose'un ölçme ve yerleştirme yolu**: `Modifier.layout { measurable, constraints -> … }` ile
+  `layout(width, height) { placeable.placeRelative(x, y) }` (alıcısı bir `MeasureScope`, bloğunki bir
+  `PlacementScope`) ve bir `Layout`'un ölçüm politikasında `layout(width, height) { … }`. `placeRelative` baştan,
+  sağdan sola düzende aynalanarak yerleştiriyor; `place` soldan.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine
