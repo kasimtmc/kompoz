@@ -577,6 +577,13 @@ void detail::NavigationBarItem(bool selected, std::function<void()> onClick, con
                                     Modifier().weight(1).height(80), 64, 12, true, std::nullopt);
 }
 
+void detail::NavigationBarItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, bool enabled,
+                               CallSite site) {
+    ComposableScope scope(site);
+    (void)enabled;  // (Kompoz's indicator item has no disabled look yet)
+    detail::indicatorNavigationItem(selected, std::move(onClick), icon, label, Modifier().weight(1).height(80), 64, 12, true, std::nullopt);
+}
+
 namespace {
 // A FAB's container (Compose 1.4's): primaryContainer, 6 dp up, 8 while hovered (6 again while
 // pressed), eased in 120 ms and out 150 as the buttons' elevations.

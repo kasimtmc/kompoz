@@ -573,6 +573,7 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 346. Compose's `FlexBox(config = { … })` with `Modifier.flex { … }`, `Grid(config = { column(1.fr); … })` with `gridItem(row = …, column = …)`, `FlowRow`'s arrangements and `BoxWithConstraintsScope` (`maxWidth`, …), all with named arguments ✅
 347. Compose's `Layout(content, modifier) { measurables, constraints -> layout(w, h) { … } }`, `SubcomposeLayout(modifier) { constraints -> … }`, `LookaheadScope(modifier)`, dividers' `thickness` and `color`, `Constraints.copy(minWidth = …)` and `placeRelative(x = …, y = …)` ✅
 348. Compose's lazy grid `span = { GridItemSpan(maxLineSpan) }`, `rememberPagerState { count }`, `rememberCarouselState { count }`, carousels' named arguments and `CarouselItemScope.(Int)` content, Coil's `AsyncImage(model, …)`, scrollbars and `PullToRefreshBox` by name ✅
+349. Compose's chips with `label = { }` and icons by name, `toggleable(value, onValueChange, role = Role.Checkbox)`, `SnackbarHost(hostState)`, `showSnackbar(actionLabel = …)` awaited, `progress = { }` indicators, `NavigationSuiteScaffold(navigationSuiteItems = { item(…) })` with content icons and labels ✅
 
 ## Next
 

@@ -254,8 +254,8 @@ void suiteScaffold(NavigationSuiteType type, const Modifier& modifier, const Nav
 
 } // namespace
 
-void NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& navigationSuiteItems, const Modifier& modifier,
-                             const NavigationSuiteScaffoldOptions& options, const Content& content, CallSite site) {
+void detail::NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& navigationSuiteItems, const Modifier& modifier,
+                                     const NavigationSuiteScaffoldOptions& options, const Content& content, CallSite site) {
     ComposableScope scope(site);
     NavigationSuiteScope nav;
     navigationSuiteItems(nav);
@@ -264,15 +264,19 @@ void NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& n
         switch (type) {
         case NavigationSuiteType::NavigationBar:
             detail::NavigationBar(Modifier(), [&] {
-                for (const auto& item : nav.items()) detail::NavigationBarItem(item.selected, item.onClick, item.icon, item.label);
+                for (const auto& item : nav.items()) {
+                    if (item.iconContent) detail::NavigationBarItem(item.selected, item.onClick, item.iconContent, item.labelContent, item.enabled);
+                    else detail::NavigationBarItem(item.selected, item.onClick, item.icon, item.label);
+                }
             });
             break;
         case NavigationSuiteType::NavigationRail:
             detail::NavigationRail(Modifier(), options.railHeader ? options.railHeader : options.primaryActionContent, [&] {
                 for (const auto& item : nav.items()) {
                     ImageVector icon = item.icon;
-                    detail::NavigationRailItem(item.selected, item.onClick, [icon] { detail::Icon(icon, ""); }, [label = item.label] { detail::Text(label); }, Modifier(),
-                                       {.enabled = item.enabled});
+                    Content iconContent = item.iconContent ? item.iconContent : Content([icon] { detail::Icon(icon, ""); });
+                    Content labelContent = item.labelContent ? item.labelContent : Content([label = item.label] { detail::Text(label); });
+                    detail::NavigationRailItem(item.selected, item.onClick, iconContent, labelContent, Modifier(), {.enabled = item.enabled});
                 }
             });
             break;
@@ -282,7 +286,9 @@ void NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& n
                 for (const auto& item : nav.items()) {
                     ImageVector icon = item.icon;
                     std::string label = item.label;
-                    detail::NavigationDrawerItem([label] { detail::Text(label); }, item.selected, item.onClick, [icon, label] { detail::Icon(icon, label); }, item.badge);
+                    Content iconContent = item.iconContent ? item.iconContent : Content([icon, label] { detail::Icon(icon, label); });
+                    Content labelContent = item.labelContent ? item.labelContent : Content([label] { detail::Text(label); });
+                    detail::NavigationDrawerItem(labelContent, item.selected, item.onClick, iconContent, item.badge);
                 }
             });
             break;
@@ -292,7 +298,9 @@ void NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& n
                 for (const auto& item : nav.items()) {
                     ImageVector icon = item.icon;
                     std::string label = item.label;
-                    NavigationSuiteItem(item.selected, item.onClick, [icon] { detail::Icon(icon, ""); }, [label] { detail::Text(label); }, Modifier(),
+                    Content iconContent = item.iconContent ? item.iconContent : Content([icon] { detail::Icon(icon, ""); });
+                    Content labelContent = item.labelContent ? item.labelContent : Content([label] { detail::Text(label); });
+                    NavigationSuiteItem(item.selected, item.onClick, iconContent, labelContent, Modifier(),
                                         {.navigationSuiteType = type, .enabled = item.enabled, .badge = item.badge});
                 }
             }, options.primaryActionContent, options.navigationItemVerticalArrangement);
@@ -302,8 +310,8 @@ void NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& n
     suiteScaffold(type, modifier, options, suite, content);
 }
 
-void NavigationSuiteScaffold(const Content& navigationItems, const Modifier& modifier, const NavigationSuiteScaffoldOptions& options,
-                             const Content& content, CallSite site) {
+void detail::NavigationSuiteScaffold(const Content& navigationItems, const Modifier& modifier, const NavigationSuiteScaffoldOptions& options,
+                                     const Content& content, CallSite site) {
     ComposableScope scope(site);
     NavigationSuiteType type = options.layoutType.value_or(NavigationSuiteScaffoldDefaults::navigationSuiteType(currentWindowAdaptiveInfo()));
     suiteScaffold(type, modifier, options,

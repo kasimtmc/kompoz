@@ -195,31 +195,31 @@ void SegmentedListItem(bool selected, std::function<void()> onClick, const ListI
     interactiveListItem(ListItemKind::Select, selected, std::move(onClick), {}, slots, modifier, options, site);
 }
 
-void AssistChip(std::function<void()> onClick, const Content& label, const ChipOptions& options,
+void detail::AssistChip(std::function<void()> onClick, const Content& label, const ChipOptions& options,
                 const Modifier& modifier, CallSite site) {
     chip(ChipKind::Assist, false, std::move(onClick), label, options, modifier, site);
 }
-void SuggestionChip(std::function<void()> onClick, const Content& label, const ChipOptions& options,
+void detail::SuggestionChip(std::function<void()> onClick, const Content& label, const ChipOptions& options,
                     const Modifier& modifier, CallSite site) {
     chip(ChipKind::Suggestion, false, std::move(onClick), label, options, modifier, site);
 }
-void FilterChip(bool selected, std::function<void()> onClick, const Content& label, const ChipOptions& options,
+void detail::FilterChip(bool selected, std::function<void()> onClick, const Content& label, const ChipOptions& options,
                 const Modifier& modifier, CallSite site) {
     chip(ChipKind::Filter, selected, std::move(onClick), label, options, modifier, site);
 }
-void InputChip(bool selected, std::function<void()> onClick, const Content& label, const ChipOptions& options,
+void detail::InputChip(bool selected, std::function<void()> onClick, const Content& label, const ChipOptions& options,
                const Modifier& modifier, CallSite site) {
     chip(ChipKind::Input, selected, std::move(onClick), label, options, modifier, site);
 }
-void ElevatedAssistChip(std::function<void()> onClick, const Content& label, const ChipOptions& options,
+void detail::ElevatedAssistChip(std::function<void()> onClick, const Content& label, const ChipOptions& options,
                         const Modifier& modifier, CallSite site) {
     chip(ChipKind::Assist, false, std::move(onClick), label, options, modifier, site, true);
 }
-void ElevatedSuggestionChip(std::function<void()> onClick, const Content& label, const ChipOptions& options,
+void detail::ElevatedSuggestionChip(std::function<void()> onClick, const Content& label, const ChipOptions& options,
                             const Modifier& modifier, CallSite site) {
     chip(ChipKind::Suggestion, false, std::move(onClick), label, options, modifier, site, true);
 }
-void ElevatedFilterChip(bool selected, std::function<void()> onClick, const Content& label, const ChipOptions& options,
+void detail::ElevatedFilterChip(bool selected, std::function<void()> onClick, const Content& label, const ChipOptions& options,
                         const Modifier& modifier, CallSite site) {
     chip(ChipKind::Filter, selected, std::move(onClick), label, options, modifier, site, true);
 }

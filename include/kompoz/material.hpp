@@ -907,15 +907,22 @@ inline constexpr Composable<detail::NavigationBarImpl> NavigationBar;
 namespace detail {
 void NavigationBarItem(bool selected, std::function<void()> onClick, const ImageVector& icon, std::string label,
                        CallSite site = CallSite::current());
+// Compose's: icon = { Icon(…) }, label = { Text("…") } (its own content), enabled.
+void NavigationBarItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, bool enabled,
+                       CallSite site = CallSite::current());
 struct NavigationBarItemImpl {
     template <class... A>
     static void call(CallSite site, A&&... args) {
-        using P = Params<names::Selected, names::OnClick, names::Icon, names::Label>;
+        using P = Params<names::Selected, names::OnClick, names::Icon, names::Label, names::Enabled>;
         static_assert(P::check<A...>());
         bool selected = P::arg<names::Selected>(args...);
         std::function<void()> onClick = P::arg<names::OnClick>(args...);
-        const ImageVector& icon = P::arg<names::Icon>(args...);
-        NavigationBarItem(selected, std::move(onClick), icon, P::get<names::Label>(std::string(), args...), site);
+        auto&& icon = P::arg<names::Icon>(args...);
+        if constexpr (std::is_convertible_v<decltype(icon), const ImageVector&>)
+            NavigationBarItem(selected, std::move(onClick), icon, P::get<names::Label>(std::string(), args...), site);
+        else
+            NavigationBarItem(selected, std::move(onClick), Content(icon), P::get<names::Label>(Content{}, args...),
+                              P::get<names::Enabled>(true, args...), site);
     }
 };
 } // namespace detail
@@ -1513,6 +1520,25 @@ public:
     [[nodiscard]] SnackbarAwaiter showSnackbarAsync(std::string message, std::string actionLabel = {},
                                                     std::optional<SnackbarDuration> duration = std::nullopt,
                                                     bool withDismissAction = false) const;
+    // Compose's named forms: showSnackbar(message, actionLabel = "…", withDismissAction = …, duration = …):
+    // in a coroutine (kompozc's showSnackbarAsync) awaited; else shown and forgotten.
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    [[nodiscard]] SnackbarAwaiter showSnackbarAsync(std::string message, A&&... args) const {
+        namespace n = detail::names;
+        using P = detail::Params<n::ActionLabel, n::WithDismissAction, n::Duration>;
+        static_assert(P::check<A...>());
+        return showSnackbarAsync(std::move(message), P::get<n::ActionLabel>(std::string(), args...),
+                                 P::get<n::Duration>(std::optional<SnackbarDuration>(), args...), P::get<n::WithDismissAction>(false, args...));
+    }
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void showSnackbar(std::string message, A&&... args) const {
+        namespace n = detail::names;
+        using P = detail::Params<n::ActionLabel, n::WithDismissAction, n::Duration>;
+        static_assert(P::check<A...>());
+        showSnackbar(std::move(message), P::get<n::ActionLabel>(std::string(), args...), {}, P::get<n::Duration>(SnackbarDuration::Short, args...));
+    }
     std::optional<SnackbarData> current() const;  // observable
     void dismiss(uint64_t id, SnackbarResult result = SnackbarResult::Dismissed) const;
     friend bool operator==(const SnackbarHostState& a, const SnackbarHostState& b) { return a.data_ == b.data_; }
@@ -1538,11 +1564,16 @@ void SnackbarHost(SnackbarHostState state, const Modifier& modifier = {}, CallSi
 void SnackbarHost(SnackbarHostState state, const Modifier& modifier, std::function<void(const SnackbarData&)> snackbar,
                   CallSite site = CallSite::current());
 struct SnackbarHostImpl {
-    using P = Params<names::State, names::Modifier, BlockWith<const SnackbarData&>>;
+    using P = Params<names::HostState, names::Modifier, names::Snackbar, BlockWith<const SnackbarData&>>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
-        SnackbarHostState state = P::arg<names::State>(args...);
+        SnackbarHostState state = P::arg<names::HostState>(args...);
+        if constexpr (P::given<names::Snackbar, A...>()) {  // snackbar = { data -> Snackbar(data) }
+            SnackbarHost(std::move(state), P::get<names::Modifier>(Modifier{}, args...),
+                         std::function<void(const SnackbarData&)>(P::arg<names::Snackbar>(args...)), site);
+            return;
+        }
         Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
         if constexpr (P::blockGiven<A...>()) SnackbarHost(std::move(state), modifier, P::block(std::forward<A>(args)...), site);
         else SnackbarHost(std::move(state), modifier, site);
@@ -1768,22 +1799,62 @@ struct ChipOptions {
     bool enabled = true;
     Content avatar;  // input chips
 };
-void AssistChip(std::function<void()> onClick, const Content& label, const ChipOptions& options = {},
-                const Modifier& modifier = {}, CallSite site = CallSite::current());
-void SuggestionChip(std::function<void()> onClick, const Content& label, const ChipOptions& options = {},
-                    const Modifier& modifier = {}, CallSite site = CallSite::current());
-void FilterChip(bool selected, std::function<void()> onClick, const Content& label, const ChipOptions& options = {},
-                const Modifier& modifier = {}, CallSite site = CallSite::current());
-void InputChip(bool selected, std::function<void()> onClick, const Content& label, const ChipOptions& options = {},
-               const Modifier& modifier = {}, CallSite site = CallSite::current());
+namespace detail {
+void AssistChip(std::function<void()> onClick, const Content& label, const ChipOptions& options, const Modifier& modifier, CallSite site);
+void SuggestionChip(std::function<void()> onClick, const Content& label, const ChipOptions& options, const Modifier& modifier, CallSite site);
+void FilterChip(bool selected, std::function<void()> onClick, const Content& label, const ChipOptions& options, const Modifier& modifier, CallSite site);
+void InputChip(bool selected, std::function<void()> onClick, const Content& label, const ChipOptions& options, const Modifier& modifier, CallSite site);
 // Elevated chips: on surfaceContainerLow with a shadow instead of a border (none when disabled),
 // for chips over images or busy content.
-void ElevatedAssistChip(std::function<void()> onClick, const Content& label, const ChipOptions& options = {},
-                        const Modifier& modifier = {}, CallSite site = CallSite::current());
-void ElevatedSuggestionChip(std::function<void()> onClick, const Content& label, const ChipOptions& options = {},
-                            const Modifier& modifier = {}, CallSite site = CallSite::current());
-void ElevatedFilterChip(bool selected, std::function<void()> onClick, const Content& label, const ChipOptions& options = {},
-                        const Modifier& modifier = {}, CallSite site = CallSite::current());
+void ElevatedAssistChip(std::function<void()> onClick, const Content& label, const ChipOptions& options, const Modifier& modifier, CallSite site);
+void ElevatedSuggestionChip(std::function<void()> onClick, const Content& label, const ChipOptions& options, const Modifier& modifier, CallSite site);
+void ElevatedFilterChip(bool selected, std::function<void()> onClick, const Content& label, const ChipOptions& options, const Modifier& modifier, CallSite site);
+
+
+// The chips as Compose's: AssistChip(onClick, label = { Text("…") }, modifier, enabled = …, leadingIcon = …,
+// trailingIcon = …), FilterChip(selected, onClick, label, …), InputChip(selected, onClick, label, …, avatar = …);
+// or with a ChipOptions after the label, as before.
+template <int Kind, bool Selectable>
+struct ChipImpl {
+    using P = std::conditional_t<Selectable,
+                                 Params<names::Selected, names::OnClick, names::Label, names::Options, names::Modifier, names::Enabled,
+                                        names::LeadingIcon, names::TrailingIcon, names::Avatar>,
+                                 Params<names::OnClick, names::Label, names::Options, names::Modifier, names::Enabled, names::LeadingIcon,
+                                        names::TrailingIcon, names::Avatar>>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::template check<A...>());
+        ChipOptions options = P::template get<names::Options>(ChipOptions{}, args...);
+        P::template set<names::Enabled>(options.enabled, args...);
+        P::template set<names::LeadingIcon>(options.leadingIcon, args...);
+        P::template set<names::TrailingIcon>(options.trailingIcon, args...);
+        P::template set<names::Avatar>(options.avatar, args...);
+        std::function<void()> onClick = P::template arg<names::OnClick>(args...);
+        Content label = P::template arg<names::Label>(args...);
+        Modifier modifier = P::template get<names::Modifier>(Modifier{}, args...);
+        if constexpr (Selectable) {
+            bool selected = P::template arg<names::Selected>(args...);
+            if constexpr (Kind == 0) FilterChip(selected, std::move(onClick), label, options, modifier, site);
+            else if constexpr (Kind == 1) InputChip(selected, std::move(onClick), label, options, modifier, site);
+            else ElevatedFilterChip(selected, std::move(onClick), label, options, modifier, site);
+        } else {
+            if constexpr (Kind == 0) AssistChip(std::move(onClick), label, options, modifier, site);
+            else if constexpr (Kind == 1) SuggestionChip(std::move(onClick), label, options, modifier, site);
+            else if constexpr (Kind == 2) ElevatedAssistChip(std::move(onClick), label, options, modifier, site);
+            else ElevatedSuggestionChip(std::move(onClick), label, options, modifier, site);
+        }
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ChipImpl<0, false>> AssistChip;
+inline constexpr Composable<detail::ChipImpl<1, false>> SuggestionChip;
+inline constexpr Composable<detail::ChipImpl<0, true>> FilterChip;
+inline constexpr Composable<detail::ChipImpl<1, true>> InputChip;
+// Elevated chips: on surfaceContainerLow with a shadow instead of a border (none when disabled),
+// for chips over images or busy content.
+inline constexpr Composable<detail::ChipImpl<2, false>> ElevatedAssistChip;
+inline constexpr Composable<detail::ChipImpl<3, false>> ElevatedSuggestionChip;
+inline constexpr Composable<detail::ChipImpl<2, true>> ElevatedFilterChip;
 
 namespace detail {
 void RadioButton(bool selected, std::function<void()> onClick, const Modifier& modifier = {}, bool enabled = true,

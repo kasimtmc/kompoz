@@ -843,6 +843,57 @@ TEST(objects_and_spans) {
     CHECK(std::abs(rule.onNodeWithTag("header").bounds().width - 300) < 0.5f && std::abs(rule.onNodeWithTag("a").bounds().width - 200) < 0.5f);
 }
 
+// Material as Compose writes it: chips with label = { }, toggleable(role = Role.Checkbox), a
+// snackbar awaited with actionLabel, progress = { }, NavigationSuiteScaffold's items block.
+@Composable
+fun MaterialForms(undo: () -> Unit) {
+    var unread by remember { mutableStateOf(false) }
+    var muted by remember { mutableStateOf(false) }
+    var tab by rememberSaveable { mutableStateOf(0) }
+    val snackbars = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    Column {
+        FilterChip(selected = unread, onClick = { unread = !unread }, label = { Text("Unread") }, modifier = Modifier.testTag("chip"))
+        Row(modifier = Modifier.toggleable(value = muted, onValueChange = { muted = it }, role = Role.Checkbox).testTag("row")) {
+            Checkbox(checked = muted, onCheckedChange = null)
+            Text("Mute")
+        }
+        Button(onClick = {
+            scope.launch {
+                if (snackbars.showSnackbar("Deleted", actionLabel = "Undo") == SnackbarResult.ActionPerformed) undo()
+            }
+        }) { Text("Delete") }
+        SnackbarHost(hostState = snackbars)
+        LinearProgressIndicator(progress = { 0.4f }, modifier = Modifier.testTag("bar"))
+        NavigationSuiteScaffold(
+            navigationSuiteItems = {
+                item(selected = tab == 0, onClick = { tab = 0 }, icon = { Icon(Icons.Filled.Home, contentDescription = null) }, label = { Text("Home") })
+                item(selected = tab == 1, onClick = { tab = 1 }, icon = { Icon(Icons.Filled.Settings, contentDescription = null) }, label = { Text("Settings") })
+            },
+            modifier = Modifier.height(300.dp),
+            layoutType = NavigationSuiteType.NavigationBar,
+        ) {
+            Text("Tab $tab")
+        }
+    }
+}
+
+TEST(material_as_compose_writes_it) {
+    int undone = 0;
+    ComposeTestRule rule([&] { MaterialForms([&] { ++undone; }); }, {400, 800});
+    rule.onNodeWithTag("chip").performClick();
+    rule.onNodeWithTag("row").performClick();
+    CHECK(rule.onNodeWithTag("bar").exists() && rule.onNodeWithText("Tab 0").exists());
+    rule.onNodeWithText("Settings").performClick();
+    CHECK(rule.onNodeWithText("Tab 1").exists());
+    rule.onNodeWithText("Delete").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("Undo").exists());
+    rule.onNodeWithText("Undo").performClick();
+    rule.waitForIdle();
+    CHECK(undone == 1);
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

@@ -186,7 +186,7 @@ void Indicator(const PullToRefreshState& state, bool isRefreshing, const Modifie
     IndicatorBox(state, isRefreshing, m, [&] {
         Crossfade(isRefreshing, [c, fraction](const bool& refreshing) {
             if (refreshing)
-                CircularProgressIndicator(Modifier().size(kSpinnerSize), c, kStrokeWidth);
+                detail::CircularProgressIndicator(Modifier().size(kSpinnerSize), c, kStrokeWidth, CallSite::current());
             else
                 ArrowIndicator(fraction, c);
         }, {}, tween(150));

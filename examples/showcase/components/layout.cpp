@@ -631,7 +631,7 @@ void LayoutSection(CallSite site) {
             LookaheadScope(Modifier().fillMaxWidth(), [&] {
                 FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                     for (int id : order.get())
-                        key(id, [&, id] { SuggestionChip([] {}, [&, id] { Text(words[id]); }, {}, Modifier().animateBounds(glide)); });
+                        key(id, [&, id] { SuggestionChip([] {}, [&, id] { Text(words[id]); }, ChipOptions{}, Modifier().animateBounds(glide)); });
                 });
             });
             Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {

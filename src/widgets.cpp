@@ -2064,7 +2064,7 @@ void linearBar(GraphicsContext& canvas, const Rect& b, bool rtl, float from, flo
 float circularGapSweep(float diameter, float strokeWidth) { return (4 + strokeWidth) / (3.14159265f * diameter) * 360; }
 } // namespace
 
-void CircularProgressIndicator(const Modifier& modifier, std::optional<Color> color, float strokeWidth, CallSite site) {
+void detail::CircularProgressIndicator(const Modifier& modifier, std::optional<Color> color, float strokeWidth, CallSite site) {
     composable(site, modifier, color, strokeWidth, [=] {
         Color c = color.value_or(colorScheme().primary);
         auto clock = detail::rememberDrawClock();  // read as it draws: nothing composed or laid out as it turns
@@ -2084,8 +2084,8 @@ void CircularProgressIndicator(const Modifier& modifier, std::optional<Color> co
     });
 }
 
-void CircularProgressIndicator(float progress, const Modifier& modifier, std::optional<Color> color, float strokeWidth,
-                               CallSite site) {
+void detail::CircularProgressIndicator(float progress, const Modifier& modifier, std::optional<Color> color, float strokeWidth,
+                                       CallSite site) {
     composable(site, progress, modifier, color, strokeWidth, [=] {
         Color c = color.value_or(colorScheme().primary), track = colorScheme().secondaryContainer;
         float p = std::clamp(progress, 0.f, 1.f);
@@ -2102,7 +2102,7 @@ void CircularProgressIndicator(float progress, const Modifier& modifier, std::op
     });
 }
 
-void LinearProgressIndicator(const Modifier& modifier, std::optional<Color> color, CallSite site) {
+void detail::LinearProgressIndicator(const Modifier& modifier, std::optional<Color> color, CallSite site) {
     composable(site, modifier, color, [=] {
         Color c = color.value_or(colorScheme().primary), track = colorScheme().secondaryContainer;
         auto clock = detail::rememberDrawClock();  // read as it draws
@@ -2125,7 +2125,7 @@ void LinearProgressIndicator(const Modifier& modifier, std::optional<Color> colo
     });
 }
 
-void LinearProgressIndicator(float progress, const Modifier& modifier, std::optional<Color> color, CallSite site) {
+void detail::LinearProgressIndicator(float progress, const Modifier& modifier, std::optional<Color> color, CallSite site) {
     composable(site, progress, modifier, color, [=] {
         Color c = color.value_or(colorScheme().primary), track = colorScheme().secondaryContainer;
         float p = std::clamp(progress, 0.f, 1.f);

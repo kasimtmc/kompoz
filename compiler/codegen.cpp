@@ -92,7 +92,7 @@ const std::map<std::string, std::string, std::less<>> kComposableProperties = {
 
 // Named arguments whose lambda gives a value: items(list, key = { it.id }, contentType = { … }).
 const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType", "selector", "comparator", "span", "pageCount",
-                                                            "itemCount"};
+                                                            "itemCount", "progress"};
 
 // Kotlin's standard functions, from kotlin.hpp: listOf(1, 2) -> kt::listOf(1, 2).
 const std::set<std::string, std::less<>> kKtFunctions = {
@@ -140,6 +140,7 @@ const std::set<std::string, std::less<>> kInlineLambdas = {
 // Named arguments whose lambda has a receiver: FlexBox(config = { gap(8.dp) }).
 const std::map<std::string, std::string, std::less<>> kReceiverArguments = {
     {"FlexBox.config", "FlexBoxConfigScope"}, {"Grid.config", "GridConfigurationScope"},
+    {"NavigationSuiteScaffold.navigationSuiteItems", "NavigationSuiteScope"},
     {"item.span", "LazyGridItemSpanScope"},   {"items.span", "LazyGridItemSpanScope"}};
 
 // Calls whose lambda is a coroutine (Kotlin's suspend lambdas): [=]() -> Task { ...; co_return; }.

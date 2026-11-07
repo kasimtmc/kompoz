@@ -188,6 +188,31 @@ void LayoutModifierPlaceable::place(A&&... args) const {
     place(float(P::arg<detail::names::X>(args...)), float(P::arg<detail::names::Y>(args...)));
 }
 
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::toggleable(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::Value, n::OnValueChange, n::Role, n::Enabled, n::InteractionSource>;
+    static_assert(P::check<A...>());
+    ClickableOptions options;
+    P::set<n::Enabled>(options.enabled, args...);
+    P::set<n::InteractionSource>(options.interactionSource, args...);
+    return toggleable(bool(P::arg<n::Value>(args...)), std::function<void(bool)>(P::arg<n::OnValueChange>(args...)),
+                      P::get<n::Role>(SemanticsRole::None, args...), options);
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::selectable(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::Selected, n::OnClick, n::Role, n::Enabled, n::InteractionSource>;
+    static_assert(P::check<A...>());
+    ClickableOptions options;
+    P::set<n::Enabled>(options.enabled, args...);
+    P::set<n::InteractionSource>(options.interactionSource, args...);
+    return selectable(bool(P::arg<n::Selected>(args...)), std::function<void()>(P::arg<n::OnClick>(args...)),
+                      P::get<n::Role>(SemanticsRole::None, args...), options);
+}
+
 // animateFloat(initialValue, targetValue, animationSpec, label) and animateColor's: the label is
 // Compose's name for its tools (none here).
 template <class... A>

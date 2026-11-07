@@ -214,7 +214,7 @@ void ShowcaseApp() {
                                 NavigationSuiteItem(tab == i, [goTab, i] { goTab(i); }, [&icon] { Icon(icon, ""); }, [label] { Text(label); });
                             }
                         },
-                        Modifier().fillMaxSize(), {}, [&] {
+                        Modifier().fillMaxSize(), NavigationSuiteScaffoldOptions{}, [&] {
                             Scaffold(Modifier().fillMaxSize().nestedScroll(barScroll.nestedScrollConnection),
                                      kompoz::topBar = topBar,
                                      floatingActionButton = fab,

@@ -855,6 +855,16 @@
 - **BoxWithConstraints, Compose'unki gibi bir SubcomposeLayout**: içeriği kutu ölçülürken aldığı kısıtlarla kompoze
   ediliyor; böylece en ilk kompozisyonu onları görüyor (önceden sınırsız kısıtlar görüyor, kısıtlar belli olunca aynı
   karede yeniden kompoze ediliyordu); kısıtlar değişince ya da kutu yeniden kompoze edilince yeniden kompoze ediliyor.
+- **Material bileşenleri Compose'un argümanlarını alıyor**: çipler, `FilterChip(selected, onClick, label = { Text("…") },
+  leadingIcon = …, trailingIcon = …, enabled = …)` ve ötekiler (bir `InputChip`'in `avatar`'ı da);
+  `Modifier.toggleable(value = …, onValueChange = …, role = Role.Checkbox)` ve `selectable(selected = …, onClick = …,
+  role = …)`; `SnackbarHost(hostState = …, snackbar = { data -> … })`; Compose'unki askıya aldığından bir coroutine'de
+  beklenen `showSnackbar(message, actionLabel = …, withDismissAction = …, duration = …)`; `progress = { … }` (bir lambda ya
+  da bir değer) ve `strokeWidth` ile `CircularProgressIndicator` ve `LinearProgressIndicator`; öğeleri kendi simge ve
+  etiketlerinden kompoze edilen `NavigationSuiteScaffold(navigationSuiteItems = { item(selected = …, onClick = …, icon =
+  { Icon(…) }, label = { Text("…") }) }, modifier, layoutType = …, …) { … }` ve içerikten bir simge ve etiketle
+  `NavigationBarItem`. C++'ta süslü parantezle verilen bir seçenek yapısı türünü adlandırıyor (`ChipOptions{…}`,
+  `NavigationSuiteScaffoldOptions{…}`).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

@@ -98,22 +98,22 @@ void ChipsSection(CallSite site) {
                                        drinks.add(drink);
                                },
                                [drink] { Text(drink); },
-                               {.leadingIcon = on ? Content([] { Icon(Icons::Filled::Check, "Seçili", Modifier().size(18)); })
+                               ChipOptions{.leadingIcon = on ? Content([] { Icon(Icons::Filled::Check, "Seçili", Modifier().size(18)); })
                                                   : Content()});
                 }
             });
             FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
                 AssistChip([] {}, [] { Text("Yol tarifi"); },
-                           {.leadingIcon = [] { Icon(Icons::Filled::Place, "Konum", Modifier().size(18)); }});
+                           ChipOptions{.leadingIcon = [] { Icon(Icons::Filled::Place, "Konum", Modifier().size(18)); }});
                 SuggestionChip([] {}, [] { Text("Bugün"); });
                 // Elevated: a shadow instead of the border.
                 ElevatedAssistChip([] {}, [] { Text("Paylaş"); },
-                                   {.leadingIcon = [] { Icon(Icons::Filled::Share, "Paylaş", Modifier().size(18)); }});
+                                   ChipOptions{.leadingIcon = [] { Icon(Icons::Filled::Share, "Paylaş", Modifier().size(18)); }});
                 ElevatedFilterChip(openOnly.get(), [openOnly] { openOnly.set(!openOnly.get()); }, [] { Text("Şu an açık"); });
                 ElevatedSuggestionChip([] {}, [] { Text("Yarın"); });
                 for (const std::string& person : people)
                     InputChip(false, [] {}, [person] { Text(person); },
-                              {.trailingIcon = [people, person] {
+                              ChipOptions{.trailingIcon = [people, person] {
                                   IconButton([people, person] {
                                       people.removeIf([&](const std::string& p) { return p == person; });
                                   }, Modifier().size(24)) { Icon(Icons::Filled::Close, "Kaldır", Modifier().size(18)); };

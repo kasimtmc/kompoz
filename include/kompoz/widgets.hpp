@@ -1625,15 +1625,43 @@ struct OutlinedIconToggleButtonImpl {
 } // namespace detail
 inline constexpr Composable<detail::OutlinedIconToggleButtonImpl> OutlinedIconToggleButton;
 
-// Indeterminate (spinning) and determinate (0..1) progress, Material 3 style.
-void CircularProgressIndicator(const Modifier& modifier = {}, std::optional<Color> color = {}, float strokeWidth = 4,
-                               CallSite site = CallSite::current());
-void CircularProgressIndicator(float progress, const Modifier& modifier = {}, std::optional<Color> color = {},
-                               float strokeWidth = 4, CallSite site = CallSite::current());
-void LinearProgressIndicator(const Modifier& modifier = {}, std::optional<Color> color = {},
-                             CallSite site = CallSite::current());
-void LinearProgressIndicator(float progress, const Modifier& modifier = {}, std::optional<Color> color = {},
-                             CallSite site = CallSite::current());
+namespace detail {
+void CircularProgressIndicator(const Modifier& modifier, std::optional<Color> color, float strokeWidth, CallSite site);
+void CircularProgressIndicator(float progress, const Modifier& modifier, std::optional<Color> color, float strokeWidth, CallSite site);
+void LinearProgressIndicator(const Modifier& modifier, std::optional<Color> color, CallSite site);
+void LinearProgressIndicator(float progress, const Modifier& modifier, std::optional<Color> color, CallSite site);
+// Indeterminate (spinning) and determinate (0..1) progress, Material 3 style: (modifier, color,
+// strokeWidth) spinning, or (progress, modifier, color, strokeWidth) with Compose's `progress`
+// a value or a lambda read in composition ({ progress }).
+template <bool Circular>
+struct ProgressIndicatorImpl {
+    using P = Params<names::Progress, names::Modifier, names::Color, names::StrokeWidth>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        constexpr bool spinning = !P::given<names::Progress, A...>() || startsWith<Modifier, A...>();
+        if constexpr (spinning) {
+            using S = Params<names::Modifier, names::Color, names::StrokeWidth>;
+            static_assert(S::check<A...>());
+            Modifier modifier = S::get<names::Modifier>(Modifier{}, args...);
+            std::optional<Color> color = S::get<names::Color>(std::optional<Color>(), args...);
+            if constexpr (Circular) CircularProgressIndicator(modifier, color, S::get<names::StrokeWidth>(4.f, args...), site);
+            else LinearProgressIndicator(modifier, color, site);
+        } else {
+            static_assert(P::check<A...>());
+            auto&& given = P::arg<names::Progress>(args...);
+            float progress;
+            if constexpr (std::is_invocable_v<decltype(given)&>) progress = float(given());
+            else progress = float(given);
+            Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
+            std::optional<Color> color = P::get<names::Color>(std::optional<Color>(), args...);
+            if constexpr (Circular) CircularProgressIndicator(progress, modifier, color, P::get<names::StrokeWidth>(4.f, args...), site);
+            else LinearProgressIndicator(progress, modifier, color, site);
+        }
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ProgressIndicatorImpl<true>> CircularProgressIndicator;
+inline constexpr Composable<detail::ProgressIndicatorImpl<false>> LinearProgressIndicator;
 
 namespace WavyProgressIndicatorDefaults {
 // The wave's height (0..1 of the full one) for a progress: flat near the start and the end.

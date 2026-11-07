@@ -2507,7 +2507,7 @@ TEST(overlays_fields_and_indicators_animate_composing_around_them_only_as_they_t
             Row([=, &scrolled] {
                 ExposedDropdownMenuDefaults::TrailingIcon(o);
                 SplitButtonDefaults::TrailingButtonIcon(o);
-                FilterChip(o, [] {}, [] { Text("Süz"); }, {.leadingIcon = o ? Content([] { Icon(Icons::Filled::Check, ""); }) : Content()});
+                FilterChip(o, [] {}, [] { Text("Süz"); }, ChipOptions{.leadingIcon = o ? Content([] { Icon(Icons::Filled::Check, ""); }) : Content()});
                 Box(Modifier().size(60, 100), [=, &scrolled] {
                     Column(Modifier().fillMaxSize().verticalScroll(scrolled), [] { Box(Modifier().height(400)); });
                     VerticalScrollbar(rememberScrollbarAdapter(scrolled), Modifier().align(Alignment::CenterEnd).fillMaxHeight().testTag("çubuk"));
@@ -8759,7 +8759,7 @@ TEST(chips_radio_buttons_and_segments_select) {
         auto segment = remember([] { return mutableStateOf(0); });
         Column([=] {
             FilterChip(chipOn.get(), [chipOn] { chipOn.set(!chipOn.get()); }, [] { Text("Filtre"); },
-                       {.leadingIcon = chipOn.get() ? Content([] { Icon(Icons::Filled::Check, "işaret", Modifier().size(18)); })
+                       ChipOptions{.leadingIcon = chipOn.get() ? Content([] { Icon(Icons::Filled::Check, "işaret", Modifier().size(18)); })
                                                     : Content()});
             for (const char* option : {"Kahve", "Çay"})
                 Row(Modifier().testTag(option), [=] {
@@ -11305,6 +11305,52 @@ TEST(box_with_constraints_composes_with_its_constraints_the_first_time) {
     CHECK(rule.onNodeWithText("iki geniş").exists() && !rule.onNodeWithText("iki dar").exists());
 }
 
+TEST(material_components_take_compose_arguments) {
+    // Chips with label = …, toggleable(value = …, role = …), SnackbarHost(hostState = …),
+    // showSnackbar(actionLabel = …), progress = { … } and NavigationSuiteScaffold's items block.
+    auto on = mutableStateOf(false), muted = mutableStateOf(false);
+    auto tab = mutableStateOf(0);
+    auto snackbars = SnackbarHostState();
+    ComposeTestRule rule([=] {
+        Column([=] {
+            FilterChip(arg::selected = on.get(), arg::onClick = [on] { on.set(!on.get()); }, arg::label = [] { Text("Okunmamış"); },
+                       arg::leadingIcon = [] { Icon(Icons::Filled::Check, ""); }, arg::modifier = Modifier().testTag("çip"));
+            AssistChip(arg::onClick = [] {}, arg::label = [] { Text("Yardım"); }, arg::enabled = false);
+            Row(Modifier().toggleable(arg::value = muted.get(), arg::onValueChange = [muted](bool v) { muted.set(v); }, arg::role = Role::Checkbox)
+                    .testTag("satır"), [=] {
+                Checkbox(muted.get(), nullptr);
+                Text("Sessiz");
+            });
+            SnackbarHost(arg::hostState = snackbars);
+            LinearProgressIndicator(arg::progress = [] { return 0.4f; }, arg::modifier = Modifier().testTag("ilerleme"));
+            CircularProgressIndicator(arg::modifier = Modifier().testTag("dönen"), arg::strokeWidth = 2.f);
+            NavigationSuiteScaffold(arg::navigationSuiteItems = [tab](NavigationSuiteScope& nav) {
+                nav.item(arg::selected = tab.get() == 0, arg::onClick = [tab] { tab.set(0); }, arg::icon = [] { Icon(Icons::Filled::Home, ""); },
+                         arg::label = [] { Text("Ev"); });
+                nav.item(arg::selected = tab.get() == 1, arg::onClick = [tab] { tab.set(1); }, arg::icon = [] { Icon(Icons::Filled::Settings, ""); },
+                         arg::label = [] { Text("Ayarlar"); });
+            }, arg::modifier = Modifier().height(300), arg::layoutType = NavigationSuiteType::NavigationBar, [tab] {
+                Text("Sekme " + std::to_string(tab.get()));
+            });
+        });
+    }, {400, 800});
+    rule.onNodeWithTag("çip").performClick();
+    CHECK(on.get());
+    rule.onNodeWithTag("satır").performClick();
+    CHECK(muted.get());
+    bool roleOk = false;
+    for (const auto& n : rule.host().semanticsTree())
+        if (n.label.find("Sessiz") != std::string::npos) roleOk = n.role == SemanticsRole::Checkbox;
+    CHECK(roleOk);
+    snackbars.showSnackbar("Silindi", arg::actionLabel = "Geri al");
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("Geri al").exists());
+    CHECK(rule.onNodeWithTag("ilerleme").exists() && rule.onNodeWithTag("dönen").exists());
+    CHECK(rule.onNodeWithText("Sekme 0").exists());
+    rule.onNodeWithText("Ayarlar").performClick();
+    CHECK(rule.onNodeWithText("Sekme 1").exists());
+}
+
 TEST(intrinsic_height_and_flow_row) {
     ComposeTestRule rule([] {
         Column([] {
@@ -12700,7 +12746,7 @@ TEST(navigation_suite_scaffold_moves_its_items_and_keeps_the_screen) {
                 nav.item(tab.get() == 0, [&] { tab.set(0); }, Icons::Filled::Home, "Ev");
                 nav.item(tab.get() == 1, [&] { tab.set(1); }, Icons::Filled::Settings, "Ayarlar");
             },
-            Modifier().fillMaxSize(), {.layoutType = forced.get()}, [&] {
+            Modifier().fillMaxSize(), NavigationSuiteScaffoldOptions{.layoutType = forced.get()}, [&] {
                 Scaffold(Modifier().fillMaxSize(), [=, &seen](PaddingValues p) {
                     seen = p;
                     auto count = remember([] { return mutableStateOf(0); });
@@ -12777,7 +12823,7 @@ TEST(navigation_suite_scaffold_with_its_own_items_a_primary_action_and_hiding) {
                                     Modifier(), {.badge = [] { Badge(Modifier(), [] { Text("3"); }); }});
             },
             Modifier().fillMaxSize(),
-            {.state = s, .primaryActionContent = [] { Box(Modifier().size(56).testTag("eylem")); }},
+            NavigationSuiteScaffoldOptions{.state = s, .primaryActionContent = [] { Box(Modifier().size(56).testTag("eylem")); }},
             [&] { Box(Modifier().fillMaxSize().testTag("ekran")); });
     }, {400, 800});
     // Compact: a short bar (64 dp) at the bottom, its icons above the labels; the action above
@@ -15523,18 +15569,18 @@ TEST(chips_as_compose_1_4) {
             });
         };
         Column([=] {
-            AssistChip([] {}, part("yardım", 40), {.trailingIcon = part("yardım-son", 18)}, Modifier().testTag("yardım-çip"));
-            SuggestionChip([] {}, part("öneri", 40), {.leadingIcon = part("öneri-baş", 18)});
-            InputChip(false, [] {}, part("giriş", 40), {}, Modifier().testTag("giriş-çip"));
-            InputChip(true, [] {}, part("seçili-giriş", 40), {.leadingIcon = part("seçili-giriş-baş", 18), .trailingIcon = part("seçili-giriş-son", 18)},
+            AssistChip([] {}, part("yardım", 40), ChipOptions{.trailingIcon = part("yardım-son", 18)}, Modifier().testTag("yardım-çip"));
+            SuggestionChip([] {}, part("öneri", 40), ChipOptions{.leadingIcon = part("öneri-baş", 18)});
+            InputChip(false, [] {}, part("giriş", 40), ChipOptions{}, Modifier().testTag("giriş-çip"));
+            InputChip(true, [] {}, part("seçili-giriş", 40), ChipOptions{.leadingIcon = part("seçili-giriş-baş", 18), .trailingIcon = part("seçili-giriş-son", 18)},
                       Modifier().testTag("seçili-giriş-çip"));
             // The avatar before an icon, in the label's color.
-            InputChip(true, [] {}, part("avatarlı", 40), {.leadingIcon = part("avatarsız-simge", 18), .avatar = part("avatar", 24)},
+            InputChip(true, [] {}, part("avatarlı", 40), ChipOptions{.leadingIcon = part("avatarsız-simge", 18), .avatar = part("avatar", 24)},
                       Modifier().testTag("avatarlı-çip"));
-            FilterChip(picked.get(), [] {}, part("filtre", 40), {.leadingIcon = picked.get() ? part("tik", 18) : Content()},
+            FilterChip(picked.get(), [] {}, part("filtre", 40), ChipOptions{.leadingIcon = picked.get() ? part("tik", 18) : Content()},
                        Modifier().testTag("filtre-çip"));
-            FilterChip(true, [] {}, part("kapalı", 40), {.enabled = false}, Modifier().testTag("kapalı-çip"));
-            FilterChip(false, [] {}, part("kapalı-boş", 40), {.enabled = false}, Modifier().testTag("kapalı-boş-çip"));
+            FilterChip(true, [] {}, part("kapalı", 40), ChipOptions{.enabled = false}, Modifier().testTag("kapalı-çip"));
+            FilterChip(false, [] {}, part("kapalı-boş", 40), ChipOptions{.enabled = false}, Modifier().testTag("kapalı-boş-çip"));
         });
     });
     auto bounds = [&](const char* tag) { return rule.onNodeWithTag(tag).bounds(); };
@@ -18884,10 +18930,10 @@ TEST(elevated_chips_cast_a_shadow_and_leading_icon_tabs_sit_side_by_side) {
     ColorScheme cs = lightColorScheme();
     ComposeTestRule rule([&] {
         Column([=, &assists] {
-            ElevatedAssistChip([&] { ++assists; }, [] { Text("Yol tarifi"); }, {.enabled = enabled.get()}, Modifier().testTag("assist"));
-            ElevatedFilterChip(on.get(), [&] { on.set(!on.get()); }, [] { Text("Açık"); }, {}, Modifier().testTag("filter"));
-            ElevatedSuggestionChip([] {}, [] { Text("Öneri"); }, {}, Modifier().testTag("suggestion"));
-            AssistChip([] {}, [] { Text("Düz"); }, {}, Modifier().testTag("plain"));
+            ElevatedAssistChip([&] { ++assists; }, [] { Text("Yol tarifi"); }, ChipOptions{.enabled = enabled.get()}, Modifier().testTag("assist"));
+            ElevatedFilterChip(on.get(), [&] { on.set(!on.get()); }, [] { Text("Açık"); }, ChipOptions{}, Modifier().testTag("filter"));
+            ElevatedSuggestionChip([] {}, [] { Text("Öneri"); }, ChipOptions{}, Modifier().testTag("suggestion"));
+            AssistChip([] {}, [] { Text("Düz"); }, ChipOptions{}, Modifier().testTag("plain"));
             PrimaryTabRow(tab.get(), Modifier().testTag("tabs"), [&] {
                 for (int i = 0; i < 2; ++i)
                     LeadingIconTab(tab.get() == i, [&, i] { tab.set(i); }, [i] { Text(i == 0 ? "Uçuş" : "Otel"); },
@@ -29540,7 +29586,7 @@ TEST(buttons_and_chips_keep_48_dp_of_room_to_touch_them) {
                 Button([taps] { taps->push_back("düğme"); }, Modifier().testTag("düğme"), [] { Text("Kaydet"); });
                 TextButton([taps] { taps->push_back("metin"); }, Modifier().testTag("metin"), [] { Text("İptal"); });
                 ToggleButton(on.get(), [on](bool v) { on.set(v); }, Modifier().testTag("aç"), {}, [] { Text("Aç"); });
-                AssistChip([taps] { taps->push_back("çip"); }, [] { Text("Yol"); }, {}, Modifier().testTag("çip"));
+                AssistChip([taps] { taps->push_back("çip"); }, [] { Text("Yol"); }, ChipOptions{}, Modifier().testTag("çip"));
                 SmallFloatingActionButton([taps] { taps->push_back("fab"); },
                                           Modifier().testTag("fab"), [] { Icon(Icons::Filled::Add, "Ekle"); });
             });

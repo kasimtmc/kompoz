@@ -103,10 +103,25 @@ public:
         std::string label;
         bool enabled = true;
         Content badge;  // over the icon (a Badge)
+        Content iconContent, labelContent;  // Compose's forms: composed instead of icon and label
     };
     void item(bool selected, std::function<void()> onClick, const ImageVector& icon, std::string label, bool enabled = true,
               Content badge = {}) {
         items_.push_back({selected, std::move(onClick), icon, std::move(label), enabled, std::move(badge)});
+    }
+    // Compose's: item(selected = …, onClick = …, icon = { Icon(…) }, label = { Text("…") }, enabled = …,
+    // badge = …). The icon and the label are composed here, as the bar's items are given them.
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void item(A&&... args) {
+        namespace n = detail::names;
+        using P = detail::Params<n::Selected, n::OnClick, n::Icon, n::Label, n::Enabled, n::Badge>;
+        static_assert(P::check<A...>());
+        Item item{bool(P::arg<n::Selected>(args...)), std::function<void()>(P::arg<n::OnClick>(args...)), ImageVector{}, {},
+                  P::get<n::Enabled>(true, args...), P::get<n::Badge>(Content{}, args...)};
+        item.iconContent = Content(P::arg<n::Icon>(args...));
+        item.labelContent = Content(P::arg<n::Label>(args...));
+        items_.push_back(std::move(item));
     }
     const std::vector<Item>& items() const { return items_; }
 
@@ -130,18 +145,48 @@ struct NavigationSuiteScaffoldOptions {
     Arrangement::Kind navigationItemVerticalArrangement = Arrangement::Kind::Start;  // Start (top), Center, End (bottom)
 };
 
+namespace detail {
+void NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& navigationSuiteItems, const Modifier& modifier,
+                             const NavigationSuiteScaffoldOptions& options, const Content& content, CallSite site);
+void NavigationSuiteScaffold(const Content& navigationItems, const Modifier& modifier, const NavigationSuiteScaffoldOptions& options,
+                             const Content& content, CallSite site);
+// NavigationSuiteScaffold(navigationSuiteItems = { item(selected = …, onClick = …, icon = …, label = …) },
+// modifier, layoutType = …, state = …, containerColor = …, contentColor = …, primaryActionContent = …) { … }
+// as Compose's: its items block on a NavigationSuiteScope (a block of plain content, Compose 1.4's
+// NavigationSuiteItem calls, is taken too); or (items, modifier, NavigationSuiteScaffoldOptions{…}) { … }.
+struct NavigationSuiteScaffoldImpl {
+    using P = Params<names::NavigationSuiteItems, names::Modifier, names::Options, names::LayoutType, names::State, names::RailHeader,
+                     names::DrawerHeader, names::ContainerColor, names::ContentColor, names::PrimaryActionContent, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        NavigationSuiteScaffoldOptions options = P::get<names::Options>(NavigationSuiteScaffoldOptions{}, args...);
+        P::set<names::LayoutType>(options.layoutType, args...);
+        P::set<names::State>(options.state, args...);
+        P::set<names::RailHeader>(options.railHeader, args...);
+        P::set<names::DrawerHeader>(options.drawerHeader, args...);
+        P::set<names::ContainerColor>(options.containerColor, args...);
+        P::set<names::ContentColor>(options.contentColor, args...);
+        P::set<names::PrimaryActionContent>(options.primaryActionContent, args...);
+        auto&& items = P::arg<names::NavigationSuiteItems>(args...);
+        Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
+        Content content = P::plainBlock(std::forward<A>(args)...);
+        if constexpr (std::is_invocable_v<decltype(items)&, NavigationSuiteScope&>)
+            NavigationSuiteScaffold(std::function<void(NavigationSuiteScope&)>(items), modifier, options, content, site);
+        else
+            NavigationSuiteScaffold(Content(items), modifier, options, content, site);
+    }
+};
+} // namespace detail
 // The app's navigation items in the bar, rail or drawer that suits the window, `content`
 // beside it — and kept clear of what the bar or rail already keeps clear of (the navigation
-// bar's inset below a bar): an inner Scaffold pads only by the rest.
-void NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& navigationSuiteItems, const Modifier& modifier,
-                             const NavigationSuiteScaffoldOptions& options, const Content& content, CallSite site = CallSite::current());
-// The same with items of the app's own composing (Compose 1.4's): NavigationSuiteItems for the
-// type the scaffold uses, M3 Expressive's by default.
+// bar's inset below a bar): an inner Scaffold pads only by the rest. Its items block on a
+// NavigationSuiteScope, or (Compose 1.4's) plain content of NavigationSuiteItem calls, M3
+// Expressive's by default:
 //   NavigationSuiteScaffold([&] {
 //       NavigationSuiteItem(tab == 0, [&] { tab = 0; }, [] { Icon(Icons::Filled::Home, ""); }, [] { Text("Ana sayfa"); });
 //   }, Modifier(), {.primaryActionContent = [] { FloatingActionButton(...); }}, [&] { Screen(tab); });
-void NavigationSuiteScaffold(const Content& navigationItems, const Modifier& modifier, const NavigationSuiteScaffoldOptions& options,
-                             const Content& content, CallSite site = CallSite::current());
+inline constexpr Composable<detail::NavigationSuiteScaffoldImpl> NavigationSuiteScaffold;
 
 // Its parts, to put together another way: the navigation component of a type around `content`
 // (its items), with the primary action (rails and drawers: at their top) and where the items go...

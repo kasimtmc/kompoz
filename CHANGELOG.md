@@ -814,6 +814,16 @@
   with the constraints it gets, so its very first composition sees them (it saw unbounded ones before, and was
   composed again in the same frame once they were known); it is composed again when they change or when the box is
   composed again.
+- **Material's components take Compose's arguments**: the chips, `FilterChip(selected, onClick, label = { Text("…") },
+  leadingIcon = …, trailingIcon = …, enabled = …)` and the others (an `InputChip`'s `avatar` too);
+  `Modifier.toggleable(value = …, onValueChange = …, role = Role.Checkbox)` and `selectable(selected = …, onClick = …,
+  role = …)`; `SnackbarHost(hostState = …, snackbar = { data -> … })`; `showSnackbar(message, actionLabel = …,
+  withDismissAction = …, duration = …)`, awaited in a coroutine as Compose's suspends; `CircularProgressIndicator` and
+  `LinearProgressIndicator` with `progress = { … }` (a lambda or a value) and `strokeWidth`; `NavigationSuiteScaffold(
+  navigationSuiteItems = { item(selected = …, onClick = …, icon = { Icon(…) }, label = { Text("…") }) }, modifier,
+  layoutType = …, …) { … }` whose items are composed from their own icon and label, and `NavigationBarItem` with an
+  icon and a label of content. In C++ a braced options struct names its type (`ChipOptions{…}`,
+  `NavigationSuiteScaffoldOptions{…}`).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

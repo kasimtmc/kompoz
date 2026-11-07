@@ -2004,6 +2004,14 @@ public:
                         const ClickableOptions& options = {}) const;
     Modifier triStateToggleable(ToggleableState state, std::function<void()> onClick, SemanticsRole role = SemanticsRole::None,
                                 const ClickableOptions& options = {}) const;
+    // Compose's forms: toggleable(value = on, onValueChange = …, role = Role.Switch, enabled = …),
+    // selectable(selected = …, onClick = …, role = …) (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier toggleable(A&&... args) const;
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier selectable(A&&... args) const;
     // The selectables inside belong together (a radio group), for accessibility services.
     Modifier selectableGroup() const;
     // A click that can also be long pressed or double clicked (onClick then waits for the
