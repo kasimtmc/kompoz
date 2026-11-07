@@ -245,6 +245,12 @@ public:
     void invalidateRoot();
     void invalidateReaders(const void* key);
     bool recording() const { return currentScope_ != nullptr; }  // reads now are a scope's
+    Scope* currentScope() const { return currentScope_; }       // the scope whose body is running
+    // Runs `scope` now, on its own, outside the frame's composition (a SubcomposeLayout's slot
+    // asked for while it measures, composed for that measure, as Compose's subcompose does): in a
+    // snapshot of its own, applied; then what left forgotten, effects and side effects, as recompose
+    // does. False if a composition is running already.
+    bool composeNow(Scope& scope);
     void invalidateScope(Scope& scope);
     void invalidateFrameScopes(int64_t frameTimeNanos);  // scopes that asked for this frame (the next, or one by now)
     bool hasFrameScopes() const { return !frameScopes_.empty() || !timedScopes_.empty(); }

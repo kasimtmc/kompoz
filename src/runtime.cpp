@@ -229,6 +229,31 @@ bool Composer::recompose(int64_t frameTimeNanos) {
     return true;
 }
 
+bool Composer::composeNow(Scope& scope) {
+    if (currentScope_ || gCurrent == this) return false;
+    Composer* previous = std::exchange(gCurrent, this);
+    auto effects = std::exchange(effects_, {});
+    auto sideEffects = std::exchange(sideEffects_, {});
+    std::vector<std::function<void()>> forgotten;
+    auto* outerForgets = std::exchange(gForgets, &forgotten);
+    ++pass_;
+    MutableSnapshot snapshot = Snapshot::takeMutableSnapshot();
+    std::optional<Snapshot::Entered> entered(std::in_place, snapshot);
+    std::erase(invalid_, &scope);
+    restart(scope);
+    detail::settleSaveables();
+    entered.reset();
+    bool applied = snapshot.apply() == SnapshotApplyResult::Success;
+    snapshot.dispose();
+    gForgets = outerForgets;
+    gCurrent = previous;
+    if (!applied) throw std::logic_error("kompoz: a state a subcomposition wrote was written meanwhile on another thread");
+    for (auto it = forgotten.rbegin(); it != forgotten.rend(); ++it) (*it)();
+    for (auto& effect : std::exchange(effects_, std::move(effects))) effect();
+    for (auto& effect : std::exchange(sideEffects_, std::move(sideEffects))) effect();
+    return true;
+}
+
 // Runs a scope on its own, without its parent: the composition locals come from the
 // providers above it, and the node it emits into gets its children list rebuilt.
 void Composer::restart(Scope& scope) {

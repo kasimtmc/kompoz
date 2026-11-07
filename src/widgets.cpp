@@ -385,47 +385,91 @@ struct SubcomposeMeasureScope::Data {
     std::vector<Slot> slots;  // composed, as the children (one container node each)
     std::vector<Slot> asked;  // by the measure under way
     MutableState<int> version{0};
+    detail::Composer* composer = nullptr;
+    detail::Scope* scope = nullptr;  // the slots' own: composed again on its own for a slot asked for
+    Constraints constraints;         // the measure's under way (a slot composed in it is measured so)
+    bool composed = false;           // a slot was composed during it
 };
 
+namespace {
+// The slots' containers: at the origin, as big as the layout may be, so what the policy places in
+// them is placed in it.
+void placeContainer(LayoutNode& container, const Constraints& c) {
+    // (measured each time: what the policy places in it moves with this measure, so its place
+    // on the screen is worked out again below it)
+    container.invalidateMeasure();
+    container.measure(Constraints::fixed(c.hasBoundedWidth() ? c.maxWidth : c.minWidth, c.hasBoundedHeight() ? c.maxHeight : c.minHeight));
+    container.place(0, 0);
+}
+} // namespace
+
 std::vector<Measurable> SubcomposeMeasureScope::slot(size_t id, Content content, size_t dependency) {
-    data_->asked.push_back({id, std::move(content), dependency});
-    for (size_t i = 0; i < data_->slots.size() && i < node_->children.size(); ++i)
-        if (data_->slots[i].id == id) {
-            std::vector<Measurable> out;
-            for (auto* child : node_->children[i]->children) out.push_back({child});
-            return out;
+    Data& d = *data_;
+    d.asked.push_back({id, std::move(content), dependency});
+    auto find = [&]() -> int {
+        for (size_t i = 0; i < d.slots.size(); ++i)
+            if (d.slots[i].id == id) return int(i);
+        return -1;
+    };
+    int i = find();
+    // New, or its dependency changed: composed now, as Compose's subcompose does, with the slots
+    // there are (those not asked for again go after the measure); else as it was composed. Not for
+    // a probe measure (an intrinsic size's, unbounded): what it would pick isn't composed for it.
+    if ((i < 0 || d.slots[size_t(i)].dependency != dependency) && d.composer && d.scope && !detail::isProbeMeasure()) {
+        if (i < 0) d.slots.push_back(d.asked.back());
+        else d.slots[size_t(i)] = d.asked.back();
+        if (d.composer->composeNow(*d.scope)) {
+            for (auto* container : node_->children) placeContainer(*container, d.constraints);  // (all of them composed again)
+            d.composed = true;
+            i = find();
+        } else if (i < 0) {
+            d.slots.pop_back();  // (not now: the next pass of this frame composes it)
+            i = -1;
         }
-    return {};  // composed for the next pass of this frame
+    }
+    std::vector<Measurable> out;
+    if (i >= 0 && size_t(i) < node_->children.size())
+        for (auto* child : node_->children[size_t(i)]->children) out.push_back({child});
+    return out;
 }
 
 void detail::SubcomposeLayout(const Modifier& modifier, SubcomposeMeasurePolicy measurePolicy, CallSite site) {
     ComposableScope scope(site);
     auto d = remember([] { return std::make_shared<SubcomposeMeasureScope::Data>(); });
-    d->version.get();  // composed again when the slots asked for change
+    d->composer = &Composer::require();
     auto policy = [d, measurePolicy](LayoutNode& node, const Constraints& c) {
-        // The slots' containers, first: at the origin, so what the policy places in them is
-        // placed in it (measured after, they would forget what was placed in them).
-        for (auto* container : node.children) {
-            container->measure(Constraints::fixed(c.hasBoundedWidth() ? c.maxWidth : c.minWidth, c.hasBoundedHeight() ? c.maxHeight : c.minHeight));
-            container->place(0, 0);
+        Size size;
+        // A slot composed during the policy: run once more, all of them composed by then, so that
+        // what it placed before isn't left as the containers' measuring found it.
+        for (int run = 0; run < 2; ++run) {
+            for (auto* container : node.children) placeContainer(*container, c);
+            d->asked.clear();
+            d->constraints = c;
+            d->composed = false;
+            SubcomposeMeasureScope scope(*d, node);
+            size = c.constrain(measurePolicy(scope, c));
+            if (!d->composed) break;
         }
-        d->asked.clear();
-        SubcomposeMeasureScope scope(*d, node);
-        Size size = c.constrain(measurePolicy(scope, c));
         if (!detail::isProbeMeasure()) {
             bool same = d->asked.size() == d->slots.size();
             for (size_t i = 0; same && i < d->asked.size(); ++i)
                 same = d->asked[i].id == d->slots[i].id && d->asked[i].dependency == d->slots[i].dependency;
             d->slots = std::move(d->asked);  // the latest content for the slots, in any case
             d->asked.clear();
-            if (!same) d->version.set(d->version.peek() + 1);  // new, gone or changed: composed again, this frame
+            if (!same) d->version.set(d->version.peek() + 1);  // gone (or one not composed yet): composed again, this frame
         }
         return size;
     };
     auto container = [](LayoutNode&, const Constraints& c) { return Size{c.maxWidth, c.maxHeight}; };  // its children are the policy's to measure
-    layoutNode(CallSite::current(), modifier, policy, [&] {
-        for (const auto& slot : d->slots)
-            key(slot.id, [&] { layoutNode(CallSite::current(), Modifier(), container, slot.content); });
+    layoutNode(CallSite::current(), modifier, policy, [d, container] {
+        // The slots in a scope of their own, run alone when a measure asks for one.
+        auto& composer = Composer::require();
+        composer.restartable(keyOf(CallSite::current()), std::tuple<>{}, [d, container] {
+            d->scope = Composer::require().currentScope();
+            d->version.get();  // composed again when the slots asked for change
+            for (const auto& slot : d->slots)
+                key(slot.id, [&] { layoutNode(CallSite::current(), Modifier(), container, slot.content); });
+        });
     });
 }
 

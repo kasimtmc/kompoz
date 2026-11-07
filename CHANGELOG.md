@@ -781,8 +781,7 @@
   `SubcomposeMeasureScope` gives `layout(w, h) { … }` too), `LookaheadScope(modifier) { … }`, and
   `HorizontalDivider` / `VerticalDivider` with `thickness` and `color`, all taking named arguments.
   `constraints.copy(minWidth = 0, minHeight = 0)`, `constrainWidth`, `constrainHeight` and `offset`, and
-  `placeable.placeRelative(x = …, y = …)` by name, as Compose's. A slot of a `SubcomposeLayout` is still composed
-  after the pass that first asks for it (Compose composes it at once): its policy takes an empty list then.
+  `placeable.placeRelative(x = …, y = …)` by name, as Compose's.
 - **kompozc: Kotlin's inline functions and measure policies**: the lambda of `forEach`, `map`, `let`, `repeat` and
   Kotlin's other inline functions reaches the locals around it by reference, so `y += h` in `forEach { }` changes
   the `y` outside, as in Kotlin. `Layout`'s measure policy has a `MeasureScope` receiver and gives its value,
@@ -804,6 +803,12 @@
   (a delegated state's reads and writes go through as everywhere); it is a `shared_ptr`, as Kompoz takes such
   objects. A lazy grid's `span = { … }` has its `LazyGridItemSpanScope` receiver; a carousel's content its
   `CarouselItemScope`; `pageCount = { … }` and `itemCount = { … }` give their values.
+- **A SubcomposeLayout composes a slot as it measures**: `subcompose(slotId) { … }` composes a slot the first time it
+  is asked for (or when its dependency changes) there and then, as Compose's does, and gives its measurables to the
+  same measure: `subcompose("main", content).map { it.measure(c) }.maxOf { it.width }` works on the first pass.
+  Before, a slot was composed after the pass and the layout ran again in the same frame, with no measurables until
+  then. The slots are a scope of their own, run alone (`Composer::composeNow`); one no longer asked for leaves after
+  the measure.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

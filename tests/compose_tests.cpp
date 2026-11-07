@@ -784,7 +784,7 @@ fun Staircase(indent: Dp, content: @Composable () -> Unit) {
 fun Underlined(content: @Composable () -> Unit) {
     SubcomposeLayout(modifier = Modifier.testTag("underlined")) { constraints ->
         val main = subcompose("main", content).map { it.measure(constraints.copy(minWidth = 0f, minHeight = 0f)) }
-        val width = main.maxOfOrNull { it.width } ?: 0f  // (none on the first pass: composed after it)
+        val width = main.maxOf { it.width }  // (composed as it is asked for: there on the first pass)
         val height = main.sumOf { it.height }
         val line = subcompose("line", width) { Box(modifier = Modifier.size(width, 2.dp)) }.map { it.measure(constraints) }
         layout(width, height + 2f) {

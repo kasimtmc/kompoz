@@ -394,9 +394,10 @@ LayoutMeasurePolicy menuRows(float maxWidth);
 // A layout that composes some of its content while it measures, from what it knows then
 // (Compose's SubcomposeLayout): subcompose(slotId, content) gives the slot's measurables — a
 // slot that depends on another's size, or one picked by the constraints. A slot asked for the
-// first time (or whose `dependency` changed) is composed, and the layout run again, in the
-// same frame (until then it has no measurables). The content runs later, in composition:
-// capture by value.
+// first time (or whose `dependency` changed) is composed there and then, as Compose's is, its
+// measurables given to the same measure (the policy runs once more after, all of them composed);
+// one no longer asked for leaves after the measure. Its content may run again later, in a
+// composition: capture by value.
 //   SubcomposeLayout(Modifier(), [](SubcomposeMeasureScope& s, const Constraints& c) {
 //       auto main = s.subcompose("main", [] { Text("Başlık"); });
 //       Size size = ...;  // measure and place them

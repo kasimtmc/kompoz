@@ -133,7 +133,7 @@ fun Underlined(content: @Composable () -> Unit) {
     SubcomposeLayout { constraints ->
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
         val main = subcompose("main", content).map { it.measure(loose) }
-        val width = main.maxOfOrNull { it.width } ?: 0f
+        val width = main.maxOf { it.width }
         val height = main.sumOf { it.height }
         // Eşleşmesi gereken genişlikle kompoze edilir; o değişince yeniden kompoze edilir.
         val line = subcompose("line", width) {
@@ -148,7 +148,7 @@ fun Underlined(content: @Composable () -> Unit) {
 }
 ```
 
-- `subcompose(slotId, content)` bir slot'u kompoze eder ve measurable'larını döndürür. Slot onu ilk isteyen geçişten sonra kompoze edilir ve yerleşim aynı karede yeniden çalışır: o zamana kadar measurable'ı yoktur, bu yüzden politika boş bir listeyi de karşılar (`maxOf` değil, `maxOfOrNull { … } ?: 0f`). Compose onu hemen kompoze eder.
+- `subcompose(slotId, content)` bir slot'u kompoze eder ve measurable'larını döndürür: ilk istendiğinde, Compose'unki gibi, orada hemen kompoze edilir.
 - Kompoz'un `subcompose(slotId, dependency, content)`'i, `dependency` değişince slot'u yeniden kompoze eder (Compose'unki bir slot'u her yeni içerik verildiğinde yeniden kompoze eder).
 - İçerik daha sonra, kompozisyon sırasında çalışır; buradaki her lambda gibi kullandığını değerle yakalar.
 

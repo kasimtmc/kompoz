@@ -822,8 +822,7 @@
   (`SubcomposeMeasureScope`'u da `layout(w, h) { … }` veriyor), `LookaheadScope(modifier) { … }` ve `thickness` ile
   `color` alan `HorizontalDivider` / `VerticalDivider`; hepsi adlı argüman alıyor. Compose'unkiler gibi
   `constraints.copy(minWidth = 0, minHeight = 0)`, `constrainWidth`, `constrainHeight` ve `offset`, ve adla
-  `placeable.placeRelative(x = …, y = …)`. Bir `SubcomposeLayout` slot'u hâlâ onu ilk isteyen geçişten sonra kompoze
-  ediliyor (Compose onu hemen kompoze eder): politikası o zaman boş bir liste alıyor.
+  `placeable.placeRelative(x = …, y = …)`.
 - **kompozc: Kotlin'in inline fonksiyonları ve ölçüm politikaları**: `forEach`, `map`, `let`, `repeat` ve Kotlin'in
   öteki inline fonksiyonlarının lambdası çevresindeki yerellere başvuruyla ulaşıyor; böylece `forEach { }` içindeki
   `y += h`, Kotlin'deki gibi dışarıdaki `y`'yi değiştiriyor. `Layout`'un ölçüm politikasının alıcısı bir
@@ -845,6 +844,12 @@
   sınıf (yetki verilmiş bir durumun okunup yazılması her yerdeki gibi); Kompoz bu tür nesneleri öyle aldığından bir
   `shared_ptr`. Tembel bir ızgaranın `span = { … }`'inin alıcısı `LazyGridItemSpanScope`'u, bir karuselin içeriğininki
   `CarouselItemScope`'u; `pageCount = { … }` ve `itemCount = { … }` değerlerini veriyor.
+- **Bir SubcomposeLayout bir slot'u ölçerken kompoze ediyor**: `subcompose(slotId) { … }` bir slot'u ilk istendiğinde
+  (ya da bağımlılığı değişince), Compose'unki gibi orada hemen kompoze ediyor ve measurable'larını aynı ölçüme veriyor:
+  `subcompose("main", content).map { it.measure(c) }.maxOf { it.width }` ilk geçişte çalışıyor. Önceden bir slot
+  geçişten sonra kompoze ediliyor, yerleşim aynı karede yeniden çalışıyordu; o zamana kadar measurable'ı yoktu.
+  Slot'lar tek başına çalıştırılan kendi scope'larında (`Composer::composeNow`); artık istenmeyen biri ölçümden sonra
+  çıkıyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

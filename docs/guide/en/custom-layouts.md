@@ -133,7 +133,7 @@ fun Underlined(content: @Composable () -> Unit) {
     SubcomposeLayout { constraints ->
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
         val main = subcompose("main", content).map { it.measure(loose) }
-        val width = main.maxOfOrNull { it.width } ?: 0f
+        val width = main.maxOf { it.width }
         val height = main.sumOf { it.height }
         // Composed with the width it has to match; composed again when that changes.
         val line = subcompose("line", width) {
@@ -148,7 +148,7 @@ fun Underlined(content: @Composable () -> Unit) {
 }
 ```
 
-- `subcompose(slotId, content)` composes a slot and returns its measurables. A slot is composed after the pass that first asks for it, and the layout runs again in the same frame: until then it has no measurables, so the policy takes an empty list (`maxOfOrNull { … } ?: 0f`, not `maxOf`). Compose composes it at once.
+- `subcompose(slotId, content)` composes a slot and returns its measurables: the first time it is asked for, it is composed there and then, as Compose's is.
 - `subcompose(slotId, dependency, content)`, Kompoz's, composes the slot again when `dependency` changes (Compose's composes a slot again whenever it is given new content).
 - The content runs later, during composition; it captures what it uses by value, as every lambda here does.
 

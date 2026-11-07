@@ -11183,9 +11183,9 @@ TEST(custom_layouts_take_compose_forms) {
                        });
                    });
             SubcomposeLayout(arg::modifier = Modifier().testTag("alt"), [](SubcomposeMeasureScope& s, const Constraints& c) {
+                // (composed now, as Compose's subcompose does: measurable on the first pass)
                 auto parts = s.subcompose(std::string("kutu"), [] { Box(Modifier().size(10, 30)); });
-                if (parts.empty()) return Size{};  // (composed after this pass, measured in the next)
-                Placeable p = parts[0].measure(c.loosen());
+                Placeable p = parts.at(0).measure(c.loosen());
                 return s.layout(p.width, p.height, [&] { p.placeRelative(0, 0); });
             });
             HorizontalDivider(arg::thickness = 3.f, arg::modifier = Modifier().testTag("çizgi"));
@@ -11245,6 +11245,40 @@ TEST(lazy_items_keep_a_temporary_list) {
         });
     });
     CHECK(rule.onNodeWithText("birinci").exists() && rule.onNodeWithText("ikinci").exists() && rule.onNodeWithText("üçüncü0").exists());
+}
+
+TEST(subcompose_layout_composes_a_slot_as_it_measures) {
+    // A slot asked for the first time is composed there and then: its measurables come back on the
+    // first pass; one asked for with another dependency is composed again then too; one no longer
+    // asked for leaves.
+    auto firstPass = std::make_shared<std::vector<size_t>>();
+    auto width = mutableStateOf(10.f);
+    auto showBadge = mutableStateOf(true);
+    ComposeTestRule rule([=] {
+        SubcomposeLayout(arg::modifier = Modifier().testTag("alt"), [=](SubcomposeMeasureScope& s, const Constraints& c) {
+            float w = width.get();
+            auto main = s.subcompose(std::string("ana"), w, [w] { Box(Modifier().size(w, 20).testTag("ana")); });
+            firstPass->push_back(main.size());
+            float height = 0, right = 0;
+            for (const Measurable& m : main) {
+                Placeable p = m.measure(c.loosen());
+                p.place(0, 0);
+                height = p.height, right = p.width;
+            }
+            if (showBadge.get())
+                for (const Measurable& m : s.subcompose(std::string("rozet"), [] { Box(Modifier().size(5).testTag("rozet")); }))
+                    m.measure(c.loosen()).place(right, 0);
+            return Size{right + 5, height};
+        });
+    });
+    CHECK(!firstPass->empty() && firstPass->front() == 1);
+    CHECK(near(rule.onNodeWithTag("ana").bounds().width, 10) && near(rule.onNodeWithTag("rozet").bounds().x, 10));
+    width.set(30);
+    rule.waitForIdle();
+    CHECK(near(rule.onNodeWithTag("ana").bounds().width, 30) && near(rule.onNodeWithTag("rozet").bounds().x, 30));
+    showBadge.set(false);
+    rule.waitForIdle();
+    CHECK(!rule.onNodeWithTag("rozet").exists() && rule.onNodeWithTag("ana").exists());
 }
 
 TEST(intrinsic_height_and_flow_row) {
@@ -13196,7 +13230,8 @@ TEST(subcompose_layout_composes_slots_from_what_it_measured) {
     rule.host().setViewportSize({600, 800});  // wide: the other slot, the first one goes
     rule.waitForIdle();
     CHECK(rule.onNodeWithText("geniş düzen 0").exists() && !rule.onNodeWithText("dar düzen 1").exists());
-    CHECK((*log == std::vector<std::string>{"+dar", "-dar", "+geniş"}));
+    // (the new slot composed as it is asked for, as Compose's; the old one leaves after the measure)
+    CHECK((*log == std::vector<std::string>{"+dar", "+geniş", "-dar"}));
 }
 
 TEST(subcompose_layout_is_not_composed_again_for_a_probe_measure) {
