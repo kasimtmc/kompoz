@@ -796,6 +796,9 @@
   contentScale = …, alpha = …)`; `VerticalScrollbar(adapter, modifier, reverseLayout = …)` and the horizontal one;
   `PullToRefreshBox(isRefreshing, onRefresh, modifier, state = …, contentAlignment = …, enabled = …) { … }`. In C++ a
   braced options struct names its type (`CarouselOptions{…}`, `AsyncImageOptions{…}`).
+- **A lazy layout keeps a list made for its call**: `items(listOf("a", "b")) { … }`, as Kotlin writes it, gives the
+  items a temporary list; they read it later, when they come into view, so it is kept with them (one given by name
+  is still read where it is).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

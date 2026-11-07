@@ -837,6 +837,9 @@
   modifier, contentScale = …, alpha = …)`'ı; `VerticalScrollbar(adapter, modifier, reverseLayout = …)` ve yatayı;
   `PullToRefreshBox(isRefreshing, onRefresh, modifier, state = …, contentAlignment = …, enabled = …) { … }`. C++'ta
   süslü parantezle verilen bir seçenek yapısı türünü adlandırıyor (`CarouselOptions{…}`, `AsyncImageOptions{…}`).
+- **Tembel bir yerleşim, çağrısı için yapılan bir listeyi tutuyor**: Kotlin'in yazdığı gibi
+  `items(listOf("a", "b")) { … }` öğelere geçici bir liste veriyor; öğeler onu daha sonra, görünür alana girince
+  okuyor, bu yüzden liste onlarla birlikte tutuluyor (adıyla verilen bir liste hâlâ olduğu yerde okunuyor).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

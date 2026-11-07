@@ -107,6 +107,16 @@ LazyListState rememberLazyListState(CallSite site = CallSite::current());
 LazyListState rememberLazyListState(int initialFirstVisibleItemIndex, float initialFirstVisibleItemScrollOffset = 0,
                                     CallSite site = CallSite::current());
 
+namespace detail {
+template <class L>
+constexpr bool isVectorOf = false;
+template <class T, class A>
+constexpr bool isVectorOf<std::vector<T, A>> = true;
+template <class L>
+concept isVector = isVectorOf<std::remove_cvref_t<L>>;
+template <class L>
+using ElementOf = typename std::remove_cvref_t<L>::value_type;
+} // namespace detail
 class LazyListScope {
 public:
     void item(const Content& content);
@@ -126,39 +136,40 @@ public:
         add(1, [k = explicitKey(key)](int) { return k; }, [content](int) { content(); }, false,
             [t = typeHash(contentType)](int) { return t; });
     }
-    template <class T, class KeyFn, class TypeFn, class F>
-        requires std::invocable<F&, const T&>
-    void items(const std::vector<T>& list, KeyFn&& key, TypeFn&& contentType, F&& content) {
-        const std::vector<T>* l = &list;
-        add(int(list.size()), [l, key](int i) { return explicitKey(key((*l)[size_t(i)])); },
+    template <class L, class KeyFn, class TypeFn, class F>
+        requires detail::isVector<L> && std::invocable<F&, const detail::ElementOf<L>&>
+    void items(L&& list, KeyFn&& key, TypeFn&& contentType, F&& content) {
+        auto l = held(std::forward<L>(list));
+        add(int(l->size()), [l, key](int i) { return explicitKey(key((*l)[size_t(i)])); },
             [l, content](int i) { content((*l)[size_t(i)]); }, false,
             [l, contentType](int i) { return typeHash(contentType((*l)[size_t(i)])); });
     }
 
     // items(list, [](const T& t) { ... })
-    template <class T, class F>
-        requires std::invocable<F&, const T&>
-    void items(const std::vector<T>& list, F&& content) {
-        const std::vector<T>* l = &list;
+    template <class L, class F>
+        requires detail::isVector<L> && std::invocable<F&, const detail::ElementOf<L>&>
+    void items(L&& list, F&& content) {
+        auto l = held(std::forward<L>(list));
         int base = size();
-        add(int(list.size()), [base](int i) { return defaultKey(base + i); },
+        add(int(l->size()), [base](int i) { return defaultKey(base + i); },
             [l, content](int i) { content((*l)[size_t(i)]); });
     }
 
     // items(list, key, content): the key keeps an item's state when the list changes.
-    template <class T, class KeyFn, class F>
-        requires std::invocable<F&, const T&>
-    void items(const std::vector<T>& list, KeyFn&& key, F&& content) {
-        const std::vector<T>* l = &list;
-        add(int(list.size()), [l, key](int i) { return explicitKey(key((*l)[size_t(i)])); },
+    template <class L, class KeyFn, class F>
+        requires detail::isVector<L> && std::invocable<F&, const detail::ElementOf<L>&>
+    void items(L&& list, KeyFn&& key, F&& content) {
+        auto l = held(std::forward<L>(list));
+        add(int(l->size()), [l, key](int i) { return explicitKey(key((*l)[size_t(i)])); },
             [l, content](int i) { content((*l)[size_t(i)]); });
     }
 
-    template <class T, class F>
-    void itemsIndexed(const std::vector<T>& list, F&& content) {
-        const std::vector<T>* l = &list;
+    template <class L, class F>
+        requires detail::isVector<L>
+    void itemsIndexed(L&& list, F&& content) {
+        auto l = held(std::forward<L>(list));
         int base = size();
-        add(int(list.size()), [base](int i) { return defaultKey(base + i); },
+        add(int(l->size()), [base](int i) { return defaultKey(base + i); },
             [l, content](int i) { content(i, (*l)[size_t(i)]); });
     }
 
@@ -168,6 +179,15 @@ public:
     template <class K>
     void stickyHeader(const K& key, const Content& content) {
         add(1, [k = explicitKey(key)](int) { return k; }, [content](int) { content(); }, true);
+    }
+
+    // The list the items read later: one given by name is read where it is (it lives on: a
+    // parameter, a state's value); a temporary (items(listOf("a", "b"))) is kept here.
+    template <class L>
+    static auto held(L&& list) {
+        using V = std::remove_cvref_t<L>;
+        if constexpr (std::is_lvalue_reference_v<L>) return std::shared_ptr<const V>(std::shared_ptr<const V>(), &list);
+        else return std::make_shared<const V>(std::move(list));
     }
 
     int size() const;

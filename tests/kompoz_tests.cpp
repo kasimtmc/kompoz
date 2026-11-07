@@ -11235,6 +11235,18 @@ TEST(lists_pagers_and_carousels_take_compose_arguments) {
     CHECK(rule.onNodeWithTag("resim").exists() && rule.onNodeWithTag("çubuk").exists() && rule.onNodeWithText("içerik").exists());
 }
 
+TEST(lazy_items_keep_a_temporary_list) {
+    // items(listOf("a", "b")) as Kotlin writes it: the list made for the call is kept by the items,
+    // which read it later (ASan tells if it isn't).
+    ComposeTestRule rule([] {
+        LazyColumn(Modifier().size(100, 200), [] {
+            items(std::vector<std::string>{"birinci", "ikinci"}, [](const std::string& s) { Text(s); });
+            itemsIndexed(std::vector<std::string>{"üçüncü"}, [](int i, const std::string& s) { Text(s + std::to_string(i)); });
+        });
+    });
+    CHECK(rule.onNodeWithText("birinci").exists() && rule.onNodeWithText("ikinci").exists() && rule.onNodeWithText("üçüncü0").exists());
+}
+
 TEST(intrinsic_height_and_flow_row) {
     ComposeTestRule rule([] {
         Column([] {
