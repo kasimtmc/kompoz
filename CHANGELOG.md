@@ -797,7 +797,8 @@
   braced options struct names its type (`CarouselOptions{…}`, `AsyncImageOptions{…}`).
 - **A lazy layout keeps a list made for its call**: `items(listOf("a", "b")) { … }`, as Kotlin writes it, gives the
   items a temporary list; they read it later, when they come into view, so it is kept with them (one given by name
-  is still read where it is).
+  is still read where it is). The count's forms (`items(50) { index -> … }`) are tried only for a count, so a list's
+  content written as a generic lambda (kompozc's) is never built for an int: Clang failed on it.
 - **kompozc: object expressions**: `object : NestedScrollConnection { override fun onPreScroll(…): Offset { … } }`
   is a class of its own deriving from the type, made where it stands, with copies of the locals its functions use
   (a delegated state's reads and writes go through as everywhere); it is a `shared_ptr`, as Kompoz takes such

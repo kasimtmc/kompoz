@@ -838,7 +838,9 @@
   süslü parantezle verilen bir seçenek yapısı türünü adlandırıyor (`CarouselOptions{…}`, `AsyncImageOptions{…}`).
 - **Tembel bir yerleşim, çağrısı için yapılan bir listeyi tutuyor**: Kotlin'in yazdığı gibi
   `items(listOf("a", "b")) { … }` öğelere geçici bir liste veriyor; öğeler onu daha sonra, görünür alana girince
-  okuyor, bu yüzden liste onlarla birlikte tutuluyor (adıyla verilen bir liste hâlâ olduğu yerde okunuyor).
+  okuyor, bu yüzden liste onlarla birlikte tutuluyor (adıyla verilen bir liste hâlâ olduğu yerde okunuyor). Sayı
+  biçimleri (`items(50) { index -> … }`) yalnız bir sayı için deneniyor; böylece genel bir lambda olarak yazılmış bir
+  liste içeriği (kompozc'ninki) hiçbir zaman bir int için derlenmiyor: Clang bunda hata veriyordu.
 - **kompozc: nesne ifadeleri**: `object : NestedScrollConnection { override fun onPreScroll(…): Offset { … } }`,
   türünden türeyen, bulunduğu yerde yapılan, fonksiyonlarının kullandığı yerellerin kopyalarını tutan kendine ait bir
   sınıf (yetki verilmiş bir durumun okunup yazılması her yerdeki gibi); Kompoz bu tür nesneleri öyle aldığından bir

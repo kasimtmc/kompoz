@@ -125,12 +125,29 @@ public:
         add(1, [k = explicitKey(key)](int) { return k; }, [content](int) { content(); });
     }
 
-    void items(int count, const std::function<void(int)>& content);
-    void items(int count, const std::function<size_t(int)>& key, const std::function<void(int)>& content);
+    // items(count) { index -> … }: the count's own forms, tried only for a count (a list's content,
+    // a generic lambda, isn't made into a function of an int to see if this one fits: compilers
+    // that build its body for that would fail on it).
+    template <class N, class F>
+        requires std::integral<N> && std::is_constructible_v<std::function<void(int)>, F>
+    void items(N count, F&& content) {
+        countItems(int(count), std::function<void(int)>(std::forward<F>(content)));
+    }
+    template <class N, class K, class F>
+        requires std::integral<N> && std::is_constructible_v<std::function<size_t(int)>, K> &&
+                 std::is_constructible_v<std::function<void(int)>, F>
+    void items(N count, K&& key, F&& content) {
+        countItems(int(count), std::function<size_t(int)>(std::forward<K>(key)), std::function<void(int)>(std::forward<F>(content)));
+    }
     // With a contentType per item (Compose's): told back in layoutInfo(); items aren't reused
     // between types here, so it changes nothing else.
-    void items(int count, const std::function<size_t(int)>& key, const std::function<size_t(int)>& contentType,
-               const std::function<void(int)>& content);
+    template <class N, class K, class T, class F>
+        requires std::integral<N> && std::is_constructible_v<std::function<size_t(int)>, K> &&
+                 std::is_constructible_v<std::function<size_t(int)>, T> && std::is_constructible_v<std::function<void(int)>, F>
+    void items(N count, K&& key, T&& contentType, F&& content) {
+        countItems(int(count), std::function<size_t(int)>(std::forward<K>(key)), std::function<size_t(int)>(std::forward<T>(contentType)),
+                   std::function<void(int)>(std::forward<F>(content)));
+    }
     template <class K, class C>
     void item(const K& key, const C& contentType, const Content& content) {
         add(1, [k = explicitKey(key)](int) { return k; }, [content](int) { content(); }, false,
@@ -180,6 +197,11 @@ public:
     void stickyHeader(const K& key, const Content& content) {
         add(1, [k = explicitKey(key)](int) { return k; }, [content](int) { content(); }, true);
     }
+
+    void countItems(int count, const std::function<void(int)>& content);
+    void countItems(int count, const std::function<size_t(int)>& key, const std::function<void(int)>& content);
+    void countItems(int count, const std::function<size_t(int)>& key, const std::function<size_t(int)>& contentType,
+                    const std::function<void(int)>& content);
 
     // The list the items read later: one given by name is read where it is (it lives on: a
     // parameter, a state's value); a temporary (items(listOf("a", "b"))) is kept here.

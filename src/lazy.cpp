@@ -356,17 +356,17 @@ void LazyListScope::item(const Content& content) {
     add(1, [k = defaultKey(size())](int) { return k; }, [content](int) { content(); });
 }
 
-void LazyListScope::items(int count, const std::function<void(int)>& content) {
+void LazyListScope::countItems(int count, const std::function<void(int)>& content) {
     int base = size();
     add(count, [base](int i) { return defaultKey(base + i); }, content);
 }
 
-void LazyListScope::items(int count, const std::function<size_t(int)>& key, const std::function<void(int)>& content) {
+void LazyListScope::countItems(int count, const std::function<size_t(int)>& key, const std::function<void(int)>& content) {
     add(count, [key](int i) { return explicitKey(key(i)); }, content);
 }
 
-void LazyListScope::items(int count, const std::function<size_t(int)>& key, const std::function<size_t(int)>& contentType,
-                          const std::function<void(int)>& content) {
+void LazyListScope::countItems(int count, const std::function<size_t(int)>& key, const std::function<size_t(int)>& contentType,
+                               const std::function<void(int)>& content) {
     add(count, [key](int i) { return explicitKey(key(i)); }, content, false, contentType);
 }
 
