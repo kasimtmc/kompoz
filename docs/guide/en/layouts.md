@@ -215,7 +215,7 @@ BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
 }
 ```
 
-The very first composition sees unbounded constraints; the content recomposes in the same frame once they are known.
+As Compose's, it is a `SubcomposeLayout`: its content is composed while the box is measured, with the constraints it gets (the first time too), and again when they change.
 
 ## Window insets
 

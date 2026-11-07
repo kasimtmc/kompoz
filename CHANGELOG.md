@@ -810,6 +810,10 @@
   Before, a slot was composed after the pass and the layout ran again in the same frame, with no measurables until
   then. The slots are a scope of their own, run alone (`Composer::composeNow`); one no longer asked for leaves after
   the measure.
+- **BoxWithConstraints is a SubcomposeLayout, as Compose's**: its content is composed while the box is measured,
+  with the constraints it gets, so its very first composition sees them (it saw unbounded ones before, and was
+  composed again in the same frame once they were known); it is composed again when they change or when the box is
+  composed again.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

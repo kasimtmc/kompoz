@@ -11281,6 +11281,30 @@ TEST(subcompose_layout_composes_a_slot_as_it_measures) {
     CHECK(!rule.onNodeWithTag("rozet").exists() && rule.onNodeWithTag("ana").exists());
 }
 
+TEST(box_with_constraints_composes_with_its_constraints_the_first_time) {
+    // A SubcomposeLayout, as Compose's: the content's first composition already sees the width it
+    // is laid out in, and is composed again when that or what it shows changes.
+    auto widths = std::make_shared<std::vector<float>>();
+    auto label = mutableStateOf(std::string("bir"));
+    ComposeTestRule rule([=] {
+        BoxWithConstraints(arg::modifier = Modifier().fillMaxWidth(), arg::contentAlignment = Alignment::Center,
+                           [=](BoxWithConstraintsScope& scope) {
+                               widths->push_back(scope.maxWidth);
+                               Text(label.get() + (scope.maxWidth < 420 ? " dar" : " geniş"), Modifier().testTag("metin"));
+                           });
+    }, {400, 800});
+    CHECK(!widths->empty() && near(widths->front(), 400));
+    CHECK(rule.onNodeWithText("bir dar").exists());
+    Rect text = rule.onNodeWithTag("metin").bounds();
+    CHECK(near(text.x + text.width / 2, 200));  // centered in it
+    label.set("iki");
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("iki dar").exists());
+    rule.host().setViewportSize({600, 800});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("iki geniş").exists() && !rule.onNodeWithText("iki dar").exists());
+}
+
 TEST(intrinsic_height_and_flow_row) {
     ComposeTestRule rule([] {
         Column([] {

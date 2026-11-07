@@ -852,6 +852,9 @@
   geçişten sonra kompoze ediliyor, yerleşim aynı karede yeniden çalışıyordu; o zamana kadar measurable'ı yoktu.
   Slot'lar tek başına çalıştırılan kendi scope'larında (`Composer::composeNow`); artık istenmeyen biri ölçümden sonra
   çıkıyor.
+- **BoxWithConstraints, Compose'unki gibi bir SubcomposeLayout**: içeriği kutu ölçülürken aldığı kısıtlarla kompoze
+  ediliyor; böylece en ilk kompozisyonu onları görüyor (önceden sınırsız kısıtlar görüyor, kısıtlar belli olunca aynı
+  karede yeniden kompoze ediliyordu); kısıtlar değişince ya da kutu yeniden kompoze edilince yeniden kompoze ediliyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

@@ -12,6 +12,7 @@
 #include "text_layout.hpp"
 
 #include <array>
+#include <bit>
 #include <optional>
 #include <unordered_map>
 #include <cmath>
@@ -519,17 +520,31 @@ void detail::FlowColumn(const Modifier& modifier, const FlowStyle& style, const 
 
 void detail::BoxWithConstraints(const Modifier& modifier, const std::function<void(const Constraints&)>& content,
                         Alignment contentAlignment, CallSite site) {
+    // A SubcomposeLayout, as Compose's: the content composed while it is measured, with the
+    // constraints it gets (the first time too), and again when they change or when this is composed
+    // again (its content may have changed: the composition's count tells the slot). The content
+    // goes in a Box, laid out with those constraints.
     ComposableScope scope(site);
-    auto constraints = remember([] { return mutableStateOf(Constraints{}); });
-    Constraints current = constraints.get();
-    MeasurePolicy box = boxPolicy(contentAlignment);
-    layoutNode(
-        CallSite::current(), modifier,
-        [box, constraints](LayoutNode& node, const Constraints& c) {
-            if (!detail::isProbeMeasure()) constraints.set(c);  // a change recomposes the content before drawing
-            return box(node, c);
+    auto latest = remember([] { return std::make_shared<std::function<void(const Constraints&)>>(); });
+    *latest = content;
+    auto compositions = remember([] { return std::make_shared<size_t>(0); });
+    size_t composition = ++*compositions;
+    detail::SubcomposeLayout(
+        modifier,
+        [latest, composition, contentAlignment](SubcomposeMeasureScope& s, const Constraints& c) {
+            uint64_t dependency = composition;
+            for (float v : {c.minWidth, c.maxWidth, c.minHeight, c.maxHeight}) dependency = mixKey(dependency, std::bit_cast<uint32_t>(v));
+            Size size{c.minWidth, c.minHeight};
+            for (const Measurable& m : s.subcompose(0, size_t(dependency), [latest, c, contentAlignment] {
+                     detail::Box(Modifier(), contentAlignment, [latest, c] { (*latest)(c); }, CallSite::current());
+                 })) {
+                Placeable p = m.measure(c);
+                p.place(0, 0);
+                size = {std::max(size.width, p.width), std::max(size.height, p.height)};
+            }
+            return c.constrain(size);
         },
-        [&] { content(current); });
+        CallSite::current());
 }
 
 namespace {

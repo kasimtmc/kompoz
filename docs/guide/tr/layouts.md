@@ -215,7 +215,7 @@ BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
 }
 ```
 
-En ilk kompozisyon sınırsız kısıtlar görür; kısıtlar belli olunca içerik aynı karede yeniden kompoze edilir.
+Compose'unki gibi bir `SubcomposeLayout`'tur: içeriği kutu ölçülürken, aldığı kısıtlarla (ilk seferde de) kompoze edilir; kısıtlar değişince yeniden kompoze edilir.
 
 ## Pencere kenar boşlukları
 

@@ -690,9 +690,9 @@ struct GridImpl {
 } // namespace detail
 inline constexpr Composable<detail::GridImpl> Grid;
 
-// A Box whose content knows the constraints it is laid out with (to pick a layout by width).
-// The layout reports them and the content recomposes in the same frame; the very first
-// composition sees unbounded constraints.
+// A Box whose content knows the constraints it is laid out with (to pick a layout by width): a
+// SubcomposeLayout, as Compose's, its content composed as it is measured, with the constraints it
+// gets (the first time too), and again when they change.
 // Compose's BoxWithConstraintsScope: what its content has as its receiver, the constraints and their
 // dp (if (maxWidth > 400.dp) …). A content taking the Constraints takes it too.
 struct BoxWithConstraintsScope {
