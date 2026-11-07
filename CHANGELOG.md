@@ -799,6 +799,11 @@
 - **A lazy layout keeps a list made for its call**: `items(listOf("a", "b")) { … }`, as Kotlin writes it, gives the
   items a temporary list; they read it later, when they come into view, so it is kept with them (one given by name
   is still read where it is).
+- **kompozc: object expressions**: `object : NestedScrollConnection { override fun onPreScroll(…): Offset { … } }`
+  is a class of its own deriving from the type, made where it stands, with copies of the locals its functions use
+  (a delegated state's reads and writes go through as everywhere); it is a `shared_ptr`, as Kompoz takes such
+  objects. A lazy grid's `span = { … }` has its `LazyGridItemSpanScope` receiver; a carousel's content its
+  `CarouselItemScope`; `pageCount = { … }` and `itemCount = { … }` give their values.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

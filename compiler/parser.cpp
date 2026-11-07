@@ -717,6 +717,50 @@ void Parser::arguments(Node& call) {
     expectOp(")");
 }
 
+// object : NestedScrollConnection { override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset { … } }
+NodeP Parser::objectExpression() {
+    auto o = make(Node::Object, take().pos);
+    expectOp(":");
+    o->type = type();
+    if (isOp("(")) {  // a class's constructor: object : Base() { … }
+        NewlineMode mode(newlines_, false);
+        take();
+        expectOp(")");
+    }
+    skipNewlines();
+    expectOp("{");
+    for (skipNewlines(); !isOp("}"); skipNewlines()) {
+        annotations(nullptr);
+        bool overrides = false;
+        while (isIdent("override") || isIdent("public") || isIdent("private"))
+            overrides = take().text == "override" || overrides;
+        if (!isIdent("fun")) fail("an object here has functions only (override fun …)");
+        if (!overrides) fail("an object's function here overrides one of its type's (override fun …)");
+        auto m = make(Node::Method, take().pos);
+        m->text = expectIdent();
+        for (Param& p : params()) {
+            m->names.push_back(p.name);
+            m->typeArgs.push_back(std::move(p.type));
+        }
+        if (acceptOp(":")) m->type = type();
+        if (isOp("=")) {
+            Pos at = take().pos;
+            skipNewlines();
+            auto ret = make(Node::Return, at);
+            ret->kids.push_back(expression());
+            auto body = make(Node::Block, at);
+            body->kids.push_back(std::move(ret));
+            m->kids.push_back(std::move(body));
+        } else {
+            skipNewlines();
+            m->kids.push_back(block());
+        }
+        o->kids.push_back(std::move(m));
+    }
+    expectOp("}");
+    return o;
+}
+
 NodeP Parser::primary() {
     const Token& t = cur();
     switch (t.kind) {
@@ -741,6 +785,7 @@ NodeP Parser::primary() {
             if (t.text == "this") return make(Node::This, take().pos);
             if (t.text == "if") return ifExpression();
             if (t.text == "when") return whenExpression();
+            if (t.text == "object" && peekRaw(1).kind == Tok::Op && peekRaw(1).text == ":") return objectExpression();
             if (kKeywords.contains(t.text)) fail("unexpected '" + t.text + "'");
             auto n = make(Node::Name, t.pos);
             n->text = take().text;

@@ -815,6 +815,34 @@ TEST(custom_layouts_as_compose_writes_them) {
     CHECK(std::abs(under.width - 50) < 0.5f && std::abs(under.height - 12) < 0.5f);
 }
 
+// An object expression, object : NestedScrollConnection { override fun … }: the locals its functions
+// use are held in it. A lazy grid's span = { GridItemSpan(maxLineSpan) }.
+fun counting(counter: MutableState<Float>) = object : NestedScrollConnection {
+    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+        counter.value += available.y
+        return Offset(0f, available.y / 2)
+    }
+}
+
+@Composable
+fun SpannedGrid() {
+    LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.width(300.dp).height(100.dp)) {
+        item(span = { GridItemSpan(maxLineSpan) }) { Box(modifier = Modifier.fillMaxWidth().height(20.dp).testTag("header")) }
+        items(listOf("a", "b"), span = { name -> GridItemSpan(if (name == "a") 2 else 1) }) { name ->
+            Box(modifier = Modifier.fillMaxWidth().height(20.dp).testTag(name))
+        }
+    }
+}
+
+TEST(objects_and_spans) {
+    auto counter = mutableStateOf(0.f);
+    auto connection = counting(counter);
+    Offset used = connection->onPreScroll({0, 10}, NestedScrollSource::UserInput);
+    CHECK(counter.get() == 10 && used.y == 5);
+    ComposeTestRule rule([] { SpannedGrid(); });
+    CHECK(std::abs(rule.onNodeWithTag("header").bounds().width - 300) < 0.5f && std::abs(rule.onNodeWithTag("a").bounds().width - 200) < 0.5f);
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

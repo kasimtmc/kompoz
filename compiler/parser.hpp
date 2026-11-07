@@ -59,6 +59,7 @@ private:
     NodeP postfix();
     NodeP primary();
     NodeP lambda();
+    NodeP objectExpression();  // object : Interface { override fun … }
     NodeP ifExpression();
     NodeP whenExpression();
     NodeP string(const Token& t);

@@ -840,6 +840,11 @@
 - **Tembel bir yerleşim, çağrısı için yapılan bir listeyi tutuyor**: Kotlin'in yazdığı gibi
   `items(listOf("a", "b")) { … }` öğelere geçici bir liste veriyor; öğeler onu daha sonra, görünür alana girince
   okuyor, bu yüzden liste onlarla birlikte tutuluyor (adıyla verilen bir liste hâlâ olduğu yerde okunuyor).
+- **kompozc: nesne ifadeleri**: `object : NestedScrollConnection { override fun onPreScroll(…): Offset { … } }`,
+  türünden türeyen, bulunduğu yerde yapılan, fonksiyonlarının kullandığı yerellerin kopyalarını tutan kendine ait bir
+  sınıf (yetki verilmiş bir durumun okunup yazılması her yerdeki gibi); Kompoz bu tür nesneleri öyle aldığından bir
+  `shared_ptr`. Tembel bir ızgaranın `span = { … }`'inin alıcısı `LazyGridItemSpanScope`'u, bir karuselin içeriğininki
+  `CarouselItemScope`'u; `pageCount = { … }` ve `itemCount = { … }` değerlerini veriyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

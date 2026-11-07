@@ -55,6 +55,8 @@ struct Node {
         If,        // kids: condition, then (a Block), else (a Block or none)
         When,      // kids[0]: subject or none; branches
         Paren,     // ( kids[0] )
+        Object,    // object : type { kids: Methods }
+        Method,    // override fun text(names: typeArgs): type { kids[0] }
         // Statements
         Block,     // kids: statements
         ExprStmt,  // kids[0]

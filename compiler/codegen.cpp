@@ -45,7 +45,7 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked",
     "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "compositionLocalOf",
     "staticCompositionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent", "mediaQuery",
-    "derivedMediaQuery", "SubcomposeLayout"};
+    "derivedMediaQuery", "SubcomposeLayout", "rememberPagerState", "rememberCarouselState"};
 
 // Kotlin types the C++ way.
 const std::map<std::string, std::string, std::less<>> kTypes = {
@@ -91,7 +91,8 @@ const std::map<std::string, std::string, std::less<>> kComposableProperties = {
     {"currentCompositionLocalContext", "::kompoz::currentCompositionLocalContext()"}};
 
 // Named arguments whose lambda gives a value: items(list, key = { it.id }, contentType = { … }).
-const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType", "selector", "comparator"};
+const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType", "selector", "comparator", "span", "pageCount",
+                                                            "itemCount"};
 
 // Kotlin's standard functions, from kotlin.hpp: listOf(1, 2) -> kt::listOf(1, 2).
 const std::set<std::string, std::less<>> kKtFunctions = {
@@ -123,7 +124,9 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"flex", "FlexConfigScope"},             {"BoxWithConstraints", "BoxWithConstraintsScope"},
     // ("const ": a receiver only read)
     {"mediaQuery", "const UiMediaScope"},    {"derivedMediaQuery", "const UiMediaScope"},
-    {"SubcomposeLayout", "SubcomposeMeasureScope"}};
+    {"SubcomposeLayout", "SubcomposeMeasureScope"},
+    {"HorizontalMultiBrowseCarousel", "const CarouselItemScope"}, {"HorizontalUncontainedCarousel", "const CarouselItemScope"},
+    {"HorizontalCenteredHeroCarousel", "const CarouselItemScope"}};
 
 // Kotlin's inline functions: their lambda runs before they return, so it reaches the locals around
 // it by reference ([&]), and `x += 1` in forEach { } changes the x outside, as in Kotlin.
@@ -136,7 +139,8 @@ const std::set<std::string, std::less<>> kInlineLambdas = {
 
 // Named arguments whose lambda has a receiver: FlexBox(config = { gap(8.dp) }).
 const std::map<std::string, std::string, std::less<>> kReceiverArguments = {
-    {"FlexBox.config", "FlexBoxConfigScope"}, {"Grid.config", "GridConfigurationScope"}};
+    {"FlexBox.config", "FlexBoxConfigScope"}, {"Grid.config", "GridConfigurationScope"},
+    {"item.span", "LazyGridItemSpanScope"},   {"items.span", "LazyGridItemSpanScope"}};
 
 // Calls whose lambda is a coroutine (Kotlin's suspend lambdas): [=]() -> Task { ...; co_return; }.
 const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "produceState"};
@@ -617,6 +621,7 @@ private:
                 return;
             case Node::Is: throw CompileError(e.pos, "`is` isn't supported yet");
             case Node::If: return ifExpression(e);
+            case Node::Object: return objectExpression(e);
             case Node::When:
                 // A when as a value: run where it stands, each branch giving its value.
                 out_.text(capture("[&]") + "() {");
@@ -868,9 +873,9 @@ private:
             const std::string& n = c.names[i];
             if (!n.empty() && !positional) out_.text("::kompoz::arg::" + n + " = ");
             auto receiver = kReceiverArguments.find(calleeName + "." + n);
-            if (c.kids[i + 1]->kind == Node::Lambda && kValueArguments.contains(n)) lambda(*c.kids[i + 1], true);
+            if (c.kids[i + 1]->kind == Node::Lambda && kValueArguments.contains(n) && receiver == kReceiverArguments.end()) lambda(*c.kids[i + 1], true);
             else if (c.kids[i + 1]->kind == Node::Lambda && receiver != kReceiverArguments.end())
-                lambda(*c.kids[i + 1], false, false, false, &receiver->second);
+                lambda(*c.kids[i + 1], kValueArguments.contains(n), false, false, &receiver->second);
             else expr(*c.kids[i + 1]);
         }
         if (c.lambda) {
@@ -1066,6 +1071,66 @@ private:
         if (receiver) receivers_.pop_back();
         out_.text(" }");
         suspend_ = wasSuspend;
+    }
+
+    // The names a node uses (to find the locals an object's functions reach).
+    static void usedNames(const Node* n, std::set<std::string, std::less<>>& out) {
+        if (!n) return;
+        if (n->kind == Node::Name) out.insert(n->text);
+        for (auto& k : n->kids) usedNames(k.get(), out);
+        usedNames(n->lambda.get(), out);
+        for (auto& b : n->branches) {
+            for (auto& c : b.conds) usedNames(c.second.get(), out);
+            usedNames(b.body.get(), out);
+        }
+    }
+
+    // object : NestedScrollConnection { override fun … }: a class of its own deriving from the type,
+    // made where it stands, its functions the overrides; the locals they use are copied into it,
+    // as a lambda's captures are. A shared_ptr to it, as Kompoz takes such objects.
+    void objectExpression(const Node& o) {
+        std::set<std::string, std::less<>> used;
+        for (auto& m : o.kids) usedNames(m.get(), used);
+        std::vector<std::pair<std::string, VarKind>> captured;
+        for (const std::string& n : used)
+            if (const VarKind* k = lookup(n)) captured.emplace_back(n, *k);
+        out_.text(capture("[=]") + "() {");
+        // (each held one's type named outside the class: inside, the name is the member's)
+        for (auto& [n, k] : captured) out_.text(" using kompoz_type_" + n + " = std::remove_cvref_t<decltype(" + cppName(n) + ")>;");
+        out_.text(" struct kompoz_object : " + type(*o.type) + " {");
+        for (auto& [n, k] : captured) out_.text(" kompoz_type_" + n + " " + cppName(n) + ";");
+        if (!captured.empty()) {
+            out_.text(" kompoz_object(");
+            for (size_t i = 0; i < captured.size(); ++i)
+                out_.text((i ? ", " : "") + std::string("kompoz_type_") + captured[i].first + " kompoz_" + captured[i].first);
+            out_.text(") : ");
+            for (size_t i = 0; i < captured.size(); ++i)
+                out_.text((i ? ", " : "") + cppName(captured[i].first) + "(std::move(kompoz_" + captured[i].first + "))");
+            out_.text(" {}");
+        }
+        // Its functions see only what it holds and their parameters (and `this` is the object).
+        auto scopes = std::exchange(scopes_, {});
+        auto receivers = std::exchange(receivers_, {});
+        bool wasSuspend = std::exchange(suspend_, false), wasGlobal = std::exchange(global_, false);
+        for (auto& m : o.kids) {
+            out_.at(m->pos);
+            out_.text(" " + (m->type ? type(*m->type) : std::string("void")) + " " + cppName(m->text) + "(");
+            scopes_.assign(1, {});
+            for (auto& [n, k] : captured) declare(n, k);
+            for (size_t i = 0; i < m->names.size(); ++i) {
+                out_.text((i ? ", " : "") + type(m->typeArgs[i]) + " " + cppName(m->names[i]));
+                declare(m->names[i], Local);
+            }
+            out_.text(") override {");
+            statements(*m->kids[0], false);
+            out_.text(" }");
+        }
+        scopes_ = std::move(scopes);
+        receivers_ = std::move(receivers);
+        suspend_ = wasSuspend, global_ = wasGlobal;
+        out_.text(" }; return std::make_shared<kompoz_object>(");
+        for (size_t i = 0; i < captured.size(); ++i) out_.text((i ? ", " : "") + cppName(captured[i].first));
+        out_.text("); }()");
     }
 
     void unary(const Node& u) {
