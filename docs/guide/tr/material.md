@@ -10,27 +10,36 @@ Material bileşenleri renklerini, yazı tiplerini ve hareketlerini `MaterialThem
 
 `Scaffold` bir ekranı yerleştirir: içeriğin çevresinde bir üst çubuk, bir alt çubuk, bir yüzen eylem butonu ve bir snackbar host'u. İçerik, onu çubuklardan ve sistemin kenar boşluklarından uzak tutan iç boşluğu alır.
 
-```cpp
-void Inbox() {
-    auto snackbars = rememberSnackbarHostState();
-    Scaffold(Modifier(),
-             topBar = [] { TopAppBar(title = [] { Text("Inbox"); },
-                                     navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menu"); }; },
-                                     actions = [] { IconButton([] {}) { Icon(Icons::Filled::Search, "Search"); }; }); },
-             floatingActionButton = [snackbars] {
-                 FloatingActionButton([snackbars] { snackbars.showSnackbar("Draft saved"); }) { Icon(Icons::Filled::Edit, "Compose"); };
-             },
-             snackbarHost = [snackbars] { SnackbarHost(snackbars); }) [](PaddingValues padding) {
-        LazyColumn(Modifier().fillMaxSize(), contentPadding = padding) {
-            items(30, [](int i) { ListItem({.headline = [i] { Text("Message " + std::to_string(i)); }}); });
-        };
-    };
+```kotlin
+@Composable
+fun Inbox() {
+    val snackbars = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Inbox") },
+                navigationIcon = { IconButton(onClick = { }) { Icon(Icons.Filled.Menu, contentDescription = "Menu") } },
+                actions = { IconButton(onClick = { }) { Icon(Icons.Filled.Search, contentDescription = "Search") } },
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { scope.launch { snackbars.showSnackbar("Draft saved") } }) {
+                Icon(Icons.Filled.Edit, contentDescription = "Compose")
+            }
+        },
+        snackbarHost = { SnackbarHost(snackbars) },
+    ) { padding ->
+        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+            items(30) { i -> ListItem(headlineContent = { Text("Message $i") }) }
+        }
+    }
 }
 ```
 
-Üst uygulama çubukları Material'ın tanımladığı boyutlarda gelir: `TopAppBar`, `CenterAlignedTopAppBar`, `MediumTopAppBar` ve `LargeTopAppBar`. Bir kaydırma davranışıyla (`TopAppBarDefaults::enterAlwaysScrollBehavior()`, `exitUntilCollapsedScrollBehavior()`, `pinnedScrollBehavior()`) ve bu davranışın `nestedScrollConnection`'ı `Scaffold`'a verildiğinde, içerik kaydıkça daralır ve renk değiştirirler (bkz. [Listeler ve ızgaralar](lists.md#iç-içe-kaydırma)). `BottomAppBar` ve `BottomSheetScaffold` da var.
+Üst uygulama çubukları Material'ın tanımladığı boyutlarda gelir: `TopAppBar`, `CenterAlignedTopAppBar`, `MediumTopAppBar` ve `LargeTopAppBar`. Bir kaydırma davranışıyla (`TopAppBarDefaults.enterAlwaysScrollBehavior()`, `exitUntilCollapsedScrollBehavior()`, `pinnedScrollBehavior()`) ve bu davranışın `nestedScrollConnection`'ı `Scaffold`'a verildiğinde, içerik kaydıkça daralır ve renk değiştirirler (bkz. [Listeler ve ızgaralar](lists.md#iç-içe-kaydırma)). `BottomAppBar` ve `BottomSheetScaffold` da var.
 
-İçeriğin iç boşluğu, çubukların boyu değiştikçe (liste kaydıkça daralan bir üst çubuk) içerik yeniden oluşturulmadan onları izler: Compose'taki gibi `Modifier::padding`, `consumeWindowInsets` ve listelerin, pager'ların, carousel'lerin `contentPadding`'i onu yerleşim sırasında okur. Bir kenarı kendiniz okumak için `calculateTopPadding()` (ve `calculateStartPadding()`, `calculateEndPadding()`, `calculateBottomPadding()`) çağırın. Bir composable'da okunursa iç boşluk değiştiğinde o composable yeniden oluşturulur; bir yerleşimde okunursa o yerleşim yeniden yerleştirilir. Alanlar (`padding.top`) iç boşluğun içerik oluşturulduğu andaki değerini tutar.
+İçeriğin iç boşluğu, çubukların boyu değiştikçe (liste kaydıkça daralan bir üst çubuk) içerik yeniden oluşturulmadan onları izler: Compose'taki gibi `Modifier.padding`, `consumeWindowInsets` ve listelerin, pager'ların, carousel'lerin `contentPadding`'i onu yerleşim sırasında okur. Bir kenarı kendiniz okumak için `calculateTopPadding()` (ve `calculateStartPadding()`, `calculateEndPadding()`, `calculateBottomPadding()`; Kompoz'unkiler yerleşim yönü almaz, iç boşluk kendininkini bilir) çağırın. Bir composable'da okunursa iç boşluk değiştiğinde o composable yeniden oluşturulur; bir yerleşimde okunursa o yerleşim yeniden yerleştirilir.
 
 ## Gezinme
 
@@ -43,18 +52,21 @@ void Inbox() {
 | `NavigationSuiteScaffold` | Pencerenin boyutuna göre bir çubuk, bir ray ya da bir çekmece seçer. |
 | `PrimaryTabRow`, `SecondaryTabRow`, `PrimaryScrollableTabRow` + `Tab` | Sekmeler. |
 
-Çoğu zaman istediğiniz `NavigationSuiteScaffold`'dur: Compose'un adaptive navigation suite'i gibi telefonda bir çubuk, tablet ya da masaüstü penceresinde bir ray gösterir.
+Çoğu zaman istediğiniz `NavigationSuiteScaffold`'dur: Compose'un adaptive navigation suite'i gibi telefonda bir çubuk, tablet ya da masaüstü penceresinde bir ray gösterir. `navigationSuiteItems` bloğu her hedef için bir `item` ekler:
 
-```cpp
-void App() {
-    auto tab = rememberSaveable([] { return mutableStateOf(0); });
-    NavigationSuiteScaffold([&](NavigationSuiteScope& nav) {
-        nav.item(tab.get() == 0, [tab] { tab.set(0); }, Icons::Filled::Home, "Home");
-        nav.item(tab.get() == 1, [tab] { tab.set(1); }, Icons::Filled::Search, "Search");
-        nav.item(tab.get() == 2, [tab] { tab.set(2); }, Icons::Filled::Settings, "Settings");
-    }, Modifier(), {}, [&] {
-        Text("Tab " + std::to_string(tab.get()));
-    });
+```kotlin
+@Composable
+fun App() {
+    var tab by rememberSaveable { mutableStateOf(0) }
+    NavigationSuiteScaffold(
+        navigationSuiteItems = {
+            item(selected = tab == 0, onClick = { tab = 0 }, icon = { Icon(Icons.Filled.Home, contentDescription = null) }, label = { Text("Home") })
+            item(selected = tab == 1, onClick = { tab = 1 }, icon = { Icon(Icons.Filled.Search, contentDescription = null) }, label = { Text("Search") })
+            item(selected = tab == 2, onClick = { tab = 2 }, icon = { Icon(Icons.Filled.Settings, contentDescription = null) }, label = { Text("Settings") })
+        },
+    ) {
+        Text("Tab $tab")
+    }
 }
 ```
 
@@ -73,55 +85,61 @@ Ekranlar arasında bir geri yığınıyla geçiş için bkz. [Gezinme](navigatio
 | `SingleChoiceSegmentedButtonRow` + `SegmentedButton` | Birkaç seçenek arasından bir seçim. |
 | `ButtonGroup`, `SplitButtonLayout`, `ToggleButton` | M3 Expressive'in grupları, bölünmüş butonları ve açma/kapama butonları. |
 
-```cpp body
-Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
-    Button([] {}) { Text("Save"); };
-    OutlinedButton([] {}) { Text("Cancel"); };
-    IconButton([] {}) { Icon(Icons::Filled::Favorite, "Like"); };
-};
+```kotlin body
+Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Button(onClick = { }) { Text("Save") }
+    OutlinedButton(onClick = { }) { Text("Cancel") }
+    IconButton(onClick = { }) { Icon(Icons.Filled.Favorite, contentDescription = "Like") }
+}
 ```
 
 ## Kartlar ve listeler
 
-`Card`, `ElevatedCard` ve `OutlinedCard` ilgili içeriği gruplar; her birinin, ilk argüman olarak `onClick` alan tıklanabilir bir biçimi de vardır. `ListItem`, isteğe bağlı baş ve son içerikli bir, iki ya da üç satırlık bir satırdır:
+`Card`, `ElevatedCard` ve `OutlinedCard` ilgili içeriği gruplar; her birinin `onClick` alan tıklanabilir bir biçimi de vardır. `ListItem`, isteğe bağlı baş ve son içerikli bir, iki ya da üç satırlık bir satırdır:
 
-```cpp body
-OutlinedCard(Modifier().fillMaxWidth()) {
-    ListItem({.headline = [] { Text("Wi-Fi"); },
-              .supporting = [] { Text("Connected"); },
-              .leading = [] { Icon(Icons::Filled::Settings, ""); },
-              .trailing = [] { Switch(true, [](bool) {}); }});
-};
+```kotlin body
+OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+    ListItem(
+        headlineContent = { Text("Wi-Fi") },
+        supportingContent = { Text("Connected") },
+        leadingContent = { Icon(Icons.Filled.Settings, contentDescription = null) },
+        trailingContent = { Switch(checked = true, onCheckedChange = { }) },
+    )
+}
 ```
 
 ## Seçim kontrolleri
 
 `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, `Slider` ve `RangeSlider`. Durumsuzdurlar: verdiğiniz değeri gösterir ve değişiklikleri bir geri çağrıyla bildirirler.
 
-```cpp
-void Volume() {
-    auto volume = remember([] { return mutableStateOf(0.5f); });
-    auto muted = remember([] { return mutableStateOf(false); });
-    Column() {
-        Slider(volume.get(), [volume](float v) { volume.set(v); });
-        Row(Modifier().toggleable(muted.get(), [muted](bool v) { muted.set(v); }, SemanticsRole::Checkbox),
-            verticalAlignment = Alignment::CenterVertically) {
-                Checkbox(muted.get(), nullptr);   // onu bütün satır açıp kapatır
-                Text("Mute");
-            };
-    };
+```kotlin
+@Composable
+fun Volume() {
+    var volume by remember { mutableStateOf(0.5f) }
+    var muted by remember { mutableStateOf(false) }
+    Column {
+        Slider(value = volume, onValueChange = { volume = it })
+        Row(
+            modifier = Modifier.toggleable(value = muted, onValueChange = { muted = it }, role = Role.Checkbox),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(checked = muted, onCheckedChange = null)   // onu bütün satır açıp kapatır
+            Text("Mute")
+        }
+    }
 }
 ```
 
-Tıklamayı kendisi işleyen bir satırın içindeki kontrole, yukarıdaki gibi boş bir geri çağrı verin; böylece satır tek bir dokunma hedefi ve erişilebilirlik için tek bir öğe olur.
+Tıklamayı kendisi işleyen bir satırın içindeki kontrole, yukarıdaki gibi geri çağrı olarak `null` verin; böylece satır tek bir dokunma hedefi ve erişilebilirlik için tek bir öğe olur.
 
 ## Chip'ler
 
-`AssistChip`, `FilterChip`, `InputChip` ve `SuggestionChip`:
+`AssistChip`, `FilterChip`, `InputChip` ve `SuggestionChip`, Compose'daki gibi `label`, `leadingIcon`, `trailingIcon` ve `enabled` ile (yükseltilmiş olanları da var):
 
-```cpp body
-#! auto unread = mutableStateOf(false);
-FilterChip(unread.get(), [unread] { unread.set(!unread.get()); }, [] { Text("Unread"); });
+```kotlin body
+var unread by remember { mutableStateOf(false) }
+FilterChip(selected = unread, onClick = { unread = !unread }, label = { Text("Unread") })
+AssistChip(onClick = { }, label = { Text("Help") }, leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null, modifier = Modifier.size(18.dp)) })
 ```
 
 ## Metin alanları
@@ -132,16 +150,19 @@ Etiketli, yer tutuculu, ikonlu, önekli, sonekli, yardımcı metinli ve hatalı 
 
 Bunlar arayüzün geri kalanının üstünde görünür. Her biri çağırdığınız yerde kompoze edilir, böylece durumunu ve composition local'larını korur; Kompoz da onu en üste yerleştirir. Birini, bir durum öyle söylediği sürece onu çağırarak gösterin:
 
-```cpp
-void DeleteButton(std::function<void()> onDelete) {
-    auto open = remember([] { return mutableStateOf(false); });
-    TextButton([open] { open.set(true); }) { Text("Delete"); };
-    if (open.get()) {
-        AlertDialog([open] { open.set(false); },
-                    confirmButton = [open, onDelete] { TextButton([open, onDelete] { open.set(false); onDelete(); }) { Text("Delete"); }; },
-                    dismissButton = [open] { TextButton([open] { open.set(false); }) { Text("Cancel"); }; },
-                    title = [] { Text("Delete this message?"); },
-                    text = [] { Text("It will be gone for good."); });
+```kotlin
+@Composable
+fun DeleteButton(onDelete: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    TextButton(onClick = { open = true }) { Text("Delete") }
+    if (open) {
+        AlertDialog(
+            onDismissRequest = { open = false },
+            confirmButton = { TextButton(onClick = { open = false; onDelete() }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } },
+            title = { Text("Delete this message?") },
+            text = { Text("It will be gone for good.") },
+        )
     }
 }
 ```
@@ -157,28 +178,28 @@ void DeleteButton(std::function<void()> onDelete) {
 
 ## Snackbar'lar
 
-Bir `SnackbarHost`, bir `SnackbarHostState`'in mesajlarını gösterir. Bir geri çağrıdan `showSnackbar` ile bir tane gösterin ya da bir coroutine içinde sonucunu bekleyin:
+Bir `SnackbarHost`, bir `SnackbarHostState`'in mesajlarını gösterir. `showSnackbar`, snackbar gidene kadar askıya alır ve nasıl gittiğini söyler; bu yüzden onu Compose'daki gibi bir coroutine içinde çağırın (düz bir geri çağrıdan yalnızca mesajı gösterir):
 
-```cpp body
-#! std::function<void()> undo;
-auto snackbars = rememberSnackbarHostState();
-auto scope = rememberCoroutineScope();
-Button([scope, snackbars, undo] {
-    scope.launch([snackbars, undo]() -> Task {
-        if (co_await snackbars.showSnackbarAsync("Message deleted", "Undo") == SnackbarResult::ActionPerformed) undo();
-    });
-}) { Text("Delete"); };
-SnackbarHost(snackbars);
+```kotlin body
+#! fun undo() {}
+val snackbars = remember { SnackbarHostState() }
+val scope = rememberCoroutineScope()
+Button(onClick = {
+    scope.launch {
+        if (snackbars.showSnackbar("Message deleted", actionLabel = "Undo") == SnackbarResult.ActionPerformed) undo()
+    }
+}) { Text("Delete") }
+SnackbarHost(hostState = snackbars)
 ```
 
 ## İlerleme
 
-İlerleme değeriyle ya da değersiz (belirsiz) `CircularProgressIndicator` ve `LinearProgressIndicator`; M3 Expressive'in `LoadingIndicator`, `ContainedLoadingIndicator` ve dalgalı göstergeleri. Belirsiz göstergeler çizim aşamasında canlanır, bu yüzden hiçbir şeyi yeniden kompoze etmezler.
+Bir `progress` lambdasıyla ya da onsuz (belirsiz) `CircularProgressIndicator` ve `LinearProgressIndicator`; M3 Expressive'in `LoadingIndicator`, `ContainedLoadingIndicator` ve dalgalı göstergeleri. Belirsiz göstergeler çizim aşamasında canlanır, bu yüzden hiçbir şeyi yeniden kompoze etmezler.
 
-```cpp body
-#! float progress = 0.4f;
-CircularProgressIndicator();               // belirsiz
-LinearProgressIndicator(progress);          // %40
+```kotlin body
+#! val progress = 0.4f
+CircularProgressIndicator()                      // belirsiz
+LinearProgressIndicator(progress = { progress }) // %40
 ```
 
 ## Diğer bileşenler

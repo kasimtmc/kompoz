@@ -10,27 +10,36 @@ Material components read their colors, type and motion from `MaterialTheme`, so 
 
 `Scaffold` lays out a screen: a top bar, a bottom bar, a floating action button and a snackbar host around the content. The content gets the padding that keeps it clear of the bars and the system's insets.
 
-```cpp
-void Inbox() {
-    auto snackbars = rememberSnackbarHostState();
-    Scaffold(Modifier(),
-             topBar = [] { TopAppBar(title = [] { Text("Inbox"); },
-                                     navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menu"); }; },
-                                     actions = [] { IconButton([] {}) { Icon(Icons::Filled::Search, "Search"); }; }); },
-             floatingActionButton = [snackbars] {
-                 FloatingActionButton([snackbars] { snackbars.showSnackbar("Draft saved"); }) { Icon(Icons::Filled::Edit, "Compose"); };
-             },
-             snackbarHost = [snackbars] { SnackbarHost(snackbars); }) [](PaddingValues padding) {
-        LazyColumn(Modifier().fillMaxSize(), contentPadding = padding) {
-            items(30, [](int i) { ListItem({.headline = [i] { Text("Message " + std::to_string(i)); }}); });
-        };
-    };
+```kotlin
+@Composable
+fun Inbox() {
+    val snackbars = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Inbox") },
+                navigationIcon = { IconButton(onClick = { }) { Icon(Icons.Filled.Menu, contentDescription = "Menu") } },
+                actions = { IconButton(onClick = { }) { Icon(Icons.Filled.Search, contentDescription = "Search") } },
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { scope.launch { snackbars.showSnackbar("Draft saved") } }) {
+                Icon(Icons.Filled.Edit, contentDescription = "Compose")
+            }
+        },
+        snackbarHost = { SnackbarHost(snackbars) },
+    ) { padding ->
+        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+            items(30) { i -> ListItem(headlineContent = { Text("Message $i") }) }
+        }
+    }
 }
 ```
 
-Top app bars come in the sizes Material defines: `TopAppBar`, `CenterAlignedTopAppBar`, `MediumTopAppBar` and `LargeTopAppBar`. With a scroll behavior (`TopAppBarDefaults::enterAlwaysScrollBehavior()`, `exitUntilCollapsedScrollBehavior()`, `pinnedScrollBehavior()`) and the behavior's `nestedScrollConnection` on the `Scaffold`, they collapse and change color as the content scrolls (see [Lists and grids](lists.md#nested-scrolling)). `BottomAppBar` and `BottomSheetScaffold` exist too.
+Top app bars come in the sizes Material defines: `TopAppBar`, `CenterAlignedTopAppBar`, `MediumTopAppBar` and `LargeTopAppBar`. With a scroll behavior (`TopAppBarDefaults.enterAlwaysScrollBehavior()`, `exitUntilCollapsedScrollBehavior()`, `pinnedScrollBehavior()`) and the behavior's `nestedScrollConnection` on the `Scaffold`, they collapse and change color as the content scrolls (see [Lists and grids](lists.md#nested-scrolling)). `BottomAppBar` and `BottomSheetScaffold` exist too.
 
-The content's padding follows the bars as they change size, a top bar collapsing as the list scrolls, without composing the content again: `Modifier::padding`, `consumeWindowInsets` and the `contentPadding` of lists, pagers and carousels read it as they lay out, as in Compose. To read a side yourself, call `calculateTopPadding()` (and `calculateStartPadding()`, `calculateEndPadding()`, `calculateBottomPadding()`): read in a composable, it composes that composable again when the padding changes; read in a layout, it lays that layout out again. The fields (`padding.top`) hold what the padding was when the content was composed.
+The content's padding follows the bars as they change size, a top bar collapsing as the list scrolls, without composing the content again: `Modifier.padding`, `consumeWindowInsets` and the `contentPadding` of lists, pagers and carousels read it as they lay out, as in Compose. To read a side yourself, call `calculateTopPadding()` (and `calculateStartPadding()`, `calculateEndPadding()`, `calculateBottomPadding()`; Kompoz's take no layout direction, the padding knows its own): read in a composable, it composes that composable again when the padding changes; read in a layout, it lays that layout out again.
 
 ## Navigation
 
@@ -43,18 +52,21 @@ The content's padding follows the bars as they change size, a top bar collapsing
 | `NavigationSuiteScaffold` | Picks a bar, a rail or a drawer by the window's size. |
 | `PrimaryTabRow`, `SecondaryTabRow`, `PrimaryScrollableTabRow` + `Tab` | Tabs. |
 
-`NavigationSuiteScaffold` is usually the one you want: it shows a bar on a phone and a rail on a tablet or desktop window, as Compose's adaptive navigation suite does.
+`NavigationSuiteScaffold` is usually the one you want: it shows a bar on a phone and a rail on a tablet or desktop window, as Compose's adaptive navigation suite does. Its `navigationSuiteItems` block adds an `item` per destination:
 
-```cpp
-void App() {
-    auto tab = rememberSaveable([] { return mutableStateOf(0); });
-    NavigationSuiteScaffold([&](NavigationSuiteScope& nav) {
-        nav.item(tab.get() == 0, [tab] { tab.set(0); }, Icons::Filled::Home, "Home");
-        nav.item(tab.get() == 1, [tab] { tab.set(1); }, Icons::Filled::Search, "Search");
-        nav.item(tab.get() == 2, [tab] { tab.set(2); }, Icons::Filled::Settings, "Settings");
-    }, Modifier(), {}, [&] {
-        Text("Tab " + std::to_string(tab.get()));
-    });
+```kotlin
+@Composable
+fun App() {
+    var tab by rememberSaveable { mutableStateOf(0) }
+    NavigationSuiteScaffold(
+        navigationSuiteItems = {
+            item(selected = tab == 0, onClick = { tab = 0 }, icon = { Icon(Icons.Filled.Home, contentDescription = null) }, label = { Text("Home") })
+            item(selected = tab == 1, onClick = { tab = 1 }, icon = { Icon(Icons.Filled.Search, contentDescription = null) }, label = { Text("Search") })
+            item(selected = tab == 2, onClick = { tab = 2 }, icon = { Icon(Icons.Filled.Settings, contentDescription = null) }, label = { Text("Settings") })
+        },
+    ) {
+        Text("Tab $tab")
+    }
 }
 ```
 
@@ -73,55 +85,61 @@ For moving between screens with a back stack, see [Navigation](navigation.md).
 | `SingleChoiceSegmentedButtonRow` + `SegmentedButton` | A choice among a few options. |
 | `ButtonGroup`, `SplitButtonLayout`, `ToggleButton` | M3 Expressive's groups, split buttons and toggles. |
 
-```cpp body
-Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
-    Button([] {}) { Text("Save"); };
-    OutlinedButton([] {}) { Text("Cancel"); };
-    IconButton([] {}) { Icon(Icons::Filled::Favorite, "Like"); };
-};
+```kotlin body
+Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Button(onClick = { }) { Text("Save") }
+    OutlinedButton(onClick = { }) { Text("Cancel") }
+    IconButton(onClick = { }) { Icon(Icons.Filled.Favorite, contentDescription = "Like") }
+}
 ```
 
 ## Cards and lists
 
-`Card`, `ElevatedCard` and `OutlinedCard` group related content; each also comes in a clickable form that takes `onClick` first. `ListItem` is a one-, two- or three-line row with optional leading and trailing content:
+`Card`, `ElevatedCard` and `OutlinedCard` group related content; each also comes in a clickable form with `onClick`. `ListItem` is a one-, two- or three-line row with optional leading and trailing content:
 
-```cpp body
-OutlinedCard(Modifier().fillMaxWidth()) {
-    ListItem({.headline = [] { Text("Wi-Fi"); },
-              .supporting = [] { Text("Connected"); },
-              .leading = [] { Icon(Icons::Filled::Settings, ""); },
-              .trailing = [] { Switch(true, [](bool) {}); }});
-};
+```kotlin body
+OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+    ListItem(
+        headlineContent = { Text("Wi-Fi") },
+        supportingContent = { Text("Connected") },
+        leadingContent = { Icon(Icons.Filled.Settings, contentDescription = null) },
+        trailingContent = { Switch(checked = true, onCheckedChange = { }) },
+    )
+}
 ```
 
 ## Selection controls
 
 `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, `Slider` and `RangeSlider`. They are stateless: they show the value you pass and report changes through a callback.
 
-```cpp
-void Volume() {
-    auto volume = remember([] { return mutableStateOf(0.5f); });
-    auto muted = remember([] { return mutableStateOf(false); });
-    Column() {
-        Slider(volume.get(), [volume](float v) { volume.set(v); });
-        Row(Modifier().toggleable(muted.get(), [muted](bool v) { muted.set(v); }, SemanticsRole::Checkbox),
-            verticalAlignment = Alignment::CenterVertically) {
-                Checkbox(muted.get(), nullptr);   // the whole row toggles it
-                Text("Mute");
-            };
-    };
+```kotlin
+@Composable
+fun Volume() {
+    var volume by remember { mutableStateOf(0.5f) }
+    var muted by remember { mutableStateOf(false) }
+    Column {
+        Slider(value = volume, onValueChange = { volume = it })
+        Row(
+            modifier = Modifier.toggleable(value = muted, onValueChange = { muted = it }, role = Role.Checkbox),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(checked = muted, onCheckedChange = null)   // the whole row toggles it
+            Text("Mute")
+        }
+    }
 }
 ```
 
-Pass an empty callback to a control inside a row that handles the click itself, as above, so that the row is one touch target and one item for accessibility.
+Pass `null` as the callback of a control inside a row that handles the click itself, as above, so that the row is one touch target and one item for accessibility.
 
 ## Chips
 
-`AssistChip`, `FilterChip`, `InputChip` and `SuggestionChip`:
+`AssistChip`, `FilterChip`, `InputChip` and `SuggestionChip`, with `label`, `leadingIcon`, `trailingIcon` and `enabled` as in Compose (and the elevated ones):
 
-```cpp body
-#! auto unread = mutableStateOf(false);
-FilterChip(unread.get(), [unread] { unread.set(!unread.get()); }, [] { Text("Unread"); });
+```kotlin body
+var unread by remember { mutableStateOf(false) }
+FilterChip(selected = unread, onClick = { unread = !unread }, label = { Text("Unread") })
+AssistChip(onClick = { }, label = { Text("Help") }, leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null, modifier = Modifier.size(18.dp)) })
 ```
 
 ## Text fields
@@ -132,16 +150,19 @@ FilterChip(unread.get(), [unread] { unread.set(!unread.get()); }, [] { Text("Unr
 
 These show above the rest of the UI. Each is composed where you call it, so it keeps its state and composition locals, and Kompoz places it on top. Show one by calling it while a state says so:
 
-```cpp
-void DeleteButton(std::function<void()> onDelete) {
-    auto open = remember([] { return mutableStateOf(false); });
-    TextButton([open] { open.set(true); }) { Text("Delete"); };
-    if (open.get()) {
-        AlertDialog([open] { open.set(false); },
-                    confirmButton = [open, onDelete] { TextButton([open, onDelete] { open.set(false); onDelete(); }) { Text("Delete"); }; },
-                    dismissButton = [open] { TextButton([open] { open.set(false); }) { Text("Cancel"); }; },
-                    title = [] { Text("Delete this message?"); },
-                    text = [] { Text("It will be gone for good."); });
+```kotlin
+@Composable
+fun DeleteButton(onDelete: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    TextButton(onClick = { open = true }) { Text("Delete") }
+    if (open) {
+        AlertDialog(
+            onDismissRequest = { open = false },
+            confirmButton = { TextButton(onClick = { open = false; onDelete() }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } },
+            title = { Text("Delete this message?") },
+            text = { Text("It will be gone for good.") },
+        )
     }
 }
 ```
@@ -157,28 +178,28 @@ void DeleteButton(std::function<void()> onDelete) {
 
 ## Snackbars
 
-A `SnackbarHost` shows the messages of a `SnackbarHostState`. Show one from a callback with `showSnackbar`, or wait for how it went in a coroutine:
+A `SnackbarHost` shows the messages of a `SnackbarHostState`. `showSnackbar` suspends until the snackbar is gone and tells how it went, so call it in a coroutine, as in Compose (from a plain callback it only shows the message):
 
-```cpp body
-#! std::function<void()> undo;
-auto snackbars = rememberSnackbarHostState();
-auto scope = rememberCoroutineScope();
-Button([scope, snackbars, undo] {
-    scope.launch([snackbars, undo]() -> Task {
-        if (co_await snackbars.showSnackbarAsync("Message deleted", "Undo") == SnackbarResult::ActionPerformed) undo();
-    });
-}) { Text("Delete"); };
-SnackbarHost(snackbars);
+```kotlin body
+#! fun undo() {}
+val snackbars = remember { SnackbarHostState() }
+val scope = rememberCoroutineScope()
+Button(onClick = {
+    scope.launch {
+        if (snackbars.showSnackbar("Message deleted", actionLabel = "Undo") == SnackbarResult.ActionPerformed) undo()
+    }
+}) { Text("Delete") }
+SnackbarHost(hostState = snackbars)
 ```
 
 ## Progress
 
-`CircularProgressIndicator` and `LinearProgressIndicator`, with a progress value or without one (indeterminate); M3 Expressive's `LoadingIndicator`, `ContainedLoadingIndicator` and the wavy indicators. Indeterminate indicators animate in the draw phase, so they don't recompose anything.
+`CircularProgressIndicator` and `LinearProgressIndicator`, with a `progress` lambda or without one (indeterminate); M3 Expressive's `LoadingIndicator`, `ContainedLoadingIndicator` and the wavy indicators. Indeterminate indicators animate in the draw phase, so they don't recompose anything.
 
-```cpp body
-#! float progress = 0.4f;
-CircularProgressIndicator();               // indeterminate
-LinearProgressIndicator(progress);          // 40 %
+```kotlin body
+#! val progress = 0.4f
+CircularProgressIndicator()                      // indeterminate
+LinearProgressIndicator(progress = { progress }) // 40 %
 ```
 
 ## Other components
