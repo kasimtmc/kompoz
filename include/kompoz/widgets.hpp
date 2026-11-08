@@ -1508,11 +1508,11 @@ struct AsyncImageOptions {
 };
 namespace detail {
 void AsyncImage(std::string model, std::string contentDescription, const Modifier& modifier, const AsyncImageOptions& options, CallSite site);
-// AsyncImage(model, contentDescription, modifier, contentScale = …, alpha = …, colorFilter = …, onState = …)
-// as Coil's, or with an AsyncImageOptions after the modifier (placeholder and error as content).
+// AsyncImage(model, contentDescription, modifier, contentScale = …, alpha = …, colorFilter = …, onState = …,
+// placeholder = { }, error = { }, crossfadeMillis = …) as Coil's, or with an AsyncImageOptions after the modifier.
 struct AsyncImageImpl {
     using P = Params<names::Model, names::ContentDescription, names::Modifier, names::Options, names::ContentScale, names::Alpha,
-                     names::ColorFilter, names::OnState>;
+                     names::ColorFilter, names::OnState, names::Placeholder, names::Error, names::CrossfadeMillis>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -1521,6 +1521,9 @@ struct AsyncImageImpl {
         P::set<names::Alpha>(options.alpha, args...);
         P::set<names::ColorFilter>(options.colorFilter, args...);
         P::set<names::OnState>(options.onState, args...);
+        P::set<names::Placeholder>(options.placeholder, args...);
+        P::set<names::Error>(options.error, args...);
+        P::set<names::CrossfadeMillis>(options.crossfadeMillis, args...);
         std::string description;
         if constexpr (P::given<names::ContentDescription, A...>()) description = descriptionOf(P::arg<names::ContentDescription>(args...));
         AsyncImage(std::string(P::arg<names::Model>(args...)), std::move(description), P::get<names::Modifier>(Modifier{}, args...), options, site);

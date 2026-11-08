@@ -341,6 +341,15 @@ template <class T, class... R>
 std::vector<std::decay_t<T>> listOf(T&& first, R&&... rest) {
     return {std::forward<T>(first), std::forward<R>(rest)...};
 }
+// floatArrayOf(8f, 6f), intArrayOf(1, 2): a vector (what takes a span takes it).
+template <class... T>
+std::vector<float> floatArrayOf(T... values) {
+    return {float(values)...};
+}
+template <class... T>
+std::vector<int> intArrayOf(T... values) {
+    return {int(values)...};
+}
 // listOf(), emptyList(), ... without a type: whichever empty collection it goes to.
 struct EmptyCollection {
     template <class T, class A>

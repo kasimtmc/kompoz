@@ -295,6 +295,59 @@ public:
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawText(const TextLayoutResult& layout, A&&... args);
+    // Compose's drawing calls by name (named_members.hpp): drawLine(color, start = …, end = …, strokeWidth = …,
+    // cap = …, pathEffect = …), drawRect(color, topLeft = …, size = …, alpha = …, style = …), drawRoundRect(…,
+    // cornerRadius = …), drawCircle(color, radius = …, center = …), drawOval(…), drawArc(color, startAngle,
+    // sweepAngle, useCenter, topLeft = …, size = …), drawPath(path, color, style = …), drawPoints(points, mode,
+    // color, strokeWidth = …), each in a brush too; style, alpha, colorFilter and blendMode as above.
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawLine(Color color, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawLine(const Brush& brush, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawRect(Color color, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawRect(const Brush& brush, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawRoundRect(Color color, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawRoundRect(const Brush& brush, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawCircle(Color color, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawCircle(const Brush& brush, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawOval(Color color, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawOval(const Brush& brush, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawArc(Color color, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawArc(const Brush& brush, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawPath(const Path& path, Color color, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawPath(const Path& path, const Brush& brush, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawPoints(const std::vector<Offset>& points, PointMode pointMode, Color color, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawPoints(const std::vector<Offset>& points, PointMode pointMode, const Brush& brush, A&&... args);
     void drawText(const TextLayoutResult& layout, const Brush& brush, Offset topLeft = {}, std::optional<float> alpha = {},
                   std::optional<Shadow> shadow = {}, std::optional<TextDecoration> textDecoration = {},
                   std::optional<DrawStyle> drawStyle = {}, BlendMode blendMode = BlendMode::SrcOver);
@@ -328,6 +381,35 @@ public:
     // What `block` draws, only inside `path` (or outside it: ClipOp::Difference), any path by its
     // fill type, its edge anti-aliased.
     void clipPath(const Path& path, const std::function<void(DrawScope&)>& block, ClipOp op = ClipOp::Intersect);
+    // Compose's forms by name, the block last (named_members.hpp): translate(left = …, top = …) { },
+    // inset(left = …, top = …, right = …, bottom = …) { } or inset(horizontal = …, vertical = …) { },
+    // clipRect(left = …, top = …, right = …, bottom = …, clipOp = …) { } (its edges, as Compose's),
+    // rotate(degrees, pivot = …) { }, rotateRad(radians, pivot = …) { }, scale(scaleX, scaleY, pivot = …) { }
+    // and scale(scale, pivot = …) { }, clipPath(path, clipOp = …) { }.
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void translate(A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void inset(A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void clipRect(A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void rotate(float degrees, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void rotateRad(float radians, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void scale(float scaleX, float scaleY, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void scale(float scale, A&&... args);
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void clipPath(const Path& path, A&&... args);
     // Several of the above at once (Compose's withTransform).
     void withTransform(const std::function<void(DrawTransform&)>& transform, const std::function<void(DrawScope&)>& block);
 
@@ -494,6 +576,11 @@ struct CanvasImpl {
 // A space to draw in (Compose's Canvas): Canvas(Modifier().size(100), [](DrawScope& draw) { ... }),
 // and Canvas(modifier, contentDescription, …) for what a screen reader says of it.
 inline constexpr Composable<detail::CanvasImpl> Canvas;
+
+// Compose's Stroke(width = …, miter = …, cap = …, join = …, pathEffect = …) by name (named_members.hpp).
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+DrawStyle Stroke(A&&... args);
 
 // Something drawn into whatever size it is given (Compose's Painter): a bitmap (BitmapPainter),
 // a vector (VectorPainter, black unless a color filter tints it), a color, a brush or drawing

@@ -843,6 +843,17 @@
   `SelectionContainer(modifier) { … }` by name; `measurer.measure(text, style = …, maxWidth = …)` and
   `drawText(layout, topLeft = …, color = …, alpha = …)` by name. kompozc gives `buildAnnotatedString { append(…);
   withStyle(SpanStyle(…)) { … } }` its builder as the receiver, and `edit { … }` its `TextFieldBuffer`.
+- **Drawing as Compose writes it**: `DrawScope`'s calls take Compose's names: `drawCircle(color, radius = …, center = …,
+  style = Stroke(width = 2f))`, `drawRect(topLeft = …, size = …, alpha = …)`, `drawRoundRect(cornerRadius = …)`,
+  `drawOval`, `drawLine(start = …, end = …, strokeWidth = …, cap = …, pathEffect = …)`, `drawArc(color, startAngle,
+  sweepAngle, useCenter, topLeft = …)`, `drawPath(path, color, style = …)`, `drawPoints(…)`, each in a brush too;
+  `Stroke(width = …, miter = …, cap = …, join = …, pathEffect = …)`; the blocks `rotate(degrees, pivot = …) { }`,
+  `rotateRad`, `scale(…, pivot = …) { }`, `translate(left = …, top = …) { }`, `inset(left = …, top = …, right = …,
+  bottom = …) { }` or `inset(horizontal = …, vertical = …) { }`, `clipRect(left = …, top = …, right = …, bottom = …,
+  clipOp = …) { }` (its edges, as Compose's) and `clipPath(path, clipOp = …) { }`. `AsyncImage(model, placeholder = { },
+  error = { }, crossfadeMillis = …)` as Coil's. `floatArrayOf(8f, 6f)` and `intArrayOf(…)` from kotlin.hpp. An `Image`'s, an
+  `AsyncImage`'s and an `Icon`'s `contentDescription` is its semantics' contentDescription, as Compose's (`onNodeWithContentDescription` finds it, `onAllNodesWithContentDescription` all of them;
+  `onNodeWithText` no longer does).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

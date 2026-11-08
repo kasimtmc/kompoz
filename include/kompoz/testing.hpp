@@ -532,6 +532,14 @@ public:
             },
             describe("content description", description));
     }
+    NodeCollection onAllNodesWithContentDescription(std::string_view description) {
+        return findAll(
+            [&](LayoutNode& n) {
+                auto s = detail::semanticsOf(n.modifier);
+                return s && s->contentDescription == description;
+            },
+            describe("content description", description));
+    }
 
     NodeInteraction onNodeWithTag(std::string_view tag) { return find(tagMatcher(tag), describe("tag", tag)); }
 

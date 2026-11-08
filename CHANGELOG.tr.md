@@ -884,6 +884,17 @@
   `SelectionContainer(modifier) { … }`; adla `measurer.measure(text, style = …, maxWidth = …)` ve `drawText(layout,
   topLeft = …, color = …, alpha = …)`. kompozc, `buildAnnotatedString { append(…); withStyle(SpanStyle(…)) { … } }`'e
   alıcı olarak kurucusunu, `edit { … }`'e `TextFieldBuffer`'ını veriyor.
+- **Compose'un yazdığı gibi çizim**: `DrawScope`'un çağrıları Compose'un adlarını alıyor: `drawCircle(color, radius = …,
+  center = …, style = Stroke(width = 2f))`, `drawRect(topLeft = …, size = …, alpha = …)`, `drawRoundRect(cornerRadius = …)`,
+  `drawOval`, `drawLine(start = …, end = …, strokeWidth = …, cap = …, pathEffect = …)`, `drawArc(color, startAngle,
+  sweepAngle, useCenter, topLeft = …)`, `drawPath(path, color, style = …)`, `drawPoints(…)`, her biri fırçayla da;
+  `Stroke(width = …, miter = …, cap = …, join = …, pathEffect = …)`; bloklar `rotate(degrees, pivot = …) { }`, `rotateRad`,
+  `scale(…, pivot = …) { }`, `translate(left = …, top = …) { }`, `inset(left = …, top = …, right = …, bottom = …) { }` ya da
+  `inset(horizontal = …, vertical = …) { }`, `clipRect(left = …, top = …, right = …, bottom = …, clipOp = …) { }` (Compose'unki
+  gibi kenarlarıyla) ve `clipPath(path, clipOp = …) { }`. Coil'inki gibi `AsyncImage(model, placeholder = { }, error = { },
+  crossfadeMillis = …)`. kotlin.hpp'den `floatArrayOf(8f, 6f)` ve `intArrayOf(…)`. Bir `Image`'ın, bir `AsyncImage`'ın ve bir `Icon`'un
+  `contentDescription`'ı, Compose'daki gibi semantiğinin contentDescription'ı (`onNodeWithContentDescription` onu buluyor, `onAllNodesWithContentDescription` hepsini; `onNodeWithText`
+  artık bulmuyor).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

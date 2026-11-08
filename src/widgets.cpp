@@ -1501,8 +1501,11 @@ void detail::Icon(const Painter& painter, std::string contentDescription, const 
     composable(site, painter, contentDescription, modifier, tint, [=] {
         Color color = tint.value_or(LocalContentColor.current());
         Modifier sized = painter.hasIntrinsicSize() ? modifier : modifier.size(24);  // its own size, or an icon's
+        // (its description is its semantics' contentDescription, as Compose's: what a screen reader
+        // says, and what onNodeWithContentDescription finds)
+        if (!contentDescription.empty()) sized = sized.semantics(contentDescription);
         layoutNode(CallSite::current(), sized.paint(painter, true, Alignment::Center, ContentScale::Fit, 1, ColorFilter::tint(color)),
-                   [](LayoutNode&, const Constraints& c) { return Size{c.minWidth, c.minHeight}; }, {}, {}, contentDescription);
+                   [](LayoutNode&, const Constraints& c) { return Size{c.minWidth, c.minHeight}; }, {}, {}, {});
     });
 }
 
@@ -1667,7 +1670,7 @@ void detail::Image(const ImageBitmap& bitmap, std::string contentDescription, co
             detail::Filtering filtering(canvas, colorFilter);
             if (dst.width > 0 && dst.height > 0) canvas.drawImage(bitmap, src, dst, alpha);
         };
-        layoutNode(CallSite::current(), modifier, measure, {}, draw, contentDescription);
+        layoutNode(CallSite::current(), contentDescription.empty() ? modifier : modifier.semantics(contentDescription), measure, {}, draw, {});
     });
 }
 
@@ -1816,8 +1819,9 @@ void vector::RenderVectorGroup(const VectorGroup& group, const std::map<std::str
 void detail::Image(const Painter& painter, std::string contentDescription, const Modifier& modifier, Alignment alignment,
            ContentScale contentScale, float alpha, std::optional<ColorFilter> colorFilter, CallSite site) {
     composable(site, painter, contentDescription, modifier, alignment, contentScale, alpha, colorFilter, [=] {
-        layoutNode(CallSite::current(), modifier.clipToBounds().paint(painter, true, alignment, contentScale, alpha, colorFilter),
-                   [](LayoutNode&, const Constraints& c) { return Size{c.minWidth, c.minHeight}; }, {}, {}, contentDescription);
+        Modifier described = contentDescription.empty() ? modifier : modifier.semantics(contentDescription);  // (as Icon's)
+        layoutNode(CallSite::current(), described.clipToBounds().paint(painter, true, alignment, contentScale, alpha, colorFilter),
+                   [](LayoutNode&, const Constraints& c) { return Size{c.minWidth, c.minHeight}; }, {}, {}, {});
     });
 }
 
@@ -1886,10 +1890,11 @@ void detail::AsyncImage(std::string model, std::string contentDescription, const
         }
         return size;
     };
-    layoutNode(site, modifier, measure, [&] {
+    // (the description is the AsyncImage's own, loading or not, as Compose's)
+    layoutNode(site, contentDescription.empty() ? modifier : modifier.semantics(contentDescription), measure, [&] {
         const Content& slot = state.status == Status::Error ? options.error : options.placeholder;
         if (shown < 1 && slot) detail::Box(Modifier(), Alignment::Center, slot);
-        if (loaded) detail::Image(state.image, contentDescription, Modifier(), options.contentScale, options.alpha * shown, options.colorFilter);
+        if (loaded) detail::Image(state.image, std::string(), Modifier(), options.contentScale, options.alpha * shown, options.colorFilter);
     });
 }
 

@@ -576,6 +576,7 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 349. Compose's chips with `label = { }` and icons by name, `toggleable(value, onValueChange, role = Role.Checkbox)`, `SnackbarHost(hostState)`, `showSnackbar(actionLabel = …)` awaited, `progress = { }` indicators, `NavigationSuiteScaffold(navigationSuiteItems = { item(…) })` with content icons and labels ✅
 350. Compose's `lightColorScheme(primary = …)` / `darkColorScheme(…)` / `scheme.copy(…)`, `typography.copy(…)`, `Typography(…)`, `TextStyle.copy(fontFamily = …)` on a `Font`, `MaterialTheme(typography = …, shapes = …)` with its color scheme optional, and `Shapes` (`MaterialTheme.shapes.medium`) ✅
 351. Compose's composable `label`, `placeholder` and `supportingText` on text fields, `TextFieldLineLimits.MultiLine(maxHeightInLines = …)`, `LinkAnnotation.Clickable(tag) { }`, `SelectionContainer(modifier) { }`, `measure(style = …)` and `drawText(topLeft = …)` by name ✅
+352. Compose's `drawCircle(radius = …, center = …)`, `drawRect(topLeft = …, size = …)`, `drawLine(start = …, end = …, cap = …)`, `drawArc`, `drawPath(style = …)`, `Stroke(width = …)`, `rotate(pivot = …) { }`, `inset`/`clipRect`/`translate` by name, Coil's `AsyncImage(placeholder = { }, error = { })`, `floatArrayOf` ✅
 
 ## Next
 

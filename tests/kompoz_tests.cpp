@@ -2,6 +2,7 @@
 
 #include <kompoz/adaptive.hpp>
 #include <kompoz/kompoz.hpp>
+#include <kompoz/kotlin.hpp>
 #include <kompoz/testing.hpp>
 
 #include <atomic>
@@ -2586,7 +2587,7 @@ TEST(icon_sizes_tints_and_draws) {
     });
     CHECK(near(rule.onNodeWithTag("small").bounds().width, 24));
     CHECK(near(rule.onNodeWithTag("big").bounds().width, 48));
-    CHECK(rule.onNodeWithText("Ekle").exists());  // content description is the semantics text
+    CHECK(rule.onNodeWithContentDescription("Ekle").exists());  // the description is its semantics', as Compose's
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
     CHECK((canvas.vectors == std::vector<uint64_t>{Icons::Filled::Add.id(), Icons::Filled::Star.id()}));
@@ -2600,8 +2601,8 @@ TEST(icon_button_clicks) {
             IconButton([&] { ++clicks; }, Modifier(), enabled = false, [] { Icon(Icons::Filled::Delete, "Sil"); });
         });
     });
-    rule.onNodeWithText("Beğen").performClick();
-    rule.onNodeWithText("Sil").performClick();
+    rule.onNodeWithContentDescription("Beğen").performClick();
+    rule.onNodeWithContentDescription("Sil").performClick();
     CHECK(clicks == 1);
 }
 
@@ -2703,8 +2704,8 @@ TEST(outlined_icon_button_has_an_outline_and_ripples_in_its_circle) {
                                    [] { Icon(Icons::Filled::Star, "Yıldız"); });
         });
     });
-    rule.onNodeWithText("Ekle").performClick();
-    rule.onNodeWithText("Ekleme").performClick();
+    rule.onNodeWithContentDescription("Ekle").performClick();
+    rule.onNodeWithContentDescription("Ekleme").performClick();
     CHECK(clicks == 1);
     {
         testing::RecordingCanvas canvas;
@@ -3182,7 +3183,7 @@ TEST(scaffold_pads_content_by_its_bars_and_insets) {
     CHECK(near(seen.calculateTopPadding(), 64 + 24));  // the top bar includes the status bar
     CHECK(near(seen.calculateBottomPadding(), 16));    // no bottom bar: the navigation bar inset
     CHECK(near(rule.onNodeWithTag("content").node()->contentBounds().y, 88));
-    Rect fab = rule.onNodeWithText("Ekle").bounds();
+    Rect fab = rule.onNodeWithContentDescription("Ekle").bounds();
     CHECK(near(fab.right(), 400 - 16 - 16) && near(fab.bottom(), 800 - 16 - 16 - 16));  // icon inside a 56dp FAB
 }
 
@@ -7632,6 +7633,53 @@ TEST(canvas_takes_compose_named_arguments) {
     CHECK(canvas.rects.size() == 1);
 }
 
+TEST(drawing_takes_compose_named_arguments) {
+    // DrawScope's calls with Compose's names draw what the positional forms draw: drawCircle(radius =, center =,
+    // style = Stroke(width =)), drawRect(topLeft =, size =), drawLine(start =, end =, strokeWidth =, cap =,
+    // pathEffect =), drawArc(startAngle, sweepAngle, useCenter, topLeft =, size =), drawPath(style =),
+    // rotate(pivot =) { }, inset(horizontal =, vertical =) { }, clipRect(left =, top =, right =, bottom =) { }.
+    Path wave;
+    wave.moveTo(0, 20);
+    wave.cubicTo(30, -10, 60, 50, 90, 20);
+    auto named = [wave](DrawScope& d) {
+        d.drawCircle(colors::White, arg::radius = 9.f, arg::center = Offset{20, 25}, arg::style = Stroke(arg::width = 2.f));
+        d.drawRect(colors::White, arg::topLeft = Offset{50, 10}, arg::size = Size{20, 20}, arg::alpha = 0.5f);
+        d.drawLine(colors::White, arg::start = Offset{0, 0}, arg::end = Offset{10, 10}, arg::strokeWidth = 3.f, arg::cap = StrokeCap::Round,
+                   arg::pathEffect = PathEffect::dashPathEffect(kt::floatArrayOf(8, 6)));
+        d.drawArc(colors::White, 0.f, 90.f, true, arg::topLeft = Offset{80, 10}, arg::size = Size{20, 20});
+        d.drawPath(wave, colors::White, arg::style = Stroke(arg::width = 3.f, arg::cap = StrokeCap::Round, arg::join = StrokeJoin::Round));
+        d.rotate(30, arg::pivot = Offset{50, 25}, [](DrawScope& r) { r.drawRect(colors::Black, arg::size = Size{10, 10}); });
+        d.inset(arg::horizontal = 4.f, arg::vertical = 2.f, [](DrawScope& r) { r.drawOval(colors::Black, arg::size = Size{10, 10}); });
+        d.clipRect(arg::left = 10.f, arg::top = 10.f, arg::right = 40.f, arg::bottom = 40.f, [](DrawScope& r) { r.drawRect(colors::Black); });
+    };
+    auto positional = [wave](DrawScope& d) {
+        d.drawCircle(colors::White, 9.f, Offset{20, 25}, 1, Stroke(2));
+        d.drawRect(colors::White, {50, 10}, Size{20, 20}, 0.5f);
+        d.drawLine(colors::White, {0, 0}, {10, 10}, 3, StrokeCap::Round, PathEffect::dashPathEffect({8, 6}));
+        d.drawArc(colors::White, 0, 90, true, {80, 10}, Size{20, 20});
+        d.drawPath(wave, colors::White, 1, Stroke(3, 4, StrokeCap::Round, StrokeJoin::Round));
+        d.rotate(30, [](DrawScope& r) { r.drawRect(colors::Black, {}, Size{10, 10}); }, Offset{50, 25});
+        d.inset(4, 2, [](DrawScope& r) { r.drawOval(colors::Black, {}, Size{10, 10}); });
+        d.clipRect({10, 10}, Size{30, 30}, [](DrawScope& r) { r.drawRect(colors::Black); });
+    };
+    testing::RecordingCanvas a, b;
+    ComposeTestRule byName([&] { Canvas(Modifier().size(100, 50), named); });
+    byName.host().draw(a);
+    ComposeTestRule byPlace([&] { Canvas(Modifier().size(100, 50), positional); });
+    byPlace.host().draw(b);
+    CHECK(a.rects.size() == b.rects.size() && a.rects.size() >= 4 && a.rects == b.rects && a.rectRadii == b.rectRadii);
+    CHECK(a.paths == b.paths && a.order == b.order && a.stack == b.stack && a.clips == b.clips);
+    CHECK(a.transforms.size() == b.transforms.size() && a.translations == b.translations);
+    CHECK(Stroke(arg::width = 2.f) == Stroke(2) && (kt::floatArrayOf(8, 6) == std::vector<float>{8, 6}));
+    // AsyncImage(model, placeholder = { }, error = { }, crossfadeMillis = …) as Coil's.
+    ComposeTestRule image([] {
+        AsyncImage(arg::model = std::string("yok.png"), arg::contentDescription = std::string("resim"), arg::modifier = Modifier().size(40),
+                   arg::placeholder = [] { Text("yükleniyor"); }, arg::error = [] { Text("hata"); }, arg::crossfadeMillis = 200);
+    });
+    image.waitForIdle();
+    CHECK(image.onNodeWithText("yükleniyor").exists() || image.onNodeWithText("hata").exists());
+}
+
 TEST(draw_scope_strokes_sit_on_the_outline) {
     // As Compose's: half of the stroke each side of the rect or circle.
     ComposeTestRule rule([] {
@@ -7981,7 +8029,7 @@ TEST(view_configuration_sets_the_gesture_thresholds) {
     host.pointerUp({50, 450});
     rule.waitForIdle();
     // And a tooltip's long press.
-    Offset anchor = rule.onNodeWithText("Favori").bounds().center();
+    Offset anchor = rule.onNodeWithContentDescription("Favori").bounds().center();
     host.pointerDown(anchor);
     rule.advanceTimeBy(500);
     CHECK(!tooltip->isVisible());
@@ -8723,7 +8771,7 @@ TEST(list_item_height_follows_its_lines) {
     CHECK(near(rule.onNodeWithTag("one").bounds().height, 56));
     CHECK(near(rule.onNodeWithTag("two").bounds().height, 72));
     CHECK(near(rule.onNodeWithTag("three").bounds().height, 88));
-    Rect person = rule.onNodeWithText("Kişi").bounds(), headline = rule.onNodeWithText("İki").bounds();
+    Rect person = rule.onNodeWithContentDescription("Kişi").bounds(), headline = rule.onNodeWithText("İki").bounds();
     CHECK(near(person.x, 16) && near(headline.x, 16 + 24 + 16));
     CHECK(near(rule.onNodeWithText("100+").bounds().right(), 400 - 16));  // 16 dp at the end, as Compose 1.4's
 }
@@ -8775,9 +8823,9 @@ TEST(chips_radio_buttons_and_segments_select) {
         });
     });
     CHECK(rule.onNodeWithText("seçim: Kahve 0").exists());
-    CHECK(!rule.onNodeWithText("işaret").exists());
+    CHECK(!rule.onNodeWithContentDescription("işaret").exists());
     rule.onNodeWithText("Filtre").performClick();
-    CHECK(rule.onNodeWithText("işaret").exists());
+    CHECK(rule.onNodeWithContentDescription("işaret").exists());
     LayoutNode* tea = rule.onNodeWithTag("Çay").node();
     CHECK(tea && tea->children.size() == 2);
     if (tea) {
@@ -8788,7 +8836,7 @@ TEST(chips_radio_buttons_and_segments_select) {
     }
     rule.onNodeWithText("S2").performClick();
     CHECK(rule.onNodeWithText("seçim: Çay 2 filtre").exists());
-    CHECK(rule.onNodeWithText("Selected").exists());  // the selected segment's check
+    CHECK(rule.onNodeWithContentDescription("Selected").exists());  // the selected segment's check
     // Segments share the row equally.
     CHECK(near(rule.onNodeWithTag("seg0").bounds().width, 100) && near(rule.onNodeWithTag("seg2").bounds().x, 200));
 }
@@ -9671,7 +9719,7 @@ TEST(test_rule_assertions) {
     };
     rule.onNodeWithText("Tamam").assertIsDisplayed().assertHasClickAction().assertIsEnabled().assertTextEquals("Tamam");
     rule.onNodeWithText("Kapalı").assertHasClickAction().assertIsNotEnabled();
-    rule.onNodeWithText("Bilgi").assertHasNoClickAction();
+    rule.onNodeWithContentDescription("Bilgi").assertHasNoClickAction();
     rule.onNodeWithText("Yok").assertDoesNotExist();
     rule.onNodeWithText("Tam", true).assertTextContains("ama");
     CHECK(fails([&] { rule.onNodeWithText("Yok").assertExists(); }, "no such node (node: text \"Yok\")"));
@@ -11786,7 +11834,7 @@ TEST(async_image_loads_away_from_the_ui_thread_and_caches) {
     rule.host().draw(after);
     CHECK(after.images.size() == 2 && !rule.onNodeWithText("yükleniyor").exists());
     CHECK(sameRect(after.imageDestinations[0], {0, 0, 100, 60}));  // cropped to fill its size
-    CHECK(rule.onNodeWithText("foto").exists());  // its description
+    CHECK(rule.onNodeWithContentDescription("foto").exists());  // its description
     shown.set(false);
     rule.waitForIdle();
     shown.set(true);  // again: from the cache, at once (no cross-fade); the failed one is tried again
@@ -15714,7 +15762,7 @@ TEST(fabs_as_compose_1_4) {
         });
     });
     // 16 dp before the icon, 12 between, 20 after the label; at least 80 wide.
-    Rect wide = rule.onNodeWithTag("geniş").bounds(), icon = rule.onNodeWithText("Yeni").bounds();  // (the icon says it too)
+    Rect wide = rule.onNodeWithTag("geniş").bounds(), icon = rule.onNodeWithContentDescription("Yeni").bounds();  // (the icon says it too)
     CHECK(near(icon.x, wide.x + 16) && near(wide.width, 16 + 24 + 12 + rule.onNodeWithTag("ölçü").bounds().width + 20));
     CHECK(near(rule.onNodeWithTag("kısa").bounds().width, 80));
     // 6 dp up, 8 hovered, 6 again pressed.
@@ -18510,13 +18558,13 @@ TEST(app_bar_rows_put_what_does_not_fit_in_a_menu) {
     // 200 dp: room kept for the ⋮ (48): three of them, the rest in its menu.
     CHECK(shown("Bir") && shown("Üç") && !shown("Dört") && !shown("Beş") && shown("More options"));
     CHECK(near(rule.onNodeWithTag("satır").bounds().width, 4 * 48));
-    rule.onNodeWithText("More options").performClick();
+    rule.onNodeWithContentDescription("More options").performClick();
     rule.waitForIdle();
     CHECK(rule.onNodeWithText("Dört öğesi").exists() && rule.onNodeWithText("Beş öğesi").exists() && !rule.onNodeWithText("Üç öğesi").exists());
     rule.onNodeWithText("Beş öğesi").performClick();  // a toggle from the menu: flipped, the menu gone
     rule.waitForIdle();
     CHECK(starred && !rule.onNodeWithText("Dört öğesi").exists());
-    rule.onNodeWithText("More options").performClick();
+    rule.onNodeWithContentDescription("More options").performClick();
     rule.waitForIdle();
     rule.onNodeWithText("Dört öğesi").performClick();
     rule.waitForIdle();
@@ -18548,8 +18596,8 @@ TEST(app_bar_columns_put_what_does_not_fit_in_a_menu_below) {
     rule.host().draw(canvas);
     auto drawn = [&](const ImageVector& v) { return std::ranges::count(canvas.vectors, v.id()) > 0; };
     CHECK(drawn(Icons::Filled::Add) && drawn(Icons::Filled::Edit) && !drawn(Icons::Filled::Share) && drawn(Icons::Filled::MoreVert));
-    CHECK(near(rule.onNodeWithText("More options").bounds().y, column.y + 2 * 48 + 12));  // at the bottom
-    rule.onNodeWithText("More options").performClick();
+    CHECK(near(rule.onNodeWithContentDescription("More options").bounds().y, column.y + 2 * 48 + 12));  // at the bottom
+    rule.onNodeWithContentDescription("More options").performClick();
     rule.waitForIdle();
     CHECK(rule.onNodeWithText("Paylaş öğesi").exists() && rule.onNodeWithText("Sil öğesi").exists() && !rule.onNodeWithText("Düzenle öğesi").exists());
     rule.onNodeWithText("Sil öğesi").performClick();
@@ -18721,9 +18769,9 @@ TEST(button_group_puts_what_does_not_fit_into_a_menu) {
     };
     // 97 + 104 + 69 dp of buttons (12 apart) fit with the ⋮ button in 400; Sil and Paylaş don't.
     CHECK(drawn("Kopyala") && drawn("Yapıştır") && drawn("Kes") && !drawn("Sil") && !drawn("Paylaş") && shown("Kes"));
-    CHECK(rule.onNodeWithText("More options").exists());
+    CHECK(rule.onNodeWithContentDescription("More options").exists());
     tap(rule, rule.onNodeWithText("Kopyala", true).bounds().center());
-    tap(rule, rule.onNodeWithText("More options").bounds().center());  // the menu: the rest
+    tap(rule, rule.onNodeWithContentDescription("More options").bounds().center());  // the menu: the rest
     rule.waitForIdle();
     CHECK(drawn("Sil") && drawn("Paylaş"));
     auto items = rule.onAllNodesWithText("Paylaş");
@@ -18735,14 +18783,14 @@ TEST(button_group_puts_what_does_not_fit_into_a_menu) {
     CHECK((*log == std::vector<std::string>{"kopyala", "paylaş"}) && !drawn("Sil"));  // picked, and the menu closed
     width.set(600);  // room for all: no ⋮
     rule.waitForIdle();
-    CHECK(drawn("Sil") && drawn("Paylaş") && !rule.onNodeWithText("More options").exists());
+    CHECK(drawn("Sil") && drawn("Paylaş") && !rule.onNodeWithContentDescription("More options").exists());
     width.set(300);  // the toggle goes into the menu: there, a check mark once checked
     cut.set(true);
     rule.waitForIdle();
     CHECK(!drawn("Kes"));
-    tap(rule, rule.onNodeWithText("More options").bounds().center());
+    tap(rule, rule.onNodeWithContentDescription("More options").bounds().center());
     rule.waitForIdle();
-    CHECK(drawn("Kes") && rule.onNodeWithText("Selected").exists());
+    CHECK(drawn("Kes") && rule.onNodeWithContentDescription("Selected").exists());
     auto toggles = rule.onAllNodesWithText("Kes");
     Rect kes{};
     for (size_t i = 0; i < toggles.size(); ++i)
@@ -18957,7 +19005,7 @@ TEST(a_tap_on_a_text_fields_icon_focuses_it) {
         keyboard = active ? std::optional(o) : std::nullopt;
     }});
     // The leading icon is part of the field: a tap there focuses it, as in Compose.
-    tap(rule, rule.onNodeWithText("kilit").bounds().center());
+    tap(rule, rule.onNodeWithContentDescription("kilit").bounds().center());
     CHECK(keyboard.has_value());
     rule.host().textInput("a");
     rule.waitForIdle();
@@ -18966,17 +19014,17 @@ TEST(a_tap_on_a_text_fields_icon_focuses_it) {
     value.set("xyz");
     rule.waitForIdle();
     rule.host().keyDown(Key::Tab);  // away
-    tap(rule, rule.onNodeWithText("kilit").bounds().center());
+    tap(rule, rule.onNodeWithContentDescription("kilit").bounds().center());
     rule.host().textInput("a");
     rule.waitForIdle();
     CHECK(value.peek() == "axyz");
     // A clickable trailing icon keeps its click, and the field the caret.
-    tap(rule, rule.onNodeWithText("göz").bounds().center());
+    tap(rule, rule.onNodeWithContentDescription("göz").bounds().center());
     rule.host().textInput("b");
     rule.waitForIdle();
     CHECK(eyes == 1 && value.peek() == "abxyz");
     // Held on it, it doesn't select a word of the field either.
-    Offset eye = rule.onNodeWithText("göz").bounds().center();
+    Offset eye = rule.onNodeWithContentDescription("göz").bounds().center();
     rule.host().pointerDown(eye);
     rule.advanceTimeBy(600);
     rule.host().pointerUp(eye);
@@ -19047,7 +19095,7 @@ TEST(elevated_chips_cast_a_shadow_and_leading_icon_tabs_sit_side_by_side) {
     rule.onNodeWithText("Yol tarifi").performClick();
     CHECK(assists == 1);
     // Leading icon tabs: 48 tall, the icon 8 dp before the text, both centered in the tab.
-    Rect t0 = rule.onNodeWithTag("tab0").bounds(), icon = rule.onNodeWithText("uçak").bounds(), text = rule.onNodeWithText("Uçuş").bounds();
+    Rect t0 = rule.onNodeWithTag("tab0").bounds(), icon = rule.onNodeWithContentDescription("uçak").bounds(), text = rule.onNodeWithText("Uçuş").bounds();
     CHECK(near(t0.height, 48) && near(rule.onNodeWithTag("tabs").bounds().height, 48));
     CHECK(near(text.x, icon.right() + 8) && near(icon.center().y, t0.center().y) && near(text.center().y, t0.center().y));
     CHECK(icon.x - t0.x == std::floor((t0.width - (text.right() - icon.x)) / 2 + 0.5f));  // centered at whole px (the half px to the right)
@@ -19565,7 +19613,7 @@ TEST(app_bar_with_search_slides_away_with_the_content) {
     }, {400, 800});
     TopAppBarState state = behavior->state;
     // 72 dp: the pill (56) filling the room between the navigation icon's button (48 dp of room) and the actions, 4 dp from each.
-    Rect bar = rule.onNodeWithTag("çubuk").bounds(), menu = rule.onNodeWithText("Menü").bounds(), account = rule.onNodeWithText("Hesap").bounds();
+    Rect bar = rule.onNodeWithTag("çubuk").bounds(), menu = rule.onNodeWithContentDescription("Menü").bounds(), account = rule.onNodeWithContentDescription("Hesap").bounds();
     Rect pill = rule.onNodeWithContentDescription("Postalarda ara").bounds();
     CHECK(near(bar.height, 72) && near(state.heightOffsetLimit(), -72) && near(rule.onNodeWithTag("row0").bounds().y, 72));
     CHECK(near(pill.height, 56) && near(pill.y, 8) && near(pill.x, menu.right() + 12 + 4) && near(pill.right(), account.x - 4) && near(account.right(), bar.right() - 4) && near(menu.center().y, 36));
@@ -19585,7 +19633,7 @@ TEST(app_bar_with_search_slides_away_with_the_content) {
     slowDrag(rule, {200, 300}, {200, 400}, 20);
     rule.waitForIdle();
     CHECK(near(state.heightOffset(), 0));
-    rule.onNodeWithText("Menü").performClick();
+    rule.onNodeWithContentDescription("Menü").performClick();
     CHECK(menus == 1 && search->targetValue() == SearchBarValue::Collapsed);
     rule.onNodeWithContentDescription("Postalarda ara").performClick();
     rule.waitForIdle();
@@ -20025,7 +20073,7 @@ TEST(menu_bar_opens_menus_and_runs_shortcuts) {
     CHECK(open.y >= bar.bottom() && near(open.x, file.x + 20 + 12) && shortcut.x > open.right() + 12);  // after the checks' place
     CHECK(near(rule.onNodeWithText("Satır numaraları").bounds().x, open.x));  // no shortcut: still where the text starts
     rule.onNodeWithText("Kapat").assertIsNotEnabled();
-    CHECK(!rule.onNodeWithText("Checked").exists());  // not ticked yet
+    CHECK(!rule.onNodeWithContentDescription("Checked").exists());  // not ticked yet
     // The mouse moving to the other title switches menus.
     host.pointerMove(edit.center());
     rule.waitForIdle();
@@ -20041,7 +20089,7 @@ TEST(menu_bar_opens_menus_and_runs_shortcuts) {
     CHECK(numbers.peek() && host.overlayCount() == 0);
     tap(rule, file.center());
     rule.waitForIdle();
-    CHECK(rule.onNodeWithText("Checked").exists());
+    CHECK(rule.onNodeWithContentDescription("Checked").exists());
     Rect recent = rule.onNodeWithText("Son açılanlar").node()->parent->bounds();
     host.pointerMove(recent.center());
     rule.waitForIdle();
@@ -21328,7 +21376,7 @@ TEST(tooltip_box_shows_on_long_press_and_hover) {
         });
     }, {400, 800});
     auto& host = rule.host();
-    Rect anchor = rule.onNodeWithText("Favori").bounds();
+    Rect anchor = rule.onNodeWithContentDescription("Favori").bounds();
     auto touch = [&](int holdMillis) {  // a finger: it doesn't hover
         host.pointerDown(anchor.center());
         rule.advanceTimeBy(holdMillis);
@@ -21559,10 +21607,10 @@ TEST(a_lifted_finger_hovers_nothing) {
         });
     }, {400, 800});
     auto& host = rule.host();
-    Rect anchor = rule.onNodeWithText("Favori").bounds();
+    Rect anchor = rule.onNodeWithContentDescription("Favori").bounds();
     host.pointerMove(anchor.center());  // a mouse rests on it: it is the hovered clickable
     rule.advanceFrame();
-    LayoutNode* button = rule.onNodeWithText("Favori").node();
+    LayoutNode* button = rule.onNodeWithContentDescription("Favori").node();
     while (button && !button->modifier.find<ClickableElement>()) button = button->parent;
     CHECK(button && button->hovered);
     host.pointerDown(anchor.center());  // then a finger taps it
@@ -21589,7 +21637,7 @@ TEST(rich_tooltip_stays_until_a_tap_outside) {
                 s, Modifier(), [] { Icon(Icons::Filled::Info, "Bilgi"); });
         });
     }, {400, 800});
-    Rect anchor = rule.onNodeWithText("Bilgi").bounds();
+    Rect anchor = rule.onNodeWithContentDescription("Bilgi").bounds();
     rule.host().pointerDown(anchor.center());
     rule.advanceTimeBy(500);
     rule.host().pointerUp(anchor.center());
@@ -21829,7 +21877,7 @@ TEST(exposed_dropdown_menu_picks_an_option) {
     }, {400, 800});
     Rect box = rule.onNodeWithTag("box").bounds();
     rule.onNodeWithText("Ankara").performClick();  // the field
-    CHECK(open.peek() && rule.host().overlayCount() == 1 && rule.onNodeWithText("Close").exists());  // the arrow turned
+    CHECK(open.peek() && rule.host().overlayCount() == 1 && rule.onNodeWithContentDescription("Close").exists());  // the arrow turned
     // Under the field, at its width; it scrolls rather than run off the window.
     LayoutNode* item = rule.onNodeWithText("Bursa").node()->parent->parent;
     LayoutNode* menu = item->parent;
@@ -21890,7 +21938,7 @@ TEST(date_picker_picks_days_months_and_years) {
     rule.onNodeWithContentDescription("17 Ağustos 2026").performClick();
     CHECK(state->selectedDate() == year{2026} / August / 17 && rule.onNodeWithText("17 Ağu 2026").exists());
     // The day first, then the month and year: they take the picked day along.
-    rule.onNodeWithText("Sonraki ay").performClick();  // the arrow icon
+    rule.onNodeWithContentDescription("Sonraki ay").performClick();  // the arrow icon
     rule.waitForIdle();
     CHECK(state->displayedMonth() == year{2026} / September && rule.onNodeWithText("Eylül 2026").exists());
     CHECK(state->selectedDate() == year{2026} / September / 17 && rule.onNodeWithText("17 Eyl 2026").exists());
@@ -21907,7 +21955,7 @@ TEST(date_picker_picks_days_months_and_years) {
           rule.onNodeWithContentDescription("31 Ağustos 2030").exists());
     CHECK(state->selectedDate() == year{2030} / August / 17 && rule.onNodeWithText("17 Ağu 2030").exists());
     rule.onNodeWithContentDescription("31 Ağustos 2030").performClick();
-    rule.onNodeWithText("Sonraki ay").performClick();  // September has no 31st: its last day
+    rule.onNodeWithContentDescription("Sonraki ay").performClick();  // September has no 31st: its last day
     rule.waitForIdle();
     CHECK(state->selectedDate() == year{2030} / September / 30);
     state->setDisplayedMonth(year{2031} / January);  // from code: only shows the month
@@ -21932,7 +21980,7 @@ TEST(date_picker_takes_a_typed_date_in_input_mode) {
         for (const auto& t : rule.drawnTexts()) all += t + " ";
         return all.find(text) != std::string::npos;
     };
-    rule.onNodeWithText("Metin girişine geç").performClick();  // the pencil by the headline
+    rule.onNodeWithContentDescription("Metin girişine geç").performClick();  // the pencil by the headline
     rule.waitForIdle();
     CHECK(state->displayMode() == DisplayMode::Input && rule.onNodeWithText("Girilen tarih").exists() && !rule.onNodeWithText("Ağustos 2026").exists());
     LayoutNode* field = rule.onNodeWithContentDescription("Tarih").node();
@@ -21961,7 +22009,7 @@ TEST(date_picker_takes_a_typed_date_in_input_mode) {
     rule.host().keyDown(Key::A, {.ctrl = true});
     rule.host().textInput("09122027");
     rule.waitForIdle();
-    rule.onNodeWithText("Takvime geç").performClick();  // back to the calendar, on the typed month
+    rule.onNodeWithContentDescription("Takvime geç").performClick();  // back to the calendar, on the typed month
     rule.waitForIdle();
     CHECK(state->displayMode() == DisplayMode::Picker && state->selectedDate() == year{2027} / December / 9 &&
           rule.onNodeWithText("Aralık 2027").exists());
@@ -22019,11 +22067,11 @@ TEST(date_range_picker_takes_typed_dates_in_input_mode) {
     CHECK(says("Geçersiz tarih aralığı girişi") && !state->selectedStartDate());
     type("Başlangıç", "12082026");  // fixed: the range again, with the end typed before
     CHECK(state->selectedStartDate() == year{2026} / August / 12 && state->selectedEndDate() == year{2026} / August / 20);
-    rule.onNodeWithText("Takvime geç").performClick();
+    rule.onNodeWithContentDescription("Takvime geç").performClick();
     rule.waitForIdle();
     CHECK(state->displayMode() == DisplayMode::Picker && rule.onNodeWithText("Ağustos 2026").exists());
     // Two long dates in the headline: they give way, the mode button stays in the picker at its end.
-    Rect button = rule.onNodeWithText("Metin girişine geç").bounds();
+    Rect button = rule.onNodeWithContentDescription("Metin girişine geç").bounds();
     CHECK(near(button.right(), 360 - 12 - 12) && near(button.width, 24));  // its icon, all of it, 12 dp in its button's end
     // The start all of it (and the end cut off first, if they don't both fit).
     CHECK(near(rule.onNodeWithText("12 Ağu 2026").bounds().width, 11 * 11));
@@ -22044,7 +22092,7 @@ TEST(date_range_picker_picks_a_range) {
         return s ? s->properties.stateDescription : std::string("?");
     };
     auto next = [&] {
-        rule.onNodeWithText("Sonraki ay").performClick();
+        rule.onNodeWithContentDescription("Sonraki ay").performClick();
         rule.waitForIdle();
     };
     auto pickYear = [&](const char* shown, const char* y) {
@@ -22158,13 +22206,13 @@ TEST(library_strings_follow_the_hosts_language_and_local_overrides) {
             CompositionLocalProvider({LocalStrings.provides(mine)}, [] { ExposedDropdownMenuDefaults::TrailingIcon(false); });
         });
     });
-    CHECK(rule.onAllNodesWithText("Open").size() == 1 && rule.onNodeWithText("Unfold").exists());  // English by default
+    CHECK(rule.onAllNodesWithContentDescription("Open").size() == 1 && rule.onNodeWithContentDescription("Unfold").exists());  // English by default
     rule.host().setStrings(Strings::turkish());  // a Turkish system
     rule.waitForIdle();
-    CHECK(rule.onNodeWithText("Aç").exists() && !rule.onNodeWithText("Open").exists() && rule.onNodeWithText("Unfold").exists());
+    CHECK(rule.onNodeWithContentDescription("Aç").exists() && !rule.onNodeWithContentDescription("Open").exists() && rule.onNodeWithContentDescription("Unfold").exists());
     rule.host().setStrings(Strings::forLanguage("en-US"));
     rule.waitForIdle();
-    CHECK(rule.onNodeWithText("Open").exists() && !rule.onNodeWithText("Aç").exists());
+    CHECK(rule.onNodeWithContentDescription("Open").exists() && !rule.onNodeWithContentDescription("Aç").exists());
 }
 
 TEST(pickers_take_their_texts_from_local_strings_unless_given) {
@@ -22187,14 +22235,14 @@ TEST(pickers_take_their_texts_from_local_strings_unless_given) {
         auto* s = n ? n->modifier.find<SemanticsElement>() : nullptr;
         return s ? s->properties.stateDescription : std::string("?");
     };
-    CHECK(rule.onNodeWithText("August 2026").exists() && rule.onNodeWithText("Next month").exists() && stateOf("August 17, 2026") == "Selected");
+    CHECK(rule.onNodeWithText("August 2026").exists() && rule.onNodeWithContentDescription("Next month").exists() && stateOf("August 17, 2026") == "Selected");
     CHECK(rule.onNodeWithText("AM").exists() && rule.onNodeWithText("Akşam").exists() && !rule.onNodeWithText("PM").exists());
     CHECK(rule.onNodeWithContentDescription("Hour").exists() && rule.onNodeWithContentDescription("Dk").exists());
     CHECK(rule.onAllNodesWithText("Hour").size() > 0);  // TimeInput's field label
     CHECK(rule.onNodeWithText("March 2026").exists() && rule.onNodeWithText("Select dates").exists());
     turkish.set(true);
     rule.waitForIdle();
-    CHECK(rule.onNodeWithText("Ağustos 2026").exists() && rule.onNodeWithText("Sonraki ay").exists() && stateOf("17 Ağustos 2026") == "Seçili");
+    CHECK(rule.onNodeWithText("Ağustos 2026").exists() && rule.onNodeWithContentDescription("Sonraki ay").exists() && stateOf("17 Ağustos 2026") == "Seçili");
     CHECK(rule.onNodeWithText("ÖÖ").exists() && rule.onNodeWithText("Akşam").exists() && !rule.onNodeWithText("AM").exists());
     CHECK(rule.onNodeWithContentDescription("Saat").exists() && rule.onNodeWithContentDescription("Dk").exists());
     CHECK(rule.onAllNodesWithText("Saat").size() > 0 && !rule.onNodeWithText("Hour").exists() && !rule.onNodeWithContentDescription("Hour").exists());
@@ -22263,7 +22311,7 @@ TEST(time_picker_dialog_switches_modes_and_confirms) {
     CHECK(rule.onNodeWithText("Saat seçin").exists() && rule.onNodeWithText("12").exists());
     rule.onNodeWithText("20").performClick();
     rule.waitForIdle();
-    rule.onNodeWithText("Mod").performClick();
+    rule.onNodeWithContentDescription("Mod").performClick();
     CHECK(!rule.onNodeWithText("12").exists() && rule.onNodeWithText("Dakika").exists() && rule.onNodeWithText("20").exists());
     rule.onNodeWithText("Tamam").performClick();
     CHECK(confirmed == std::pair(20, 15) && !open.peek() && rule.host().overlayCount() == 0);
@@ -25809,7 +25857,7 @@ TEST(snackbar_results_come_back_to_the_coroutine) {
     CHECK((results == std::vector{R::ActionPerformed}) && rule.onNodeWithText("Kısa").exists());
     rule.advanceTimeBy(4500);  // timed out
     CHECK((results == std::vector{R::ActionPerformed, R::Dismissed}) && rule.onNodeWithText("Kapatılabilir").exists());
-    rule.onNodeWithText("Dismiss").performClick();  // its close button
+    rule.onNodeWithContentDescription("Dismiss").performClick();  // its close button
     rule.waitForIdle();
     CHECK((results == std::vector{R::ActionPerformed, R::Dismissed, R::Dismissed}));
     cancellable->launch([state, &results]() -> Task {
@@ -29811,7 +29859,7 @@ TEST(center_aligned_top_app_bar_mirrors_right_to_left) {
         });
     }, {400, 800});
     // The navigation icon at the start (the right), the actions at the end (the left), 4 dp in.
-    Rect menu = rule.onNodeWithText("Menü").bounds(), search = rule.onNodeWithText("Ara").bounds();
+    Rect menu = rule.onNodeWithContentDescription("Menü").bounds(), search = rule.onNodeWithContentDescription("Ara").bounds();
     CHECK(near(menu.right(), 400 - 4) && near(search.x, 4));
     CHECK(near(rule.onNodeWithText("Başlık").bounds().center().x, 200, 1));
 }

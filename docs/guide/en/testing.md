@@ -47,7 +47,7 @@ Keep your composables in source files the app and the tests share. Build Kompoz 
 | `onNodeWithText(text)` | A node whose text is `text`; `onNodeWithText(text, true)` for a substring. |
 | `onNodeWithContentDescription(d)` | A node with that content description: icons, images. |
 | `onNodeWithTag(tag)` | A node with `Modifier().testTag(tag)`. |
-| `onAllNodesWithText(text)`, `onAllNodesWithTag(tag)` | All of them, as a collection: `assertCountEquals(n)`, `[i]`, `size()`. |
+| `onAllNodesWithText(text)`, `onAllNodesWithContentDescription(d)`, `onAllNodesWithTag(tag)` | All of them, as a collection: `assertCountEquals(n)`, `[i]`, `size()`. |
 
 As in Compose, finders use merged semantics: a text inside a clickable answers for that clickable, so `onNodeWithText("Add").performClick()` clicks the button and `assertIsEnabled()` checks it.
 

@@ -248,6 +248,199 @@ void DrawScope::drawText(const TextLayoutResult& layout, A&&... args) {
     drawText(layout, P::get<n::Color>(std::optional<Color>(), args...), P::get<n::TopLeft>(Offset{}, args...), P::get<n::Alpha>(std::optional<float>(), args...));
 }
 
+// ---- DrawScope's drawing calls, as Compose names their arguments ----
+namespace detail {
+// The arguments every one of them takes, after its own.
+template <class P, class... A>
+float drawAlpha(A&&... args) { return P::template get<names::Alpha>(1.f, args...); }
+template <class P, class... A>
+DrawStyle drawStyle(A&&... args) { return P::template get<names::Style>(Fill, args...); }
+template <class P, class... A>
+std::optional<ColorFilter> drawColorFilter(A&&... args) { return P::template get<names::ColorFilter>(std::optional<ColorFilter>(), args...); }
+template <class P, class... A>
+BlendMode drawBlendMode(A&&... args) { return P::template get<names::BlendMode>(BlendMode::SrcOver, args...); }
+// The block, last.
+template <class... A>
+std::function<void(DrawScope&)> drawBlock(A&&... args) {
+    return std::function<void(DrawScope&)>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...)));
+}
+using LineParams = Params<names::Start, names::End, names::StrokeWidth, names::Cap, names::PathEffect, names::Alpha, names::ColorFilter, names::BlendMode>;
+using RectParams = Params<names::TopLeft, names::Size, names::Alpha, names::Style, names::ColorFilter, names::BlendMode>;
+using RoundRectParams = Params<names::TopLeft, names::Size, names::CornerRadius, names::Alpha, names::Style, names::ColorFilter, names::BlendMode>;
+using CircleParams = Params<names::Radius, names::Center, names::Alpha, names::Style, names::ColorFilter, names::BlendMode>;
+using ArcParams = Params<names::StartAngle, names::SweepAngle, names::UseCenter, names::TopLeft, names::Size, names::Alpha, names::Style, names::ColorFilter, names::BlendMode>;
+using PathParams = Params<names::Alpha, names::Style, names::ColorFilter, names::BlendMode>;
+using PointsParams = Params<names::StrokeWidth, names::Cap, names::PathEffect, names::Alpha, names::ColorFilter, names::BlendMode>;
+template <class Paint, class... A>
+void drawLineBy(DrawScope& d, const Paint& paint, A&&... args) {
+    using P = LineParams;
+    static_assert(P::check<A...>());
+    d.drawLine(paint, Offset(P::arg<names::Start>(args...)), Offset(P::arg<names::End>(args...)), P::get<names::StrokeWidth>(0.f, args...),
+               P::get<names::Cap>(StrokeCap::Butt, args...), P::get<names::PathEffect>(std::optional<PathEffect>(), args...), drawAlpha<P>(args...),
+               drawColorFilter<P>(args...), drawBlendMode<P>(args...));
+}
+template <class Paint, class... A>
+void drawRectBy(DrawScope& d, const Paint& paint, A&&... args) {
+    using P = RectParams;
+    static_assert(P::check<A...>());
+    d.drawRect(paint, P::get<names::TopLeft>(Offset{}, args...), P::get<names::Size>(std::optional<Size>(), args...), drawAlpha<P>(args...),
+               drawStyle<P>(args...), drawColorFilter<P>(args...), drawBlendMode<P>(args...));
+}
+template <class Paint, class... A>
+void drawRoundRectBy(DrawScope& d, const Paint& paint, A&&... args) {
+    using P = RoundRectParams;
+    static_assert(P::check<A...>());
+    if constexpr (std::is_same_v<Paint, Color>)  // (its style before its alpha, as Compose's)
+        d.drawRoundRect(paint, P::get<names::TopLeft>(Offset{}, args...), P::get<names::Size>(std::optional<Size>(), args...),
+                        P::get<names::CornerRadius>(CornerRadius{}, args...), drawStyle<P>(args...), drawAlpha<P>(args...), drawColorFilter<P>(args...),
+                        drawBlendMode<P>(args...));
+    else
+        d.drawRoundRect(paint, P::get<names::TopLeft>(Offset{}, args...), P::get<names::Size>(std::optional<Size>(), args...),
+                        P::get<names::CornerRadius>(CornerRadius{}, args...), drawAlpha<P>(args...), drawStyle<P>(args...), drawColorFilter<P>(args...),
+                        drawBlendMode<P>(args...));
+}
+template <class Paint, class... A>
+void drawCircleBy(DrawScope& d, const Paint& paint, A&&... args) {
+    using P = CircleParams;
+    static_assert(P::check<A...>());
+    d.drawCircle(paint, P::get<names::Radius>(std::optional<float>(), args...), P::get<names::Center>(std::optional<Offset>(), args...),
+                 drawAlpha<P>(args...), drawStyle<P>(args...), drawColorFilter<P>(args...), drawBlendMode<P>(args...));
+}
+template <class Paint, class... A>
+void drawOvalBy(DrawScope& d, const Paint& paint, A&&... args) {
+    using P = RectParams;
+    static_assert(P::check<A...>());
+    d.drawOval(paint, P::get<names::TopLeft>(Offset{}, args...), P::get<names::Size>(std::optional<Size>(), args...), drawAlpha<P>(args...),
+               drawStyle<P>(args...), drawColorFilter<P>(args...), drawBlendMode<P>(args...));
+}
+template <class Paint, class... A>
+void drawArcBy(DrawScope& d, const Paint& paint, A&&... args) {
+    using P = ArcParams;
+    static_assert(P::check<A...>());
+    d.drawArc(paint, float(P::arg<names::StartAngle>(args...)), float(P::arg<names::SweepAngle>(args...)), bool(P::arg<names::UseCenter>(args...)),
+              P::get<names::TopLeft>(Offset{}, args...), P::get<names::Size>(std::optional<Size>(), args...), drawAlpha<P>(args...), drawStyle<P>(args...),
+              drawColorFilter<P>(args...), drawBlendMode<P>(args...));
+}
+template <class Paint, class... A>
+void drawPathBy(DrawScope& d, const Path& path, const Paint& paint, A&&... args) {
+    using P = PathParams;
+    static_assert(P::check<A...>());
+    d.drawPath(path, paint, drawAlpha<P>(args...), drawStyle<P>(args...), drawColorFilter<P>(args...), drawBlendMode<P>(args...));
+}
+template <class Paint, class... A>
+void drawPointsBy(DrawScope& d, const std::vector<Offset>& points, PointMode pointMode, const Paint& paint, A&&... args) {
+    using P = PointsParams;
+    static_assert(P::check<A...>());
+    d.drawPoints(points, pointMode, paint, P::get<names::StrokeWidth>(0.f, args...), P::get<names::Cap>(StrokeCap::Butt, args...),
+                 P::get<names::PathEffect>(std::optional<PathEffect>(), args...), drawAlpha<P>(args...), drawColorFilter<P>(args...), drawBlendMode<P>(args...));
+}
+} // namespace detail
+
+#define KOMPOZ_DRAW_BY_NAME(method, helper, ...)                                                   \
+    template <class... A>                                                                          \
+        requires(detail::anyNamedArgument<A...>)                                                   \
+    void DrawScope::method(__VA_ARGS__ Color color, A&&... args) {                                 \
+        detail::helper(*this, KOMPOZ_DRAW_FIRST color, std::forward<A>(args)...);                 \
+    }                                                                                              \
+    template <class... A>                                                                          \
+        requires(detail::anyNamedArgument<A...>)                                                   \
+    void DrawScope::method(__VA_ARGS__ const Brush& brush, A&&... args) {                          \
+        detail::helper(*this, KOMPOZ_DRAW_FIRST brush, std::forward<A>(args)...);                 \
+    }
+#define KOMPOZ_DRAW_FIRST
+KOMPOZ_DRAW_BY_NAME(drawLine, drawLineBy)
+KOMPOZ_DRAW_BY_NAME(drawRect, drawRectBy)
+KOMPOZ_DRAW_BY_NAME(drawRoundRect, drawRoundRectBy)
+KOMPOZ_DRAW_BY_NAME(drawCircle, drawCircleBy)
+KOMPOZ_DRAW_BY_NAME(drawOval, drawOvalBy)
+KOMPOZ_DRAW_BY_NAME(drawArc, drawArcBy)
+#undef KOMPOZ_DRAW_FIRST
+#define KOMPOZ_DRAW_FIRST path,
+KOMPOZ_DRAW_BY_NAME(drawPath, drawPathBy, const Path& path,)
+#undef KOMPOZ_DRAW_FIRST
+#define KOMPOZ_DRAW_FIRST points, pointMode,
+KOMPOZ_DRAW_BY_NAME(drawPoints, drawPointsBy, const std::vector<Offset>& points, PointMode pointMode,)
+#undef KOMPOZ_DRAW_FIRST
+#undef KOMPOZ_DRAW_BY_NAME
+
+// The transforms with a block, their arguments by name, the block last.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+void DrawScope::translate(A&&... args) {
+    namespace n = detail::names;
+    using P = detail::Params<n::Left, n::Top, detail::BlockWith<DrawScope&>>;
+    static_assert(P::check<A...>());
+    translate(P::get<n::Left>(0.f, args...), P::get<n::Top>(0.f, args...), detail::drawBlock(args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+void DrawScope::inset(A&&... args) {
+    namespace n = detail::names;
+    using P = detail::Params<n::Left, n::Top, n::Right, n::Bottom, n::Horizontal, n::Vertical, detail::BlockWith<DrawScope&>>;
+    static_assert(P::check<A...>());
+    float horizontal = P::get<n::Horizontal>(0.f, args...), vertical = P::get<n::Vertical>(0.f, args...);
+    inset(P::get<n::Left>(horizontal, args...), P::get<n::Top>(vertical, args...), P::get<n::Right>(horizontal, args...), P::get<n::Bottom>(vertical, args...),
+          detail::drawBlock(args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+void DrawScope::clipRect(A&&... args) {
+    namespace n = detail::names;
+    using P = detail::Params<n::Left, n::Top, n::Right, n::Bottom, n::ClipOp, detail::BlockWith<DrawScope&>>;
+    static_assert(P::check<A...>());
+    float left = P::get<n::Left>(0.f, args...), top = P::get<n::Top>(0.f, args...);
+    float right = P::get<n::Right>(size().width, args...), bottom = P::get<n::Bottom>(size().height, args...);
+    clipRect(Offset{left, top}, Size{right - left, bottom - top}, detail::drawBlock(args...), P::get<n::ClipOp>(ClipOp::Intersect, args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+void DrawScope::rotate(float degrees, A&&... args) {
+    namespace n = detail::names;
+    using P = detail::Params<n::Pivot, detail::BlockWith<DrawScope&>>;
+    static_assert(P::check<A...>());
+    rotate(degrees, detail::drawBlock(args...), P::get<n::Pivot>(std::optional<Offset>(), args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+void DrawScope::rotateRad(float radians, A&&... args) {
+    namespace n = detail::names;
+    using P = detail::Params<n::Pivot, detail::BlockWith<DrawScope&>>;
+    static_assert(P::check<A...>());
+    rotateRad(radians, detail::drawBlock(args...), P::get<n::Pivot>(std::optional<Offset>(), args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+void DrawScope::scale(float scaleX, float scaleY, A&&... args) {
+    namespace n = detail::names;
+    using P = detail::Params<n::Pivot, detail::BlockWith<DrawScope&>>;
+    static_assert(P::check<A...>());
+    scale(scaleX, scaleY, detail::drawBlock(args...), P::get<n::Pivot>(std::optional<Offset>(), args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+void DrawScope::scale(float scale, A&&... args) {
+    this->scale(scale, scale, std::forward<A>(args)...);
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+void DrawScope::clipPath(const Path& path, A&&... args) {
+    namespace n = detail::names;
+    using P = detail::Params<n::ClipOp, detail::BlockWith<DrawScope&>>;
+    static_assert(P::check<A...>());
+    clipPath(path, detail::drawBlock(args...), P::get<n::ClipOp>(ClipOp::Intersect, args...));
+}
+
+// Stroke(width = …, miter = …, cap = …, join = …, pathEffect = …).
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+DrawStyle Stroke(A&&... args) {
+    namespace n = detail::names;
+    using P = detail::Params<n::Width, n::Miter, n::Cap, n::Join, n::PathEffect>;
+    static_assert(P::check<A...>());
+    return Stroke(P::get<n::Width>(0.f, args...), P::get<n::Miter>(4.f, args...), P::get<n::Cap>(StrokeCap::Butt, args...),
+                  P::get<n::Join>(StrokeJoin::Miter, args...), P::get<n::PathEffect>(std::optional<PathEffect>(), args...));
+}
+
 // animateFloat(initialValue, targetValue, animationSpec, label) and animateColor's: the label is
 // Compose's name for its tools (none here).
 template <class... A>

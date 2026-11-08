@@ -47,7 +47,7 @@ Composable'larınızı uygulamanın ve testlerin paylaştığı kaynak dosyalard
 | `onNodeWithText(text)` | Metni `text` olan bir düğüm; alt dize için `onNodeWithText(text, true)`. |
 | `onNodeWithContentDescription(d)` | O içerik açıklamasına sahip bir düğüm: ikonlar, resimler. |
 | `onNodeWithTag(tag)` | `Modifier().testTag(tag)` taşıyan bir düğüm. |
-| `onAllNodesWithText(text)`, `onAllNodesWithTag(tag)` | Hepsini, bir koleksiyon olarak: `assertCountEquals(n)`, `[i]`, `size()`. |
+| `onAllNodesWithText(text)`, `onAllNodesWithContentDescription(d)`, `onAllNodesWithTag(tag)` | Hepsini, bir koleksiyon olarak: `assertCountEquals(n)`, `[i]`, `size()`. |
 
 Compose'da olduğu gibi bulucular birleştirilmiş semantiği kullanır: bir tıklanabilirin içindeki metin o tıklanabilir adına yanıt verir; böylece `onNodeWithText("Add").performClick()` butona tıklar ve `assertIsEnabled()` onu kontrol eder.
 
