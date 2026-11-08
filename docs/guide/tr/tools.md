@@ -6,14 +6,18 @@
 
 Compose'un `@Preview`'ı gibi, bir önizleme tek bir composable'ı uygulamanın geri kalanı olmadan, seçtiğiniz boyutta bir çerçevede tek başına gösterir. Onu composable'ın yanına, uygulamanızın kaynaklarına yazın:
 
-```cpp
-#! void CounterCard() {}
-KOMPOZ_PREVIEW(CounterCardPreview, .width = 400, .height = 220) {
-    MaterialTheme(lightColorScheme(), [] { CounterCard(); });
+```kotlin
+#! @Composable fun CounterCard() {}
+@Preview(widthDp = 400, heightDp = 220)
+@Composable
+fun CounterCardPreview() {
+    MaterialTheme(colorScheme = lightColorScheme()) { CounterCard() }
 }
 
-KOMPOZ_PREVIEW(CounterCardDarkPreview, .width = 400, .height = 220, .darkTheme = true) {
-    MaterialTheme(darkColorScheme(), [] { CounterCard(); });
+@Preview(widthDp = 400, heightDp = 220, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+fun CounterCardDarkPreview() {
+    MaterialTheme(colorScheme = darkColorScheme()) { CounterCard() }
 }
 ```
 
@@ -25,13 +29,13 @@ KOMPOZ_PREVIEW=CounterCardPreview ./build/myapp
 
 `KOMPOZ_PREVIEW='*'` ya da hiçbir önizlemenin taşımadığı bir ad, hepsini adı ve boyutuyla birlikte alt alta gösterir.
 
-Addan sonraki seçenekler bir `PreviewSpec`'tir:
+`@Preview`'ın argümanları Compose'unkilerdir; her biri önizlemenin `PreviewSpec`'ini belirler (C++'ta `KOMPOZ_PREVIEW(Name, .width = 400, …) { … }` bir tane kaydeder):
 
-| Seçenek | Anlamı |
+| Argüman | Anlamı |
 |---|---|
-| `.width`, `.height` | Çerçevenin dp cinsinden boyutu (varsayılan 360 × 640). |
-| `.darkTheme` | Önizleme içinde `isSystemInDarkTheme()`'in döndürdüğü değer; verilmezse sistemin. |
-| `.background` | Önizlemenin arkasındaki renk; verilmezse yok. |
+| `widthDp`, `heightDp` | Çerçevenin dp cinsinden boyutu (varsayılan 360 × 640): `.width`, `.height`. |
+| `uiMode = Configuration.UI_MODE_NIGHT_YES` | Önizleme içinde `isSystemInDarkTheme()` true döndürür; verilmezse sistemin: `.darkTheme`. |
+| `showBackground = true` | Önizlemenin arkasında beyaz bir arka plan; verilmezse yok: `.background`, C++'ta herhangi bir renk. |
 
 Yazı ölçeği önizlemenin kendisinin değil, pencerenindir (`KOMPOZ_FONT_SCALE`). Bir önizleme program başlarken kendini kaydeder; bu yüzden uygulamaya bağlanan bir kaynak dosyada olmalıdır.
 
@@ -95,11 +99,12 @@ Arayüzü hiç pencere açmadan kontrol eden testler için [Test](testing.md) sa
 
 ## Recomposition'ı görmek
 
-`Modifier().recomposeHighlighter()`, Compose snippet'lerindeki highlighter gibi, bir düğümün çevresine onu oluşturan composable'ın kaç kez çalıştığını gösteren bir çerçeve çizer: olması gerekenden sık yeniden kompoze olan şeyi bulmak için kullanın.
+`Modifier.recomposeHighlighter()`, Compose snippet'lerindeki highlighter gibi, bir düğümün çevresine onu oluşturan composable'ın kaç kez çalıştığını gösteren bir çerçeve çizer: olması gerekenden sık yeniden kompoze olan şeyi bulmak için kullanın.
 
-```cpp
-void Row1(const std::string& title) {
-    Text(title, Modifier().recomposeHighlighter());
+```kotlin
+@Composable
+fun Row1(title: String) {
+    Text(title, modifier = Modifier.recomposeHighlighter())
 }
 ```
 

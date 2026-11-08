@@ -6,14 +6,18 @@ Previews, rebuilding on save, scripted screenshots, profiling and the environmen
 
 As Compose's `@Preview`, a preview shows one composable on its own, without the rest of the app, in a frame of the size you choose. Write it next to the composable, in your app's sources:
 
-```cpp
-#! void CounterCard() {}
-KOMPOZ_PREVIEW(CounterCardPreview, .width = 400, .height = 220) {
-    MaterialTheme(lightColorScheme(), [] { CounterCard(); });
+```kotlin
+#! @Composable fun CounterCard() {}
+@Preview(widthDp = 400, heightDp = 220)
+@Composable
+fun CounterCardPreview() {
+    MaterialTheme(colorScheme = lightColorScheme()) { CounterCard() }
 }
 
-KOMPOZ_PREVIEW(CounterCardDarkPreview, .width = 400, .height = 220, .darkTheme = true) {
-    MaterialTheme(darkColorScheme(), [] { CounterCard(); });
+@Preview(widthDp = 400, heightDp = 220, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+fun CounterCardDarkPreview() {
+    MaterialTheme(colorScheme = darkColorScheme()) { CounterCard() }
 }
 ```
 
@@ -25,13 +29,13 @@ KOMPOZ_PREVIEW=CounterCardPreview ./build/myapp
 
 `KOMPOZ_PREVIEW='*'`, or a name no preview has, shows all of them one under another, each with its name and size.
 
-The options after the name are a `PreviewSpec`:
+`@Preview`'s arguments are Compose's; each sets the preview's `PreviewSpec` (in C++, `KOMPOZ_PREVIEW(Name, .width = 400, …) { … }` registers one):
 
-| Option | Meaning |
+| Argument | Meaning |
 |---|---|
-| `.width`, `.height` | The frame's size in dp (360 × 640 by default). |
-| `.darkTheme` | What `isSystemInDarkTheme()` returns inside the preview; unset, the system's. |
-| `.background` | A color behind the preview; unset, none. |
+| `widthDp`, `heightDp` | The frame's size in dp (360 × 640 by default): `.width`, `.height`. |
+| `uiMode = Configuration.UI_MODE_NIGHT_YES` | `isSystemInDarkTheme()` returns true inside the preview; unset, the system's: `.darkTheme`. |
+| `showBackground = true` | A white background behind the preview; unset, none: `.background`, any color in C++. |
 
 The text scale is the window's (`KOMPOZ_FONT_SCALE`), not a preview's own. A preview registers itself when the program starts, so it must be in a source file that is linked into the app.
 
@@ -95,11 +99,12 @@ For tests that check the UI without any window at all, see [Testing](testing.md)
 
 ## Seeing recomposition
 
-`Modifier().recomposeHighlighter()` draws a border around a node showing how many times the composable that made it has run, as the Compose snippets' highlighter does: use it to find what recomposes more often than it should.
+`Modifier.recomposeHighlighter()` draws a border around a node showing how many times the composable that made it has run, as the Compose snippets' highlighter does: use it to find what recomposes more often than it should.
 
-```cpp
-void Row1(const std::string& title) {
-    Text(title, Modifier().recomposeHighlighter());
+```kotlin
+@Composable
+fun Row1(title: String) {
+    Text(title, modifier = Modifier.recomposeHighlighter())
 }
 ```
 

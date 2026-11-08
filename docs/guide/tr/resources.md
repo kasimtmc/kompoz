@@ -27,8 +27,8 @@ Android'de, vitrinin `app/build.gradle.kts` dosyasının yaptığı gibi iki kla
 
 `imageResource("images/cover.jpg")` bir resim asset'ini bir kez yükler ve saklar; `painterResource` aynısını bir `Painter` olarak verir. JPEG, PNG, WebP ve BMP okunur (web'de PNG ve BMP; oradaki diğerleri için `AsyncImage`'ı kullanın).
 
-```cpp body
-Image(imageResource("images/cover.jpg"), "Cover", Modifier().size(120), ContentScale::Crop);
+```kotlin body
+Image(imageResource("images/cover.jpg"), contentDescription = "Cover", modifier = Modifier.size(120.dp), contentScale = ContentScale.Crop)
 ```
 
 `AsyncImage`, asset'leri ve web resimlerini aynı biçimde, gösterildikleri boyutta ve arayüz thread'inin dışında yükler. Bkz. [Grafik](graphics.md#resimler).
@@ -37,59 +37,56 @@ Image(imageResource("images/cover.jpg"), "Cover", Modifier().size(120), ContentS
 
 `vectorResource("vectors/logo.xml")` bir Android vector drawable asset'ini okur; böylece Android için dışa aktarılmış vektörler olduğu gibi çalışır:
 
-```cpp body
-Icon(vectorResource("vectors/heart.xml"), "Favorite");                                         // renklendirilmiş
-Image(rememberVectorPainter(vectorResource("vectors/logo.xml")), "Logo", Modifier().size(64));  // kendi renkleriyle
+```kotlin body
+Icon(vectorResource("vectors/heart.xml"), contentDescription = "Favorite")                                           // renklendirilmiş
+Image(rememberVectorPainter(vectorResource("vectors/logo.xml")), contentDescription = "Logo", modifier = Modifier.size(64.dp))  // kendi renkleriyle
 ```
 
-Tek bir path için `ImageVector::fromSvgPath("M12,2…")` SVG path verisini doğrudan alır.
+Tek bir path için `ImageVector.fromSvgPath("M12,2…")` SVG path verisini doğrudan alır.
 
 ## Fontlar
 
-`FontFamily::fromFiles` font asset'lerinden bir aile oluşturur; bkz. [Metin](text.md#fontlar). Paketlenmiş Noto Sans ve lisanslar her uygulamayla birlikte dağıtılmalıdır; bunu `kompoz_copy_assets` ile yukarıdaki Android ve web kurulumları halleder.
+`FontFamily.fromFiles` font asset'lerinden bir aile oluşturur; bkz. [Metin](text.md#fontlar). Paketlenmiş Noto Sans ve lisanslar her uygulamayla birlikte dağıtılmalıdır; bunu `kompoz_copy_assets` ile yukarıdaki Android ve web kurulumları halleder.
 
 ## Kütüphanenin kendi metinleri
 
 Bazı bileşenler kendilerine ait metinler gösterir ya da seslendirir: bir metin alanının Kes, Kopyala ve Yapıştır'ı, bir taşma butonundaki "More options", tarih seçicinin ay adları, ekran okuyucuların okuduğu "Selected". Bunlar, Compose'un string kaynakları gibi, `LocalStrings`'in sağladığı `Strings` içindedir.
 
-- Kompoz'da bunlar İngilizce (`Strings::english()`, varsayılan) ve Türkçe (`Strings::turkish()`) olarak bulunur.
+- Kompoz'da bunlar İngilizce (`Strings.english()`, varsayılan) ve Türkçe (`Strings.turkish()`) olarak bulunur.
 - Host bunları sistemin tercih ettiği dile göre seçer: Türkçe bir sistemde Türkçe, aksi halde İngilizce. Bunun yerine `KOMPOZ_LANGUAGE=tr` ya da `en` belirleyici olur.
 - Bir uygulama, tamamen kendi yazdığı ya da değiştirdiği metinleri `CompositionLocalProvider` ile sağlar:
 
-```cpp
-#! void App() {}
-void Localized() {
-    Strings mine = Strings::english();
-    mine.copy = "Duplicate";
-    mine.moreOptions = "More";
-    CompositionLocalProvider({LocalStrings.provides(mine)}, App);
+```kotlin
+#! @Composable fun App() {}
+@Composable
+fun Localized() {
+    val mine = Strings.english()
+    mine.copy = "Duplicate"
+    mine.moreOptions = "More"
+    CompositionLocalProvider(LocalStrings provides mine) { App() }
 }
 ```
 
-Başka bir dil için, `datePicker` adları dahil kendi `Strings`'inizi doldurun ve aynı şekilde sağlayın. `Strings::forLanguage("tr_TR.UTF-8")` herhangi bir Türkçe yerel ayar adı için Türkçe metinleri, geri kalanlar için İngilizceyi döndürür.
+Başka bir dil için, `datePicker` adları dahil kendi `Strings`'inizi doldurun ve aynı şekilde sağlayın. `Strings.forLanguage("tr_TR.UTF-8")` herhangi bir Türkçe yerel ayar adı için Türkçe metinleri, geri kalanlar için İngilizceyi döndürür.
 
-`DatePickerOptions::strings` ve `TimePickerOptions`'ın etiketleri, atandıklarında `LocalStrings`'e üstün gelir.
+`DatePickerOptions.strings` ve `TimePickerOptions`'ın etiketleri, atandıklarında `LocalStrings`'e üstün gelir.
 
 ### Uygulamanızın kendi metinleri
 
 Kompoz uygulamanızın metinlerini çevirmez. Aynı modele uyan basit bir yaklaşım, dil başına metinlerinizi içeren bir struct'tır; kendi `CompositionLocal`'ınızla sağlanır ve `LocalStrings.current().language`'a göre seçilir:
 
-```cpp
-struct AppTexts {
-    std::string greeting, signIn;
-    friend bool operator==(const AppTexts&, const AppTexts&) = default;
-};
+```kotlin
+data class AppTexts(val greeting: String = "", val signIn: String = "")
 
-const AppTexts& textsFor(const std::string& language) {
-    static const AppTexts en{"Welcome", "Sign in"}, tr{"Hoş geldiniz", "Giriş yap"};
-    return language == "tr" ? tr : en;
-}
+fun textsFor(language: String): AppTexts =
+    if (language == "tr") AppTexts("Hoş geldiniz", "Giriş yap") else AppTexts("Welcome", "Sign in")
 
-inline const CompositionLocal<AppTexts> LocalAppTexts{AppTexts{}};
+val LocalAppTexts = compositionLocalOf { AppTexts() }
 
-#! void App() {}
-void Root() {
-    CompositionLocalProvider({LocalAppTexts.provides(textsFor(LocalStrings.current().language))}, App);
+#! @Composable fun App() {}
+@Composable
+fun Root() {
+    CompositionLocalProvider(LocalAppTexts provides textsFor(LocalStrings.current.language)) { App() }
 }
 ```
 
@@ -97,28 +94,29 @@ void Root() {
 
 Composable'ların bir kompozisyon içinde edindiği ve callback'ler için sakladığı hizmetler; Compose'un `LocalUriHandler`'ı ve benzerleri gibi:
 
-```cpp
-void ShareRow(const std::string& link) {
-    UriHandler links = uriHandler();
-    ClipboardManager clip = clipboardManager();
-    HapticFeedback haptics = hapticFeedback();
-    Row() {
-        TextButton([links, link] { links.openUri(link); }) { Text("Open"); };
-        TextButton([clip, haptics, link] {
-            clip.setText(link);
-            haptics.performHapticFeedback(HapticFeedbackType::Confirm);
-        }) { Text("Copy link"); };
-    };
+```kotlin
+@Composable
+fun ShareRow(link: String) {
+    val links = LocalUriHandler.current
+    val clip = LocalClipboardManager.current
+    val haptics = LocalHapticFeedback.current
+    Row {
+        TextButton(onClick = { links.openUri(link) }) { Text("Open") }
+        TextButton(onClick = {
+            clip.setText(link)
+            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+        }) { Text("Copy link") }
+    }
 }
 ```
 
 | Hizmet | Ne yapar |
 |---|---|
 | `uriHandler().openUri(uri)` | Bir bağlantı açar: uygulamanın kendi derin bağlantılarından birini uygulamada, `http(s)`'yi tarayıcıda, diğerlerini (`mailto:`, `tel:`) onları karşılayan uygulamada. |
-| `clipboardManager().setText(text)`, `getText()` | Sistem panosundaki metin. `clipboard()`, Compose 1.8'in coroutine sürümüdür. |
+| `LocalClipboardManager.current.setText(text)`, `getText()` | Sistem panosundaki metin. `clipboard()`, Compose 1.8'in coroutine sürümüdür. |
 | `hapticFeedback().performHapticFeedback(type)` | Sistemin yaptığı gibi kısa bir titreşim: Android'de Android'inki, web'de tarayıcınınki, masaüstlerinde hiçbir şey. |
-| `softwareKeyboardController().hide()`, `show()` | Odaklanmış alanın yazılım klavyesini gizler ya da gösterir. |
-| `focusManager().clearFocus()` | Odağı kaldırır (bkz. [Hareketler](gestures.md#odak)). |
+| `LocalSoftwareKeyboardController.current.hide()`, `show()` | Odaklanmış alanın yazılım klavyesini gizler ya da gösterir. |
+| `LocalFocusManager.current.clearFocus()` | Odağı kaldırır (bkz. [Hareketler](gestures.md#odak)). |
 
 ## Ayrıca bakın
 

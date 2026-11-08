@@ -12,119 +12,127 @@ Anlamın ekranda metin olarak bulunmadığı yerlerde ona ekleme yapmanız gerek
 
 Anlam taşıyan her ikona ve resme bir içerik açıklaması verin, süs amaçlı olanları boş bırakın:
 
-```cpp body
-IconButton([] {}) { Icon(Icons::Filled::Share, "Share"); };     // "Share, button" olarak seslendirilir
-Icon(Icons::Filled::Star, "");                                      // süs: seslendirilmez
-Image(imageResource("images/chart.png"), "Sales grew 20% in March", Modifier().size(200));
+```kotlin body
+IconButton(onClick = {}) { Icon(Icons.Filled.Share, contentDescription = "Share") }     // "Share, button" olarak seslendirilir
+Icon(Icons.Filled.Star, contentDescription = null)                                       // süs: seslendirilmez
+Image(imageResource("images/chart.png"), contentDescription = "Sales grew 20% in March", modifier = Modifier.size(200.dp))
 ```
 
 Metin etiketi de olan bir butonun içindeki ikon onu tekrarlamamalıdır: ikona boş bir açıklama verin.
 
 ## Semantik modifier'ı
 
-`Modifier().semantics({…})` bir düğümün ne anlama geldiğini belirler:
+`Modifier.semantics { … }` bir düğümün ne anlama geldiğini belirler:
 
 | Özellik | Kullanımı |
 |---|---|
 | `contentDescription` | Metni olmadığında ne olduğu. |
-| `role` | `SemanticsRole::Button`, `Checkbox`, `Switch`, `RadioButton`, `Tab`, `Image`, `Slider`. |
+| `role` | `Role.Button`, `Checkbox`, `Switch`, `RadioButton`, `Tab`, `Image`, `Slider`. |
 | `checked` | Açık ya da kapalı; anahtarlar ve seçili sekmeler için. |
 | `stateDescription` | Durumunun sözcüklerle ifadesi: "Oynatılıyor", "5'te 3". |
 | `heading` | Bir başlık; ekran okuyucu kullanıcıları bölümler arasında atlayabilsin diye. |
 | `mergeDescendants` | İçindeki her şeyle birlikte tek bir öğe olarak okunur. |
-| `liveRegion` | Değişiklikler seslendirilir: `LiveRegionMode::Polite` ya da `Assertive`. |
+| `liveRegion` | Değişiklikler seslendirilir: `LiveRegionMode.Polite` ya da `Assertive`. |
 | `customActions` | TalkBack'in eylemler menüsünde sunulan eylemler. |
 | `progressBarRangeInfo`, `setProgress` | Hizmetlerin okuyup atayabileceği, bir aralıktaki değer. |
 | `traversalIndex` | Kardeşler arasındaki okuma sırası, küçük olan önce. |
 
-```cpp body
-Text("Settings", Modifier().semantics({.heading = true}), style = typography().headlineSmall);
+```kotlin body
+Text("Settings", modifier = Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
 ```
 
-`Modifier().semantics("description")`, yalnızca bir içerik açıklaması için kısa yoldur.
+`Modifier.semantics { contentDescription = "…" }` yalnızca bir içerik açıklaması belirler.
 
 ## Birleştirme
 
 Bir ekran okuyucu öğeden öğeye geçer. Bir ikon ve iki metinden oluşan bir satır üç değil, birlikte okunan tek bir öğe olmalıdır. Tıklanabilirler içeriklerini zaten birleştirir; diğer gruplar için `mergeDescendants`'ı ayarlayın:
 
-```cpp body
-Row(Modifier().semantics({.mergeDescendants = true}).padding(16)) {
-    Icon(Icons::Filled::Person, "");
-    Column() {
-        Text("Ada Lovelace");
-        Text("Online");
-    };
-};   // "Ada Lovelace, Online" olarak okunur
+```kotlin body
+Row(modifier = Modifier.semantics(mergeDescendants = true) {}.padding(16.dp)) {
+    Icon(Icons.Filled.Person, contentDescription = null)
+    Column {
+        Text("Ada Lovelace")
+        Text("Online")
+    }
+}   // "Ada Lovelace, Online" olarak okunur
 ```
 
-`Modifier().clearAndSetSemantics({…})` içindekileri sizin belirlediğinizle değiştirir: beş yıldız olarak çizilen bir puan "Puan: 5'te 4" olur. `Modifier().hideFromAccessibility()` bir düğümü ve içindekileri gizler.
+`Modifier.clearAndSetSemantics { … }` içindekileri sizin belirlediğinizle değiştirir: beş yıldız olarak çizilen bir puan "Puan: 5'te 4" olur. `Modifier.semantics { hideFromAccessibility() }` bir düğümü ve içindekileri gizler.
 
-```cpp body
-Row(Modifier().clearAndSetSemantics({.contentDescription = "Rating: 4 of 5"})) {
-    for (int i = 0; i < 5; ++i) Icon(i < 4 ? Icons::Filled::Star : Icons::Filled::FavoriteBorder, "");
-};
+```kotlin body
+Row(modifier = Modifier.clearAndSetSemantics { contentDescription = "Rating: 4 of 5" }) {
+    for (i in 0 until 5) Icon(if (i < 4) Icons.Filled.Star else Icons.Filled.FavoriteBorder, contentDescription = null)
+}
 ```
 
 ## Özel kontroller
 
 Kendiniz çizdiğiniz bir kontrol ne olduğunu ve nasıl kullanılacağını söylemelidir. Bunu sizin yerinize yapan modifier'ları tercih edin: `clickable`, `toggleable(value, onChange, role)`, `selectable(selected, onClick, role)` ve `triStateToggleable` rolü, durumu ve eylemi ayarlar:
 
-```cpp
-void StarToggle() {
-    auto starred = remember([] { return mutableStateOf(false); });
-    Icon(starred.get() ? Icons::Filled::Star : Icons::Filled::FavoriteBorder, "Starred",
-         Modifier().toggleable(starred.get(), [starred](bool v) { starred.set(v); }, SemanticsRole::Switch).padding(12));
+```kotlin
+@Composable
+fun StarToggle() {
+    var starred by remember { mutableStateOf(false) }
+    Icon(if (starred) Icons.Filled.Star else Icons.Filled.FavoriteBorder, contentDescription = "Starred",
+         modifier = Modifier.toggleable(value = starred, onValueChange = { starred = it }, role = Role.Switch).padding(12.dp))
 }
 ```
 
 Tek bir kontrol gibi davranan bir satırda modifier'ı satıra koyun ve içindeki kontrole boş bir callback verin; böylece bütün satır tek bir dokunma hedefi ve tek bir öğe olur:
 
-```cpp
-void WifiRow() {
-    auto on = remember([] { return mutableStateOf(true); });
-    Row(Modifier().fillMaxWidth().toggleable(on.get(), [on](bool v) { on.set(v); }, SemanticsRole::Switch).padding(16),
-        verticalAlignment = Alignment::CenterVertically) {
-            Text("Wi-Fi", Modifier().weight(1));
-            Switch(on.get(), nullptr);
-        };
+```kotlin
+@Composable
+fun WifiRow() {
+    var on by remember { mutableStateOf(true) }
+    Row(modifier = Modifier.fillMaxWidth().toggleable(value = on, onValueChange = { on = it }, role = Role.Switch).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Text("Wi-Fi", modifier = Modifier.weight(1f))
+        Switch(checked = on, onCheckedChange = null)
+    }
 }
 ```
 
-Bir grup radyo butonu satırı `Modifier().selectableGroup()` içine konur; böylece hizmetler bunların bir arada olduğunu bilir.
+Bir grup radyo butonu satırı `Modifier.selectableGroup()` içine konur; böylece hizmetler bunların bir arada olduğunu bilir.
 
 ### Hareket gerektiren eylemler
 
 Kaydırarak silme, uzun basma menüleri ve sürükleme tutamaçlarını bir ekran okuyucuyla kullanmak zordur. Aynı eylemleri özel eylemler olarak da sunun:
 
-```cpp body
-#! std::function<void()> archive, deleteItem;
-Box(Modifier().semantics({.customActions = {{"Archive", [archive] { archive(); return true; }},
-                                            {"Delete", [deleteItem] { deleteItem(); return true; }}}})) {};
+```kotlin body
+#! fun archive() {}
+#! fun deleteItem() {}
+Box(modifier = Modifier.semantics {
+    customActions = listOf(CustomAccessibilityAction("Archive") { archive(); true },
+                           CustomAccessibilityAction("Delete") { deleteItem(); true })
+})
 ```
 
 ### Bir aralıktaki değerler
 
 Özel bir slider değerini bildirir ve hizmetlerin onu atamasına izin verir:
 
-```cpp body
-#! auto level = mutableStateOf(0.5f);
-Box(Modifier().semantics({.contentDescription = "Brightness", .role = SemanticsRole::Slider,
-                          .progressBarRangeInfo = ProgressBarRangeInfo{level.get(), 0, 1},
-                          .setProgress = [level](float v) { level.set(v); return true; }})) {};
+```kotlin body
+#! val level = mutableStateOf(0.5f)
+Box(modifier = Modifier.semantics {
+    contentDescription = "Brightness"
+    role = Role.Slider
+    progressBarRangeInfo = ProgressBarRangeInfo(level.value, 0f, 1f)
+    setProgress { level.value = it; true }
+})
 ```
 
 ## Değişiklikleri seslendirmek
 
 Odağı taşımadan beliren bir mesaj, örneğin "Kaydedildi" ya da bir alanın altındaki bir hata, seslendirilmelidir. Onu canlı bölge olarak işaretleyin:
 
-```cpp body
-#! bool saved = true;
-if (saved) Text("Saved", Modifier().semantics({.liveRegion = LiveRegionMode::Polite}));
+```kotlin body
+#! val saved = true
+if (saved) Text("Saved", modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
 ```
 
 ## Dokunma hedefleri
 
-Material bileşenleri, Compose'dakiler gibi (`LocalMinimumInteractiveComponentSize`), daha küçük görünseler bile en az 48 dp'lik bir dokunma hedefi korur. Kendi küçük kontrolleriniz için `Modifier().minimumInteractiveComponentSize()` ekleyin.
+Material bileşenleri, Compose'dakiler gibi (`LocalMinimumInteractiveComponentSize`), daha küçük görünseler bile en az 48 dp'lik bir dokunma hedefi korur. Kendi küçük kontrolleriniz için `Modifier.minimumInteractiveComponentSize()` ekleyin.
 
 ## Metin boyutu ve kontrast
 

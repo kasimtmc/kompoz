@@ -1,32 +1,31 @@
 # Testing
 
-UI tests that run without a window, as Compose's `createComposeRule()`: compose a composable, find nodes, act on them, and check the result, with a virtual clock that makes animations and coroutines deterministic.
+UI tests that run without a window, as Compose's `createComposeRule()`: `ComposeTestRule { … }` composes a composable, find nodes, act on them, and check the result, with a virtual clock that makes animations and coroutines deterministic.
 
 ## A first test
 
 `ComposeTestRule` composes, lays out and draws its content headlessly, with a text measurer of fixed sizes. Find nodes by text, content description or test tag, act on them, and assert:
 
-```cpp
-#include <kompoz/testing.hpp>
-using namespace kompoz::testing;
-
-void Counter() {
-    auto count = remember([] { return mutableStateOf(0); });
-    Column() {
-        Text("Count: " + std::to_string(count.get()));
-        Button([count] { count.set(count.get() + 1); }) { Text("Add"); };
-    };
+```kotlin
+@Composable
+fun Counter() {
+    var count by remember { mutableStateOf(0) }
+    Column {
+        Text("Count: $count")
+        Button(onClick = { count++ }) { Text("Add") }
+    }
 }
 
-void counterIncrements() {
-    ComposeTestRule rule([] { Counter(); });
-    rule.onNodeWithText("Count: 0").assertIsDisplayed();
-    rule.onNodeWithText("Add").performClick();
-    rule.onNodeWithText("Count: 1").assertIsDisplayed();
+@Test
+fun counterIncrements() {
+    val rule = ComposeTestRule { Counter() }
+    rule.onNodeWithText("Count: 0").assertIsDisplayed()
+    rule.onNodeWithText("Add").performClick()
+    rule.onNodeWithText("Count: 1").assertIsDisplayed()
 }
 ```
 
-A failed assertion throws `kompoz::testing::AssertionError`, saying what it looked for and what it found. Use any test framework, or none: the rule works in a plain function.
+A failed assertion throws `AssertionError` (`kompoz::testing::AssertionError`), saying what it looked for and what it found. Use any test framework, or none: the rule works in a plain function; `@Test` marks one for yours.
 
 ## Setting up a test target
 
@@ -46,24 +45,25 @@ Keep your composables in source files the app and the tests share. Build Kompoz 
 |---|---|
 | `onNodeWithText(text)` | A node whose text is `text`; `onNodeWithText(text, true)` for a substring. |
 | `onNodeWithContentDescription(d)` | A node with that content description: icons, images. |
-| `onNodeWithTag(tag)` | A node with `Modifier().testTag(tag)`. |
+| `onNodeWithTag(tag)` | A node with `Modifier.testTag(tag)`. |
 | `onAllNodesWithText(text)`, `onAllNodesWithContentDescription(d)`, `onAllNodesWithTag(tag)` | All of them, as a collection: `assertCountEquals(n)`, `[i]`, `size()`. |
 
 As in Compose, finders use merged semantics: a text inside a clickable answers for that clickable, so `onNodeWithText("Add").performClick()` clicks the button and `assertIsEnabled()` checks it.
 
 A test tag is the most robust way to find something whose text changes or is translated:
 
-```cpp
-#! using namespace kompoz::testing;
-void Search() {
-    auto query = rememberTextFieldState();
-    OutlinedTextField(query, Modifier().testTag("search"), label = "Search");
+```kotlin
+@Composable
+fun Search() {
+    val query = rememberTextFieldState()
+    OutlinedTextField(state = query, modifier = Modifier.testTag("search"), label = { Text("Search") })
 }
 
-void typingFillsTheField() {
-    ComposeTestRule rule([] { Search(); });
-    rule.onNodeWithTag("search").performTextInput("kompoz");
-    rule.onNodeWithText("kompoz").assertExists();
+@Test
+fun typingFillsTheField() {
+    val rule = ComposeTestRule { Search() }
+    rule.onNodeWithTag("search").performTextInput("kompoz")
+    rule.onNodeWithText("kompoz").assertExists()
 }
 ```
 
@@ -73,7 +73,7 @@ void typingFillsTheField() {
 |---|---|
 | `performClick()` | Taps the node's center. |
 | `performTextInput(text)` | Focuses the node and types. |
-| `performKey(Key::Enter)` | Presses a key. |
+| `performKey(Key.Enter)` | Presses a key. |
 | `performScrollTo()` | Scrolls the scrollables around the node to show it. |
 | `rule.swipe(from, to, frames)` | A drag across the window, a frame per step: fast enough to fling. |
 
@@ -83,10 +83,13 @@ Each action waits for the UI to settle afterwards.
 
 `assertExists`, `assertDoesNotExist`, `assertIsDisplayed` (in the window, not clipped away), `assertIsNotDisplayed`, `assertTextEquals`, `assertTextContains`, `assertContentDescriptionEquals`, `assertHasClickAction`, `assertIsEnabled`, `assertIsNotEnabled`, `assertIsSelected` (a selected tab, a ticked checkbox, a switch on), `assertIsOn`, `assertIsOff`. They return the node, so they chain:
 
-```cpp body
-#! using namespace kompoz::testing;
-#! ComposeTestRule rule([] {});
-rule.onNodeWithText("Save").assertIsDisplayed().assertIsEnabled().performClick();
+```kotlin
+#! @Composable fun Form() {}
+@Test
+fun saves() {
+    val rule = ComposeTestRule { Form() }
+    rule.onNodeWithText("Save").assertIsDisplayed().assertIsEnabled().performClick()
+}
 ```
 
 For anything else, a node gives its `bounds()` (in dp, in the window) and `text()`, and `exists()`. `rule.drawnTexts()` lists the texts that were actually drawn, for checking what reached the screen.
@@ -97,26 +100,28 @@ The rule's clock is virtual: time moves only when the test says so, so animation
 
 - `rule.waitForIdle()` runs frames until nothing is pending: recomposition, layout, animations on their way (read while drawing too), and timers that are due within a couple of seconds.
 - `rule.advanceTimeBy(ms)` moves the clock forward, running the frames in between.
-- `rule.advanceFrame()` runs one frame.
+- `rule.advanceFrame()` runs one frame; `rule.mainClock.advanceTimeBy(ms)` is Compose's name for `rule.advanceTimeBy(ms)`.
 
-```cpp
-#! using namespace kompoz::testing;
-void Toast(bool show) {
-    auto visible = remember([] { return mutableStateOf(false); });
-    LaunchedEffect(show, [show, visible]() -> Task {
-        if (!show) co_return;
-        visible.set(true);
-        co_await delay(std::chrono::seconds(2));
-        visible.set(false);
-    });
-    if (visible.get()) Text("Saved");
+```kotlin
+@Composable
+fun Toast(show: Boolean) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(show) {
+        if (show) {
+            visible = true
+            delay(2000)
+            visible = false
+        }
+    }
+    if (visible) Text("Saved")
 }
 
-void toastGoesAwayAfterTwoSeconds() {
-    ComposeTestRule rule([] { Toast(true); });
-    rule.onNodeWithText("Saved").assertExists();
-    rule.advanceTimeBy(2100);
-    rule.onNodeWithText("Saved").assertDoesNotExist();
+@Test
+fun toastGoesAwayAfterTwoSeconds() {
+    val rule = ComposeTestRule { Toast(true) }
+    rule.onNodeWithText("Saved").assertExists()
+    rule.mainClock.advanceTimeBy(2100)
+    rule.onNodeWithText("Saved").assertDoesNotExist()
 }
 ```
 
@@ -126,19 +131,19 @@ Work given to `withBackground` runs on real threads; `waitForIdle` waits for it 
 
 The content lambda can read state that the test owns, so the test can change it between steps:
 
-```cpp
-#! using namespace kompoz::testing;
-void showsTheNewName() {
-    auto name = mutableStateOf(std::string("Ada"));
-    ComposeTestRule rule([name] { Text("Hello, " + name.get()); });
-    rule.onNodeWithText("Hello, Ada").assertExists();
-    name.set("Grace");
-    rule.waitForIdle();
-    rule.onNodeWithText("Hello, Grace").assertExists();
+```kotlin
+@Test
+fun showsTheNewName() {
+    val name = mutableStateOf("Ada")
+    val rule = ComposeTestRule { Text("Hello, ${name.value}") }
+    rule.onNodeWithText("Hello, Ada").assertExists()
+    name.value = "Grace"
+    rule.waitForIdle()
+    rule.onNodeWithText("Hello, Grace").assertExists()
 }
 ```
 
-`rule.host()` gives the host, to change what the platform would: `setSystemDarkTheme(true)`, `setLayoutDirection(LayoutDirection::Rtl)`, `setStrings(Strings::turkish())`. The second argument of the rule's constructor is the window's size in dp, `{400, 800}` by default.
+`rule.host()` gives the host, to change what the platform would: `setSystemDarkTheme(true)`, `setLayoutDirection(LayoutDirection.Rtl)`, `setStrings(Strings.turkish())`. The second argument of the rule's constructor is the window's size in dp, `{400, 800}` by default.
 
 ## What to test
 
