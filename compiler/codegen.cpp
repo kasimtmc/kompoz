@@ -60,7 +60,7 @@ const std::map<std::string, std::string, std::less<>> kTypes = {
 const std::map<std::string, std::string, std::less<>> kObjectProperties = {
     {"MaterialTheme.colorScheme", "::kompoz::colorScheme()"},
     {"MaterialTheme.typography", "::kompoz::typography()"},
-    {"MaterialTheme.shapes", "::kompoz::shapes()"},
+    {"MaterialTheme.shapes", "::kompoz::LocalShapes.current()"},
     {"MaterialTheme.motionScheme", "::kompoz::motionScheme()"},
     // (Compose's insets are properties: WindowInsets.systemBars)
     {"WindowInsets.statusBars", "::kompoz::WindowInsets::statusBars()"},

@@ -290,16 +290,24 @@ struct MotionScheme {
 inline const CompositionLocal<MotionScheme> LocalMotionScheme{MotionScheme::standard()};
 inline const MotionScheme& motionScheme() { return LocalMotionScheme.current(); }
 
+// Material 3's shape scale (Compose's Shapes), for the app's own components: shape =
+// MaterialTheme.shapes.medium. Kompoz's components have Material's shapes built in.
+struct Shapes {
+    friend bool operator==(const Shapes&, const Shapes&) = default;
+    Shapes copy(A&&... args) const {
+        Shapes s = *this;
+// (read as LocalShapes.current(): `shapes` is the buttons' named argument)
+inline const CompositionLocal<Shapes> LocalShapes{Shapes{}};
 // MaterialTheme(colorScheme, motionScheme, content): the motion left out stays the one around it
 // (standard() at the top). Its content runs as a call's own, in its caller's scope.
 namespace detail {
 void MaterialTheme(const ColorScheme& colorScheme, const Content& content, CallSite site = CallSite::current());
 void MaterialTheme(const ColorScheme& colorScheme, const MotionScheme& motionScheme, const Content& content,
                    CallSite site = CallSite::current());
-// MaterialTheme(colorScheme, typography, motionScheme) { … }: a typography given goes to everything
-// inside (LocalTypography), as Compose's. (Kompoz has no Shapes theme: shapes are the components'.)
+// MaterialTheme(colorScheme, typography, shapes, motionScheme) { … }: a typography or shapes given go
+// to everything inside (LocalTypography, LocalShapes), as Compose's.
 struct MaterialThemeImpl {
-    using P = Params<names::ColorScheme, names::MotionScheme, names::Typography, Block>;
+    using P = Params<names::ColorScheme, names::MotionScheme, names::Typography, names::Shapes, Block>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -328,6 +336,9 @@ namespace detail {
 // (buttons' and list items' shapes as they are pressed or selected).
 Shape morphingShape(const Shape& target, CallSite site = CallSite::current());
 }  // namespace detail
+        if constexpr (P::given<names::Shapes, A...>()) {
+            Shapes shapes = P::arg<names::Shapes>(args...);
+            content = [shapes, inner = std::move(content)] { CompositionLocalProvider({LocalShapes.provides(shapes)}, inner); };
 inline bool isSystemInDarkTheme() { return LocalSystemDarkTheme.current(); }
 inline const ColorScheme& colorScheme() { return LocalColorScheme.current(); }
 // The content color for `background` (Compose's contentColorFor): the theme's matching one, or

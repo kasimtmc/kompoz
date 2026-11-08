@@ -503,6 +503,11 @@ struct TargetValue {};
 struct AnimationSpec {};
 struct Content {};
 struct MergeDescendants {};
+struct ExtraSmall {};
+struct Small {};
+struct Medium {};
+struct Large {};
+struct ExtraLarge {};
 struct Typography {};
 struct Primary {};
 struct OnPrimary {};
@@ -808,11 +813,16 @@ inline constexpr Param<detail::names::ContentType> contentType;
 // (kompoz::colorScheme() and motionScheme() read the theme's: these are MaterialTheme's names)
 inline constexpr Param<detail::names::ColorScheme> colorScheme;
 inline constexpr Param<detail::names::MotionScheme> motionScheme;
-// (kompoz::typography() reads the theme's: this is MaterialTheme's name)
+// (kompoz::typography() reads the theme's: this is MaterialTheme's name; shapes is args' already)
 inline constexpr Param<detail::names::Typography> typography;
 // Members' (Modifier's, Color's, InfiniteTransition's): words too common to be names of all of kompoz's (end, x, width).
 inline constexpr Param<detail::names::Start> start;
 inline constexpr Param<detail::names::Top> top;
+inline constexpr Param<detail::names::ExtraSmall> extraSmall;
+inline constexpr Param<detail::names::Small> small;
+inline constexpr Param<detail::names::Medium> medium;
+inline constexpr Param<detail::names::Large> large;
+inline constexpr Param<detail::names::ExtraLarge> extraLarge;
 inline constexpr Param<detail::names::End> end;
 inline constexpr Param<detail::names::Bottom> bottom;
 inline constexpr Param<detail::names::Horizontal> horizontal;

@@ -11372,6 +11372,13 @@ TEST(theme_pieces_take_compose_named_arguments) {
     });
     CHECK(seen->family == FontFamily::Serif.id && seen->size == 30);
     CHECK(*primary == darkColorScheme().primary);  // (kept from the theme around it)
+    // Shapes: Material's scale by default, MaterialTheme(shapes = …) for what is inside.
+    CHECK(Shapes{}.medium == RoundedCornerShape(12) && Shapes{}.copy(arg::medium = RoundedCornerShape(20)).medium == RoundedCornerShape(20));
+    auto corner = std::make_shared<Shape>();
+    ComposeTestRule shaped([=] { MaterialTheme(arg::shapes = Shapes{}.copy(arg::large = RoundedCornerShape(24)), [=] { *corner = LocalShapes.current().large; }); });
+    CHECK(*corner == RoundedCornerShape(24) && LocalShapes.current().large == RoundedCornerShape(16));
+}
+
 }
 
 TEST(intrinsic_height_and_flow_row) {

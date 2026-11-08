@@ -869,8 +869,9 @@
   onPrimary = …)`, `darkColorScheme(…)` ve `scheme.copy(…)`; `typography.copy(headlineSmall = …)` ve
   `Typography(displayLarge = …)`; Compose'un `TextStyle.copy`'si gibi bir `Font` üzerinde `style.copy(fontFamily = …,
   fontWeight = …, fontSize = …, fontStyle = …, letterSpacing = …, lineHeight = …)`; `MaterialTheme(colorScheme,
-  typography, motionScheme) { … }`, tipografisi içindeki her şeye veriliyor, renk şeması yazılmazsa çevredeki.
-  (Kompoz'da `Shapes` teması yok: şekiller bileşenlerin.)
+  typography, shapes, motionScheme) { … }`, tipografisi ve şekilleri içindeki her şeye veriliyor, renk şeması
+  yazılmazsa çevredeki. `Shapes`, Material'ın şekil ölçeği (`MaterialTheme.shapes.medium`, `Shapes(medium = …)`,
+  `copy(…)`), uygulamanın kendi bileşenleri için; Kompoz'unkilerde Material'ın şekilleri yerleşik.
 - **kompozc: enum class'lar ve her composable'a bir grup**: `enum class ThemeChoice { System, Light, Dark }` (yalnız
   girdiler; değerli olan C++'ınki) C++'ın enum class'ı, bir `when`'de `ThemeChoice.Dark` diye okunuyor. Değer döndüren
   bir `@Composable fun` bir çağrı yeri alıyor ve Compose'un her composable çağrısına verdiği gibi kendi grubu oluyor:

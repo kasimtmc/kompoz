@@ -905,6 +905,7 @@ fun schemeFor(choice: ThemeChoice): ColorScheme = when (choice) {
 }
 
 int gNextId = 0;
+Shape gMedium;
 
 @Composable
 fun counted(): Int = remember { ++gNextId }
@@ -914,8 +915,9 @@ fun Themed(choice: ThemeChoice) {
     val base = MaterialTheme.typography
     val type = base.copy(headlineSmall = base.headlineSmall.copy(fontFamily = FontFamily.Serif, fontSize = 30.sp))
     var showFirst by remember { mutableStateOf(true) }
-    MaterialTheme(colorScheme = schemeFor(choice), typography = type) {
+    MaterialTheme(colorScheme = schemeFor(choice), typography = type, shapes = Shapes(medium = RoundedCornerShape(20.dp))) {
         Column {
+            gMedium = MaterialTheme.shapes.medium
             Text("${MaterialTheme.typography.headlineSmall.size.toInt()}", modifier = Modifier.testTag("size"), color = MaterialTheme.colorScheme.primary)
             if (showFirst) Text("a ${counted()}")
             Text("b ${counted()}")
@@ -928,6 +930,7 @@ TEST(theming_as_compose_writes_it) {
     CHECK(schemeFor(ThemeChoice::Dark).primary == Color(0xFF9ECAFF) && schemeFor(ThemeChoice::Light).onPrimary == Color::White);
     ComposeTestRule rule([] { Themed(ThemeChoice::System); });
     CHECK(rule.onNodeWithTag("size").text() == "30");
+    CHECK(gMedium == RoundedCornerShape(20));
     CHECK(rule.onNodeWithText("a 1").exists() && rule.onNodeWithText("b 2").exists());
     rule.onNodeWithText("hide").performClick();
     // The first call gone, the second keeps what it remembered: each call a group of its own, not a

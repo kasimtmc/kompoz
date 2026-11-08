@@ -574,7 +574,7 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 347. Compose's `Layout(content, modifier) { measurables, constraints -> layout(w, h) { … } }`, `SubcomposeLayout(modifier) { constraints -> … }`, `LookaheadScope(modifier)`, dividers' `thickness` and `color`, `Constraints.copy(minWidth = …)` and `placeRelative(x = …, y = …)` ✅
 348. Compose's lazy grid `span = { GridItemSpan(maxLineSpan) }`, `rememberPagerState { count }`, `rememberCarouselState { count }`, carousels' named arguments and `CarouselItemScope.(Int)` content, Coil's `AsyncImage(model, …)`, scrollbars and `PullToRefreshBox` by name ✅
 349. Compose's chips with `label = { }` and icons by name, `toggleable(value, onValueChange, role = Role.Checkbox)`, `SnackbarHost(hostState)`, `showSnackbar(actionLabel = …)` awaited, `progress = { }` indicators, `NavigationSuiteScaffold(navigationSuiteItems = { item(…) })` with content icons and labels ✅
-350. Compose's `lightColorScheme(primary = …)` / `darkColorScheme(…)` / `scheme.copy(…)`, `typography.copy(…)`, `Typography(…)`, `TextStyle.copy(fontFamily = …)` on a `Font`, and `MaterialTheme(typography = …)` with its color scheme optional ✅
+350. Compose's `lightColorScheme(primary = …)` / `darkColorScheme(…)` / `scheme.copy(…)`, `typography.copy(…)`, `Typography(…)`, `TextStyle.copy(fontFamily = …)` on a `Font`, `MaterialTheme(typography = …, shapes = …)` with its color scheme optional, and `Shapes` (`MaterialTheme.shapes.medium`) ✅
 
 ## Next
 

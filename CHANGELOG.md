@@ -828,8 +828,9 @@
   `scheme.copy(…)` with any of the scheme's colors by name; `typography.copy(headlineSmall = …)` and
   `Typography(displayLarge = …)`; `style.copy(fontFamily = …, fontWeight = …, fontSize = …, fontStyle = …,
   letterSpacing = …, lineHeight = …)` on a `Font`, as Compose's `TextStyle.copy`; `MaterialTheme(colorScheme, typography,
-  motionScheme) { … }`, its typography given to everything inside and its color scheme, left out, the one around it.
-  (Kompoz has no `Shapes` theme: shapes are the components'.)
+  shapes, motionScheme) { … }`, its typography and shapes given to everything inside and its color scheme, left out,
+  the one around it. `Shapes` is Material's shape scale (`MaterialTheme.shapes.medium`, `Shapes(medium = …)`,
+  `copy(…)`), for the app's own components; Kompoz's have Material's shapes built in.
 - **kompozc: enum classes, and a group for every composable**: `enum class ThemeChoice { System, Light, Dark }` (entries
   only; one with values is C++'s) is C++'s enum class, read as `ThemeChoice.Dark` in a `when`. A `@Composable fun` that
   returns a value takes a call site and is a group of its own, as Compose makes every composable call: what it
