@@ -134,8 +134,11 @@ Function Parser::function() {
     for (bool more = true; more;) {
         annotations(&names);
         more = false;
-        while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("inline")) {
-            if (take().text == "private") f.isPrivate = true;
+        while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("inline") || isIdent("override") ||
+               isIdent("protected") || isIdent("open")) {
+            std::string word = take().text;
+            if (word == "private") f.isPrivate = true;
+            if (word == "override") f.overrides = true;
             more = true;
         }
     }
@@ -178,6 +181,97 @@ Function Parser::function() {
     }
     f.end = tokens_[index_ - 1].end;
     return f;
+}
+
+ClassDecl Parser::classDecl() {
+    ClassDecl c;
+    c.pos = cur().pos;
+    while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("open") || isIdent("abstract"))
+        if (take().text == "private") c.isPrivate = true;
+    if (!isIdent("class")) fail("expected 'class'");
+    take();
+    c.name = expectIdent();
+    if (isOp("(")) {  // the primary constructor: (val a: T, b: U = d)
+        NewlineMode mode(newlines_, false);
+        take();
+        while (!isOp(")")) {
+            annotations(nullptr);
+            bool isPrivate = false;
+            while (isIdent("private") || isIdent("public") || isIdent("internal") || isIdent("protected"))
+                isPrivate = take().text == "private" || isPrivate;
+            char kind = ' ';
+            if (isIdent("val") || isIdent("var")) kind = take().text == "val" ? 'v' : 'm';
+            Param p;
+            p.pos = cur().pos;
+            p.name = expectIdent();
+            expectOp(":");
+            p.type = type();
+            if (acceptOp("=")) p.defaultValue = expression();
+            c.ctorParams.push_back(std::move(p));
+            c.ctorKinds.push_back(kind);
+            c.ctorPrivate.push_back(isPrivate);
+            if (!acceptOp(",")) break;
+        }
+        expectOp(")");
+    }
+    if (acceptOp(":")) {  // : Base(args)
+        c.base = type();
+        if (isOp("(")) {
+            NewlineMode mode(newlines_, false);
+            take();
+            while (!isOp(")")) {
+                c.baseArgs.push_back(expression());
+                if (!acceptOp(",")) break;
+            }
+            expectOp(")");
+        }
+    }
+    if (opAfterNewlines("{")) {
+        skipNewlines();
+        take();
+        for (skipNewlines(); !isOp("}"); skipNewlines()) {
+            if (acceptOp(";")) continue;  // (members on one line: var x = 0; fun f() { })
+            if (isIdent("init")) {
+                take();
+                skipNewlines();
+                c.initBlocks.push_back(block());
+                continue;
+            }
+            // A property, or a function (its modifiers read by function()).
+            size_t save = index_;
+            bool isPrivate = false;
+            annotations(nullptr);
+            while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("protected") || isIdent("open") ||
+                   isIdent("override"))
+                isPrivate = take().text == "private" || isPrivate;
+            if (isIdent("val") || isIdent("var")) {
+                ClassProperty p;
+                p.pos = cur().pos;
+                p.isVar = take().text == "var";
+                p.isPrivate = isPrivate;
+                p.name = expectIdent();
+                if (acceptOp(":")) p.type = type();
+                if (isIdent("by")) fail("a class's property by … isn't supported");
+                if (acceptOp("=")) {
+                    skipNewlines();
+                    p.init = expression();
+                } else if (!p.type) {
+                    fail("a class's property needs a value or a type");
+                }
+                c.order.push_back(c.properties.size() * 2);
+                c.properties.push_back(std::move(p));
+            } else {
+                index_ = save;  // (function() reads the modifiers itself)
+                Function f = function();
+                if (f.composable) fail(f.pos, "a class's function can't be @Composable here: write it at the top level");
+                c.order.push_back(c.methods.size() * 2 + 1);
+                c.methods.push_back(std::move(f));
+            }
+        }
+        expectOp("}");
+    }
+    c.end = tokens_[index_ - 1].end;
+    return c;
 }
 
 DataClass Parser::dataClass() {

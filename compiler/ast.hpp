@@ -112,6 +112,7 @@ struct Function {
     std::optional<Type> result;      // none: Unit
     NodeP body;                      // a Block; or an expression body (= expr) as a Return in a Block
     bool expressionBody = false;
+    bool overrides = false;          // override fun (a class's)
     std::vector<std::string> annotations;  // besides @Composable (Preview, ...)
     Pos pos;                         // the @ of @Composable (or where it starts)
     Pos end;                         // just past the closing brace
@@ -130,6 +131,30 @@ struct Property {
 struct EnumClass {
     std::string name;
     std::vector<std::string> entries;
+    Pos pos;
+    Pos end;
+};
+
+// A class: class Name(val a: Int, b: String) : Base(b) { val c = …; fun f() { … }; override fun g() { … }; init { … } }.
+struct ClassProperty {
+    std::string name;
+    std::optional<Type> type;  // none: the value's
+    NodeP init;
+    bool isVar = false, isPrivate = false;
+    Pos pos;
+};
+struct ClassDecl {
+    std::string name;
+    bool isPrivate = false;
+    std::vector<Param> ctorParams;
+    std::vector<char> ctorKinds;      // one per parameter: ' ' plain, 'v' val, 'm' var
+    std::vector<bool> ctorPrivate;    // private val x
+    std::optional<Type> base;
+    std::vector<NodeP> baseArgs;      // : Base(args)
+    std::vector<ClassProperty> properties;
+    std::vector<Function> methods;
+    std::vector<size_t> order;        // members in declaration order: an index into properties (even) or methods (odd): i * 2 + kind
+    std::vector<NodeP> initBlocks;
     Pos pos;
     Pos end;
 };

@@ -16,6 +16,8 @@ public:
     DataClass dataClass();
     // enum class Name { A, B, C }
     EnumClass enumClass();
+    // class Name(val a: T, b: U) : Base(b) { val c = …; fun f() { … } }
+    ClassDecl classDecl();
     // [private | internal | const] val name[: Type] = value, at the top of a file.
     Property property();
     // One expression and then `}`: a string template's ${...}.

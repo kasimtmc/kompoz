@@ -287,6 +287,7 @@ public:
     // A value once none came after it for `timeout` (and the last one when the flow ends):
     // a search as the user stops typing.
     Flow debounce(std::chrono::nanoseconds timeout) const;
+    Flow debounce(long long timeoutMillis) const { return debounce(std::chrono::milliseconds(timeoutMillis)); }  // Kotlin's debounce(Long)
     // For each value, the flow `transform` makes of it, collected until the next value comes
     // (then that one is cancelled, and what it sent but wasn't taken yet dropped): search
     // results for the latest query.
@@ -362,6 +363,7 @@ public:
     }
     Flow<T> take(size_t count) const { return self().asFlow().take(count); }
     Flow<T> debounce(std::chrono::nanoseconds timeout) const { return self().asFlow().debounce(timeout); }
+    Flow<T> debounce(long long timeoutMillis) const { return debounce(std::chrono::milliseconds(timeoutMillis)); }
     template <class F>
     auto flatMapLatest(F transform) const {
         return self().asFlow().flatMapLatest(std::move(transform));

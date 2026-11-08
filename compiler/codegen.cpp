@@ -45,7 +45,7 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked",
     "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "shader", "compositionLocalOf",
     "slideInVertically", "slideInHorizontally", "slideOutVertically", "slideOutHorizontally", "animateFloat", "animateDp", "animateColor",
-    "dragAndDropSource",
+    "dragAndDropSource", "update", "LifecycleResumeEffect", "LifecycleStartEffect", "flatMapLatest", "mapLatest", "flatMapConcat",
     "staticCompositionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent", "mediaQuery",
     "derivedMediaQuery", "SubcomposeLayout", "rememberPagerState", "rememberCarouselState"};
 
@@ -97,10 +97,15 @@ const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType"
                                                             "itemCount", "progress", "transitionSpec", "contentKey", "shouldStartDragAndDrop",
                                                             "initialOffsetX", "initialOffsetY", "targetOffsetX", "targetOffsetY"};
 
+// Properties of a class's own that are functions here, read by their bare name in its body (Kotlin's
+// viewModelScope in a ViewModel).
+const std::set<std::string, std::less<>> kBareProperties = {"viewModelScope"};
+
 // Kotlin's standard functions, from kotlin.hpp: listOf(1, 2) -> kt::listOf(1, 2).
 const std::set<std::string, std::less<>> kKtFunctions = {
     "listOf", "mutableListOf", "emptyList", "arrayListOf", "setOf", "mutableSetOf", "emptySet", "mapOf", "mutableMapOf",
-    "emptyMap", "repeat", "println", "maxOf", "minOf", "require", "check", "error", "TODO", "onDispose", "floatArrayOf", "intArrayOf"};
+    "emptyMap", "repeat", "println", "maxOf", "minOf", "require", "check", "error", "TODO", "onDispose", "onPauseOrDispose",
+    "onStopOrDispose", "floatArrayOf", "intArrayOf"};
 
 // Members of Kotlin's standard types, from kotlin.hpp: text.trim() -> kt::trim(text). Each uses the
 // value's own member of that name where it has one.
@@ -167,7 +172,7 @@ const std::map<std::string, std::string, std::less<>> kReceiverArguments = {
     {"animateColor.transitionSpec", "auto TransitionSegment"}};
 
 // Calls whose lambda is a coroutine (Kotlin's suspend lambdas): [=]() -> Task { ...; co_return; }.
-const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "produceState", "pointerInput", "awaitEachGesture"};
+const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "produceState", "pointerInput", "awaitEachGesture", "flow"};
 
 // Functions of a PointerInputScope's (Compose's extensions on it), called in pointerInput { } with the
 // scope first here: detectTapGestures(onTap = { }) is detectTapGestures(scope, TapGestureHandlers{…}).
@@ -300,6 +305,195 @@ public:
         out_.text(", \")\"); } };\n");
     }
 
+    // Name(a = 1, b = "x") for a class: its constructor's parameters in their order (defaults left to it).
+    void constructClass(const Node& c, const ClassDecl& k) {
+        if (c.lambda) throw CompileError(c.lambda->pos, k.name + " takes no lambda");
+        std::vector<const Node*> given(k.ctorParams.size(), nullptr);
+        size_t next = 0;
+        for (size_t i = 0; i + 1 < c.kids.size(); ++i) {
+            const std::string& n = c.names[i];
+            size_t at = next;
+            if (!n.empty()) {
+                at = k.ctorParams.size();
+                for (size_t f = 0; f < k.ctorParams.size(); ++f)
+                    if (k.ctorParams[f].name == n) at = f;
+                if (at == k.ctorParams.size()) throw CompileError(c.kids[i + 1]->pos, k.name + " has no parameter named " + n);
+            } else {
+                next = at + 1;
+            }
+            if (at >= k.ctorParams.size()) throw CompileError(c.kids[i + 1]->pos, "too many arguments for " + k.name);
+            if (given[at]) throw CompileError(c.kids[i + 1]->pos, k.ctorParams[at].name + " is given twice");
+            given[at] = c.kids[i + 1].get();
+        }
+        size_t last = k.ctorParams.size();
+        while (last > 0 && !given[last - 1]) --last;  // (trailing ones left out take their defaults)
+        out_.text(qualifierOf(k.name) + k.name + "(");
+        for (size_t f = 0; f < last; ++f) {
+            if (f) out_.text(", ");
+            const Param& p = k.ctorParams[f];
+            const Node* arg = given[f] ? given[f] : p.defaultValue.get();
+            if (!arg) throw CompileError(c.pos, k.name + " needs " + p.name);
+            if (arg->kind == Node::Lambda) lambda(*arg, p.type.function && p.type.result && p.type.result->name != "Unit");
+            else expr(*arg, &p.type);
+        }
+        out_.text(")");
+    }
+
+    // class Name(val a: T, b: U) : Base(b) { val c = …; fun f() { … } }: a C++ class, its constructor's
+    // class Name(val a: T, b: U) : Base(b) { val c = …; fun f() { … } }: a C++ class. One with a base is that
+    // class itself (the base's owner hands it out: viewModel<T>()); one without is a handle to its object
+    // (Name::Object, shared by its copies), as a Kotlin object is reached through references: a copy is
+    // the same object (== too), a lambda capturing it keeps it, a `const Name&` parameter changes it.
+    // Either way the constructor's val/var parameters and the properties are members (typed as written,
+    // else as their value is; initialized in the constructor in their order), init blocks the
+    // constructor's body, the functions inline, const, their members mutable (Kotlin's references never
+    // make an object const), an override as its base's. Kotlin code reaches a handle's object through
+    // kt::deref (kompoz_object()); C++ calls the handle's functions, which forward.
+    void classDeclDefinition(const ClassDecl& k) {
+        bool handle = !k.base;
+        out_.at(k.pos);
+        out_.text("class " + k.name + (k.base ? " : public " + type(*k.base) : std::string()) + " {");
+        bool wasInClass = std::exchange(inClass_, true);
+        scopes_.emplace_back();
+        // Plain constructor parameters: only the constructor and the initializers see them.
+        std::set<std::string, std::less<>> plainParams;
+        for (size_t i = 0; i < k.ctorParams.size(); ++i)
+            if (k.ctorKinds[i] == ' ') plainParams.insert(k.ctorParams[i].name);
+        bool isPublic = true;
+        auto access = [&](bool wantPublic) {
+            if (wantPublic != isPublic) out_.text(wantPublic ? " public:" : " private:");
+            isPublic = wantPublic;
+        };
+        out_.text(" public:");
+        if (handle) out_.text(" struct Object {");
+        // The members: the constructor's val/var parameters, then the properties.
+        for (size_t i = 0; i < k.ctorParams.size(); ++i) {
+            if (k.ctorKinds[i] == ' ') continue;
+            access(!k.ctorPrivate[i]);
+            out_.at(k.ctorParams[i].pos);
+            out_.text(" mutable " + type(k.ctorParams[i].type) + " " + cppName(k.ctorParams[i].name) + ";");
+        }
+        for (const ClassProperty& p : k.properties) {
+            access(!p.isPrivate);
+            out_.at(p.pos);
+            if (p.type) {
+                out_.text(" mutable " + type(*p.type) + " " + cppName(p.name) + ";");
+            } else {
+                // Its value's type (the value is written again, unevaluated): one that reads a plain
+                // constructor parameter can't be, the parameter isn't here yet.
+                std::set<std::string, std::less<>> used;
+                usedNames(p.init.get(), used);
+                for (const std::string& n : used)
+                    if (plainParams.contains(n))
+                        throw CompileError(p.pos, "give " + p.name + " a type: its value reads the constructor's parameter " + n);
+                out_.text(" mutable std::remove_cvref_t<decltype(");
+                expr(*p.init);
+                out_.text(")> " + cppName(p.name) + ";");
+            }
+        }
+        // The constructor: Base(args), the members in order, the init blocks. (A val/var parameter is
+        // named for its member: the initializers and init blocks reading the Kotlin name reach the
+        // member, which the parameter has filled by then.)
+        access(true);
+        out_.at(k.pos);
+        size_t firstDefault = k.ctorParams.size();
+        while (firstDefault > 0 && k.ctorParams[firstDefault - 1].defaultValue) --firstDefault;
+        auto parameters = [&](bool defaults, bool forMembers) {
+            for (size_t i = 0; i < k.ctorParams.size(); ++i) {
+                const Param& p = k.ctorParams[i];
+                bool renamed = forMembers && k.ctorKinds[i] != ' ';
+                out_.text((i ? ", " : "") + paramType(p.type) + " " + (renamed ? "kompoz_" + p.name : cppName(p.name)));
+                if (defaults && i >= firstDefault) {
+                    out_.text(" = ");
+                    expr(*p.defaultValue);
+                }
+            }
+        };
+        if (handle) out_.text(" Object(");
+        else out_.text(std::string(k.ctorParams.size() == 1 ? " explicit " : " ") + k.name + "(");
+        parameters(!handle, true);
+        out_.text(")");
+        for (size_t i = 0; i < k.ctorParams.size(); ++i)
+            if (k.ctorKinds[i] == ' ') declare(k.ctorParams[i].name, Local);
+        bool any = false;
+        if (k.base && !k.baseArgs.empty()) {
+            out_.text(" : " + type(*k.base) + "(");
+            for (size_t i = 0; i < k.baseArgs.size(); ++i) {
+                if (i) out_.text(", ");
+                expr(*k.baseArgs[i]);
+            }
+            out_.text(")");
+            any = true;
+        }
+        for (size_t i = 0; i < k.ctorParams.size(); ++i) {
+            if (k.ctorKinds[i] == ' ') continue;
+            out_.text(std::string(any ? ", " : " : ") + cppName(k.ctorParams[i].name) + "(std::move(kompoz_" + k.ctorParams[i].name + "))");
+            any = true;
+        }
+        for (const ClassProperty& p : k.properties) {
+            if (!p.init) continue;
+            out_.text(std::string(any ? ", " : " : ") + cppName(p.name) + "(");
+            expr(*p.init, p.type ? &*p.type : nullptr);
+            out_.text(")");
+            any = true;
+        }
+        out_.text(" {");
+        for (const NodeP& b : k.initBlocks) statements(*b, false);
+        out_.text(" }");
+        scopes_.pop_back();
+        // Its functions, each seeing its parameters and, by their names, the class's members.
+        auto methodHead = [&](const Function& m, bool forwarder) {
+            out_.text(" " + (m.result ? type(*m.result) : m.expressionBody ? std::string(forwarder ? "decltype(auto)" : "auto") : std::string("void")) +
+                      " " + cppName(m.name) + "(");
+            for (size_t i = 0; i < m.params.size(); ++i) {
+                const Param& p = m.params[i];
+                out_.text((i ? ", " : "") + paramType(p.type) + " " + cppName(p.name));
+                if (p.defaultValue && forwarder == handle) {  // (the defaults where the call arrives)
+                    out_.text(" = ");
+                    expr(*p.defaultValue);
+                }
+            }
+            out_.text(")");
+        };
+        for (const Function& m : k.methods) {
+            access(!m.isPrivate);
+            out_.at(m.pos);
+            methodHead(m, false);
+            out_.text(std::string(m.overrides ? " override" : " const") + " {");
+            scopes_.emplace_back();
+            for (const Param& p : m.params) declare(p.name, Local);
+            const Type* wasResult = std::exchange(currentResult_, m.result ? &*m.result : nullptr);
+            statements(*m.body, false);
+            currentResult_ = wasResult;
+            scopes_.pop_back();
+            out_.text(" }");
+        }
+        if (handle) {
+            access(true);
+            out_.text(" };");  // (Object)
+            // The handle: made with the object, the same object in every copy, its public functions forwarded.
+            out_.at(k.pos);
+            out_.text(std::string(k.ctorParams.size() == 1 ? " explicit " : " ") + k.name + "(");
+            parameters(true, false);
+            out_.text(") : kompoz_object_(std::make_shared<Object>(");
+            for (size_t i = 0; i < k.ctorParams.size(); ++i) out_.text((i ? ", " : "") + cppName(k.ctorParams[i].name));
+            out_.text(")) {}");
+            out_.text(" Object& kompoz_object() const { return *kompoz_object_; }");
+            out_.text(" bool operator==(const " + k.name + "& o) const { return kompoz_object_ == o.kompoz_object_; }");
+            for (const Function& m : k.methods) {
+                if (m.isPrivate) continue;
+                out_.at(m.pos);
+                methodHead(m, true);
+                out_.text(" const { return kompoz_object_->" + cppName(m.name) + "(");
+                for (size_t i = 0; i < m.params.size(); ++i) out_.text((i ? ", " : "") + cppName(m.params[i].name));
+                out_.text("); }");
+            }
+            out_.text(" private: std::shared_ptr<Object> kompoz_object_;");
+        }
+        out_.text(" };\n");
+        inClass_ = wasInClass;
+    }
+
     // val name = value at the top: a constant of the namespace (private: of the file), its type the
     // value's unless one is written.
     void property(const Property& p) {
@@ -317,6 +511,7 @@ public:
 
     void definition(const Function& f) {
         bool unit = !f.result || f.result->name == "Unit";
+        currentResult_ = f.result ? &*f.result : nullptr;
         if (!f.composable) {  // (no declaration before it: its defaults are here)
             signature(f, true);
             out_.text(" {");
@@ -379,7 +574,11 @@ private:
 
     // A lambda's capture: none at namespace scope (a top-level val's value), where there is nothing to
     // capture and C++ takes no default. What is inside it is in a block scope (Scoped).
-    std::string capture(const char* captureDefault) const { return global_ ? "[]" : captureDefault; }
+    std::string capture(const char* captureDefault) const {
+        if (global_) return "[]";
+        if (inClass_ && std::string_view(captureDefault) == "[=]") return "[=, this]";  // (C++20 deprecates [=]'s this)
+        return captureDefault;
+    }
     struct Scoped {
         explicit Scoped(bool& global) : global_(global), was_(std::exchange(global, false)) {}
         ~Scoped() { global_ = was_; }
@@ -517,6 +716,16 @@ private:
             expr(*target.kids[0]);
             out_.text(".set(");
             rhs();
+            out_.text(");");
+            return;
+        }
+        if (target.kind == Node::Index && target.kids.size() == 2 && op == "=") {  // a[k] = v: set(k, v) where there is one (a SavedStateHandle's)
+            out_.text("::kompoz::kt::setAt(");
+            expr(*target.kids[0]);
+            out_.text(", ");
+            expr(*target.kids[1]);
+            out_.text(", ");
+            expr(*a.kids[1]);
             out_.text(");");
             return;
         }
@@ -697,6 +906,10 @@ private:
             out_.text("::kompoz::Modifier()");
             return;
         }
+        if (inClass_ && kBareProperties.contains(e.text)) {  // a class's own property that is a function here
+            out_.text(cppName(e.text) + "()");
+            return;
+        }
         if (auto p = kComposableProperties.find(e.text); p != kComposableProperties.end()) {
             out_.text(p->second);
             return;
@@ -844,6 +1057,13 @@ private:
     void call(const Node& c) {
         const Node& callee = companionless(*c.kids[0]);
         std::string calleeName = callee.kind == Node::Name ? callee.text : callee.kind == Node::Member ? callee.text : "";
+        // A local of the callee's name is not what is called when the call has a trailing lambda or named
+        // arguments (a value can't take them): items(items, key = { }) { } calls the function, as Kotlin does.
+        if (callee.kind == Node::Name && lookup(callee.text) && (c.lambda || named(c))) {
+            if (auto f = module_.functions.find(callee.text); f != module_.functions.end()) return moduleCall(c, *f->second);
+            out_.text("::kompoz::" + cppName(callee.text));  // (qualified: C++ would take the local)
+            return arguments(c, calleeName, false);
+        }
         // A receiver's member (drawCircle(…) in a Canvas's lambda): before the file's and Kotlin's own.
         if (callee.kind == Node::Name && !lookup(callee.text)) {
             if (size_t r = receiverOf(callee.text)) {
@@ -856,6 +1076,13 @@ private:
                 out_.text(callee.text + "((*kompoz_this_" + std::to_string(r) + ")");
                 return arguments(c, calleeName, false, true);
             }
+            if (callee.text == "flow" && c.lambda && c.kids.size() == 1 && c.typeArgs.empty()) {
+                // flow { emit(…) } in a function returning Flow<T>: flow<T>, its lambda the collector's (emit)
+                if (!currentResult_ || currentResult_->name != "Flow" || currentResult_->args.size() != 1)
+                    throw CompileError(c.pos, "flow { } needs the function's type: fun f(): Flow<T> = flow { … }");
+                out_.text("::kompoz::flow<" + type(currentResult_->args[0]) + ">");
+                return arguments(c, calleeName, false);
+            }
             if (callee.text == "DraggableAnchors" && c.lambda && c.kids.size() == 1) {  // Compose's builder: DraggableAnchors { A at 0f }
                 out_.text("::kompoz::draggableAnchors");
                 return arguments(c, calleeName, false);
@@ -865,6 +1092,7 @@ private:
         if (callee.kind == Node::Name && !lookup(callee.text)) {
             if (auto f = module_.functions.find(callee.text); f != module_.functions.end()) return moduleCall(c, *f->second);
             if (auto k = module_.classes.find(callee.text); k != module_.classes.end()) return construct(c, *k->second);
+            if (auto k = module_.classDecls.find(callee.text); k != module_.classDecls.end() && named(c)) return constructClass(c, *k->second);
             if (callee.text == "Color" && c.kids.size() == 2 && c.names[0].empty() && !c.lambda) {
                 // Compose's Color(0xFF6750A4), an Int or a Long: AARRGGBB (its packed ULong form is Color(value = …), not this)
                 out_.text("::kompoz::Color::argb(");
@@ -917,7 +1145,10 @@ private:
             }
         }
         if (callee.kind == Node::Member && !callee.flag && !qualifier(companionless(*callee.kids[0])) && callee.text != "Companion") {
-            expr(companionless(*callee.kids[0]));  // a member called: obj.f(…), not a property
+            // A member called: obj.f(…), not a property (obj may be a pointer to the object: a viewModel's).
+            out_.text("::kompoz::kt::deref(");
+            expr(companionless(*callee.kids[0]));
+            out_.text(")");
             // In a coroutine, Compose's suspending forms where Kompoz's C++ has a separate one.
             std::string member = suspend_ && callee.text == "showSnackbar" ? "showSnackbarAsync" : cppName(callee.text);
             out_.text("." + member);
@@ -1133,10 +1364,13 @@ private:
         if (suspend) {
             // A coroutine (Kotlin's suspend lambda): its CoroutineScope receiver has no name here;
             // produceState's gives it the state, `value` (a copy: a coroutine's parameters outlive
-            // their call).
+            // their call); flow's gives it the collector, `emit`.
             if (produceState) {
                 out_.text("auto value");
                 declare("value", Delegated);
+            } else if (label == "flow") {
+                out_.text("auto emit");
+                declare("emit", Local);
             }
         } else if (l.flag) {
             for (size_t i = 0; i < l.names.size(); ++i) {
@@ -1339,6 +1573,8 @@ private:
     std::vector<std::string> receivers_;  // the receivers' types of the lambdas it is in, innermost last
     std::vector<std::string> receiverLabels_;  // and the calls they were given to (this@AnimatedContent)
     bool global_ = false;  // at namespace scope: a top-level val's value
+    bool inClass_ = false;  // in a class's body: its members are reached by their names
+    const Type* currentResult_ = nullptr;  // the function being defined's result type (flow { } takes its T from Flow<T>)
     bool inline_ = false;  // the lambda written next is an inline function's (kInlineLambdas)
     std::vector<std::map<std::string, VarKind, std::less<>>> scopes_;
 };
@@ -1366,6 +1602,11 @@ void generatePrototype(Output& out, const Function& f, const Module& module) {
 void generateProperty(Output& out, const Property& p, const Module& module) {
     Generator g(out, module);
     g.property(p);
+}
+
+void generateClassDecl(Output& out, const ClassDecl& c, const Module& module) {
+    Generator g(out, module);
+    g.classDeclDefinition(c);
 }
 
 void generateDefinition(Output& out, const Function& f, const Module& module) {

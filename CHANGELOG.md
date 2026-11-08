@@ -888,6 +888,18 @@
 - **kompozc: a scope's functions and infix functions**: in `pointerInput { }` (a coroutine on its `PointerInputScope`) the
   detectors take the scope first and their handlers as a struct; `a at b` inside `DraggableAnchors { }` is the builder's
   `at(a, b)`, as any infix function the receiver has; a struct's field given a lambda returns the lambda's last expression.
+- **kompozc: classes**: `class Name(val a: T, b: U = d) : Base(b) { val c = …; var n = 0; init { … }; fun f(x: Int): R { … };
+  override fun g() { … }; private fun h() = … }` is a C++ class: its constructor's `val`/`var` parameters and its properties
+  members (typed as written, else as their value is), initialized in order in the constructor, `init` blocks its body;
+  its functions inline and const, its members mutable (a Kotlin object is reached through references that never make
+  it const), an `override` as its base's; `Name(b = …)` by name. A class without a base is a handle to its object
+  (`Name::Object`, `kompoz_object()` from C++), shared by its copies as Kotlin's references share it: a copy, a lambda's
+  capture or a `const Name&` parameter is the same object, `==` says so. One with a base (`: ViewModel()`) is the
+  class itself, handed out by its owner (`viewModel<T>()`) as a pointer, reached as the object (`vm.items`, `vm.toggle(…)`). `flow { emit(…) }` in a function typed
+  `Flow<T>`, `state["key"] = v` as `set`, `LifecycleResumeEffect(Unit) { …; onPauseOrDispose { … } }` and
+  `LifecycleStartEffect`'s `onStopOrDispose`, `viewModelScope` by name, `update { }`, `flatMapLatest { }` and the other
+  value lambdas; a function whose name a local shares (`items(items) { }`) is called, as Kotlin does. `debounce(300)` takes
+  milliseconds, as Kotlin's.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

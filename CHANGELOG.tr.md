@@ -929,6 +929,17 @@
 - **kompozc: bir kapsamın işlevleri ve infix işlevler**: `pointerInput { }` içinde (`PointerInputScope`'u üzerinde bir coroutine)
   algılayıcılar kapsamı önce, işleyicilerini bir struct olarak alıyor; `DraggableAnchors { }` içindeki `a at b`, alıcının sahip
   olduğu her infix işlev gibi, kurucunun `at(a, b)`'si; bir struct'ın lambda verilen alanı lambda'nın son ifadesini döndürüyor.
+- **kompozc: sınıflar**: `class Name(val a: T, b: U = d) : Base(b) { val c = …; var n = 0; init { … }; fun f(x: Int): R { … };
+  override fun g() { … }; private fun h() = … }` bir C++ sınıfı: kurucusunun `val`/`var` parametreleri ve özellikleri üye
+  (yazıldığı türde, yoksa değerinin türünde), kurucuda sırayla ilklenir, `init` blokları kurucunun gövdesi; işlevleri
+  inline ve const, üyeleri mutable (bir Kotlin nesnesine onu const yapmayan başvurularla erişilir), bir `override`
+  tabanınki gibi; adla `Name(b = …)`. Tabanı olmayan bir sınıf nesnesine bir tutamaç (`Name::Object`, C++'tan
+  `kompoz_object()`), Kotlin'in başvurularının paylaştığı gibi kopyalarınca paylaşılır: bir kopya, bir lambda'nın yakaladığı
+  ya da bir `const Name&` parametresi aynı nesnedir, `==` bunu söyler. Tabanı olan (`: ViewModel()`) sınıfın kendisidir,
+  sahibinin (`viewModel<T>()`) işaretçi olarak verdiği, nesne olarak erişilir (`vm.items`, `vm.toggle(…)`). `Flow<T>` tipli bir işlevde `flow { emit(…) }`, `set` olarak
+  `state["key"] = v`, `LifecycleResumeEffect(Unit) { …; onPauseOrDispose { … } }` ve `LifecycleStartEffect`'in
+  `onStopOrDispose`'u, adla `viewModelScope`, `update { }`, `flatMapLatest { }` ve öteki değer lambda'ları; adını bir
+  yerelin paylaştığı bir işlev (`items(items) { }`) Kotlin'deki gibi çağrılır. `debounce(300)` Kotlin'inki gibi milisaniye alır.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

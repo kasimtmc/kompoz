@@ -32,13 +32,14 @@ struct Found {
     std::optional<DataClass> dataClass;
     std::optional<Property> property;
     std::optional<EnumClass> enumClass;
+    std::optional<ClassDecl> classDecl;
     size_t begin, end;  // offsets in the source
     // The C++ namespace it is in, as a call names it: "::" at the top, "::app::" in namespace app;
     // empty in an unnamed one (a call there can't name it so).
     std::string qualifier;
 
     const std::string& name() const {
-        return function ? function->name : dataClass ? dataClass->name : property ? property->name : enumClass->name;
+        return function ? function->name : dataClass ? dataClass->name : property ? property->name : classDecl ? classDecl->name : enumClass->name;
     }
 };
 
@@ -84,6 +85,39 @@ bool startsEnumClass(std::string_view src, size_t at) {
     for (size_t i = k + 1; i < close; ++i)
         if (!identChar(src[i]) && !std::isspace(static_cast<unsigned char>(src[i])) && src[i] != ',' && src[i] != ';') return false;
     return true;
+}
+
+// Whether Kotlin's class starts at `at`: [private | internal | public | open | abstract]... class Name, then a
+// primary constructor `(`, a base with its arguments `: Base(…)`, or a body that begins as Kotlin's do
+// (val, var, fun, init, override, …; C++'s begin with public: or a type).
+bool startsClass(std::string_view src, size_t at) {
+    size_t k = at;
+    auto word = [&] {
+        while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+        size_t b = k;
+        while (k < src.size() && identChar(src[k])) ++k;
+        return src.substr(b, k - b);
+    };
+    std::string_view w = word();
+    while (w == "private" || w == "internal" || w == "public" || w == "open" || w == "abstract") w = word();
+    if (w != "class" || word().empty()) return false;
+    while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+    if (k >= src.size()) return false;
+    if (src[k] == '(') return true;
+    if (src[k] == ':') {  // a base: Kotlin's is constructed, Base(…)
+        size_t brace = src.find_first_of("{\n", k);
+        return src.substr(k, (brace == std::string_view::npos ? src.size() : brace) - k).find('(') != std::string_view::npos;
+    }
+    if (src[k] != '{') return false;
+    ++k;
+    while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;  // (the body may start on the next line)
+    std::string_view first = word();
+    if (first == "private" || first == "public" || first == "internal" || first == "protected") {
+        if (k < src.size() && src[k] == ':') return false;  // C++'s access label
+        first = word();
+    }
+    static const std::set<std::string_view> kotlin = {"val", "var", "fun", "init", "override", "open", "abstract", "suspend", "lateinit"};
+    return kotlin.contains(first);
 }
 
 // Whether a top-level val starts at `at`: [private | internal | public | const]... val name, then
@@ -217,7 +251,7 @@ std::vector<Found> scan(std::string_view src) {
             Parser parser(src, positionOf(src, i));
             Function f = parser.function();
             size_t end = f.end.offset;
-            found.push_back({std::move(f), std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
+            found.push_back({std::move(f), std::nullopt, std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
             i = end;
         } else if (c == 'd' && (i == 0 || !identChar(src[i - 1])) && src.substr(i, 4) == "data" && i + 4 < src.size() &&
                    std::isspace(static_cast<unsigned char>(src[i + 4]))) {
@@ -228,16 +262,25 @@ std::vector<Found> scan(std::string_view src) {
                 Parser parser(src, positionOf(src, i));
                 DataClass d = parser.dataClass();
                 size_t end = d.end.offset;
-                found.push_back({std::nullopt, std::move(d), std::nullopt, std::nullopt, i, end, qualifier()});
+                found.push_back({std::nullopt, std::move(d), std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
                 i = end;
             } else {
                 i += 4;
             }
+        } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsClass(src, i)) {
+            Parser parser(src, positionOf(src, i));
+            ClassDecl k = parser.classDecl();
+            size_t end = k.end.offset;
+            Found f;
+            f.classDecl = std::move(k);
+            f.begin = i, f.end = end, f.qualifier = qualifier();
+            found.push_back(std::move(f));
+            i = end;
         } else if (c == 'e' && (i == 0 || !identChar(src[i - 1])) && startsEnumClass(src, i)) {
             Parser parser(src, positionOf(src, i));
             EnumClass e = parser.enumClass();
             size_t end = e.end.offset;
-            found.push_back({std::nullopt, std::nullopt, std::nullopt, std::move(e), i, end, qualifier()});
+            found.push_back({std::nullopt, std::nullopt, std::nullopt, std::move(e), std::nullopt, i, end, qualifier()});
             i = end;
         } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsFun(src, i)) {
             Parser parser(src, positionOf(src, i));
@@ -248,13 +291,13 @@ std::vector<Found> scan(std::string_view src) {
                 f = again.function();
                 end = f.end.offset;
             }
-            found.push_back({std::move(f), std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
+            found.push_back({std::move(f), std::nullopt, std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
             i = end;
         } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsVal(src, i)) {
             Parser parser(src.substr(0, valEnd(src, i)), positionOf(src, i));
             Property p = parser.property();
             size_t end = p.end.offset;
-            found.push_back({std::nullopt, std::nullopt, std::move(p), std::nullopt, i, end, qualifier()});
+            found.push_back({std::nullopt, std::nullopt, std::move(p), std::nullopt, std::nullopt, i, end, qualifier()});
             i = end;
         } else if (identChar(c)) {
             size_t b = i;
@@ -351,6 +394,27 @@ void names(const Found& f, std::set<std::string, std::less<>>& out) {
         names(f.property->decl.get(), out);
     } else if (f.enumClass) {
         // (nothing: its entries are its own)
+    } else if (f.classDecl) {
+        const ClassDecl& c = *f.classDecl;
+        for (const Param& p : c.ctorParams) {
+            typeNames(p.type, out);
+            names(p.defaultValue.get(), out);
+        }
+        if (c.base) typeNames(*c.base, out);
+        for (const NodeP& a : c.baseArgs) names(a.get(), out);
+        for (const ClassProperty& p : c.properties) {
+            if (p.type) typeNames(*p.type, out);
+            names(p.init.get(), out);
+        }
+        for (const Function& m : c.methods) {
+            for (const Param& p : m.params) {
+                typeNames(p.type, out);
+                names(p.defaultValue.get(), out);
+            }
+            if (m.result) typeNames(*m.result, out);
+            names(m.body.get(), out);
+        }
+        for (const NodeP& b : c.initBlocks) names(b.get(), out);
     } else {
         for (const Param& p : f.dataClass->fields) {
             typeNames(p.type, out);
@@ -375,6 +439,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
         if (f.function) module.functions[f.function->name] = &*f.function;
         else if (f.dataClass) module.classes[f.dataClass->name] = &*f.dataClass;
         else if (f.property) module.properties[f.property->name] = &*f.property;
+        else if (f.classDecl) module.classDecls[f.classDecl->name] = &*f.classDecl;
     }
     // The other sources' declarations this one uses, and those they use in turn (a data class in
     // a parameter's type): declared here too, as C++ needs (Kotlin's module needs nothing).
@@ -389,7 +454,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
                 for (const Found& f : o.found) {
                     const std::string& name = f.name();
                     if (taken.contains(&f) || !used.contains(name) || module.functions.contains(name) || module.classes.contains(name) ||
-                        module.properties.contains(name))
+                        module.properties.contains(name) || module.classDecls.contains(name))
                         continue;
                     // A private val or function only for what is taken from its own file (uses it there).
                     bool isPrivate = (f.property && f.property->isPrivate) || (f.function && f.function->isPrivate);
@@ -410,6 +475,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             if (f->function) module.functions[f->function->name] = &*f->function;
             else if (f->dataClass) module.classes[f->dataClass->name] = &*f->dataClass;
             else if (f->property) module.properties[f->property->name] = &*f->property;
+            else if (f->classDecl) module.classDecls[f->classDecl->name] = &*f->classDecl;
         }
     }
     Output out(lineFile);
@@ -436,9 +502,9 @@ std::string translate(const std::string& src, const fs::path& source, const std:
     // uses; one of another file, from its file.
     std::map<std::string, std::pair<std::string, const Found*>, std::less<>> early;
     for (const Found& g : found)
-        if (g.property || (g.function && !g.function->composable)) early[g.name()] = {lineFile, &g};
+        if (g.property || g.classDecl || (g.function && !g.function->composable)) early[g.name()] = {lineFile, &g};
     for (auto [o, g] : imported)
-        if (g->property || (g->function && !g->function->composable)) early[g->name()] = {o->lineFile, g};
+        if (g->property || g->classDecl || (g->function && !g->function->composable)) early[g->name()] = {o->lineFile, g};
     std::set<std::string, std::less<>> defined;
     // (`where`: the qualifier of where it is defined, the namespace its calls name)
     auto define = [&](auto&& self, const std::string& name, const std::string& where) -> void {
@@ -452,6 +518,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
         declare(used);
         out.setFile(v->second.first);
         if (g.property) generateProperty(out, *g.property, module);
+        else if (g.classDecl) generateClassDecl(out, *g.classDecl, module);
         else generateDefinition(out, *g.function, module);
         out.setFile(lineFile);
     };
@@ -476,7 +543,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
                 if (g.dataClass) generateClass(out, *g.dataClass, module);
             }
         }
-        if (f.property || (f.function && !f.function->composable)) {
+        if (f.property || f.classDecl || (f.function && !f.function->composable)) {
             define(define, f.name(), f.qualifier);
         } else if (f.function) {
             // The function itself declared, and what it uses declared or defined, before it.

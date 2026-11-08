@@ -26,16 +26,33 @@
 #include <vector>
 
 // a.b in Kotlin: a's property b, which is a member function here (listState.firstVisibleItemIndex is
-// firstVisibleItemIndex()) or a field (a data class's). (A macro: a member's name can't be passed.)
+// firstVisibleItemIndex()) or a field (a data class's); `a` may be a pointer to the object (a
+// viewModel<T>()'s shared_ptr): Kotlin has no pointers. (A macro: a member's name can't be passed.)
 #define KOMPOZ_KT_GET(object, name)                                          \
     ::kompoz::kt::detail::get(                                               \
         [](auto&& kompoz_o) -> decltype(auto) {                              \
             if constexpr (requires { kompoz_o.name(); }) return kompoz_o.name(); \
             else return (kompoz_o.name);                                     \
         },                                                                   \
-        object)
+        ::kompoz::kt::deref(object))
 
 namespace kompoz::kt {
+
+// A pointer to an object: a raw one, or a smart one (a shared_ptr: get() gives the raw pointer; a
+// state's get() gives its value, so a state is not one).
+template <class T>
+concept PointerLike = std::is_pointer_v<std::remove_cvref_t<T>> ||
+                      (requires(const std::remove_cvref_t<T>& x) { *x; x.get(); } &&
+                       std::is_pointer_v<std::remove_cvref_t<decltype(std::declval<const std::remove_cvref_t<T>&>().get())>>);
+
+// The object behind a pointer (a viewModel<T>()'s shared_ptr, a raw pointer), or the value itself:
+// Kotlin's `a.b` knows no pointers (an optional is not one: a nullable's ?. unwraps it).
+template <class T>
+decltype(auto) deref(T&& x) {
+    if constexpr (requires { x.kompoz_object(); }) return (x.kompoz_object());  // a kompozc class's handle: its object
+    else if constexpr (PointerLike<T>) return (*x);
+    else return std::forward<T>(x);
+}
 
 namespace detail {
 template <class F, class T>
@@ -165,6 +182,7 @@ bool isNull(const T& v) {
 template <class T>
 decltype(auto) notNull(T&& v) {
     if constexpr (requires { v.has_value(); *v; }) return *std::forward<T>(v);
+    else if constexpr (PointerLike<T>) return (*v);  // (a pointer, a shared_ptr: the object)
     else return std::forward<T>(v);
 }
 
@@ -195,7 +213,7 @@ decltype(auto) value(const S& s) {
 // gives a Color, whose own value() is its packed bits, not what `by` means).
 template <class S>
 decltype(auto) delegated(const S& s) {
-    if constexpr (requires { s.get(); }) return s.get();
+    if constexpr (requires { s.get(); } && !PointerLike<S>) return s.get();  // (not a shared_ptr's)
     else if constexpr (requires { s.value; }) return (s.value);
     else return (s);
 }
@@ -299,6 +317,22 @@ auto safe(const T& a, F&& f) {
 // DisposableEffect(key) { …; onDispose { … } }: what the effect gives back, run when it leaves.
 template <class F>
 std::function<void()> onDispose(F&& f) {
+    return std::function<void()>(std::forward<F>(f));
+}
+// a[k] = v: a's set(k, v) where it has one (a SavedStateHandle's, a state list's), else its element.
+template <class C, class K, class V>
+void setAt(C&& c, K&& k, V&& v) {
+    if constexpr (requires { c.set(k, v); }) c.set(std::forward<K>(k), std::forward<V>(v));
+    else c[std::forward<K>(k)] = std::forward<V>(v);
+}
+
+// LifecycleResumeEffect(key) { …; onPauseOrDispose { … } } and LifecycleStartEffect's onStopOrDispose: the same.
+template <class F>
+std::function<void()> onPauseOrDispose(F&& f) {
+    return std::function<void()>(std::forward<F>(f));
+}
+template <class F>
+std::function<void()> onStopOrDispose(F&& f) {
     return std::function<void()>(std::forward<F>(f));
 }
 
@@ -961,3 +995,9 @@ std::pair<A, B> to(A a, B b) {
 }
 
 }  // namespace kompoz::kt
+
+// Unit as a key (LaunchedEffect(Unit), LifecycleResumeEffect(Unit)): one value, one hash.
+template <>
+struct std::hash<kompoz::kt::UnitValue> {
+    size_t operator()(const kompoz::kt::UnitValue&) const noexcept { return 0; }
+};

@@ -1131,6 +1131,83 @@ TEST(gestures_as_compose_writes_it) {
     CHECK(!log.empty() && log.front() == "tap");
 }
 
+// Classes as Kotlin writes them: a ViewModel with a state flow and a function, a class with a primary
+// constructor (val and plain parameters, a default), a property typed by its value, an init block, a
+// flow built in a function typed Flow<T>, a saved state handle set by index, a lifecycle effect.
+data class Todo(val id: Int, val title: String, val done: Boolean = false)
+
+class TodoViewModel : ViewModel() {
+    val items = MutableStateFlow(listOf(Todo(1, "Yaz"), Todo(2, "Gönder")))
+    var toggles = 0
+
+    fun toggle(id: Int, done: Boolean) {
+        toggles++
+        items.update { list -> list.map { if (it.id == id) it.copy(done = done) else it } }
+    }
+
+    override fun onCleared() {}
+}
+
+class Greeter(private val name: String, suffix: String, val punctuation: String = "!") {
+    val greeting: String = "Merhaba, $name$suffix"   // (typed: it reads a plain parameter)
+    var greeted = 0
+    init { greeted = -1 }
+    fun greet(): String {
+        greeted++
+        return greeting + punctuation
+    }
+    private fun hidden() = 1
+}
+
+fun ticks(): Flow<Int> = flow {
+    for (i in 0 until 3) {
+        emit(i)
+        delay(10)
+    }
+}
+
+class QueryViewModel(private val state: SavedStateHandle) : ViewModel() {
+    val query: StateFlow<String> = state.getStateFlow("query", "")
+    fun setQuery(q: String) { state["query"] = q }
+}
+
+class Player { var playing = false; fun play() { playing = true } fun pause() { playing = false } }
+
+@Composable
+fun TodoScreen(player: Player) {
+    val vm = viewModel<TodoViewModel>()
+    val items by vm.items.collectAsState()
+    LazyColumn {
+        items(items, key = { it.id }) { t ->
+            Text(if (t.done) "✓ ${t.title}" else t.title, modifier = Modifier.clickable { vm.toggle(t.id, !t.done) })
+        }
+    }
+    LifecycleResumeEffect(Unit) {
+        player.play()
+        onPauseOrDispose { player.pause() }
+    }
+}
+
+TEST(classes_as_kotlin_writes_them) {
+    Player player;
+    ComposeTestRule rule([&] { TodoScreen(player); });
+    CHECK(rule.onNodeWithText("Yaz").exists());
+    CHECK(player.kompoz_object().playing);  // (the composable copied the handle: the same object)
+    rule.onNodeWithText("Yaz").performClick();
+    CHECK(rule.onNodeWithText("✓ Yaz").exists());
+    Greeter g("Ada", " Lovelace");
+    CHECK(g.kompoz_object().greeting == "Merhaba, Ada Lovelace" && g.kompoz_object().greeted == -1);
+    CHECK(g.greet() == "Merhaba, Ada Lovelace!" && g.kompoz_object().greeted == 0);
+    Greeter same = g;  // a copy is the same object, as Kotlin's
+    same.greet();
+    CHECK(g.kompoz_object().greeted == 1 && same == g);
+    CHECK(Greeter("Bo", "", "?").greet() == "Merhaba, Bo?");
+    QueryViewModel q{SavedStateHandle()};
+    q.setQuery("kompoz");
+    CHECK(q.query.value() == "kompoz");
+    (void)ticks();  // (it compiles: Flow<int> from flow { emit(i) })
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;
