@@ -104,7 +104,7 @@ void Parser::fail(Pos at, const std::string& message) { throw CompileError(at, m
 
 // ---- Declarations -------------------------------------------------------------------------------
 
-void Parser::annotations(std::vector<std::string>* names) {
+void Parser::annotations(std::vector<std::string>* names, std::map<std::string, std::string>* args) {
     while (isOp("@")) {
         take();
         std::string name = expectIdent();
@@ -112,15 +112,28 @@ void Parser::annotations(std::vector<std::string>* names) {
             take();
             name += "." + take().text;
         }
-        if (isOp("(") && !cur().spaceBefore) {  // @Preview(showBackground = true): its arguments aren't used yet
+        if (isOp("(") && !cur().spaceBefore) {  // @Preview(widthDp = 400, showBackground = true): each argument's text
             NewlineMode mode(newlines_, false);
-            int depth = 0;
-            do {
+            take();
+            while (!isOp(")")) {
                 if (cur().kind == Tok::End) fail("unterminated annotation");
-                if (isOp("(")) ++depth;
-                if (isOp(")")) --depth;
-                take();
-            } while (depth > 0);
+                std::string key, value;
+                if (cur().kind == Tok::Ident && peekRaw(1).kind == Tok::Op && peekRaw(1).text == "=") {
+                    key = take().text;
+                    take();
+                }
+                int depth = 0;
+                while (!(depth == 0 && (isOp(",") || isOp(")")))) {
+                    if (cur().kind == Tok::End) fail("unterminated annotation");
+                    if (isOp("(")) ++depth;
+                    if (isOp(")")) --depth;
+                    const Token& t = take();
+                    value += t.kind == Tok::String ? "\"" + t.text + "\"" : t.text;
+                }
+                if (args && !key.empty()) (*args)[key] = value;
+                acceptOp(",");
+            }
+            expectOp(")");
         }
         if (names) names->push_back(name);
         skipNewlines();
@@ -132,7 +145,7 @@ Function Parser::function() {
     f.pos = cur().pos;
     std::vector<std::string> names;
     for (bool more = true; more;) {
-        annotations(&names);
+        annotations(&names, &f.annotationArgs);
         more = false;
         while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("inline") || isIdent("override") ||
                isIdent("protected") || isIdent("open")) {
@@ -274,9 +287,28 @@ ClassDecl Parser::classDecl() {
     return c;
 }
 
+ObjectDecl Parser::objectDecl() {
+    ObjectDecl o;
+    o.pos = cur().pos;
+    annotations(&o.annotations);
+    if (!isIdent("object")) fail("expected 'object'");
+    take();
+    o.name = expectIdent();
+    if (opAfterNewlines("{")) {  // an empty body
+        skipNewlines();
+        take();
+        skipNewlines();
+        if (!isOp("}")) fail("an object with members isn't supported: a @Serializable object is a route");
+        take();
+    }
+    o.end = tokens_[index_ - 1].end;
+    return o;
+}
+
 DataClass Parser::dataClass() {
     DataClass c;
     c.pos = cur().pos;
+    annotations(&c.annotations);
     if (!isIdent("data")) fail("expected 'data class'");
     take();
     if (!isIdent("class")) fail("expected 'class' after 'data'");

@@ -4,6 +4,7 @@
 
 #include "lexer.hpp"
 
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -114,6 +115,7 @@ struct Function {
     bool expressionBody = false;
     bool overrides = false;          // override fun (a class's)
     std::vector<std::string> annotations;  // besides @Composable (Preview, ...)
+    std::map<std::string, std::string> annotationArgs;  // @Preview(widthDp = 400): "widthDp" -> "400" (the text of each)
     Pos pos;                         // the @ of @Composable (or where it starts)
     Pos end;                         // just past the closing brace
 };
@@ -164,6 +166,15 @@ struct DataClass {
     std::string name;
     std::vector<Param> fields;
     std::vector<bool> mutableFields;  // var (else val)
+    std::vector<std::string> annotations;  // @Serializable: a route
+    Pos pos;
+    Pos end;
+};
+
+// An object: @Serializable object Home (a route without arguments; the name is its type and its value).
+struct ObjectDecl {
+    std::string name;
+    std::vector<std::string> annotations;
     Pos pos;
     Pos end;
 };

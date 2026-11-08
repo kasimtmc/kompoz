@@ -12,8 +12,10 @@ public:
 
     // [@Composable] [@Other...] [private] fun [Receiver.]name(params)[: Type] { body } (or = expression).
     Function function();
-    // data class Name(val a: T, var b: U = d)
+    // [@Serializable] data class Name(val a: T, var b: U = d)
     DataClass dataClass();
+    // [@Serializable] object Name
+    ObjectDecl objectDecl();
     // enum class Name { A, B, C }
     EnumClass enumClass();
     // class Name(val a: T, b: U) : Base(b) { val c = …; fun f() { … } }
@@ -39,7 +41,7 @@ private:
 
     Type type();
     std::vector<Param> params();
-    void annotations(std::vector<std::string>* names);
+    void annotations(std::vector<std::string>* names, std::map<std::string, std::string>* args = nullptr);
 
     NodeP block();             // { statements }
     NodeP body();              // a block, or one statement as a block

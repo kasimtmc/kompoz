@@ -947,6 +947,16 @@
   route = …) { }`'ı; `navigate(route) { popUpTo("home") { saveState = true }; launchSingleTop = true }` (`NavOptionsBuilder`,
   `PopUpToBuilder`); `navDeepLink { uriPattern = "…" }`; `entry.destination.route` (`NavDestination`); `BackHandler(enabled
   = …) { }`; `combinedClickable(onClick = …, onLongClick = …, onDoubleClick = …)`.
+- **kompozc: rotalar ve object'ler**: `@Serializable data class Profile(val id: String, val tab: Int? = null)` bir rota
+  (`KOMPOZ_ROUTE`), `@Serializable object Home` argümansız bir rota, adı hem türü hem tek değeri (`navigate(Home)`,
+  `composable<Home> { }`); `e.toRoute<Profile>()` ve bir nesne üzerinde tür argümanlı öteki çağrılar;
+  `entry?.destination?.route` getter'lar üzerinden okunuyor.
+- **kompozc: önizlemeler, testler ve platformun local'leri**: bir `@Preview(widthDp = …, heightDp = …, uiMode =
+  Configuration.UI_MODE_NIGHT_YES, showBackground = true) @Composable fun` kendi adıyla bir önizleme kaydediyor (C++'ta
+  `KOMPOZ_PREVIEW`'ın yaptığı), `KOMPOZ_PREVIEW=Ad` ile gösteriliyor; ek açıklamalı bir işlev (`@Test fun`) ek açıklamasından
+  okunuyor; `ComposeTestRule { … }` ve `AssertionError`, `kompoz::testing`'inkiler; `LocalUriHandler.current`,
+  `LocalClipboardManager.current`, `LocalHapticFeedback.current` ve `LocalSoftwareKeyboardController.current` host'un
+  verdikleri (`uriHandler()` ve ötekiler). Test kuralının `mainClock.advanceTimeBy(ms)`'si, Compose'un adı.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

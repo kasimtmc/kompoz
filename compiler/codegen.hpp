@@ -7,6 +7,7 @@
 #include "headers.hpp"
 
 #include <map>
+#include <set>
 #include <string>
 
 namespace kompozc {
@@ -19,6 +20,7 @@ struct Module {
     std::map<std::string, const DataClass*, std::less<>> classes;
     std::map<std::string, const Property*, std::less<>> properties;  // top-level vals
     std::map<std::string, const ClassDecl*, std::less<>> classDecls;  // classes (constructed with their parameters in order)
+    std::set<std::string, std::less<>> objects;  // objects: a name that is a type and its one value
     // How a call names each of the file's (or another file's, defined here) functions and vals: its
     // namespace, "::" at the top (a name of all of Kompoz's, label or shape, is not it then).
     std::map<std::string, std::string, std::less<>> qualifiers;
@@ -49,6 +51,8 @@ private:
 
 // An enum class: C++'s enum class, its entries in order.
 void generateEnum(Output& out, const EnumClass& e);
+// An object: an empty struct, a route when @Serializable.
+void generateObject(Output& out, const ObjectDecl& o);
 // A data class: a struct with its fields, == and toString().
 void generateClass(Output& out, const DataClass& c, const Module& module);
 // A top-level val: a constant of the namespace.

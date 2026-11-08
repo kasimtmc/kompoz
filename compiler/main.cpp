@@ -33,13 +33,14 @@ struct Found {
     std::optional<Property> property;
     std::optional<EnumClass> enumClass;
     std::optional<ClassDecl> classDecl;
+    std::optional<ObjectDecl> object;
     size_t begin, end;  // offsets in the source
     // The C++ namespace it is in, as a call names it: "::" at the top, "::app::" in namespace app;
     // empty in an unnamed one (a call there can't name it so).
     std::string qualifier;
 
     const std::string& name() const {
-        return function ? function->name : dataClass ? dataClass->name : property ? property->name : classDecl ? classDecl->name : enumClass->name;
+        return function ? function->name : dataClass ? dataClass->name : property ? property->name : classDecl ? classDecl->name : object ? object->name : enumClass->name;
     }
 };
 
@@ -118,6 +119,65 @@ bool startsClass(std::string_view src, size_t at) {
     }
     static const std::set<std::string_view> kotlin = {"val", "var", "fun", "init", "override", "open", "abstract", "suspend", "lateinit"};
     return kotlin.contains(first);
+}
+
+// Whether Kotlin's object starts at `at`: object Name, with no body or an empty one (C++ has no `object`).
+bool startsObject(std::string_view src, size_t at) {
+    size_t k = at;
+    auto word = [&] {
+        while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+        size_t b = k;
+        while (k < src.size() && identChar(src[k])) ++k;
+        return src.substr(b, k - b);
+    };
+    std::string_view w = word();
+    while (w == "private" || w == "internal" || w == "public" || w == "data") w = word();
+    if (w != "object") return false;
+    return !word().empty();
+}
+
+// What annotated Kotlin declaration starts at `at` (an '@'): 'd' a data class, 'o' an object, 'c' a class,
+// 'f' a function (@Preview @Composable fun, @Test fun), ' ' none (annotations in C++ don't exist).
+char annotatedDeclaration(std::string_view src, size_t at) {
+    size_t k = at;
+    for (;;) {
+        if (k >= src.size() || src[k] != '@') break;
+        ++k;
+        size_t b = k;
+        while (k < src.size() && (identChar(src[k]) || src[k] == '.')) ++k;
+        if (k == b) return ' ';
+        if (k < src.size() && src[k] == '(') {  // its arguments
+            int depth = 0;
+            for (; k < src.size(); ++k) {
+                if (src[k] == '(') ++depth;
+                else if (src[k] == ')' && --depth == 0) {
+                    ++k;
+                    break;
+                }
+            }
+        }
+        while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
+    }
+    size_t b = k;
+    while (k < src.size() && identChar(src[k])) ++k;
+    std::string_view w = src.substr(b, k - b);
+    while (w == "private" || w == "internal" || w == "public" || w == "open" || w == "abstract") {
+        while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+        b = k;
+        while (k < src.size() && identChar(src[k])) ++k;
+        w = src.substr(b, k - b);
+    }
+    if (w == "data") {
+        size_t j = k;
+        while (j < src.size() && std::isspace(static_cast<unsigned char>(src[j]))) ++j;
+        if (src.substr(j, 5) == "class") return 'd';
+        if (src.substr(j, 6) == "object") return 'o';
+        return ' ';
+    }
+    if (w == "object") return 'o';
+    if (w == "class" && startsClass(src, b)) return 'c';
+    if (w == "fun") return 'f';
+    return ' ';
 }
 
 // Whether a top-level val starts at `at`: [private | internal | public | const]... val name, then
@@ -247,11 +307,35 @@ std::vector<Found> scan(std::string_view src) {
                 ++i;
             }
             ++i;
+        } else if (c == '@' && annotatedDeclaration(src, i) != ' ') {
+            // @Serializable data class / object / class: read from the annotation
+            char kind = annotatedDeclaration(src, i);
+            Parser parser(src, positionOf(src, i));
+            Found f;
+            if (kind == 'd') f.dataClass = parser.dataClass();
+            else if (kind == 'o') f.object = parser.objectDecl();
+            else if (kind == 'c') f.classDecl = parser.classDecl();
+            else {
+                f.function = parser.function();
+                if (f.function->expressionBody) {  // (its expression ends with its line, as a val's: measured from `fun`)
+                    size_t funAt = i;
+                    while ((funAt = src.find("fun", funAt + 1)) != std::string_view::npos &&
+                           (identChar(src[funAt - 1]) || (funAt + 3 < src.size() && identChar(src[funAt + 3]))))
+                        ;
+                    Parser again(src.substr(0, valEnd(src, funAt)), positionOf(src, i));
+                    f.function = again.function();
+                }
+            }
+            f.begin = i;
+            f.end = f.dataClass ? f.dataClass->end.offset : f.object ? f.object->end.offset : f.classDecl ? f.classDecl->end.offset : f.function->end.offset;
+            f.qualifier = qualifier();
+            found.push_back(std::move(f));
+            i = f.end;
         } else if (c == '@' && src.substr(i + 1, 10) == "Composable" && (i + 11 >= src.size() || !identChar(src[i + 11]))) {
             Parser parser(src, positionOf(src, i));
             Function f = parser.function();
             size_t end = f.end.offset;
-            found.push_back({std::move(f), std::nullopt, std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
+            found.push_back({std::move(f), std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
             i = end;
         } else if (c == 'd' && (i == 0 || !identChar(src[i - 1])) && src.substr(i, 4) == "data" && i + 4 < src.size() &&
                    std::isspace(static_cast<unsigned char>(src[i + 4]))) {
@@ -262,7 +346,7 @@ std::vector<Found> scan(std::string_view src) {
                 Parser parser(src, positionOf(src, i));
                 DataClass d = parser.dataClass();
                 size_t end = d.end.offset;
-                found.push_back({std::nullopt, std::move(d), std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
+                found.push_back({std::nullopt, std::move(d), std::nullopt, std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
                 i = end;
             } else {
                 i += 4;
@@ -276,11 +360,18 @@ std::vector<Found> scan(std::string_view src) {
             f.begin = i, f.end = end, f.qualifier = qualifier();
             found.push_back(std::move(f));
             i = end;
+        } else if (c == 'o' && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsObject(src, i)) {
+            Parser parser(src, positionOf(src, i));
+            Found f;
+            f.object = parser.objectDecl();
+            f.begin = i, f.end = f.object->end.offset, f.qualifier = qualifier();
+            found.push_back(std::move(f));
+            i = f.end;
         } else if (c == 'e' && (i == 0 || !identChar(src[i - 1])) && startsEnumClass(src, i)) {
             Parser parser(src, positionOf(src, i));
             EnumClass e = parser.enumClass();
             size_t end = e.end.offset;
-            found.push_back({std::nullopt, std::nullopt, std::nullopt, std::move(e), std::nullopt, i, end, qualifier()});
+            found.push_back({std::nullopt, std::nullopt, std::nullopt, std::move(e), std::nullopt, std::nullopt, i, end, qualifier()});
             i = end;
         } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsFun(src, i)) {
             Parser parser(src, positionOf(src, i));
@@ -291,13 +382,13 @@ std::vector<Found> scan(std::string_view src) {
                 f = again.function();
                 end = f.end.offset;
             }
-            found.push_back({std::move(f), std::nullopt, std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
+            found.push_back({std::move(f), std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
             i = end;
         } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsVal(src, i)) {
             Parser parser(src.substr(0, valEnd(src, i)), positionOf(src, i));
             Property p = parser.property();
             size_t end = p.end.offset;
-            found.push_back({std::nullopt, std::nullopt, std::move(p), std::nullopt, std::nullopt, i, end, qualifier()});
+            found.push_back({std::nullopt, std::nullopt, std::move(p), std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
             i = end;
         } else if (identChar(c)) {
             size_t b = i;
@@ -392,8 +483,8 @@ void names(const Found& f, std::set<std::string, std::less<>>& out) {
     } else if (f.property) {
         if (f.property->decl->type) typeNames(*f.property->decl->type, out);
         names(f.property->decl.get(), out);
-    } else if (f.enumClass) {
-        // (nothing: its entries are its own)
+    } else if (f.enumClass || f.object) {
+        // (nothing: its entries are its own; an object is its name)
     } else if (f.classDecl) {
         const ClassDecl& c = *f.classDecl;
         for (const Param& p : c.ctorParams) {
@@ -440,6 +531,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
         else if (f.dataClass) module.classes[f.dataClass->name] = &*f.dataClass;
         else if (f.property) module.properties[f.property->name] = &*f.property;
         else if (f.classDecl) module.classDecls[f.classDecl->name] = &*f.classDecl;
+        else if (f.object) module.objects.insert(f.object->name);
     }
     // The other sources' declarations this one uses, and those they use in turn (a data class in
     // a parameter's type): declared here too, as C++ needs (Kotlin's module needs nothing).
@@ -476,6 +568,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             else if (f->dataClass) module.classes[f->dataClass->name] = &*f->dataClass;
             else if (f->property) module.properties[f->property->name] = &*f->property;
             else if (f->classDecl) module.classDecls[f->classDecl->name] = &*f->classDecl;
+            else if (f->object) module.objects.insert(f->object->name);
         }
     }
     Output out(lineFile);
@@ -536,11 +629,13 @@ std::string translate(const std::string& src, const fs::path& source, const std:
                 out.setFile(o->lineFile);
                 if (g->enumClass) generateEnum(out, *g->enumClass);
                 if (g->dataClass) generateClass(out, *g->dataClass, module);
+                if (g->object) generateObject(out, *g->object);
             }
             out.setFile(lineFile);
             for (const Found& g : found) {
                 if (g.enumClass) generateEnum(out, *g.enumClass);
                 if (g.dataClass) generateClass(out, *g.dataClass, module);
+                if (g.object) generateObject(out, *g.object);
             }
         }
         if (f.property || f.classDecl || (f.function && !f.function->composable)) {

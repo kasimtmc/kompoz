@@ -907,6 +907,16 @@
   = …, route = …) { }` by name; `navigate(route) { popUpTo("home") { saveState = true }; launchSingleTop = true }`
   (`NavOptionsBuilder`, `PopUpToBuilder`); `navDeepLink { uriPattern = "…" }`; `entry.destination.route`
   (`NavDestination`); `BackHandler(enabled = …) { }`; `combinedClickable(onClick = …, onLongClick = …, onDoubleClick = …)`.
+- **kompozc: routes and objects**: `@Serializable data class Profile(val id: String, val tab: Int? = null)` is a route
+  (`KOMPOZ_ROUTE`), `@Serializable object Home` a route without arguments, the name its type and its one value
+  (`navigate(Home)`, `composable<Home> { }`); `e.toRoute<Profile>()` and the other calls with type arguments on an
+  object; `entry?.destination?.route` reads through getters.
+- **kompozc: previews, tests and the platform's locals**: a `@Preview(widthDp = …, heightDp = …, uiMode =
+  Configuration.UI_MODE_NIGHT_YES, showBackground = true) @Composable fun` registers a preview under its name (what
+  `KOMPOZ_PREVIEW` does in C++), shown with `KOMPOZ_PREVIEW=Name`; an annotated function (`@Test fun`) is read from its
+  annotation; `ComposeTestRule { … }` and `AssertionError` are `kompoz::testing`'s; `LocalUriHandler.current`,
+  `LocalClipboardManager.current`, `LocalHapticFeedback.current` and `LocalSoftwareKeyboardController.current` are what
+  the host gives (`uriHandler()` and the others). The test rule's `mainClock.advanceTimeBy(ms)`, Compose's name.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

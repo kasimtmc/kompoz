@@ -54,6 +54,7 @@ const std::map<std::string, std::string, std::less<>> kTypes = {
     {"String", "std::string"},   {"Int", "int"},           {"Long", "long long"},     {"Short", "short"},
     {"Byte", "signed char"},     {"Float", "float"},       {"Double", "double"},      {"Boolean", "bool"},
     {"Char", "char32_t"},        {"Unit", "void"},         {"UInt", "unsigned"},      {"ULong", "unsigned long long"},
+    {"ComposeTestRule", "::kompoz::testing::ComposeTestRule"}, {"AssertionError", "::kompoz::testing::AssertionError"},
     {"Dp", "float"},             {"List", "std::vector"},  {"MutableList", "std::vector"}, {"ArrayList", "std::vector"},
     {"Set", "std::set"},         {"MutableSet", "std::set"}, {"Map", "std::map"},    {"MutableMap", "std::map"},
     {"Pair", "std::pair"},       {"Any", "std::any"}};
@@ -63,6 +64,9 @@ const std::map<std::string, std::string, std::less<>> kObjectProperties = {
     {"MaterialTheme.colorScheme", "::kompoz::colorScheme()"},
     {"MaterialTheme.typography", "::kompoz::typography()"},
     {"MaterialTheme.shapes", "::kompoz::LocalShapes.current()"},
+    // Compose's platform locals: what the host gives (platform.hpp)
+    {"LocalUriHandler.current", "::kompoz::uriHandler()"}, {"LocalClipboardManager.current", "::kompoz::clipboardManager()"},
+    {"LocalHapticFeedback.current", "::kompoz::hapticFeedback()"}, {"LocalSoftwareKeyboardController.current", "::kompoz::softwareKeyboardController()"},
     {"MaterialTheme.motionScheme", "::kompoz::motionScheme()"},
     // (Compose's insets are properties: WindowInsets.systemBars)
     {"WindowInsets.statusBars", "::kompoz::WindowInsets::statusBars()"},
@@ -95,6 +99,7 @@ const std::map<std::string, std::string, std::less<>> kComposableProperties = {
 // Named arguments whose lambda gives a value: items(list, key = { it.id }, contentType = { … }).
 const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType", "selector", "comparator", "span", "pageCount",
                                                             "itemCount", "progress", "transitionSpec", "contentKey", "shouldStartDragAndDrop",
+                                                            "enterTransition", "exitTransition", "popEnterTransition", "popExitTransition",
                                                             "initialOffsetX", "initialOffsetY", "targetOffsetX", "targetOffsetY"};
 
 // Properties of a class's own that are functions here, read by their bare name in its body (Kotlin's
@@ -139,6 +144,8 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"SharedTransitionLayout", "const SharedTransitionScope"},
     {"pointerInput", "PointerInputScope"},   {"awaitEachGesture", "PointerInputScope"},
     {"DraggableAnchors", "auto DraggableAnchors"},  // (the builder's anchors: DragValue.Start at 0f)
+    {"NavHost", "NavGraphBuilder"},          {"navigation", "NavGraphBuilder"},
+    {"navigate", "NavOptionsBuilder"},       {"popUpTo", "PopUpToBuilder"},     {"navDeepLink", "NavDeepLink"},
     // (an ImageVector's builder: group(…) { path(…) { moveTo(…) } })
     {"group", "ImageVector::Builder"},       {"path", "PathBuilder"},
     {"HorizontalMultiBrowseCarousel", "const CarouselItemScope"}, {"HorizontalUncontainedCarousel", "const CarouselItemScope"},
@@ -169,7 +176,9 @@ const std::map<std::string, std::string, std::less<>> kReceiverArguments = {
     // ("auto X": a template's scope, typed auto&&, its members X's: AnimatedContentTransitionScope<S>)
     {"AnimatedContent.transitionSpec", "auto AnimatedContentTransitionScope"},
     {"animateFloat.transitionSpec", "auto TransitionSegment"}, {"animateDp.transitionSpec", "auto TransitionSegment"},
-    {"animateColor.transitionSpec", "auto TransitionSegment"}};
+    {"animateColor.transitionSpec", "auto TransitionSegment"},
+    {"NavHost.enterTransition", "auto AnimatedContentTransitionScope"}, {"NavHost.exitTransition", "auto AnimatedContentTransitionScope"},
+    {"NavHost.popEnterTransition", "auto AnimatedContentTransitionScope"}, {"NavHost.popExitTransition", "auto AnimatedContentTransitionScope"}};
 
 // Calls whose lambda is a coroutine (Kotlin's suspend lambdas): [=]() -> Task { ...; co_return; }.
 const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "produceState", "pointerInput", "awaitEachGesture", "flow"};
@@ -297,6 +306,11 @@ public:
             out_.text(";");
         }
         scopes_.pop_back();
+        if (std::find(k.annotations.begin(), k.annotations.end(), "Serializable") != k.annotations.end()) {  // a route (nav_host.hpp)
+            out_.text(" KOMPOZ_ROUTE(" + k.name);
+            for (const Param& f : k.fields) out_.text(", " + cppName(f.name));
+            out_.text(")");
+        }
         out_.text(" bool operator==(const " + k.name + "&) const = default;");
         // (a template: built only where it is used, so a field without a text form doesn't stop the rest)
         out_.text(" template <class = void> std::string toString() const { return ::kompoz::kt::str(\"" + k.name + "(\"");
@@ -548,6 +562,19 @@ public:
         }
         scopes_.pop_back();
         out_.text(" }\n");
+        if (unit && f.params.empty() && std::find(f.annotations.begin(), f.annotations.end(), "Preview") != f.annotations.end()) {
+            // @Preview(widthDp = 400, heightDp = 220, showBackground = true, uiMode = UI_MODE_NIGHT_YES): a preview
+            // registered under the function's name (preview.hpp's KOMPOZ_PREVIEW), shown with KOMPOZ_PREVIEW=Name.
+            std::string spec;
+            auto arg = [&](const char* key) { auto it = f.annotationArgs.find(key); return it == f.annotationArgs.end() ? std::string() : it->second; };
+            if (!arg("widthDp").empty()) spec += ".width = " + arg("widthDp") + ", ";
+            if (!arg("heightDp").empty()) spec += ".height = " + arg("heightDp") + ", ";
+            if (arg("uiMode").find("NIGHT_YES") != std::string::npos) spec += ".darkTheme = true, ";
+            if (arg("showBackground") == "true") spec += ".background = ::kompoz::colors::White, ";
+            if (!spec.empty()) spec.resize(spec.size() - 2);
+            out_.text("static const ::kompoz::detail::PreviewRegistration kompoz_preview_" + f.name + "{{\"" + f.name + "\", ::kompoz::PreviewSpec{" + spec +
+                      "}, [] { " + f.name + "(); }}};\n");
+        }
     }
 
 private:
@@ -902,6 +929,10 @@ private:
             out_.text(qualifierOf(e.text) + cppName(e.text));
             return;
         }
+        if (module_.objects.contains(e.text)) {  // an object: its one value
+            out_.text(qualifierOf(e.text) + e.text + "{}");
+            return;
+        }
         if (e.text == "Modifier") {
             out_.text("::kompoz::Modifier()");
             return;
@@ -982,7 +1013,7 @@ private:
             out_.text("::kompoz::kt::safe(");
             expr(obj);
             out_.text(", " + capture("[&]") + (e.text == "size" || e.text == "length" ? "(auto&& kompoz_safe) { return ::kompoz::kt::size(kompoz_safe); })"
-                                                                                    : "(auto&& kompoz_safe) { return kompoz_safe." + cppName(e.text) + "; })"));
+                                                                                    : "(auto&& kompoz_safe) { return KOMPOZ_KT_GET((kompoz_safe), " + cppName(e.text) + "); })"));
             return;
         }
         if (obj.kind == Node::Member || obj.kind == Node::Name) {
@@ -1068,6 +1099,11 @@ private:
         if (callee.kind == Node::Name && !lookup(callee.text)) {
             if (size_t r = receiverOf(callee.text)) {
                 out_.text("(*kompoz_this_" + std::to_string(r) + ")." + cppName(callee.text));
+                if (!c.typeArgs.empty()) {  // composable<Profile> { } in a NavHost
+                    out_.text("<");
+                    for (size_t i = 0; i < c.typeArgs.size(); ++i) out_.text((i ? ", " : "") + type(c.typeArgs[i]));
+                    out_.text(">");
+                }
                 return arguments(c, calleeName, false);
             }
             if (kScopeFunctions.contains(callee.text) && !receivers_.empty()) {  // the scope first (the PointerInputScope around it)
@@ -1093,6 +1129,10 @@ private:
             if (auto f = module_.functions.find(callee.text); f != module_.functions.end()) return moduleCall(c, *f->second);
             if (auto k = module_.classes.find(callee.text); k != module_.classes.end()) return construct(c, *k->second);
             if (auto k = module_.classDecls.find(callee.text); k != module_.classDecls.end() && named(c)) return constructClass(c, *k->second);
+            if (auto t = kTypes.find(callee.text); t != kTypes.end() && t->second.starts_with("::")) {  // a type named in full (ComposeTestRule { })
+                out_.text(t->second);
+                return arguments(c, calleeName, false);
+            }
             if (callee.text == "Color" && c.kids.size() == 2 && c.names[0].empty() && !c.lambda) {
                 // Compose's Color(0xFF6750A4), an Int or a Long: AARRGGBB (its packed ULong form is Color(value = …), not this)
                 out_.text("::kompoz::Color::argb(");
@@ -1146,21 +1186,34 @@ private:
         }
         if (callee.kind == Node::Member && !callee.flag && !qualifier(companionless(*callee.kids[0])) && callee.text != "Companion") {
             // A member called: obj.f(…), not a property (obj may be a pointer to the object: a viewModel's).
-            out_.text("::kompoz::kt::deref(");
-            expr(companionless(*callee.kids[0]));
-            out_.text(")");
             // In a coroutine, Compose's suspending forms where Kompoz's C++ has a separate one.
             std::string member = suspend_ && callee.text == "showSnackbar" ? "showSnackbarAsync" : cppName(callee.text);
-            out_.text("." + member);
+            if (!c.typeArgs.empty()) {
+                // e.toRoute<Profile>(): the object's type may depend on a lambda's parameter, so the call is
+                // made where it is dependent for sure (.template is right there, wrong elsewhere).
+                out_.text(capture("[&]") + "(auto&& kompoz_o) -> decltype(auto) { return kompoz_o.template " + member);
+                typeArguments(c);
+                arguments(c, calleeName, false);
+                out_.text("; }(::kompoz::kt::deref(");
+                expr(companionless(*callee.kids[0]));
+                out_.text("))");
+                return;
+            }
+            out_.text("::kompoz::kt::deref(");
+            expr(companionless(*callee.kids[0]));
+            out_.text(")." + member);
         } else {
             expr(callee);
         }
-        if (!c.typeArgs.empty()) {
-            out_.text("<");
-            for (size_t i = 0; i < c.typeArgs.size(); ++i) out_.text((i ? ", " : "") + type(c.typeArgs[i]));
-            out_.text(">");
-        }
+        typeArguments(c);
         arguments(c, calleeName, false);
+    }
+
+    void typeArguments(const Node& c) {
+        if (c.typeArgs.empty()) return;
+        out_.text("<");
+        for (size_t i = 0; i < c.typeArgs.size(); ++i) out_.text((i ? ", " : "") + type(c.typeArgs[i]));
+        out_.text(">");
     }
 
     // (args): as written, named ones as kompoz's named arguments, the trailing lambda last.
@@ -1586,6 +1639,13 @@ void generateEnum(Output& out, const EnumClass& e) {
     out.text("enum class " + e.name + " {");
     for (size_t i = 0; i < e.entries.size(); ++i) out.text(std::string(i ? ", " : " ") + e.entries[i]);
     out.text(" };\n");
+}
+
+void generateObject(Output& out, const ObjectDecl& o) {
+    out.at(o.pos);
+    bool route = std::find(o.annotations.begin(), o.annotations.end(), "Serializable") != o.annotations.end();
+    out.text("struct " + o.name + " {" + (route ? " KOMPOZ_ROUTE(" + o.name + ")" : std::string()) + " bool operator==(const " + o.name +
+             "&) const = default; };\n");
 }
 
 void generateClass(Output& out, const DataClass& c, const Module& module) {

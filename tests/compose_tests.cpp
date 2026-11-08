@@ -1208,6 +1208,60 @@ TEST(classes_as_kotlin_writes_them) {
     (void)ticks();  // (it compiles: Flow<int> from flow { emit(i) })
 }
 
+// Navigation as Compose writes it: NavHost by name with a graph builder, typed routes from @Serializable,
+// navigate with its options block, the back stack entry's destination, nested graphs, deep links, the
+// host's transitions, BackHandler and combinedClickable by name.
+@Serializable
+data class Detail(val id: Int, val tab: String? = null)
+
+@Serializable
+object Start
+
+@Composable
+fun Navigator(nav: NavController) {
+    val entry by nav.currentBackStackEntryAsState()
+    val route = entry?.destination?.route
+    var selecting by remember { mutableStateOf(false) }
+    BackHandler(enabled = selecting) { selecting = false }
+    Column {
+        Text("rota ${route ?: "yok"}", modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { selecting = true }))
+        NavHost(navController = nav, startDestination = Start, modifier = Modifier.size(200.dp),
+                enterTransition = { slideInHorizontally { it } }, exitTransition = { slideOutHorizontally { -it } }) {
+            composable<Start> {
+                Button(onClick = { nav.navigate(Detail(id = 7, tab = "b")) { launchSingleTop = true } }) { Text("Aç") }
+            }
+            composable<Detail> { backStackEntry ->
+                val detail = backStackEntry.toRoute<Detail>()
+                Text("ayrıntı ${detail.id} ${detail.tab ?: "-"}")
+                Button(onClick = { nav.navigate(Start) { popUpTo<Start>(); launchSingleTop = true } }) { Text("Geri") }
+            }
+            navigation(startDestination = "a/{n}", route = "grup") {
+                composable("a/{n}", deepLinks = listOf(navDeepLink { uriPattern = "kompoz://a/{n}" })) { e ->
+                    Text("a ${e.arguments?.getInt("n") ?: 0}")
+                }
+            }
+        }
+    }
+}
+
+TEST(navigation_as_compose_writes_it) {
+    NavController nav;
+    ComposeTestRule rule([&] { Navigator(nav); });
+    rule.waitForIdle();  // (the entry read above the NavHost arrives with its first composition)
+    CHECK(rule.onNodeWithText("Aç").exists());
+    std::string rota = rule.onNodeWithText("rota ", true).text();
+    CHECK(rota == "rota Start" || (std::printf("rota: %s\n", rota.c_str()), false));
+    rule.onNodeWithText("Aç").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("ayrıntı 7 b").exists() && rule.onNodeWithText("rota Detail/{id}?tab={tab}").exists());
+    rule.onNodeWithText("Geri").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("Aç").exists());
+    nav.navigate("kompoz://a/4");
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("a 4").exists());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;
