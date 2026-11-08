@@ -805,7 +805,14 @@ NodeP Parser::primary() {
                 return n;
             }
             if (t.text == "null") return make(Node::Null, take().pos);
-            if (t.text == "this") return make(Node::This, take().pos);
+            if (t.text == "this") {  // this, or this@Label: the receiver of the lambda Label(…) { } around it
+                auto n = make(Node::This, take().pos);
+                if (isOp("@") && !cur().spaceBefore && peekRaw(1).kind == Tok::Ident) {
+                    take();
+                    n->text = take().text;
+                }
+                return n;
+            }
             if (t.text == "if") return ifExpression();
             if (t.text == "when") return whenExpression();
             if (t.text == "object" && peekRaw(1).kind == Tok::Op && peekRaw(1).text == ":") return objectExpression();

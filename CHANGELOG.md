@@ -873,6 +873,12 @@
   `sharedBounds` by name (`sharedContentState`, `animatedVisibilityScope`, `boundsTransform`, `renderInOverlayDuringTransition`,
   `zIndexInOverlay`, `resizeMode`), `animateEnterExit(enter = …, exit = …)`. `AnimatedContent` and `Crossfade` deduce
   their state's type: `AnimatedContent(count, …)`, not `AnimatedContent<int>(…)`; options are an `AnimatedContentOptions<T>`.
+- **kompozc: this@Label, a template's scope, `using`**: `this@AnimatedContent` is the receiver of the lambda given to that
+  call; a receiver that is a template's (`AnimatedContentTransitionScope<S>`, `TransitionSegment<S>`) is typed `auto`;
+  `a using b` is `a.withSizeTransform(b)`; the slides' and the transitions' value lambdas return their value. `Color(0xFF6750A4)`
+  is Compose's `Color(Long)`, AARRGGBB (`Color::argb`): it was the packed 64-bit constructor, so the pages' colors were wrong.
+  A `by` delegate reads a state's value, else the value itself (`val color by transition.animateColor { }`: a `Color`, not
+  its packed `value()`).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

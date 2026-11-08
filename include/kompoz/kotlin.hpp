@@ -191,6 +191,15 @@ decltype(auto) value(const S& s) {
     else return (s);  // (produceState's value: delegated to as it is)
 }
 
+// What a `by` delegate reads: a state's value (get()), else the value itself (a Transition's animateColor
+// gives a Color, whose own value() is its packed bits, not what `by` means).
+template <class S>
+decltype(auto) delegated(const S& s) {
+    if constexpr (requires { s.get(); }) return s.get();
+    else if constexpr (requires { s.value; }) return (s.value);
+    else return (s);
+}
+
 // ---- Ranges: 0 until n, 1..10, 10 downTo 1, r step 2, x in r ----
 
 template <class T>

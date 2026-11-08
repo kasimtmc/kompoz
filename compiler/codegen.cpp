@@ -44,6 +44,7 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "maxByOrNull", "minByOrNull", "let", "run", "with", "takeIf", "takeUnless", "getOrElse", "lazy", "snapshotFlow",
     "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked",
     "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "shader", "compositionLocalOf",
+    "slideInVertically", "slideInHorizontally", "slideOutVertically", "slideOutHorizontally", "animateFloat", "animateDp", "animateColor",
     "staticCompositionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent", "mediaQuery",
     "derivedMediaQuery", "SubcomposeLayout", "rememberPagerState", "rememberCarouselState"};
 
@@ -92,7 +93,8 @@ const std::map<std::string, std::string, std::less<>> kComposableProperties = {
 
 // Named arguments whose lambda gives a value: items(list, key = { it.id }, contentType = { … }).
 const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType", "selector", "comparator", "span", "pageCount",
-                                                            "itemCount", "progress"};
+                                                            "itemCount", "progress", "transitionSpec", "contentKey",
+                                                            "initialOffsetX", "initialOffsetY", "targetOffsetX", "targetOffsetY"};
 
 // Kotlin's standard functions, from kotlin.hpp: listOf(1, 2) -> kt::listOf(1, 2).
 const std::set<std::string, std::less<>> kKtFunctions = {
@@ -127,6 +129,8 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"SubcomposeLayout", "SubcomposeMeasureScope"},
     {"buildAnnotatedString", "AnnotatedStringBuilder"}, {"edit", "TextFieldBuffer"},
     {"GenericShape", "Path"},                {"blur", "BlurScope"},
+    {"AnimatedVisibility", "const AnimatedVisibilityScope"}, {"AnimatedContent", "const AnimatedContentScope"},
+    {"SharedTransitionLayout", "const SharedTransitionScope"},
     // (an ImageVector's builder: group(…) { path(…) { moveTo(…) } })
     {"group", "ImageVector::Builder"},       {"path", "PathBuilder"},
     {"HorizontalMultiBrowseCarousel", "const CarouselItemScope"}, {"HorizontalUncontainedCarousel", "const CarouselItemScope"},
@@ -150,7 +154,11 @@ const std::set<std::string, std::less<>> kInlineLambdas = {
 const std::map<std::string, std::string, std::less<>> kReceiverArguments = {
     {"FlexBox.config", "FlexBoxConfigScope"}, {"Grid.config", "GridConfigurationScope"},
     {"NavigationSuiteScaffold.navigationSuiteItems", "NavigationSuiteScope"},
-    {"item.span", "LazyGridItemSpanScope"},   {"items.span", "LazyGridItemSpanScope"}};
+    {"item.span", "LazyGridItemSpanScope"},   {"items.span", "LazyGridItemSpanScope"},
+    // ("auto X": a template's scope, typed auto&&, its members X's: AnimatedContentTransitionScope<S>)
+    {"AnimatedContent.transitionSpec", "auto AnimatedContentTransitionScope"},
+    {"animateFloat.transitionSpec", "auto TransitionSegment"}, {"animateDp.transitionSpec", "auto TransitionSegment"},
+    {"animateColor.transitionSpec", "auto TransitionSegment"}};
 
 // Calls whose lambda is a coroutine (Kotlin's suspend lambdas): [=]() -> Task { ...; co_return; }.
 const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "produceState"};
@@ -304,10 +312,12 @@ public:
             for (const Param& p : f.params) declare(p.name, Local);
             if (f.receiver) {  // its members reached by their names, as a lambda's receiver's
                 receivers_.push_back(qualified(f.receiver->name));
+                receiverLabels_.push_back({});
                 out_.text(" [[maybe_unused]] auto* kompoz_this_1 = &kompoz_receiver_1;");
             }
             statements(*f.body, false);
             receivers_.clear();
+            receiverLabels_.clear();
             scopes_.pop_back();
             out_.text(" }\n");
             return;
@@ -601,9 +611,15 @@ private:
             case Node::Char: out_.text("U'" + e.text + "'"); return;
             case Node::Bool: out_.text(e.text); return;
             case Node::Null: out_.text("::kompoz::kt::null"); return;
-            case Node::This:  // in a lambda with a receiver: the receiver
-                out_.text(receivers_.empty() ? std::string("(*this)") : "(*kompoz_this_" + std::to_string(receivers_.size()) + ")");
+            case Node::This: {  // in a lambda with a receiver: the receiver; this@Label: the lambda Label(…) { }'s
+                size_t r = receivers_.size();
+                if (!e.text.empty()) {
+                    while (r > 0 && receiverLabels_[r - 1] != e.text) --r;
+                    if (r == 0) throw CompileError(e.pos, "this@" + e.text + ": no lambda of " + e.text + " around it");
+                }
+                out_.text(r == 0 ? std::string("(*this)") : "(*kompoz_this_" + std::to_string(r) + ")");
                 return;
+            }
             case Node::Paren:
                 out_.text("(");
                 expr(*e.kids[0]);
@@ -653,7 +669,7 @@ private:
 
     void name(const Node& e) {
         if (const VarKind* k = lookup(e.text)) {
-            if (*k == Delegated) out_.text("::kompoz::kt::value(" + cppName(e.text) + ")");
+            if (*k == Delegated) out_.text("::kompoz::kt::delegated(" + cppName(e.text) + ")");
             else out_.text(cppName(e.text));
             return;
         }
@@ -827,6 +843,13 @@ private:
         if (callee.kind == Node::Name && !lookup(callee.text)) {
             if (auto f = module_.functions.find(callee.text); f != module_.functions.end()) return moduleCall(c, *f->second);
             if (auto k = module_.classes.find(callee.text); k != module_.classes.end()) return construct(c, *k->second);
+            if (callee.text == "Color" && c.kids.size() == 2 && c.names[0].empty() && !c.lambda) {
+                // Compose's Color(0xFF6750A4), an Int or a Long: AARRGGBB (its packed ULong form is Color(value = …), not this)
+                out_.text("::kompoz::Color::argb(");
+                expr(*c.kids[1]);
+                out_.text(")");
+                return;
+            }
             if (callee.text == "Path" && named(c)) {  // a vector's path (Compose's Path(pathData = …) in rememberVectorPainter { })
                 out_.text("::kompoz::vector::Path");
                 return arguments(c, calleeName, false);
@@ -911,7 +934,7 @@ private:
                 auto receiver = kReceiverArguments.find(calleeName + "." + n);
                 if (c.kids[i + 1]->kind == Node::Lambda && kValueArguments.contains(n) && receiver == kReceiverArguments.end()) lambda(*c.kids[i + 1], true);
                 else if (c.kids[i + 1]->kind == Node::Lambda && receiver != kReceiverArguments.end())
-                    lambda(*c.kids[i + 1], kValueArguments.contains(n), false, false, &receiver->second);
+                    lambda(*c.kids[i + 1], kValueArguments.contains(n), false, false, &receiver->second, calleeName);
                 else expr(*c.kids[i + 1]);
             }
         }
@@ -927,7 +950,7 @@ private:
             if (calleeName == "layout" || measures) type = measures ? &measureScope : &placementScope;
             inline_ = kInlineLambdas.contains(calleeName);
             lambda(*c.lambda, kValueLambdas.contains(calleeName) || measures, kSuspendLambdas.contains(calleeName), calleeName == "produceState",
-                   type);
+                   type, calleeName);
         }
         out_.text(")");
     }
@@ -1066,18 +1089,22 @@ private:
 
     // `receiver`: the type of its receiver (Kotlin's T.() -> R, one of Kompoz's), taken first; kompoz_this_N points
     // to it (a pointer, so a lambda inside that keeps it sees the same one, as Kotlin's would).
-    void lambda(const Node& l, bool value, bool suspend = false, bool produceState = false, const std::string* receiver = nullptr) {
+    void lambda(const Node& l, bool value, bool suspend = false, bool produceState = false, const std::string* receiver = nullptr,
+                const std::string& label = {}) {
         bool wasSuspend = std::exchange(suspend_, suspend);
         out_.text(capture(std::exchange(inline_, false) ? "[&]" : "[=]") + "(");
         Scoped inside(global_);
         scopes_.emplace_back();
         std::string self;
         if (receiver) {
-            receivers_.push_back(receiver->starts_with("const ") ? receiver->substr(6) : *receiver);
+            bool isConst = receiver->starts_with("const "), isAuto = receiver->starts_with("auto ");
+            std::string bare = isConst ? receiver->substr(6) : isAuto ? receiver->substr(5) : *receiver;
+            receivers_.push_back(bare);
+            receiverLabels_.push_back(label);
             self = std::to_string(receivers_.size());
-            // (typed: an overload taking other parameters is never tried with it)
-            std::string type = receiver->starts_with("const ") ? "const ::kompoz::" + receiver->substr(6) : "::kompoz::" + *receiver;
-            out_.text(type + "& kompoz_receiver_" + self + std::string(l.flag && !l.names.empty() ? ", " : ""));
+            // (typed: an overload taking other parameters is never tried with it; "auto": a template's scope)
+            std::string type = isAuto ? "auto&&" : (isConst ? "const ::kompoz::" + bare : "::kompoz::" + bare) + "&";
+            out_.text(type + " kompoz_receiver_" + self + std::string(l.flag && !l.names.empty() ? ", " : ""));
         }
         if (suspend) {
             // A coroutine (Kotlin's suspend lambda): its CoroutineScope receiver has no name here;
@@ -1109,7 +1136,10 @@ private:
         for (size_t i = 0; i < l.kids.size(); ++i) statement(*l.kids[i], value && i + 1 == l.kids.size());
         if (suspend) out_.text(" co_return;");
         scopes_.pop_back();
-        if (receiver) receivers_.pop_back();
+        if (receiver) {
+            receivers_.pop_back();
+            receiverLabels_.pop_back();
+        }
         out_.text(" }");
         suspend_ = wasSuspend;
     }
@@ -1152,6 +1182,7 @@ private:
         // Its functions see only what it holds and their parameters (and `this` is the object).
         auto scopes = std::exchange(scopes_, {});
         auto receivers = std::exchange(receivers_, {});
+        auto receiverLabels = std::exchange(receiverLabels_, {});
         bool wasSuspend = std::exchange(suspend_, false), wasGlobal = std::exchange(global_, false);
         for (auto& m : o.kids) {
             out_.at(m->pos);
@@ -1168,6 +1199,7 @@ private:
         }
         scopes_ = std::move(scopes);
         receivers_ = std::move(receivers);
+        receiverLabels_ = std::move(receiverLabels);
         suspend_ = wasSuspend, global_ = wasGlobal;
         out_.text(" }; return std::make_shared<kompoz_object>(");
         for (size_t i = 0; i < captured.size(); ++i) out_.text((i ? ", " : "") + cppName(captured[i].first));
@@ -1212,6 +1244,13 @@ private:
             return helper("contains", r, l);
         }
         if (op == "to") return helper("to", l, r);
+        if (op == "using") {  // (enter togetherWith exit) using SizeTransform(clip = false)
+            expr(l);
+            out_.text(".withSizeTransform(");
+            expr(r);
+            out_.text(")");
+            return;
+        }
         if (op == "?:") {
             out_.text("::kompoz::kt::elvis(");
             expr(l);
@@ -1265,6 +1304,7 @@ private:
     const Module& module_;
     bool suspend_ = false;  // in a coroutine
     std::vector<std::string> receivers_;  // the receivers' types of the lambdas it is in, innermost last
+    std::vector<std::string> receiverLabels_;  // and the calls they were given to (this@AnimatedContent)
     bool global_ = false;  // at namespace scope: a top-level val's value
     bool inline_ = false;  // the lambda written next is an inline function's (kInlineLambdas)
     std::vector<std::map<std::string, VarKind, std::less<>>> scopes_;

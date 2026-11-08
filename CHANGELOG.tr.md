@@ -914,6 +914,12 @@
   `sharedBounds` (`sharedContentState`, `animatedVisibilityScope`, `boundsTransform`, `renderInOverlayDuringTransition`,
   `zIndexInOverlay`, `resizeMode`), `animateEnterExit(enter = …, exit = …)`. `AnimatedContent` ve `Crossfade` durumlarının
   türünü çıkarıyor: `AnimatedContent<int>(…)` değil `AnimatedContent(count, …)`; seçenekler bir `AnimatedContentOptions<T>`.
+- **kompozc: this@Etiket, bir şablonun kapsamı, `using`**: `this@AnimatedContent`, o çağrıya verilen lambda'nın alıcısı; bir
+  şablonun kapsamı olan alıcı (`AnimatedContentTransitionScope<S>`, `TransitionSegment<S>`) `auto` tipinde; `a using b`,
+  `a.withSizeTransform(b)`; kaymaların ve geçişlerin değer lambda'ları değerlerini döndürüyor. `Color(0xFF6750A4)`, Compose'un
+  `Color(Long)`'u, AARRGGBB (`Color::argb`): paketlenmiş 64 bitlik kurucuya gidiyordu, sayfaların renkleri yanlıştı. Bir `by`
+  temsilcisi bir durumun değerini, yoksa değerin kendisini okuyor (`val color by transition.animateColor { }`: bir `Color`,
+  paketlenmiş `value()`'su değil).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

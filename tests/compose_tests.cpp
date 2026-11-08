@@ -927,7 +927,7 @@ fun Themed(choice: ThemeChoice) {
 }
 
 TEST(theming_as_compose_writes_it) {
-    CHECK(schemeFor(ThemeChoice::Dark).primary == Color(0xFF9ECAFF) && schemeFor(ThemeChoice::Light).onPrimary == Color::White);
+    CHECK(schemeFor(ThemeChoice::Dark).primary == Color::argb(0xFF9ECAFF) && schemeFor(ThemeChoice::Light).onPrimary == Color::White);  // (Color(Long): AARRGGBB)
     ComposeTestRule rule([] { Themed(ThemeChoice::System); });
     CHECK(rule.onNodeWithTag("size").text() == "30");
     CHECK(gMedium == RoundedCornerShape(20));
@@ -1023,6 +1023,68 @@ TEST(graphics_as_compose_writes_it) {
     rule.host().draw(canvas);
     CHECK(canvas.rects.size() >= 3 && !canvas.paths.empty());  // the circle and the rects; the line, the ticket and the vectors' paths
     CHECK(BadgeIcon.root().size() == 2 && Ticket.createOutline({10, 10}, LayoutDirection::Ltr).asPath().bounds().width == 10);
+}
+
+// Animation as Compose writes it: animated values by delegate, AnimatedVisibility and AnimatedContent with
+// their named arguments and infix transforms, a transition's values, an Animatable in a coroutine,
+// a shared element with this@AnimatedContent.
+enum class Panel { Closed, Open }
+val InkBlue = Color(0xFF1E88E5)   // Compose's Color(Long): AARRGGBB
+
+@Composable
+fun Animations(open: Boolean, count: Int) {
+    val scale by animateFloatAsState(if (open) 1.2f else 1f, spring(Spring.DampingRatioMediumBouncy), label = "scale")
+    val tint by animateColorAsState(if (open) Color.White else Color.Black, tween(300))
+    val transition = updateTransition(targetState = if (open) Panel.Open else Panel.Closed, label = "panel")
+    val size by transition.animateDp(label = "size") { if (it == Panel.Open) 200.dp else 80.dp }
+    val pulse by rememberInfiniteTransition(label = "pulse").animateFloat(
+        initialValue = 0.85f, targetValue = 1f, animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "scale")
+    val offset = remember { Animatable(0f) }
+    LaunchedEffect(open) {
+        if (open) {
+            for (x in listOf(-12f, 12f, 0f)) offset.animateTo(x, tween(50))
+        }
+    }
+    Column {
+        Text("ölçek ${(scale * 10).roundToInt()}", modifier = Modifier.graphicsLayer { scaleX = pulse; scaleY = pulse }, color = tint)
+        Box(modifier = Modifier.size(size).offset { IntOffset(offset.value.roundToInt(), 0) }.testTag("kutu"))
+        AnimatedVisibility(visible = open, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically(), label = "details") {
+            Text("ayrıntılar")
+        }
+        AnimatedContent(
+            targetState = count,
+            transitionSpec = {
+                if (targetState > initialState) slideInVertically { it } togetherWith slideOutVertically { -it }
+                else (slideInVertically { -it } togetherWith slideOutVertically { it }) using SizeTransform(clip = false)
+            },
+            label = "count",
+        ) { n ->
+            Text("sayı $n")
+        }
+        Crossfade(targetState = open, label = "page") { p -> Text(if (p) "açık" else "kapalı") }
+        SharedTransitionLayout(modifier = Modifier.fillMaxWidth()) {
+            AnimatedContent(targetState = open, label = "photo") { o ->
+                Box(modifier = Modifier.size(if (o) 80.dp else 40.dp).testTag(if (o) "büyük" else "küçük")
+                        .sharedElement(rememberSharedContentState(key = "photo"), animatedVisibilityScope = this@AnimatedContent))
+            }
+        }
+    }
+}
+
+TEST(animation_as_compose_writes_it) {
+    auto open = mutableStateOf(false);
+    auto count = mutableStateOf(0);
+    ComposeTestRule rule([&] { Animations(open.get(), count.get()); });
+    CHECK(rule.onNodeWithText("ölçek 10").exists() && rule.onNodeWithText("sayı 0").exists() && rule.onNodeWithText("kapalı").exists());
+    CHECK(!rule.onNodeWithText("ayrıntılar").exists() && rule.onNodeWithTag("küçük").exists());
+    CHECK(std::abs(rule.onNodeWithTag("kutu").bounds().width - 80) < 0.5f);
+    open.set(true);
+    count.set(1);
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("ölçek 12").exists() && rule.onNodeWithText("sayı 1").exists() && rule.onNodeWithText("açık").exists());
+    CHECK(rule.onNodeWithText("ayrıntılar").exists() && rule.onNodeWithTag("büyük").exists());
+    CHECK(std::abs(rule.onNodeWithTag("kutu").bounds().width - 200) < 0.5f);
+    CHECK(InkBlue == Color::argb(0xFF1E88E5) && std::abs(InkBlue.blue() - 0xE5 / 255.f) < 0.01f);
 }
 
 int main(int argc, char** argv) {
