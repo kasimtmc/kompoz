@@ -344,8 +344,8 @@ SharedContentState SharedTransitionScope::rememberSharedContentState(std::string
 
 bool SharedTransitionScope::isTransitionActive() const { return registry_->moving(); }
 
-void SharedTransitionLayout(const Modifier& modifier, const std::function<void(const SharedTransitionScope&)>& content,
-                            CallSite site) {
+void detail::SharedTransitionLayout(const Modifier& modifier, const std::function<void(const SharedTransitionScope&)>& content,
+                                    CallSite site) {
     ComposableScope scope(site);
     auto registry = remember([] { return std::make_shared<SharedRegistry>(); });
     registry->host = &detail::Composer::require().host();

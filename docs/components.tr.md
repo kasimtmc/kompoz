@@ -578,6 +578,7 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 350. Compose'un `lightColorScheme(primary = …)` / `darkColorScheme(…)` / `scheme.copy(…)`'si, `typography.copy(…)`, `Typography(…)`, bir `Font` üzerinde `TextStyle.copy(fontFamily = …)` renk şeması isteğe bağlı `MaterialTheme(typography = …, shapes = …)` ve `Shapes` (`MaterialTheme.shapes.medium`) ✅
 351. Metin alanlarında Compose'un composable `label`, `placeholder` ve `supportingText`'i, `TextFieldLineLimits.MultiLine(maxHeightInLines = …)`, `LinkAnnotation.Clickable(tag) { }`, `SelectionContainer(modifier) { }`, adla `measure(style = …)` ve `drawText(topLeft = …)` ✅
 352. Compose'un `drawCircle(radius = …, center = …)`, `drawRect(topLeft = …, size = …)`, `drawLine(start = …, end = …, cap = …)`, `drawArc`, `drawPath(style = …)`, `Stroke(width = …)`, `rotate(pivot = …) { }`, adla `inset`/`clipRect`/`translate`, Coil'in `AsyncImage(placeholder = { }, error = { })`'ı, `floatArrayOf` ✅
+353. Compose'un `animateFloatAsState(targetValue, animationSpec = …, label = …)`, `AnimatedVisibility(visible, enter = …, exit = …) { }`, `togetherWith`/`using` ile `AnimatedContent(targetState, transitionSpec = { … }) { }`, `Crossfade`, kaymaların lambda'ları, `updateTransition(label = …)` ve `animateDp(label = …) { }`, `SharedTransitionLayout { }`, `sharedElement(…, animatedVisibilityScope = …)`, `rememberSharedContentState(key = …)` ✅
 
 ## Sıradakiler
 

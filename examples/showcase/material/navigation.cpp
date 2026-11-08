@@ -31,7 +31,7 @@ void TabsSection(CallSite site) {
                                    [&, i] { Icon(*icons[i], titles[i], Modifier().size(18)); }, Modifier(),
                                    {.unselectedContentColor = cs.onSurfaceVariant});
             });
-            AnimatedContent<int>(tab.get(), [&](const int& t) {
+            AnimatedContent(tab.get(), [&](const int& t) {
                 const char* texts[] = {"3 yeni ileti var.", "Yıldızlı ileti yok.", "Bildirimler ve hesap ayarları."};
                 Text(texts[t], Modifier().padding(4, 8), color = cs.onSurfaceVariant, style = typography().bodyMedium);
             });

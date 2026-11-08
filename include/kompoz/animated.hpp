@@ -25,6 +25,8 @@ struct TransitionParts {
     float hiddenAlpha = 0;
     bool expandWidth = false, expandHeight = false;
     float slideX = 0, slideY = 0;  // offset when hidden, as a fraction of the content size
+    // Or from the full size, Compose's lambdas (slideInVertically { it / 2 }); set, slideX / slideY aren't used.
+    std::function<float(float)> slideXOf, slideYOf;
     bool scale = false;
     float hiddenScale = 0;
     Offset transformOrigin{0.5f, 0.5f};
@@ -73,11 +75,15 @@ struct VisibilityState {
 } // namespace detail
 
 
+struct ExitTransition;
+struct ContentTransform;
 struct EnterTransition {
     detail::TransitionParts parts;
     friend EnterTransition operator+(const EnterTransition& a, const EnterTransition& b) {
         return {a.parts.merged(b.parts)};
     }
+    // Compose's infix: enter togetherWith exit, an AnimatedContent's transform.
+    ContentTransform togetherWith(const ExitTransition& exit) const;
     // None at all: shown at once (the content's children may still animateEnterExit).
     static const EnterTransition None;
 };
@@ -97,6 +103,9 @@ EnterTransition expandHorizontally(AnimationSpec spec = defaultVisibilitySpec())
 EnterTransition expandIn(AnimationSpec spec = defaultVisibilitySpec());
 EnterTransition slideInVertically(float initialOffsetFraction = -0.5f, AnimationSpec spec = defaultVisibilitySpec());
 EnterTransition slideInHorizontally(float initialOffsetFraction = -0.5f, AnimationSpec spec = defaultVisibilitySpec());
+// Compose's forms: the offset when hidden from the full height or width (slideInVertically { it / 2 }).
+EnterTransition slideInVertically(std::function<float(float fullHeight)> initialOffsetY, AnimationSpec spec = defaultVisibilitySpec());
+EnterTransition slideInHorizontally(std::function<float(float fullWidth)> initialOffsetX, AnimationSpec spec = defaultVisibilitySpec());
 // Grows from `initialScale` around `transformOrigin` (drawn through a graphicsLayer).
 EnterTransition scaleIn(float initialScale = 0, Offset transformOrigin = {0.5f, 0.5f},
                         AnimationSpec spec = defaultVisibilitySpec());
@@ -108,6 +117,8 @@ ExitTransition shrinkHorizontally(AnimationSpec spec = defaultVisibilitySpec());
 ExitTransition shrinkOut(AnimationSpec spec = defaultVisibilitySpec());
 ExitTransition slideOutVertically(float targetOffsetFraction = -0.5f, AnimationSpec spec = defaultVisibilitySpec());
 ExitTransition slideOutHorizontally(float targetOffsetFraction = -0.5f, AnimationSpec spec = defaultVisibilitySpec());
+ExitTransition slideOutVertically(std::function<float(float fullHeight)> targetOffsetY, AnimationSpec spec = defaultVisibilitySpec());
+ExitTransition slideOutHorizontally(std::function<float(float fullWidth)> targetOffsetX, AnimationSpec spec = defaultVisibilitySpec());
 
 // The content of an AnimatedVisibility or AnimatedContent, for shared elements inside it to
 // know whether they enter or leave (Compose's AnimatedVisibilityScope).
@@ -127,18 +138,37 @@ public:
     //   });
     Modifier animateEnterExit(const EnterTransition& enter, const ExitTransition& exit, CallSite site = CallSite::current()) const;
     Modifier animateEnterExit(CallSite site = CallSite::current()) const;  // fadeIn(), fadeOut()
+    // Compose's animateEnterExit(enter = …, exit = …), either by name.
+    template <class N1>
+        requires(detail::isNamed<N1>)
+    Modifier animateEnterExit(N1&& a, CallSite site = CallSite::current()) const {
+        return animateEnterExitNamed(site, std::forward<N1>(a));
+    }
+    template <class N1, class N2>
+        requires(detail::isNamed<N1> && detail::isNamed<N2>)
+    Modifier animateEnterExit(N1&& a, N2&& b, CallSite site = CallSite::current()) const {
+        return animateEnterExitNamed(site, std::forward<N1>(a), std::forward<N2>(b));
+    }
     friend bool operator==(const AnimatedVisibilityScope& a, const AnimatedVisibilityScope& b) { return a.state_ == b.state_; }
 
 private:
+    template <class... A>
+    Modifier animateEnterExitNamed(CallSite site, A&&... args) const {
+        using P = detail::Params<detail::names::Enter, detail::names::Exit>;
+        static_assert(P::check<A...>());
+        return animateEnterExit(P::get<detail::names::Enter>(fadeIn(), args...), P::get<detail::names::Exit>(fadeOut(), args...), site);
+    }
     std::shared_ptr<detail::VisibilityState> state_;
 };
 using AnimatedContentScope = AnimatedVisibilityScope;
 
 // Shows `content` with `enter` when `visible` becomes true and hides it with `exit`; once
 // hidden the content leaves the composition (its state is disposed).
+namespace detail {
+// (The call site has a default here too: library code in this namespace calls these.)
 void AnimatedVisibility(bool visible, const Content& content, CallSite site = CallSite::current());
-void AnimatedVisibility(bool visible, const Modifier& modifier, const EnterTransition& enter,
-                        const ExitTransition& exit, const Content& content, CallSite site = CallSite::current());
+void AnimatedVisibility(bool visible, const Modifier& modifier, const EnterTransition& enter, const ExitTransition& exit,
+                        const Content& content, CallSite site = CallSite::current());
 // ...with its AnimatedVisibilityScope, for shared elements.
 void AnimatedVisibility(bool visible, const Modifier& modifier, const EnterTransition& enter, const ExitTransition& exit,
                         const std::function<void(const AnimatedVisibilityScope&)>& content, CallSite site = CallSite::current());
@@ -150,6 +180,29 @@ void AnimatedVisibility(const MutableTransitionState<bool>& visibleState, const 
 void AnimatedVisibility(const MutableTransitionState<bool>& visibleState, const Modifier& modifier, const EnterTransition& enter,
                         const ExitTransition& exit, const std::function<void(const AnimatedVisibilityScope&)>& content,
                         CallSite site = CallSite::current());
+// AnimatedVisibility(visible, modifier, enter, exit) { … } as Compose's, the block with its scope or
+// without one; a MutableTransitionState<bool> in place of the bool.
+struct AnimatedVisibilityImpl {
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        constexpr bool plain = lastIsBlock<A...>();  // [] { … }, not [](const AnimatedVisibilityScope&) { … }
+        using P = std::conditional_t<plain, Params<names::Visible, names::Modifier, names::Enter, names::Exit, names::Label, Block>,
+                                     Params<names::Visible, names::Modifier, names::Enter, names::Exit, names::Label,
+                                            BlockWith<const AnimatedVisibilityScope&>>>;
+        static_assert(P::template check<A...>());
+        static_assert(P::template blockGiven<A...>(), "kompoz: AnimatedVisibility shows its block: AnimatedVisibility(visible) { … }");
+        auto&& block = std::get<sizeof...(A) - 1>(std::forward_as_tuple(args...));
+        std::function<void(const AnimatedVisibilityScope&)> content;
+        if constexpr (plain) content = [&block](const AnimatedVisibilityScope&) { block(); };
+        else content = block;
+        P::template get<names::Label>(std::string(), args...);
+        AnimatedVisibility(P::template arg<names::Visible>(args...), P::template get<names::Modifier>(Modifier{}, args...),
+                           P::template get<names::Enter>(fadeIn() + expandVertically(), args...),
+                           P::template get<names::Exit>(fadeOut() + shrinkVertically(), args...), content, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::AnimatedVisibilityImpl> AnimatedVisibility;
 
 // AnimatedContent's own size between two contents (Compose's SizeTransform): it animates from
 // the old content's size to the new one's, clipping what is drawn to it unless clip is false.
@@ -180,6 +233,7 @@ struct ContentTransform {
     }
 };
 inline ContentTransform togetherWith(EnterTransition enter, ExitTransition exit) { return {enter, exit}; }
+inline ContentTransform EnterTransition::togetherWith(const ExitTransition& exit) const { return {*this, exit}; }
 
 inline ContentTransform defaultContentTransform() { return togetherWith(fadeIn(0, tween(220, 90)), fadeOut(0, tween(90))); }
 
@@ -221,6 +275,14 @@ struct AnimatedContentOptions {
     float seekFraction = 0;
 };
 
+// Compose's AnimatedContentTransitionScope, the transitionSpec's receiver: the states it goes between.
+template <class S>
+struct AnimatedContentTransitionScope {
+    const S& initialState;
+    const S& targetState;
+};
+
+namespace detail {
 // Animates between the content for the old and the new `targetState` whenever it changes.
 // The content gets its AnimatedContentScope too, for shared elements (see shared_transition.hpp).
 template <class T>
@@ -399,5 +461,75 @@ void Crossfade(const T& targetState, const std::function<void(const std::type_id
     AnimatedContent<T>(targetState, content, modifier, togetherWith(fadeIn(0, spec), fadeOut(0, spec)).withSizeTransform(std::nullopt),
                        {}, site);
 }
+
+// AnimatedContent(targetState, content, modifier, transitionSpec, options) as it was, or Compose's
+// AnimatedContent(targetState, modifier = …, transitionSpec = { … }, contentAlignment = …, label = …,
+// contentKey = { … }) { state -> … }: the content last, with or without its scope; the transitionSpec
+// with its scope (initialState, targetState) or with the two states.
+struct AnimatedContentImpl {
+    static constexpr bool takesContentByName = true;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        using First = Params<names::TargetState>;
+        using T = std::remove_cvref_t<decltype(First::arg<names::TargetState>(args...))>;
+        using P = Params<names::TargetState, names::Content, names::Modifier, names::TransitionSpec, names::Options, names::ContentAlignment,
+                         names::Label, names::ContentKey, BlockWith<const AnimatedContentScope&, const T&>>;
+        static_assert(P::template check<A...>());
+        const T& target = First::arg<names::TargetState>(args...);
+        std::function<void(const AnimatedContentScope&, const T&)> content;
+        auto adopt = [&](auto&& c) {
+            using C = std::remove_cvref_t<decltype(c)>;
+            if constexpr (std::is_invocable_v<C&, const AnimatedContentScope&, const T&>) content = c;
+            else content = [&c](const AnimatedContentScope&, const T& state) { c(state); };
+        };
+        if constexpr (P::template blockGiven<A...>()) adopt(std::get<sizeof...(A) - 1>(std::forward_as_tuple(args...)));
+        else adopt(P::template arg<names::Content>(args...));
+        ContentTransitionSpec<T> spec;
+        if constexpr (P::template given<names::TransitionSpec, A...>()) {
+            auto&& given = P::template arg<names::TransitionSpec>(args...);
+            using TS = std::remove_cvref_t<decltype(given)>;
+            if constexpr (std::is_convertible_v<TS, ContentTransform>)  // one transform for every change (the C++ form)
+                spec = [transform = ContentTransform(given)](const T&, const T&) { return transform; };
+            else if constexpr (std::is_invocable_v<TS&, const AnimatedContentTransitionScope<T>&>)
+                spec = [&given](const T& from, const T& to) { return ContentTransform(given(AnimatedContentTransitionScope<T>{from, to})); };
+            else spec = given;
+        } else {
+            spec = [](const T&, const T&) { return defaultContentTransform(); };
+        }
+        AnimatedContentOptions<T> options = P::template get<names::Options>(AnimatedContentOptions<T>{}, args...);
+        P::template set<names::ContentAlignment>(options.contentAlignment, args...);
+        P::template get<names::Label>(std::string(), args...);
+        if constexpr (P::template given<names::ContentKey, A...>()) {
+            auto&& key = P::template arg<names::ContentKey>(args...);
+            options.contentKey = [&key](const T& s) -> uint64_t {
+                using R = std::remove_cvref_t<decltype(key(s))>;
+                if constexpr (std::is_convertible_v<R, uint64_t> || std::is_enum_v<R>) return uint64_t(key(s));
+                else return std::hash<R>{}(key(s));
+            };
+        }
+        AnimatedContent<T>(target, content, P::template get<names::Modifier>(Modifier{}, args...), spec, options, site);
+    }
+};
+// Crossfade(targetState, content, modifier, animationSpec) as it was, or Compose's
+// Crossfade(targetState, modifier = …, animationSpec = …, label = …) { state -> … }.
+struct CrossfadeImpl {
+    static constexpr bool takesContentByName = true;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        using First = Params<names::TargetState>;
+        using T = std::remove_cvref_t<decltype(First::arg<names::TargetState>(args...))>;
+        using P = Params<names::TargetState, names::Content, names::Modifier, names::AnimationSpec, names::Label, BlockWith<const T&>>;
+        static_assert(P::template check<A...>());
+        std::function<void(const T&)> content;
+        if constexpr (P::template blockGiven<A...>()) content = std::get<sizeof...(A) - 1>(std::forward_as_tuple(args...));
+        else content = P::template arg<names::Content>(args...);
+        P::template get<names::Label>(std::string(), args...);
+        Crossfade<T>(First::arg<names::TargetState>(args...), content, P::template get<names::Modifier>(Modifier{}, args...),
+                     P::template get<names::AnimationSpec>(tween(300), args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::AnimatedContentImpl> AnimatedContent;
+inline constexpr Composable<detail::CrossfadeImpl> Crossfade;
 
 } // namespace kompoz

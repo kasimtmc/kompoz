@@ -902,6 +902,18 @@
   moveTo(…) }` yolu üzerinde kuruyor, `blur { blurRadiusSpec = … }` kapsamını ayarlıyor, `Brush.shader { size -> … }`
   shader'ını döndürüyor; bir lambdanın `_` parametreleri adsız; başlık okuyucu `class Outer::Inner { }` diye tanımlanan
   bir sınıfı, bir türün statik veri üyelerini ve varsayılan argümanı küme ayracı olan işlevleri tanıyor.
+- **Compose'un yazdığı gibi animasyon**: `animateFloatAsState(targetValue, animationSpec = …, label = …)`, `animateColorAsState`
+  ve `animateDpAsState` (bir dp bir float); `AnimatedVisibility(visible, enter = …, exit = …, label = …) { }`;
+  `AnimatedContent(targetState, transitionSpec = { if (targetState > initialState) slideInVertically { it } togetherWith
+  slideOutVertically { -it } else … }, contentAlignment = …, contentKey = { }, label = …) { state -> }`, tanımın lambda'sı
+  `AnimatedContentTransitionScope`'u üzerinde, üye olarak `enter togetherWith exit` ve `using SizeTransform(clip = false)`;
+  `Crossfade(targetState, animationSpec = …, label = …) { state -> }`; kaymalar Compose'un tam boyut lambda'sını alıyor
+  (`slideInVertically { it / 2 }`); `updateTransition(targetState, label = …)` ve `label = …` ile `transitionSpec = { … }`
+  (bir `TransitionSegment` üzerinde) alan `animateFloat`, `animateDp` ve `animateColor`'ı; `rememberInfiniteTransition(label
+  = …)`; `SharedTransitionLayout(modifier = …) { }`, `rememberSharedContentState(key = …)`, adla `sharedElement` ve
+  `sharedBounds` (`sharedContentState`, `animatedVisibilityScope`, `boundsTransform`, `renderInOverlayDuringTransition`,
+  `zIndexInOverlay`, `resizeMode`), `animateEnterExit(enter = …, exit = …)`. `AnimatedContent` ve `Crossfade` durumlarının
+  türünü çıkarıyor: `AnimatedContent<int>(…)` değil `AnimatedContent(count, …)`; seçenekler bir `AnimatedContentOptions<T>`.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

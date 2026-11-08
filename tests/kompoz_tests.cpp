@@ -3344,7 +3344,7 @@ TEST(animated_visibility_expands_then_disposes_on_exit) {
 TEST(animated_content_shows_both_while_switching) {
     auto n = mutableStateOf(1);
     ComposeTestRule rule([&] {
-        AnimatedContent<int>(n.get(), [](const int& v) { Text("n=" + std::to_string(v)); });
+        AnimatedContent(n.get(), [](const int& v) { Text("n=" + std::to_string(v)); });
     });
     CHECK(rule.onNodeWithText("n=1").exists());
     n.set(2);
@@ -3366,7 +3366,7 @@ TEST(animated_content_puts_the_entering_content_by_its_z_index) {
     auto n = mutableStateOf(1);
     auto spec = mutableStateOf(0.f);  // the entering content's z-index
     ComposeTestRule rule([&] {
-        AnimatedContent<int>(n.get(), [](const AnimatedContentScope&, const int& v) { Text("n=" + std::to_string(v)); }, Modifier(),
+        AnimatedContent(n.get(), [](const AnimatedContentScope&, const int& v) { Text("n=" + std::to_string(v)); }, Modifier(),
                              [&](const int&, const int&) {  // fades both at once (both drawn from the start)
                                  return togetherWith(fadeIn(0, tween(300)), fadeOut(0, tween(300))).withTargetContentZIndex(spec.peek());
                              });
@@ -3511,7 +3511,7 @@ TEST(leaving_content_takes_no_taps) {
 TEST(crossfade_between_states) {
     auto on = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        Crossfade<bool>(on.get(), [](const bool& v) { Text(v ? "açık" : "kapalı"); });
+        Crossfade(on.get(), [](const bool& v) { Text(v ? "açık" : "kapalı"); });
     });
     on.set(true);
     rule.waitForIdle();
@@ -3567,7 +3567,7 @@ TEST(shared_transition_overlay_draws_in_its_order_and_nodes_above) {
     ComposeTestRule rule([&] {
         SharedTransitionLayout(Modifier().fillMaxSize(), [&](const SharedTransitionScope& shared) {
             Box(Modifier().fillMaxSize(), [=, &blue, &gray, &green, &red, &yellow] {
-                AnimatedContent<bool>(details.get(), [&](const AnimatedContentScope& scope, const bool& open) {
+                AnimatedContent(details.get(), [&](const AnimatedContentScope& scope, const bool& open) {
                     SharedContentState a = shared.rememberSharedContentState("a"), b = shared.rememberSharedContentState("b");
                     Column([=, &green, &red] {
                         Box(Modifier().size(open ? 200.f : 40.f, open ? 100.f : 40.f).sharedElement(a, scope, defaultBoundsTransform(), inOverlay.get(), 2).background(red));
@@ -3686,7 +3686,7 @@ TEST(skip_to_lookahead_size_lays_out_where_it_goes) {
                         [=] { Box(Modifier().fillMaxSize().testTag(std::format("iç{}", skip))); });
                 });
             SharedTransitionLayout(Modifier().fillMaxWidth().height(300), [&](const SharedTransitionScope& shared) {
-                AnimatedContent<bool>(details.get(), [&](const AnimatedContentScope& scope, const bool& open) {
+                AnimatedContent(details.get(), [&](const AnimatedContentScope& scope, const bool& open) {
                     SharedContentState card = shared.rememberSharedContentState("kart");
                     Box(Modifier().size(open ? 300.f : 60.f, 60).sharedElement(card, scope).skipToLookaheadSize(),
                         [=] { Box(Modifier().fillMaxSize().testTag(open ? "kart açık" : "kart kapalı")); });
@@ -3724,7 +3724,7 @@ TEST(shared_bounds_resize_mode_scales_or_remeasures) {
     auto mode = mutableStateOf(SharedResizeMode::remeasureToBounds());
     ComposeTestRule rule([&] {
         SharedTransitionLayout(Modifier().fillMaxSize(), [&](const SharedTransitionScope& shared) {
-            AnimatedContent<bool>(details.get(), [&](const AnimatedContentScope& scope, const bool& open) {
+            AnimatedContent(details.get(), [&](const AnimatedContentScope& scope, const bool& open) {
                 SharedContentState card = shared.rememberSharedContentState("kart");
                 Box(Modifier()
                         .size(open ? 200.f : 40.f, open ? 100.f : 40.f)
@@ -3771,7 +3771,7 @@ TEST(shared_element_moves_from_its_match_and_hides_it) {
     auto bounds = mutableStateOf(false);  // sharedBounds instead of sharedElement
     ComposeTestRule rule([&] {
         SharedTransitionLayout(Modifier().fillMaxSize(), [&](const SharedTransitionScope& shared) {
-            AnimatedContent<bool>(details.get(), [&](const AnimatedContentScope& scope, const bool& open) {
+            AnimatedContent(details.get(), [&](const AnimatedContentScope& scope, const bool& open) {
                 SharedContentState photo = shared.rememberSharedContentState("photo");
                 Modifier m = open ? Modifier().offset(100, 300).size(200) : Modifier().size(40);
                 m = bounds.get() ? m.sharedBounds(photo, scope) : m.sharedElement(photo, scope);
@@ -4623,10 +4623,10 @@ TEST(animated_content_seeks_a_transition_part_way) {
     auto seek = mutableStateOf(std::optional<int>{});
     auto fraction = mutableStateOf(0.f);
     ComposeTestRule rule([&] {
-        AnimatedContent<int>(target.get(), [](const AnimatedContentScope&, const int& n) {
+        AnimatedContent(target.get(), [](const AnimatedContentScope&, const int& n) {
             Box(Modifier().size(n * 100.f).testTag("içerik " + std::to_string(n)));
         }, Modifier().testTag("kutu"), togetherWith(fadeIn(0, tween(200, 0, LinearEasing)), fadeOut(0, tween(200, 0, LinearEasing))),
-           {.seekState = seek.get(), .seekFraction = fraction.get()});
+           AnimatedContentOptions<int>{.seekState = seek.get(), .seekFraction = fraction.get()});
     }, {400, 800});
     auto width = [&] { return rule.onNodeWithTag("kutu").bounds().width; };
     // Seeked half way to 2: it is there, and the box keeps the size of the one shown.
@@ -7678,6 +7678,61 @@ TEST(drawing_takes_compose_named_arguments) {
     });
     image.waitForIdle();
     CHECK(image.onNodeWithText("yükleniyor").exists() || image.onNodeWithText("hata").exists());
+}
+
+TEST(animations_take_compose_named_arguments) {
+    // animateFloatAsState(targetValue, animationSpec =, label =), AnimatedVisibility(visible, enter =, exit =) { },
+    // AnimatedContent(targetState, transitionSpec = { … }, label =) { scope, state -> }, Crossfade(targetState) { },
+    // updateTransition(targetState, label =) and its animateFloat(label =) { }, rememberInfiniteTransition(label =),
+    // the slides' lambdas of the full size, togetherWith as a member, SharedTransitionLayout(modifier =) { }.
+    auto on = mutableStateOf(false);
+    auto count = mutableStateOf(0);
+    auto log = std::make_shared<std::vector<std::string>>();
+    ComposeTestRule rule([&] {
+        float scale = animateFloatAsState(arg::targetValue = on.get() ? 2.f : 1.f, arg::animationSpec = tween(100, 0, LinearEasing), arg::label = "scale");
+        Color tint = animateColorAsState(on.get() ? colors::White : colors::Black, 100);
+        auto transition = updateTransition(arg::targetState = on.get(), arg::label = "on");
+        float size = transition.animateFloat(arg::label = "size", [](const bool& s) { return s ? 40.f : 20.f; });
+        float dp = transition.animateDp(arg::label = "dp", arg::transitionSpec = [](const TransitionSegment<bool>& seg) { return seg.isTransitioningTo(false, true) ? tween(50) : snap(); },
+                                        [](const bool& s) { return s ? 10.f : 0.f; });
+        auto pulse = rememberInfiniteTransition(arg::label = "pulse").animateFloat(arg::initialValue = 0.f, arg::targetValue = 1.f, arg::animationSpec = infiniteRepeatable(tween(100)));
+        log->push_back(std::format("{:.0f} {:.0f} {:.0f} {:.0f} {}", scale, tint.red(), size, dp, pulse.value() >= 0));
+        Column([&] {
+            AnimatedVisibility(arg::visible = on.get(), arg::enter = slideInVertically([](float h) { return h / 2; }) + fadeIn(),
+                               arg::exit = slideOutVertically([](float h) { return -h; }), arg::label = "details", [] { Text("ayrıntı"); });
+            AnimatedContent(arg::targetState = count.get(),
+                            arg::transitionSpec = [](const AnimatedContentTransitionScope<int>& s) {
+                                return s.targetState > s.initialState ? slideInVertically([](float h) { return h; }).togetherWith(slideOutVertically([](float h) { return -h; }))
+                                                                       : slideInVertically([](float h) { return -h; }).togetherWith(slideOutVertically([](float h) { return h; }));
+                            },
+                            arg::label = "count", [](const AnimatedContentScope&, const int& n) { Text("sayı " + std::to_string(n)); });
+            Crossfade(arg::targetState = on.get(), arg::label = "page", [](const bool& v) { Text(v ? "açık" : "kapalı"); });
+            SharedTransitionLayout(arg::modifier = Modifier().testTag("paylaşım"), [&](const SharedTransitionScope& shared) {
+                AnimatedContent(arg::targetState = on.get(), [&](const AnimatedContentScope& scope, const bool& open) {
+                    Box(Modifier().size(open ? 80 : 40).testTag(open ? "büyük" : "küçük")
+                            .sharedElement(arg::sharedContentState = shared.rememberSharedContentState(arg::key = "foto"), arg::animatedVisibilityScope = scope));
+                });
+            });
+        });
+    });
+    CHECK(log->back() == "1 0 20 0 true" && rule.onNodeWithText("sayı 0").exists() && rule.onNodeWithText("kapalı").exists());
+    CHECK(!rule.onNodeWithText("ayrıntı").exists() && rule.onNodeWithTag("küçük").exists() && rule.onNodeWithTag("paylaşım").exists());
+    on.set(true);
+    count.set(1);
+    rule.waitForIdle();
+    CHECK(log->back() == "2 1 40 10 true" && rule.onNodeWithText("sayı 1").exists() && rule.onNodeWithText("açık").exists());
+    CHECK(rule.onNodeWithText("ayrıntı").exists() && rule.onNodeWithTag("büyük").exists());
+    // The slides' lambdas: a content 100 tall hidden by slideInVertically { it / 2 } sits 50 below its place half way.
+    auto vis = mutableStateOf(false);
+    ComposeTestRule slide([&] {
+        AnimatedVisibility(vis.get(), Modifier(), slideInVertically([](float h) { return h / 2; }, tween(100, 0, LinearEasing)), ExitTransition::None,
+                           [] { Box(Modifier().size(100).testTag("kayan")); });
+    });
+    vis.set(true);
+    slide.advanceTimeBy(50);
+    float y = slide.onNodeWithTag("kayan").bounds().y;
+    CHECK(y > 20 && y < 30);  // (50 dp hidden, half the way: 25)
+    CHECK(EnterTransition::None.togetherWith(ExitTransition::None).enter.parts.spec.has_value());
 }
 
 TEST(draw_scope_strokes_sit_on_the_outline) {
@@ -23484,11 +23539,11 @@ TEST(animated_content_picks_its_transition_from_the_states_and_animates_its_size
     ComposeTestRule rule([&] {
         Column([=] {
             // Up: faded in from 0.2; down: from 0.6 (to tell them apart).
-            AnimatedContent<int>(n.get(), [](const int& v) { Text(std::format("sayı {}", v)); }, Modifier().testTag("sayaç"),
+            AnimatedContent(n.get(), [](const int& v) { Text(std::format("sayı {}", v)); }, Modifier().testTag("sayaç"),
                                  [](const int& from, const int& to) {
                                      return togetherWith(fadeIn(to > from ? 0.2f : 0.6f, tween(300)), fadeOut(0, tween(300)));
                                  });
-            AnimatedContent<bool>(big.get(), [](const bool& b) { Box(Modifier().size(b ? 300.f : 100.f, b ? 150.f : 50.f)); },
+            AnimatedContent(big.get(), [](const bool& b) { Box(Modifier().size(b ? 300.f : 100.f, b ? 150.f : 50.f)); },
                                   Modifier().testTag("kutu"),
                                   sized.get() ? togetherWith(fadeIn(0, tween(300)), fadeOut(0, tween(300))).withSizeTransform(SizeTransform{.spec = tween(320)})
                                               : togetherWith(fadeIn(0, tween(300)), fadeOut(0, tween(300))).withSizeTransform(std::nullopt));
@@ -23542,18 +23597,18 @@ TEST(animated_content_aligns_its_contents_and_keeps_same_key_content) {
     auto composedLoaded = std::make_shared<int>(0);
     ComposeTestRule rule([&] {
         Column([=] {
-            AnimatedContent<bool>(big.get(), [](const bool& b) { Box(Modifier().size(b ? 200.f : 100.f, b ? 80.f : 40.f).testTag(b ? "büyük" : "küçük")); },
+            AnimatedContent(big.get(), [](const bool& b) { Box(Modifier().size(b ? 200.f : 100.f, b ? 80.f : 40.f).testTag(b ? "büyük" : "küçük")); },
                                   Modifier().testTag("ortalı"),
                                   togetherWith(fadeIn(0, tween(300)), fadeOut(0, tween(300))).withSizeTransform(SizeTransform{.clip = false, .spec = tween(300)}),
-                                  {.contentAlignment = Alignment::Center});
-            AnimatedContent<Screen>(screen.get(), [composedLoaded](const Screen& s) {
+                                  AnimatedContentOptions<bool>{.contentAlignment = Alignment::Center});
+            AnimatedContent(screen.get(), [composedLoaded](const Screen& s) {
                 if (s.kind == 0) {
                     Text("Yükleniyor");
                     return;
                 }
                 auto seen = remember([composedLoaded] { return ++*composedLoaded; });  // once per content shown
                 Text(std::format("veri {} ({})", s.data, seen));
-            }, Modifier().testTag("ekran"), defaultContentTransform(), {.contentKey = [](const Screen& s) { return uint64_t(s.kind); }});
+            }, Modifier().testTag("ekran"), defaultContentTransform(), AnimatedContentOptions<Screen>{.contentKey = [](const Screen& s) { return uint64_t(s.kind); }});
         });
     });
     Rect box = rule.onNodeWithTag("ortalı").bounds();
@@ -23718,7 +23773,7 @@ TEST(animate_enter_exit_gives_children_their_own_transitions) {
 TEST(animated_content_waits_for_its_childrens_exits) {
     auto page = mutableStateOf(0);
     ComposeTestRule rule([&] {
-        AnimatedContent<int>(page.get(), [](const AnimatedContentScope& s, const int& p) {
+        AnimatedContent(page.get(), [](const AnimatedContentScope& s, const int& p) {
             Box(s.animateEnterExit(slideInHorizontally(1, tween(500)), slideOutHorizontally(-1, tween(500))).size(100, 40),
                 [=] { Box(Modifier().fillMaxSize().testTag(std::format("sayfa {}", p))); });
         }, Modifier(), togetherWith(fadeIn(0, tween(100)), fadeOut(0, tween(100))));

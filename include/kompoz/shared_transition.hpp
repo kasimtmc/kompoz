@@ -55,6 +55,10 @@ class SharedTransitionScope {
 public:
     explicit SharedTransitionScope(std::shared_ptr<detail::SharedRegistry> registry) : registry_(std::move(registry)) {}
     SharedContentState rememberSharedContentState(std::string key, CallSite site = CallSite::current()) const;
+    template <class V>  // Compose's rememberSharedContentState(key = "…")
+    SharedContentState rememberSharedContentState(Named<detail::names::Key, V> key, CallSite site = CallSite::current()) const {
+        return rememberSharedContentState(std::string(key.value), site);
+    }
     bool isTransitionActive() const;  // some shared element is moving
     const std::shared_ptr<detail::SharedRegistry>& registry() const { return registry_; }
     friend bool operator==(const SharedTransitionScope& a, const SharedTransitionScope& b) { return a.registry_ == b.registry_; }
@@ -65,8 +69,21 @@ private:
 
 // Hosts shared element transitions: elements of the content inside move between the places of
 // their matches, drawn above the content.
+namespace detail {
 void SharedTransitionLayout(const Modifier& modifier, const std::function<void(const SharedTransitionScope&)>& content,
                             CallSite site = CallSite::current());
+struct SharedTransitionLayoutImpl {  // SharedTransitionLayout(modifier = …) { … }, as Compose's
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        using P = Params<names::Modifier, BlockWith<const SharedTransitionScope&>>;
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: SharedTransitionLayout takes its content: SharedTransitionLayout { … }");
+        SharedTransitionLayout(P::get<names::Modifier>(Modifier{}, args...),
+                               std::function<void(const SharedTransitionScope&)>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(args...))), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::SharedTransitionLayoutImpl> SharedTransitionLayout;
 
 // The default bounds animation (Compose's: a spring at medium-low stiffness).
 inline AnimationSpec defaultBoundsTransform() { return spring(Spring::DampingRatioNoBouncy, Spring::StiffnessMediumLow); }

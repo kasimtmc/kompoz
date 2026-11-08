@@ -861,6 +861,18 @@
   builds on its path, `blur { blurRadiusSpec = … }` sets its scope, `Brush.shader { size -> … }` returns its shader; a
   lambda's `_` parameters are unnamed; the headers' reader knows a class defined as `class Outer::Inner { }`, a type's
   static data members, and functions whose default arguments are braces.
+- **Animation as Compose writes it**: `animateFloatAsState(targetValue, animationSpec = …, label = …)`, `animateColorAsState`
+  and `animateDpAsState` (a dp is a float); `AnimatedVisibility(visible, enter = …, exit = …, label = …) { }`;
+  `AnimatedContent(targetState, transitionSpec = { if (targetState > initialState) slideInVertically { it } togetherWith
+  slideOutVertically { -it } else … }, contentAlignment = …, contentKey = { }, label = …) { state -> }`, the spec's lambda
+  on its `AnimatedContentTransitionScope`, `enter togetherWith exit` as a member and `using SizeTransform(clip = false)`;
+  `Crossfade(targetState, animationSpec = …, label = …) { state -> }`; the slides take Compose's lambda of the full size
+  (`slideInVertically { it / 2 }`); `updateTransition(targetState, label = …)` and its `animateFloat`, `animateDp` and
+  `animateColor` with `label = …` and `transitionSpec = { … }` (on a `TransitionSegment`); `rememberInfiniteTransition(label
+  = …)`; `SharedTransitionLayout(modifier = …) { }`, `rememberSharedContentState(key = …)`, `sharedElement` and
+  `sharedBounds` by name (`sharedContentState`, `animatedVisibilityScope`, `boundsTransform`, `renderInOverlayDuringTransition`,
+  `zIndexInOverlay`, `resizeMode`), `animateEnterExit(enter = …, exit = …)`. `AnimatedContent` and `Crossfade` deduce
+  their state's type: `AnimatedContent(count, …)`, not `AnimatedContent<int>(…)`; options are an `AnimatedContentOptions<T>`.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

@@ -1972,6 +1972,15 @@ public:
                            bool renderInOverlayDuringTransition, float zIndexInOverlay = 0) const;
     Modifier sharedBounds(const SharedContentState& state, const AnimatedVisibilityScope& scope, const AnimationSpec& boundsTransform,
                           const SharedResizeMode& resizeMode, bool renderInOverlayDuringTransition, float zIndexInOverlay = 0) const;
+    // Compose's names (named_members.hpp): sharedElement(sharedContentState, animatedVisibilityScope = …,
+    // boundsTransform = …, renderInOverlayDuringTransition = …, zIndexInOverlay = …), sharedBounds's with
+    // resizeMode = … too.
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier sharedElement(A&&... args) const;
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier sharedBounds(A&&... args) const;
     // Drawn in `scope`'s overlay instead of where it is while renderInOverlay() says so (unset:
     // while a shared element moves), ordered among the moving elements by zIndexInOverlay
     // (Compose's renderInSharedTransitionScopeOverlay): a bottom bar the elements pass under.

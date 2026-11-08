@@ -79,7 +79,7 @@ void AnimationsSection(CallSite site) {
                     Button([expanded] { expanded.set(!expanded.get()); }) { Text(expanded.get() ? "Gizle" : "Detaylar"); };
                     FilledTonalIconButton([count] { count.set(count.get() - 1); }) { Icon(Icons::Filled::Remove, "Azalt"); };
                     // The digits come in from below when it grows, from above when it shrinks.
-                    AnimatedContent<int>(
+                    AnimatedContent(
                         count.get(),
                         [&](const int& n) {
                             Text(std::to_string(n), Modifier().width(48),
@@ -90,7 +90,7 @@ void AnimationsSection(CallSite site) {
                             return togetherWith(slideInVertically(way) + fadeIn(), slideOutVertically(-way) + fadeOut());
                         });
                     FilledTonalIconButton([count] { count.set(count.get() + 1); }) { Icon(Icons::Filled::Add, "Artır"); };
-                    Crossfade<bool>(liked.get(), [&](const bool& on) {
+                    Crossfade(liked.get(), [&](const bool& on) {
                         IconButton([liked, pulse, scope] {
                             liked.set(!liked.get());
                             scope.launch([pulse]() -> Task { co_await pulse.animateTo(1.f, keyframes(420, {{110, 1.35f}, {260, 0.9f}})); });
@@ -110,7 +110,7 @@ void AnimationsSection(CallSite site) {
                        };
             });
             // SizeTransform: AnimatedContent grows and shrinks between its contents' sizes.
-            AnimatedContent<bool>(
+            AnimatedContent(
                 details.get(),
                 [&](const bool& open) {
                     if (!open) {
@@ -128,7 +128,7 @@ void AnimationsSection(CallSite site) {
                     }
                 },
                 Modifier().fillMaxWidth(), togetherWith(fadeIn(0, tween(220, 90)), fadeOut(0, tween(90))).withSizeTransform(SizeTransform{}),
-                {.contentAlignment = Alignment::TopCenter});  // the closed one in the middle, the card grows from it
+                AnimatedContentOptions<bool>{.contentAlignment = Alignment::TopCenter});  // the closed one in the middle, the card grows from it
             // contentKey: loading → loaded slides; new posts on the loaded screen just update it.
             LaunchedEffect(feed.get().loaded, [feed]() -> Task {  // a load takes a moment
                 if (feed.peek().loaded) co_return;
@@ -139,7 +139,7 @@ void AnimationsSection(CallSite site) {
                 OutlinedButton([feed] { feed.set({false, feed.get().posts}); }, Modifier(), enabled = feed.get().loaded) { Text("Yeniden yükle"); };
                 OutlinedButton([feed] { feed.set({true, feed.get().posts + 1}); }, Modifier(), enabled = feed.get().loaded) { Text("Yeni gönderi"); };
             };
-            AnimatedContent<Feed>(
+            AnimatedContent(
                 feed.get(),
                 [&](const Feed& f) {
                     Row(Modifier().fillMaxWidth().height(40), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
@@ -153,7 +153,7 @@ void AnimationsSection(CallSite site) {
                         };
                 },
                 Modifier().fillMaxWidth(), togetherWith(slideInVertically(1) + fadeIn(), slideOutVertically(-1) + fadeOut()),
-                {.contentKey = [](const Feed& f) { return uint64_t(f.loaded); }});
+                AnimatedContentOptions<Feed>{.contentKey = [](const Feed& f) { return uint64_t(f.loaded); }});
             // animateEnterExit: the content itself comes and goes at once; inside it the scrim
             // fades and the panel slides, each its own way, and it stays until both are out.
             OutlinedButton([panel] { panel.set(!panel.get()); }, Modifier()) { Text(panel.get() ? "Paneli kapat" : "Panel (animateEnterExit)"); };
@@ -502,7 +502,7 @@ void SharedElementSection(CallSite site) {
         static const char* names[] = {"Kızıl kayalar", "Yeşil vadi", "Mavi göl"};
         Section("SharedTransitionLayout · sharedElement · sharedBounds", [=] {
             SharedTransitionLayout(Modifier().fillMaxWidth().height(340), [&](const SharedTransitionScope& shared) {
-                AnimatedContent<int>(selected.get(), [&](const AnimatedContentScope& scope, const int& item) {
+                AnimatedContent(selected.get(), [&](const AnimatedContentScope& scope, const int& item) {
                     auto photo = [=](int i) { return shared.rememberSharedContentState("photo" + std::to_string(i)); };
                     auto title = [=](int i) { return shared.rememberSharedContentState("title" + std::to_string(i)); };
                     if (item < 0) {

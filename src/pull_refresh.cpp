@@ -189,7 +189,7 @@ void Indicator(const PullToRefreshState& state, bool isRefreshing, const Modifie
                 detail::CircularProgressIndicator(Modifier().size(kSpinnerSize), c, kStrokeWidth, CallSite::current());
             else
                 ArrowIndicator(fraction, c);
-        }, {}, tween(150));
+        }, Modifier(), tween(150));
     }, maxDistance, indicatorShape, containerColor.value_or(indicatorContainerColor()));
 }
 

@@ -9,6 +9,7 @@
 
 #include "layout.hpp"
 #include "named.hpp"
+#include "shared_transition.hpp"
 
 namespace kompoz {
 
@@ -462,6 +463,29 @@ InfiniteState<Color> InfiniteTransition::animateColor(A&&... args) const {
     P::get<n::Label>(std::string(), args...);
     return animateColor(Color(P::arg<n::InitialValue>(args...)), Color(P::arg<n::TargetValue>(args...)),
                         AnimationSpec(P::arg<n::AnimationSpec>(args...)));
+}
+
+// ---- Shared elements, as Compose names their arguments ----
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::sharedElement(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::SharedContentState, n::AnimatedVisibilityScope, n::BoundsTransform, n::RenderInOverlayDuringTransition, n::ZIndexInOverlay>;
+    static_assert(P::check<A...>());
+    return sharedElement(P::arg<n::SharedContentState>(args...), P::arg<n::AnimatedVisibilityScope>(args...),
+                         P::get<n::BoundsTransform>(defaultBoundsTransform(), args...), P::get<n::RenderInOverlayDuringTransition>(true, args...),
+                         P::get<n::ZIndexInOverlay>(0.f, args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::sharedBounds(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::SharedContentState, n::AnimatedVisibilityScope, n::BoundsTransform, n::ResizeMode, n::RenderInOverlayDuringTransition,
+                             n::ZIndexInOverlay>;
+    static_assert(P::check<A...>());
+    return sharedBounds(P::arg<n::SharedContentState>(args...), P::arg<n::AnimatedVisibilityScope>(args...),
+                        P::get<n::BoundsTransform>(defaultBoundsTransform(), args...), P::get<n::ResizeMode>(SharedResizeMode{}, args...),
+                        P::get<n::RenderInOverlayDuringTransition>(true, args...), P::get<n::ZIndexInOverlay>(0.f, args...));
 }
 
 } // namespace kompoz

@@ -4,6 +4,7 @@
 // transitions, as in androidx.compose.animation.core.
 
 #include "coroutines.hpp"
+#include "named.hpp"
 #include "runtime.hpp"
 
 #include <algorithm>
@@ -260,20 +261,30 @@ AnimatedState<T> animateValueAsState(const T& target, const AnimationSpec& spec,
     return state;
 }
 
-inline AnimatedState<float> animateFloatAsState(float target, const AnimationSpec& spec = spring(),
-                                                CallSite site = CallSite::current()) {
-    return animateValueAsState(target, spec, site);
-}
-inline AnimatedState<float> animateFloatAsState(float target, float durationMillis, CallSite site = CallSite::current()) {
-    return animateValueAsState(target, tween(durationMillis), site);
-}
-inline AnimatedState<Color> animateColorAsState(Color target, const AnimationSpec& spec = spring(),
-                                                CallSite site = CallSite::current()) {
-    return animateValueAsState(target, spec, site);
-}
-inline AnimatedState<Color> animateColorAsState(Color target, float durationMillis, CallSite site = CallSite::current()) {
-    return animateValueAsState(target, tween(durationMillis), site);
-}
+// animateFloatAsState(targetValue, animationSpec = spring(), label = "…") and animateColorAsState's, as
+// Compose's (animateDpAsState is animateFloatAsState: a dp is a float); or, Kompoz's own, a duration
+// in milliseconds for a tween in place of the spec.
+namespace detail {
+template <class T>
+struct AnimateAsStateImpl {
+    template <class... A>
+    static AnimatedState<T> call(CallSite site, A&&... args) {
+        using P = Params<names::TargetValue, names::AnimationSpec, names::Label>;
+        static_assert(P::check<A...>());
+        AnimationSpec spec = spring();
+        if constexpr (P::given<names::AnimationSpec, A...>()) {
+            auto&& given = P::arg<names::AnimationSpec>(args...);
+            if constexpr (std::is_arithmetic_v<std::remove_cvref_t<decltype(given)>>) spec = tween(float(given));
+            else spec = given;
+        }
+        P::get<names::Label>(std::string(), args...);
+        return animateValueAsState(T(P::arg<names::TargetValue>(args...)), spec, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::AnimateAsStateImpl<float>> animateFloatAsState;
+inline constexpr Composable<detail::AnimateAsStateImpl<float>> animateDpAsState;
+inline constexpr Composable<detail::AnimateAsStateImpl<Color>> animateColorAsState;
 
 // A value animated by coroutines: co_await anim.animateTo(1.f, tween(500));
 // Reading value() in a composable recomposes it on every animation frame.
@@ -516,9 +527,18 @@ private:
     std::shared_ptr<int64_t> start_ = std::make_shared<int64_t>(-1);
 };
 
-inline InfiniteTransition rememberInfiniteTransition(CallSite site = CallSite::current()) {
-    return remember([] { return InfiniteTransition(); }, site);
-}
+namespace detail {
+inline InfiniteTransition rememberInfiniteTransition(CallSite site = CallSite::current()) { return remember([] { return InfiniteTransition(); }, site); }
+struct RememberInfiniteTransitionImpl {  // rememberInfiniteTransition(label = "…"), as Compose's
+    template <class... A>
+    static InfiniteTransition call(CallSite site, A&&... args) {
+        using P = Params<names::Label>;
+        static_assert(P::check<A...>());
+        return rememberInfiniteTransition(site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::RememberInfiniteTransitionImpl> rememberInfiniteTransition;
 
 namespace detail {
 // An endless animation's clock read while drawing, as Compose's progress indicators read theirs
@@ -542,12 +562,47 @@ inline DrawClock rememberDrawClock(CallSite site = CallSite::current()) {
 //   Color bg = t.animateColor([&](bool on) { return on ? cs.primary : cs.surface; });
 //   float scale = t.animateFloat([](bool on) { return on ? 1.1f : 1.f; });
 // currentState() catches up with targetState() once every value has arrived.
+// Compose's Transition.Segment, a transitionSpec's receiver: where the transition goes from and to.
+template <class S>
+struct TransitionSegment {
+    const S& initialState;
+    const S& targetState;
+    bool isTransitioningTo(const S& from, const S& to) const { return initialState == from && targetState == to; }
+};
+
 template <class S>
 class Transition {
 public:
     const S& targetState() const { return target_; }
     const S& currentState() const { return data_->current.get(); }
     bool isRunning() const { return data_->running; }
+
+    // Compose's forms: animateFloat(label = "…", transitionSpec = { tween(300) }) { state -> … } (the
+    // spec's lambda gets its TransitionSegment, or nothing), and animateDp, a float here.
+    template <class N1, class F>
+        requires(detail::isNamed<N1> && !detail::isNamed<F>)
+    float animateFloat(N1&& a, F&& valueFor, CallSite site = CallSite::current()) const {
+        return animateFloat(std::function<float(const S&)>(std::forward<F>(valueFor)), specOf(a), site);
+    }
+    template <class N1, class N2, class F>
+        requires(detail::isNamed<N1> && detail::isNamed<N2>)
+    float animateFloat(N1&& a, N2&& b, F&& valueFor, CallSite site = CallSite::current()) const {
+        return animateFloat(std::function<float(const S&)>(std::forward<F>(valueFor)), specOf(a, b), site);
+    }
+    template <class N1, class F>
+        requires(detail::isNamed<N1> && !detail::isNamed<F>)
+    Color animateColor(N1&& a, F&& valueFor, CallSite site = CallSite::current()) const {
+        return animateColor(std::function<Color(const S&)>(std::forward<F>(valueFor)), specOf(a), site);
+    }
+    template <class N1, class N2, class F>
+        requires(detail::isNamed<N1> && detail::isNamed<N2>)
+    Color animateColor(N1&& a, N2&& b, F&& valueFor, CallSite site = CallSite::current()) const {
+        return animateColor(std::function<Color(const S&)>(std::forward<F>(valueFor)), specOf(a, b), site);
+    }
+    template <class... A>
+    float animateDp(A&&... args) const {
+        return animateFloat(std::forward<A>(args)...);
+    }
 
     float animateFloat(const std::function<float(const S&)>& valueFor, AnimationSpec spec = spring(),
                        CallSite site = CallSite::current()) const {
@@ -575,8 +630,25 @@ private:
         if (value != target) data_->runningNow = true;
         return value;
     }
+    // The spec named arguments give (transitionSpec = …, a spec or a lambda making one), else a spring.
+    template <class... A>
+    AnimationSpec specOf(A&&... args) const {
+        using P = detail::Params<detail::names::TransitionSpec, detail::names::Label>;
+        static_assert(P::check<A...>());
+        P::get<detail::names::Label>(std::string(), args...);
+        if constexpr (P::given<detail::names::TransitionSpec, A...>()) {
+            auto&& given = P::arg<detail::names::TransitionSpec>(args...);
+            using TS = std::remove_cvref_t<decltype(given)>;
+            if constexpr (std::is_invocable_v<TS&, const TransitionSegment<S>&>) return AnimationSpec(given(TransitionSegment<S>{data_->initial, target_}));
+            else if constexpr (std::is_invocable_v<TS&>) return AnimationSpec(given());
+            else return AnimationSpec(given);
+        } else {
+            return spring();
+        }
+    }
 };
 
+namespace detail {
 template <class S>
 Transition<S> updateTransition(const S& targetState, CallSite site = CallSite::current()) {
     auto& data = remember([&] { return std::make_shared<typename Transition<S>::Data>(targetState); }, site);
@@ -588,6 +660,7 @@ Transition<S> updateTransition(const S& targetState, CallSite site = CallSite::c
     });
     return Transition<S>{targetState, data};
 }
+} // namespace detail
 
 // A transition's state kept outside it (Compose's MutableTransitionState): set targetState to
 // start it — a target other than the initial state at once animates the first time it shows
@@ -630,9 +703,22 @@ Transition<S> rememberTransition(const MutableTransitionState<S>& transitionStat
     });
     return Transition<S>{target, data};
 }
+namespace detail {
 template <class S>
 Transition<S> updateTransition(const MutableTransitionState<S>& transitionState, CallSite site = CallSite::current()) {
     return rememberTransition(transitionState, site);
 }
+// updateTransition(targetState, label = "…"), as Compose's; a MutableTransitionState for its state.
+struct UpdateTransitionImpl {
+    template <class... A>
+    static auto call(CallSite site, A&&... args) {
+        using P = Params<names::TargetState, names::Label>;
+        static_assert(P::check<A...>());
+        P::get<names::Label>(std::string(), args...);
+        return updateTransition(P::arg<names::TargetState>(args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::UpdateTransitionImpl> updateTransition;
 
 } // namespace kompoz

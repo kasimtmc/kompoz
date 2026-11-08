@@ -566,7 +566,7 @@ void NavHost(const NavController& navController, std::string startDestination, c
     if (progress >= 0)
         if (auto entry = navController.previousBackStackEntry()) below = entry;
     std::vector<uint64_t> shown;  // entries composed this time, and their graphs' (one leaving keeps its ViewModels until it is gone)
-    AnimatedContent<std::shared_ptr<const NavBackStackEntry>>(
+    AnimatedContent(
         current,
         [&](const AnimatedContentScope&, const std::shared_ptr<const NavBackStackEntry>& entry) {
             if (!entry) return;
@@ -591,7 +591,7 @@ void NavHost(const NavController& navController, std::string startDestination, c
             d.zIndices[to] = z;
             return (d.lastWasPop ? options.popTransition : options.transition).withTargetContentZIndex(z);
         },
-        {.seekState = below, .seekFraction = progress});
+        AnimatedContentOptions<std::shared_ptr<const NavBackStackEntry>>{.seekState = below, .seekFraction = progress});
     // Lifecycles: the screen shown resumed — started while a transition runs —, the ones still
     // leaving started, the rest of the back stack (and the saved stacks) created; applied after
     // the composition, and again whenever the NavHost's own lifecycle moves.

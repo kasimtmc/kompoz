@@ -10,25 +10,28 @@ namespace {
 // Expand/shrink and slide: shows `widthFraction` x `heightFraction` of the content, revealed
 // from its far edge (like Compose's expandFrom = Bottom / End), offset by a fraction of its size.
 struct RevealElement final : ModifierElement {
-    float widthFraction = 1, heightFraction = 1, slideX = 0, slideY = 0;
+    float widthFraction = 1, heightFraction = 1;
+    // The slide when hidden, as a fraction of the content's size (hiddenX / hiddenY) or from its
+    // full size (slideXOf / slideYOf), and how far from shown it is (`hidden`: 1 hidden, 0 shown).
+    float hiddenX = 0, hiddenY = 0, hidden = 0;
+    std::function<float(float)> slideXOf, slideYOf;
     // Read as it is laid out instead: the fractions and the slide at that progress.
     std::optional<detail::Live<float>> progress;
     bool expandWidth = false, expandHeight = false;
-    float hiddenX = 0, hiddenY = 0;
 
     Size measure(const Constraints& c, const MeasureNext& next, Offset& contentOffset) const override {
-        float widthFraction = this->widthFraction, heightFraction = this->heightFraction, slideX = this->slideX, slideY = this->slideY;
+        float widthFraction = this->widthFraction, heightFraction = this->heightFraction, hidden = this->hidden;
         if (progress) {
             float p = std::max(0.f, (*progress)());
             widthFraction = expandWidth ? p : 1, heightFraction = expandHeight ? p : 1;
-            slideX = (1 - p) * hiddenX, slideY = (1 - p) * hiddenY;
+            hidden = 1 - p;
         }
         Constraints inner = c;
         if (widthFraction < 1) inner.minWidth = 0;
         if (heightFraction < 1) inner.minHeight = 0;
         Size s = next(inner);
-        contentOffset = {slideX * s.width - (1 - widthFraction) * s.width,
-                         slideY * s.height - (1 - heightFraction) * s.height};
+        float slideX = slideXOf ? slideXOf(s.width) : hiddenX * s.width, slideY = slideYOf ? slideYOf(s.height) : hiddenY * s.height;
+        contentOffset = {hidden * slideX - (1 - widthFraction) * s.width, hidden * slideY - (1 - heightFraction) * s.height};
         return c.constrain({s.width * widthFraction, s.height * heightFraction});
     }
     void draw(GraphicsContext& canvas, const Rect& bounds, const LayoutNode&, const std::function<void()>& drawContent) const override {
@@ -40,7 +43,7 @@ struct RevealElement final : ModifierElement {
     bool equals(const ModifierElement& other) const override {
         auto* o = dynamic_cast<const RevealElement*>(&other);
         return o && !progress && !o->progress && o->widthFraction == widthFraction && o->heightFraction == heightFraction &&
-               o->slideX == slideX && o->slideY == slideY;
+               o->hiddenX == hiddenX && o->hiddenY == hiddenY && o->hidden == hidden && !slideXOf && !o->slideXOf && !slideYOf && !o->slideYOf;
     }
 };
 
@@ -66,6 +69,8 @@ TransitionParts TransitionParts::merged(const TransitionParts& o) const {
     m.expandHeight = expandHeight || o.expandHeight;
     if (o.slideX != 0) m.slideX = o.slideX;
     if (o.slideY != 0) m.slideY = o.slideY;
+    if (o.slideXOf) m.slideXOf = o.slideXOf;
+    if (o.slideYOf) m.slideYOf = o.slideYOf;
     if (o.scale) {
         m.scale = true;
         m.hiddenScale = o.hiddenScale;
@@ -84,14 +89,14 @@ Modifier TransitionParts::apply(const Modifier& m, float progress) const {
         float s = lerp(hiddenScale, 1, std::max(0.f, progress));
         out = out.graphicsLayer({.scaleX = s, .scaleY = s, .transformOrigin = transformOrigin});
     }
-    bool reveal = (expandWidth || expandHeight || slideX != 0 || slideY != 0) && progress < 1;
+    bool reveal = (expandWidth || expandHeight || slideX != 0 || slideY != 0 || slideXOf || slideYOf) && progress < 1;
     if (reveal) {
         auto e = std::make_shared<RevealElement>();
         float p = std::max(0.f, progress);
         e->widthFraction = expandWidth ? p : 1;
         e->heightFraction = expandHeight ? p : 1;
-        e->slideX = (1 - p) * slideX;
-        e->slideY = (1 - p) * slideY;
+        e->hiddenX = slideX, e->hiddenY = slideY, e->hidden = 1 - p;
+        e->slideXOf = slideXOf, e->slideYOf = slideYOf;
         out = out.then(std::move(e));
     }
     return out;
@@ -105,11 +110,12 @@ Modifier TransitionParts::apply(const Modifier& m, const Live<float>& progress) 
             l.scaleX = l.scaleY = lerp(hidden, 1, std::max(0.f, progress()));
             l.transformOrigin = origin;
         });
-    if (expandWidth || expandHeight || slideX != 0 || slideY != 0) {
+    if (expandWidth || expandHeight || slideX != 0 || slideY != 0 || slideXOf || slideYOf) {
         auto e = std::make_shared<RevealElement>();
         e->progress = progress;
         e->expandWidth = expandWidth, e->expandHeight = expandHeight;
         e->hiddenX = slideX, e->hiddenY = slideY;
+        e->slideXOf = slideXOf, e->slideYOf = slideYOf;
         out = out.then(std::move(e));
     }
     return out;
@@ -263,6 +269,12 @@ EnterTransition slideInVertically(float fraction, AnimationSpec spec) { return e
 EnterTransition slideInHorizontally(float fraction, AnimationSpec spec) {
     return enter({.slideX = fraction, .spec = spec});
 }
+EnterTransition slideInVertically(std::function<float(float)> initialOffsetY, AnimationSpec spec) {
+    return enter({.slideYOf = std::move(initialOffsetY), .spec = spec});
+}
+EnterTransition slideInHorizontally(std::function<float(float)> initialOffsetX, AnimationSpec spec) {
+    return enter({.slideXOf = std::move(initialOffsetX), .spec = spec});
+}
 EnterTransition scaleIn(float initialScale, Offset transformOrigin, AnimationSpec spec) {
     return enter({.scale = true, .hiddenScale = initialScale, .transformOrigin = transformOrigin, .spec = spec});
 }
@@ -279,13 +291,19 @@ ExitTransition slideOutVertically(float fraction, AnimationSpec spec) { return e
 ExitTransition slideOutHorizontally(float fraction, AnimationSpec spec) {
     return exit({.slideX = fraction, .spec = spec});
 }
+ExitTransition slideOutVertically(std::function<float(float)> targetOffsetY, AnimationSpec spec) {
+    return exit({.slideYOf = std::move(targetOffsetY), .spec = spec});
+}
+ExitTransition slideOutHorizontally(std::function<float(float)> targetOffsetX, AnimationSpec spec) {
+    return exit({.slideXOf = std::move(targetOffsetX), .spec = spec});
+}
 
-void AnimatedVisibility(bool visible, const Content& content, CallSite site) {
+void detail::AnimatedVisibility(bool visible, const Content& content, CallSite site) {
     AnimatedVisibility(visible, Modifier(), fadeIn() + expandVertically(), fadeOut() + shrinkVertically(), content, site);
 }
 
-void AnimatedVisibility(bool visible, const Modifier& modifier, const EnterTransition& enterTransition,
-                        const ExitTransition& exitTransition, const Content& content, CallSite site) {
+void detail::AnimatedVisibility(bool visible, const Modifier& modifier, const EnterTransition& enterTransition,
+                                const ExitTransition& exitTransition, const Content& content, CallSite site) {
     AnimatedVisibility(visible, modifier, enterTransition, exitTransition, [&](const AnimatedVisibilityScope&) { content(); }, site);
 }
 
@@ -341,20 +359,20 @@ void animatedVisibility(bool visible, bool initiallyVisible, const std::shared_p
 
 } // namespace
 
-void AnimatedVisibility(bool visible, const Modifier& modifier, const EnterTransition& enterTransition,
-                        const ExitTransition& exitTransition, const std::function<void(const AnimatedVisibilityScope&)>& content,
-                        CallSite site) {
+void detail::AnimatedVisibility(bool visible, const Modifier& modifier, const EnterTransition& enterTransition,
+                                const ExitTransition& exitTransition, const std::function<void(const AnimatedVisibilityScope&)>& content,
+                                CallSite site) {
     ComposableScope scope(site);
     animatedVisibility(visible, visible, nullptr, modifier, enterTransition, exitTransition, content);
 }
 
-void AnimatedVisibility(const MutableTransitionState<bool>& visibleState, const Modifier& modifier, const EnterTransition& enter,
-                        const ExitTransition& exit, const Content& content, CallSite site) {
+void detail::AnimatedVisibility(const MutableTransitionState<bool>& visibleState, const Modifier& modifier, const EnterTransition& enter,
+                                const ExitTransition& exit, const Content& content, CallSite site) {
     AnimatedVisibility(visibleState, modifier, enter, exit, [&](const AnimatedVisibilityScope&) { content(); }, site);
 }
 
-void AnimatedVisibility(const MutableTransitionState<bool>& visibleState, const Modifier& modifier, const EnterTransition& enter,
-                        const ExitTransition& exit, const std::function<void(const AnimatedVisibilityScope&)>& content, CallSite site) {
+void detail::AnimatedVisibility(const MutableTransitionState<bool>& visibleState, const Modifier& modifier, const EnterTransition& enter,
+                                const ExitTransition& exit, const std::function<void(const AnimatedVisibilityScope&)>& content, CallSite site) {
     ComposableScope scope(site);
     const auto& d = visibleState.data_;
     animatedVisibility(d->target.get(), d->current.peek(), d, modifier, enter, exit, content);
