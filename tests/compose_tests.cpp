@@ -938,6 +938,38 @@ TEST(theming_as_compose_writes_it) {
     CHECK(!rule.onNodeWithText("a 1").exists() && rule.onNodeWithText("b 2").exists());
 }
 
+// Text as Compose writes it: an annotated string built on its builder, a field with composable
+// label and supporting text, a state field with lineLimits and a placeholder, a measurer in a Canvas.
+fun openTerms() {}
+
+@Composable
+fun TextForms() {
+    var email by remember { mutableStateOf("") }
+    val message = rememberTextFieldState()
+    val measurer = rememberTextMeasurer()
+    Column {
+        Text(buildAnnotatedString {
+            append("accept the ")
+            withLink(LinkAnnotation.Clickable("terms") { openTerms() }) { append("terms") }
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(" now") }
+        })
+        OutlinedTextField(value = email, onValueChange = { email = it }, singleLine = true, label = { Text("Email") }, supportingText = { Text("Never shared") })
+        OutlinedTextField(state = message, lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 4), placeholder = { Text("Message") })
+        SelectionContainer { Text("Order KMP-1") }
+        Canvas(modifier = Modifier.size(40.dp)) {
+            val label = measurer.measure("7%", style = TextStyle(fontSize = 24.sp))
+            drawText(label, topLeft = Offset(center.x - label.size.width / 2, 0f))
+        }
+    }
+}
+
+TEST(text_as_compose_writes_it) {
+    ComposeTestRule rule([] { TextForms(); });
+    CHECK(rule.onNodeWithText("accept the terms now", true).exists());
+    CHECK(rule.onNodeWithText("Email").exists() && rule.onNodeWithText("Never shared").exists() && rule.onNodeWithText("Message").exists());
+    CHECK(rule.onNodeWithText("Order KMP-1").exists());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

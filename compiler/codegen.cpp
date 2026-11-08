@@ -125,6 +125,7 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     // ("const ": a receiver only read)
     {"mediaQuery", "const UiMediaScope"},    {"derivedMediaQuery", "const UiMediaScope"},
     {"SubcomposeLayout", "SubcomposeMeasureScope"},
+    {"buildAnnotatedString", "AnnotatedStringBuilder"}, {"edit", "TextFieldBuffer"},
     {"HorizontalMultiBrowseCarousel", "const CarouselItemScope"}, {"HorizontalUncontainedCarousel", "const CarouselItemScope"},
     {"HorizontalCenteredHeroCarousel", "const CarouselItemScope"}};
 
