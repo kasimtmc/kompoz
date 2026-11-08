@@ -11351,6 +11351,29 @@ TEST(material_components_take_compose_arguments) {
     CHECK(rule.onNodeWithText("Sekme 1").exists());
 }
 
+TEST(theme_pieces_take_compose_named_arguments) {
+    // lightColorScheme(primary = …), scheme.copy(…), Typography::copy and Font::copy by name, and a
+    // MaterialTheme given a typography (its color scheme, left out, the one around it).
+    ColorScheme brand = lightColorScheme(arg::primary = Color(0xFF0061A4), arg::onPrimary = colors::White);
+    CHECK(brand.primary == Color(0xFF0061A4) && brand.onPrimary == colors::White && brand.secondary == lightColorScheme().secondary);
+    ColorScheme changed = brand.copy(arg::onPrimary = colors::Black);
+    CHECK(changed.onPrimary == colors::Black && changed.primary == brand.primary);
+    Typography type = Typography{}.copy(arg::headlineSmall = Typography{}.headlineSmall.copy(arg::fontFamily = FontFamily::Serif, arg::fontSize = TextUnit::sp(30)));
+    CHECK(type.headlineSmall.family == FontFamily::Serif.id && type.headlineSmall.size == 30 && type.bodyMedium == Typography{}.bodyMedium);
+    auto seen = std::make_shared<Font>();
+    auto primary = std::make_shared<Color>();
+    ComposeTestRule rule([=] {
+        MaterialTheme(darkColorScheme(), [=] {
+            MaterialTheme(arg::typography = type, [=] {
+                *seen = typography().headlineSmall;
+                *primary = colorScheme().primary;
+            });
+        });
+    });
+    CHECK(seen->family == FontFamily::Serif.id && seen->size == 30);
+    CHECK(*primary == darkColorScheme().primary);  // (kept from the theme around it)
+}
+
 TEST(intrinsic_height_and_flow_row) {
     ComposeTestRule rule([] {
         Column([] {

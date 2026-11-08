@@ -213,6 +213,32 @@ Modifier Modifier::selectable(A&&... args) const {
                       P::get<n::Role>(SemanticsRole::None, args...), options);
 }
 
+// Font::copy(fontFamily = lora, fontWeight = FontWeight::Bold, fontSize = 20.sp, …): a size is a TextUnit
+// (its sp) or a number of sp; a family is a FontFamily (its id) or an id.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Font Font::copy(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::FontFamily, n::FontWeight, n::FontSize, n::FontStyle, n::LetterSpacing, n::LineHeight>;
+    static_assert(P::check<A...>());
+    Font f = *this;
+    auto sp = [](auto&& v) {
+        if constexpr (requires { v.value; }) return float(v.value);
+        else return float(v);
+    };
+    if constexpr (P::given<n::FontFamily, A...>()) {
+        auto&& family = P::arg<n::FontFamily>(args...);
+        if constexpr (requires { family.id; }) f.family = family.id;
+        else f.family = uint16_t(family);
+    }
+    P::set<n::FontWeight>(f.weight, args...);
+    P::set<n::FontStyle>(f.style, args...);
+    if constexpr (P::given<n::FontSize, A...>()) f.size = sp(P::arg<n::FontSize>(args...));
+    if constexpr (P::given<n::LetterSpacing, A...>()) f.letterSpacing = sp(P::arg<n::LetterSpacing>(args...));
+    if constexpr (P::given<n::LineHeight, A...>()) f.lineHeight = sp(P::arg<n::LineHeight>(args...));
+    return f;
+}
+
 // animateFloat(initialValue, targetValue, animationSpec, label) and animateColor's: the label is
 // Compose's name for its tools (none here).
 template <class... A>

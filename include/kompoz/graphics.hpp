@@ -391,6 +391,11 @@ struct Font {
     bool stroked = false;
     float strokeWidth = 0;
     StrokeJoin strokeJoin = StrokeJoin::Miter;
+    // Compose's TextStyle.copy(fontFamily = …, fontWeight = …, fontSize = …, fontStyle = …,
+    // letterSpacing = …, lineHeight = …) (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Font copy(A&&... args) const;
     float strokeMiter = 4;
     // Its glyphs stretched across (their advances too) and slanted: a point y above the baseline
     // moved y * skewX to the right (a text style's TextGeometricTransform).

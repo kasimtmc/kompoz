@@ -865,6 +865,12 @@
   { Icon(…) }, label = { Text("…") }) }, modifier, layoutType = …, …) { … }` ve içerikten bir simge ve etiketle
   `NavigationBarItem`. C++'ta süslü parantezle verilen bir seçenek yapısı türünü adlandırıyor (`ChipOptions{…}`,
   `NavigationSuiteScaffoldOptions{…}`).
+- **Compose'un yazdığı gibi tema**: şemanın renklerinden herhangi biri adıyla `lightColorScheme(primary = …,
+  onPrimary = …)`, `darkColorScheme(…)` ve `scheme.copy(…)`; `typography.copy(headlineSmall = …)` ve
+  `Typography(displayLarge = …)`; Compose'un `TextStyle.copy`'si gibi bir `Font` üzerinde `style.copy(fontFamily = …,
+  fontWeight = …, fontSize = …, fontStyle = …, letterSpacing = …, lineHeight = …)`; `MaterialTheme(colorScheme,
+  typography, motionScheme) { … }`, tipografisi içindeki her şeye veriliyor, renk şeması yazılmazsa çevredeki.
+  (Kompoz'da `Shapes` teması yok: şekiller bileşenlerin.)
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

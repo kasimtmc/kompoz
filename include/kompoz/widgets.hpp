@@ -56,6 +56,10 @@ struct ColorScheme {
                 f(onTertiaryFixedVariant)};
     }
     friend constexpr bool operator==(const ColorScheme&, const ColorScheme&) = default;
+    // Compose's copy(primary = …) (below).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    ColorScheme copy(A&&... args) const;
 };
 
 constexpr ColorScheme lightColorScheme() {
@@ -146,7 +150,112 @@ struct Typography {
     Font labelMedium = detail::typeScale(12, 16, 0.5f, FontWeight::Medium);
     Font labelSmall = detail::typeScale(11, 16, 0.5f, FontWeight::Medium);
     friend constexpr bool operator==(const Typography&, const Typography&) = default;
+    // Compose's copy(headlineSmall = …) (below).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Typography copy(A&&... args) const;
 };
+// Compose's typography.copy(headlineSmall = …) (Typography(displayLarge = …) is the struct's own init).
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Typography Typography::copy(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::DisplayLarge, n::DisplayMedium, n::DisplaySmall, n::HeadlineLarge, n::HeadlineMedium, n::HeadlineSmall, n::TitleLarge, n::TitleMedium, n::BodyLarge, n::TitleSmall, n::BodyMedium, n::BodySmall, n::LabelLarge, n::LabelMedium, n::LabelSmall>;
+    static_assert(P::check<A...>());
+    Typography t = *this;
+    P::set<n::DisplayLarge>(t.displayLarge, args...);
+    P::set<n::DisplayMedium>(t.displayMedium, args...);
+    P::set<n::DisplaySmall>(t.displaySmall, args...);
+    P::set<n::HeadlineLarge>(t.headlineLarge, args...);
+    P::set<n::HeadlineMedium>(t.headlineMedium, args...);
+    P::set<n::HeadlineSmall>(t.headlineSmall, args...);
+    P::set<n::TitleLarge>(t.titleLarge, args...);
+    P::set<n::TitleMedium>(t.titleMedium, args...);
+    P::set<n::BodyLarge>(t.bodyLarge, args...);
+    P::set<n::TitleSmall>(t.titleSmall, args...);
+    P::set<n::BodyMedium>(t.bodyMedium, args...);
+    P::set<n::BodySmall>(t.bodySmall, args...);
+    P::set<n::LabelLarge>(t.labelLarge, args...);
+    P::set<n::LabelMedium>(t.labelMedium, args...);
+    P::set<n::LabelSmall>(t.labelSmall, args...);
+    return t;
+}
+
+
+
+// Compose's named forms: lightColorScheme(primary = …, onPrimary = …), darkColorScheme(…) and
+// scheme.copy(primary = …): the baseline scheme (or this one) with those colors changed.
+namespace detail {
+template <class... A>
+ColorScheme withColors(ColorScheme cs, A&&... args) {
+    namespace n = detail::names;
+    using P = detail::Params<n::Primary, n::OnPrimary, n::PrimaryContainer, n::OnPrimaryContainer, n::Background, n::OnBackground, n::Surface, n::OnSurface, n::SurfaceContainer, n::OnSurfaceVariant, n::Outline, n::OutlineVariant, n::Error, n::InverseSurface, n::InverseOnSurface, n::InversePrimary, n::SecondaryContainer, n::OnSecondaryContainer, n::Secondary, n::OnSecondary, n::Tertiary, n::OnTertiary, n::OnError, n::SurfaceContainerLow, n::SurfaceContainerHighest, n::TertiaryContainer, n::OnTertiaryContainer, n::ErrorContainer, n::OnErrorContainer, n::SurfaceVariant, n::SurfaceTint, n::Scrim, n::SurfaceBright, n::SurfaceDim, n::SurfaceContainerLowest, n::PrimaryFixed, n::PrimaryFixedDim, n::OnPrimaryFixed, n::OnPrimaryFixedVariant, n::SecondaryFixed, n::SecondaryFixedDim, n::OnSecondaryFixed, n::OnSecondaryFixedVariant, n::TertiaryFixed, n::TertiaryFixedDim, n::OnTertiaryFixed, n::OnTertiaryFixedVariant>;
+    static_assert(P::check<A...>());
+    P::set<n::Primary>(cs.primary, args...);
+    P::set<n::OnPrimary>(cs.onPrimary, args...);
+    P::set<n::PrimaryContainer>(cs.primaryContainer, args...);
+    P::set<n::OnPrimaryContainer>(cs.onPrimaryContainer, args...);
+    P::set<n::Background>(cs.background, args...);
+    P::set<n::OnBackground>(cs.onBackground, args...);
+    P::set<n::Surface>(cs.surface, args...);
+    P::set<n::OnSurface>(cs.onSurface, args...);
+    P::set<n::SurfaceContainer>(cs.surfaceContainer, args...);
+    P::set<n::OnSurfaceVariant>(cs.onSurfaceVariant, args...);
+    P::set<n::Outline>(cs.outline, args...);
+    P::set<n::OutlineVariant>(cs.outlineVariant, args...);
+    P::set<n::Error>(cs.error, args...);
+    P::set<n::InverseSurface>(cs.inverseSurface, args...);
+    P::set<n::InverseOnSurface>(cs.inverseOnSurface, args...);
+    P::set<n::InversePrimary>(cs.inversePrimary, args...);
+    P::set<n::SecondaryContainer>(cs.secondaryContainer, args...);
+    P::set<n::OnSecondaryContainer>(cs.onSecondaryContainer, args...);
+    P::set<n::Secondary>(cs.secondary, args...);
+    P::set<n::OnSecondary>(cs.onSecondary, args...);
+    P::set<n::Tertiary>(cs.tertiary, args...);
+    P::set<n::OnTertiary>(cs.onTertiary, args...);
+    P::set<n::OnError>(cs.onError, args...);
+    P::set<n::SurfaceContainerLow>(cs.surfaceContainerLow, args...);
+    P::set<n::SurfaceContainerHighest>(cs.surfaceContainerHighest, args...);
+    P::set<n::TertiaryContainer>(cs.tertiaryContainer, args...);
+    P::set<n::OnTertiaryContainer>(cs.onTertiaryContainer, args...);
+    P::set<n::ErrorContainer>(cs.errorContainer, args...);
+    P::set<n::OnErrorContainer>(cs.onErrorContainer, args...);
+    P::set<n::SurfaceVariant>(cs.surfaceVariant, args...);
+    P::set<n::SurfaceTint>(cs.surfaceTint, args...);
+    P::set<n::Scrim>(cs.scrim, args...);
+    P::set<n::SurfaceBright>(cs.surfaceBright, args...);
+    P::set<n::SurfaceDim>(cs.surfaceDim, args...);
+    P::set<n::SurfaceContainerLowest>(cs.surfaceContainerLowest, args...);
+    P::set<n::PrimaryFixed>(cs.primaryFixed, args...);
+    P::set<n::PrimaryFixedDim>(cs.primaryFixedDim, args...);
+    P::set<n::OnPrimaryFixed>(cs.onPrimaryFixed, args...);
+    P::set<n::OnPrimaryFixedVariant>(cs.onPrimaryFixedVariant, args...);
+    P::set<n::SecondaryFixed>(cs.secondaryFixed, args...);
+    P::set<n::SecondaryFixedDim>(cs.secondaryFixedDim, args...);
+    P::set<n::OnSecondaryFixed>(cs.onSecondaryFixed, args...);
+    P::set<n::OnSecondaryFixedVariant>(cs.onSecondaryFixedVariant, args...);
+    P::set<n::TertiaryFixed>(cs.tertiaryFixed, args...);
+    P::set<n::TertiaryFixedDim>(cs.tertiaryFixedDim, args...);
+    P::set<n::OnTertiaryFixed>(cs.onTertiaryFixed, args...);
+    P::set<n::OnTertiaryFixedVariant>(cs.onTertiaryFixedVariant, args...);
+    return cs;
+}
+} // namespace detail
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+ColorScheme lightColorScheme(A&&... args) {
+    return detail::withColors(lightColorScheme(), std::forward<A>(args)...);
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+ColorScheme darkColorScheme(A&&... args) {
+    return detail::withColors(darkColorScheme(), std::forward<A>(args)...);
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+ColorScheme ColorScheme::copy(A&&... args) const {
+    return detail::withColors(*this, std::forward<A>(args)...);
+}
 
 inline const CompositionLocal<ColorScheme> LocalColorScheme{lightColorScheme()};
 inline const CompositionLocal<Typography> LocalTypography{Typography{}};
@@ -187,16 +296,24 @@ namespace detail {
 void MaterialTheme(const ColorScheme& colorScheme, const Content& content, CallSite site = CallSite::current());
 void MaterialTheme(const ColorScheme& colorScheme, const MotionScheme& motionScheme, const Content& content,
                    CallSite site = CallSite::current());
+// MaterialTheme(colorScheme, typography, motionScheme) { … }: a typography given goes to everything
+// inside (LocalTypography), as Compose's. (Kompoz has no Shapes theme: shapes are the components'.)
 struct MaterialThemeImpl {
-    using P = Params<names::ColorScheme, names::MotionScheme, Block>;
+    using P = Params<names::ColorScheme, names::MotionScheme, names::Typography, Block>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
         static_assert(P::blockGiven<A...>(), "kompoz: MaterialTheme takes a block: its content");
-        const ColorScheme& colorScheme = P::arg<names::ColorScheme>(args...);
+        // (no colorScheme: the one around it, as Compose's default MaterialTheme.colorScheme)
+        ColorScheme colorScheme = P::get<names::ColorScheme>(LocalColorScheme.current(), args...);
+        Content content = P::plainBlock(std::forward<A>(args)...);
+        if constexpr (P::given<names::Typography, A...>()) {
+            Typography typography = P::arg<names::Typography>(args...);
+            content = [typography, inner = std::move(content)] { CompositionLocalProvider({LocalTypography.provides(typography)}, inner); };
+        }
         if constexpr (P::given<names::MotionScheme, A...>())
-            MaterialTheme(colorScheme, P::get<names::MotionScheme>(MotionScheme::standard(), args...), P::plainBlock(std::forward<A>(args)...), site);
-        else MaterialTheme(colorScheme, P::plainBlock(std::forward<A>(args)...), site);
+            MaterialTheme(colorScheme, P::get<names::MotionScheme>(MotionScheme::standard(), args...), content, site);
+        else MaterialTheme(colorScheme, content, site);
     }
 };
 } // namespace detail

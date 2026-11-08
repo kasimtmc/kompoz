@@ -824,6 +824,12 @@
   layoutType = …, …) { … }` whose items are composed from their own icon and label, and `NavigationBarItem` with an
   icon and a label of content. In C++ a braced options struct names its type (`ChipOptions{…}`,
   `NavigationSuiteScaffoldOptions{…}`).
+- **Theming as Compose writes it**: `lightColorScheme(primary = …, onPrimary = …)`, `darkColorScheme(…)` and
+  `scheme.copy(…)` with any of the scheme's colors by name; `typography.copy(headlineSmall = …)` and
+  `Typography(displayLarge = …)`; `style.copy(fontFamily = …, fontWeight = …, fontSize = …, fontStyle = …,
+  letterSpacing = …, lineHeight = …)` on a `Font`, as Compose's `TextStyle.copy`; `MaterialTheme(colorScheme, typography,
+  motionScheme) { … }`, its typography given to everything inside and its color scheme, left out, the one around it.
+  (Kompoz has no `Shapes` theme: shapes are the components'.)
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and
