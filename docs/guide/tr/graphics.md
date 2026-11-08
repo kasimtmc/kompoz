@@ -6,14 +6,16 @@
 
 `Canvas`, bir `DrawScope` içinde ona ne söylerseniz onu çizen bir composable'dır. Boyutunu modifier'ıyla verin:
 
-```cpp
-void Target() {
-    Color ring = colorScheme().primary, center = colorScheme().error;
-    Canvas(Modifier().size(160), [=](DrawScope& d) {
-        d.drawCircle(ring.copy(0.2f));                              // canvas'ı doldurur
-        d.drawCircle(ring, d.size().width / 3, std::nullopt, 1, Stroke(6));
-        d.drawCircle(center, 12);                                   // merkezde
-    });
+```kotlin
+@Composable
+fun Target() {
+    val ring = MaterialTheme.colorScheme.primary
+    val center = MaterialTheme.colorScheme.error
+    Canvas(modifier = Modifier.size(160.dp)) {
+        drawCircle(ring.copy(alpha = 0.2f))                                  // canvas'ı doldurur
+        drawCircle(ring, radius = size.width / 3, style = Stroke(width = 6f))
+        drawCircle(center, radius = 12f)                                     // merkezde
+    }
 }
 ```
 
@@ -32,21 +34,22 @@ void Target() {
 | `drawImage(image, topLeft)`, `drawImage(image, srcOffset, srcSize, dstOffset, dstSize, …, filterQuality)` | Bir bitmap ya da bir parçası bir dikdörtgene, `FilterQuality`'nin dediği gibi örneklenerek. |
 | `painter.draw(d, size, alpha, colorFilter)` | Bir `Painter` (bir `ImageVector`'ünkü: `VectorPainter(vector)`), Compose'un `with(painter) { draw(…) }`'u gibi. |
 
-Compose'un parametrelerini Compose'un sırasıyla alırlar: bir renk ya da fırça, sonra `alpha`, `style`, `colorFilter` ve `blendMode` (`d.drawRect(color, {}, size, 0.5f, Stroke(2))`). `DrawStyle`, `Fill` (varsayılan) ya da `Stroke(width, miter, cap, join, pathEffect)`'tir; 0 genişlik kıl kalınlığındadır, dönüşüm ne olursa olsun bir piksel. Koordinatlar canvas'ın sol üst köşesinden dp cinsindendir; `d.size()` ve `d.center()` boyutunu ve merkezini, `d.density()` bir dp'deki pikselleri verir.
+Compose'un parametrelerini Compose'unki gibi adla alırlar: bir renk ya da fırça, sonra `topLeft`, `size`, `radius`, `center`, `alpha`, `style`, `colorFilter` ve `blendMode` (`drawRect(color, size = size, alpha = 0.5f, style = Stroke(width = 2f))`). `DrawStyle`, `Fill` (varsayılan) ya da `Stroke(width, miter, cap, join, pathEffect)`'tir; 0 genişlik kıl kalınlığındadır, dönüşüm ne olursa olsun bir piksel. Koordinatlar canvas'ın sol üst köşesinden dp cinsindendir; `d.size()` ve `d.center()` boyutunu ve merkezini, `d.density()` bir dp'deki pikselleri verir.
 
 ### Dönüştürmek
 
-`translate`, `rotate` (ve `rotateRad`), `scale`, `inset`, `clipRect` ve `clipPath` bir blok alır: bloğun çizdiği taşınır, döndürülür, ölçeklenir ya da kırpılır. `clipRect` ve `clipPath` içeride kalanı, `ClipOp::Difference` ile dışarıda kalanı tutar. `withTransform` birkaçını birden yapar; onun `transform(matrix)`'i herhangi bir `Matrix`'i (Compose'un 4x4'lüğü, perspektif de) alır. Compose'daki gibi dönüşüm çizimin kendisine işler: hiçbir şey çizimin alanına kırpılmaz; GPU renderer'da her şey, nasıl döndürülürse, gerilirse ya da perspektiften görülürse görülsün keskin ve birebir kenar yumuşatmalı kalır (yazı gösterildiği boyutta dizilir).
+`translate`, `rotate` (ve `rotateRad`), `scale`, `inset`, `clipRect` ve `clipPath` bir blok alır: bloğun çizdiği taşınır, döndürülür, ölçeklenir ya da kırpılır. `clipRect` ve `clipPath` içeride kalanı, `ClipOp.Difference` ile dışarıda kalanı tutar. `withTransform` birkaçını birden yapar; onun `transform(matrix)`'i herhangi bir `Matrix`'i (Compose'un 4x4'lüğü, perspektif de) alır. Compose'daki gibi dönüşüm çizimin kendisine işler: hiçbir şey çizimin alanına kırpılmaz; GPU renderer'da her şey, nasıl döndürülürse, gerilirse ya da perspektiften görülürse görülsün keskin ve birebir kenar yumuşatmalı kalır (yazı gösterildiği boyutta dizilir).
 
-```cpp
-void Clock(float minutes) {
-    Color hand = colorScheme().onSurface;
-    Canvas(Modifier().size(120), [=](DrawScope& d) {
-        d.drawCircle(hand, std::nullopt, std::nullopt, 1, Stroke(2));
-        d.rotate(minutes * 6, [&](DrawScope& r) {          // dakika başına 6°, merkez etrafında
-            r.drawLine(hand, r.center(), {r.center().x, 12}, 3, StrokeCap::Round);
-        }, d.center());
-    });
+```kotlin
+@Composable
+fun Clock(minutes: Float) {
+    val hand = MaterialTheme.colorScheme.onSurface
+    Canvas(modifier = Modifier.size(120.dp)) {
+        drawCircle(hand, style = Stroke(width = 2f))
+        rotate(minutes * 6) {   // dakika başına 6°, merkez etrafında
+            drawLine(hand, start = center, end = Offset(center.x, 12f), strokeWidth = 3f, cap = StrokeCap.Round)
+        }
+    }
 }
 ```
 
@@ -58,19 +61,21 @@ Var olan bir composable'ın üzerine çizmek için `Canvas`'a ihtiyacınız yok.
 - `drawWithContent(onDraw)` içeriğin çevresine çizer: içeriğin geleceği yerde `drawContent()`'i çağırın, önüne ya da arkasına çizin.
 - `drawWithCache(build)` nesneleri (path'ler, fırçalar) boyut başına bir kez kurar ve her karede onlarla çizer.
 
-```cpp
-void Highlighted(const std::string& text) {
-    Color marker = Color::hex(0xFFEB3B, 0.6f);
-    Text(text, Modifier().drawBehind([marker](DrawScope& d) {
-        d.drawRect(marker, {0, d.size().height * 0.55f}, Size{d.size().width, d.size().height * 0.4f});
-    }));
+```kotlin
+@Composable
+fun Highlighted(text: String) {
+    val marker = Color(0xFFFFEB3B).copy(alpha = 0.6f)
+    Text(text, modifier = Modifier.drawBehind {
+        drawRect(marker, topLeft = Offset(0f, size.height * 0.55f), size = Size(size.width, size.height * 0.4f))
+    })
 }
 
-void Faded(const Content& content) {
-    Box(Modifier().drawWithContent([](ContentDrawScope& d) {
-        d.drawContent();
-        d.drawRect(Brush::verticalGradient({colors::Transparent, colors::White}));   // alt kısımda bir solma
-    })) { content(); };
+@Composable
+fun Faded(content: @Composable () -> Unit) {
+    Box(modifier = Modifier.drawWithContent {
+        drawContent()
+        drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.White)))   // alt kısımda bir solma
+    }) { content() }
 }
 ```
 
@@ -78,13 +83,13 @@ void Faded(const Content& content) {
 
 Bir `Color` Compose'unkidir: 64 bit; sRGB'de kanal başına 8 bit, Compose'un başka bir renk uzayında (`ColorSpaces`: Display P3, BT.2020, Adobe RGB, CIE L\*a\*b\*, Oklab ve daha fazlası) bileşenleri yarım float'lar. `convert` birini başka bir uzaya çevirir, `toArgb()` sRGB'sini `0xAARRGGBB` olarak verir; bir renk hangi uzayda olursa olsun sRGB'de çizilir.
 
-```cpp body
-Color p3(0.1f, 0.75f, 0.45f, 1, ColorSpaces::DisplayP3);  // Display P3'te
-Color lab(55, 60, -40, 1, ColorSpaces::CieLab);           // L*, a*, b*
-Color between = lerp(colors::Red, colors::Blue, 0.5f);    // Oklab'da karıştırılır
-Row(Modifier().height(40)) {
-    for (Color c : {p3, lab, between}) Box(Modifier().size(40).background(c)) {};
-};
+```kotlin body
+val p3 = Color(0.1f, 0.75f, 0.45f, 1f, ColorSpaces.DisplayP3)   // Display P3'te
+val lab = Color(55f, 60f, -40f, 1f, ColorSpaces.CieLab)        // L*, a*, b*
+val between = lerp(Color.Red, Color.Blue, 0.5f)                 // Oklab'da karıştırılır
+Row(modifier = Modifier.height(40.dp)) {
+    for (c in listOf(p3, lab, between)) Box(modifier = Modifier.size(40.dp).background(c))
+}
 ```
 
 `lerp`, Compose'unki gibi iki rengi Oklab'da karıştırır: kırmızıdan maviye yarı yol, sRGB sayılarının verdiği koyu mor değil, ikisi kadar açık bir menekşedir. Canlandırılan bir renk de böyle gider (`animateColorAsState`). Bir gradyan renklerini Skia'nınki gibi sRGB'de karıştırır.
@@ -93,40 +98,43 @@ Row(Modifier().height(40)) {
 
 Bir `Brush`, bir rengin gidebileceği her yerde düz bir renkle ya da bir gradyanla boyar: çizim çağrıları, `background`, metin.
 
-```cpp body
-Box(Modifier().fillMaxWidth().height(120).background(
-    Brush::linearGradient({Color::hex(0x6750A4), Color::hex(0xB58392)}), RoundedCornerShape(16))) {};
+```kotlin body
+Box(modifier = Modifier.fillMaxWidth().height(120.dp).background(
+    Brush.linearGradient(listOf(Color(0xFF6750A4), Color(0xFFB58392))), RoundedCornerShape(16.dp)))
 ```
 
-Renk durakları ve döşeme modlarıyla `Brush::solid`, `linearGradient`, `horizontalGradient`, `verticalGradient`, `radialGradient` ve `sweepGradient` mevcuttur.
+Renk durakları ve döşeme modlarıyla `Brush.solid` (Compose'un `SolidColor`'ı), `linearGradient`, `horizontalGradient`, `verticalGradient`, `radialGradient` ve `sweepGradient` mevcuttur.
 
 Kendi fırçanız, Compose'un `ShaderBrush`'ı gibi, boyadığı boyut için yapılan bir shader'dır: bir degrade, döşenmiş bir resim ya da birleştirilmiş iki shader.
 
-```cpp body
-Box(Modifier().size(120, 72).background(Brush::shader([](Size size) {
-    return CompositeShader(LinearGradientShader({0, 0}, {size.width, 0}, {Color::hex(0x6750A4), Color::hex(0xB58392)}),
-                           RadialGradientShader({24, 20}, 48, {colors::White.copy(0.9f), colors::Transparent}), BlendMode::Screen);
-}))) {};
+```kotlin body
+Box(modifier = Modifier.size(120.dp, 72.dp).background(Brush.shader { size ->
+    CompositeShader(
+        LinearGradientShader(Offset(0f, 0f), Offset(size.width, 0f), listOf(Color(0xFF6750A4), Color(0xFFB58392))),
+        RadialGradientShader(Offset(24f, 20f), 48f, listOf(Color.White.copy(alpha = 0.9f), Color.Transparent)),
+        BlendMode.Screen,
+    )
+}))
 ```
 
-`Brush::composite` aynısını iki fırçayla yapar, `withTransform` bir degradenin ya da shader'ın boyadığını taşır, `lerp` de bir animasyonun yaptığı gibi bir fırçadan ötekine geçer.
+`Brush.composite` aynısını iki fırçayla yapar, `withTransform` bir degradenin ya da shader'ın boyadığını taşır, `lerp` de bir animasyonun yaptığı gibi bir fırçadan ötekine geçer.
 
 ## Canvas ve Paint
 
-Bir `DrawScope`'un altında kaydetme yığını ve `Paint`'iyle Compose'un `Canvas`'ı vardır (`Canvas` composable'ı adı aldığı için burada `graphics::Canvas`):
+Bir `DrawScope`'un altında kaydetme yığını ve `Paint`'iyle Compose'un `Canvas`'ı vardır (`Paint` burada bir struct: `Paint(color = …, style = …)`; Compose'unkinde ayarlayıcılar vardır):
 
-```cpp body
-Canvas(Modifier().size(96), [](DrawScope& d) {
-    d.drawIntoCanvas([&](graphics::Canvas& c) {
-        Paint spoke{.color = Color::hex(0x6750A4), .style = PaintingStyle::Stroke, .strokeWidth = 4, .strokeCap = StrokeCap::Round};
-        for (int i = 0; i < 12; ++i) {
-            c.save();
-            c.rotate(float(i) * 30, 48, 48);
-            c.drawLine({48, 30}, {48, 8}, spoke);
-            c.restore();
+```kotlin body
+Canvas(modifier = Modifier.size(96.dp)) {
+    drawIntoCanvas { canvas ->
+        val spoke = Paint(color = Color(0xFF6750A4), style = PaintingStyle.Stroke, strokeWidth = 4f, strokeCap = StrokeCap.Round)
+        for (i in 0 until 12) {
+            canvas.save()
+            canvas.rotate(i * 30f, 48f, 48f)
+            canvas.drawLine(Offset(48f, 30f), Offset(48f, 8f), spoke)
+            canvas.restore()
         }
-    });
-});
+    }
+}
 ```
 
 Canvas'ın kaydedip dönüştürdüğü, Compose'daki gibi, içinde bulunduğu blok bitene dek kapsamın sonraki çizimleri için geçerlidir.
@@ -135,64 +143,67 @@ Canvas'ın kaydedip dönüştürdüğü, Compose'daki gibi, içinde bulunduğu b
 
 Bir `Path`, çizgiler, eğriler ve yaylarla herhangi bir dış hattı tanımlar:
 
-```cpp
-Path heart(Size s) {
-    Path p;
-    float w = s.width, h = s.height;
-    p.moveTo(w / 2, h * 0.9f);
-    p.cubicTo(w * 0.1f, h * 0.6f, 0, h * 0.25f, w * 0.25f, h * 0.1f);
-    p.cubicTo(w * 0.4f, 0, w / 2, h * 0.15f, w / 2, h * 0.25f);
-    p.cubicTo(w / 2, h * 0.15f, w * 0.6f, 0, w * 0.75f, h * 0.1f);
-    p.cubicTo(w, h * 0.25f, w * 0.9f, h * 0.6f, w / 2, h * 0.9f);
-    p.close();
-    return p;
+```kotlin
+fun heart(s: Size): Path {
+    val p = Path()
+    val w = s.width
+    val h = s.height
+    p.moveTo(w / 2, h * 0.9f)
+    p.cubicTo(w * 0.1f, h * 0.6f, 0f, h * 0.25f, w * 0.25f, h * 0.1f)
+    p.cubicTo(w * 0.4f, 0f, w / 2, h * 0.15f, w / 2, h * 0.25f)
+    p.cubicTo(w / 2, h * 0.15f, w * 0.6f, 0f, w * 0.75f, h * 0.1f)
+    p.cubicTo(w, h * 0.25f, w * 0.9f, h * 0.6f, w / 2, h * 0.9f)
+    p.close()
+    return p
 }
 
-void Heart() {
-    Color red = Color::hex(0xE53935);
-    Box(Modifier().size(64).drawWithCache([red](CacheDrawScope& cache) {
-        Path path = heart(cache.size());   // boyut başına bir kez kurulur
-        return cache.onDrawBehind([path, red](DrawScope& d) { d.drawPath(path, red); });
-    })) {};
+@Composable
+fun Heart() {
+    val red = Color(0xFFE53935)
+    Box(modifier = Modifier.size(64.dp).drawWithCache {
+        val path = heart(size)   // boyut başına bir kez kurulur
+        onDrawBehind { drawPath(path, red) }
+    })
 }
 ```
 
-`moveTo`, `lineTo`, `quadraticTo`, `conicTo`, `cubicTo`, bunların `relative…` biçimleri, `arcTo`, `addRect`, `addOval`, `addRoundRect` ve `close` path'i Compose'unki (bir Android path'i) gibi kurar: bütün olarak eklenen şekiller `Path::Direction::Clockwise` vermezseniz saat yönünün tersine döner, yaylar ve ovaller birebir conic'lerdir. `transform(matrix)` onu taşır, `op` (ya da `a + b`, `a - b`, `a & b`) iki path'i eğrilerini koruyarak birleştirir, `iterator()` segmentlerini gezer, `PathHitTester` noktaları ona tekrar tekrar sınar. `PathMeasure` uzunluğunu ölçer ve parçalarını verir (eğrilerinin parçalarını eğri olarak); Android'inki gibi, bir path'i adım adım çizmek için.
+`moveTo`, `lineTo`, `quadraticTo`, `conicTo`, `cubicTo`, bunların `relative…` biçimleri, `arcTo`, `addRect`, `addOval`, `addRoundRect` ve `close` path'i Compose'unki (bir Android path'i) gibi kurar: bütün olarak eklenen şekiller `Path.Direction.Clockwise` vermezseniz saat yönünün tersine döner, yaylar ve ovaller birebir conic'lerdir. `transform(matrix)` onu taşır, `op` (ya da `a + b`, `a - b`, `a & b`) iki path'i eğrilerini koruyarak birleştirir, `iterator()` segmentlerini gezer, `PathHitTester` noktaları ona tekrar tekrar sınar. `PathMeasure` uzunluğunu ölçer ve parçalarını verir (eğrilerinin parçalarını eğri olarak); Android'inki gibi, bir path'i adım adım çizmek için.
 
 Bir çizgideki (ya da bir `Paint`'teki) `PathEffect` path'i çizilirken değiştirir, Skia'nınki gibi: kesikler, yuvarlak köşeler, boyunca basılan bir şekil ya da biri ardından öteki (`chainPathEffect`).
 
-```cpp body
-Path wave;
-wave.moveTo(0, 20);
-wave.cubicTo(30, -10, 60, 50, 90, 20);
-Canvas(Modifier().size(100, 40), [wave](DrawScope& d) {
-    d.drawPath(wave, colorScheme().primary, 1, Stroke(3, 4, StrokeCap::Round, StrokeJoin::Round, PathEffect::dashPathEffect({8, 6})));
-});
+```kotlin body
+val primary = MaterialTheme.colorScheme.primary
+val wave = Path()
+wave.moveTo(0f, 20f)
+wave.cubicTo(30f, -10f, 60f, 50f, 90f, 20f)
+Canvas(modifier = Modifier.size(100.dp, 40.dp)) {
+    drawPath(wave, primary, style = Stroke(width = 3f, cap = StrokeCap.Round, join = StrokeJoin.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))))
+}
 ```
 
 Path'in çizildiği yerde, çizildiği piksellerde uygulanır; böylece bir eğrideki kesik her ölçekte Compose'unkinin düştüğü yere düşer.
 
 ## Şekiller ve kırpma
 
-Bir `Shape`, arka planların, çerçevelerin, kırpmaların ve gölgelerin kullandığı dış hattır: `RectangleShape`, `CircleShape`, `RoundedCornerShape(16)` (ya da köşe başına bir yarıçap), `CutCornerShape(8)` ve Material 3 Expressive'in şekilleri (`MaterialShapes::Cookie9Sided()` ve diğerleri, `toShape` ile).
+Bir `Shape`, arka planların, çerçevelerin, kırpmaların ve gölgelerin kullandığı dış hattır: `RectangleShape`, `CircleShape`, `RoundedCornerShape(16.dp)` (ya da köşe başına bir yarıçap), `CutCornerShape(8.dp)` ve Material 3 Expressive'in şekilleri (`MaterialShapes.Cookie9Sided()` ve diğerleri, `toShape` ile).
 
-```cpp body
-Box(Modifier().size(96).clip(CircleShape).background(colorScheme().tertiaryContainer)) {};
-Box(Modifier().size(96).border(2, colorScheme().outline, RoundedCornerShape(12, 12, 0, 0))) {};
+```kotlin body
+Box(modifier = Modifier.size(96.dp).clip(CircleShape).background(MaterialTheme.colorScheme.tertiaryContainer))
+Box(modifier = Modifier.size(96.dp).border(2.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp, 12.dp, 0.dp, 0.dp)))
 ```
 
-Compose'daki gibi bir şekil, bir boyutta ve yerleşim yönünde dış hattını yapar (`createOutline`): bir dikdörtgen, yuvarlak bir dikdörtgen (köşeleri eliptik de olabilen `Outline::Rounded(RoundRect{…})`) ya da herhangi bir yol. `GenericShape` birini bir yoldan kurar:
+Compose'daki gibi bir şekil, bir boyutta ve yerleşim yönünde dış hattını yapar (`createOutline`): bir dikdörtgen, yuvarlak bir dikdörtgen (köşeleri eliptik de olabilen `Outline.Rounded(RoundRect(…))`) ya da herhangi bir yol. `GenericShape` birini bir yoldan kurar (burada bir `Rect` Compose'un sol, üst, sağ, alt'ı değil `(x, y, width, height)`'tır):
 
-```cpp body
-Shape ticket = GenericShape([](Path& p, Size size, LayoutDirection) {
-    p.moveTo(0, 0);
-    p.lineTo(size.width, 0);
-    p.lineTo(size.width, size.height);
-    p.arcTo({size.width / 2 - 12, size.height - 12, 24, 24}, 0, -180, false);  // altta bir çentik
-    p.lineTo(0, size.height);
-    p.close();
-});
-Box(Modifier().size(120, 72).clip(ticket).background(colorScheme().primaryContainer)) {};
+```kotlin body
+val ticket = GenericShape { size, _ ->
+    moveTo(0f, 0f)
+    lineTo(size.width, 0f)
+    lineTo(size.width, size.height)
+    arcTo(Rect(size.width / 2 - 12, size.height - 12, 24f, 24f), 0f, -180f, false)  // altta bir çentik
+    lineTo(0f, size.height)
+    close()
+}
+Box(modifier = Modifier.size(120.dp, 72.dp).clip(ticket).background(MaterialTheme.colorScheme.primaryContainer))
 ```
 
 `clip(shape)` içeriği şekle göre, kenarı yumuşatılmış olarak ve katmansız kırpar.
@@ -201,27 +212,28 @@ Box(Modifier().size(120, 72).clip(ticket).background(colorScheme().primaryContai
 
 `shadow(elevation, shape)` bir düğümü yükseltir: Compose'unki gibi o `shadowElevation`'lı bir `graphicsLayer`'dır; şeklinin gölgesi Android'in çizdiği gibi, pencerenin üstünden gelen bir ışıkla çizilir (gölgeler ekranın aşağısına doğru uzar), içerik de şekle göre kırpılır (`clip`, yükseklik 0'dan büyükse varsayılan). `dropShadow(shape, Shadow{…})` ve `innerShadow(shape, Shadow{…})` kendi renginiz (ya da `brush`), kaydırmanız, bulanıklık yarıçapınız, yayılmanız, alfanız ve blend modunuzla gölgeler çizer:
 
-```cpp body
-Box(Modifier().size(120)
-        .dropShadow(RoundedCornerShape(24), Shadow{.color = Color::hex(0x6750A4, 0.4f), .offset = {0, 8}, .blurRadius = 24})
-        .background(colorScheme().surface, RoundedCornerShape(24))) {};
+```kotlin body
+Box(modifier = Modifier.size(120.dp)
+    .dropShadow(RoundedCornerShape(24.dp), Shadow(color = Color(0xFF6750A4).copy(alpha = 0.4f), offset = Offset(0f, 8f), blurRadius = 24f))
+    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(24.dp)))
 ```
 
 ## graphicsLayer
 
-`graphicsLayer` içeriği, yerleşimini değiştirmeden ölçeklenmiş, döndürülmüş (3B de: `rotationX`, `rotationY`), taşınmış, soldurulmuş, kırpılmış, süzülmüş, karıştırılmış ya da bulanıklaştırılmış olarak çizer. Compose'daki gibi yalnızca gereken yerde ekran dışı bir katmandan geçer (soluk, bir blend modu, bir renk süzgeci, bir render effect ya da `CompositingStrategy::Offscreen`); yoksa dönüşüm ve kırpma doğrudan çizime gider:
+`graphicsLayer` içeriği, yerleşimini değiştirmeden ölçeklenmiş, döndürülmüş (3B de: `rotationX`, `rotationY`), taşınmış, soldurulmuş, kırpılmış, süzülmüş, karıştırılmış ya da bulanıklaştırılmış olarak çizer. Compose'daki gibi yalnızca gereken yerde ekran dışı bir katmandan geçer (soluk, bir blend modu, bir renk süzgeci, bir render effect ya da `CompositingStrategy.Offscreen`); yoksa dönüşüm ve kırpma doğrudan çizime gider:
 
-```cpp body
-Box(Modifier().size(80).graphicsLayer({.scaleX = 1.2f, .scaleY = 1.2f, .alpha = 0.8f, .rotationZ = 15})
-        .background(colorScheme().primary, RoundedCornerShape(16))) {};
+```kotlin body
+Box(modifier = Modifier.size(80.dp).graphicsLayer(scaleX = 1.2f, scaleY = 1.2f, alpha = 0.8f, rotationZ = 15f)
+    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)))
 ```
 
 Lambda alan biçimi çizim sırasında değerlendirilir; bu yüzden orada okunan animasyonlu değerler yeniden kompoze etmeden ya da yeniden yerleştirmeden değişir. Her karede değişen her şey için onu kullanın (bkz. [Aşamalar](phases.md#durum-okumalarını-ertelemek)):
 
-```cpp
-void Spinner() {
-    auto angle = rememberInfiniteTransition().animateFloat(0, 360, infiniteRepeatable(tween(1200, 0, LinearEasing)));
-    Icon(Icons::Filled::Refresh, "Loading", Modifier().graphicsLayer([angle](GraphicsLayerScope& l) { l.rotationZ = angle.get(); }));
+```kotlin
+@Composable
+fun Spinner() {
+    val angle by rememberInfiniteTransition().animateFloat(0f, 360f, infiniteRepeatable(tween(1200, 0, LinearEasing)))
+    Icon(Icons.Filled.Refresh, contentDescription = "Loading", modifier = Modifier.graphicsLayer { rotationZ = angle })
 }
 ```
 
@@ -229,94 +241,97 @@ void Spinner() {
 
 ### Bulanıklık ve render effect'ler
 
-`blur(radius)` içeriği Compose'unki gibi bulanıklaştırır. Varsayılan olarak bulanıklık düğümün sınırları içinde kalır (`BlurredEdgeTreatment::Rectangle`: kenarların ötesindeki pikseller kenarınki sayılır); `BlurredEdgeTreatment::Unbounded` solarak dışarı yayılmasına izin verir; `BlurredEdgeTreatment{shape}` onu bir şekle göre keser:
+`blur(radius)` içeriği Compose'unki gibi bulanıklaştırır. Varsayılan olarak bulanıklık düğümün sınırları içinde kalır (`BlurredEdgeTreatment.Rectangle`: kenarların ötesindeki pikseller kenarınki sayılır); `BlurredEdgeTreatment.Unbounded` solarak dışarı yayılmasına izin verir; `BlurredEdgeTreatment{shape}` onu bir şekle göre keser:
 
-```cpp body
-Image(imageResource("images/cover.jpg"), "Album cover",
-      Modifier().size(160).blur(12, BlurredEdgeTreatment{RoundedCornerShape(16)}), ContentScale::Crop);
+```kotlin body
+Image(imageResource("images/cover.jpg"), contentDescription = "Album cover",
+      modifier = Modifier.size(160.dp).blur(12.dp, BlurredEdgeTreatment(RoundedCornerShape(16.dp))), contentScale = ContentScale.Crop)
 ```
 
 Bu, render effect'i olan bir `graphicsLayer`'dır; bir katmana render effect'i kendiniz de verebilirsiniz. `BlurEffect(radiusX, radiusY, edgeTreatment)` piksellerini bulanıklaştırır (bir Gauss, yarıçap için Android'inki; `TileMode` kenarların ötesinde ne olduğunu söyler); `OffsetEffect(x, y)` onları taşır. Her biri önce içinden geçilecek bir başkasını alır:
 
-```cpp body
-Box(Modifier().size(96).graphicsLayer({.renderEffect = OffsetEffect(BlurEffect(6, 6, TileMode::Decal), {0, 4})})
-        .background(colorScheme().primary, CircleShape)) {};
+```kotlin body
+Box(modifier = Modifier.size(96.dp).graphicsLayer(renderEffect = OffsetEffect(BlurEffect(6f, 6f, TileMode.Decal), Offset(0f, 4f)))
+    .background(MaterialTheme.colorScheme.primary, CircleShape))
 ```
 
 Katmanın sınırları içinde çizilen, effect'in içinden geçer; `clip` açıksa effect'in yaptığı sonra katmanın şekline göre kesilir.
 
 `blur`, Compose 1.13'ünki gibi kademeli de bulanıklaştırır: bazı yerlerde ötekilerden daha çok; bir yarıçaptan ötekine (ya da `BlurStop`'lar üzerinden) aşağı, yana, bir doğru boyunca ya da bir merkezden dışarı. Lambda alan biçimi bunu çizim sırasında ayarlar:
 
-```cpp body
-Image(imageResource("images/cover.jpg"), "Album cover",
-      Modifier().size(160).blur(BlurRadiusSpec::verticalGradient(0, 16)), ContentScale::Crop);  // sharp at the top
-Box(Modifier().size(120).blur([](BlurScope& b) {
-    b.blurRadiusSpec = BlurRadiusSpec::radialGradient(0, 12);  // sharp in the middle
-}).background(colorScheme().primary, CircleShape)) {};
+```kotlin body
+Image(imageResource("images/cover.jpg"), contentDescription = "Album cover",
+      modifier = Modifier.size(160.dp).blur(BlurRadiusSpec.verticalGradient(0.dp, 16.dp)), contentScale = ContentScale.Crop)  // üstte keskin
+Box(modifier = Modifier.size(120.dp).blur {
+    blurRadiusSpec = BlurRadiusSpec.radialGradient(0.dp, 12.dp)   // ortada keskin
+}.background(MaterialTheme.colorScheme.primary, CircleShape))
 ```
 
 Kompoz'un `blur`'u neyin bulanıklaşacağını da alır (`BlurType`). Varsayılan `Family`, Compose'unki gibi düğümü ve çocuklarını bulanıklaştırır. `Morph` düğümün arkasında çizileni şekli içinde bulanıklaştırır ve düğümü üstüne keskin çizer: buzlu cam. `Self` yalnızca düğümün kendi çizdiğini (arka planı, kenarlığı, resmi) bulanıklaştırır ve çocuklarını üstüne keskin çizer:
 
-```cpp body
-(Box)(Modifier().size(200, 72)
-        .blur(16, BlurredEdgeTreatment{RoundedCornerShape(16)}, BlurType::Morph)
-        .background(colors::White.copy(0.2f), RoundedCornerShape(16)),
-    Alignment::Center, [] { Text("Frosted glass"); });
+```kotlin body
+Box(
+    modifier = Modifier.size(200.dp, 72.dp)
+        .blur(16.dp, BlurredEdgeTreatment(RoundedCornerShape(16.dp)), BlurType.Morph)
+        .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp)),
+    contentAlignment = Alignment.Center,
+) { Text("Frosted glass") }
 ```
 
 ## Resimler
 
 `Image` bir bitmap gösterir; `imageResource(path)` uygulamanın varlıklarından bir tane yükler, bir kez:
 
-```cpp body
-Image(imageResource("images/cover.jpg"), "Album cover", Modifier().size(160).clip(RoundedCornerShape(12)), ContentScale::Crop);
+```kotlin body
+Image(imageResource("images/cover.jpg"), contentDescription = "Album cover", modifier = Modifier.size(160.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
 ```
 
 `AsyncImage` bir resmi varlıklardan ya da web'den (`http://`, `https://`) yükler, gösterildiği boyutta çözer ve indirmeleri diskte saklar. Yüklenirken bir yer tutucu, başarısız olursa başka bir şey gösterir:
 
-```cpp body
-AsyncImage("https://example.com/photo.webp", "A photo", Modifier().size(200),
-           AsyncImageOptions{.placeholder = [] { CircularProgressIndicator(); },
-            .error = [] { Icon(Icons::Filled::Info, "Couldn't load"); },
-            .contentScale = ContentScale::Crop,
-            .crossfadeMillis = 200});
+```kotlin body
+AsyncImage(
+    model = "https://example.com/photo.webp",
+    contentDescription = "A photo",
+    modifier = Modifier.size(200.dp),
+    placeholder = { CircularProgressIndicator() },
+    error = { Icon(Icons.Filled.Info, contentDescription = "Couldn't load") },
+    contentScale = ContentScale.Crop,
+    crossfadeMillis = 200,
+)
 ```
 
 JPEG, PNG ve WebP desteklenir. `ContentScale`, resmi Compose'daki gibi kutusuna yerleştirir: `Fit`, `Crop`, `FillBounds`, `FillWidth`, `FillHeight`, `Inside`, `None`.
 
 ## Vektörler ve simgeler
 
-`Icon`, bir `ImageVector`'ü içerik rengiyle renklendirerek, varsayılan olarak 24 dp boyutunda çizer. Kompoz'da `Icons::Filled` ve `Icons::AutoMirrored::Filled` altında Material simgeleri vardır (ikincisi sağdan sola yerleşimlerde aynalanır):
+`Icon`, bir `ImageVector`'ü içerik rengiyle renklendirerek, varsayılan olarak 24 dp boyutunda çizer. Kompoz'da `Icons.Filled` ve `Icons.AutoMirrored.Filled` altında Material simgeleri vardır (ikincisi sağdan sola yerleşimlerde aynalanır):
 
-```cpp body
-Icon(Icons::Filled::Favorite, "Favorite", Modifier(), Color::hex(0xE53935));
+```kotlin body
+Icon(Icons.Filled.Favorite, contentDescription = "Favorite", tint = Color(0xFFE53935))
 ```
 
 Kendi vektörleriniz SVG path verisinden, Android vector drawable dosyalarından gelir ya da kodda kurulur:
 
-```cpp
-const ImageVector& sparkle() {
-    static const ImageVector v = ImageVector::fromSvgPath("M12,2l2.4,7.6L22,12l-7.6,2.4L12,22l-2.4-7.6L2,12l7.6-2.4z");
-    return v;
-}
+```kotlin
+val SparkleIcon = ImageVector.fromSvgPath("M12,2l2.4,7.6L22,12l-7.6,2.4L12,22l-2.4-7.6L2,12l7.6-2.4z")
 
 // Kendi boyalarıyla yollar, gruplar içinde, Compose'un ImageVector.Builder'ının yaptığı gibi.
-const ImageVector& badgeIcon() {
-    static const ImageVector v =
-        ImageVector::Builder("Rozet", 24, 24, 24, 24)
-            .addPath({.pathData = addPathNodes("M12,2a10,10 0 1,0 0.01,0z"), .fill = Brush::solid(Color::hex(0x1E88E5))})
-            .group({.rotation = -10, .pivotX = 12, .pivotY = 12}, [](ImageVector::Builder& b) {
-                b.path({.stroke = Brush::solid(colors::White), .strokeLineWidth = 2, .strokeLineCap = StrokeCap::Round},
-                       [](PathBuilder& p) { p.moveTo(7, 12).lineTo(10.5f, 15.5f).lineTo(17, 9); });
-            })
-            .build();
-    return v;
-}
+val BadgeIcon = ImageVector.Builder("Rozet", 24.dp, 24.dp, 24f, 24f)
+    .addPath(pathData = addPathNodes("M12,2a10,10 0 1,0 0.01,0z"), fill = Brush.solid(Color(0xFF1E88E5)))
+    .group(rotation = -10f, pivotX = 12f, pivotY = 12f) {
+        path(stroke = Brush.solid(Color.White), strokeLineWidth = 2f, strokeLineCap = StrokeCap.Round) {
+            moveTo(7f, 12f)
+            lineTo(10.5f, 15.5f)
+            lineTo(17f, 9f)
+        }
+    }
+    .build()
 
-void Sparkle() {
-    Icon(sparkle(), "");
-    Image(rememberVectorPainter(badgeIcon()), "Rozet");
-    Image(rememberVectorPainter(vectorResource("vectors/logo.xml")), "Logo", Modifier().size(48));
+@Composable
+fun Sparkle() {
+    Icon(SparkleIcon, contentDescription = null)
+    Image(rememberVectorPainter(BadgeIcon), contentDescription = "Rozet")
+    Image(rememberVectorPainter(vectorResource("vectors/logo.xml")), contentDescription = "Logo", modifier = Modifier.size(48.dp))
 }
 ```
 
@@ -324,17 +339,16 @@ void Sparkle() {
 
 Bir vektörün içeriği Compose'un `rememberVectorPainter { Group { Path() } }`'u gibi composable da olabilir: okuduğu şey onu yeniden yapar; burada açıldıkça kendini çizen bir onay işareti.
 
-```cpp body
-#! auto done = mutableStateOf(false);
-float drawn = animateFloatAsState(done.get() ? 1.f : 0.f, tween(400));
-Painter tick = rememberVectorPainter(24, 24, 24, 24, [&](float, float) {
-    vector::Path({.pathData = addPathNodes("M5,12l5,5l9,-10"), .stroke = Brush::solid(colors::Black), .strokeLineWidth = 2,
-                  .trimPathEnd = drawn});
-});
-Image(tick, "Tamam");
+```kotlin body
+#! val done = remember { mutableStateOf(false) }
+val drawn by animateFloatAsState(if (done.value) 1f else 0f, tween(400))
+val tick = rememberVectorPainter(24.dp, 24.dp, 24f, 24f) { _, _ ->
+    Path(pathData = addPathNodes("M5,12l5,5l9,-10"), stroke = Brush.solid(Color.Black), strokeLineWidth = 2f, trimPathEnd = drawn)
+}
+Image(tick, contentDescription = "Tamam")
 ```
 
-`vector::RenderVectorGroup(icon.root(), configs)` var olan bir vektörün ağacını böyle çizer; bir grubun ya da yolun adına verilen `VectorConfig` onun çizileceği değerleri verir (dönüş, renk, kırpma).
+`vector.RenderVectorGroup(icon.root, configs)` var olan bir vektörün ağacını böyle çizer; bir grubun ya da yolun adına verilen `VectorConfig` onun çizileceği değerleri verir (dönüş, renk, kırpma).
 
 ## Ayrıca bakın
 
