@@ -900,6 +900,13 @@
   `LifecycleStartEffect`'s `onStopOrDispose`, `viewModelScope` by name, `update { }`, `flatMapLatest { }` and the other
   value lambdas; a function whose name a local shares (`items(items) { }`) is called, as Kotlin does. `debounce(300)` takes
   milliseconds, as Kotlin's.
+- **Navigation as Compose writes it**: `NavHost(navController, startDestination, modifier = …, enterTransition = { },
+  exitTransition = { }, popEnterTransition = { }, popExitTransition = { }) { composable("home") { } }`, the transitions'
+  lambdas on their `AnimatedContentTransitionScope` of the two entries (`NavHostOptions::transitionFor`,
+  `popTransitionFor` in C++); the builder's `composable(route, deepLinks = …) { entry -> }` and `navigation(startDestination
+  = …, route = …) { }` by name; `navigate(route) { popUpTo("home") { saveState = true }; launchSingleTop = true }`
+  (`NavOptionsBuilder`, `PopUpToBuilder`); `navDeepLink { uriPattern = "…" }`; `entry.destination.route`
+  (`NavDestination`); `BackHandler(enabled = …) { }`; `combinedClickable(onClick = …, onLongClick = …, onDoubleClick = …)`.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

@@ -174,7 +174,7 @@ void ShowcaseApp() {
                                                [&](const NavBackStackEntry&) { MaterialScreen(Modifier().fillMaxSize(), colorSource, nav); });
             graph.composable<routes::Places>({navDeepLink("kompoz://places")},
                                              [&](const NavBackStackEntry&) { PlacesScreen(Modifier().fillMaxSize()); });
-        }, {.transition = fade, .popTransition = fade});
+        }, NavHostOptions{.transition = fade, .popTransition = fade});
         if (about.get())
             AlertDialog([about] { about.set(false); },
                         confirmButton = [about] { TextButton([about] { about.set(false); }) { Text("Tamam"); }; },

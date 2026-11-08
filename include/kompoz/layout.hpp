@@ -2025,6 +2025,10 @@ public:
     Modifier selectableGroup() const;
     // A click that can also be long pressed or double clicked (onClick then waits for the
     // double-click timeout).
+    // Compose's combinedClickable(onClick = …, onLongClick = …, onDoubleClick = …, enabled = …) by name (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier combinedClickable(A&&... args) const;
     Modifier combinedClickable(std::function<void()> onClick, std::function<void()> onLongClick,
                                std::function<void()> onDoubleClick = {}, bool enabled = true) const;
     // Drags along one axis report their delta to the state (rememberDraggableState, gestures.hpp).

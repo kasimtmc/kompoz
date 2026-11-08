@@ -940,6 +940,13 @@
   `state["key"] = v`, `LifecycleResumeEffect(Unit) { …; onPauseOrDispose { … } }` ve `LifecycleStartEffect`'in
   `onStopOrDispose`'u, adla `viewModelScope`, `update { }`, `flatMapLatest { }` ve öteki değer lambda'ları; adını bir
   yerelin paylaştığı bir işlev (`items(items) { }`) Kotlin'deki gibi çağrılır. `debounce(300)` Kotlin'inki gibi milisaniye alır.
+- **Compose'un yazdığı gibi gezinme**: `NavHost(navController, startDestination, modifier = …, enterTransition = { },
+  exitTransition = { }, popEnterTransition = { }, popExitTransition = { }) { composable("home") { } }`, geçişlerin
+  lambda'ları iki girdinin `AnimatedContentTransitionScope`'u üzerinde (C++'ta `NavHostOptions::transitionFor`,
+  `popTransitionFor`); kurucunun adla `composable(route, deepLinks = …) { entry -> }` ve `navigation(startDestination = …,
+  route = …) { }`'ı; `navigate(route) { popUpTo("home") { saveState = true }; launchSingleTop = true }` (`NavOptionsBuilder`,
+  `PopUpToBuilder`); `navDeepLink { uriPattern = "…" }`; `entry.destination.route` (`NavDestination`); `BackHandler(enabled
+  = …) { }`; `combinedClickable(onClick = …, onLongClick = …, onDoubleClick = …)`.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

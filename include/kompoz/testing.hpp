@@ -481,6 +481,13 @@ public:
         waitForIdle(0);
     }
 
+    // Compose's rule.mainClock.advanceTimeBy(ms): the virtual clock.
+    struct MainClock {
+        ComposeTestRule& rule;
+        void advanceTimeBy(int64_t millis) { rule.advanceTimeBy(millis); }
+    };
+    MainClock mainClock() { return {*this}; }
+
     // Runs frames (16 ms of virtual time each) until nothing is pending, including coroutine
     // delays due within `timerHorizonMillis` (so an endless ticking loop doesn't run forever;
     // use advanceTimeBy for those).

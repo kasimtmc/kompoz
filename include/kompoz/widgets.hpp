@@ -899,7 +899,19 @@ void TooltipArea(const Content& tooltip, const Modifier& modifier, const Tooltip
                  CallSite site = CallSite::current());
 
 // Handles the back button (Escape on desktop) while enabled; the most recently composed wins.
+namespace detail {
 void BackHandler(bool enabled, std::function<void()> onBack, CallSite site = CallSite::current());
+struct BackHandlerImpl {  // BackHandler(enabled = …) { … }, as Compose's
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        using P = Params<names::Enabled, Block>;
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: BackHandler(enabled) { … } takes what back does");
+        BackHandler(P::get<names::Enabled>(true, args...), std::function<void()>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(args...))), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::BackHandlerImpl> BackHandler;
 template <class T>
 class Flow;
 // Back as a gesture (Compose's PredictiveBackHandler): while enabled, the system's back gesture

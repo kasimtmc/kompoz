@@ -510,8 +510,8 @@ void NavGraphBuilder::navigation(std::string startDestination, std::string route
     for (auto& dest : nested.destinations_) destinations_.push_back(std::move(dest));
 }
 
-void NavHost(const NavController& navController, std::string startDestination, const Modifier& modifier,
-             const std::function<void(NavGraphBuilder&)>& builder, const NavHostOptions& options, CallSite site) {
+void detail::NavHost(const NavController& navController, std::string startDestination, const Modifier& modifier,
+                     const std::function<void(NavGraphBuilder&)>& builder, const NavHostOptions& options, CallSite site) {
     ComposableScope scope(site);
     NavGraphBuilder graph;
     builder(graph);
@@ -535,8 +535,15 @@ void NavHost(const NavController& navController, std::string startDestination, c
         });
         return [&host, owner] { host.removeDeepLinkHandler(owner); };
     });
-    if (auto link = host.takeDeepLink([&](const std::string& l) { return d.resolve(l).has_value(); })) d.deepLink(*link);
-    else if (d.entries.empty() && d.nextId == 1) d.go(startDestination, {});
+    // (changed(): what read currentBackStackEntryAsState() before this, a bottom bar above it, learns of
+    // the first entry, as Compose's does)
+    if (auto link = host.takeDeepLink([&](const std::string& l) { return d.resolve(l).has_value(); })) {
+        d.deepLink(*link);
+        d.changed();
+    } else if (d.entries.empty() && d.nextId == 1) {
+        d.go(startDestination, {});
+        d.changed();
+    }
     SaveableStateHolder holder = rememberSaveableStateHolder();
     for (uint64_t id : std::exchange(d.dropped, {})) holder.removeState(std::to_string(id));
     d.version.get();  // recompose when the stack changes
@@ -589,6 +596,8 @@ void NavHost(const NavController& navController, std::string startDestination, c
             float z = d.zIndices[from];
             if (to != from) z += d.lastWasPop ? -1.f : 1.f;
             d.zIndices[to] = z;
+            const auto& custom = d.lastWasPop ? options.popTransitionFor : options.transitionFor;
+            if (custom && initial && target) return custom(*initial, *target).withTargetContentZIndex(z);
             return (d.lastWasPop ? options.popTransition : options.transition).withTargetContentZIndex(z);
         },
         AnimatedContentOptions<std::shared_ptr<const NavBackStackEntry>>{.seekState = below, .seekFraction = progress});

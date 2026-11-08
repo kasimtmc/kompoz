@@ -54,6 +54,7 @@
 #include "animated.hpp"
 #include "lifecycle.hpp"
 #include "runtime.hpp"
+#include "named.hpp"
 #include "viewmodel.hpp"
 
 #include <cstdlib>
@@ -198,10 +199,17 @@ T routeFrom(const NavArguments& args);
 // Also a LifecycleOwner (the LocalLifecycleOwner of its screen): resumed while it is the screen
 // shown, started while a transition to or from it runs, created on the back stack (or in a
 // saved one), destroyed once popped and off the screen — the NavHost's own lifecycle at most.
+// What an entry is of (Compose's NavDestination): its route pattern.
+struct NavDestination {
+    std::string route;
+    friend bool operator==(const NavDestination&, const NavDestination&) = default;
+};
+
 class NavBackStackEntry : public ViewModelStoreOwner, public LifecycleOwner {
 public:
     uint64_t id() const { return id_; }
     const std::string& route() const { return route_; }  // the destination's pattern ("detail/{id}")
+    NavDestination destination() const { return {route_}; }  // Compose's entry.destination.route
     const std::string& path() const { return path_; }    // as navigated to ("detail/42")
     const NavArguments& arguments() const { return arguments_; }
     bool isGraph() const { return graph_; }
@@ -241,6 +249,14 @@ struct NavDeepLink {
     std::string uriPattern;
 };
 inline NavDeepLink navDeepLink(std::string uriPattern) { return {std::move(uriPattern)}; }
+// Compose's navDeepLink { uriPattern = "…" }.
+template <class F>
+    requires std::is_invocable_v<F&, NavDeepLink&>
+NavDeepLink navDeepLink(F&& build) {
+    NavDeepLink link;
+    build(link);
+    return link;
+}
 
 // A deep link pattern for T under `basePath`: navDeepLink<Profile>("kompoz://profile") answers
 // "kompoz://profile/{id}?tab={tab}".
@@ -291,6 +307,28 @@ struct NavOptions {
     bool launchSingleTop = false;        // the destination already on top: no second copy
     bool restoreState = false;           // bring back the entries saved for this destination
 };
+// Compose's navigate(route) { popUpTo("home") { saveState = true }; launchSingleTop = true }: the
+// options built in a block.
+struct PopUpToBuilder {
+    bool inclusive = false, saveState = false;
+};
+struct NavOptionsBuilder {
+    bool launchSingleTop = false, restoreState = false;
+    std::optional<std::string> popUpToRoute;
+    PopUpToBuilder popUpToOptions;
+    void popUpTo(std::string route) { popUpToRoute = std::move(route); }
+    template <class F>
+        requires std::is_invocable_v<F&, PopUpToBuilder&>
+    void popUpTo(std::string route, F&& build) {
+        popUpToRoute = std::move(route);
+        build(popUpToOptions);
+    }
+    template <TypedRoute T>
+    void popUpTo() { popUpToRoute = routePattern<T>(); }
+    NavOptions options() const {
+        return {popUpToRoute, popUpToOptions.inclusive, popUpToOptions.saveState, launchSingleTop, restoreState};
+    }
+};
 
 class NavController {
 public:
@@ -298,6 +336,13 @@ public:
     // Goes to `path`, which must match one of the NavHost's routes, or to the destination a
     // deep link URI leads to.
     void navigate(std::string path, const NavOptions& options = {}) const;
+    template <class F>
+        requires std::is_invocable_v<F&, NavOptionsBuilder&>
+    void navigate(std::string path, F&& build) const {
+        NavOptionsBuilder b;
+        build(b);
+        navigate(std::move(path), b.options());
+    }
     // Opens a link as the app does when it is started with one: the back stack starts over
     // with the start destination, the graphs on the way and the destination. False if no
     // destination answers it (a URI, or a route's path).
@@ -306,6 +351,11 @@ public:
     template <TypedRoute T>
     void navigate(const T& route, const NavOptions& options = {}) const {
         navigate(routePath(route), options);
+    }
+    template <TypedRoute T, class F>
+        requires std::is_invocable_v<F&, NavOptionsBuilder&>
+    void navigate(const T& route, F&& build) const {
+        navigate(routePath(route), std::forward<F>(build));
     }
     template <TypedRoute T>
     std::shared_ptr<const NavBackStackEntry> getBackStackEntry() const {
@@ -372,6 +422,28 @@ public:
         (void)startDestination;
         navigation(routePattern<S>(), routePattern<T>(), builder);
     }
+    // Compose's names: composable(route, deepLinks = listOf(…)) { entry -> … } and
+    // navigation(startDestination = …, route = …) { … }.
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void composable(A&&... args) {
+        namespace n = detail::names;
+        using P = detail::Params<n::Route, n::DeepLinks, detail::BlockWith<const NavBackStackEntry&>>;
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: composable(route) { entry -> … } takes its content");
+        std::function<void(const NavBackStackEntry&)> content = std::get<sizeof...(A) - 1>(std::forward_as_tuple(args...));
+        composable(std::string(P::arg<n::Route>(args...)), P::get<n::DeepLinks>(std::vector<NavDeepLink>(), args...), std::move(content));
+    }
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void navigation(A&&... args) {
+        namespace n = detail::names;
+        using P = detail::Params<n::StartDestination, n::Route, detail::BlockWith<NavGraphBuilder&>>;
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: navigation(startDestination, route) { … } takes its destinations");
+        std::function<void(NavGraphBuilder&)> builder = std::get<sizeof...(A) - 1>(std::forward_as_tuple(args...));
+        navigation(std::string(P::arg<n::StartDestination>(args...)), std::string(P::arg<n::Route>(args...)), builder);
+    }
 
     struct Destination {
         std::string route;
@@ -393,16 +465,63 @@ private:
 struct NavHostOptions {
     ContentTransform transition = togetherWith(fadeIn(0, tween(700)), fadeOut(0, tween(700)));
     ContentTransform popTransition = togetherWith(fadeIn(0, tween(700)), fadeOut(0, tween(700)));
+    // Or, set, the transform for each navigation, from the entry leaving to the one coming (Compose's
+    // enterTransition / exitTransition lambdas on their AnimatedContentTransitionScope).
+    std::function<ContentTransform(const NavBackStackEntry& from, const NavBackStackEntry& to)> transitionFor, popTransitionFor;
 };
 
+namespace detail {
 void NavHost(const NavController& navController, std::string startDestination, const Modifier& modifier,
-             const std::function<void(NavGraphBuilder&)>& builder, const NavHostOptions& options = {},
-             CallSite site = CallSite::current());
+             const std::function<void(NavGraphBuilder&)>& builder, const NavHostOptions& options = {}, CallSite site = CallSite::current());
 template <TypedRoute S>
 void NavHost(const NavController& navController, const S& startDestination, const Modifier& modifier,
-             const std::function<void(NavGraphBuilder&)>& builder, const NavHostOptions& options = {},
-             CallSite site = CallSite::current()) {
+             const std::function<void(NavGraphBuilder&)>& builder, const NavHostOptions& options = {}, CallSite site = CallSite::current()) {
     NavHost(navController, routePath(startDestination), modifier, builder, options, site);
 }
+// NavHost(nav, start, modifier, builder, options) as it was, or Compose's NavHost(navController = …,
+// startDestination = …, modifier = …, enterTransition = { }, exitTransition = { }, popEnterTransition = { },
+// popExitTransition = { }) { composable(…) { } }: the transitions' lambdas on their scope (initialState,
+// targetState: the entries), the builder last.
+struct NavHostImpl {
+    static constexpr bool takesContentByName = true;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        using P = Params<names::NavController, names::StartDestination, names::Modifier, names::Content, names::Options, names::EnterTransition,
+                         names::ExitTransition, names::PopEnterTransition, names::PopExitTransition, BlockWith<NavGraphBuilder&>>;
+        static_assert(P::check<A...>());
+        std::function<void(NavGraphBuilder&)> builder;
+        if constexpr (P::blockGiven<A...>()) builder = std::get<sizeof...(A) - 1>(std::forward_as_tuple(args...));
+        else builder = P::arg<names::Content>(args...);
+        NavHostOptions options = P::get<names::Options>(NavHostOptions{}, args...);
+        using Scope = AnimatedContentTransitionScope<NavBackStackEntry>;
+        auto transform = [&](auto enterTag, auto exitTag, auto& into) {
+            using Enter = decltype(enterTag);
+            using Exit = decltype(exitTag);
+            if constexpr (P::given<Enter, A...>() || P::given<Exit, A...>()) {
+                std::function<EnterTransition(const Scope&)> enter;
+                std::function<ExitTransition(const Scope&)> exit;
+                if constexpr (P::given<Enter, A...>()) enter = P::arg<Enter>(args...);
+                else enter = [](const Scope&) { return fadeIn(0, tween(700)); };
+                if constexpr (P::given<Exit, A...>()) exit = P::arg<Exit>(args...);
+                else exit = [](const Scope&) { return fadeOut(0, tween(700)); };
+                into = [enter, exit](const NavBackStackEntry& from, const NavBackStackEntry& to) {
+                    Scope scope{from, to};
+                    return togetherWith(enter(scope), exit(scope));
+                };
+            }
+        };
+        transform(names::EnterTransition{}, names::ExitTransition{}, options.transitionFor);
+        transform(names::PopEnterTransition{}, names::PopExitTransition{}, options.popTransitionFor);
+        if (!options.popTransitionFor) options.popTransitionFor = options.transitionFor;  // (Compose's pop defaults to the forward ones)
+        auto&& start = P::arg<names::StartDestination>(args...);
+        using S = std::remove_cvref_t<decltype(start)>;
+        if constexpr (std::is_convertible_v<S, std::string>)
+            NavHost(P::arg<names::NavController>(args...), std::string(start), P::get<names::Modifier>(Modifier{}, args...), builder, options, site);
+        else
+            NavHost(P::arg<names::NavController>(args...), routePath(start), P::get<names::Modifier>(Modifier{}, args...), builder, options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::NavHostImpl> NavHost;
 
 } // namespace kompoz

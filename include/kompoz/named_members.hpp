@@ -485,6 +485,16 @@ Modifier Modifier::dragAndDropTarget(A&&... args) const {
                              DragAndDropTarget(P::arg<n::Target>(args...)));
 }
 
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::combinedClickable(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::OnClick, n::OnLongClick, n::OnDoubleClick, n::Enabled>;
+    static_assert(P::check<A...>());
+    return combinedClickable(std::function<void()>(P::arg<n::OnClick>(args...)), P::get<n::OnLongClick>(std::function<void()>(), args...),
+                             P::get<n::OnDoubleClick>(std::function<void()>(), args...), P::get<n::Enabled>(true, args...));
+}
+
 // ---- Shared elements, as Compose names their arguments ----
 template <class... A>
     requires(detail::anyNamedArgument<A...>)

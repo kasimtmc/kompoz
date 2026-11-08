@@ -4523,7 +4523,7 @@ TEST(nav_host_seeks_its_pop_transition_with_the_back_gesture) {
         NavHost(nav, "a", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
             for (const char* route : {"a", "b", "c"})
                 graph.composable(route, [route](const NavBackStackEntry&) { Text(std::string("ekran ") + route); });
-        }, {.transition = togetherWith(EnterTransition::None, ExitTransition::None), .popTransition = pop});
+        }, NavHostOptions{.transition = togetherWith(EnterTransition::None, ExitTransition::None), .popTransition = pop});
     }, {400, 800});
     NavController nav = *controller;
     struct Drawn {
@@ -4659,7 +4659,7 @@ TEST(nav_host_keeps_saveable_state_on_the_back_stack_and_in_saved_tabs) {
             graph.composable("a", [](const NavBackStackEntry&) { SaveableScreen("a"); });
             graph.composable("b", [](const NavBackStackEntry&) { SaveableScreen("b"); });
             graph.composable("b/detail/{n}", [](const NavBackStackEntry&) { SaveableScreen("detay"); });
-        }, {.transition = togetherWith(fadeIn(0, snap()), fadeOut(0, snap())), .popTransition = togetherWith(fadeIn(0, snap()), fadeOut(0, snap()))});
+        }, NavHostOptions{.transition = togetherWith(fadeIn(0, snap()), fadeOut(0, snap())), .popTransition = togetherWith(fadeIn(0, snap()), fadeOut(0, snap()))});
     }, {400, 800});
     NavController nav = *controller;
     auto tap = [&](const std::string& tag, int times) {
@@ -4712,7 +4712,7 @@ TEST(saveable_scroll_position_comes_back_with_its_entry) {
                 Column(Modifier().fillMaxSize().verticalScroll(scroll), [=] { Box(Modifier().height(5000)); });
             });
             graph.composable("other", [](const NavBackStackEntry&) { Text("öteki"); });
-        }, {.transition = togetherWith(fadeIn(0, snap()), fadeOut(0, snap())), .popTransition = togetherWith(fadeIn(0, snap()), fadeOut(0, snap()))});
+        }, NavHostOptions{.transition = togetherWith(fadeIn(0, snap()), fadeOut(0, snap())), .popTransition = togetherWith(fadeIn(0, snap()), fadeOut(0, snap()))});
     }, {400, 800});
     seen->scrollTo(1234);
     rule.waitForIdle();
@@ -4783,7 +4783,7 @@ TEST(view_models_live_as_long_as_their_navigation_entry) {
                 seen = vm;
                 Text(std::format("b {}", vm->count.collectAsState()));
             });
-        }, {.transition = togetherWith(fadeIn(0, tween(100)), fadeOut(0, tween(100))),
+        }, NavHostOptions{.transition = togetherWith(fadeIn(0, tween(100)), fadeOut(0, tween(100))),
             .popTransition = togetherWith(fadeIn(0, tween(100)), fadeOut(0, tween(100)))});
     }, {400, 800});
     NavController nav = *controller;
@@ -4899,7 +4899,7 @@ TEST(a_nested_graphs_view_models_are_shared_by_its_screens) {
                 });
             });
             graph.composable("home", [](const NavBackStackEntry&) { Text("ana"); });
-        }, {.transition = fade, .popTransition = fade});
+        }, NavHostOptions{.transition = fade, .popTransition = fade});
     });
     NavController nav = *controller;
     CHECK(stackOf(nav) == "[login] username" && rule.onNodeWithText("kullanıcı 0").exists());
@@ -7757,6 +7757,36 @@ TEST(gestures_take_compose_named_arguments) {
         a.at(2, 120);
     });
     CHECK(anchors.positionOf(2) == 120 && anchors.size() == 2);
+}
+
+TEST(navigation_takes_compose_named_arguments) {
+    // NavHost(navController =, startDestination =, enterTransition = { }) { … } with the graph builder's
+    // composable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }
+    // as a block of options, the entry's destination(), BackHandler(enabled =) { }, combinedClickable by name.
+    NavController nav;
+    auto longPressed = std::make_shared<int>(0), backs = std::make_shared<int>(0);
+    ComposeTestRule rule([&] {
+        auto entry = nav.currentBackStackEntryAsState();
+        Text(entry ? entry->destination().route : "yok", Modifier().combinedClickable(arg::onClick = [] {}, arg::onLongClick = [longPressed] { ++*longPressed; }));
+        BackHandler(arg::enabled = true, [backs] { ++*backs; });
+        NavHost(arg::navController = nav, arg::startDestination = std::string("ev"), arg::modifier = Modifier().size(200),
+                arg::enterTransition = [](const AnimatedContentTransitionScope<NavBackStackEntry>&) { return slideInHorizontally([](float w) { return w; }); },
+                [&](NavGraphBuilder& graph) {
+                    graph.composable(arg::route = std::string("ev"), [&](const NavBackStackEntry&) { Text("ev"); });
+                    graph.navigation(arg::startDestination = std::string("a"), arg::route = std::string("grup"), [&](NavGraphBuilder& g) {
+                        g.composable(arg::route = std::string("a"), arg::deepLinks = std::vector<NavDeepLink>{navDeepLink([](NavDeepLink& l) { l.uriPattern = "kompoz://a"; })},
+                                     [&](const NavBackStackEntry&) { Text("a"); });
+                    });
+                });
+    });
+    CHECK(rule.onNodeWithText("ev").exists());
+    nav.navigate("a", [](NavOptionsBuilder& b) {
+        b.popUpTo("ev", [](PopUpToBuilder& p) { p.inclusive = false; });
+        b.launchSingleTop = true;
+    });
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("a").exists() && rule.onNodeWithText("a").bounds().width > 0);
+    CHECK(NavOptionsBuilder{.launchSingleTop = true}.options().launchSingleTop && !NavOptionsBuilder{}.options().popUpTo);
 }
 
 TEST(draw_scope_strokes_sit_on_the_outline) {

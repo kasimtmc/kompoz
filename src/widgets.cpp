@@ -582,7 +582,7 @@ void detail::backHandler(ComposeHost::BackCallback callbacks, CallSite site) {
     });
 }
 
-void BackHandler(bool enabled, std::function<void()> onBack, CallSite site) {
+void detail::BackHandler(bool enabled, std::function<void()> onBack, CallSite site) {
     detail::backHandler({.onBack = std::move(onBack), .enabled = enabled}, site);
 }
 
