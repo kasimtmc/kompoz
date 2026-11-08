@@ -80,6 +80,8 @@ bool looksLikeFunction(std::string_view st) {
 // `constructor` set if it declares one.
 std::vector<std::string> fieldsOf(const std::string& statement, const std::string& structName, bool& constructor) {
     std::string st = trim(statement);
+    // (static data members are the type's values: Color::White; its static functions have parentheses)
+    if (startsWithWord(st, "static") && !startsWithWord(st, "static_assert")) st = trim(std::string_view(st).substr(6));
     for (std::string_view word : {"static", "using", "typedef", "friend", "template", "enum", "struct", "class", "union",
                                   "static_assert", "operator", "virtual", "inline", "constexpr", "consteval", "explicit"}) {
         if (startsWithWord(st, word)) {
@@ -324,6 +326,12 @@ void Structs::readText(std::string_view src) {
             size_t nameStart = k;
             while (k < text.size() && identChar(text[k])) ++k;
             std::string name = text.substr(nameStart, k - nameStart);
+            while (text.compare(k, 2, "::") == 0) {  // class Outer::Inner { … }: defined outside, Inner's
+                k += 2;
+                nameStart = k;
+                while (k < text.size() && identChar(text[k])) ++k;
+                name = text.substr(nameStart, k - nameStart);
+            }
             if (name.empty()) continue;
             size_t open = text.find_first_of("{;()<>=", k);
             if (open == std::string::npos || text[open] != '{') continue;  // a declaration, a template's parameter, ...
@@ -352,7 +360,7 @@ void Structs::readText(std::string_view src) {
                 flush();
             }
             bool visible = keyword == "struct", constructor = false;
-            int depth = 1;
+            int depth = 1, parens = 0;  // (braces in parentheses, a default argument's = {}, are no block)
             std::string statement;
             auto take = [&] {
                 std::string st = trim(statement);
@@ -369,12 +377,14 @@ void Structs::readText(std::string_view src) {
             };
             for (size_t b = open + 1; b < text.size() && depth > 0; ++b) {
                 char c = text[b];
-                if (c == '{') {
+                if (depth == 1 && c == '(') ++parens;
+                if (depth == 1 && c == ')' && parens > 0) --parens;
+                if (c == '{' && !(depth == 1 && parens > 0)) {
                     ++depth;
                     statement += c;
                     continue;
                 }
-                if (c == '}') {
+                if (c == '}' && !(depth == 1 && parens > 0)) {
                     if (--depth == 0) break;
                     statement += c;
                     if (depth == 1 && looksLikeFunction(statement)) take();  // a function's body ends it

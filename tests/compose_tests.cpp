@@ -439,8 +439,8 @@ TEST(composes_scaffold_sample) {
     ComposeTestRule rule([] { ScaffoldExample(); });
     CHECK(rule.onNodeWithText("Top app bar").exists() && rule.onNodeWithText("Bottom app bar").exists());
     CHECK(rule.onNodeWithText("You have pressed the floating action button 0 times.", true).exists());
-    rule.onNodeWithText("Add").performClick();  // (an Icon's description is its node's text here)
-    rule.onNodeWithText("Add").performClick();
+    rule.onNodeWithContentDescription("Add").performClick();
+    rule.onNodeWithContentDescription("Add").performClick();
     CHECK(rule.onNodeWithText("You have pressed the floating action button 2 times.", true).exists());
     CHECK(rule.onNodeWithText("This is an example of a scaffold.", true).text().starts_with("This is an example"));  // (trimIndent: no indent)
 }
@@ -968,6 +968,61 @@ TEST(text_as_compose_writes_it) {
     CHECK(rule.onNodeWithText("accept the terms now", true).exists());
     CHECK(rule.onNodeWithText("Email").exists() && rule.onNodeWithText("Never shared").exists() && rule.onNodeWithText("Message").exists());
     CHECK(rule.onNodeWithText("Order KMP-1").exists());
+}
+
+// Graphics as Compose writes them: a Canvas drawing by name, a shape from a path, a cached drawing,
+// a blur set in its scope, an ImageVector built with groups and paths, a vector painter's content.
+val Ticket = GenericShape { size, _ ->
+    moveTo(0f, 0f)
+    lineTo(size.width, 0f)
+    lineTo(size.width, size.height)
+    lineTo(0f, size.height)
+    close()
+}
+
+val BadgeIcon = ImageVector.Builder("Badge", 24.dp, 24.dp, 24f, 24f)
+    .addPath(pathData = addPathNodes("M12,2a10,10 0 1,0 0.01,0z"), fill = Brush.solid(Color(0xFF1E88E5)))
+    .group(rotation = -10f, pivotX = 12f, pivotY = 12f) {
+        path(stroke = Brush.solid(Color.White), strokeLineWidth = 2f, strokeLineCap = StrokeCap.Round) {
+            moveTo(7f, 12f)
+            lineTo(10.5f, 15.5f)
+            lineTo(17f, 9f)
+        }
+    }
+    .build()
+
+@Composable
+fun Drawings() {
+    val ink = Color.White.copy(alpha = 0.5f)
+    Column {
+        Canvas(modifier = Modifier.size(100.dp, 50.dp).testTag("tuval")) {
+            drawCircle(ink, radius = 9f, center = Offset(20f, 25f), style = Stroke(width = 2f))
+            rotate(30f, pivot = Offset(50f, 25f)) { drawRect(ink, topLeft = Offset(50f, 10f), size = Size(20f, 20f)) }
+            drawLine(ink, start = Offset(0f, 0f), end = Offset(10f, 10f), strokeWidth = 3f, cap = StrokeCap.Round,
+                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f)))
+        }
+        Box(modifier = Modifier.size(64.dp).clip(Ticket).drawWithCache {
+            val half = size.width / 2
+            onDrawBehind { drawRect(ink, size = Size(half, size.height)) }
+        })
+        Box(modifier = Modifier.size(40.dp).blur { blurRadiusSpec = BlurRadiusSpec.radialGradient(0.dp, 12.dp) }.background(ink))
+        Image(rememberVectorPainter(BadgeIcon), contentDescription = "Badge")
+        val tick = rememberVectorPainter(24.dp, 24.dp, 24f, 24f) { _, _ ->
+            Path(pathData = addPathNodes("M5,12l5,5l9,-10"), stroke = Brush.solid(Color.Black), strokeLineWidth = 2f)
+        }
+        Image(tick, contentDescription = "Done")
+    }
+}
+
+TEST(graphics_as_compose_writes_it) {
+    ComposeTestRule rule([] { Drawings(); });
+    CHECK(rule.onNodeWithTag("tuval").exists());
+    CHECK(rule.onNodeWithContentDescription("Badge").exists());
+    CHECK(rule.onNodeWithContentDescription("Done").exists());
+    testing::RecordingCanvas canvas;
+    rule.host().draw(canvas);
+    CHECK(canvas.rects.size() >= 3 && !canvas.paths.empty());  // the circle and the rects; the line, the ticket and the vectors' paths
+    CHECK(BadgeIcon.root().size() == 2 && Ticket.createOutline({10, 10}, LayoutDirection::Ltr).asPath().bounds().width == 10);
 }
 
 int main(int argc, char** argv) {

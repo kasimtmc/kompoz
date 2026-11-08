@@ -895,6 +895,13 @@
   crossfadeMillis = …)`. kotlin.hpp'den `floatArrayOf(8f, 6f)` ve `intArrayOf(…)`. Bir `Image`'ın, bir `AsyncImage`'ın ve bir `Icon`'un
   `contentDescription`'ı, Compose'daki gibi semantiğinin contentDescription'ı (`onNodeWithContentDescription` onu buluyor, `onAllNodesWithContentDescription` hepsini; `onNodeWithText`
   artık bulmuyor).
+- **kompozc: bir türün değerleri, bir struct'ın alanları adla ve daha çok alıcı**: `Color.White.copy(alpha = 0.5f)` değer
+  üzerinde çağrılıyor (bir türün statik üyesi bir kapsam değil bir değer; üzerindeki bir uzantı da öyle çağrılıyor);
+  `addPath(pathData = …, fill = …)`, `group(rotation = …, pivotX = …) { path(stroke = …) { moveTo(…) } }` ve bir vektör
+  ressamının `Path(pathData = …)`'i aldıkları `VectorPath` ya da `VectorGroup`'u dolduruyor; `GenericShape { size, _ ->
+  moveTo(…) }` yolu üzerinde kuruyor, `blur { blurRadiusSpec = … }` kapsamını ayarlıyor, `Brush.shader { size -> … }`
+  shader'ını döndürüyor; bir lambdanın `_` parametreleri adsız; başlık okuyucu `class Outer::Inner { }` diye tanımlanan
+  bir sınıfı, bir türün statik veri üyelerini ve varsayılan argümanı küme ayracı olan işlevleri tanıyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

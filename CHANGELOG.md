@@ -854,6 +854,13 @@
   error = { }, crossfadeMillis = …)` as Coil's. `floatArrayOf(8f, 6f)` and `intArrayOf(…)` from kotlin.hpp. An `Image`'s, an
   `AsyncImage`'s and an `Icon`'s `contentDescription` is its semantics' contentDescription, as Compose's (`onNodeWithContentDescription` finds it, `onAllNodesWithContentDescription` all of them;
   `onNodeWithText` no longer does).
+- **kompozc: a type's values, a struct's fields by name, and more receivers**: `Color.White.copy(alpha = 0.5f)` calls
+  on the value (a type's static member is a value, not a scope, so an extension on it is called as one too);
+  `addPath(pathData = …, fill = …)`, `group(rotation = …, pivotX = …) { path(stroke = …) { moveTo(…) } }` and a vector
+  painter's `Path(pathData = …)` fill the `VectorPath` or `VectorGroup` they take; `GenericShape { size, _ -> moveTo(…) }`
+  builds on its path, `blur { blurRadiusSpec = … }` sets its scope, `Brush.shader { size -> … }` returns its shader; a
+  lambda's `_` parameters are unnamed; the headers' reader knows a class defined as `class Outer::Inner { }`, a type's
+  static data members, and functions whose default arguments are braces.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

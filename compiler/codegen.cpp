@@ -43,7 +43,7 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "maxOfOrNull", "minOfOrNull",
     "maxByOrNull", "minByOrNull", "let", "run", "with", "takeIf", "takeUnless", "getOrElse", "lazy", "snapshotFlow",
     "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked",
-    "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "compositionLocalOf",
+    "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "shader", "compositionLocalOf",
     "staticCompositionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent", "mediaQuery",
     "derivedMediaQuery", "SubcomposeLayout", "rememberPagerState", "rememberCarouselState"};
 
@@ -97,7 +97,7 @@ const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType"
 // Kotlin's standard functions, from kotlin.hpp: listOf(1, 2) -> kt::listOf(1, 2).
 const std::set<std::string, std::less<>> kKtFunctions = {
     "listOf", "mutableListOf", "emptyList", "arrayListOf", "setOf", "mutableSetOf", "emptySet", "mapOf", "mutableMapOf",
-    "emptyMap", "repeat", "println", "maxOf", "minOf", "require", "check", "error", "TODO", "onDispose"};
+    "emptyMap", "repeat", "println", "maxOf", "minOf", "require", "check", "error", "TODO", "onDispose", "floatArrayOf", "intArrayOf"};
 
 // Members of Kotlin's standard types, from kotlin.hpp: text.trim() -> kt::trim(text). Each uses the
 // value's own member of that name where it has one.
@@ -126,8 +126,16 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"mediaQuery", "const UiMediaScope"},    {"derivedMediaQuery", "const UiMediaScope"},
     {"SubcomposeLayout", "SubcomposeMeasureScope"},
     {"buildAnnotatedString", "AnnotatedStringBuilder"}, {"edit", "TextFieldBuffer"},
+    {"GenericShape", "Path"},                {"blur", "BlurScope"},
+    // (an ImageVector's builder: group(…) { path(…) { moveTo(…) } })
+    {"group", "ImageVector::Builder"},       {"path", "PathBuilder"},
     {"HorizontalMultiBrowseCarousel", "const CarouselItemScope"}, {"HorizontalUncontainedCarousel", "const CarouselItemScope"},
     {"HorizontalCenteredHeroCarousel", "const CarouselItemScope"}};
+
+// Calls whose arguments by name are the fields of one C++ struct they take (Compose's parameters are
+// its fields): addPath(pathData = …, fill = …) is addPath(VectorPath{.pathData = …, .fill = …}).
+const std::map<std::string, std::string, std::less<>> kStructParameters = {
+    {"addPath", "VectorPath"}, {"path", "VectorPath"}, {"Path", "VectorPath"}, {"group", "VectorGroup"}};
 
 // Kotlin's inline functions: their lambda runs before they return, so it reaches the locals around
 // it by reference ([&]), and `x += 1` in forEach { } changes the x outside, as in Kotlin.
@@ -339,8 +347,11 @@ private:
     // looks at local names first, then at the implicit receivers, then at what is declared at the top.)
     size_t receiverOf(const std::string& name) const {
         if (!module_.structs) return 0;
-        for (size_t r = receivers_.size(); r > 0; --r)
-            if (module_.structs->member(receivers_[r - 1], name)) return r;
+        for (size_t r = receivers_.size(); r > 0; --r) {
+            std::string_view type = receivers_[r - 1];
+            if (size_t colons = type.rfind("::"); colons != std::string_view::npos) type = type.substr(colons + 2);  // (ImageVector::Builder)
+            if (module_.structs->member(type, name)) return r;
+        }
         return 0;
     }
 
@@ -708,8 +719,14 @@ private:
     // after it is reached with ::, not with a dot.
     bool qualifier(const Node& e) const {
         if (e.kind == Node::Name) return capitalized(e.text) && !lookup(e.text) && e.text != "Modifier";
-        if (e.kind == Node::Member) return !e.flag && capitalized(e.text) && qualifier(*e.kids[0]);
+        if (e.kind == Node::Member) return !e.flag && capitalized(e.text) && qualifier(*e.kids[0]) && !staticValue(e);
         return false;
+    }
+    // Color.White: a type's member of its own (a static value), so Color.White.copy(…) calls on it.
+    bool staticValue(const Node& e) const {
+        if (!module_.structs || e.kind != Node::Member) return false;
+        const Node& type = companionless(*e.kids[0]);
+        return module_.structs->member(type.text, e.text);
     }
 
     std::string dotted(const Node& e) const {
@@ -810,6 +827,10 @@ private:
         if (callee.kind == Node::Name && !lookup(callee.text)) {
             if (auto f = module_.functions.find(callee.text); f != module_.functions.end()) return moduleCall(c, *f->second);
             if (auto k = module_.classes.find(callee.text); k != module_.classes.end()) return construct(c, *k->second);
+            if (callee.text == "Path" && named(c)) {  // a vector's path (Compose's Path(pathData = …) in rememberVectorPainter { })
+                out_.text("::kompoz::vector::Path");
+                return arguments(c, calleeName, false);
+            }
             if (module_.structs && !c.lambda && c.kids.size() > 1 && capitalized(callee.text))
                 if (const auto* fields = module_.structs->find(callee.text); fields && structCall(c, callee.text, *fields)) return;
             if (kKtFunctions.contains(callee.text) || (suspend_ && callee.text == "delay")) {
@@ -869,19 +890,30 @@ private:
     // (args): as written, named ones as kompoz's named arguments, the trailing lambda last.
     // `positional`: names dropped (kotlin.hpp's functions take their arguments by position);
     // `after`: the parenthesis is open and the first argument written.
+    static bool named(const Node& c) {
+        return std::any_of(c.names.begin(), c.names.end(), [](const std::string& n) { return !n.empty(); });
+    }
+
     void arguments(const Node& c, const std::string& calleeName, bool positional, bool after = false) {
         if (!after) out_.text("(");
         bool any = after;
-        for (size_t i = 0; i < c.kids.size() - 1; ++i) {
-            if (any) out_.text(", ");
+        auto sp = kStructParameters.find(calleeName);
+        const std::vector<std::string>* fields =
+            sp != kStructParameters.end() && module_.structs && !positional && !after && named(c) ? module_.structs->find(sp->second) : nullptr;
+        if (fields && structCall(c, "::kompoz::" + sp->second, *fields)) {
             any = true;
-            const std::string& n = c.names[i];
-            if (!n.empty() && !positional) out_.text("::kompoz::arg::" + n + " = ");
-            auto receiver = kReceiverArguments.find(calleeName + "." + n);
-            if (c.kids[i + 1]->kind == Node::Lambda && kValueArguments.contains(n) && receiver == kReceiverArguments.end()) lambda(*c.kids[i + 1], true);
-            else if (c.kids[i + 1]->kind == Node::Lambda && receiver != kReceiverArguments.end())
-                lambda(*c.kids[i + 1], kValueArguments.contains(n), false, false, &receiver->second);
-            else expr(*c.kids[i + 1]);
+        } else {
+            for (size_t i = 0; i < c.kids.size() - 1; ++i) {
+                if (any) out_.text(", ");
+                any = true;
+                const std::string& n = c.names[i];
+                if (!n.empty() && !positional) out_.text("::kompoz::arg::" + n + " = ");
+                auto receiver = kReceiverArguments.find(calleeName + "." + n);
+                if (c.kids[i + 1]->kind == Node::Lambda && kValueArguments.contains(n) && receiver == kReceiverArguments.end()) lambda(*c.kids[i + 1], true);
+                else if (c.kids[i + 1]->kind == Node::Lambda && receiver != kReceiverArguments.end())
+                    lambda(*c.kids[i + 1], kValueArguments.contains(n), false, false, &receiver->second);
+                else expr(*c.kids[i + 1]);
+            }
         }
         if (c.lambda) {
             if (any) out_.text(", ");
@@ -1057,6 +1089,10 @@ private:
             }
         } else if (l.flag) {
             for (size_t i = 0; i < l.names.size(); ++i) {
+                if (l.names[i] == "_") {  // (unused, as Kotlin's)
+                    out_.text((i ? ", " : "") + std::string("auto&&"));
+                    continue;
+                }
                 out_.text((i ? ", " : "") + std::string("auto&& ") + cppName(l.names[i]));
                 declare(l.names[i], Local);
             }
