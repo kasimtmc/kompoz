@@ -4,10 +4,10 @@ Handling taps, clicks, drags, swipes, pinches, the keyboard, focus, hover and dr
 
 ## Clicks
 
-`Modifier().clickable(onClick)` is the simplest gesture: a tap or a click, with Material's ripple, keyboard activation (Enter and Space when focused) and an accessibility action.
+`Modifier.clickable(onClick)` is the simplest gesture: a tap or a click, with Material's ripple, keyboard activation (Enter and Space when focused) and an accessibility action.
 
-```cpp body
-Text("Open", Modifier().clickable([] { /* … */ }).padding(16));
+```kotlin body
+Text("Open", modifier = Modifier.clickable { /* … */ }.padding(16.dp))
 ```
 
 `combinedClickable(onClick, onLongClick)` also takes a long press (and, through its options, a double tap). `ClickableOptions` turns the click off (`enabled`), shares an `interactionSource`, or changes the `indication`: `false` for none, `ripple(false, 24)` for an unbounded ripple.
@@ -18,19 +18,19 @@ Components that act on clicks (`Button`, `Card`, `ListItem`) take an `onClick` o
 
 For scrolling content, use the scroll modifiers or a lazy list (see [Lists and grids](lists.md)): they handle drags, flings with Android's curve, the overscroll stretch, the mouse wheel and touchpads.
 
-`Modifier().draggable(state, orientation)` reports drags along one axis, as deltas in dp. It doesn't move anything itself: move what you want, typically with an offset read during layout:
+`Modifier.draggable(state, orientation)` reports drags along one axis, as deltas in dp. It doesn't move anything itself: move what you want, typically with an offset read during layout:
 
-```cpp
-void Slider1D() {
-    auto x = remember([] { return mutableStateOf(0.f); });
-    Box(Modifier().fillMaxWidth().height(56)) {
-        Box(Modifier()
-                .offset([x] { return Offset{x.get(), 0}; })
-                .draggable(rememberDraggableState([x](float delta) { x.set(std::max(0.f, x.get() + delta)); }),
-                           Orientation::Horizontal)
-                .size(56)
-                .background(colorScheme().primary, CircleShape)) {};
-    };
+```kotlin
+@Composable
+fun Slider1D() {
+    var x by remember { mutableStateOf(0f) }
+    Box(modifier = Modifier.fillMaxWidth().height(56.dp)) {
+        Box(modifier = Modifier
+                .offset { IntOffset(x.roundToInt(), 0) }
+                .draggable(orientation = Orientation.Horizontal, state = rememberDraggableState { delta -> x = maxOf(0f, x + delta) })
+                .size(56.dp)
+                .background(MaterialTheme.colorScheme.primary, CircleShape))
+    }
 }
 ```
 
@@ -40,19 +40,23 @@ void Slider1D() {
 
 `anchoredDraggable` drags something between named positions and settles at one of them when let go, with a fling's velocity: the building block of bottom sheets, drawers and swipe-to-reveal.
 
-```cpp
-enum class DragValue { Start, End };
+```kotlin
+enum class DragValue { Start, End }
 
-void Toggle() {
-    auto state = rememberAnchoredDraggableState(DragValue::Start);
-    state.updateAnchors({{DragValue::Start, 0}, {DragValue::End, 120}});
-    Box(Modifier().width(176).height(56).background(colorScheme().surfaceContainerHigh, CircleShape)) {
-        Box(Modifier()
-                .offset([state] { return Offset{state.requireOffset(), 0}; })
-                .anchoredDraggable(state, Orientation::Horizontal)
-                .size(56)
-                .background(colorScheme().primary, CircleShape)) {};
-    };
+@Composable
+fun Toggle() {
+    val state = rememberAnchoredDraggableState(DragValue.Start)
+    state.updateAnchors(DraggableAnchors {
+        DragValue.Start at 0f
+        DragValue.End at 120f
+    })
+    Box(modifier = Modifier.width(176.dp).height(56.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)) {
+        Box(modifier = Modifier
+                .offset { IntOffset(state.requireOffset().roundToInt(), 0) }
+                .anchoredDraggable(state, Orientation.Horizontal)
+                .size(56.dp)
+                .background(MaterialTheme.colorScheme.primary, CircleShape))
+    }
 }
 ```
 
@@ -62,33 +66,31 @@ void Toggle() {
 
 `transformable` turns multi-touch gestures into zoom, pan and rotation changes. Ctrl+wheel and touchpad pinches zoom too:
 
-```cpp
-void ZoomableImage() {
-    auto scale = remember([] { return mutableStateOf(1.f); });
-    auto state = rememberTransformableState([scale](float zoom, Offset, float) {
-        scale.set(std::clamp(scale.get() * zoom, 1.f, 5.f));
-    });
-    Image(imageResource("images/map.png"), "Map",
-          Modifier().fillMaxSize()
-              .graphicsLayer([scale](GraphicsLayerScope& l) { l.scaleX = l.scaleY = scale.get(); })
-              .transformable(state));
+```kotlin
+@Composable
+fun ZoomableImage() {
+    var scale by remember { mutableStateOf(1f) }
+    val state = rememberTransformableState { zoom, _, _ -> scale = (scale * zoom).coerceIn(1f, 5f) }
+    Image(imageResource("images/map.png"), contentDescription = "Map",
+          modifier = Modifier.fillMaxSize()
+              .graphicsLayer { scaleX = scale; scaleY = scale }
+              .transformable(state))
 }
 ```
 
 ## pointerInput
 
-For gestures of your own, `Modifier().pointerInput(key, block)` runs a coroutine that receives the node's pointer events. The gesture detectors run inside it:
+For gestures of your own, `Modifier.pointerInput(key) { }` runs a coroutine that receives the node's pointer events. The gesture detectors run inside it:
 
-```cpp
-void TapTarget() {
-    auto last = remember([] { return mutableStateOf(std::string("Nothing yet")); });
-    Box(Modifier().size(200).background(colorScheme().secondaryContainer)
-            .pointerInput(0, [last](PointerInputScope& s) -> Task {
-                co_await detectTapGestures(s, {.onTap = [last](Offset) { last.set("Tap"); },
-                                               .onDoubleTap = [last](Offset) { last.set("Double tap"); },
-                                               .onLongPress = [last](Offset) { last.set("Long press"); }});
-            }),
-        Alignment::Center) { Text(last.get()); };
+```kotlin
+@Composable
+fun TapTarget() {
+    var last by remember { mutableStateOf("Nothing yet") }
+    Box(modifier = Modifier.size(200.dp).background(MaterialTheme.colorScheme.secondaryContainer)
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { last = "Tap" }, onDoubleTap = { last = "Double tap" }, onLongPress = { last = "Long press" })
+            },
+        contentAlignment = Alignment.Center) { Text(last) }
 }
 ```
 
@@ -100,20 +102,18 @@ void TapTarget() {
 | `detectDragGesturesAfterLongPress` | A drag that starts with a long press, to pick something up. |
 | `detectTransformGestures(s, onGesture)` | Pinch, pan and rotate with several fingers. |
 
-The block restarts when `key` changes, so give it a key that captures what it depends on. For lower-level work, `co_await s.awaitPointerEvent()` gives each event with every pointer's change; consume a change (`change.consume()`) so that scrolling and clicks around it leave it alone. `awaitEachGesture` and `waitForUpOrCancellation` help structure a gesture, and `VelocityTracker` measures how fast a finger moved when it lifted, for a fling.
+The block restarts when `key` changes, so give it a key that captures what it depends on. For lower-level work, `awaitPointerEvent()` (in the block: Compose's `awaitPointerEventScope { }` is implicit here) gives each event with every pointer's change; consume a change (`change.consume()`) so that scrolling and clicks around it leave it alone. `awaitEachGesture` and `waitForUpOrCancellation` help structure a gesture, and `VelocityTracker` measures how fast a finger moved when it lifted, for a fling.
 
-```cpp
-void Drawing() {
-    auto points = remember([] { return mutableStateOf(std::vector<Offset>{}); });
-    Color ink = colorScheme().onSurface;
-    Canvas(Modifier().fillMaxSize().pointerInput(0, [points](PointerInputScope& s) -> Task {
-        co_await detectDragGestures(s, {.onDragStart = [points](Offset at) { points.set({at}); },
-                                        .onDrag = [points](PointerInputChange& change, Offset) {
-                                            points.update([&](std::vector<Offset>& v) { v.push_back(change.position); });
-                                        }});
-    }), [=](DrawScope& d) {
-        d.drawPoints(points.get(), PointMode::Polygon, ink, 3);
-    });
+```kotlin
+@Composable
+fun Drawing() {
+    val points = remember { mutableStateListOf<Offset>() }
+    val ink = MaterialTheme.colorScheme.onSurface
+    Canvas(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+        detectDragGestures(onDragStart = { at -> points.clear(); points.add(at) }, onDrag = { change, _ -> points.add(change.position) })
+    }) {
+        drawPoints(points.toList(), PointMode.Polygon, ink, strokeWidth = 3f)
+    }
 }
 ```
 
@@ -121,25 +121,26 @@ void Drawing() {
 
 `onKeyEvent` handles keys on a focused node; return `true` when you handled one. `onPreviewKeyEvent` sees keys before the focused node does.
 
-```cpp body
-#! std::function<void()> submit;
-Box(Modifier()
-        .onKeyEvent([submit](const KeyEvent& e) {
-            if (e.type == KeyEventType::KeyDown && e.key == Key::Enter && e.isCtrlPressed()) {
-                submit();
-                return true;
+```kotlin body
+#! fun submit() {}
+Box(modifier = Modifier
+        .onKeyEvent { e ->
+            if (e.type == KeyEventType.KeyDown && e.key == Key.Enter && e.isCtrlPressed) {
+                submit()
+                true
+            } else {
+                false
             }
-            return false;
-        })
-        .focusable()) {};
+        }
+        .focusable())
 ```
 
 ## Focus
 
-Tab and Shift+Tab move keyboard focus between focusable nodes, and the arrow keys move it in a direction. Clickable components and text fields are focusable already; `Modifier().focusable()` makes any node so.
+Tab and Shift+Tab move keyboard focus between focusable nodes, and the arrow keys move it in a direction. Clickable components and text fields are focusable already; `Modifier.focusable()` makes any node so.
 
-- `FocusRequester` moves focus from code: remember one, attach it with `Modifier().focusRequester(r)`, call `r.requestFocus()`.
-- `focusManager().clearFocus()` takes focus away, which also hides the soft keyboard.
+- `FocusRequester` moves focus from code: remember one, attach it with `Modifier.focusRequester(r)`, call `r.requestFocus()`.
+- `LocalFocusManager.current.clearFocus()` takes focus away, which also hides the soft keyboard.
 - `onFocusChanged([](FocusState s) { … })` says when a node gains or loses focus.
 - `focusProperties({.canFocus = false})` takes a node out of the order; its `next` and the other directions change where focus goes.
 - `focusGroup()` and `focusRestorer()` keep focus moving sensibly through groups, such as a row of chips.
@@ -148,51 +149,49 @@ Keyboard focus is shown, as in Compose Material 3, by the component's focus stat
 
 ## Hover and the mouse
 
-```cpp
-void HoverCard() {
-    auto source = remember([] { return MutableInteractionSource(); });
-    bool hovered = source.collectIsHoveredAsState();
-    Card(Modifier().hoverable(source).pointerHoverIcon(PointerIcon::Hand)) {
-        Text(hovered ? "Hovering" : "Point at me", Modifier().padding(24));
-    };
+```kotlin
+@Composable
+fun HoverCard() {
+    val source = remember { MutableInteractionSource() }
+    val hovered by source.collectIsHoveredAsState()
+    Card(modifier = Modifier.hoverable(source).pointerHoverIcon(PointerIcon.Hand)) {
+        Text(if (hovered) "Hovering" else "Point at me", modifier = Modifier.padding(24.dp))
+    }
 }
 ```
 
-`hoverable(source)` reports the mouse coming over a node and leaving. `pointerHoverIcon(PointerIcon::Hand)` changes the cursor. Text fields and selections show a context menu on a right click.
+`hoverable(source)` reports the mouse coming over a node and leaving. `pointerHoverIcon(PointerIcon.Hand)` changes the cursor. Text fields and selections show a context menu on a right click.
 
 ## Interactions
 
-A `MutableInteractionSource` is told of the presses, hovers, focus and drags of the components it is given to. Read whether one is going on with `collectIsPressedAsState()`, `collectIsHoveredAsState()`, `collectIsFocusedAsState()` and `collectIsDraggedAsState()`; they recompose when it changes.
+A `MutableInteractionSource` is told of the presses, hovers, focus and drags of the components it is given to. Read whether one is going on with `collectIsPressedAsState()`, `collectIsHoveredAsState()`, `collectIsFocusedAsState()` and `collectIsDraggedAsState()` (read with `by`); they recompose when it changes.
 
-```cpp
-void PressToRecord() {
-    auto source = remember([] { return MutableInteractionSource(); });
-    bool pressed = source.collectIsPressedAsState();
-    Button([] {}, Modifier(), interactionSource = source) { Text(pressed ? "Recording…" : "Hold to record"); };
+```kotlin
+@Composable
+fun PressToRecord() {
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    Button(onClick = {}, interactionSource = source) { Text(if (pressed) "Recording…" else "Hold to record") }
 }
 ```
 
-`interactions()` gives the stream of interactions as a flow. `Modifier().indication(source, ripple())` draws an indication for interactions that happen somewhere else.
+`interactions()` gives the stream of interactions as a flow. `Modifier.indication(source, ripple())` draws an indication for interactions that happen somewhere else.
 
 ## Drag and drop
 
 `dragAndDropSource` starts a drag with data; `dragAndDropTarget` accepts drops, from inside the app or, on the desktop, files from outside it:
 
-```cpp
-void DropZone() {
-    auto dropped = remember([] { return mutableStateOf(std::string("Drop text here")); });
-    Column() {
-        Text("Drag me", Modifier().padding(16).dragAndDropSource([](Offset) {
-            return std::optional(DragAndDropTransferData{.text = "Hello"});
-        }));
-        Box(Modifier().size(200).border(2, colorScheme().outline, 12)
-                .dragAndDropTarget([](const DragAndDropEvent& e) { return e.hasMimeType("text/plain"); },
-                                   {.onDrop = [dropped](const DragAndDropEvent& e) {
-                                       dropped.set(e.text());
-                                       return true;
-                                   }}),
-            Alignment::Center) { Text(dropped.get()); };
-    };
+```kotlin
+@Composable
+fun DropZone() {
+    var dropped by remember { mutableStateOf("Drop text here") }
+    Column {
+        Text("Drag me", modifier = Modifier.padding(16.dp).dragAndDropSource { DragAndDropTransferData(text = "Hello") })
+        Box(modifier = Modifier.size(200.dp).border(2.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+                .dragAndDropTarget(shouldStartDragAndDrop = { it.hasMimeType("text/plain") },
+                                   target = DragAndDropTarget(onDrop = { e -> dropped = e.text(); true })),
+            contentAlignment = Alignment.Center) { Text(dropped) }
+    }
 }
 ```
 
