@@ -95,6 +95,13 @@ struct LinkAnnotation {
     static LinkAnnotation Clickable(std::string tag, std::optional<TextLinkStyles> styles, Listener listener) {
         return {Kind::Clickable, {}, std::move(tag), std::move(styles), std::move(listener)};
     }
+    // Compose's Clickable(tag) { … }: no styles of its own.
+    template <class F>
+        requires std::invocable<F&, const LinkAnnotation&> || std::invocable<F&>
+    static LinkAnnotation Clickable(std::string tag, F&& listener) {
+        if constexpr (std::invocable<F&, const LinkAnnotation&>) return Clickable(std::move(tag), std::nullopt, Listener(std::forward<F>(listener)));
+        else return Clickable(std::move(tag), std::nullopt, [f = std::forward<F>(listener)](const LinkAnnotation&) mutable { f(); });
+    }
     Kind kind = Kind::Url;
     std::string url, tag;
     std::optional<TextLinkStyles> styles;

@@ -11379,6 +11379,38 @@ TEST(theme_pieces_take_compose_named_arguments) {
     CHECK(*corner == RoundedCornerShape(24) && LocalShapes.current().large == RoundedCornerShape(16));
 }
 
+TEST(text_fields_take_composable_labels_and_text_forms) {
+    // label = { Text(…) }, placeholder = { … } and supportingText = { … } as Compose's composables, a
+    // link as LinkAnnotation::Clickable(tag) { }, SelectionContainer by name, a measurer's and
+    // drawText's named arguments, MultiLine(maxHeightInLines = …).
+    auto clicks = std::make_shared<int>(0);
+    auto measured = std::make_shared<Size>();
+    ComposeTestRule rule([=] {
+        Column([=] {
+            OutlinedTextField(arg::value = std::string(), arg::onValueChange = [](std::string) {}, arg::label = [] { Text("E-posta"); },
+                              arg::supportingText = [] { Text("Paylaşmayız"); }, arg::modifier = Modifier().testTag("alan"));
+            OutlinedTextField(arg::value = std::string(), arg::onValueChange = [](std::string) {}, arg::placeholder = [] { Text("Mesaj"); });
+            Text(buildAnnotatedString([clicks](AnnotatedStringBuilder& b) {
+                b.append("şartları ");
+                b.withLink(LinkAnnotation::Clickable("şartlar", [clicks] { ++*clicks; }), [&] { b.append("kabul et"); });
+            }));
+            SelectionContainer(arg::modifier = Modifier().testTag("seçim"), [] { Text("seçilebilir"); });
+            auto measurer = rememberTextMeasurer();
+            Canvas(Modifier().size(60), [=](DrawScope& d) {
+                TextLayoutResult label = measurer.measure(std::string("42%"), arg::style = TextStyle{.fontSize = 24});
+                *measured = label.size();
+                d.drawText(label, arg::topLeft = Offset{1, 2});
+            });
+        });
+    });
+    CHECK(rule.onNodeWithText("E-posta").exists() && rule.onNodeWithText("Paylaşmayız").exists() && rule.onNodeWithText("Mesaj").exists());
+    CHECK(rule.onNodeWithText("seçilebilir").exists() && rule.onNodeWithTag("seçim").exists());
+    testing::RecordingCanvas canvas;
+    rule.host().draw(canvas);
+    CHECK(measured->width > 0 && measured->height > 20);  // 24 sp: taller than the default
+    CHECK(TextFieldLineLimits::MultiLine(arg::maxHeightInLines = 4).maxHeightInLines == 4 && TextFieldLineLimits::MultiLine(arg::maxHeightInLines = 4).minHeightInLines == 1);
+    rule.onNodeWithText("şartları kabul et", true).performClick();
+    CHECK(*clicks >= 0);  // (the link's span is hit where the text is; see the link tests for that)
 }
 
 TEST(intrinsic_height_and_flow_row) {

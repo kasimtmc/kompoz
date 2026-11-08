@@ -293,11 +293,28 @@ inline const MotionScheme& motionScheme() { return LocalMotionScheme.current(); 
 // Material 3's shape scale (Compose's Shapes), for the app's own components: shape =
 // MaterialTheme.shapes.medium. Kompoz's components have Material's shapes built in.
 struct Shapes {
+    Shape extraSmall = RoundedCornerShape(4), small = RoundedCornerShape(8), medium = RoundedCornerShape(12), large = RoundedCornerShape(16),
+          extraLarge = RoundedCornerShape(28);
     friend bool operator==(const Shapes&, const Shapes&) = default;
+    // Compose's copy(medium = …).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
     Shapes copy(A&&... args) const {
+        namespace n = detail::names;
+        using P = detail::Params<n::ExtraSmall, n::Small, n::Medium, n::Large, n::ExtraLarge>;
+        static_assert(P::check<A...>());
         Shapes s = *this;
+        P::set<n::ExtraSmall>(s.extraSmall, args...);
+        P::set<n::Small>(s.small, args...);
+        P::set<n::Medium>(s.medium, args...);
+        P::set<n::Large>(s.large, args...);
+        P::set<n::ExtraLarge>(s.extraLarge, args...);
+        return s;
+    }
+};
 // (read as LocalShapes.current(): `shapes` is the buttons' named argument)
 inline const CompositionLocal<Shapes> LocalShapes{Shapes{}};
+
 // MaterialTheme(colorScheme, motionScheme, content): the motion left out stays the one around it
 // (standard() at the top). Its content runs as a call's own, in its caller's scope.
 namespace detail {
@@ -319,6 +336,10 @@ struct MaterialThemeImpl {
             Typography typography = P::arg<names::Typography>(args...);
             content = [typography, inner = std::move(content)] { CompositionLocalProvider({LocalTypography.provides(typography)}, inner); };
         }
+        if constexpr (P::given<names::Shapes, A...>()) {
+            Shapes shapes = P::arg<names::Shapes>(args...);
+            content = [shapes, inner = std::move(content)] { CompositionLocalProvider({LocalShapes.provides(shapes)}, inner); };
+        }
         if constexpr (P::given<names::MotionScheme, A...>())
             MaterialTheme(colorScheme, P::get<names::MotionScheme>(MotionScheme::standard(), args...), content, site);
         else MaterialTheme(colorScheme, content, site);
@@ -336,9 +357,6 @@ namespace detail {
 // (buttons' and list items' shapes as they are pressed or selected).
 Shape morphingShape(const Shape& target, CallSite site = CallSite::current());
 }  // namespace detail
-        if constexpr (P::given<names::Shapes, A...>()) {
-            Shapes shapes = P::arg<names::Shapes>(args...);
-            content = [shapes, inner = std::move(content)] { CompositionLocalProvider({LocalShapes.provides(shapes)}, inner); };
 inline bool isSystemInDarkTheme() { return LocalSystemDarkTheme.current(); }
 inline const ColorScheme& colorScheme() { return LocalColorScheme.current(); }
 // The content color for `background` (Compose's contentColorFor): the theme's matching one, or
@@ -978,7 +996,18 @@ void BasicText(const AnnotatedString& text, const Modifier& modifier = {}, const
 // selects a word, with handles to drag (from text to text) and a toolbar (copy, select all);
 // the mouse drags a selection or double clicks a word, and Ctrl+C copies it. A press elsewhere
 // in it clears it.
-void SelectionContainer(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
+namespace detail {
+void SelectionContainer(const Modifier& modifier, const Content& content, CallSite site);
+struct SelectionContainerImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        SelectionContainer(P::get<names::Modifier>(Modifier{}, args...), P::plainBlock(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::SelectionContainerImpl> SelectionContainer;
 
 // The floating toolbar over a text selection (Compose's TextToolbar): a field's cut, copy,
 // paste and select all, a SelectionContainer's copy and select all. Kompoz draws its own unless
@@ -2188,12 +2217,37 @@ struct TextFieldLabelPosition {
 // How many lines a field has (Compose's TextFieldLineLimits, the state-based fields' way of
 // saying singleLine / minLines / maxLines): SingleLine — one line, scrolled sideways, Enter runs
 // the keyboard action; MultiLine(min, max) — wrapped, min..max lines tall, scrolled beyond.
+namespace detail {
+// A text field's label, placeholder or supporting text given by name: Compose's composable
+// (anything callable) into `content`, else a string into `text`.
+template <class Tag, class... A>
+void textOrContent(std::string& text, Content& content, A&&... args) {
+    (
+        [&] {
+            if constexpr (std::is_same_v<TagOf<A>, Tag>) {
+                if constexpr (std::is_invocable_v<decltype((args.value))&>) content = Content(args.value);
+                else text = std::string(args.value);
+            }
+        }(),
+        ...);
+}
+} // namespace detail
+
 struct TextFieldLineLimits {
     bool singleLine = false;
     int minHeightInLines = 1, maxHeightInLines = std::numeric_limits<int>::max();
     static const TextFieldLineLimits SingleLine, Default;  // Default: MultiLine()
     static TextFieldLineLimits MultiLine(int minHeightInLines = 1, int maxHeightInLines = std::numeric_limits<int>::max()) {
         return {false, minHeightInLines, maxHeightInLines};
+    }
+    // Compose's MultiLine(maxHeightInLines = 4).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    static TextFieldLineLimits MultiLine(A&&... args) {
+        namespace n = detail::names;
+        using P = detail::Params<n::MinHeightInLines, n::MaxHeightInLines>;
+        static_assert(P::check<A...>());
+        return MultiLine(P::get<n::MinHeightInLines>(1, args...), P::get<n::MaxHeightInLines>(std::numeric_limits<int>::max(), args...));
     }
 };
 inline const TextFieldLineLimits TextFieldLineLimits::SingleLine{true, 1, 1};
@@ -2214,6 +2268,10 @@ struct TextFieldOptions {
     std::string prefix, suffix;
     Content leadingIcon, trailingIcon;
     std::string supportingText;
+    // Compose's composable forms of the label, the placeholder and the supporting text (label = {
+    // Text("…") }): composed in their places, in the label's animated style, the placeholder's color
+    // and the supporting text's; set in place of the strings.
+    Content labelContent, placeholderContent, supportingTextContent;
     bool isError = false;
     KeyboardOptions keyboardOptions;
     KeyboardActions keyboardActions;
@@ -2323,13 +2381,13 @@ struct TextFieldImpl {
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::ReadOnly>(options.readOnly, args...);
         P::set<names::TextStyle>(options.textStyle, args...);
-        P::set<names::Label>(options.label, args...);
-        P::set<names::Placeholder>(options.placeholder, args...);
+        detail::textOrContent<names::Label>(options.label, options.labelContent, args...);
+        detail::textOrContent<names::Placeholder>(options.placeholder, options.placeholderContent, args...);
         P::set<names::LeadingIcon>(options.leadingIcon, args...);
         P::set<names::TrailingIcon>(options.trailingIcon, args...);
         P::set<names::Prefix>(options.prefix, args...);
         P::set<names::Suffix>(options.suffix, args...);
-        P::set<names::SupportingText>(options.supportingText, args...);
+        detail::textOrContent<names::SupportingText>(options.supportingText, options.supportingTextContent, args...);
         P::set<names::IsError>(options.isError, args...);
         P::set<names::VisualTransformation>(options.visualTransformation, args...);
         P::set<names::KeyboardOptions>(options.keyboardOptions, args...);
@@ -2359,13 +2417,13 @@ struct TextFieldImpl {
         P::set<names::InputTransformation>(options.inputTransformation, args...);
         P::set<names::TextStyle>(options.textStyle, args...);
         P::set<names::LabelPosition>(options.labelPosition, args...);
-        P::set<names::Label>(options.label, args...);
-        P::set<names::Placeholder>(options.placeholder, args...);
+        detail::textOrContent<names::Label>(options.label, options.labelContent, args...);
+        detail::textOrContent<names::Placeholder>(options.placeholder, options.placeholderContent, args...);
         P::set<names::LeadingIcon>(options.leadingIcon, args...);
         P::set<names::TrailingIcon>(options.trailingIcon, args...);
         P::set<names::Prefix>(options.prefix, args...);
         P::set<names::Suffix>(options.suffix, args...);
-        P::set<names::SupportingText>(options.supportingText, args...);
+        detail::textOrContent<names::SupportingText>(options.supportingText, options.supportingTextContent, args...);
         P::set<names::IsError>(options.isError, args...);
         P::set<names::KeyboardOptions>(options.keyboardOptions, args...);
         P::set<names::KeyboardActions>(options.keyboardActions, args...);
@@ -2414,7 +2472,7 @@ struct BasicTextFieldImpl {
         P::set<names::VisualTransformation>(options.visualTransformation, args...);
         P::set<names::InteractionSource>(options.interactionSource, args...);
         P::set<names::Decorator>(options.decorator, args...);
-        P::set<names::Placeholder>(options.placeholder, args...);
+        detail::textOrContent<names::Placeholder>(options.placeholder, options.placeholderContent, args...);
         P::set<names::OnSubmit>(options.onSubmit, args...);
         P::set<names::LineLimits>(options.lineLimits, args...);
         P::set<names::InputTransformation>(options.inputTransformation, args...);
@@ -2443,7 +2501,7 @@ struct BasicTextFieldImpl {
         P::set<names::MaxLines>(options.maxLines, args...);
         P::set<names::MinLines>(options.minLines, args...);
         P::set<names::VisualTransformation>(options.visualTransformation, args...);
-        P::set<names::Placeholder>(options.placeholder, args...);
+        detail::textOrContent<names::Placeholder>(options.placeholder, options.placeholderContent, args...);
         P::set<names::OnSubmit>(options.onSubmit, args...);
         P::set<names::TextFieldColors>(options.colors, args...);
         P::set<names::Colors>(options.colors, args...);
@@ -2473,13 +2531,13 @@ struct OutlinedTextFieldImpl {
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::ReadOnly>(options.readOnly, args...);
         P::set<names::TextStyle>(options.textStyle, args...);
-        P::set<names::Label>(options.label, args...);
-        P::set<names::Placeholder>(options.placeholder, args...);
+        detail::textOrContent<names::Label>(options.label, options.labelContent, args...);
+        detail::textOrContent<names::Placeholder>(options.placeholder, options.placeholderContent, args...);
         P::set<names::LeadingIcon>(options.leadingIcon, args...);
         P::set<names::TrailingIcon>(options.trailingIcon, args...);
         P::set<names::Prefix>(options.prefix, args...);
         P::set<names::Suffix>(options.suffix, args...);
-        P::set<names::SupportingText>(options.supportingText, args...);
+        detail::textOrContent<names::SupportingText>(options.supportingText, options.supportingTextContent, args...);
         P::set<names::IsError>(options.isError, args...);
         P::set<names::VisualTransformation>(options.visualTransformation, args...);
         P::set<names::KeyboardOptions>(options.keyboardOptions, args...);
@@ -2509,13 +2567,13 @@ struct OutlinedTextFieldImpl {
         P::set<names::InputTransformation>(options.inputTransformation, args...);
         P::set<names::TextStyle>(options.textStyle, args...);
         P::set<names::LabelPosition>(options.labelPosition, args...);
-        P::set<names::Label>(options.label, args...);
-        P::set<names::Placeholder>(options.placeholder, args...);
+        detail::textOrContent<names::Label>(options.label, options.labelContent, args...);
+        detail::textOrContent<names::Placeholder>(options.placeholder, options.placeholderContent, args...);
         P::set<names::LeadingIcon>(options.leadingIcon, args...);
         P::set<names::TrailingIcon>(options.trailingIcon, args...);
         P::set<names::Prefix>(options.prefix, args...);
         P::set<names::Suffix>(options.suffix, args...);
-        P::set<names::SupportingText>(options.supportingText, args...);
+        detail::textOrContent<names::SupportingText>(options.supportingText, options.supportingTextContent, args...);
         P::set<names::IsError>(options.isError, args...);
         P::set<names::KeyboardOptions>(options.keyboardOptions, args...);
         P::set<names::KeyboardActions>(options.keyboardActions, args...);
@@ -2567,6 +2625,7 @@ struct SecureTextFieldOptions {
     std::string prefix, suffix;
     Content leadingIcon, trailingIcon;  // e.g. an eye that switches textObfuscationMode
     std::string supportingText;
+    Content labelContent, placeholderContent, supportingTextContent;  // Compose's composable forms (TextFieldOptions')
     bool isError = false;
     TextObfuscationMode textObfuscationMode = TextObfuscationMode::RevealLastTyped;
     std::string textObfuscationCharacter = "•";  // one character
@@ -2599,13 +2658,13 @@ struct SecureTextFieldImpl {
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::TextStyle>(options.textStyle, args...);
         P::set<names::LabelPosition>(options.labelPosition, args...);
-        P::set<names::Label>(options.label, args...);
-        P::set<names::Placeholder>(options.placeholder, args...);
+        detail::textOrContent<names::Label>(options.label, options.labelContent, args...);
+        detail::textOrContent<names::Placeholder>(options.placeholder, options.placeholderContent, args...);
         P::set<names::LeadingIcon>(options.leadingIcon, args...);
         P::set<names::TrailingIcon>(options.trailingIcon, args...);
         P::set<names::Prefix>(options.prefix, args...);
         P::set<names::Suffix>(options.suffix, args...);
-        P::set<names::SupportingText>(options.supportingText, args...);
+        detail::textOrContent<names::SupportingText>(options.supportingText, options.supportingTextContent, args...);
         P::set<names::IsError>(options.isError, args...);
         P::set<names::InputTransformation>(options.inputTransformation, args...);
         P::set<names::TextObfuscationMode>(options.textObfuscationMode, args...);
@@ -2634,13 +2693,13 @@ struct OutlinedSecureTextFieldImpl {
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::TextStyle>(options.textStyle, args...);
         P::set<names::LabelPosition>(options.labelPosition, args...);
-        P::set<names::Label>(options.label, args...);
-        P::set<names::Placeholder>(options.placeholder, args...);
+        detail::textOrContent<names::Label>(options.label, options.labelContent, args...);
+        detail::textOrContent<names::Placeholder>(options.placeholder, options.placeholderContent, args...);
         P::set<names::LeadingIcon>(options.leadingIcon, args...);
         P::set<names::TrailingIcon>(options.trailingIcon, args...);
         P::set<names::Prefix>(options.prefix, args...);
         P::set<names::Suffix>(options.suffix, args...);
-        P::set<names::SupportingText>(options.supportingText, args...);
+        detail::textOrContent<names::SupportingText>(options.supportingText, options.supportingTextContent, args...);
         P::set<names::IsError>(options.isError, args...);
         P::set<names::InputTransformation>(options.inputTransformation, args...);
         P::set<names::TextObfuscationMode>(options.textObfuscationMode, args...);
@@ -2677,7 +2736,7 @@ struct BasicSecureTextFieldImpl {
         P::set<names::TextObfuscationCharacter>(options.textObfuscationCharacter, args...);
         P::set<names::KeyboardOptions>(options.keyboardOptions, args...);
         P::set<names::KeyboardActions>(options.keyboardActions, args...);
-        P::set<names::Placeholder>(options.placeholder, args...);
+        detail::textOrContent<names::Placeholder>(options.placeholder, options.placeholderContent, args...);
         P::set<names::OnSubmit>(options.onSubmit, args...);
         P::set<names::TextFieldColors>(options.colors, args...);
         BasicSecureTextField(state, P::get<names::Modifier>(Modifier{}, args...), std::move(options), site);

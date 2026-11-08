@@ -836,6 +836,13 @@
   returns a value takes a call site and is a group of its own, as Compose makes every composable call: what it
   remembers is its own, however often its caller calls it from one place. An `if` as a value may put its `else` on
   the next line.
+- **Text as Compose writes it**: a text field's `label = { Text("…") }`, `placeholder = { … }` and `supportingText = { … }`
+  are composables (a string still does), composed in their places: the label in its animated style as it floats, the
+  placeholder in its color where the text starts, the supporting text under the field;
+  `TextFieldLineLimits.MultiLine(maxHeightInLines = 4)`; `LinkAnnotation.Clickable(tag) { … }`;
+  `SelectionContainer(modifier) { … }` by name; `measurer.measure(text, style = …, maxWidth = …)` and
+  `drawText(layout, topLeft = …, color = …, alpha = …)` by name. kompozc gives `buildAnnotatedString { append(…);
+  withStyle(SpanStyle(…)) { … } }` its builder as the receiver, and `edit { … }` its `TextFieldBuffer`.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

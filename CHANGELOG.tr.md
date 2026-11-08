@@ -877,6 +877,13 @@
   bir `@Composable fun` bir çağrı yeri alıyor ve Compose'un her composable çağrısına verdiği gibi kendi grubu oluyor:
   hatırladığı kendinin, çağıranı onu bir yerden kaç kez çağırırsa çağırsın. Değer olarak bir `if`, `else`'ini alt
   satıra koyabiliyor.
+- **Compose'un yazdığı gibi metin**: bir metin alanının `label = { Text("…") }`, `placeholder = { … }` ve
+  `supportingText = { … }`'i composable (dize de olur), yerlerinde kompoze ediliyor: etiket yüzerken canlanan stilinde,
+  yer tutucu metnin başladığı yerde kendi renginde, destek metni alanın altında;
+  `TextFieldLineLimits.MultiLine(maxHeightInLines = 4)`; `LinkAnnotation.Clickable(tag) { … }`; adla
+  `SelectionContainer(modifier) { … }`; adla `measurer.measure(text, style = …, maxWidth = …)` ve `drawText(layout,
+  topLeft = …, color = …, alpha = …)`. kompozc, `buildAnnotatedString { append(…); withStyle(SpanStyle(…)) { … } }`'e
+  alıcı olarak kurucusunu, `edit { … }`'e `TextFieldBuffer`'ını veriyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

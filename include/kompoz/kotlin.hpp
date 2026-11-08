@@ -252,17 +252,20 @@ bool contains(const C& c, const X& x) {
     }
 }
 
-// list.size, text.length (a text's characters, not its UTF-8 bytes), or the size of what has one.
+// list.size, text.length (a text's characters, not its UTF-8 bytes), or the size of what has one: a
+// count as an int; a size that is something else (a layout result's Size) as it is.
 template <class C>
-int size(const C& c) {
+decltype(auto) size(const C& c) {
     if constexpr (std::is_convertible_v<const C&, std::string_view>) {
         int n = 0;
         for (char ch : std::string_view(c)) n += (static_cast<unsigned char>(ch) & 0xC0) != 0x80;
         return n;
     } else if constexpr (requires { c.size(); }) {
-        return int(c.size());
+        if constexpr (std::is_arithmetic_v<std::remove_cvref_t<decltype(c.size())>>) return int(c.size());
+        else return c.size();
     } else if constexpr (requires { c.size; }) {
-        return int(c.size);
+        if constexpr (std::is_arithmetic_v<std::remove_cvref_t<decltype(c.size)>>) return int(c.size);
+        else return (c.size);
     } else {
         return int(c.length);
     }

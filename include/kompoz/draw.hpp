@@ -291,6 +291,10 @@ public:
     void drawText(const TextLayoutResult& layout, std::optional<Color> color = {}, Offset topLeft = {}, std::optional<float> alpha = {},
                   std::optional<Shadow> shadow = {}, std::optional<TextDecoration> textDecoration = {},
                   std::optional<DrawStyle> drawStyle = {}, BlendMode blendMode = BlendMode::SrcOver);
+    // Compose's drawText(layout, topLeft = …, color = …, alpha = …) by name (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawText(const TextLayoutResult& layout, A&&... args);
     void drawText(const TextLayoutResult& layout, const Brush& brush, Offset topLeft = {}, std::optional<float> alpha = {},
                   std::optional<Shadow> shadow = {}, std::optional<TextDecoration> textDecoration = {},
                   std::optional<DrawStyle> drawStyle = {}, BlendMode blendMode = BlendMode::SrcOver);

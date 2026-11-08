@@ -503,6 +503,9 @@ struct TargetValue {};
 struct AnimationSpec {};
 struct Content {};
 struct MergeDescendants {};
+struct TopLeft {};
+struct MinHeightInLines {};
+struct MaxHeightInLines {};
 struct ExtraSmall {};
 struct Small {};
 struct Medium {};
@@ -815,14 +818,15 @@ inline constexpr Param<detail::names::ColorScheme> colorScheme;
 inline constexpr Param<detail::names::MotionScheme> motionScheme;
 // (kompoz::typography() reads the theme's: this is MaterialTheme's name; shapes is args' already)
 inline constexpr Param<detail::names::Typography> typography;
-// Members' (Modifier's, Color's, InfiniteTransition's): words too common to be names of all of kompoz's (end, x, width).
-inline constexpr Param<detail::names::Start> start;
-inline constexpr Param<detail::names::Top> top;
+// (Shapes' corner sizes: words too common to be names of all of kompoz's)
 inline constexpr Param<detail::names::ExtraSmall> extraSmall;
 inline constexpr Param<detail::names::Small> small;
 inline constexpr Param<detail::names::Medium> medium;
 inline constexpr Param<detail::names::Large> large;
 inline constexpr Param<detail::names::ExtraLarge> extraLarge;
+// Members' (Modifier's, Color's, InfiniteTransition's): words too common to be names of all of kompoz's (end, x, width).
+inline constexpr Param<detail::names::Start> start;
+inline constexpr Param<detail::names::Top> top;
 inline constexpr Param<detail::names::End> end;
 inline constexpr Param<detail::names::Bottom> bottom;
 inline constexpr Param<detail::names::Horizontal> horizontal;
@@ -843,6 +847,9 @@ inline constexpr Param<detail::names::AnimationSpec> animationSpec;
 // (a composable's block, given by name as Compose's content = … : kompoz::Content is its type)
 inline constexpr Param<detail::names::Content> content;
 inline constexpr Param<detail::names::MergeDescendants> mergeDescendants;
+inline constexpr Param<detail::names::TopLeft> topLeft;
+inline constexpr Param<detail::names::MinHeightInLines> minHeightInLines;
+inline constexpr Param<detail::names::MaxHeightInLines> maxHeightInLines;
 inline constexpr Param<detail::names::Primary> primary;
 inline constexpr Param<detail::names::OnPrimary> onPrimary;
 inline constexpr Param<detail::names::PrimaryContainer> primaryContainer;

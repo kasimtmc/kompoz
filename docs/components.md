@@ -575,6 +575,7 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 348. Compose's lazy grid `span = { GridItemSpan(maxLineSpan) }`, `rememberPagerState { count }`, `rememberCarouselState { count }`, carousels' named arguments and `CarouselItemScope.(Int)` content, Coil's `AsyncImage(model, …)`, scrollbars and `PullToRefreshBox` by name ✅
 349. Compose's chips with `label = { }` and icons by name, `toggleable(value, onValueChange, role = Role.Checkbox)`, `SnackbarHost(hostState)`, `showSnackbar(actionLabel = …)` awaited, `progress = { }` indicators, `NavigationSuiteScaffold(navigationSuiteItems = { item(…) })` with content icons and labels ✅
 350. Compose's `lightColorScheme(primary = …)` / `darkColorScheme(…)` / `scheme.copy(…)`, `typography.copy(…)`, `Typography(…)`, `TextStyle.copy(fontFamily = …)` on a `Font`, `MaterialTheme(typography = …, shapes = …)` with its color scheme optional, and `Shapes` (`MaterialTheme.shapes.medium`) ✅
+351. Compose's composable `label`, `placeholder` and `supportingText` on text fields, `TextFieldLineLimits.MultiLine(maxHeightInLines = …)`, `LinkAnnotation.Clickable(tag) { }`, `SelectionContainer(modifier) { }`, `measure(style = …)` and `drawText(topLeft = …)` by name ✅
 
 ## Next
 

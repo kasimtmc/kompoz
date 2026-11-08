@@ -239,6 +239,15 @@ Font Font::copy(A&&... args) const {
     return f;
 }
 
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+void DrawScope::drawText(const TextLayoutResult& layout, A&&... args) {
+    namespace n = detail::names;
+    using P = detail::Params<n::TopLeft, n::Color, n::Alpha>;
+    static_assert(P::check<A...>());
+    drawText(layout, P::get<n::Color>(std::optional<Color>(), args...), P::get<n::TopLeft>(Offset{}, args...), P::get<n::Alpha>(std::optional<float>(), args...));
+}
+
 // animateFloat(initialValue, targetValue, animationSpec, label) and animateColor's: the label is
 // Compose's name for its tools (none here).
 template <class... A>

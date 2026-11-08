@@ -576,6 +576,7 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 348. Compose'un tembel ızgara `span = { GridItemSpan(maxLineSpan) }`'i, `rememberPagerState { count }`, `rememberCarouselState { count }`, karusellerin adlı argümanları ve `CarouselItemScope.(Int)` içeriği, Coil'in `AsyncImage(model, …)`'ı, kaydırma çubukları ve adla `PullToRefreshBox` ✅
 349. Compose'un `label = { }` ve adla simgeler alan çipleri, `toggleable(value, onValueChange, role = Role.Checkbox)`, `SnackbarHost(hostState)`, beklenen `showSnackbar(actionLabel = …)`, `progress = { }` göstergeleri, içerik simge ve etiketli `NavigationSuiteScaffold(navigationSuiteItems = { item(…) })` ✅
 350. Compose'un `lightColorScheme(primary = …)` / `darkColorScheme(…)` / `scheme.copy(…)`'si, `typography.copy(…)`, `Typography(…)`, bir `Font` üzerinde `TextStyle.copy(fontFamily = …)` renk şeması isteğe bağlı `MaterialTheme(typography = …, shapes = …)` ve `Shapes` (`MaterialTheme.shapes.medium`) ✅
+351. Metin alanlarında Compose'un composable `label`, `placeholder` ve `supportingText`'i, `TextFieldLineLimits.MultiLine(maxHeightInLines = …)`, `LinkAnnotation.Clickable(tag) { }`, `SelectionContainer(modifier) { }`, adla `measure(style = …)` ve `drawText(topLeft = …)` ✅
 
 ## Sıradakiler
 

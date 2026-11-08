@@ -1281,7 +1281,7 @@ void detail::customTextToolbar(const std::shared_ptr<TextToolbar>& toolbar, std:
     });
 }
 
-void SelectionContainer(const Modifier& modifier, const Content& content, CallSite site) {
+void detail::SelectionContainer(const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     auto registry = remember([] { return std::make_shared<SelectionRegistry>(mutableStateOf(TextSelection{})); });
     registry->host = &detail::Composer::require().host();
@@ -2664,8 +2664,10 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     // The label inside the field (floating up), or above it outside (Above): only one inside
     // takes room in it and covers the placeholder while down.
     bool plainKind = kind == FieldKind::Plain;
-    bool labelAbove = !o.label.empty() && !plainKind && o.labelPosition.kind == TextFieldLabelPosition::Kind::Above;
-    bool hasLabel = !o.label.empty() && !plainKind && !labelAbove;
+    bool labelGiven = !o.label.empty() || bool(o.labelContent);  // a string, or Compose's composable
+    bool labelAbove = labelGiven && !plainKind && o.labelPosition.kind == TextFieldLabelPosition::Kind::Above;
+    bool hasLabel = labelGiven && !plainKind && !labelAbove;
+    auto labelSize = remember([] { return std::make_shared<Size>(); });  // a composed label's, as laid out
     bool alwaysUp = hasLabel && o.labelPosition.alwaysMinimize;
     // 1: label floated. Read as the field is drawn (the label, the affixes, the outline's gap).
     auto floated = animateFloatAsState(isFocused || !value.empty() || alwaysUp ? 1.f : 0.f, 150);
@@ -3147,7 +3149,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
         Size s = d.size();
         float h = s.height;
         Font small{lerp(16, 12, p)};
-        float labelWidth = hasLabel ? d.measureText(label, Font{12}).width : 0;
+        float labelWidth = !hasLabel ? 0 : label.empty() ? labelSize->width : d.measureText(label, Font{12}).width;
         d.drawContent();
         if (kind == FieldKind::Filled) {
             d.drawRect(indicator, {0, h - indicatorWidth}, Size{s.width, indicatorWidth});
@@ -3175,7 +3177,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                 outline.close();
             d.drawPath(outline, indicator, 1, Stroke(indicatorWidth));
         }
-        if (hasLabel) {
+        if (hasLabel && !label.empty()) {  // (a composed label is placed by the layout instead)
             float rest = (std::min(h, 56.f) - d.measureText(label, Font{16}).height) / 2;  // on the first line
             float floatedY = kind == FieldKind::Outlined ? -d.measureText(label, Font{12}).height / 2 : 8.f;
             float floatedX = kind == FieldKind::Outlined ? 16.f : textStart;
@@ -3204,8 +3206,13 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     layoutNode(CallSite::current(), outer, container, [&] {
         if (labelAbove) {  // over the field, outside it (Compose's AboveLabel paddings)
             float bias = o.labelPosition.alignment.bias;
-            detail::Text(o.label, Modifier().fillMaxWidth().padding(4, 0, 4, 4),
-                 {.font = type.bodySmall, .color = labelColor, .textAlign = bias < 0 ? TextAlign::Start : bias > 0 ? TextAlign::End : TextAlign::Center});
+            if (o.labelContent)
+                detail::Box(Modifier().fillMaxWidth().padding(4, 0, 4, 4), bias < 0 ? Alignment::TopStart : bias > 0 ? Alignment::TopEnd : Alignment::TopCenter, [&] {
+                    CompositionLocalProvider({LocalTextStyle.provides(type.bodySmall), LocalContentColor.provides(labelColor)}, o.labelContent);
+                });
+            else
+                detail::Text(o.label, Modifier().fillMaxWidth().padding(4, 0, 4, 4),
+                     {.font = type.bodySmall, .color = labelColor, .textAlign = bias < 0 ? TextAlign::Start : bias > 0 ? TextAlign::End : TextAlign::Center});
         }
         // The text itself (Compose's innerTextField): between the icons, or where a decorator puts it.
         auto innerTextField = [&] {
@@ -3252,27 +3259,65 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
         if (plain && o.decorator) {
             detail::Box(Modifier().then(std::make_shared<TextFieldDecorationElement>()), [&] { o.decorator(innerTextField); });
         } else {
-            detail::Row((plain ? Modifier()
-                        : Modifier()
-                              .heightIn(56)
-                              .then(containerColor.alpha() > 0 ? Modifier().background(containerColor, shape) : Modifier())
-                              .drawWithContent(decoration)).then(std::make_shared<TextFieldDecorationElement>()),
-                {.verticalAlignment = Alignment::CenterVertically},
-                [&] {
-                if (o.leadingIcon)
-                    detail::Box(Modifier().padding(12, 0, 16, 0), [&] {
-                        CompositionLocalProvider({LocalContentColor.provides(leadingIconColor)}, o.leadingIcon);
-                    });
-                innerTextField();
-                if (o.trailingIcon)
-                    detail::Box(Modifier().padding(16, 0, 12, 0), [&] {
-                        CompositionLocalProvider({LocalContentColor.provides(trailingIconColor)}, o.trailingIcon);
-                    });
-            });
+            Modifier frame = (plain ? Modifier()
+                                    : Modifier()
+                                          .heightIn(56)
+                                          .then(containerColor.alpha() > 0 ? Modifier().background(containerColor, shape) : Modifier())
+                                          .drawWithContent(decoration))
+                                 .then(std::make_shared<TextFieldDecorationElement>());
+            auto row = [&](const Modifier& m) {
+                detail::Row(m, {.verticalAlignment = Alignment::CenterVertically}, [&] {
+                    if (o.leadingIcon)
+                        detail::Box(Modifier().padding(12, 0, 16, 0), [&] {
+                            CompositionLocalProvider({LocalContentColor.provides(leadingIconColor)}, o.leadingIcon);
+                        });
+                    innerTextField();
+                    if (o.trailingIcon)
+                        detail::Box(Modifier().padding(16, 0, 12, 0), [&] {
+                            CompositionLocalProvider({LocalContentColor.provides(trailingIconColor)}, o.trailingIcon);
+                        });
+                });
+            };
+            // Compose's composable label and placeholder: composed over the row, the label in its
+            // animated style where the drawn one would be, the placeholder where the text starts.
+            bool composedLabel = hasLabel && o.labelContent, composedPlaceholder = bool(o.placeholderContent) && !plain;
+            if (!composedLabel && !composedPlaceholder) {
+                row(frame);
+            } else {
+                detail::Box(frame, [&] {
+                    row(Modifier().fillMaxWidth().heightIn(56));
+                    if (composedPlaceholder && value.empty() && (!hasLabel || isFocused || alwaysUp))
+                        detail::Box(Modifier().padding(textStart, 16, 0, 0), [&] {
+                            CompositionLocalProvider({LocalTextStyle.provides(font), LocalContentColor.provides(placeholderColor)}, o.placeholderContent);
+                        });
+                    if (composedLabel) {
+                        float p = floated.value();  // (read here: the style follows it each frame)
+                        float floatedX = kind == FieldKind::Outlined ? 16.f : textStart;
+                        // Placed from its own measured size, in the same layout pass (not a state set
+                        // by onSizeChanged, which would place it a frame late).
+                        detail::Box(Modifier().layout([=](const MeasureNext& measure, const Constraints& c, Offset& placeAt) {
+                                        Size s = measure(c);
+                                        *labelSize = s;
+                                        float q = floated.value();
+                                        float floatedY = kind == FieldKind::Outlined ? -s.height / 2 : 8.f;
+                                        placeAt = Offset{lerp(textStart, floatedX, q), lerp(28 - s.height / 2, floatedY, q)};
+                                        return s;
+                                    }),
+                                    [&] {
+                                        CompositionLocalProvider({LocalTextStyle.provides(Font{lerp(16, 12, p)}), LocalContentColor.provides(labelColor)},
+                                                                 o.labelContent);
+                                    });
+                    }
+                });
+            }
         }
         if (!o.supportingText.empty())
             detail::Text(o.supportingText, Modifier().padding(16, 4, 16, 0),
                  {.font = type.bodySmall, .color = supportingColor});
+        else if (o.supportingTextContent)
+            detail::Box(Modifier().padding(16, 4, 16, 0), [&] {
+                CompositionLocalProvider({LocalTextStyle.provides(type.bodySmall), LocalContentColor.provides(supportingColor)}, o.supportingTextContent);
+            });
     });
 }
 
@@ -3622,6 +3667,9 @@ void secureTextField(FieldKind kind, const TextFieldState& state, const Modifier
                .leadingIcon = std::move(o.leadingIcon),
                .trailingIcon = std::move(o.trailingIcon),
                .supportingText = std::move(o.supportingText),
+               .labelContent = std::move(o.labelContent),
+               .placeholderContent = std::move(o.placeholderContent),
+               .supportingTextContent = std::move(o.supportingTextContent),
                .isError = o.isError,
                .keyboardOptions = o.keyboardOptions,
                .keyboardActions = std::move(o.keyboardActions),

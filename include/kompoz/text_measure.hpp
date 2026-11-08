@@ -17,6 +17,7 @@
 
 #include "graphics.hpp"
 #include "layout.hpp"
+#include "named.hpp"
 #include "runtime.hpp"
 #include "text.hpp"
 #include "widgets.hpp"
@@ -69,6 +70,10 @@ public:
                              float maxHeight = kInfinity) const;
     TextLayoutResult measure(const AnnotatedString& text, const TextStyle& style = {}, float maxWidth = kInfinity,
                              float maxHeight = kInfinity) const;
+    // Compose's measure(text, style = …, constraints = …) by name (named_members.hpp): style and maxWidth.
+    template <class T, class... A>
+        requires(detail::anyNamedArgument<A...>)
+    TextLayoutResult measure(const T& text, A&&... args) const;
     friend bool operator==(const TextLayoutMeasurer&, const TextLayoutMeasurer&) = default;
 
 private:
@@ -80,6 +85,16 @@ private:
 };
 
 TextLayoutMeasurer rememberTextMeasurer(CallSite site = CallSite::current());
+
+
+template <class T, class... A>
+    requires(detail::anyNamedArgument<A...>)
+TextLayoutResult TextLayoutMeasurer::measure(const T& text, A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::Style, n::MaxWidth>;
+    static_assert(P::check<A...>());
+    return measure(text, P::get<n::Style>(TextStyle{}, args...), P::get<n::MaxWidth>(kInfinity, args...));
+}
 
 
 } // namespace kompoz
