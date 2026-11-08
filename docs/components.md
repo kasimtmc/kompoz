@@ -578,6 +578,7 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 351. Compose's composable `label`, `placeholder` and `supportingText` on text fields, `TextFieldLineLimits.MultiLine(maxHeightInLines = …)`, `LinkAnnotation.Clickable(tag) { }`, `SelectionContainer(modifier) { }`, `measure(style = …)` and `drawText(topLeft = …)` by name ✅
 352. Compose's `drawCircle(radius = …, center = …)`, `drawRect(topLeft = …, size = …)`, `drawLine(start = …, end = …, cap = …)`, `drawArc`, `drawPath(style = …)`, `Stroke(width = …)`, `rotate(pivot = …) { }`, `inset`/`clipRect`/`translate` by name, Coil's `AsyncImage(placeholder = { }, error = { })`, `floatArrayOf` ✅
 353. Compose's `animateFloatAsState(targetValue, animationSpec = …, label = …)`, `AnimatedVisibility(visible, enter = …, exit = …) { }`, `AnimatedContent(targetState, transitionSpec = { … }) { }` with `togetherWith`/`using`, `Crossfade`, the slides' lambdas, `updateTransition(label = …)` and `animateDp(label = …) { }`, `SharedTransitionLayout { }`, `sharedElement(…, animatedVisibilityScope = …)`, `rememberSharedContentState(key = …)` ✅
+354. Compose's `pointerInput(Unit) { detectTapGestures(onTap = { }) }` and the other detectors by name, `draggable(orientation = …, state = …)`, the `DraggableAnchors { A at 0f }` builder, `dragAndDropSource { }` and `dragAndDropTarget(shouldStartDragAndDrop = { }, target = …)` ✅
 
 ## Next
 

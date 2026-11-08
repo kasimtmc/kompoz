@@ -465,6 +465,26 @@ InfiniteState<Color> InfiniteTransition::animateColor(A&&... args) const {
                         AnimationSpec(P::arg<n::AnimationSpec>(args...)));
 }
 
+// ---- Gestures, as Compose names their arguments ----
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::draggable(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::State, n::Orientation, n::Enabled, n::InteractionSource>;
+    static_assert(P::check<A...>());
+    return draggable(P::arg<n::State>(args...), P::arg<n::Orientation>(args...), P::get<n::Enabled>(true, args...),
+                     P::get<n::InteractionSource>(std::optional<MutableInteractionSource>(), args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::dragAndDropTarget(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::ShouldStartDragAndDrop, n::Target>;
+    static_assert(P::check<A...>());
+    return dragAndDropTarget(std::function<bool(const DragAndDropEvent&)>(P::arg<n::ShouldStartDragAndDrop>(args...)),
+                             DragAndDropTarget(P::arg<n::Target>(args...)));
+}
+
 // ---- Shared elements, as Compose names their arguments ----
 template <class... A>
     requires(detail::anyNamedArgument<A...>)

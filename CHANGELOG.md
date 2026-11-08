@@ -879,6 +879,12 @@
   is Compose's `Color(Long)`, AARRGGBB (`Color::argb`): it was the packed 64-bit constructor, so the pages' colors were wrong.
   A `by` delegate reads a state's value, else the value itself (`val color by transition.animateColor { }`: a `Color`, not
   its packed `value()`).
+- **Gestures as Compose writes them**: `pointerInput(Unit) { detectTapGestures(onTap = { }, onDoubleTap = { }, onLongPress = { }) }`,
+  `detectDragGestures(onDragStart = { }, onDrag = { change, amount -> })` and the other detectors with their handlers by
+  name, in the block with its `PointerInputScope`; `draggable(orientation = …, state = rememberDraggableState { delta -> })`;
+  Compose's `DraggableAnchors { DragValue.Start at 0f; DragValue.End at 120f }` builder for `updateAnchors`
+  (`draggableAnchors([](auto& a) { a.at(…, 0); })` in C++, taking the state's value type); `dragAndDropSource { … }`
+  giving its data, `dragAndDropTarget(shouldStartDragAndDrop = { }, target = DragAndDropTarget(onDrop = { }))`.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

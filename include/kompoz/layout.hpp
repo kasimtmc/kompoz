@@ -2030,6 +2030,10 @@ public:
     // Drags along one axis report their delta to the state (rememberDraggableState, gestures.hpp).
     Modifier draggable(const DraggableState& state, Orientation orientation, bool enabled = true,
                        std::optional<MutableInteractionSource> interactionSource = {}) const;
+    // Compose's draggable(state = …, orientation = …, enabled = …, interactionSource = …) by name (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier draggable(A&&... args) const;
     // Drags in any direction (past the touch slop, or at once) go to the state as offsets
     // (Compose's Modifier.draggable2D); the drag is consumed, so scrolling around it leaves it.
     Modifier draggable2D(const Draggable2DState& state) const;
@@ -2303,6 +2307,10 @@ public:
     // Takes drops (Compose's dragAndDropTarget): shouldStartDragAndDrop says, as a drag starts,
     // whether this one takes part (by its MIME types, say); then `target` hears of it.
     Modifier dragAndDropTarget(std::function<bool(const DragAndDropEvent&)> shouldStartDragAndDrop, DragAndDropTarget target) const;
+    // Compose's dragAndDropTarget(shouldStartDragAndDrop = { }, target = …) by name (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier dragAndDropTarget(A&&... args) const;
     // From the android/snippets RecomposeHighlighter: a border that shows how often the
     // composable emitting this node ran (blue once, green twice, then yellow to red, thicker).
     Modifier recomposeHighlighter() const;

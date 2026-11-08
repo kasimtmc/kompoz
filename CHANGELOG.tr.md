@@ -920,6 +920,12 @@
   `Color(Long)`'u, AARRGGBB (`Color::argb`): paketlenmiş 64 bitlik kurucuya gidiyordu, sayfaların renkleri yanlıştı. Bir `by`
   temsilcisi bir durumun değerini, yoksa değerin kendisini okuyor (`val color by transition.animateColor { }`: bir `Color`,
   paketlenmiş `value()`'su değil).
+- **Compose'un yazdığı gibi hareketler**: `pointerInput(Unit) { detectTapGestures(onTap = { }, onDoubleTap = { }, onLongPress = { }) }`,
+  `detectDragGestures(onDragStart = { }, onDrag = { change, amount -> })` ve öteki algılayıcılar işleyicileri adla, blokta
+  `PointerInputScope`'uyla; `draggable(orientation = …, state = rememberDraggableState { delta -> })`; `updateAnchors` için
+  Compose'un `DraggableAnchors { DragValue.Start at 0f; DragValue.End at 120f }` kurucusu (C++'ta durumun değer türünü alan
+  `draggableAnchors([](auto& a) { a.at(…, 0); })`); verisini veren `dragAndDropSource { … }`,
+  `dragAndDropTarget(shouldStartDragAndDrop = { }, target = DragAndDropTarget(onDrop = { }))`.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

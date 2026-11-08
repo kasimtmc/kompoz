@@ -7735,6 +7735,30 @@ TEST(animations_take_compose_named_arguments) {
     CHECK(EnterTransition::None.togetherWith(ExitTransition::None).enter.parts.spec.has_value());
 }
 
+TEST(gestures_take_compose_named_arguments) {
+    // draggable(orientation =, state =), dragAndDropTarget(shouldStartDragAndDrop =, target =), and Compose's
+    // DraggableAnchors { } builder: draggableAnchors(…) becomes the state's anchors of its own value type.
+    auto x = mutableStateOf(0.f);
+    auto dropped = std::make_shared<std::string>();
+    ComposeTestRule rule([&] {
+        auto drag = rememberDraggableState([x](float delta) { x.set(x.get() + delta); });
+        Box(Modifier().size(56).testTag("tutamaç").draggable(arg::orientation = Orientation::Horizontal, arg::state = drag));
+        Box(Modifier().size(100).testTag("hedef").dragAndDropTarget(arg::shouldStartDragAndDrop = [](const DragAndDropEvent& e) { return e.hasMimeType("text/plain"); },
+                                                                     arg::target = DragAndDropTarget{.onDrop = [dropped](const DragAndDropEvent& e) {
+                                                                         *dropped = e.text();
+                                                                         return true;
+                                                                     }}));
+    });
+    rule.swipe({10, 28}, {40, 28});
+    CHECK(x.get() > 20);
+    CHECK(rule.onNodeWithTag("hedef").exists() && dropped->empty());
+    DraggableAnchors<int> anchors = draggableAnchors([](auto& a) {
+        a.at(1, 0);
+        a.at(2, 120);
+    });
+    CHECK(anchors.positionOf(2) == 120 && anchors.size() == 2);
+}
+
 TEST(draw_scope_strokes_sit_on_the_outline) {
     // As Compose's: half of the stroke each side of the rect or circle.
     ComposeTestRule rule([] {

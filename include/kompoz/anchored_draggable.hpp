@@ -93,6 +93,23 @@ private:
     std::vector<std::pair<T, float>> entries_;
 };
 
+// Compose's DraggableAnchors { DragValue.Start at 0f; DragValue.End at 120f }: a builder whose anchors
+// are given to a state of whatever value type (updateAnchors(draggableAnchors([](auto& a) { a.at(…, 0); }))).
+template <class F>
+struct DraggableAnchorsBuilder {
+    F build;
+    template <class T>
+    operator DraggableAnchors<T>() const {
+        DraggableAnchors<T> anchors;
+        build(anchors);
+        return anchors;
+    }
+};
+template <class F>
+DraggableAnchorsBuilder<std::decay_t<F>> draggableAnchors(F&& build) {
+    return {std::forward<F>(build)};
+}
+
 template <class T>
 struct AnchoredDraggableOptions {
     // How far (dp) a release must be past the anchor it came from to go on to the next, given
