@@ -4,21 +4,22 @@
 
 ## Bir NavHost
 
-```cpp
-void App() {
-    auto nav = rememberNavController();
-    NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-        graph.composable("home", [nav](const NavBackStackEntry&) {
-            Button([nav] { nav.navigate("detail/42"); }) { Text("Open item 42"); };
-        });
-        graph.composable("detail/{id}", [nav](const NavBackStackEntry& entry) {
-            int id = entry.arguments().getInt("id").value_or(0);
-            Column() {
-                Text("Item " + std::to_string(id));
-                TextButton([nav] { nav.popBackStack(); }) { Text("Back"); };
-            };
-        });
-    });
+```kotlin
+@Composable
+fun App() {
+    val nav = rememberNavController()
+    NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
+        composable("home") {
+            Button(onClick = { nav.navigate("detail/42") }) { Text("Open item 42") }
+        }
+        composable("detail/{id}") { backStackEntry ->
+            val id = backStackEntry.arguments?.getInt("id") ?: 0
+            Column {
+                Text("Item $id")
+                TextButton(onClick = { nav.popBackStack() }) { Text("Back") }
+            }
+        }
+    }
 }
 ```
 
@@ -35,34 +36,31 @@ Bir rota, `{name}` parçaları ve isteğe bağlı sorgu parametreleri olan bir y
 
 ### Tür güvenli rotalar
 
-Compose'un `@Serializable` rotaları gibi, bir struct da rota olabilir. Zorunlu alanları yol parçaları, `std::optional` alanları sorgu parametreleridir:
+Compose'daki gibi, `@Serializable` bir data class (ya da object) bir rotadır. Zorunlu alanları yol parçaları, null olabilen alanları sorgu parametreleridir:
 
-```cpp
-struct Profile {
-    std::string id;
-    std::optional<int> tab;
-    KOMPOZ_ROUTE(Profile, id, tab)   // "Profile/{id}?tab={tab}" rotası
-};
+```kotlin
+@Serializable
+data class Profile(val id: String, val tab: Int? = null)   // "Profile/{id}?tab={tab}" rotası
 
-struct Home {
-    KOMPOZ_ROUTE(Home)
-};
+@Serializable
+object Home
 
-void TypedApp() {
-    auto nav = rememberNavController();
-    NavHost(nav, Home{}, Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-        graph.composable<Home>([nav](const NavBackStackEntry&) {
-            Button([nav] { nav.navigate(Profile{.id = "ada"}); }) { Text("Ada's profile"); };
-        });
-        graph.composable<Profile>([](const NavBackStackEntry& e) {
-            Profile p = e.toRoute<Profile>();
-            Text("Profile of " + p.id + ", tab " + std::to_string(p.tab.value_or(0)));
-        });
-    });
+@Composable
+fun TypedApp() {
+    val nav = rememberNavController()
+    NavHost(navController = nav, startDestination = Home, modifier = Modifier.fillMaxSize()) {
+        composable<Home> {
+            Button(onClick = { nav.navigate(Profile(id = "ada")) }) { Text("Ada's profile") }
+        }
+        composable<Profile> { backStackEntry ->
+            val profile = backStackEntry.toRoute<Profile>()
+            Text("Profile of ${profile.id}, tab ${profile.tab ?: 0}")
+        }
+    }
 }
 ```
 
-Alanlar string, sayı, bool, enum ve bunların `std::optional`'ları olabilir. `nav.getBackStackEntry<T>()`, `nav.popBackStack<T>(inclusive)` ve `entry.hasRoute<T>()` de türlerle çalışır.
+Alanlar string, sayı, bool, enum ve bunların null olabilenleri olabilir. `nav.getBackStackEntry<T>()`, `nav.popBackStack<T>(inclusive)` ve `entry.hasRoute<T>()` de türlerle çalışır.
 
 ## Gezinme seçenekleri
 
@@ -78,31 +76,38 @@ Alanlar string, sayı, bool, enum ve bunların `std::optional`'ları olabilir. `
 
 Her sekmenin yığınını ve kaydırma konumunu koruyarak sekmeler arasında geçiş yapan alışılmış alt gezinme deseni:
 
-```cpp body
-#! NavController nav;
-#! std::string tab;
-nav.navigate(tab, {.popUpTo = "home", .saveState = true, .launchSingleTop = true, .restoreState = true});
+```kotlin body
+#! val nav = rememberNavController()
+#! val tab = "search"
+nav.navigate(tab) {
+    popUpTo("home") { saveState = true }
+    launchSingleTop = true
+    restoreState = true
+}
 ```
 
 Bir giriş akışından sonra onu yığından temizleyin:
 
-```cpp body
-#! NavController nav;
-nav.navigate("home", {.popUpTo = "login", .inclusive = true});
+```kotlin body
+#! val nav = rememberNavController()
+nav.navigate("home") { popUpTo("login") { inclusive = true } }
 ```
 
 ## Güncel hedef
 
 `nav.currentBackStackEntryAsState()` en üstteki girdiyi döndürür ve o değiştiğinde yeniden kompoze eder: bir gezinme çubuğunun seçili öğesini vurgulamak için kullanın.
 
-```cpp
-void BottomBar(NavController nav) {
-    auto entry = nav.currentBackStackEntryAsState();
-    std::string route = entry ? entry->route() : "";
-    NavigationBar(Modifier()) {
-        NavigationBarItem(route == "home", [nav] { nav.navigate("home", {.launchSingleTop = true}); }, Icons::Filled::Home, "Home");
-        NavigationBarItem(route == "search", [nav] { nav.navigate("search", {.launchSingleTop = true}); }, Icons::Filled::Search, "Search");
-    };
+```kotlin
+@Composable
+fun BottomBar(nav: NavController) {
+    val entry by nav.currentBackStackEntryAsState()
+    val route = entry?.destination?.route
+    NavigationBar {
+        NavigationBarItem(selected = route == "home", onClick = { nav.navigate("home") { launchSingleTop = true } },
+                          icon = { Icon(Icons.Filled.Home, contentDescription = null) }, label = { Text("Home") })
+        NavigationBarItem(selected = route == "search", onClick = { nav.navigate("search") { launchSingleTop = true } },
+                          icon = { Icon(Icons.Filled.Search, contentDescription = null) }, label = { Text("Search") })
+    }
 }
 ```
 
@@ -114,24 +119,27 @@ Her girdi, geri yığınında durduğu sürece kaydırma konumları dahil `remem
 
 Birbirine ait ekranlar, örneğin bir oturum açma akışı, kendi rotası olan iç içe bir grafiğe konur. Grafiğin rotasına gezinmek onun başlangıç hedefini açar:
 
-```cpp
-#! class LoginViewModel : public ViewModel { public: MutableStateFlow<std::string> user{std::string()}; };
-void Graphs(NavController nav) {
-    NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-        graph.composable("home", [nav](const NavBackStackEntry&) {
-            Button([nav] { nav.navigate("login"); }) { Text("Sign in"); };
-        });
-        graph.navigation("username", "login", [&](NavGraphBuilder& login) {
-            login.composable("username", [nav](const NavBackStackEntry& e) {
-                auto form = viewModel<LoginViewModel>(*e.parent());   // grafiğin ekranlarınca paylaşılır
-                Button([nav] { nav.navigate("password"); }) { Text("Next"); };
-            });
-            login.composable("password", [nav](const NavBackStackEntry& e) {
-                auto form = viewModel<LoginViewModel>(*e.parent());   // aynısı
-                Button([nav] { nav.navigate("home", {.popUpTo = "login", .inclusive = true}); }) { Text("Done"); };
-            });
-        });
-    });
+```kotlin
+#! class LoginViewModel : ViewModel() { val user = MutableStateFlow("") }
+@Composable
+fun Graphs(nav: NavController) {
+    NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
+        composable("home") {
+            Button(onClick = { nav.navigate("login") }) { Text("Sign in") }
+        }
+        navigation(startDestination = "username", route = "login") {
+            composable("username") { entry ->
+                val form = viewModel<LoginViewModel>(entry.parent!!)   // grafiğin ekranlarınca paylaşılır
+                val user by form.user.collectAsState()
+                Button(onClick = { nav.navigate("password") }) { Text("Next, $user") }
+            }
+            composable("password") { entry ->
+                val form = viewModel<LoginViewModel>(entry.parent!!)   // aynısı
+                val user by form.user.collectAsState()
+                Button(onClick = { nav.navigate("home") { popUpTo("login") { inclusive = true } } }) { Text("Done, $user") }
+            }
+        }
+    }
 }
 ```
 
@@ -141,14 +149,14 @@ Grafiğin geri yığınında, ekranlarının altında kendine ait bir girdisi va
 
 Bir hedef URI'lara yanıt verebilir. Uygulama bir bağlantıyla açıldığında `NavHost` o hedefe gider; başlangıç hedefini ve yol üzerindeki grafiklerin ekranlarını onun altına koyar ki geri tuşu yukarı götürsün:
 
-```cpp body
-#! NavController nav;
-NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-    graph.composable("home", [](const NavBackStackEntry&) { Text("Home"); });
-    graph.composable("item/{n}", {navDeepLink("kompoz://item/{n}")}, [](const NavBackStackEntry& e) {
-        Text("Item " + std::to_string(e.arguments().getInt("n").value_or(0)));
-    });
-});
+```kotlin body
+#! val nav = rememberNavController()
+NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
+    composable("home") { Text("Home") }
+    composable("item/{n}", deepLinks = listOf(navDeepLink { uriPattern = "kompoz://item/{n}" })) { e ->
+        Text("Item ${e.arguments?.getInt("n") ?: 0}")
+    }
+}
 ```
 
 Bağlantıların geldiği yerler:
@@ -163,12 +171,13 @@ Uygulamanın içinden `nav.navigate("kompoz://item/42")` bir bağlantıyı yığ
 
 `NavHostOptions`, hedefler arasındaki animasyonu bir `AnimatedContent` dönüşümü olarak belirler: biri ileri gezinmek, biri geri gitmek için:
 
-```cpp body
-#! NavController nav;
-NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-    graph.composable("home", [](const NavBackStackEntry&) { Text("Home"); });
-}, {.transition = togetherWith(slideInHorizontally(1), slideOutHorizontally(-0.3f)),
-    .popTransition = togetherWith(slideInHorizontally(-0.3f), slideOutHorizontally(1))});
+```kotlin body
+#! val nav = rememberNavController()
+NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize(),
+        enterTransition = { slideInHorizontally { it } }, exitTransition = { slideOutHorizontally { -it / 3 } },
+        popEnterTransition = { slideInHorizontally { -it / 3 } }, popExitTransition = { slideOutHorizontally { it } }) {
+    composable("home") { Text("Home") }
+}
 ```
 
 Varsayılan, bir çapraz geçiştir (cross-fade).
@@ -177,12 +186,13 @@ Varsayılan, bir çapraz geçiştir (cross-fade).
 
 `BackHandler(enabled, onBack)`, `enabled` olduğu sürece geri butonunu, hareketini ya da Escape'i üstlenir; en son kompoze edilen etkin olan kazanır. Ekrandan önce kapanması gereken şeyler için kullanın, örneğin bir seçim modu:
 
-```cpp
-void Selectable() {
-    auto selecting = remember([] { return mutableStateOf(false); });
-    BackHandler(selecting.get(), [selecting] { selecting.set(false); });
-    Text(selecting.get() ? "Selecting (back to stop)" : "Long press to select",
-         Modifier().combinedClickable([] {}, [selecting] { selecting.set(true); }));
+```kotlin
+@Composable
+fun Selectable() {
+    var selecting by remember { mutableStateOf(false) }
+    BackHandler(enabled = selecting) { selecting = false }
+    Text(if (selecting) "Selecting (back to stop)" else "Long press to select",
+         modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { selecting = true }))
 }
 ```
 

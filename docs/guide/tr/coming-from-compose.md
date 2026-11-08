@@ -152,7 +152,7 @@ Lambdalar, Kotlin'inkiler gibi değerleri kopyalayarak yakalar: bir blok daha so
 
 ## Henüz yok
 
-kompozc, bir composable'ın gerek duyduğu Kotlin'i okur. Henüz okumadıkları onun yanında C++ ile yazılır: data class dışındaki sınıflar, `object`, `sealed` sınıflar ve `is`, eklenti işlevleri, etiketler (`return@forEach`) ve `@Composable` olmayan işlevler. Editörünüzün C++ araçları (clangd) da bir `.cpp` dosyasındaki Kotlin'i okumaz; derlemenin iletileri ise onun satırlarını gösterir.
+kompozc, bir composable'ın gerek duyduğu Kotlin'i okur: composable'lar, düz ve eklenti işlevleri, üst düzey `val`'ler, data class'lar, enum class'lar, sınıflar (bir ViewModel, bir depo), `@Serializable` rotalar ve object'ler. Henüz okumadıkları onun yanında C++ ile yazılır: `sealed` sınıflar ve `is`, arayüzler ve üyeli `object`'ler, `suspend fun`, bir sınıfın `by` özellikleri, etiketler (`return@forEach`). Editörünüzün C++ araçları (clangd) da bir `.cpp` dosyasındaki Kotlin'i okumaz; derlemenin iletileri ise onun satırlarını gösterir.
 
 kompozc olmadan Kompoz'un composable'ları C++ ile yazılır: [C++ ile yazmak](cpp.md), Kotlin'in her yapısının orada nasıl okunduğunu gösterir.
 

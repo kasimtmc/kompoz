@@ -4,21 +4,22 @@ Moving between screens with a back stack, as `androidx.navigation.compose` does:
 
 ## A NavHost
 
-```cpp
-void App() {
-    auto nav = rememberNavController();
-    NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-        graph.composable("home", [nav](const NavBackStackEntry&) {
-            Button([nav] { nav.navigate("detail/42"); }) { Text("Open item 42"); };
-        });
-        graph.composable("detail/{id}", [nav](const NavBackStackEntry& entry) {
-            int id = entry.arguments().getInt("id").value_or(0);
-            Column() {
-                Text("Item " + std::to_string(id));
-                TextButton([nav] { nav.popBackStack(); }) { Text("Back"); };
-            };
-        });
-    });
+```kotlin
+@Composable
+fun App() {
+    val nav = rememberNavController()
+    NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
+        composable("home") {
+            Button(onClick = { nav.navigate("detail/42") }) { Text("Open item 42") }
+        }
+        composable("detail/{id}") { backStackEntry ->
+            val id = backStackEntry.arguments?.getInt("id") ?: 0
+            Column {
+                Text("Item $id")
+                TextButton(onClick = { nav.popBackStack() }) { Text("Back") }
+            }
+        }
+    }
 }
 ```
 
@@ -35,34 +36,31 @@ A route is a path with `{name}` parts, and optional query parameters: `"detail/{
 
 ### Type-safe routes
 
-As Compose's `@Serializable` routes, a struct can be a route. Its required fields are path segments, its `std::optional` fields query parameters:
+As Compose's, a `@Serializable` data class (or object) is a route. Its required fields are path segments, its nullable fields query parameters:
 
-```cpp
-struct Profile {
-    std::string id;
-    std::optional<int> tab;
-    KOMPOZ_ROUTE(Profile, id, tab)   // the route "Profile/{id}?tab={tab}"
-};
+```kotlin
+@Serializable
+data class Profile(val id: String, val tab: Int? = null)   // the route "Profile/{id}?tab={tab}"
 
-struct Home {
-    KOMPOZ_ROUTE(Home)
-};
+@Serializable
+object Home
 
-void TypedApp() {
-    auto nav = rememberNavController();
-    NavHost(nav, Home{}, Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-        graph.composable<Home>([nav](const NavBackStackEntry&) {
-            Button([nav] { nav.navigate(Profile{.id = "ada"}); }) { Text("Ada's profile"); };
-        });
-        graph.composable<Profile>([](const NavBackStackEntry& e) {
-            Profile p = e.toRoute<Profile>();
-            Text("Profile of " + p.id + ", tab " + std::to_string(p.tab.value_or(0)));
-        });
-    });
+@Composable
+fun TypedApp() {
+    val nav = rememberNavController()
+    NavHost(navController = nav, startDestination = Home, modifier = Modifier.fillMaxSize()) {
+        composable<Home> {
+            Button(onClick = { nav.navigate(Profile(id = "ada")) }) { Text("Ada's profile") }
+        }
+        composable<Profile> { backStackEntry ->
+            val profile = backStackEntry.toRoute<Profile>()
+            Text("Profile of ${profile.id}, tab ${profile.tab ?: 0}")
+        }
+    }
 }
 ```
 
-Fields can be strings, numbers, bools, enums and `std::optional`s of them. `nav.getBackStackEntry<T>()`, `nav.popBackStack<T>(inclusive)` and `entry.hasRoute<T>()` work with types too.
+Fields can be strings, numbers, bools, enums and nullable ones of them. `nav.getBackStackEntry<T>()`, `nav.popBackStack<T>(inclusive)` and `entry.hasRoute<T>()` work with types too.
 
 ## Navigation options
 
@@ -78,31 +76,38 @@ Fields can be strings, numbers, bools, enums and `std::optional`s of them. `nav.
 
 The usual bottom-navigation pattern, switching between tabs while keeping each tab's stack and scroll position:
 
-```cpp body
-#! NavController nav;
-#! std::string tab;
-nav.navigate(tab, {.popUpTo = "home", .saveState = true, .launchSingleTop = true, .restoreState = true});
+```kotlin body
+#! val nav = rememberNavController()
+#! val tab = "search"
+nav.navigate(tab) {
+    popUpTo("home") { saveState = true }
+    launchSingleTop = true
+    restoreState = true
+}
 ```
 
 After a login flow, clear it from the stack:
 
-```cpp body
-#! NavController nav;
-nav.navigate("home", {.popUpTo = "login", .inclusive = true});
+```kotlin body
+#! val nav = rememberNavController()
+nav.navigate("home") { popUpTo("login") { inclusive = true } }
 ```
 
 ## The current destination
 
 `nav.currentBackStackEntryAsState()` returns the top entry and recomposes when it changes: use it to highlight the selected item of a navigation bar.
 
-```cpp
-void BottomBar(NavController nav) {
-    auto entry = nav.currentBackStackEntryAsState();
-    std::string route = entry ? entry->route() : "";
-    NavigationBar(Modifier()) {
-        NavigationBarItem(route == "home", [nav] { nav.navigate("home", {.launchSingleTop = true}); }, Icons::Filled::Home, "Home");
-        NavigationBarItem(route == "search", [nav] { nav.navigate("search", {.launchSingleTop = true}); }, Icons::Filled::Search, "Search");
-    };
+```kotlin
+@Composable
+fun BottomBar(nav: NavController) {
+    val entry by nav.currentBackStackEntryAsState()
+    val route = entry?.destination?.route
+    NavigationBar {
+        NavigationBarItem(selected = route == "home", onClick = { nav.navigate("home") { launchSingleTop = true } },
+                          icon = { Icon(Icons.Filled.Home, contentDescription = null) }, label = { Text("Home") })
+        NavigationBarItem(selected = route == "search", onClick = { nav.navigate("search") { launchSingleTop = true } },
+                          icon = { Icon(Icons.Filled.Search, contentDescription = null) }, label = { Text("Search") })
+    }
 }
 ```
 
@@ -114,24 +119,27 @@ Each entry keeps its `rememberSaveable` state, scroll positions included, while 
 
 Screens that belong together, such as a sign-in flow, go in a nested graph with a route of its own. Navigating to the graph's route opens its start destination:
 
-```cpp
-#! class LoginViewModel : public ViewModel { public: MutableStateFlow<std::string> user{std::string()}; };
-void Graphs(NavController nav) {
-    NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-        graph.composable("home", [nav](const NavBackStackEntry&) {
-            Button([nav] { nav.navigate("login"); }) { Text("Sign in"); };
-        });
-        graph.navigation("username", "login", [&](NavGraphBuilder& login) {
-            login.composable("username", [nav](const NavBackStackEntry& e) {
-                auto form = viewModel<LoginViewModel>(*e.parent());   // shared by the graph's screens
-                Button([nav] { nav.navigate("password"); }) { Text("Next"); };
-            });
-            login.composable("password", [nav](const NavBackStackEntry& e) {
-                auto form = viewModel<LoginViewModel>(*e.parent());   // the same one
-                Button([nav] { nav.navigate("home", {.popUpTo = "login", .inclusive = true}); }) { Text("Done"); };
-            });
-        });
-    });
+```kotlin
+#! class LoginViewModel : ViewModel() { val user = MutableStateFlow("") }
+@Composable
+fun Graphs(nav: NavController) {
+    NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
+        composable("home") {
+            Button(onClick = { nav.navigate("login") }) { Text("Sign in") }
+        }
+        navigation(startDestination = "username", route = "login") {
+            composable("username") { entry ->
+                val form = viewModel<LoginViewModel>(entry.parent!!)   // shared by the graph's screens
+                val user by form.user.collectAsState()
+                Button(onClick = { nav.navigate("password") }) { Text("Next, $user") }
+            }
+            composable("password") { entry ->
+                val form = viewModel<LoginViewModel>(entry.parent!!)   // the same one
+                val user by form.user.collectAsState()
+                Button(onClick = { nav.navigate("home") { popUpTo("login") { inclusive = true } } }) { Text("Done, $user") }
+            }
+        }
+    }
 }
 ```
 
@@ -141,14 +149,14 @@ The graph has an entry of its own on the back stack, below its screens, so its `
 
 A destination can answer URIs. When the app is opened with a link, the `NavHost` goes to that destination, with the start destination and the screens of the graphs on the way below it, so that back leads up:
 
-```cpp body
-#! NavController nav;
-NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-    graph.composable("home", [](const NavBackStackEntry&) { Text("Home"); });
-    graph.composable("item/{n}", {navDeepLink("kompoz://item/{n}")}, [](const NavBackStackEntry& e) {
-        Text("Item " + std::to_string(e.arguments().getInt("n").value_or(0)));
-    });
-});
+```kotlin body
+#! val nav = rememberNavController()
+NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
+    composable("home") { Text("Home") }
+    composable("item/{n}", deepLinks = listOf(navDeepLink { uriPattern = "kompoz://item/{n}" })) { e ->
+        Text("Item ${e.arguments?.getInt("n") ?: 0}")
+    }
+}
 ```
 
 Where links come from:
@@ -163,12 +171,13 @@ From inside the app, `nav.navigate("kompoz://item/42")` follows a link onto the 
 
 `NavHostOptions` sets the animation between destinations, as an `AnimatedContent` transform, one for navigating forward and one for going back:
 
-```cpp body
-#! NavController nav;
-NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-    graph.composable("home", [](const NavBackStackEntry&) { Text("Home"); });
-}, {.transition = togetherWith(slideInHorizontally(1), slideOutHorizontally(-0.3f)),
-    .popTransition = togetherWith(slideInHorizontally(-0.3f), slideOutHorizontally(1))});
+```kotlin body
+#! val nav = rememberNavController()
+NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize(),
+        enterTransition = { slideInHorizontally { it } }, exitTransition = { slideOutHorizontally { -it / 3 } },
+        popEnterTransition = { slideInHorizontally { -it / 3 } }, popExitTransition = { slideOutHorizontally { it } }) {
+    composable("home") { Text("Home") }
+}
 ```
 
 The default is a cross-fade.
@@ -177,12 +186,13 @@ The default is a cross-fade.
 
 `BackHandler(enabled, onBack)` takes the back button, gesture or Escape while `enabled`; the most recently composed enabled one wins. Use it for things that should close before the screen does, such as a selection mode:
 
-```cpp
-void Selectable() {
-    auto selecting = remember([] { return mutableStateOf(false); });
-    BackHandler(selecting.get(), [selecting] { selecting.set(false); });
-    Text(selecting.get() ? "Selecting (back to stop)" : "Long press to select",
-         Modifier().combinedClickable([] {}, [selecting] { selecting.set(true); }));
+```kotlin
+@Composable
+fun Selectable() {
+    var selecting by remember { mutableStateOf(false) }
+    BackHandler(enabled = selecting) { selecting = false }
+    Text(if (selecting) "Selecting (back to stop)" else "Long press to select",
+         modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { selecting = true }))
 }
 ```
 
