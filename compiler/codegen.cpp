@@ -45,6 +45,7 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked",
     "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "shader", "compositionLocalOf",
     "slideInVertically", "slideInHorizontally", "slideOutVertically", "slideOutHorizontally", "animateFloat", "animateDp", "animateColor",
+    "dragAndDropSource",
     "staticCompositionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent", "mediaQuery",
     "derivedMediaQuery", "SubcomposeLayout", "rememberPagerState", "rememberCarouselState"};
 
@@ -93,7 +94,7 @@ const std::map<std::string, std::string, std::less<>> kComposableProperties = {
 
 // Named arguments whose lambda gives a value: items(list, key = { it.id }, contentType = { … }).
 const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType", "selector", "comparator", "span", "pageCount",
-                                                            "itemCount", "progress", "transitionSpec", "contentKey",
+                                                            "itemCount", "progress", "transitionSpec", "contentKey", "shouldStartDragAndDrop",
                                                             "initialOffsetX", "initialOffsetY", "targetOffsetX", "targetOffsetY"};
 
 // Kotlin's standard functions, from kotlin.hpp: listOf(1, 2) -> kt::listOf(1, 2).
@@ -131,6 +132,8 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"GenericShape", "Path"},                {"blur", "BlurScope"},
     {"AnimatedVisibility", "const AnimatedVisibilityScope"}, {"AnimatedContent", "const AnimatedContentScope"},
     {"SharedTransitionLayout", "const SharedTransitionScope"},
+    {"pointerInput", "PointerInputScope"},   {"awaitEachGesture", "PointerInputScope"},
+    {"DraggableAnchors", "auto DraggableAnchors"},  // (the builder's anchors: DragValue.Start at 0f)
     // (an ImageVector's builder: group(…) { path(…) { moveTo(…) } })
     {"group", "ImageVector::Builder"},       {"path", "PathBuilder"},
     {"HorizontalMultiBrowseCarousel", "const CarouselItemScope"}, {"HorizontalUncontainedCarousel", "const CarouselItemScope"},
@@ -139,7 +142,10 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
 // Calls whose arguments by name are the fields of one C++ struct they take (Compose's parameters are
 // its fields): addPath(pathData = …, fill = …) is addPath(VectorPath{.pathData = …, .fill = …}).
 const std::map<std::string, std::string, std::less<>> kStructParameters = {
-    {"addPath", "VectorPath"}, {"path", "VectorPath"}, {"Path", "VectorPath"}, {"group", "VectorGroup"}};
+    {"addPath", "VectorPath"}, {"path", "VectorPath"}, {"Path", "VectorPath"}, {"group", "VectorGroup"},
+    {"detectTapGestures", "TapGestureHandlers"}, {"detectDragGestures", "DragGestureHandlers"},
+    {"detectDragGesturesAfterLongPress", "DragGestureHandlers"}, {"detectHorizontalDragGestures", "AxisDragGestureHandlers"},
+    {"detectVerticalDragGestures", "AxisDragGestureHandlers"}};
 
 // Kotlin's inline functions: their lambda runs before they return, so it reaches the locals around
 // it by reference ([&]), and `x += 1` in forEach { } changes the x outside, as in Kotlin.
@@ -161,7 +167,13 @@ const std::map<std::string, std::string, std::less<>> kReceiverArguments = {
     {"animateColor.transitionSpec", "auto TransitionSegment"}};
 
 // Calls whose lambda is a coroutine (Kotlin's suspend lambdas): [=]() -> Task { ...; co_return; }.
-const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "produceState"};
+const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "produceState", "pointerInput", "awaitEachGesture"};
+
+// Functions of a PointerInputScope's (Compose's extensions on it), called in pointerInput { } with the
+// scope first here: detectTapGestures(onTap = { }) is detectTapGestures(scope, TapGestureHandlers{…}).
+const std::set<std::string, std::less<>> kScopeFunctions = {"detectTapGestures", "detectDragGestures", "detectDragGesturesAfterLongPress",
+                                                            "detectHorizontalDragGestures", "detectVerticalDragGestures",
+                                                            "detectTransformGestures", "awaitEachGesture"};
 
 
 const std::set<std::string, std::less<>> kCppKeywords = {
@@ -838,6 +850,16 @@ private:
                 out_.text("(*kompoz_this_" + std::to_string(r) + ")." + cppName(callee.text));
                 return arguments(c, calleeName, false);
             }
+            if (kScopeFunctions.contains(callee.text) && !receivers_.empty()) {  // the scope first (the PointerInputScope around it)
+                size_t r = receivers_.size();
+                while (r > 1 && receivers_[r - 1] != "PointerInputScope") --r;
+                out_.text(callee.text + "((*kompoz_this_" + std::to_string(r) + ")");
+                return arguments(c, calleeName, false, true);
+            }
+            if (callee.text == "DraggableAnchors" && c.lambda && c.kids.size() == 1) {  // Compose's builder: DraggableAnchors { A at 0f }
+                out_.text("::kompoz::draggableAnchors");
+                return arguments(c, calleeName, false);
+            }
         }
         // A @Composable kompozc translates: arguments by position, defaults filled in.
         if (callee.kind == Node::Name && !lookup(callee.text)) {
@@ -922,8 +944,8 @@ private:
         bool any = after;
         auto sp = kStructParameters.find(calleeName);
         const std::vector<std::string>* fields =
-            sp != kStructParameters.end() && module_.structs && !positional && !after && named(c) ? module_.structs->find(sp->second) : nullptr;
-        if (fields && structCall(c, "::kompoz::" + sp->second, *fields)) {
+            sp != kStructParameters.end() && module_.structs && !positional && named(c) ? module_.structs->find(sp->second) : nullptr;
+        if (fields && structCall(c, "::kompoz::" + sp->second, *fields, any ? ", " : "")) {
             any = true;
         } else {
             for (size_t i = 0; i < c.kids.size() - 1; ++i) {
@@ -991,7 +1013,7 @@ private:
 
     // DialogProperties(dismissOnClickOutside = false): a C++ struct's designated initializers, in
     // its fields' order. False (nothing written) if a name isn't one of its fields.
-    bool structCall(const Node& c, const std::string& name, const std::vector<std::string>& fields) {
+    bool structCall(const Node& c, const std::string& name, const std::vector<std::string>& fields, const std::string& prefix = {}) {
         std::vector<const Node*> given(fields.size(), nullptr);
         size_t next = 0;
         for (size_t i = 0; i + 1 < c.kids.size(); ++i) {
@@ -1006,13 +1028,15 @@ private:
             if (at >= fields.size() || given[at]) return false;
             given[at] = c.kids[i + 1].get();
         }
-        out_.text(name + "{");
+        out_.text(prefix + name + "{");
         bool any = false;
         for (size_t f = 0; f < fields.size(); ++f) {
             if (!given[f]) continue;
             out_.text(std::string(any ? ", " : "") + "." + fields[f] + " = ");
             any = true;
-            expr(*given[f]);
+            // (a field's lambda returns its last expression: a std::function<bool(…)> wants it, a void one takes it)
+            if (given[f]->kind == Node::Lambda) lambda(*given[f], true);
+            else expr(*given[f]);
         }
         out_.text("}");
         return true;
@@ -1271,6 +1295,15 @@ private:
             expr(l);
             out_.text(" " + (op == "===" ? std::string("==") : op == "!==" ? std::string("!=") : op) + " ");
             expr(r);
+            return;
+        }
+        // An infix function of the receiver's, with both sides (DragValue.Start at 0f in DraggableAnchors { }).
+        if (size_t rcv = std::isalpha(static_cast<unsigned char>(op[0])) ? receiverOf(op) : 0) {
+            out_.text("(*kompoz_this_" + std::to_string(rcv) + ")." + cppName(op) + "(");
+            expr(l);
+            out_.text(", ");
+            expr(r);
+            out_.text(")");
             return;
         }
         // An infix function: a.name(b).

@@ -1087,6 +1087,50 @@ TEST(animation_as_compose_writes_it) {
     CHECK(InkBlue == Color::argb(0xFF1E88E5) && std::abs(InkBlue.blue() - 0xE5 / 255.f) < 0.01f);
 }
 
+// Gestures as Compose writes them: pointerInput { detectTapGestures(onTap = { }) }, the anchors builder with
+// its infix `at`, draggable and dragAndDropTarget by name, a drag's points in a state list.
+enum class DragValue { Start, End }
+
+@Composable
+fun Gestures(onEvent: (String) -> Unit) {
+    var x by remember { mutableStateOf(0f) }
+    val state = rememberAnchoredDraggableState(DragValue.Start)
+    state.updateAnchors(DraggableAnchors {
+        DragValue.Start at 0f
+        DragValue.End at 120f
+    })
+    val points = remember { mutableStateListOf<Offset>() }
+    Column {
+        Box(modifier = Modifier.size(56.dp).testTag("tutamaç")
+                .draggable(orientation = Orientation.Horizontal, state = rememberDraggableState { delta -> x = maxOf(0f, x + delta) }))
+        Box(modifier = Modifier.size(56.dp).anchoredDraggable(state, Orientation.Horizontal).testTag("geçiş"))
+        Box(modifier = Modifier.size(100.dp).testTag("dokun").pointerInput(Unit) {
+            detectTapGestures(onTap = { onEvent("tap") }, onLongPress = { onEvent("long") })
+        })
+        Box(modifier = Modifier.size(100.dp).testTag("çiz").pointerInput(Unit) {
+            detectDragGestures(onDragStart = { at -> points.clear(); points.add(at) }, onDrag = { change, _ -> points.add(change.position) })
+        })
+        Text("x ${x.roundToInt()} noktalar ${points.size} konum ${state.requireOffset().roundToInt()}")
+        Box(modifier = Modifier.size(40.dp).dragAndDropTarget(shouldStartDragAndDrop = { it.hasMimeType("text/plain") },
+                                                              target = DragAndDropTarget(onDrop = { e -> onEvent(e.text()); true })))
+    }
+}
+
+TEST(gestures_as_compose_writes_it) {
+    std::vector<std::string> log;
+    ComposeTestRule rule([&] { Gestures([&](std::string e) { log.push_back(std::move(e)); }); });
+    CHECK(rule.onNodeWithText("x 0 noktalar 0 konum 0").exists());
+    rule.swipe({10, 28}, {40, 28});
+    int x = std::stoi(rule.onNodeWithText("x ", true).text().substr(2));
+    CHECK(x > 20 && x <= 30);  // (30 dp dragged, less the touch slop)
+    Offset tap = rule.onNodeWithTag("dokun").bounds().center();
+    rule.host().pointerDown(tap);
+    rule.host().pointerUp(tap);
+    rule.waitForIdle();
+    rule.advanceTimeBy(400);  // (onTap waits for no double tap when there is no onDoubleTap: at once)
+    CHECK(!log.empty() && log.front() == "tap");
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

@@ -885,6 +885,9 @@
   Compose's `DraggableAnchors { DragValue.Start at 0f; DragValue.End at 120f }` builder for `updateAnchors`
   (`draggableAnchors([](auto& a) { a.at(…, 0); })` in C++, taking the state's value type); `dragAndDropSource { … }`
   giving its data, `dragAndDropTarget(shouldStartDragAndDrop = { }, target = DragAndDropTarget(onDrop = { }))`.
+- **kompozc: a scope's functions and infix functions**: in `pointerInput { }` (a coroutine on its `PointerInputScope`) the
+  detectors take the scope first and their handlers as a struct; `a at b` inside `DraggableAnchors { }` is the builder's
+  `at(a, b)`, as any infix function the receiver has; a struct's field given a lambda returns the lambda's last expression.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

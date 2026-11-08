@@ -926,6 +926,9 @@
   Compose'un `DraggableAnchors { DragValue.Start at 0f; DragValue.End at 120f }` kurucusu (C++'ta durumun değer türünü alan
   `draggableAnchors([](auto& a) { a.at(…, 0); })`); verisini veren `dragAndDropSource { … }`,
   `dragAndDropTarget(shouldStartDragAndDrop = { }, target = DragAndDropTarget(onDrop = { }))`.
+- **kompozc: bir kapsamın işlevleri ve infix işlevler**: `pointerInput { }` içinde (`PointerInputScope`'u üzerinde bir coroutine)
+  algılayıcılar kapsamı önce, işleyicilerini bir struct olarak alıyor; `DraggableAnchors { }` içindeki `a at b`, alıcının sahip
+  olduğu her infix işlev gibi, kurucunun `at(a, b)`'si; bir struct'ın lambda verilen alanı lambda'nın son ifadesini döndürüyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine
