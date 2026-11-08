@@ -10,22 +10,21 @@ Durum aşağı akar, olaylar yukarı:
 - Kullanıcı bir şey yaptığında arayüz durumu kendisi değiştirmez, bir *olay* (bir callback) bildirir.
 - Durumun sahibi olan, olayın durumu nasıl değiştireceğine karar verir ve yeni durum yeniden aşağı akar.
 
-```cpp
-struct TodoItem {
-    int id;
-    std::string title;
-    bool done;
-    friend bool operator==(const TodoItem&, const TodoItem&) = default;
-};
+```kotlin
+data class TodoItem(val id: Int, val title: String, val done: Boolean = false)
 
 // Durumsuz: öğeleri gösterir, kullanıcının ne yaptığını bildirir.
-void TodoList(const std::vector<TodoItem>& todos, std::function<void(int id, bool done)> onToggle) {
-    LazyColumn(Modifier().fillMaxSize()) {
-        items(todos, [](const TodoItem& t) { return t.id; }, [onToggle](const TodoItem& t) {
-            ListItem(t.done, [onToggle, id = t.id](bool done) { onToggle(id, done); },
-                     {.headline = [&] { Text(t.title); }, .leading = [&] { Checkbox(t.done, nullptr); }});
-        });
-    };
+@Composable
+fun TodoList(todos: List<TodoItem>, onToggle: (Int, Boolean) -> Unit) {
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        items(todos, key = { it.id }) { t ->
+            ListItem(
+                headlineContent = { Text(t.title) },
+                leadingContent = { Checkbox(checked = t.done, onCheckedChange = { onToggle(t.id, it) }) },
+                modifier = Modifier.toggleable(value = t.done, onValueChange = { onToggle(t.id, it) }),
+            )
+        }
+    }
 }
 ```
 
@@ -45,74 +44,63 @@ Bu, composable'ları yeniden kullanmayı, önizlemeyi ve test etmeyi kolaylaşt�
 
 Bir `ViewModel`, Jetpack'teki gibi bir ekranın durumunu tutar ve işini yapar. En yakın sahibinde yaşar: bir gezinme girdisi (girdi kalıcı olarak geri yığınından çıkarıldığında temizlenir) ya da yoksa uygulama. Böylece onu gösteren composable'lar gelip gitse de ayakta kalır.
 
-```cpp continued
-class TodoViewModel : public ViewModel {
-public:
-    MutableStateFlow<std::vector<TodoItem>> items{std::vector<TodoItem>{{1, "Write docs", false}, {2, "Ship", false}}};
+```kotlin continued
+class TodoViewModel : ViewModel() {
+    val items = MutableStateFlow(listOf(TodoItem(1, "Write docs"), TodoItem(2, "Ship")))
 
-    void toggle(int id, bool done) {
-        items.update([&](const std::vector<TodoItem>& list) {
-            std::vector<TodoItem> next = list;
-            for (TodoItem& t : next)
-                if (t.id == id) t.done = done;
-            return next;
-        });
+    fun toggle(id: Int, done: Boolean) {
+        items.update { list -> list.map { if (it.id == id) it.copy(done = done) else it } }
     }
 
-protected:
-    void onCleared() override { /* abonelikleri iptal et, dosyaları kapat */ }
-};
+    override fun onCleared() { /* abonelikleri iptal et, dosyaları kapat */ }
+}
 
-void TodoScreen() {
-    auto vm = viewModel<TodoViewModel>();   // sahibi yaşadıkça hep aynısı
-    std::vector<TodoItem> items = vm->items.collectAsState();
-    TodoList(items, [vm](int id, bool done) { vm->toggle(id, done); });
+@Composable
+fun TodoScreen() {
+    val vm = viewModel<TodoViewModel>()   // sahibi yaşadıkça hep aynısı
+    val items by vm.items.collectAsState()
+    TodoList(items) { id, done -> vm.toggle(id, done) }
 }
 ```
 
-- `viewModel<T>()` bir `std::shared_ptr<T>` döndürür: ilk seferde oluşturulur, sonrasında hep aynısıdır. Callback'lerde onu değerle yakalayın.
-- `viewModelScope()`, `ViewModel` temizlendiğinde iptal edilen bir `CoroutineScope`'tur; işlerini orada başlatın.
+- `viewModel<T>()` `ViewModel`'ı verir: ilk seferde oluşturulur, sonrasında hep aynısıdır (C++'ta paylaşılan bir işaretçi, Kotlin'de nesnenin kendisi olarak erişilir).
+- `viewModelScope`, `ViewModel` temizlendiğinde iptal edilen bir `CoroutineScope`'tur; işlerini orada başlatın.
 - `onCleared()`, sahibi ortadan kalktığında çalışır.
 - İç içe bir gezinme grafiğinin ekranları, grafiğin girdisi üzerinden tek bir tanesini paylaşabilir: `viewModel<T>(*entry.parent())` (bkz. [Gezinme](navigation.md)).
 
-Bir `ViewModel`'a bağımlılık vermek için fabrika alan aşırı yüklemeyi kullanın: `viewModel<T>(key, [&] { return std::make_shared<T>(repository); })`.
+Bir `ViewModel`'a bağımlılık vermek için fabrika alan aşırı yüklemeyi kullanın: `viewModel<T>(key, factory)`; fabrika onu bağımlılıklarıyla oluşturur (C++'ta `std::make_shared<T>(repository)`).
 
 ## Flow'lar
 
 Bir `ViewModel` durumunu bir `StateFlow` olarak dışarı açar; arayüz onu `collectAsState()` ile okur ve değer değiştiğinde yeniden kompoze eder.
 
 - `MutableStateFlow<T>` bir değer tutar. `setValue(v)` ve `update(f)` **herhangi bir thread'den** çağrılabilir; bu da onu worker thread'lerle arayüz arasındaki köprü yapar.
-- `value()` güncel değeri okur; `collect(f)` onu bir coroutine içinde izler.
+- `value` güncel değeri okur; `collect(f)` onu bir coroutine içinde izler.
 - Kotlin'deki gibi birleştiricidir (conflated): zaten sahip olduğu değeri atamak hiçbir şey yapmaz.
 
 `Flow<T>` soğuk bir akıştır; her toplayıcı için bir coroutine tarafından üretilir ve Kotlin'in operatörleriyle gelir: `map`, `filter`, `take`, `debounce`, `distinctUntilChanged`, `flatMapLatest`, `combine` ve daha fazlası. `stateIn` bir Flow'u bir scope'un tuttuğu bir `StateFlow`'a çevirir:
 
-```cpp
-#! struct Repository { Flow<std::vector<std::string>> search(const std::string& q) { return flow<std::vector<std::string>>([q](FlowCollector<std::vector<std::string>> emit) -> Task { co_await emit({q}); }); } };
-class SearchViewModel : public ViewModel {
-public:
-    explicit SearchViewModel(Repository& repo)
-        : results(query.debounce(std::chrono::milliseconds(300))
-                       .flatMapLatest([&repo](const std::string& q) { return repo.search(q); })
-                       .stateIn(viewModelScope(), std::vector<std::string>{})) {}
-
-    MutableStateFlow<std::string> query{std::string()};
-    StateFlow<std::vector<std::string>> results;
-};
+```kotlin
+#! class Repository { fun search(q: String): Flow<List<String>> = flow { emit(listOf(q)) } }
+class SearchViewModel(repo: Repository) : ViewModel() {
+    val query = MutableStateFlow("")
+    val results: StateFlow<List<String>> = query.debounce(300)
+        .flatMapLatest { q -> repo.search(q) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+}
 ```
 
-`MutableSharedFlow<T>` tek seferlik olaylar (bir mesaj göstermek, gezinmek) için sıcak bir akıştır ve `tryEmit` herhangi bir thread'den çalışır. `shareIn` ve `stateIn`; `SharingStarted::Eagerly`, `Lazily` ya da `WhileSubscribed(5000ms)` alır; sonuncusu yukarı akışı yalnızca biri toplarken toplar.
+`MutableSharedFlow<T>` tek seferlik olaylar (bir mesaj göstermek, gezinmek) için sıcak bir akıştır ve `tryEmit` herhangi bir thread'den çalışır. `shareIn` ve `stateIn`; `SharingStarted.Eagerly`, `Lazily` ya da `WhileSubscribed(5000)` alır; sonuncusu yukarı akışı yalnızca biri toplarken toplar.
 
 Elle bir Flow oluşturmak:
 
-```cpp
-Flow<int> ticks() {
-    return flow<int>([](FlowCollector<int> emit) -> Task {
-        for (int i = 0;; ++i) {
-            co_await emit(i);
-            co_await delay(std::chrono::seconds(1));
-        }
-    });
+```kotlin
+fun ticks(): Flow<Int> = flow {
+    var i = 0
+    while (true) {
+        emit(i++)
+        delay(1000)
+    }
 }
 ```
 
@@ -125,16 +113,11 @@ Android, arka plandaki bir uygulamanın sürecini sonlandırıp daha sonra geri 
 - Composable'larda `rememberSaveable` (bkz. [Durum](state.md#remembersaveable)).
 - `ViewModel`'larda `SavedStateHandle`: kurucusu bir tane alan `ViewModel`, yeniden oluşturulduğunda onu eski değerleriyle birlikte alır.
 
-```cpp
-class SearchScreenViewModel : public ViewModel {
-public:
-    explicit SearchScreenViewModel(SavedStateHandle state) : state_(state), query(state.getStateFlow<std::string>("query", "")) {}
-    void setQuery(const std::string& q) { state_.set("query", q); }
-    StateFlow<std::string> query;
-
-private:
-    SavedStateHandle state_;
-};
+```kotlin
+class SearchScreenViewModel(private val state: SavedStateHandle) : ViewModel() {
+    val query: StateFlow<String> = state.getStateFlow("query", "")
+    fun setQuery(q: String) { state["query"] = q }
+}
 ```
 
 `viewModel<SearchScreenViewModel>()` handle'ı iletir. Değerler kaydedilebilir türlerden olmalıdır. Masaüstünde `KOMPOZ_STATE_FILE=file` çalıştırmalar arasında kaydedip geri yükler; böylece bunu telefon olmadan deneyebilirsiniz.
@@ -143,17 +126,18 @@ private:
 
 Uygulamanın ve her gezinme girdisinin, öne gelip arkaya gittikçe `Created`, `Started` ve `Resumed` arasında ilerleyen bir `Lifecycle`'ı vardır. Efektler, Jetpack'tekiler gibi onu izleyebilir:
 
-```cpp
-#! struct Player { void play() {} void pause() {} };
-void Video(std::shared_ptr<Player> player) {
-    LifecycleResumeEffect(0, [player] {
-        player->play();
-        return [player] { player->pause(); };   // artık resumed olmadığında
-    });
+```kotlin
+#! class Player { fun play() {} fun pause() {} }
+@Composable
+fun Video(player: Player) {
+    LifecycleResumeEffect(Unit) {
+        player.play()
+        onPauseOrDispose { player.pause() }   // artık resumed olmadığında
+    }
 }
 ```
 
-`LifecycleStartEffect`, `LifecycleEventEffect(LifecycleEvent::OnStart, …)` ve `currentLifecycleOwner()` de vardır. `collectAsStateWithLifecycle(flow)` bir Flow'u yalnızca yaşam döngüsü en az started iken toplar; böylece arka planda abone sayılmaz.
+`LifecycleStartEffect`, `LifecycleEventEffect(LifecycleEvent.OnStart, …)` ve `LocalLifecycleOwner.current` de vardır. `collectAsStateWithLifecycle(flow)` bir Flow'u yalnızca yaşam döngüsü en az started iken toplar; böylece arka planda abone sayılmaz.
 
 ## Ayrıca bakın
 
