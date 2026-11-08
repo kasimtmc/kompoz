@@ -871,6 +871,11 @@
   fontWeight = …, fontSize = …, fontStyle = …, letterSpacing = …, lineHeight = …)`; `MaterialTheme(colorScheme,
   typography, motionScheme) { … }`, tipografisi içindeki her şeye veriliyor, renk şeması yazılmazsa çevredeki.
   (Kompoz'da `Shapes` teması yok: şekiller bileşenlerin.)
+- **kompozc: enum class'lar ve her composable'a bir grup**: `enum class ThemeChoice { System, Light, Dark }` (yalnız
+  girdiler; değerli olan C++'ınki) C++'ın enum class'ı, bir `when`'de `ThemeChoice.Dark` diye okunuyor. Değer döndüren
+  bir `@Composable fun` bir çağrı yeri alıyor ve Compose'un her composable çağrısına verdiği gibi kendi grubu oluyor:
+  hatırladığı kendinin, çağıranı onu bir yerden kaç kez çağırırsa çağırsın. Değer olarak bir `if`, `else`'ini alt
+  satıra koyabiliyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

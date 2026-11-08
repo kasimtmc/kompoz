@@ -126,6 +126,14 @@ struct Property {
     Pos end;
 };
 
+// An enum class: enum class Name { A, B, C } (entries only; one with values is written in C++).
+struct EnumClass {
+    std::string name;
+    std::vector<std::string> entries;
+    Pos pos;
+    Pos end;
+};
+
 // A data class: data class Name(val a: Int, var b: String = "").
 struct DataClass {
     std::string name;

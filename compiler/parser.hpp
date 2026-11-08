@@ -14,6 +14,8 @@ public:
     Function function();
     // data class Name(val a: T, var b: U = d)
     DataClass dataClass();
+    // enum class Name { A, B, C }
+    EnumClass enumClass();
     // [private | internal | const] val name[: Type] = value, at the top of a file.
     Property property();
     // One expression and then `}`: a string template's ${...}.

@@ -211,6 +211,29 @@ DataClass Parser::dataClass() {
     return c;
 }
 
+EnumClass Parser::enumClass() {
+    EnumClass e;
+    e.pos = cur().pos;
+    if (!isIdent("enum")) fail("expected 'enum class'");
+    take();
+    if (!isIdent("class")) fail("expected 'class' after 'enum'");
+    take();
+    e.name = expectIdent();
+    skipNewlines();
+    expectOp("{");
+    for (skipNewlines(); !isOp("}"); skipNewlines()) {
+        e.entries.push_back(expectIdent());
+        skipNewlines();
+        if (!acceptOp(",")) break;
+    }
+    skipNewlines();
+    if (acceptOp(";")) skipNewlines();  // (Kotlin allows one after the entries)
+    expectOp("}");
+    e.end = tokens_[index_ - 1].end;
+    if (e.entries.empty()) fail(e.pos, "an enum class needs an entry");
+    return e;
+}
+
 Property Parser::property() {
     Property p;
     p.pos = cur().pos;

@@ -830,6 +830,11 @@
   letterSpacing = …, lineHeight = …)` on a `Font`, as Compose's `TextStyle.copy`; `MaterialTheme(colorScheme, typography,
   motionScheme) { … }`, its typography given to everything inside and its color scheme, left out, the one around it.
   (Kompoz has no `Shapes` theme: shapes are the components'.)
+- **kompozc: enum classes, and a group for every composable**: `enum class ThemeChoice { System, Light, Dark }` (entries
+  only; one with values is C++'s) is C++'s enum class, read as `ThemeChoice.Dark` in a `when`. A `@Composable fun` that
+  returns a value takes a call site and is a group of its own, as Compose makes every composable call: what it
+  remembers is its own, however often its caller calls it from one place. An `if` as a value may put its `else` on
+  the next line.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

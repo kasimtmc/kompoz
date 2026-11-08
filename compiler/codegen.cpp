@@ -242,7 +242,7 @@ public:
                 scopes_.pop_back();
             }
         }
-        if (unit && f.composable)
+        if (f.composable)  // (a value-returning one too: a group of its own, as Compose gives every call)
             out_.text(std::string(f.params.empty() ? "" : ", ") + "::kompoz::CallSite site" + (defaults ? " = ::kompoz::CallSite::current()" : ""));
         out_.text(")");
     }
@@ -315,6 +315,9 @@ public:
             statements(*f.body, false);
             out_.text(" });");
         } else {
+            // Not restartable (what it reads is its caller's), but a group of its own: what it
+            // remembers is its, however many times its caller calls it from one place.
+            out_.text(" ::kompoz::ComposableScope kompoz_scope(site);");
             statements(*f.body, true);
         }
         scopes_.pop_back();
@@ -1231,6 +1234,13 @@ private:
 };
 
 }  // namespace
+
+void generateEnum(Output& out, const EnumClass& e) {
+    out.at(e.pos);
+    out.text("enum class " + e.name + " {");
+    for (size_t i = 0; i < e.entries.size(); ++i) out.text(std::string(i ? ", " : " ") + e.entries[i]);
+    out.text(" };\n");
+}
 
 void generateClass(Output& out, const DataClass& c, const Module& module) {
     Generator g(out, module);

@@ -46,6 +46,8 @@ private:
     int current_ = 0;  // the original line the output's current line stands for (0: none yet)
 };
 
+// An enum class: C++'s enum class, its entries in order.
+void generateEnum(Output& out, const EnumClass& e);
 // A data class: a struct with its fields, == and toString().
 void generateClass(Output& out, const DataClass& c, const Module& module);
 // A top-level val: a constant of the namespace.

@@ -894,6 +894,47 @@ TEST(material_as_compose_writes_it) {
     CHECK(undone == 1);
 }
 
+// Theming as Compose writes it: an enum class in a when, a color scheme with its colors by name,
+// Typography and TextStyle copies, MaterialTheme(typography = …), and a value-returning composable
+// that remembers on its own (a group of its own, as Compose gives it) however often it is called.
+enum class ThemeChoice { System, Light, Dark }
+
+fun schemeFor(choice: ThemeChoice): ColorScheme = when (choice) {
+    ThemeChoice.Dark -> darkColorScheme(primary = Color(0xFF9ECAFF))
+    else -> lightColorScheme(primary = Color(0xFF0061A4), onPrimary = Color.White)
+}
+
+int gNextId = 0;
+
+@Composable
+fun counted(): Int = remember { ++gNextId }
+
+@Composable
+fun Themed(choice: ThemeChoice) {
+    val base = MaterialTheme.typography
+    val type = base.copy(headlineSmall = base.headlineSmall.copy(fontFamily = FontFamily.Serif, fontSize = 30.sp))
+    var showFirst by remember { mutableStateOf(true) }
+    MaterialTheme(colorScheme = schemeFor(choice), typography = type) {
+        Column {
+            Text("${MaterialTheme.typography.headlineSmall.size.toInt()}", modifier = Modifier.testTag("size"), color = MaterialTheme.colorScheme.primary)
+            if (showFirst) Text("a ${counted()}")
+            Text("b ${counted()}")
+            Button(onClick = { showFirst = false }) { Text("hide") }
+        }
+    }
+}
+
+TEST(theming_as_compose_writes_it) {
+    CHECK(schemeFor(ThemeChoice::Dark).primary == Color(0xFF9ECAFF) && schemeFor(ThemeChoice::Light).onPrimary == Color::White);
+    ComposeTestRule rule([] { Themed(ThemeChoice::System); });
+    CHECK(rule.onNodeWithTag("size").text() == "30");
+    CHECK(rule.onNodeWithText("a 1").exists() && rule.onNodeWithText("b 2").exists());
+    rule.onNodeWithText("hide").performClick();
+    // The first call gone, the second keeps what it remembered: each call a group of its own, not a
+    // slot by order from the same site (which would hand b a's).
+    CHECK(!rule.onNodeWithText("a 1").exists() && rule.onNodeWithText("b 2").exists());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

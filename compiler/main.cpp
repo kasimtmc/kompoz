@@ -31,12 +31,15 @@ struct Found {
     std::optional<Function> function;
     std::optional<DataClass> dataClass;
     std::optional<Property> property;
+    std::optional<EnumClass> enumClass;
     size_t begin, end;  // offsets in the source
     // The C++ namespace it is in, as a call names it: "::" at the top, "::app::" in namespace app;
     // empty in an unnamed one (a call there can't name it so).
     std::string qualifier;
 
-    const std::string& name() const { return function ? function->name : dataClass ? dataClass->name : property->name; }
+    const std::string& name() const {
+        return function ? function->name : dataClass ? dataClass->name : property ? property->name : enumClass->name;
+    }
 };
 
 bool identChar(char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; }
@@ -60,6 +63,27 @@ Pos positionOf(std::string_view src, size_t offset) {
 bool startsLine(std::string_view src, size_t at) {
     while (at > 0 && (src[at - 1] == ' ' || src[at - 1] == '\t')) --at;
     return at == 0 || src[at - 1] == '\n';
+}
+
+// Whether Kotlin's enum class starts at `at`: enum class Name { A, B } with entries only (C++'s with
+// a base, enum class X : int, or values, A = 1, is C++ and stays as it is; one with entries only is
+// the same in both, so it may be written either way).
+bool startsEnumClass(std::string_view src, size_t at) {
+    size_t k = at;
+    auto word = [&] {
+        while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
+        size_t b = k;
+        while (k < src.size() && identChar(src[k])) ++k;
+        return src.substr(b, k - b);
+    };
+    if (word() != "enum" || word() != "class" || word().empty()) return false;
+    while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
+    if (k >= src.size() || src[k] != '{') return false;
+    size_t close = src.find('}', k);
+    if (close == std::string_view::npos) return false;
+    for (size_t i = k + 1; i < close; ++i)
+        if (!identChar(src[i]) && !std::isspace(static_cast<unsigned char>(src[i])) && src[i] != ',' && src[i] != ';') return false;
+    return true;
 }
 
 // Whether a top-level val starts at `at`: [private | internal | public | const]... val name, then
@@ -136,7 +160,8 @@ size_t valEnd(std::string_view src, size_t at) {
             while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
             std::string_view next = src.substr(k, 2);
             bool wantsMore = std::string_view("=+-*/%,.&|:>!").find(last) != std::string_view::npos;
-            if (!wantsMore && !(next.starts_with('.') || next == "?." || next == "?:" || next == "&&" || next == "||")) return i;
+            bool elseNext = src.substr(k, 4) == "else" && (k + 4 >= src.size() || !identChar(src[k + 4]));  // if … \n else …
+            if (!wantsMore && !elseNext && !(next.starts_with('.') || next == "?." || next == "?:" || next == "&&" || next == "||")) return i;
         }
         ++i;
     }
@@ -192,7 +217,7 @@ std::vector<Found> scan(std::string_view src) {
             Parser parser(src, positionOf(src, i));
             Function f = parser.function();
             size_t end = f.end.offset;
-            found.push_back({std::move(f), std::nullopt, std::nullopt, i, end, qualifier()});
+            found.push_back({std::move(f), std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
             i = end;
         } else if (c == 'd' && (i == 0 || !identChar(src[i - 1])) && src.substr(i, 4) == "data" && i + 4 < src.size() &&
                    std::isspace(static_cast<unsigned char>(src[i + 4]))) {
@@ -203,11 +228,17 @@ std::vector<Found> scan(std::string_view src) {
                 Parser parser(src, positionOf(src, i));
                 DataClass d = parser.dataClass();
                 size_t end = d.end.offset;
-                found.push_back({std::nullopt, std::move(d), std::nullopt, i, end, qualifier()});
+                found.push_back({std::nullopt, std::move(d), std::nullopt, std::nullopt, i, end, qualifier()});
                 i = end;
             } else {
                 i += 4;
             }
+        } else if (c == 'e' && (i == 0 || !identChar(src[i - 1])) && startsEnumClass(src, i)) {
+            Parser parser(src, positionOf(src, i));
+            EnumClass e = parser.enumClass();
+            size_t end = e.end.offset;
+            found.push_back({std::nullopt, std::nullopt, std::nullopt, std::move(e), i, end, qualifier()});
+            i = end;
         } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsFun(src, i)) {
             Parser parser(src, positionOf(src, i));
             Function f = parser.function();
@@ -217,13 +248,13 @@ std::vector<Found> scan(std::string_view src) {
                 f = again.function();
                 end = f.end.offset;
             }
-            found.push_back({std::move(f), std::nullopt, std::nullopt, i, end, qualifier()});
+            found.push_back({std::move(f), std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
             i = end;
         } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsVal(src, i)) {
             Parser parser(src.substr(0, valEnd(src, i)), positionOf(src, i));
             Property p = parser.property();
             size_t end = p.end.offset;
-            found.push_back({std::nullopt, std::nullopt, std::move(p), i, end, qualifier()});
+            found.push_back({std::nullopt, std::nullopt, std::move(p), std::nullopt, i, end, qualifier()});
             i = end;
         } else if (identChar(c)) {
             size_t b = i;
@@ -318,6 +349,8 @@ void names(const Found& f, std::set<std::string, std::less<>>& out) {
     } else if (f.property) {
         if (f.property->decl->type) typeNames(*f.property->decl->type, out);
         names(f.property->decl.get(), out);
+    } else if (f.enumClass) {
+        // (nothing: its entries are its own)
     } else {
         for (const Param& p : f.dataClass->fields) {
             typeNames(p.type, out);
@@ -341,7 +374,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
         if (f.function && f.function->composable) module.qualifiers[f.function->name] = f.qualifier;
         if (f.function) module.functions[f.function->name] = &*f.function;
         else if (f.dataClass) module.classes[f.dataClass->name] = &*f.dataClass;
-        else module.properties[f.property->name] = &*f.property;
+        else if (f.property) module.properties[f.property->name] = &*f.property;
     }
     // The other sources' declarations this one uses, and those they use in turn (a data class in
     // a parameter's type): declared here too, as C++ needs (Kotlin's module needs nothing).
@@ -376,7 +409,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
         for (auto [o, f] : imported) {
             if (f->function) module.functions[f->function->name] = &*f->function;
             else if (f->dataClass) module.classes[f->dataClass->name] = &*f->dataClass;
-            else module.properties[f->property->name] = &*f->property;
+            else if (f->property) module.properties[f->property->name] = &*f->property;
         }
     }
     Output out(lineFile);
@@ -432,14 +465,16 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             // Before the first: the helpers the translations use, and the data classes, so that
             // every function may use them (as Kotlin's do, in any order).
             out.text("\n#include <kompoz/kotlin.hpp>\n");
-            for (auto [o, g] : imported)  // (from their own files: #line says which)
-                if (g->dataClass) {
-                    out.setFile(o->lineFile);
-                    generateClass(out, *g->dataClass, module);
-                }
+            for (auto [o, g] : imported) {  // (from their own files: #line says which)
+                out.setFile(o->lineFile);
+                if (g->enumClass) generateEnum(out, *g->enumClass);
+                if (g->dataClass) generateClass(out, *g->dataClass, module);
+            }
             out.setFile(lineFile);
-            for (const Found& g : found)
+            for (const Found& g : found) {
+                if (g.enumClass) generateEnum(out, *g.enumClass);
                 if (g.dataClass) generateClass(out, *g.dataClass, module);
+            }
         }
         if (f.property || (f.function && !f.function->composable)) {
             define(define, f.name(), f.qualifier);
