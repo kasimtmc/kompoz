@@ -587,6 +587,7 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 360. Compose's `BadgedBox(badge = { Badge { Text("8") } }) { Icon(…) }`, `Badge()`, `SegmentedListItem(selected = …, onClick = …, shapes = …, headlineContent = { }, supportingContent = { }, leadingContent = { })`, `LoadingIndicator(modifier = …)` and `LoadingIndicator(progress = …)`, the extended FABs' `icon = { Icon(…) }, text = { Text(…) }`, `BottomAppBar(windowInsets = WindowInsets(0.dp))` ✅
 361. Compose's `items(snapshotStateList) { }` in a lazy layout (a `mutableStateListOf`), `list.shuffle(Random(seed))`, `list.addAll(…)` on one ✅
 362. Compose's `PrimaryTabRow(selectedTabIndex = …) { Tab(selected = …, onClick = …, text = { }, icon = { }) }`, `SecondaryTabRow`, `PrimaryScrollableTabRow(selectedTabIndex, edgePadding = …) { LeadingIconTab(selected, onClick, text = { }, icon = { }, unselectedContentColor = …) }`, `FloatingActionButtonMenu(expanded = …, button = { ToggleFloatingActionButton(checked = …, onCheckedChange = …) { Icon(…, Modifier.graphicsLayer { rotationZ = 45 * checkedProgress }) } }) { FloatingActionButtonMenuItem(onClick = …, text = { }, icon = { }) }`, the floating toolbars' `colors = …` ✅
+363. Compose's `InputTransformation.byValue { current, proposed -> … }`, `OutputTransformation { insert(at, " ") }` on the buffer, `LocalFocusManager.current`, `text.filter { it.isDigit() }` and Kotlin's `Char` classes (`isDigit`, `isLetter`, `isWhitespace`, …) through kompozc ✅
 
 ## Next
 

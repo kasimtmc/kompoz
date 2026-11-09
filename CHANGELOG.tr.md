@@ -1036,6 +1036,10 @@
 - **Gösteri uygulamasının material gezinmesi Compose'un sözdizimiyle**: sekme satırları, FAB menüsü, kısa gezinme çubuğu, geniş
   gezinme rayı ve kayan araç çubukları Kotlin'de `@Composable fun`'lar (hedefler bir data class, FAB'ın artısı `checkedProgress`
   okuyan bir `graphicsLayer`'da dönüyor).
+- **kompozc: bir metin alanının dönüşümleri ve odak yöneticisi Compose'un yazdığı gibi**: `InputTransformation.byValue {
+  current, proposed -> … }` (lambda'sı değerini veriyor), `TextFieldBuffer` üzerinde `OutputTransformation { if (length > 3)
+  insert(3, " ") }`, `LocalFocusManager.current` (`focusManager()`); `text.filter { it.isDigit() }` bir metin veriyor, bir
+  karakterin `isDigit`, `isLetter`, `isLetterOrDigit`, `isWhitespace`, `isUpperCase` ve `isLowerCase`'i Kotlin'inkiler.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

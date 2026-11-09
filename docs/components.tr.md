@@ -588,6 +588,7 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 360. Compose'un `BadgedBox(badge = { Badge { Text("8") } }) { Icon(…) }`'u, `Badge()`, `SegmentedListItem(selected = …, onClick = …, shapes = …, headlineContent = { }, supportingContent = { }, leadingContent = { })`, `LoadingIndicator(modifier = …)` ve `LoadingIndicator(progress = …)`, genişletilmiş FAB'ların `icon = { Icon(…) }, text = { Text(…) }`'i, `BottomAppBar(windowInsets = WindowInsets(0.dp))` ✅
 361. Compose'un tembel bir yerleşimde `items(snapshotStateList) { }`'u (bir `mutableStateListOf`), `list.shuffle(Random(seed))`, birinde `list.addAll(…)` ✅
 362. Compose'un `PrimaryTabRow(selectedTabIndex = …) { Tab(selected = …, onClick = …, text = { }, icon = { }) }`'u, `SecondaryTabRow`, `PrimaryScrollableTabRow(selectedTabIndex, edgePadding = …) { LeadingIconTab(selected, onClick, text = { }, icon = { }, unselectedContentColor = …) }`, `FloatingActionButtonMenu(expanded = …, button = { ToggleFloatingActionButton(checked = …, onCheckedChange = …) { Icon(…, Modifier.graphicsLayer { rotationZ = 45 * checkedProgress }) } }) { FloatingActionButtonMenuItem(onClick = …, text = { }, icon = { }) }`, kayan araç çubuklarının `colors = …`'u ✅
+363. Compose'un `InputTransformation.byValue { current, proposed -> … }`'su, arabellek üzerinde `OutputTransformation { insert(at, " ") }`, `LocalFocusManager.current`, `text.filter { it.isDigit() }` ve Kotlin'in `Char` sınıfları (`isDigit`, `isLetter`, `isWhitespace`, …) kompozc üzerinden ✅
 
 ## Sıradakiler
 

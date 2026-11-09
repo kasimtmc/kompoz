@@ -997,6 +997,10 @@
 - **The showcase's material navigation in Compose's syntax**: the tab rows, the FAB menu, the short navigation bar, the wide
   navigation rail and the floating toolbars are `@Composable fun`s in Kotlin (the destinations a data class, the FAB's plus
   turning in a `graphicsLayer` that reads `checkedProgress`).
+- **kompozc: a text field's transformations and the focus manager as Compose writes them**: `InputTransformation.byValue {
+  current, proposed -> … }` (its lambda gives its value), `OutputTransformation { if (length > 3) insert(3, " ") }` on the
+  `TextFieldBuffer`, `LocalFocusManager.current` (`focusManager()`); `text.filter { it.isDigit() }` gives a text, and a
+  character's `isDigit`, `isLetter`, `isLetterOrDigit`, `isWhitespace`, `isUpperCase` and `isLowerCase` are Kotlin's.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

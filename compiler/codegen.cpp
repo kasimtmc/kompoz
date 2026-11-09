@@ -46,7 +46,7 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "shader", "compositionLocalOf",
     "slideInVertically", "slideInHorizontally", "slideOutVertically", "slideOutHorizontally", "animateFloat", "animateDp", "animateColor",
     "dragAndDropSource", "update", "LifecycleResumeEffect", "LifecycleStartEffect", "flatMapLatest", "mapLatest", "flatMapConcat",
-    "removeIf", "removeAll", "ifEmpty", "ifBlank",
+    "removeIf", "removeAll", "ifEmpty", "ifBlank", "byValue",
     "staticCompositionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent", "mediaQuery",
     "derivedMediaQuery", "SubcomposeLayout", "rememberPagerState", "rememberCarouselState"};
 
@@ -68,6 +68,7 @@ const std::map<std::string, std::string, std::less<>> kObjectProperties = {
     // Compose's platform locals: what the host gives (platform.hpp)
     {"LocalUriHandler.current", "::kompoz::uriHandler()"}, {"LocalClipboardManager.current", "::kompoz::clipboardManager()"},
     {"LocalHapticFeedback.current", "::kompoz::hapticFeedback()"}, {"LocalSoftwareKeyboardController.current", "::kompoz::softwareKeyboardController()"},
+    {"LocalFocusManager.current", "::kompoz::focusManager()"},
     {"MaterialTheme.motionScheme", "::kompoz::motionScheme()"},
     // (Compose's insets are properties: WindowInsets.systemBars)
     {"WindowInsets.statusBars", "::kompoz::WindowInsets::statusBars()"},
@@ -124,7 +125,7 @@ const std::set<std::string, std::less<>> kKtMembers = {
     "coerceIn", "coerceAtLeast", "coerceAtMost", "roundToInt", "toPx", "roundToPx", "toDp", "find", "add", "addAll", "removeAt", "remove",
     "format", "indexOfFirst", "indexOfLast", "removeIf", "removeAll", "flatMap", "sortedByDescending", "maxByOrNull", "minByOrNull",
     "mapNotNull", "filterIndexed", "distinctBy", "takeUnless", "groupBy", "associateBy", "associateWith", "chunked", "partition",
-    "ifEmpty", "ifBlank", "shuffle"};
+    "ifEmpty", "ifBlank", "shuffle", "isDigit", "isLetter", "isLetterOrDigit", "isWhitespace", "isUpperCase", "isLowerCase"};
 
 // Calls whose lambda has a receiver, Kotlin's T.() -> R: the C++ lambda takes it
 // first, and the names the body doesn't declare that are the receiver's members are the receiver's
@@ -144,7 +145,7 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"SubcomposeLayout", "SubcomposeMeasureScope"},
     {"ButtonGroup", "ButtonGroupScope"},  // (its items: clickableItem(…); its buttons' Modifier.animateWidth(source))
     {"FloatingActionButtonMenu", "const FloatingActionButtonMenuScope"}, {"ToggleFloatingActionButton", "const ToggleFloatingActionButtonScope"},
-    {"buildAnnotatedString", "AnnotatedStringBuilder"}, {"edit", "TextFieldBuffer"},
+    {"buildAnnotatedString", "AnnotatedStringBuilder"}, {"edit", "TextFieldBuffer"}, {"OutputTransformation", "TextFieldBuffer"},
     {"GenericShape", "Path"},                {"blur", "BlurScope"},
     {"AnimatedVisibility", "const AnimatedVisibilityScope"}, {"AnimatedContent", "const AnimatedContentScope"},
     {"SharedTransitionLayout", "const SharedTransitionScope"},

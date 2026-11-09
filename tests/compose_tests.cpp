@@ -1504,6 +1504,30 @@ TEST(tabs_and_fab_menu_as_compose_writes_them) {
     CHECK(rule.onNodeWithText("seçili 1 · Konum · fazla").exists());
 }
 
+// A text field's transformations as Compose writes them: InputTransformation.byValue { current, proposed -> },
+// OutputTransformation { insert(…) } on the buffer, a text filtered by its characters, LocalFocusManager.
+@Composable
+fun Phone() {
+    val phone = rememberTextFieldState("5551234567")
+    var digits by remember { mutableStateOf("a1b2") }
+    val focus = LocalFocusManager.current
+    Column {
+        OutlinedTextField(state = phone, modifier = Modifier.testTag("telefon"),
+                          inputTransformation = InputTransformation.byValue { current, proposed -> if (proposed.all { it.isDigit() }) proposed else current }
+                              .then(InputTransformation.maxLength(10)),
+                          outputTransformation = OutputTransformation { for (at in listOf(8, 6, 3)) if (length > at) insert(at, " ") })
+        Text("değer ${phone.text} · ${digits.filter { it.isDigit() }} · ${"a b".filter { !it.isWhitespace() }}")
+        Button(onClick = { focus.clearFocus() }) { Text("Odağı bırak") }
+    }
+}
+
+TEST(text_field_transformations_as_compose_writes_them) {
+    ComposeTestRule rule([] { Phone(); });
+    CHECK(rule.onNodeWithText("değer 5551234567 · 12 · ab").exists());
+    rule.onNodeWithTag("telefon").performTextInput("x9");  // the letter refused, the digit kept, then the length's limit
+    CHECK(rule.onNodeWithText("değer 5551234567", true).exists());
+}
+
 TEST(navigation_as_compose_writes_it) {
     NavController nav;
     ComposeTestRule rule([&] { Navigator(nav); });

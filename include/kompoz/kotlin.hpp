@@ -702,12 +702,26 @@ auto mapIndexed(const C& c, F&& f, A&&... args) {
 template <class C, class F, class... A>
 auto filter(const C& c, F&& f, A&&... args) {
     KOMPOZ_KT_OWN(filter(f)) {
-        std::vector<detail::Element<C>> out;
-        for (const auto& v : c)
-            if (f(v)) out.push_back(v);
-        return out;
+        if constexpr (std::is_convertible_v<const C&, std::string_view>) {  // text.filter { it.isDigit() }: a text (its bytes)
+            std::string out;
+            for (char ch : std::string_view(c))
+                if (f(ch)) out += ch;
+            return out;
+        } else {
+            std::vector<detail::Element<C>> out;
+            for (const auto& v : c)
+                if (f(v)) out.push_back(v);
+            return out;
+        }
     }
 }
+// A character's class, as Kotlin's Char asks (ASCII; a byte of a longer UTF-8 character counts as a letter).
+inline bool isDigit(char c) { return c >= '0' && c <= '9'; }
+inline bool isLetter(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || static_cast<unsigned char>(c) >= 0x80; }
+inline bool isLetterOrDigit(char c) { return isLetter(c) || isDigit(c); }
+inline bool isWhitespace(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v'; }
+inline bool isUpperCase(char c) { return c >= 'A' && c <= 'Z'; }
+inline bool isLowerCase(char c) { return c >= 'a' && c <= 'z'; }
 template <class C, class F, class... A>
 auto filterNot(const C& c, F&& f, A&&... args) {
     KOMPOZ_KT_OWN(filterNot(f)) return filter(c, [&](const auto& v) { return !f(v); });
