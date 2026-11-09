@@ -1001,6 +1001,8 @@
   current, proposed -> … }` (its lambda gives its value), `OutputTransformation { if (length > 3) insert(3, " ") }` on the
   `TextFieldBuffer`, `LocalFocusManager.current` (`focusManager()`); `text.filter { it.isDigit() }` gives a text, and a
   character's `isDigit`, `isLetter`, `isLetterOrDigit`, `isWhitespace`, `isUpperCase` and `isLowerCase` are Kotlin's.
+- **The showcase's text fields screen in Compose's syntax**: the fields, their transformations, colors, undo state,
+  decorator and focus are a `@Composable fun` in Kotlin.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

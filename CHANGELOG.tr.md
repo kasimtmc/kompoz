@@ -1040,6 +1040,8 @@
   current, proposed -> … }` (lambda'sı değerini veriyor), `TextFieldBuffer` üzerinde `OutputTransformation { if (length > 3)
   insert(3, " ") }`, `LocalFocusManager.current` (`focusManager()`); `text.filter { it.isDigit() }` bir metin veriyor, bir
   karakterin `isDigit`, `isLetter`, `isLetterOrDigit`, `isWhitespace`, `isUpperCase` ve `isLowerCase`'i Kotlin'inkiler.
+- **Gösteri uygulamasının metin alanları ekranı Compose'un sözdizimiyle**: alanlar, dönüşümleri, renkleri, geri alma durumu,
+  dekoratörü ve odak Kotlin'de bir `@Composable fun`.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

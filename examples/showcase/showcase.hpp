@@ -173,8 +173,7 @@ void ImeNestedScrollSection(CallSite site = CallSite::current());
 void FrameRateSection(CallSite site = CallSite::current());
 void InsetsSection(CallSite site = CallSite::current());
 
-// material/text_fields.cpp
-void TextFieldsSection(CallSite site = CallSite::current());
+// material/text_fields.cpp: TextFieldsSection is @Composable there (the module declares it)
 
 // material/controls.cpp: ButtonsSection, ChipsSection and SelectionControlsSection are @Composable there (the module declares them)
 
