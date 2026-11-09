@@ -965,6 +965,10 @@
   else null`), `if (c) x else null` a nullable of x; `text.ifEmpty { }`, `ifBlank`; a range's `start` and `endInclusive`;
   `list.remove(x)` on a `SnapshotStateList`; `listOf<String>()` keeps its type argument. A C++ file that declares a Kotlin
   function's prototype itself is left to it (kompozc doesn't declare it again).
+- **The showcase's material controls in Compose's syntax**: the buttons (the button groups with `clickableItem` /
+  `toggleableItem` and with `Modifier.animateWidth`, the toggle and split buttons), the chips (`leadingIcon = if (on) { {
+  Icon(…) } } else null`) and the selection controls (the sliders with `valueRange`, the price `RangeSlider` on a range,
+  `Label` around the picked thumb, the slider states by name, the segmented buttons) are `@Composable fun`s in Kotlin.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

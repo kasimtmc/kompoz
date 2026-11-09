@@ -1005,6 +1005,10 @@
   null`), `if (c) x else null` x'in null olabilir hâli; `text.ifEmpty { }`, `ifBlank`; bir aralığın `start`'ı ve `endInclusive`'i;
   bir `SnapshotStateList`'te `list.remove(x)`; `listOf<String>()` tür argümanını koruyor. Bir Kotlin işlevinin prototipini
   kendisi bildiren bir C++ dosyası kendi hâline bırakılıyor (kompozc onu yeniden bildirmiyor).
+- **Gösteri uygulamasının material kontrolleri Compose'un sözdizimiyle**: butonlar (`clickableItem` / `toggleableItem` ile
+  ve `Modifier.animateWidth` ile buton grupları, açma/kapama ve bölünmüş butonlar), chip'ler (`leadingIcon = if (on) { {
+  Icon(…) } } else null`) ve seçim kontrolleri (`valueRange` alan slider'lar, bir aralık üzerindeki fiyat `RangeSlider`'ı,
+  seçilen imlecin çevresinde `Label`, adla slider durumları, bölümlü butonlar) Kotlin'de `@Composable fun`'lar.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

@@ -176,10 +176,7 @@ void InsetsSection(CallSite site = CallSite::current());
 // material/text_fields.cpp
 void TextFieldsSection(CallSite site = CallSite::current());
 
-// material/controls.cpp
-void ButtonsSection(CallSite site = CallSite::current());
-void ChipsSection(CallSite site = CallSite::current());
-void SelectionControlsSection(CallSite site = CallSite::current());
+// material/controls.cpp: ButtonsSection, ChipsSection and SelectionControlsSection are @Composable there (the module declares them)
 
 // material/containers.cpp
 void AnimateItemSection(CallSite site = CallSite::current());

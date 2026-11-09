@@ -2,322 +2,305 @@
 
 #include "showcase.hpp"
 
-#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
-
-void ButtonsSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        Section("Butonlar", [=] {
-            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                Button([] {}) { Text("Button"); };
-                FilledTonalButton([] {}) { Text("Tonal"); };
-                ElevatedButton([] {}) { Text("Elevated"); };
-            };
-            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                OutlinedButton([] {}) { Text("Outlined"); };
-                TextButton([] {}) { Text("Text"); };
-                Button([] {}, Modifier(), enabled = false) { Text("Kapalı"); };
-            };
-            // MotionScheme: the buttons below on Material 3's standard springs or the expressive ones
-            // (MaterialExpressiveTheme's), which bounce as the corners morph and the held button grows.
-            auto expressiveMotion = remember([] { return mutableStateOf(false); });
-            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
-                Switch(expressiveMotion.get(), [expressiveMotion](bool on) { expressiveMotion.set(on); });
-                Text(expressiveMotion.get() ? "MotionScheme.expressive()" : "MotionScheme.standard()", style = typography().bodyMedium);
-            };
-            CompositionLocalProvider({LocalMotionScheme.provides(expressiveMotion.get() ? MotionScheme::expressive() : MotionScheme::standard())}, [&] {
-                // M3 Expressive: the corners morph, squarer while held; toggle buttons turn square when checked.
-                Button([] {}, Modifier(), shapes = ButtonShapes{}) { Text("Basılı tut: köşeler"); };
-                // ButtonGroup: the button held grows and squeezes its neighbours.
-                ButtonGroup([&](const ButtonGroupScope& group) {
-                    const char* labels[] = {"Önceki", "Oynat", "Sonraki"};
-                    for (int i = 0; i < 3; ++i) {
-                        auto source = remember([] { return MutableInteractionSource(); });
-                        if (i == 1)
-                            Button([] {}, group.animateWidth(source), interactionSource = source) { Text(labels[i]); };
-                        else
-                            FilledTonalButton([] {}, group.animateWidth(source), interactionSource = source) { Text(labels[i]); };
+@Composable
+fun ButtonsSection() {
+    val cs = MaterialTheme.colorScheme
+    Section("Butonlar") {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { }) { Text("Button") }
+            FilledTonalButton(onClick = { }) { Text("Tonal") }
+            ElevatedButton(onClick = { }) { Text("Elevated") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { }) { Text("Outlined") }
+            TextButton(onClick = { }) { Text("Text") }
+            Button(onClick = { }, enabled = false) { Text("Kapalı") }
+        }
+        // MotionScheme: the buttons below on Material 3's standard springs or the expressive ones
+        // (MaterialExpressiveTheme's), which bounce as the corners morph and the held button grows.
+        var expressiveMotion by remember { mutableStateOf(false) }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = expressiveMotion, onCheckedChange = { expressiveMotion = it })
+            Text(if (expressiveMotion) "MotionScheme.expressive()" else "MotionScheme.standard()", style = MaterialTheme.typography.bodyMedium)
+        }
+        CompositionLocalProvider(LocalMotionScheme provides if (expressiveMotion) MotionScheme.expressive() else MotionScheme.standard()) {
+            // M3 Expressive: the corners morph, squarer while held; toggle buttons turn square when checked.
+            Button(onClick = { }, shapes = ButtonDefaults.shapes()) { Text("Basılı tut: köşeler") }
+            // ButtonGroup: the button held grows and squeezes its neighbours.
+            ButtonGroup {
+                val labels = listOf("Önceki", "Oynat", "Sonraki")
+                for (i in 0 until 3) {
+                    val source = remember { MutableInteractionSource() }
+                    if (i == 1) {
+                        Button(onClick = { }, modifier = Modifier.animateWidth(source), interactionSource = source) { Text(labels[i]) }
+                    } else {
+                        FilledTonalButton(onClick = { }, modifier = Modifier.animateWidth(source), interactionSource = source) { Text(labels[i]) }
                     }
-                });
-            });
-            auto styles = remember([] { return mutableStateOf(std::array<bool, 4>{true, false, false, false}); });
-            auto flip = [styles](size_t i) {
-                return [styles, i](bool on) {
-                    auto s = styles.peek();
-                    s[i] = on;
-                    styles.set(s);
-                };
-            };
-            // From items: what doesn't fit goes into the ⋮ menu at the end.
-            auto bold = remember([] { return mutableStateOf(false); });
-            auto lastAction = remember([] { return mutableStateOf(std::string("yok")); });
-            ButtonGroup({{.label = "Kopyala", .onClick = [lastAction] { lastAction.set("Kopyala"); }},
-                         {.label = "Yapıştır", .onClick = [lastAction] { lastAction.set("Yapıştır"); }},
-                         {.label = "Kalın", .checked = bold.get(), .onCheckedChange = [bold](bool on) { bold.set(on); }},
-                         {.label = "Sil", .icon = &Icons::Filled::Delete, .onClick = [lastAction] { lastAction.set("Sil"); }},
-                         {.label = "Paylaş", .icon = &Icons::Filled::Share, .onClick = [lastAction] { lastAction.set("Paylaş"); }}},
-                        Modifier().fillMaxWidth());
-            Text("Son eylem: " + lastAction.get() + (bold.get() ? " · kalın" : ""), color = cs.onSurfaceVariant, style = typography().bodySmall);
-            // A split button: the menu button turns round while its menu is open.
-            auto saveMenu = remember([] { return mutableStateOf(false); });
-            Box() {
-                SplitButtonLayout([&] { SplitButtonDefaults::LeadingButton([] {}, [] { Text("Kaydet"); }); },
-                                  [&] {
-                                      SplitButtonDefaults::TrailingButton(saveMenu.get(), [saveMenu](bool on) { saveMenu.set(on); },
-                                                                          [&] { SplitButtonDefaults::TrailingButtonIcon(saveMenu.get()); });
-                                  });
-                DropdownMenu(saveMenu.get(), [saveMenu] { saveMenu.set(false); }) {
-                    DropdownMenuItem([] { Text("Farklı kaydet"); }, [saveMenu] { saveMenu.set(false); });
-                    DropdownMenuItem([] { Text("Taslak olarak kaydet"); }, [saveMenu] { saveMenu.set(false); });
-                };
-            };
-            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
-                const auto& on = styles.get();
-                ToggleButton(on[0], flip(0), [] { Text("Kalın"); });
-                ElevatedToggleButton(on[1], flip(1), [] { Text("İtalik"); });
-                TonalToggleButton(on[2], flip(2), [] { Text("Altı çizili"); });
-                OutlinedToggleButton(on[3], flip(3), [] { Text("Üstü çizili"); });
-            });
-        });
-    });
+                }
+            }
+        }
+        // From items: what doesn't fit goes into the ⋮ menu at the end.
+        var bold by remember { mutableStateOf(false) }
+        var lastAction by remember { mutableStateOf("yok") }
+        ButtonGroup(
+            overflowIndicator = { menuState ->
+                FilledIconButton(onClick = { if (menuState.isExpanded) menuState.dismiss() else menuState.show() }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "Daha fazla")
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            clickableItem(onClick = { lastAction = "Kopyala" }, label = "Kopyala")
+            clickableItem(onClick = { lastAction = "Yapıştır" }, label = "Yapıştır")
+            toggleableItem(checked = bold, onCheckedChange = { bold = it }, label = "Kalın")
+            clickableItem(onClick = { lastAction = "Sil" }, label = "Sil", icon = { Icon(Icons.Filled.Delete, contentDescription = null) })
+            clickableItem(onClick = { lastAction = "Paylaş" }, label = "Paylaş", icon = { Icon(Icons.Filled.Share, contentDescription = null) })
+        }
+        Text("Son eylem: $lastAction${if (bold) " · kalın" else ""}", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        // A split button: the menu button turns round while its menu is open.
+        var saveMenu by remember { mutableStateOf(false) }
+        Box {
+            SplitButtonLayout(
+                leadingButton = { SplitButtonDefaults.LeadingButton(onClick = { }) { Text("Kaydet") } },
+                trailingButton = {
+                    SplitButtonDefaults.TrailingButton(checked = saveMenu, onCheckedChange = { saveMenu = it }) {
+                        SplitButtonDefaults.TrailingButtonIcon(saveMenu)
+                    }
+                },
+            )
+            DropdownMenu(expanded = saveMenu, onDismissRequest = { saveMenu = false }) {
+                DropdownMenuItem(text = { Text("Farklı kaydet") }, onClick = { saveMenu = false })
+                DropdownMenuItem(text = { Text("Taslak olarak kaydet") }, onClick = { saveMenu = false })
+            }
+        }
+        val styles = remember { mutableStateListOf(true, false, false, false) }
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ToggleButton(checked = styles[0], onCheckedChange = { styles[0] = it }) { Text("Kalın") }
+            ElevatedToggleButton(checked = styles[1], onCheckedChange = { styles[1] = it }) { Text("İtalik") }
+            TonalToggleButton(checked = styles[2], onCheckedChange = { styles[2] = it }) { Text("Altı çizili") }
+            OutlinedToggleButton(checked = styles[3], onCheckedChange = { styles[3] = it }) { Text("Üstü çizili") }
+        }
+    }
 }
 
-void ChipsSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto drinks = remember([] { return mutableStateListOf<std::string>({"Kahve"}); });
-        auto people = remember([] { return mutableStateListOf<std::string>({"Ayşe", "Mehmet"}); });
-        auto openOnly = remember([] { return mutableStateOf(false); });
-        Section("Chip'ler", [=] {
-            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
-                for (const char* drink : {"Kahve", "Çay", "Su", "Ayran"}) {
-                    bool on = std::find(drinks.begin(), drinks.end(), drink) != drinks.end();
-                    FilterChip(on,
-                               [drinks, drink, on] {
-                                   if (on)
-                                       drinks.removeIf([&](const std::string& d) { return d == drink; });
-                                   else
-                                       drinks.add(drink);
-                               },
-                               [drink] { Text(drink); },
-                               ChipOptions{.leadingIcon = on ? Content([] { Icon(Icons::Filled::Check, "Seçili", Modifier().size(18)); })
-                                                  : Content()});
-                }
-            });
-            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
-                AssistChip([] {}, [] { Text("Yol tarifi"); },
-                           ChipOptions{.leadingIcon = [] { Icon(Icons::Filled::Place, "Konum", Modifier().size(18)); }});
-                SuggestionChip([] {}, [] { Text("Bugün"); });
-                // Elevated: a shadow instead of the border.
-                ElevatedAssistChip([] {}, [] { Text("Paylaş"); },
-                                   ChipOptions{.leadingIcon = [] { Icon(Icons::Filled::Share, "Paylaş", Modifier().size(18)); }});
-                ElevatedFilterChip(openOnly.get(), [openOnly] { openOnly.set(!openOnly.get()); }, [] { Text("Şu an açık"); });
-                ElevatedSuggestionChip([] {}, [] { Text("Yarın"); });
-                for (const std::string& person : people)
-                    InputChip(false, [] {}, [person] { Text(person); },
-                              ChipOptions{.trailingIcon = [people, person] {
-                                  IconButton([people, person] {
-                                      people.removeIf([&](const std::string& p) { return p == person; });
-                                  }, Modifier().size(24)) { Icon(Icons::Filled::Close, "Kaldır", Modifier().size(18)); };
-                              }});
-            });
-            std::string chosen;
-            for (const std::string& d : drinks) chosen += (chosen.empty() ? "" : ", ") + d;
-            Text("Seçilen içecekler: " + (chosen.empty() ? std::string("yok") : chosen),
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-        });
-    });
+@Composable
+fun ChipsSection() {
+    val cs = MaterialTheme.colorScheme
+    val drinks = remember { mutableStateListOf("Kahve") }
+    val people = remember { mutableStateListOf("Ayşe", "Mehmet") }
+    var openOnly by remember { mutableStateOf(false) }
+    Section("Chip'ler") {
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (drink in listOf("Kahve", "Çay", "Su", "Ayran")) {
+                val on = drink in drinks
+                FilterChip(selected = on, onClick = { if (on) drinks.remove(drink) else drinks.add(drink) }, label = { Text(drink) },
+                           leadingIcon = if (on) { { Icon(Icons.Filled.Check, contentDescription = "Seçili", modifier = Modifier.size(18.dp)) } } else null)
+            }
+        }
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AssistChip(onClick = { }, label = { Text("Yol tarifi") },
+                       leadingIcon = { Icon(Icons.Filled.Place, contentDescription = "Konum", modifier = Modifier.size(18.dp)) })
+            SuggestionChip(onClick = { }, label = { Text("Bugün") })
+            // Elevated: a shadow instead of the border.
+            ElevatedAssistChip(onClick = { }, label = { Text("Paylaş") },
+                               leadingIcon = { Icon(Icons.Filled.Share, contentDescription = "Paylaş", modifier = Modifier.size(18.dp)) })
+            ElevatedFilterChip(selected = openOnly, onClick = { openOnly = !openOnly }, label = { Text("Şu an açık") })
+            ElevatedSuggestionChip(onClick = { }, label = { Text("Yarın") })
+            for (person in people) {
+                InputChip(selected = false, onClick = { }, label = { Text(person) },
+                          trailingIcon = {
+                              IconButton(onClick = { people.remove(person) }, modifier = Modifier.size(24.dp)) {
+                                  Icon(Icons.Filled.Close, contentDescription = "Kaldır", modifier = Modifier.size(18.dp))
+                              }
+                          })
+            }
+        }
+        Text("Seçilen içecekler: ${drinks.joinToString(", ").ifEmpty { "yok" }}", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
-void SelectionControlsSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto size = remember([] { return mutableStateOf(std::string("Orta")); });
-        auto volume = remember([] { return mutableStateOf(40.f); });
-        auto toppings = remember([] { return mutableStateOf(std::array<bool, 3>{true, false, false}); });
-        auto rating = remember([] { return mutableStateOf(3.f); });
-        auto price = remember([] { return mutableStateOf(std::pair(200.f, 800.f)); });
-        // The sliders' interaction sources: the value being moved stands out while held.
-        auto volumeSource = remember([] { return MutableInteractionSource(); });
-        auto priceFrom = remember([] { return MutableInteractionSource(); });
-        auto priceTo = remember([] { return MutableInteractionSource(); });
-        auto period = remember([] { return mutableStateOf(1); });
-        auto transport = remember([] { return mutableStateOf(std::array<bool, 3>{true, false, false}); });
-                   auto touchRoom = remember([] { return mutableStateOf(true); });
-        Section("Seçim kontrolleri", [=] {
-            // minimumInteractiveComponentSize: 48 dp of room to touch the controls (0: just their own size).
-            Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
-                Switch(touchRoom.get(), [touchRoom](bool v) { touchRoom.set(v); });
-                Text("48 dp dokunma alanı", Modifier().padding(12, 0, 0, 0));
-            };
-            CompositionLocalProvider({LocalMinimumInteractiveComponentSize.provides(touchRoom.get() ? 48.f : 0.f)}, [&] {
-                // TriStateCheckbox: all, none or some of the toppings (Indeterminate: a dash).
-                ToggleableState all = toppings.get()[0] && toppings.get()[1] && toppings.get()[2] ? ToggleableState::On
-                                      : toppings.get()[0] || toppings.get()[1] || toppings.get()[2] ? ToggleableState::Indeterminate
-                                                                                                      : ToggleableState::Off;
-                Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
-                    TriStateCheckbox(all, [toppings, all] {
-                        bool on = all != ToggleableState::On;
-                        toppings.set({on, on, on});
-                    });
-                    Text("Hepsi (TriStateCheckbox)");
-                };
-                // Each box with its label, onto the next line together where the row is narrow.
-                FlowRow(Modifier().padding(24, 0, 0, 0), FlowStyle{}, [&] {
-                    const char* names[] = {"Peynir", "Zeytin", "Mantar"};
-                    for (int i = 0; i < 3; ++i)
-                        Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
-                            Checkbox(toppings.get()[size_t(i)], [toppings, i](bool v) {
-                                auto t = toppings.peek();
-                                t[size_t(i)] = v;
-                                toppings.set(t);
-                            });
-                            Text(names[i], Modifier().padding(0, 0, 8, 0));
-                        };
-                });
-                Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
-                    for (const char* option : {"Küçük", "Orta", "Büyük"}) {
-                        RadioButton(size.get() == option, [size, option] { size.set(option); });
-                        Text(option, Modifier().padding(0, 0, 12, 0));
+// One end of the price range: bold while that thumb is held.
+@Composable
+private fun RangeEnd(value: Float, source: MutableInteractionSource) {
+    val pressed by source.collectIsPressedAsState()
+    val dragged by source.collectIsDraggedAsState()
+    val held = pressed || dragged
+    Text("%.0f".format(value), fontWeight = if (held) FontWeight.Bold else null,
+         color = if (held) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+}
+
+@Composable
+fun SelectionControlsSection() {
+    val cs = MaterialTheme.colorScheme
+    var size by remember { mutableStateOf("Orta") }
+    var volume by remember { mutableStateOf(40f) }
+    val toppings = remember { mutableStateListOf(true, false, false) }
+    var rating by remember { mutableStateOf(3f) }
+    var price by remember { mutableStateOf(200f..800f) }
+    // The sliders' interaction sources: the value being moved stands out while held.
+    val volumeSource = remember { MutableInteractionSource() }
+    val priceFrom = remember { MutableInteractionSource() }
+    val priceTo = remember { MutableInteractionSource() }
+    var period by remember { mutableStateOf(1) }
+    val transport = remember { mutableStateListOf(true, false, false) }
+    var touchRoom by remember { mutableStateOf(true) }
+    Section("Seçim kontrolleri") {
+        // minimumInteractiveComponentSize: 48 dp of room to touch the controls (0: just their own size).
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = touchRoom, onCheckedChange = { touchRoom = it })
+            Text("48 dp dokunma alanı", modifier = Modifier.padding(start = 12.dp))
+        }
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides if (touchRoom) 48.dp else 0.dp) {
+            // TriStateCheckbox: all, none or some of the toppings (Indeterminate: a dash).
+            val all = if (toppings.all { it }) ToggleableState.On else if (toppings.any { it }) ToggleableState.Indeterminate else ToggleableState.Off
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TriStateCheckbox(state = all, onClick = {
+                    val on = all != ToggleableState.On
+                    for (i in 0 until 3) toppings[i] = on
+                })
+                Text("Hepsi (TriStateCheckbox)")
+            }
+            // Each box with its label, onto the next line together where the row is narrow.
+            FlowRow(modifier = Modifier.padding(start = 24.dp)) {
+                val names = listOf("Peynir", "Zeytin", "Mantar")
+                for (i in 0 until 3) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = toppings[i], onCheckedChange = { toppings[i] = it })
+                        Text(names[i], modifier = Modifier.padding(end = 8.dp))
                     }
-                };
-                Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
-                    Icon(Icons::Filled::Notifications, "Ses");
-                    Slider(volume.get(), [volume](float v) { volume.set(v); }, Modifier().weight(1).padding(8, 0),
-                           valueFrom = 0, valueTo = 100, interactionSource = volumeSource);
-                    bool held = volumeSource.collectIsPressedAsState() || volumeSource.collectIsDraggedAsState();
-                    Text(std::format("{:.0f}", volume.get()), Modifier().width(32),
-                         fontWeight = held ? std::optional(FontWeight::Bold) : std::nullopt, color = held ? std::optional(cs.primary) : std::nullopt, textAlign = TextAlign::End);
-                };
-                Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
-                    Icon(Icons::Filled::Star, "Puan");
-                    Slider(rating.get(), [rating](float v) { rating.set(v); }, Modifier().weight(1).padding(8, 0),
-                           valueFrom = 1, valueTo = 5, steps = 3);
-                    Text(std::format("{:.0f}", rating.get()), Modifier().width(32), textAlign = TextAlign::End);
-                };
-                // systemGestureExclusion: two sliders out to the window's edges; a drag
-                // from the edge moves the first, but is the system's back on the second.
-                {
-                    auto edgeA = remember([] { return mutableStateOf(0.05f); });
-                    auto edgeB = remember([] { return mutableStateOf(0.05f); });
-                    float window = LocalWindowSize.current().width;
-                    Text("Kenardan kenara (üstteki systemGestureExclusion ile korunur):", color = cs.onSurfaceVariant, style = typography().bodyMedium);
-                    Slider(edgeA.get(), [edgeA](float v) { edgeA.set(v); }, Modifier().requiredWidth(window).systemGestureExclusion());
-                    Slider(edgeB.get(), [edgeB](float v) { edgeB.set(v); }, Modifier().requiredWidth(window));
                 }
-                Row() {  // the end being dragged is shown bold
-                    auto end = [&](float v, const MutableInteractionSource& source) {
-                        bool held = source.collectIsPressedAsState() || source.collectIsDraggedAsState();
-                        Text(std::format("{:.0f}", v), fontWeight = held ? std::optional(FontWeight::Bold) : std::nullopt, color = held ? cs.primary : cs.onSurfaceVariant, style = typography().bodyMedium);
-                    };
-                    Text("Fiyat aralığı: ", color = cs.onSurfaceVariant, style = typography().bodyMedium);
-                    end(price.get().first, priceFrom);
-                    Text(" – ", color = cs.onSurfaceVariant, style = typography().bodyMedium);
-                    end(price.get().second, priceTo);
-                    Text(" ₺", color = cs.onSurfaceVariant, style = typography().bodyMedium);
-                };
-                RangeSlider(price.get(), [price](std::pair<float, float> v) { price.set(v); }, Modifier().fillMaxWidth(),
-                            valueFrom = 0, valueTo = 1000, steps = 19, interactionSource = priceFrom, endInteractionSource = priceTo);
-                // M3 Expressive's vertical sliders: up for more (the second one in five steps).
-                auto volume = remember([] { return mutableStateOf(0.6f); });
-                auto light = remember([] { return mutableStateOf(0.5f); });
-                Row(Modifier().height(160), horizontalArrangement = Arrangement::spacedBy(24), verticalAlignment = Alignment::CenterVertically) {
-                    VerticalSlider(volume.get(), [volume](float v) { volume.set(v); });
-                    VerticalSlider(light.get(), [light](float v) { light.set(v); }, Modifier(), steps = 3);
-                    Text(std::format("Ses %{} · Işık %{}", int(std::lround(volume.get() * 100)), int(std::lround(light.get() * 100))),
-                         color = cs.onSurfaceVariant, style = typography().bodyMedium);
-                };
-                // The thumb and track to pick: the classic circle, Material 3's bar, shapes, an icon
-                // or the value; the classic thin track or Material 3's thick one; steps or none.
-                auto thumbKind = remember([] { return mutableStateOf(0); });
-                auto thickTrack = remember([] { return mutableStateOf(false); });
-                auto stepped = remember([] { return mutableStateOf(false); });
-                auto bubble = remember([] { return mutableStateOf(true); });
-                auto picked = remember([] { return mutableStateOf(40.f); });
-                Text("Slider imleci", style = typography().titleSmall);
-                const char* thumbs[] = {"Daire", "M3 çubuk", "Kare", "Elmas", "Kurabiye", "Güneş", "Simge", "Değer"};
-                FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 0}, [&] {
-                    for (int i = 0; i < 8; ++i)
-                        FilterChip(thumbKind.get() == i, [thumbKind, i] { thumbKind.set(i); }, [&, i] { Text(thumbs[i]); });
-                });
-                Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                    FilterChip(thickTrack.get(), [thickTrack] { thickTrack.set(!thickTrack.get()); }, [] { Text("M3 iz"); });
-                    FilterChip(stepped.get(), [stepped] { stepped.set(!stepped.get()); }, [] { Text("10 adım"); });
-                    FilterChip(bubble.get(), [bubble] { bubble.set(!bubble.get()); }, [] { Text("Değer balonu"); });
-                };
-                auto thumbFor = [](int kind) -> std::function<void(const SliderState&)> {
-                    switch (kind) {
-                    case 1: return [](const SliderState& s) { SliderDefaults::Thumb(s); };
-                    case 2: return [](const SliderState& s) { SliderDefaults::ShapeThumb(s, RoundedCornerShape(6), {22, 22}); };
-                    case 3: return [](const SliderState& s) { SliderDefaults::ShapeThumb(s, OutlineShape(MaterialShapes::Diamond()), {26, 26}); };
-                    case 4: return [](const SliderState& s) { SliderDefaults::ShapeThumb(s, OutlineShape(MaterialShapes::Cookie9Sided()), {28, 28}); };
-                    case 5: return [](const SliderState& s) { SliderDefaults::ShapeThumb(s, OutlineShape(MaterialShapes::Sunny()), {28, 28}); };
-                    case 6: return [](const SliderState& s) { SliderDefaults::IconThumb(s, Icons::Filled::Favorite); };
-                    case 7: return [](const SliderState& s) { SliderDefaults::ValueThumb(s); };
-                    default: return {};  // the classic circle
-                    }
-                };
-                // With the bubble: the thumb picked, in a Label showing the value while it is held.
-                auto withBubble = [&](std::function<void(const SliderState&)> thumb) -> std::function<void(const SliderState&)> {
-                    if (!bubble.get()) return thumb;
-                    return [thumb](const SliderState& s) {
-                        SliderDefaults::Label(s, [&] { PlainTooltip([&] { Text(std::format("{:.0f}", s.value())); }); }, [&] {
-                            if (thumb) thumb(s);
-                            else SliderDefaults::CircleThumb(s);
-                        });
-                    };
-                };
-                std::function<void(const SliderState&)> pickedTrack;
-                if (thickTrack.get()) pickedTrack = [](const SliderState& s) { SliderDefaults::Track(s); };
-                Slider(picked.get(), [picked](float v) { picked.set(v); }, Modifier().fillMaxWidth(),
-                       valueFrom = 0, valueTo = 100, steps = stepped.get() ? 9 : 0, thumb = withBubble(thumbFor(thumbKind.get())), track = pickedTrack);
-                // The same thumbs on a range (each its own), the track picked alike.
-                auto pickedRange = remember([] { return mutableStateOf(std::pair{20.f, 70.f}); });
-                std::function<void(const RangeSliderState&)> pickedRangeTrack;
-                if (thickTrack.get()) pickedRangeTrack = [](const RangeSliderState& s) { SliderDefaults::Track(s); };
-                RangeSlider(pickedRange.get(), [pickedRange](std::pair<float, float> v) { pickedRange.set(v); }, Modifier().fillMaxWidth(),
-                            valueFrom = 0, valueTo = 100, steps = stepped.get() ? 9 : 0, thumb = withBubble(thumbFor(thumbKind.get())), rangeTrack = pickedRangeTrack);
-                // States of their own (rememberSliderState, rememberRangeSliderState): Material 3's look, values shown.
-                auto hours = rememberRangeSliderState(9, 17, 23, 0, 24);
-                Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
-                    Text(std::format("Saat: {:02.0f}–{:02.0f}", hours.activeRangeStart(), hours.activeRangeEnd()), Modifier().width(120),
-                         style = typography().bodyMedium);
-                    RangeSlider(hours, Modifier().weight(1),
-                                thumb = [](const SliderState& s) { SliderDefaults::ValueThumb(s); }, rangeTrack = [](const RangeSliderState& s) { SliderDefaults::Track(s); });
-                };
-                auto stars = rememberSliderState(3, 3, 1, 5);
-                Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
-                    Text(std::format("SliderState: {:.0f} ★", stars.value()), Modifier().width(120), style = typography().bodyMedium);
-                    Slider(stars, Modifier().weight(1),
-                           thumb = [](const SliderState& s) { SliderDefaults::ValueThumb(s); }, track = [](const SliderState& s) { SliderDefaults::Track(s); });
-                };
-                SingleChoiceSegmentedButtonRow(Modifier().fillMaxWidth(), [&] {
-                    const char* labels[] = {"Gün", "Hafta", "Ay"};
-                    for (int i = 0; i < 3; ++i)
-                        SegmentedButton(period.get() == i, [period, i] { period.set(i); }, [&, i] { Text(labels[i]); });
-                });
-                // Several at once (MultiChoiceSegmentedButtonRow): each on or off; one that can't be picked.
-                MultiChoiceSegmentedButtonRow(Modifier().fillMaxWidth(), [&] {
-                    const char* ways[] = {"Yürüyüş", "Bisiklet", "Araba"};
-                    for (int i = 0; i < 3; ++i)
-                        SegmentedButton(transport.get()[size_t(i)], [transport, i](bool on) {
-                            auto t = transport.peek();
-                            t[size_t(i)] = on;
-                            transport.set(t);
-                        }, [&, i] { Text(ways[i]); }, Modifier(), {.enabled = i != 2});
-                });
-                // M3 Expressive's connected button group: toggle buttons 2 dp apart, the checked one round.
-                auto view = remember([] { return mutableStateOf(0); });
-                Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(ButtonGroupDefaults::ConnectedSpaceBetween)) {
-                    const char* views[] = {"Liste", "Izgara", "Harita"};
-                    for (int i = 0; i < 3; ++i)
-                        TonalToggleButton(view.get() == i, [view, i](bool) { view.set(i); }, Modifier().weight(1),
-                                          {.shapes = i == 0   ? ButtonGroupDefaults::connectedLeadingButtonShapes()
-                                                     : i == 2 ? ButtonGroupDefaults::connectedTrailingButtonShapes()
-                                                              : ButtonGroupDefaults::connectedMiddleButtonShapes()},
-                                          [&, i] { Text(views[i]); });
-                };
-            });
-        });
-    });
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                for (option in listOf("Küçük", "Orta", "Büyük")) {
+                    RadioButton(selected = size == option, onClick = { size = option })
+                    Text(option, modifier = Modifier.padding(end = 12.dp))
+                }
+            }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Notifications, contentDescription = "Ses")
+                Slider(value = volume, onValueChange = { volume = it }, modifier = Modifier.weight(1f).padding(8.dp, 0.dp),
+                       valueRange = 0f..100f, interactionSource = volumeSource)
+                val pressed by volumeSource.collectIsPressedAsState()
+                val dragged by volumeSource.collectIsDraggedAsState()
+                val held = pressed || dragged
+                Text("%.0f".format(volume), modifier = Modifier.width(32.dp), fontWeight = if (held) FontWeight.Bold else null,
+                     color = if (held) cs.primary else LocalContentColor.current, textAlign = TextAlign.End)
+            }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Star, contentDescription = "Puan")
+                Slider(value = rating, onValueChange = { rating = it }, modifier = Modifier.weight(1f).padding(8.dp, 0.dp), valueRange = 1f..5f, steps = 3)
+                Text("%.0f".format(rating), modifier = Modifier.width(32.dp), textAlign = TextAlign.End)
+            }
+            // systemGestureExclusion: two sliders out to the window's edges; a drag
+            // from the edge moves the first, but is the system's back on the second.
+            var edgeA by remember { mutableStateOf(0.05f) }
+            var edgeB by remember { mutableStateOf(0.05f) }
+            val window = LocalWindowSize.current.width
+            Text("Kenardan kenara (üstteki systemGestureExclusion ile korunur):", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            Slider(value = edgeA, onValueChange = { edgeA = it }, modifier = Modifier.requiredWidth(window.dp).systemGestureExclusion())
+            Slider(value = edgeB, onValueChange = { edgeB = it }, modifier = Modifier.requiredWidth(window.dp))
+            Row {  // the end being dragged is shown bold
+                Text("Fiyat aralığı: ", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                RangeEnd(price.start, priceFrom)
+                Text(" – ", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                RangeEnd(price.endInclusive, priceTo)
+                Text(" ₺", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            }
+            RangeSlider(value = price, onValueChange = { price = it }, modifier = Modifier.fillMaxWidth(), valueRange = 0f..1000f, steps = 19,
+                        interactionSource = priceFrom, endInteractionSource = priceTo)
+            // M3 Expressive's vertical sliders: up for more (the second one in five steps).
+            var loudness by remember { mutableStateOf(0.6f) }
+            var light by remember { mutableStateOf(0.5f) }
+            Row(modifier = Modifier.height(160.dp), horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
+                VerticalSlider(value = loudness, onValueChange = { loudness = it })
+                VerticalSlider(value = light, onValueChange = { light = it }, steps = 3)
+                Text("Ses %${(loudness * 100).roundToInt()} · Işık %${(light * 100).roundToInt()}", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            }
+            // The thumb and track to pick: the classic circle, Material 3's bar, shapes, an icon
+            // or the value; the classic thin track or Material 3's thick one; steps or none.
+            var thumbKind by remember { mutableStateOf(0) }
+            var thickTrack by remember { mutableStateOf(false) }
+            var stepped by remember { mutableStateOf(false) }
+            var bubble by remember { mutableStateOf(true) }
+            var picked by remember { mutableStateOf(40f) }
+            val pickedSource = remember { MutableInteractionSource() }
+            Text("Slider imleci", style = MaterialTheme.typography.titleSmall)
+            val thumbs = listOf("Daire", "M3 çubuk", "Kare", "Elmas", "Kurabiye", "Güneş", "Simge", "Değer")
+            FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (i in 0 until 8) FilterChip(selected = thumbKind == i, onClick = { thumbKind = i }, label = { Text(thumbs[i]) })
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = thickTrack, onClick = { thickTrack = !thickTrack }, label = { Text("M3 iz") })
+                FilterChip(selected = stepped, onClick = { stepped = !stepped }, label = { Text("10 adım") })
+                FilterChip(selected = bubble, onClick = { bubble = !bubble }, label = { Text("Değer balonu") })
+            }
+            val thumb: (SliderState) -> Unit = { s ->
+                when (thumbKind) {
+                    1 -> SliderDefaults.Thumb(s)
+                    2 -> SliderDefaults.ShapeThumb(s, RoundedCornerShape(6.dp), DpSize(22.dp, 22.dp))
+                    3 -> SliderDefaults.ShapeThumb(s, OutlineShape(MaterialShapes.Diamond()), DpSize(26.dp, 26.dp))
+                    4 -> SliderDefaults.ShapeThumb(s, OutlineShape(MaterialShapes.Cookie9Sided()), DpSize(28.dp, 28.dp))
+                    5 -> SliderDefaults.ShapeThumb(s, OutlineShape(MaterialShapes.Sunny()), DpSize(28.dp, 28.dp))
+                    6 -> SliderDefaults.IconThumb(s, Icons.Filled.Favorite)
+                    7 -> SliderDefaults.ValueThumb(s)
+                    else -> SliderDefaults.CircleThumb(s)  // the classic circle
+                }
+            }
+            // With the bubble: the thumb picked, in a Label showing the value while it is held.
+            val withBubble: (SliderState) -> Unit = { s ->
+                if (bubble) {
+                    Label(label = { PlainTooltip { Text("%.0f".format(s.value)) } }, interactionSource = pickedSource) { thumb(s) }
+                } else {
+                    thumb(s)
+                }
+            }
+            Slider(value = picked, onValueChange = { picked = it }, modifier = Modifier.fillMaxWidth(), valueRange = 0f..100f,
+                   steps = if (stepped) 9 else 0, interactionSource = pickedSource, thumb = withBubble,
+                   track = if (thickTrack) { { s -> SliderDefaults.Track(s) } } else null)
+            // The same thumbs on a range (each its own), the track picked alike.
+            var pickedRange by remember { mutableStateOf(20f..70f) }
+            RangeSlider(value = pickedRange, onValueChange = { pickedRange = it }, modifier = Modifier.fillMaxWidth(), valueRange = 0f..100f,
+                        steps = if (stepped) 9 else 0, startThumb = thumb, endThumb = thumb,
+                        track = if (thickTrack) { { s -> SliderDefaults.Track(s) } } else null)
+            // States of their own (rememberSliderState, rememberRangeSliderState): Material 3's look, values shown.
+            val hours = rememberRangeSliderState(activeRangeStart = 9f, activeRangeEnd = 17f, steps = 23, valueRange = 0f..24f)
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Saat: %02.0f–%02.0f".format(hours.activeRangeStart, hours.activeRangeEnd), modifier = Modifier.width(120.dp), style = MaterialTheme.typography.bodyMedium)
+                RangeSlider(state = hours, modifier = Modifier.weight(1f), startThumb = { SliderDefaults.ValueThumb(it) },
+                            endThumb = { SliderDefaults.ValueThumb(it) }, track = { SliderDefaults.Track(it) })
+            }
+            val stars = rememberSliderState(value = 3f, steps = 3, valueRange = 1f..5f)
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("SliderState: %.0f ★".format(stars.value), modifier = Modifier.width(120.dp), style = MaterialTheme.typography.bodyMedium)
+                Slider(state = stars, modifier = Modifier.weight(1f), thumb = { SliderDefaults.ValueThumb(it) }, track = { SliderDefaults.Track(it) })
+            }
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                val labels = listOf("Gün", "Hafta", "Ay")
+                for (i in 0 until 3) {
+                    SegmentedButton(selected = period == i, onClick = { period = i }, shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(labels[i]) }
+                }
+            }
+            // Several at once (MultiChoiceSegmentedButtonRow): each on or off; one that can't be picked.
+            MultiChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                val ways = listOf("Yürüyüş", "Bisiklet", "Araba")
+                for (i in 0 until 3) {
+                    SegmentedButton(checked = transport[i], onCheckedChange = { transport[i] = it }, shape = SegmentedButtonDefaults.itemShape(i, 3),
+                                    enabled = i != 2) { Text(ways[i]) }
+                }
+            }
+            // M3 Expressive's connected button group: toggle buttons 2 dp apart, the checked one round.
+            var view by remember { mutableStateOf(0) }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
+                val views = listOf("Liste", "Izgara", "Harita")
+                for (i in 0 until 3) {
+                    TonalToggleButton(checked = view == i, onCheckedChange = { view = i }, modifier = Modifier.weight(1f),
+                                      shapes = when (i) {
+                                          0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                                          2 -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                                          else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                                      }) { Text(views[i]) }
+                }
+            }
+        }
+    }
 }
