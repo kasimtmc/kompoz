@@ -1077,6 +1077,9 @@
   `pow`, `PI`…), Compose'un anlamıyla `Rect(left, top, right, bottom)` ve `Rect(topLeft, size)` (Kompoz'un `Rect`'i x, y,
   genişlik, yükseklik tutar), `CornerSize(percent)` / `CornerSize(dp)`, bir `PathMeasure`'ın `length`'i,
   `withTransform({ translate(…); rotate(…) }) { … }`'ın dönüşüm bloğu (bir `DrawTransform`), `rememberScrollable2DState { }`'in değeri.
+- **Vitrinin çizim ekranı Compose söz dizimiyle**: Canvas örnekleri (halka, sinüs dalgası, path efektleri, PathMeasure,
+  drawWithCache içinde Path.combine, clipPath ve withTransform, fırçalar), dönen simge, köşe şekilleri, sürüklenen top ve
+  uzun basılan kart, scrollable2D, GraphicsLayer yansıması, dokunuşlar ve combinedClickable Kotlin'de bir `@Composable fun`.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

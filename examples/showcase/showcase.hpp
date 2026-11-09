@@ -133,8 +133,7 @@ void CanvasSection(CallSite site = CallSite::current());
 void BlurSection(CallSite site = CallSite::current());
 void ColorVectorSection(CallSite site = CallSite::current());
 
-// components/drawing.cpp
-void DrawingSection(CallSite site = CallSite::current());
+// components/drawing.cpp: DrawingSection is @Composable there (the module declares it)
 
 // components/input.cpp
 void SelectableTextSection(CallSite site = CallSite::current());

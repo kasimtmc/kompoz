@@ -1038,6 +1038,10 @@
   `floor`, `round`, `pow`, `PI`…), `Rect(left, top, right, bottom)` and `Rect(topLeft, size)` with Compose's meaning (Kompoz's
   `Rect` holds x, y, width, height), `CornerSize(percent)` / `CornerSize(dp)`, a `PathMeasure`'s `length`,
   `withTransform({ translate(…); rotate(…) }) { … }`'s transform block (a `DrawTransform`), `rememberScrollable2DState { }`'s value.
+- **The showcase's drawing screen in Compose's syntax**: the Canvas samples (the donut, the sine wave, path effects,
+  PathMeasure, Path.combine in drawWithCache, clipPath and withTransform, brushes), the spinning icon, the corner shapes,
+  the draggable ball and the long-press card, scrollable2D, the GraphicsLayer reflection, taps and combinedClickable are a
+  `@Composable fun` in Kotlin.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and
