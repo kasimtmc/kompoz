@@ -1029,6 +1029,15 @@
   `TextIndent(24.sp)` take text units; `rememberTextMeasurer().measure(text, style = …)` takes a typography style too.
 - **The showcase's text screen in Compose's syntax**: the annotated strings, fonts, overflow, styles, inline content, HTML and
   marquee samples are a `@Composable fun` in Kotlin (the variable-font sample stays C++ in the file).
+- **Drawing as Compose writes it, the rest**: `drawText(textMeasurer, text, topLeft = …, style = …, overflow = …, maxLines = …)`
+  by name (the style a `TextStyle` or a typography style); `record(graphicsLayer, size = …) { … }` by name, and a
+  `GraphicsLayer`'s `alpha`, `scaleY`, `topLeft`… written on the layer itself in Kotlin (`layer.alpha = 0.35f`: its
+  `properties()`); `Modifier.onVisibilityChanged(minDurationMs = …, minFractionVisible = …, viewportBounds = …) { visible -> }`
+  and `Modifier.draggable2D(state, startDragImmediately = …, onDragStarted = …, …)` by name; `Offset.Zero`, `Size.Zero`,
+  `IntOffset.Zero`; `PointerIcon.Move` and the other cursors. kompozc: kotlin.math (`sin`, `cos`, `sqrt`, `abs`, `min`, `max`,
+  `floor`, `round`, `pow`, `PI`…), `Rect(left, top, right, bottom)` and `Rect(topLeft, size)` with Compose's meaning (Kompoz's
+  `Rect` holds x, y, width, height), `CornerSize(percent)` / `CornerSize(dp)`, a `PathMeasure`'s `length`,
+  `withTransform({ translate(…); rotate(…) }) { … }`'s transform block (a `DrawTransform`), `rememberScrollable2DState { }`'s value.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

@@ -7,6 +7,7 @@
 // The names are arg's (kompoz::arg::width, ...): end, x or width as names of all of kompoz's would
 // take those words from code that says `using namespace kompoz`.
 
+#include "gestures.hpp"
 #include "layout.hpp"
 #include "named.hpp"
 #include "shared_transition.hpp"
@@ -593,6 +594,65 @@ Modifier Modifier::horizontalScroll(A&&... args) const {
     using P = detail::Params<n::State, n::Enabled, n::ReverseScrolling>;
     static_assert(P::check<A...>());
     return horizontalScroll(P::arg<n::State>(args...), P::get<n::Enabled>(true, args...), P::get<n::ReverseScrolling>(false, args...));
+}
+
+// onVisibilityChanged(minDurationMs = …, minFractionVisible = …, viewportBounds = …) { visible -> }: the callback last.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::onVisibilityChanged(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::MinDurationMs, n::MinFractionVisible, n::ViewportBounds, detail::BlockWith<bool>>;
+    static_assert(P::check<A...>());
+    VisibilityOptions options;
+    P::set<n::MinDurationMs>(options.minDurationMs, args...);
+    P::set<n::MinFractionVisible>(options.minFractionVisible, args...);
+    P::set<n::ViewportBounds>(options.viewport, args...);
+    return onVisibilityChanged(std::function<void(bool)>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...))), options);
+}
+
+// draggable2D(state, startDragImmediately = …, …): Compose's names over Draggable2DOptions.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::draggable2D(const Draggable2DState& state, A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::Enabled, n::InteractionSource, n::StartDragImmediately, n::OnDragStarted, n::OnDragStopped, n::ReverseDirection>;
+    static_assert(P::check<A...>());
+    Draggable2DOptions options;
+    P::set<n::Enabled>(options.enabled, args...);
+    P::set<n::InteractionSource>(options.interactionSource, args...);
+    P::set<n::StartDragImmediately>(options.startDragImmediately, args...);
+    P::set<n::OnDragStarted>(options.onDragStarted, args...);
+    P::set<n::OnDragStopped>(options.onDragStopped, args...);
+    P::set<n::ReverseDirection>(options.reverseDirection, args...);
+    return draggable2D(state, options);
+}
+
+// drawText(measurer, text, topLeft = …, style = …): the style a TextStyle, or a typography style (a Font) as the style's font.
+template <class S, class... A>
+    requires(detail::anyNamedArgument<A...>)
+void DrawScope::drawText(const TextLayoutMeasurer& measurer, const S& text, A&&... args) {
+    namespace n = detail::names;
+    using P = detail::Params<n::TopLeft, n::Style, n::Overflow, n::SoftWrap, n::MaxLines, n::Size, n::BlendMode>;
+    static_assert(P::check<A...>());
+    TextStyle style;
+    if constexpr (P::given<n::Style, A...>()) {
+        auto&& given = P::arg<n::Style>(args...);
+        if constexpr (std::is_convertible_v<decltype(given), Font>) style.font = Font(given);
+        else style = TextStyle(given);
+    }
+    drawText(measurer, text, P::get<n::TopLeft>(Offset{}, args...), style, P::get<n::Overflow>(std::optional<TextOverflow>(), args...),
+             P::get<n::SoftWrap>(std::optional<bool>(), args...), P::get<n::MaxLines>(std::optional<int>(), args...),
+             P::get<n::Size>(std::optional<Size>(), args...), P::get<n::BlendMode>(BlendMode::SrcOver, args...));
+}
+
+// record(layer, size = …) { … }: the recording's block last.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+void DrawScope::record(const GraphicsLayer& layer, A&&... args) {
+    namespace n = detail::names;
+    using P = detail::Params<n::Size, detail::BlockWith<DrawScope&>>;
+    static_assert(P::check<A...>());
+    record(layer, detail::drawBlock(std::forward<A>(args)...), P::get<n::Size>(std::optional<Size>(), args...));
 }
 
 } // namespace kompoz

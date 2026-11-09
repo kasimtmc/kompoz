@@ -216,9 +216,11 @@ struct FocusState {
     friend constexpr bool operator==(const FocusState&, const FocusState&) = default;
 };
 enum class Cursor { Default, Pointer, Text, Crosshair, Move, ResizeHorizontal, ResizeVertical, NotAllowed, Wait };
-// Compose's PointerIcon names: Modifier().pointerHoverIcon(PointerIcon::Hand).
+// Compose's PointerIcon names: Modifier().pointerHoverIcon(PointerIcon::Hand); and Kompoz's for the other cursors.
 struct PointerIcon {
     static constexpr Cursor Default = Cursor::Default, Hand = Cursor::Pointer, Text = Cursor::Text, Crosshair = Cursor::Crosshair;
+    static constexpr Cursor Move = Cursor::Move, ResizeHorizontal = Cursor::ResizeHorizontal, ResizeVertical = Cursor::ResizeVertical,
+                            NotAllowed = Cursor::NotAllowed, Wait = Cursor::Wait;
 };
 
 // Preferred color for content (text, pressed/hover overlays) in the current subtree.
@@ -1810,6 +1812,11 @@ public:
     // options.minDurationMs; not visible at once, also when it leaves the layout. onFirstVisible:
     // only the first time (an impression).
     Modifier onVisibilityChanged(std::function<void(bool visible)> callback, VisibilityOptions options = {}) const;
+    // Compose's onVisibilityChanged(minDurationMs = …, minFractionVisible = …, viewportBounds = …) { visible -> } by name
+    // (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier onVisibilityChanged(A&&... args) const;
     // Told where it is when that changes (Compose's onLayoutRectChanged): once it has stayed put
     // for debounceMillis (a scroll is told once it stops) and, with throttleMillis, also every
     // that long while it moves; with neither, at once on every change. A node leaving the
@@ -2051,6 +2058,11 @@ public:
     Modifier scrollable2D(const Scrollable2DState& state, bool enabled = true,
                           std::optional<MutableInteractionSource> interactionSource = {}) const;
     Modifier draggable2D(const Draggable2DState& state, const Draggable2DOptions& options) const;
+    // Compose's draggable2D(state, enabled = …, interactionSource = …, startDragImmediately = …, onDragStarted = …,
+    // onDragStopped = …, reverseDirection = …) by name (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier draggable2D(const Draggable2DState& state, A&&... args) const;
     // Drags along `orientation` move the state's offset between its anchors; a release settles
     // on one (anchored_draggable.hpp). The drag is all its own: none of it goes on to the
     // scrollables around it.

@@ -46,7 +46,7 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "shader", "compositionLocalOf",
     "slideInVertically", "slideInHorizontally", "slideOutVertically", "slideOutHorizontally", "animateFloat", "animateDp", "animateColor",
     "dragAndDropSource", "update", "LifecycleResumeEffect", "LifecycleStartEffect", "flatMapLatest", "mapLatest", "flatMapConcat",
-    "removeIf", "removeAll", "ifEmpty", "ifBlank", "byValue",
+    "removeIf", "removeAll", "ifEmpty", "ifBlank", "byValue", "rememberScrollableState", "rememberScrollable2DState",
     "staticCompositionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent", "mediaQuery",
     "derivedMediaQuery", "SubcomposeLayout", "rememberPagerState", "rememberCarouselState"};
 
@@ -112,7 +112,13 @@ const std::set<std::string, std::less<>> kBareProperties = {"viewModelScope"};
 const std::set<std::string, std::less<>> kKtFunctions = {
     "listOf", "mutableListOf", "emptyList", "arrayListOf", "setOf", "mutableSetOf", "emptySet", "mapOf", "mutableMapOf",
     "emptyMap", "repeat", "println", "maxOf", "minOf", "require", "check", "error", "TODO", "onDispose", "onPauseOrDispose",
-    "onStopOrDispose", "floatArrayOf", "intArrayOf", "List", "MutableList", "Random", "Pair", "Triple"};
+    "onStopOrDispose", "floatArrayOf", "intArrayOf", "List", "MutableList", "Random", "Pair", "Triple",
+    // kotlin.math's (a Float in, a Float out), and Compose's Rect(left, top, right, bottom) / Rect(offset, size) and
+    // CornerSize(percent) / CornerSize(dp): Kotlin's meanings over the C++ structs' fields.
+    "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sinh", "cosh", "tanh", "sqrt", "abs", "min", "max", "floor", "ceil",
+    "round", "truncate", "sign", "pow", "hypot", "exp", "ln", "log2", "log10", "Rect", "CornerSize"};
+// kotlin.math's constants: PI.
+const std::map<std::string, std::string, std::less<>> kBareConstants = {{"PI", "::kompoz::kt::PI"}};
 
 // Members of Kotlin's standard types, from kotlin.hpp: text.trim() -> kt::trim(text). Each uses the
 // value's own member of that name where it has one.
@@ -134,6 +140,7 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"graphicsLayer", "GraphicsLayerScope"}, {"drawBehind", "DrawScope"},       {"Canvas", "DrawScope"},
     {"drawWithContent", "ContentDrawScope"}, {"drawWithCache", "CacheDrawScope"},
     {"onDrawBehind", "DrawScope"},           {"onDrawWithContent", "ContentDrawScope"},
+    {"record", "DrawScope"},  // (record(layer, size = …) { … }: the recording's drawing)
     // DrawScope's own: what they draw is drawn moved, clipped, ... (rotate(45f) { drawRect(…) })
     {"translate", "DrawScope"},              {"inset", "DrawScope"},            {"clipRect", "DrawScope"},
     {"clipPath", "DrawScope"},               {"rotate", "DrawScope"},           {"rotateRad", "DrawScope"},
@@ -181,6 +188,7 @@ const std::map<std::string, std::string, std::less<>> kReceiverArguments = {
     {"FlexBox.config", "FlexBoxConfigScope"}, {"Grid.config", "GridConfigurationScope"},
     {"NavigationSuiteScaffold.navigationSuiteItems", "NavigationSuiteScope"},
     {"item.span", "LazyGridItemSpanScope"},   {"items.span", "LazyGridItemSpanScope"},
+    {"withTransform.", "DrawTransform"},  // (its positional lambda: withTransform({ translate(…); rotate(…) }) { … })
     // ("auto X": a template's scope, typed auto&&, its members X's: AnimatedContentTransitionScope<S>)
     {"AnimatedContent.transitionSpec", "auto AnimatedContentTransitionScope"},
     {"animateFloat.transitionSpec", "auto TransitionSegment"}, {"animateDp.transitionSpec", "auto TransitionSegment"},
@@ -987,6 +995,10 @@ private:
             out_.text("::kompoz::kt::Unit");
             return;
         }
+        if (auto k = kBareConstants.find(e.text); k != kBareConstants.end()) {  // PI
+            out_.text(k->second);
+            return;
+        }
         out_.text(cppName(e.text));
     }
 
@@ -1029,7 +1041,8 @@ private:
     // after it is reached with ::, not with a dot.
     bool qualifier(const Node& e) const {
         if (e.kind == Node::Name)
-            return (capitalized(e.text) || (module_.structs && module_.structs->namespaces.contains(e.text))) && !lookup(e.text) && e.text != "Modifier";
+            return (capitalized(e.text) || (module_.structs && module_.structs->namespaces.contains(e.text))) && !lookup(e.text) && e.text != "Modifier" &&
+                   !kBareConstants.contains(e.text);
         if (e.kind == Node::Member) return !e.flag && capitalized(e.text) && qualifier(*e.kids[0]) && !staticValue(e);
         return false;
     }
@@ -1193,7 +1206,7 @@ private:
                 out_.text("::kompoz::vector::Path");
                 return arguments(c, calleeName, false);
             }
-            if (module_.structs && !c.lambda && c.kids.size() > 1 && capitalized(callee.text))
+            if (module_.structs && !c.lambda && c.kids.size() > 1 && capitalized(callee.text) && !kKtFunctions.contains(callee.text))
                 if (const auto* fields = module_.structs->find(callee.text); fields && structCall(c, callee.text, *fields)) return;
             if (kKtFunctions.contains(callee.text) || (suspend_ && callee.text == "delay")) {
                 out_.text("::kompoz::kt::" + callee.text);

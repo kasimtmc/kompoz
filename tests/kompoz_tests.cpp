@@ -7980,6 +7980,60 @@ TEST(text_styles_take_compose_named_arguments) {
     CHECK(rule.onNodeWithText("sığ").exists() && rule.onNodeWithText("ölçü var").exists());
 }
 
+TEST(drawing_forms_take_compose_named_arguments) {
+    // drawText(measurer, text, topLeft =, style =) and record(layer, size =) { } by name draw what the positional forms
+    // draw; a layer's properties through KOMPOZ_KT_GET (Compose's layer.alpha); onVisibilityChanged(minFractionVisible =) { }
+    // and draggable2D(state, startDragImmediately =) by name; kotlin.hpp's kotlin.math, Rect(left, top, right, bottom),
+    // CornerSize(percent), a PathMeasure's length as its size, Offset::Zero, PointerIcon::Move.
+    CHECK((kt::Rect(0, -3, 18, 3) == Rect{0, -3, 18, 6} && kt::Rect(Offset{1, 2}, Size{3, 4}) == Rect{1, 2, 3, 4}));
+    CHECK((kt::CornerSize(50) == CornerPercent(50) && kt::CornerSize(6.f) == CornerSize{6, 0}));
+    CHECK(kt::max(0.f, 2.f) == 2.f && kt::min(3, 1) == 1 && kt::abs(-2.5f) == 2.5f && kt::round(2.5f) == 2.f && kt::sign(-3) == -1);
+    CHECK(kt::toFloat(kt::PI) > 3.14f && kt::toFloat(kt::PI) < 3.15f && kt::sqrt(16.f) == 4.f && kt::sin(0.f) == 0.f);
+    CHECK(Offset::Zero == Offset{} && IntOffset::Zero == IntOffset{} && Size::Zero == Size{} && PointerIcon::Move == Cursor::Move);
+    Path line;
+    line.moveTo(0, 0);
+    line.lineTo(10, 0);
+    PathMeasure measure(line);
+    CHECK(kt::size(measure) == 10.f);  // Compose's measure.length
+    GraphicsLayer layer;
+    KOMPOZ_KT_GET((layer), alpha) = 0.5f;
+    KOMPOZ_KT_GET((layer), topLeft) = IntOffset{0, 20};
+    CHECK((layer.properties().alpha == 0.5f && layer.properties().topLeft == Offset{0, 20}));
+    layer.properties() = {};
+    testing::RecordingCanvas a, b;
+    ComposeTestRule byName([&] {
+        auto measurer = rememberTextMeasurer();
+        Box(Modifier().size(100, 50).drawWithContent([measurer, layer](ContentDrawScope& d) {
+                d.record(layer, arg::size = IntSize{100, 25}, [&](DrawScope&) { d.drawContent(); });
+                d.drawLayer(layer);
+                d.drawText(measurer, std::string("ölçek"), arg::topLeft = Offset{2, 30}, arg::style = typography().labelSmall);
+            }),
+            [] { Box(Modifier().size(100, 25).background(colors::White)); });
+    });
+    byName.host().draw(a);
+    ComposeTestRule byPlace([&] {
+        auto measurer = rememberTextMeasurer();
+        Box(Modifier().size(100, 50).drawWithContent([measurer, layer](ContentDrawScope& d) {
+                d.record(layer, [&](DrawScope&) { d.drawContent(); }, Size{100, 25});
+                d.drawLayer(layer);
+                d.drawText(measurer, "ölçek", {2, 30}, TextStyle{.font = typography().labelSmall});
+            }),
+            [] { Box(Modifier().size(100, 25).background(colors::White)); });
+    });
+    byPlace.host().draw(b);
+    CHECK(a.rects == b.rects && a.texts == b.texts && a.order == b.order && (a.texts == std::vector<std::string>{"ölçek"}));
+    auto seen = std::make_shared<std::optional<bool>>();
+    auto pulled = mutableStateOf(Offset{});
+    ComposeTestRule rule([&] {
+        auto state = rememberDraggable2DState([pulled](Offset d) { pulled.set({pulled.peek().x + d.x, pulled.peek().y + d.y}); });
+        Box(Modifier().size(200).onVisibilityChanged(arg::minFractionVisible = 0.f, [seen](bool v) { *seen = v; }).draggable2D(state, arg::startDragImmediately = true));
+    }, {400, 800});
+    CHECK(*seen == true);
+    rule.swipe({50, 50}, {90, 80}, 10);  // from the press: the whole 40 across, 30 down
+    rule.waitForIdle();
+    CHECK(pulled.peek().x > 30 && pulled.peek().y > 20);
+}
+
 TEST(navigation_takes_compose_named_arguments) {
     // NavHost(navController =, startDestination =, enterTransition = { }) { … } with the graph builder's
     // composable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }

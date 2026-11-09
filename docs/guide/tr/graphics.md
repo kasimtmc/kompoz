@@ -167,7 +167,7 @@ fun Heart() {
 }
 ```
 
-`moveTo`, `lineTo`, `quadraticTo`, `conicTo`, `cubicTo`, bunların `relative…` biçimleri, `arcTo`, `addRect`, `addOval`, `addRoundRect` ve `close` path'i Compose'unki (bir Android path'i) gibi kurar: bütün olarak eklenen şekiller `Path.Direction.Clockwise` vermezseniz saat yönünün tersine döner, yaylar ve ovaller birebir conic'lerdir. `transform(matrix)` onu taşır, `op` (ya da `a + b`, `a - b`, `a & b`) iki path'i eğrilerini koruyarak birleştirir, `iterator()` segmentlerini gezer, `PathHitTester` noktaları ona tekrar tekrar sınar. `PathMeasure` uzunluğunu ölçer ve parçalarını verir (eğrilerinin parçalarını eğri olarak); Android'inki gibi, bir path'i adım adım çizmek için.
+`moveTo`, `lineTo`, `quadraticTo`, `conicTo`, `cubicTo`, bunların `relative…` biçimleri, `arcTo`, `addRect`, `addOval`, `addRoundRect` ve `close` path'i Compose'unki (bir Android path'i) gibi kurar: bütün olarak eklenen şekiller `Path.Direction.Clockwise` vermezseniz saat yönünün tersine döner, yaylar ve ovaller birebir conic'lerdir. Bir `Rect` Compose'daki gibi verilir: `Rect(left, top, right, bottom)` ya da `Rect(topLeft, size)`. `transform(matrix)` onu taşır, `op` (ya da `a + b`, `a - b`, `a & b`) iki path'i eğrilerini koruyarak birleştirir, `iterator()` segmentlerini gezer, `PathHitTester` noktaları ona tekrar tekrar sınar. `PathMeasure` uzunluğunu ölçer ve parçalarını verir (eğrilerinin parçalarını eğri olarak); Android'inki gibi, bir path'i adım adım çizmek için.
 
 Bir çizgideki (ya da bir `Paint`'teki) `PathEffect` path'i çizilirken değiştirir, Skia'nınki gibi: kesikler, yuvarlak köşeler, boyunca basılan bir şekil ya da biri ardından öteki (`chainPathEffect`).
 
@@ -238,6 +238,32 @@ fun Spinner() {
 ```
 
 `alpha(a)`, `scale(s)` ve `rotate(degrees)` sık görülen durumlar için kısaltmalardır.
+
+### Bir GraphicsLayer'a kaydetmek
+
+`rememberGraphicsLayer()`, Compose'daki gibi, çizimin içine kaydedilip yeniden çizileceği bir katman verir: `drawWithContent` içinde `record(layer) { this@drawWithContent.drawContent() }` içeriği kaydeder (`size = …` ile kendi boyutunda), `drawLayer(layer)` kaydı çizer; katmanın `alpha`, `scaleX`, `scaleY`, `translationX`, `rotationZ`, `topLeft`… özellikleri nasıl çizileceğini söyler. Bir kart ve yansıması, içerik bir kez çizilip iki kez gösterilir:
+
+```kotlin
+@Composable
+fun Reflected() {
+    val layer = rememberGraphicsLayer()
+    Box(modifier = Modifier.size(150.dp, 110.dp).drawWithContent {
+        record(layer, size = IntSize(150, 55)) { this@drawWithContent.drawContent() }
+        drawLayer(layer)
+        layer.topLeft = IntOffset(0, 55)
+        layer.scaleY = -1f
+        layer.alpha = 0.35f
+        drawLayer(layer)
+        layer.topLeft = IntOffset.Zero
+        layer.scaleY = 1f
+        layer.alpha = 1f
+    }) {
+        Box(modifier = Modifier.size(150.dp, 55.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)))
+    }
+}
+```
+
+`layer.toImageBitmap()` kaydı piksele çevirir (`Image` için bir `ImageBitmap`, ya da paylaşmak için), Compose'unki gibi.
 
 ### Bulanıklık ve render effect'ler
 

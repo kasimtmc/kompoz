@@ -167,7 +167,7 @@ fun Heart() {
 }
 ```
 
-`moveTo`, `lineTo`, `quadraticTo`, `conicTo`, `cubicTo`, their `relative…` forms, `arcTo`, `addRect`, `addOval`, `addRoundRect` and `close` build it, as Compose's (an Android path) does: shapes added whole go counterclockwise unless you pass `Path.Direction.Clockwise`, and arcs and ovals are conics, exact. `transform(matrix)` moves it, `op` (or `a + b`, `a - b`, `a & b`) combines two, keeping their curves, `iterator()` walks its segments, `PathHitTester` tests points against it again and again. `PathMeasure` measures its length and gives segments of it (pieces of its curves, as curves), for drawing a path progressively, as Android's does.
+`moveTo`, `lineTo`, `quadraticTo`, `conicTo`, `cubicTo`, their `relative…` forms, `arcTo`, `addRect`, `addOval`, `addRoundRect` and `close` build it, as Compose's (an Android path) does: shapes added whole go counterclockwise unless you pass `Path.Direction.Clockwise`, and arcs and ovals are conics, exact. A `Rect` is given as Compose's, `Rect(left, top, right, bottom)` or `Rect(topLeft, size)`. `transform(matrix)` moves it, `op` (or `a + b`, `a - b`, `a & b`) combines two, keeping their curves, `iterator()` walks its segments, `PathHitTester` tests points against it again and again. `PathMeasure` measures its length and gives segments of it (pieces of its curves, as curves), for drawing a path progressively, as Android's does.
 
 A `PathEffect` on a stroke (or a `Paint`) changes the path as it is drawn, as Skia's: dashes, rounded corners, a shape stamped along it, or one after another (`chainPathEffect`).
 
@@ -238,6 +238,32 @@ fun Spinner() {
 ```
 
 `alpha(a)`, `scale(s)` and `rotate(degrees)` are shorthands for the common cases.
+
+### Recording into a GraphicsLayer
+
+`rememberGraphicsLayer()` gives a layer to record drawing into and draw again, as Compose's: in `drawWithContent`, `record(layer) { this@drawWithContent.drawContent() }` records the content (`size = …` for a size of its own), `drawLayer(layer)` draws the recording, and the layer's `alpha`, `scaleX`, `scaleY`, `translationX`, `rotationZ`, `topLeft`… say how. A card and its reflection, the content drawn once and shown twice:
+
+```kotlin
+@Composable
+fun Reflected() {
+    val layer = rememberGraphicsLayer()
+    Box(modifier = Modifier.size(150.dp, 110.dp).drawWithContent {
+        record(layer, size = IntSize(150, 55)) { this@drawWithContent.drawContent() }
+        drawLayer(layer)
+        layer.topLeft = IntOffset(0, 55)
+        layer.scaleY = -1f
+        layer.alpha = 0.35f
+        drawLayer(layer)
+        layer.topLeft = IntOffset.Zero
+        layer.scaleY = 1f
+        layer.alpha = 1f
+    }) {
+        Box(modifier = Modifier.size(150.dp, 55.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)))
+    }
+}
+```
+
+`layer.toImageBitmap()` turns the recording into pixels (an `ImageBitmap` for `Image`, or to share), as Compose's does.
 
 ### Blur and render effects
 

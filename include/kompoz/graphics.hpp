@@ -200,13 +200,17 @@ std::array<float, 4> srgbComponents(Color c);
 
 struct Offset {
     float x = 0, y = 0;
+    static const Offset Zero;  // Compose's Offset.Zero
     friend constexpr bool operator==(const Offset&, const Offset&) = default;
 };
+inline const Offset Offset::Zero{};
 
 struct Size {
     float width = 0, height = 0;
+    static const Size Zero;  // Compose's Size.Zero
     friend constexpr bool operator==(const Size&, const Size&) = default;
 };
+inline const Size Size::Zero{};
 // Compose's DpSize(width, height): a Size, in dp as every size here is.
 constexpr Size DpSize(float width, float height) { return {width, height}; }
 constexpr Offset lerp(Offset a, Offset b, float t) { return {lerp(a.x, b.x, t), lerp(a.y, b.y, t)}; }
@@ -248,9 +252,11 @@ struct Density {
 // into its dp counterpart where one is wanted.
 struct IntOffset {
     int x = 0, y = 0;
+    static const IntOffset Zero;  // Compose's IntOffset.Zero
     constexpr operator Offset() const { return {float(x), float(y)}; }
     friend constexpr bool operator==(const IntOffset&, const IntOffset&) = default;
 };
+inline const IntOffset IntOffset::Zero{};
 struct IntSize {
     int width = 0, height = 0;
     constexpr operator Size() const { return {float(width), float(height)}; }

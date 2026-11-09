@@ -34,7 +34,8 @@
     ::kompoz::kt::detail::get(                                               \
         [](auto&& kompoz_o) -> decltype(auto) {                              \
             if constexpr (requires { kompoz_o.name(); }) return kompoz_o.name(); \
-            else return (kompoz_o.name);                                     \
+            else if constexpr (requires { kompoz_o.name; }) return (kompoz_o.name); \
+            else return (kompoz_o.properties().name); /* a GraphicsLayer's: Compose's layer.alpha */ \
         },                                                                   \
         ::kompoz::kt::deref(object))
 
@@ -348,6 +349,8 @@ decltype(auto) size(const C& c) {
     } else if constexpr (requires { c.size; }) {
         if constexpr (std::is_arithmetic_v<std::remove_cvref_t<decltype(c.size)>>) return int(c.size);
         else return (c.size);
+    } else if constexpr (requires { c.length(); }) {
+        return c.length();  // a PathMeasure's: as it is
     } else {
         return int(c.length);
     }
@@ -1398,6 +1401,67 @@ template <class A, class B>
 std::pair<A, B> to(A a, B b) {
     return {std::move(a), std::move(b)};
 }
+
+// kotlin.math: sin(x), sqrt(x), abs(x), max(a, b), PI… (a Float in, a Float out; an Int in, a Double).
+inline constexpr double PI = 3.14159265358979323846;
+#define KOMPOZ_KT_MATH(name, fn) \
+    template <class T> \
+    auto name(T x) { \
+        return fn(x); \
+    }
+KOMPOZ_KT_MATH(sin, std::sin)
+KOMPOZ_KT_MATH(cos, std::cos)
+KOMPOZ_KT_MATH(tan, std::tan)
+KOMPOZ_KT_MATH(asin, std::asin)
+KOMPOZ_KT_MATH(acos, std::acos)
+KOMPOZ_KT_MATH(atan, std::atan)
+KOMPOZ_KT_MATH(sinh, std::sinh)
+KOMPOZ_KT_MATH(cosh, std::cosh)
+KOMPOZ_KT_MATH(tanh, std::tanh)
+KOMPOZ_KT_MATH(sqrt, std::sqrt)
+KOMPOZ_KT_MATH(abs, std::abs)
+KOMPOZ_KT_MATH(floor, std::floor)
+KOMPOZ_KT_MATH(ceil, std::ceil)
+KOMPOZ_KT_MATH(round, std::nearbyint)  // (Kotlin's round: halves to the even neighbour)
+KOMPOZ_KT_MATH(truncate, std::trunc)
+KOMPOZ_KT_MATH(exp, std::exp)
+KOMPOZ_KT_MATH(ln, std::log)
+KOMPOZ_KT_MATH(log2, std::log2)
+KOMPOZ_KT_MATH(log10, std::log10)
+#undef KOMPOZ_KT_MATH
+template <class T>
+T sign(T x) {
+    return x > T(0) ? T(1) : x < T(0) ? T(-1) : T(0);
+}
+template <class A, class B>
+auto pow(A x, B y) {
+    return std::pow(x, y);
+}
+template <class A, class B>
+auto hypot(A x, B y) {
+    return std::hypot(x, y);
+}
+template <class A, class B>
+auto atan2(A y, B x) {
+    return std::atan2(y, x);
+}
+template <class A, class B>
+auto max(A a, B b) {
+    using C = std::common_type_t<A, B>;
+    return C(a) < C(b) ? C(b) : C(a);
+}
+template <class A, class B>
+auto min(A a, B b) {
+    using C = std::common_type_t<A, B>;
+    return C(b) < C(a) ? C(b) : C(a);
+}
+
+// Compose's Rect(left, top, right, bottom) and Rect(topLeft, size): Kompoz's Rect holds x, y, width, height.
+constexpr ::kompoz::Rect Rect(float left, float top, float right, float bottom) { return {left, top, right - left, bottom - top}; }
+constexpr ::kompoz::Rect Rect(Offset topLeft, Size size) { return {topLeft.x, topLeft.y, size.width, size.height}; }
+// Compose's CornerSize(percent: Int) and CornerSize(size: Dp).
+constexpr ::kompoz::CornerSize CornerSize(int percent) { return {0, float(percent)}; }
+constexpr ::kompoz::CornerSize CornerSize(float dp) { return {dp, 0}; }
 
 }  // namespace kompoz::kt
 

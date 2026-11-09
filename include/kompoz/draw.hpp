@@ -295,6 +295,11 @@ public:
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawText(const TextLayoutResult& layout, A&&... args);
+    // Compose's drawText(textMeasurer, text, topLeft = …, style = …, overflow = …, softWrap = …, maxLines = …, size = …,
+    // blendMode = …) by name (named_members.hpp); `style` a TextStyle, or a typography style (a Font).
+    template <class S, class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void drawText(const TextLayoutMeasurer& measurer, const S& text, A&&... args);
     // Compose's drawing calls by name (named_members.hpp): drawLine(color, start = …, end = …, strokeWidth = …,
     // cap = …, pathEffect = …), drawRect(color, topLeft = …, size = …, alpha = …, style = …), drawRoundRect(…,
     // cornerRadius = …), drawCircle(color, radius = …, center = …), drawOval(…), drawArc(color, startAngle,
@@ -358,6 +363,10 @@ public:
     // what it draws — a ContentDrawScope's drawContent() too — from this scope's top left, in a
     // size of its own or this scope's. drawLayer() draws the recording, as often as wanted.
     void record(const GraphicsLayer& layer, const std::function<void(DrawScope&)>& block, std::optional<Size> size = {});
+    // Compose's record(graphicsLayer, size = …) { … } by name (named_members.hpp): the block last.
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void record(const GraphicsLayer& layer, A&&... args);
     // Draws what `layer` recorded at its topLeft, with its alpha, scale, rotation and translation.
     void drawLayer(const GraphicsLayer& layer);
 

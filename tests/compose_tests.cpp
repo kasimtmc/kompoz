@@ -1615,6 +1615,77 @@ TEST(text_styles_as_compose_writes_them) {
     CHECK(rule.onNodeWithText("ölçü var").exists());
 }
 
+// Drawing forms as Compose writes them: kotlin.math and PI, Rect(left, top, right, bottom) / Rect(offset, size),
+// CornerSize(percent), a PathMeasure's length, withTransform's transform block, drawText(measurer, text, topLeft =,
+// style =), record(layer, size =) { } with the layer's properties, onVisibilityChanged(minFractionVisible =) { },
+// draggable2D(state, startDragImmediately =), rememberScrollable2DState's value, Offset.Zero, PointerIcon.Move.
+@Composable
+fun DrawingForms() {
+    val measurer = rememberTextMeasurer()
+    val layer = rememberGraphicsLayer()
+    var seen by remember { mutableStateOf("gizli") }
+    var pulled by remember { mutableStateOf(Offset.Zero) }
+    val drag = rememberDraggable2DState { pulled = Offset(pulled.x + it.x, pulled.y + it.y) }
+    val pan = rememberScrollable2DState { d -> Offset(min(d.x, 0f), max(d.y, 0f)) }
+    Column {
+        Canvas(modifier = Modifier.size(100.dp, 50.dp).testTag("biçimler")) {
+            val wave = Path()
+            for (i in 0..8) {
+                val y = 25 + sin(i / 8f * 2 * PI.toFloat()) * 10
+                if (i == 0) wave.moveTo(0f, y) else wave.lineTo(i * 12f, y)
+            }
+            val measure = PathMeasure()
+            measure.setPath(wave, false)
+            val half = Path()
+            if (measure.getSegment(0f, measure.length / 2, half)) drawPath(half, Color.White, style = Stroke(width = 2f))
+            val ring = Path()
+            ring.addOval(Rect(Offset(60f, 10f), Size(30f, 30f)))
+            ring.addRect(Rect(2f, 2f, 10f, 6f))
+            drawPath(ring, Color.White)
+            withTransform({
+                translate(10f, 0f)
+                rotate(45f, Offset(0f, 0f))
+            }) { drawRect(Color.White, size = Size(10f, 10f)) }
+            drawText(measurer, "ölçek", topLeft = Offset(2f, 30f), style = TextStyle(fontSize = 10.sp, color = Color.White))
+        }
+        Box(modifier = Modifier.size(40.dp, 40.dp).drawWithContent {
+            record(layer, size = IntSize(40, 20)) { this@drawWithContent.drawContent() }
+            drawLayer(layer)
+            layer.topLeft = IntOffset(0, 20)
+            layer.scaleY = -1f
+            layer.alpha = 0.5f
+            drawLayer(layer)
+            layer.topLeft = IntOffset.Zero
+            layer.scaleY = 1f
+            layer.alpha = 1f
+        }) { Box(modifier = Modifier.size(40.dp, 20.dp).background(Color.White)) }
+        Box(modifier = Modifier
+                .size(100.dp)
+                .onVisibilityChanged(minFractionVisible = 0f) { seen = if (it) "görünür" else "gizli" }
+                .draggable2D(drag, startDragImmediately = true)
+                .scrollable2D(pan)
+                .pointerHoverIcon(PointerIcon.Move)
+                .clip(RoundedCornerShape(CornerSize(50), CornerSize(4.dp), CornerSize(4.dp), CornerSize(50)))
+                .background(Color.White)
+                .testTag("sürüklenir"))
+        Text(seen)
+        Text(if (pulled.x > 30f && pulled.y > 20f) "sürüklendi" else "duruyor")
+        Text("pi ${PI.toFloat().toInt()} ${max(2, 3)} ${abs(-4f).toInt()} ${sqrt(16f).toInt()}")
+    }
+}
+
+TEST(drawing_forms_as_compose_writes_them) {
+    ComposeTestRule rule([] { DrawingForms(); }, {400, 800});
+    rule.waitForIdle();
+    testing::RecordingCanvas canvas;
+    rule.host().draw(canvas);
+    CHECK(canvas.paths.size() >= 2 && !canvas.texts.empty() && canvas.texts[0] == "ölçek");
+    CHECK(rule.onNodeWithText("pi 3 3 4 4").exists() && rule.onNodeWithText("görünür").exists() && rule.onNodeWithText("duruyor").exists());
+    rule.swipe({50, 140}, {90, 170}, 10);  // the box at 90..190: from the press, the whole way
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("sürüklendi").exists());
+}
+
 TEST(navigation_as_compose_writes_it) {
     NavController nav;
     ComposeTestRule rule([&] { Navigator(nav); });
