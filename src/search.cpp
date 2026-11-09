@@ -12,7 +12,7 @@ namespace kompoz {
 namespace {
 
 // The field, editing `o.query` or a TextFieldState.
-void inputField(const SearchBarDefaults::InputFieldOptions& o, const std::optional<TextFieldState>& state, const Modifier& modifier) {
+void searchField(const SearchBarDefaults::InputFieldOptions& o, const std::optional<TextFieldState>& state, const Modifier& modifier) {
     const ColorScheme& cs = colorScheme();
     const Typography& t = typography();
     auto& requester = remember([] { return FocusRequester(); });
@@ -37,6 +37,7 @@ void inputField(const SearchBarDefaults::InputFieldOptions& o, const std::option
                     };
                     TextFieldOptions options{.singleLine = true,
                                              .placeholder = o.placeholder,
+                                             .placeholderContent = o.placeholderContent,
                                              .keyboardOptions = {.imeAction = ImeAction::Search},
                                              .keyboardActions = {.onSearch = search}};
                     Modifier field = Modifier().fillMaxWidth().focusRequester(requester);
@@ -44,6 +45,8 @@ void inputField(const SearchBarDefaults::InputFieldOptions& o, const std::option
                         detail::BasicTextField(*state, field, std::move(options));
                     else
                         detail::BasicTextField(o.query, o.onQueryChange, field, std::move(options));
+                } else if (o.query.empty() && o.placeholderContent) {  // Compose's placeholder = { Text("…") }
+                    CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant), LocalTextStyle.provides(t.bodyLarge)}, o.placeholderContent);
                 } else {
                     detail::Text(o.query.empty() ? o.placeholder : o.query,
                          {.font = t.bodyLarge, .color = o.query.empty() ? cs.onSurfaceVariant : cs.onSurface, .maxLines = 1,
@@ -107,12 +110,12 @@ SearchBarState rememberSearchBarState(SearchBarValue initialValue, CallSite site
 
 namespace SearchBarDefaults {
 
-void InputField(const InputFieldOptions& o, const Modifier& modifier, CallSite site) {
+void detail::InputField(const InputFieldOptions& o, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
-    inputField(o, std::nullopt, modifier);
+    searchField(o, std::nullopt, modifier);
 }
 
-void InputField(const SearchBarState& state, const TextFieldState& textFieldState, const InputFieldOptions& options,
+void detail::InputField(const SearchBarState& state, const TextFieldState& textFieldState, const InputFieldOptions& options,
                 const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     auto own = rememberCoroutineScope();
@@ -126,7 +129,7 @@ void InputField(const SearchBarState& state, const TextFieldState& textFieldStat
     o.onSearch = [onSearch = options.onSearch, textFieldState](std::string) {
         if (onSearch) onSearch(textFieldState.text());
     };
-    inputField(o, textFieldState, modifier);
+    searchField(o, textFieldState, modifier);
 }
 
 } // namespace SearchBarDefaults
@@ -141,7 +144,7 @@ bool showsExpanded(const SearchBarState& state) {
 }
 } // namespace
 
-void SearchBar(const SearchBarState& state, const Content& inputField, const Modifier& modifier, CallSite site) {
+void detail::SearchBar(const SearchBarState& state, const Content& inputField, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     auto d = state.data_;
@@ -177,7 +180,7 @@ struct SearchBack {
 // results fading in under it) and back into it. A back gesture shrinks it to nine tenths,
 // away from the edge it came from, and up or down with the finger by up to 24 dp (never past
 // the bar); done, it goes back into the bar from there.
-void ExpandedFullScreenSearchBar(const SearchBarState& state, const Content& inputField, const Content& content, CallSite site) {
+void detail::ExpandedFullScreenSearchBar(const SearchBarState& state, const Content& inputField, const Content& content, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     auto own = rememberCoroutineScope();
@@ -199,7 +202,7 @@ void ExpandedFullScreenSearchBar(const SearchBarState& state, const Content& inp
             .enabled = state.targetValue() == SearchBarValue::Expanded,
         });
         Color surface = cs.surfaceContainerHigh;
-        Layout(
+        ::kompoz::Layout(
             Modifier().fillMaxSize(),
             [&] {
                 detail::Box(Modifier().drawBehind([d, back, surface](DrawScope& draw) {  // round as the bar, square once grown
@@ -211,7 +214,7 @@ void ExpandedFullScreenSearchBar(const SearchBarState& state, const Content& inp
                     l.alpha = d->progress.value();
                 }),
                        [&] {
-                           HorizontalDivider();
+                           ::kompoz::HorizontalDivider();
                            content();
                        });
             },
@@ -241,7 +244,7 @@ void ExpandedFullScreenSearchBar(const SearchBarState& state, const Content& inp
     });
 }
 
-void ExpandedDockedSearchBar(const SearchBarState& state, const Content& inputField, const Content& content, CallSite site) {
+void detail::ExpandedDockedSearchBar(const SearchBarState& state, const Content& inputField, const Content& content, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     auto own = rememberCoroutineScope();
@@ -263,13 +266,13 @@ void ExpandedDockedSearchBar(const SearchBarState& state, const Content& inputFi
                          .clip(RoundedCornerShape(28)),
                      [&] {
                          detail::Box(Modifier().fillMaxWidth().heightIn(56), Alignment::CenterStart, inputField);
-                         HorizontalDivider();
+                         ::kompoz::HorizontalDivider();
                          detail::Column(Modifier().fillMaxWidth().heightIn(240, maxHeight), content);
                      });
           });
 }
 
-void SearchBar(const Content& inputField, bool expanded, std::function<void(bool)> onExpandedChange,
+void detail::SearchBar(const Content& inputField, bool expanded, std::function<void(bool)> onExpandedChange,
                const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
@@ -291,7 +294,7 @@ void SearchBar(const Content& inputField, bool expanded, std::function<void(bool
                          .safeDrawingPadding(),  // under the status bar, above the keyboard
                      [&] {
                          detail::Box(Modifier().fillMaxWidth().heightIn(72), Alignment::CenterStart, inputField);
-                         HorizontalDivider();
+                         ::kompoz::HorizontalDivider();
                          detail::Column(Modifier().fillMaxWidth().weight(1), content);
                      });
           });
@@ -326,7 +329,7 @@ void DockedSearchBar(const Content& inputField, bool expanded, std::function<voi
                       detail::Column(Modifier().width(width.get()).shadow(3, 28).background(cs.surfaceContainerHigh, 28).clip(RoundedCornerShape(28)),
                              [&] {
                                  detail::Box(Modifier().fillMaxWidth().heightIn(56), Alignment::CenterStart, inputField);
-                                 HorizontalDivider();
+                                 ::kompoz::HorizontalDivider();
                                  detail::Column(Modifier()
                                             .fillMaxWidth()
                                             .heightIn(240, maxHeight)

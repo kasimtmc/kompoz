@@ -76,6 +76,15 @@ struct AnimationSpec {
 };
 
 AnimationSpec tween(float durationMillis = 300, float delayMillis = 0, Easing easing = FastOutSlowInEasing);
+// tween(durationMillis = 300, delayMillis = 0, easing = LinearEasing), as Compose writes it.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+AnimationSpec tween(A&&... args) {
+    using P = detail::Params<detail::names::DurationMillis, detail::names::DelayMillis, detail::names::Easing>;
+    static_assert(P::check<A...>());
+    return tween(float(P::get<detail::names::DurationMillis>(300.f, args...)), float(P::get<detail::names::DelayMillis>(0.f, args...)),
+                 P::get<detail::names::Easing>(::kompoz::Easing(FastOutSlowInEasing), args...));
+}
 AnimationSpec spring(float dampingRatio = Spring::DampingRatioNoBouncy, float stiffness = Spring::StiffnessMedium);
 AnimationSpec snap(float delayMillis = 0);
 // Compose's keyframes { durationMillis = 375; 0.4f at 75 using FastOutSlowInEasing; 1.1f at 225 }:

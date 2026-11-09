@@ -371,7 +371,7 @@ void TimeField(MutableState<std::string> text, std::function<int()> current, std
 
 } // namespace
 
-void TimePicker(const TimePickerState& state, const Modifier& modifier, TimePickerOptions options, CallSite site) {
+void detail::TimePicker(const TimePickerState& state, const Modifier& modifier, TimePickerOptions options, CallSite site) {
     ComposableScope scope(site);
     Size window = LocalWindowSize.current();
     TimePickerLayoutType layout = options.layoutType.value_or(window.width > window.height ? TimePickerLayoutType::Horizontal
@@ -392,7 +392,7 @@ void TimePicker(const TimePickerState& state, const Modifier& modifier, TimePick
     }
 }
 
-void TimeInput(const TimePickerState& state, const Modifier& modifier, TimePickerOptions options, CallSite site) {
+void detail::TimeInput(const TimePickerState& state, const Modifier& modifier, TimePickerOptions options, CallSite site) {
     ComposableScope scope(site);
     auto hourText = remember([&] { return mutableStateOf(twoDigits(hourForDisplay(state))); });
     auto minuteText = remember([&] { return mutableStateOf(twoDigits(state.minute())); });
@@ -421,7 +421,7 @@ void TimeInput(const TimePickerState& state, const Modifier& modifier, TimePicke
     });
 }
 
-void TimePickerDialog(std::function<void()> onDismissRequest, const TimePickerDialogSlots& slots, const Content& content,
+void detail::TimePickerDialog(std::function<void()> onDismissRequest, const TimePickerDialogSlots& slots, const Content& content,
                       CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();

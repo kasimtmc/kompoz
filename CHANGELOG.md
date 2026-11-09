@@ -1003,6 +1003,21 @@
   character's `isDigit`, `isLetter`, `isLetterOrDigit`, `isWhitespace`, `isUpperCase` and `isLowerCase` are Kotlin's.
 - **The showcase's text fields screen in Compose's syntax**: the fields, their transformations, colors, undo state,
   decorator and focus are a `@Composable fun` in Kotlin.
+- **Swipe boxes, search bars, tooltips, pickers, focus properties and clicks as Compose writes them**:
+  `rememberSwipeToDismissBoxState(confirmValueChange = { })`, `SwipeToDismissBox(state = …, modifier = …, backgroundContent = { },
+  enableDismissFromStartToEnd = …) { }`; `SearchBar(state = …, inputField = { }, modifier = …)`, `ExpandedFullScreenSearchBar` and
+  `ExpandedDockedSearchBar(state = …, inputField = { }) { }`, `SearchBarDefaults.InputField(textFieldState = …, searchBarState = …,
+  onSearch = { }, placeholder = { Text("…") } or a string, leadingIcon = { }, trailingIcon = { })` (`InputFieldOptions::placeholderContent`);
+  `TooltipBox(positionProvider = …, tooltip = { }, state = …, modifier = …) { }`, `PlainTooltip(modifier = …, caretSize = …) { }`,
+  `RichTooltip(modifier = …, title = { }, action = { }, caretSize = …) { text }`; `DatePickerDialog(onDismissRequest = …, confirmButton
+  = { }, dismissButton = { }) { }`, `DatePicker(state = …)`, `DateRangePicker(state = …)`, `TimePicker(state = …)`, `TimeInput(state =
+  …)`, `TimePickerDialog(onDismissRequest = …, confirmButton = { }, dismissButton = { }, title = { }, modeToggleButton = { }) { }`;
+  `Modifier.focusProperties { canFocus = false; next = other }`, `clickable(interactionSource = …, indication = null, enabled = …) {
+  }` (`indication = null`: none), `verticalScroll(state, reverseScrolling = true)` and `horizontalScroll`'s; `tween(durationMillis
+  = …, delayMillis = …, easing = …)`. The C++ forms by place stay. In kompozc, a class's static function is read as Compose's property
+  (`WindowInsets.statusBars`, `WindowInsets.isImeVisible`); `LocalDate` is `std::chrono::year_month_day`; `Pair(a, b)` and
+  `Triple(a, b, c)`; a nullable's member is read after its null check (Kotlin's smart cast); an `if` or `when` expression's branches
+  take the `val`'s declared type (`val palette: TonalPalette? = if (…) system else null`).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

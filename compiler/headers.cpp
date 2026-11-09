@@ -210,6 +210,11 @@ bool Structs::member(std::string_view type, std::string_view name) const {
     return false;
 }
 
+bool Structs::staticFunction(std::string_view type, std::string_view name) const {
+    auto c = classes.find(type);
+    return c != classes.end() && c->second.staticFunctions.contains(name);
+}
+
 bool Structs::derivesFrom(std::string_view type, std::string_view base) const {
     if (type == base) return true;
     if (ambiguousClasses.contains(type)) return false;
@@ -436,7 +441,10 @@ void Structs::readText(std::string_view src) {
                     if (startsWithWord(st, word)) return;
                 if (looksLikeFunction(st) || startsWithWord(st, "template")) {
                     std::string f = functionName(st);
-                    if (!f.empty() && f != name) members.names.insert(f);
+                    if (!f.empty() && f != name) {
+                        members.names.insert(f);
+                        if (startsWithWord(st, "static")) members.staticFunctions.insert(f);
+                    }
                 } else {
                     for (auto& n : fieldsOf(st, name, constructor)) members.names.insert(n);
                 }

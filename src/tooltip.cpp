@@ -175,13 +175,13 @@ void BasicTooltipBox(const TooltipPosition& position, const Content& tooltip, co
     tooltipBox(position, nullptr, tooltip, state, modifier, content, focusable, enableUserInput, false);
 }
 
-void TooltipBox(const Content& tooltip, const TooltipState& state, const Modifier& modifier, const Content& content,
+void detail::TooltipBox(const Content& tooltip, const TooltipState& state, const Modifier& modifier, const Content& content,
                 CallSite site) {
     ComposableScope scope(site);
     TooltipBox(TooltipPositionProvider{}, tooltip, state, modifier, content);
 }
 
-void TooltipBox(const TooltipPositionProvider& positionProvider, const Content& tooltip, const TooltipState& state,
+void detail::TooltipBox(const TooltipPositionProvider& positionProvider, const Content& tooltip, const TooltipState& state,
                 const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     auto caretInfo = remember([] { return std::make_shared<Caret>(); });
@@ -223,9 +223,9 @@ void TooltipBox(const TooltipPositionProvider& positionProvider, const Content& 
     tooltipBox(position, caretInfo, tooltip, state, modifier, content, state.isPersistent(), true, true);
 }
 
-void PlainTooltip(const Content& content, const Modifier& modifier, CallSite site) { PlainTooltip(content, modifier, Size{}, site); }
+void detail::PlainTooltip(const Content& content, const Modifier& modifier, CallSite site) { PlainTooltip(content, modifier, Size{}, site); }
 
-void PlainTooltip(const Content& content, const Modifier& modifier, Size caretSize, CallSite site) {
+void detail::PlainTooltip(const Content& content, const Modifier& modifier, Size caretSize, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     detail::Box(modifier.heightIn(24).widthIn(40, 200).then(caret(caretSize, cs.inverseSurface)).background(cs.inverseSurface, 4).padding(8, 4),
@@ -235,9 +235,9 @@ void PlainTooltip(const Content& content, const Modifier& modifier, Size caretSi
     });
 }
 
-void RichTooltip(const RichTooltipSlots& slots, const Modifier& modifier, CallSite site) { RichTooltip(slots, modifier, Size{}, site); }
+void detail::RichTooltip(const RichTooltipSlots& slots, const Modifier& modifier, CallSite site) { RichTooltip(slots, modifier, Size{}, site); }
 
-void RichTooltip(const RichTooltipSlots& slots, const Modifier& modifier, Size caretSize, CallSite site) {
+void detail::RichTooltip(const RichTooltipSlots& slots, const Modifier& modifier, Size caretSize, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     const Typography& t = typography();

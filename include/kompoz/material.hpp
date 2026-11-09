@@ -487,11 +487,50 @@ struct DatePickerOptions {
 // outlined field, digits only (the separators show by themselves, MM/DD/YYYY or the strings'
 // pattern), picked once it is whole and valid; a date that isn't, or is out of the year range,
 // says so under the field.
+namespace detail {
 void DatePicker(const DatePickerState& state, const Modifier& modifier = {}, DatePickerOptions options = {},
                 CallSite site = CallSite::current());
 // A date picker in a dialog with its buttons (confirm and dismiss), as Compose's DatePickerDialog.
 void DatePickerDialog(std::function<void()> onDismissRequest, const Content& confirmButton, const Content& dismissButton,
                       const Content& content, CallSite site = CallSite::current());
+// A picker with its state: DatePicker(state = …, modifier = …), TimeInput(state = …) and the others as Compose writes
+// them (and by place; the options form, (state, modifier, options), too).
+template <class S, class O, void (*F)(const S&, const Modifier&, O, CallSite)>
+struct StatePickerImpl {
+    using P = Params<names::State, names::Modifier>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        F(P::arg<names::State>(args...), P::get<names::Modifier>(Modifier{}, args...), O{}, site);
+    }
+};
+template <class S, class O, void (*F)(const S&, const Modifier&, O, CallSite)>
+struct StatePickerCall : Composable<StatePickerImpl<S, O, F>> {
+    using Composable<StatePickerImpl<S, O, F>>::operator();
+    void operator()(const S& state, const Modifier& modifier, O options, CallSite site = CallSite::current()) const {
+        F(state, modifier, std::move(options), site);
+    }
+};
+// DatePickerDialog(onDismissRequest = …, confirmButton = { … }, dismissButton = { … }, modifier = …) { DatePicker(…) } as
+// Compose writes it; Kompoz's (onDismissRequest, confirmButton, dismissButton, content) by place.
+struct DatePickerDialogImpl {
+    using P = Params<names::OnDismissRequest, names::ConfirmButton, names::Modifier, names::DismissButton, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (sizeof...(A) == 4 && !(isNamed<A> || ...) && std::is_invocable_v<std::remove_cvref_t<std::tuple_element_t<2, std::tuple<A...>>>&>) {
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            DatePickerDialog(std::function<void()>(std::get<0>(all)), Content(std::get<1>(all)), Content(std::get<2>(all)), Content(std::get<3>(all)), site);
+        } else {
+            static_assert(P::check<A...>());
+            static_assert(P::blockGiven<A...>(), "kompoz: DatePickerDialog takes a block: its picker");
+            DatePickerDialog(std::function<void()>(P::arg<names::OnDismissRequest>(args...)), Content(P::arg<names::ConfirmButton>(args...)),
+                             P::get<names::DismissButton>(Content{}, args...), P::block(std::forward<A>(args)...), site);
+        }
+    }
+};
+} // namespace detail
+inline constexpr detail::StatePickerCall<DatePickerState, DatePickerOptions, &detail::DatePicker> DatePicker;
+inline constexpr Composable<detail::DatePickerDialogImpl> DatePickerDialog;
 
 // The first and last day of a range and the month on show, observable. A range is complete
 // when it has both; the end is never before the start.
@@ -533,8 +572,11 @@ DateRangePickerState rememberDateRangePickerState(std::optional<std::chrono::yea
 // between are banded. (Compose's lists the months vertically, without tabs.) DisplayMode::Input:
 // the start and the end typed side by side, as DatePicker's field; a start after the end (or
 // an end before the start) says so instead of picking it.
+namespace detail {
 void DateRangePicker(const DateRangePickerState& state, const Modifier& modifier = {}, DatePickerOptions options = {},
                      CallSite site = CallSite::current());
+} // namespace detail
+inline constexpr detail::StatePickerCall<DateRangePickerState, DatePickerOptions, &detail::DateRangePicker> DateRangePicker;
 
 // ---- Time picker -------------------------------------------------------------------------------
 
@@ -576,19 +618,49 @@ struct TimePickerOptions {
 // Material 3 time picker: the hour and minute (tap one to set it) above a clock dial; tap or
 // drag on the dial, and a picked hour moves on to the minutes. The 24-hour dial has the
 // hours 13..23 and 00 on an inner ring.
+namespace detail {
 void TimePicker(const TimePickerState& state, const Modifier& modifier = {}, TimePickerOptions options = {},
                 CallSite site = CallSite::current());
 // The same time typed into two number fields (Compose's TimeInput).
 void TimeInput(const TimePickerState& state, const Modifier& modifier = {}, TimePickerOptions options = {},
                CallSite site = CallSite::current());
 
+} // namespace detail
+inline constexpr detail::StatePickerCall<TimePickerState, TimePickerOptions, &detail::TimePicker> TimePicker;
+inline constexpr detail::StatePickerCall<TimePickerState, TimePickerOptions, &detail::TimeInput> TimeInput;
 struct TimePickerDialogSlots {
     Content title, confirmButton, dismissButton;
     Content modeToggleButton;  // bottom left: switches between TimePicker and TimeInput
 };
+namespace detail {
 // A time picker in a dialog with its title and buttons, as Compose's TimePickerDialog.
 void TimePickerDialog(std::function<void()> onDismissRequest, const TimePickerDialogSlots& slots, const Content& content,
                       CallSite site = CallSite::current());
+// TimePickerDialog(onDismissRequest = …, confirmButton = { }, dismissButton = { }, title = { }, modeToggleButton = { }) {
+// TimePicker(…) } as Compose writes it; Kompoz's form with a TimePickerDialogSlots by place.
+struct TimePickerDialogImpl {
+    using P = Params<names::OnDismissRequest, names::ConfirmButton, names::Modifier, names::DismissButton, names::Title, names::ModeToggleButton, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: TimePickerDialog takes a block: its picker");
+        TimePickerDialogSlots slots;
+        P::set<names::ConfirmButton>(slots.confirmButton, args...);
+        P::set<names::DismissButton>(slots.dismissButton, args...);
+        P::set<names::Title>(slots.title, args...);
+        P::set<names::ModeToggleButton>(slots.modeToggleButton, args...);
+        TimePickerDialog(std::function<void()>(P::arg<names::OnDismissRequest>(args...)), slots, P::block(std::forward<A>(args)...), site);
+    }
+};
+struct TimePickerDialogCall : Composable<TimePickerDialogImpl> {
+    using Composable<TimePickerDialogImpl>::operator();
+    void operator()(std::function<void()> onDismissRequest, const TimePickerDialogSlots& slots, const Content& content,
+                    CallSite site = CallSite::current()) const {
+        TimePickerDialog(std::move(onDismissRequest), slots, content, site);
+    }
+};
+} // namespace detail
+inline constexpr detail::TimePickerDialogCall TimePickerDialog;
 
 // ---- Search bar ------------------------------------------------------------------------------
 
@@ -600,11 +672,14 @@ struct InputFieldOptions {
     bool expanded = false;
     std::function<void(bool)> onExpandedChange;
     std::string placeholder;
+    Content placeholderContent;  // Compose's placeholder = { Text("…") }: composed in its place instead of the string
     Content leadingIcon, trailingIcon;
 };
+namespace detail {
 // The search bar's field: the query (or placeholder) that expands the bar when tapped, and an
 // editable, focused field while expanded.
 void InputField(const InputFieldOptions& options, const Modifier& modifier = {}, CallSite site = CallSite::current());
+} // namespace detail
 } // namespace SearchBarDefaults
 
 // Material 3 search bar: a pill in the layout that expands into a search view over the whole
@@ -612,8 +687,10 @@ void InputField(const InputFieldOptions& options, const Modifier& modifier = {},
 //   SearchBar([&] { SearchBarDefaults::InputField({.query = q.get(), .onQueryChange = ..., .onSearch = ...,
 //                                                  .expanded = open.get(), .onExpandedChange = ...}); },
 //             open.get(), [open](bool v) { open.set(v); }, Modifier().fillMaxWidth(), [&] { ...suggestions... });
+namespace detail {
 void SearchBar(const Content& inputField, bool expanded, std::function<void(bool)> onExpandedChange,
                const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
+} // namespace detail
 // A search bar that opens in place (Compose's DockedSearchBar): the field stays where it is and
 // `content` opens under it at the bar's width, over the page (240 dp to two thirds of the
 // window tall); a tap outside or back closes it. Same arguments as SearchBar.
@@ -655,12 +732,59 @@ struct Saver<SearchBarState> {
 };
 SearchBarState rememberSearchBarState(SearchBarValue initialValue = SearchBarValue::Collapsed, CallSite site = CallSite::current());
 namespace SearchBarDefaults {
+namespace detail {
 // The field of a SearchBarState: collapsed, the query (or placeholder), expanding the bar when
 // tapped; expanded, the focused field editing `textFieldState` (the keyboard's search key calls
 // onSearch with it). Of `options`, onSearch, placeholder and the icons count.
 void InputField(const SearchBarState& state, const TextFieldState& textFieldState, const InputFieldOptions& options = {},
                 const Modifier& modifier = {}, CallSite site = CallSite::current());
+namespace kd = ::kompoz::detail;
+// SearchBarDefaults.InputField(textFieldState = …, searchBarState = …, onSearch = { }, placeholder = { Text("…") }, leadingIcon = { },
+// trailingIcon = { }) as Compose writes it; Kompoz's C++ forms, (state, textFieldState, options, modifier) and (options,
+// modifier), go by place.
+struct InputFieldImpl {
+    using P = kd::Params<kd::names::TextFieldState, kd::names::SearchBarState, kd::names::OnSearch, kd::names::Modifier, kd::names::Placeholder,
+                         kd::names::LeadingIcon, kd::names::TrailingIcon>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (kd::startsWith<::kompoz::SearchBarState, A...>()) {
+            static_assert(!(kd::isNamed<A> || ...), "kompoz: InputField's form with the state first takes its arguments by place");
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            InputFieldOptions options;
+            Modifier modifier;
+            if constexpr (sizeof...(A) >= 3) options = std::get<2>(all);
+            if constexpr (sizeof...(A) >= 4) modifier = std::get<3>(all);
+            InputField(std::get<0>(all), std::get<1>(all), options, modifier, site);
+        } else {
+            static_assert(P::check<A...>());
+            InputFieldOptions options;
+            P::set<kd::names::OnSearch>(options.onSearch, args...);
+            P::set<kd::names::LeadingIcon>(options.leadingIcon, args...);
+            P::set<kd::names::TrailingIcon>(options.trailingIcon, args...);
+            if constexpr (P::given<kd::names::Placeholder, A...>()) {
+                auto&& placeholder = P::arg<kd::names::Placeholder>(args...);
+                if constexpr (std::is_invocable_v<std::remove_cvref_t<decltype(placeholder)>&>) options.placeholderContent = Content(placeholder);
+                else options.placeholder = std::string(placeholder);
+            }
+            InputField(P::arg<kd::names::SearchBarState>(args...), P::arg<kd::names::TextFieldState>(args...), options,
+                       P::get<kd::names::Modifier>(Modifier{}, args...), site);
+        }
+    }
+};
+struct InputFieldCall : Composable<InputFieldImpl> {
+    using Composable<InputFieldImpl>::operator();
+    void operator()(const InputFieldOptions& options, const Modifier& modifier = {}, CallSite site = CallSite::current()) const {
+        InputField(options, modifier, site);
+    }
+    void operator()(const ::kompoz::SearchBarState& state, const TextFieldState& textFieldState, const InputFieldOptions& options,
+                    const Modifier& modifier = {}, CallSite site = CallSite::current()) const {
+        InputField(state, textFieldState, options, modifier, site);
+    }
+};
+} // namespace detail
+inline constexpr detail::InputFieldCall InputField;
 } // namespace SearchBarDefaults
+namespace detail {
 // The collapsed bar of a SearchBarState: the pill in the layout (empty while the bar is expanded).
 void SearchBar(const SearchBarState& state, const Content& inputField, const Modifier& modifier = {}, CallSite site = CallSite::current());
 // The expanded search over the whole window (the field on top, `content` below), fading in and
@@ -671,6 +795,35 @@ void ExpandedFullScreenSearchBar(const SearchBarState& state, const Content& inp
 // (240 dp to two thirds of the window tall); a tap outside or back collapses it.
 void ExpandedDockedSearchBar(const SearchBarState& state, const Content& inputField, const Content& content,
                              CallSite site = CallSite::current());
+// SearchBar(state = …, inputField = { … }, modifier = …) as Compose writes it (and by place); the older form,
+// (inputField, expanded, onExpandedChange, modifier, content), by place.
+struct SearchBarImpl {
+    using P = Params<names::State, names::InputField, names::Modifier>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (sizeof...(A) == 5 && !(isNamed<A> || ...) && std::is_invocable_v<std::remove_cvref_t<std::tuple_element_t<0, std::tuple<A...>>>&>) {
+            SearchBar(std::forward<A>(args)..., site);
+        } else {
+            static_assert(P::check<A...>());
+            SearchBar(P::arg<names::State>(args...), Content(P::arg<names::InputField>(args...)), P::get<names::Modifier>(Modifier{}, args...), site);
+        }
+    }
+};
+template <bool Docked>
+struct ExpandedSearchBarImpl {
+    using P = Params<names::State, names::InputField, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: an expanded search bar takes a block: its content under the field");
+        (Docked ? ExpandedDockedSearchBar : ExpandedFullScreenSearchBar)(P::arg<names::State>(args...), Content(P::arg<names::InputField>(args...)),
+                                                                        P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::SearchBarImpl> SearchBar;
+inline constexpr Composable<detail::ExpandedSearchBarImpl<false>> ExpandedFullScreenSearchBar;
+inline constexpr Composable<detail::ExpandedSearchBarImpl<true>> ExpandedDockedSearchBar;
 
 // A search bar as the top app bar (Compose's AppBarWithSearch): the collapsed SearchBar between a
 // navigation icon and actions, under the status bar, 72 dp tall. With a scroll behavior on the
@@ -756,8 +909,10 @@ TooltipState rememberTooltipState(bool initialIsVisible = false, bool isPersiste
 // or while a mouse rests on it; a long press doesn't click what is under it.
 //   TooltipBox([] { PlainTooltip([] { Text("Favorilere ekle"); }); }, rememberTooltipState(), Modifier(),
 //              [&] { IconButton(add, [] { Icon(Icons::Filled::Favorite, "Favori"); }); });
+namespace detail {
 void TooltipBox(const Content& tooltip, const TooltipState& state, const Modifier& modifier, const Content& content,
                 CallSite site = CallSite::current());
+} // namespace detail
 // Which side of its anchor a tooltip goes (M3's TooltipAnchorPosition): to the other one when
 // there is no room; Start and End follow the layout direction.
 enum class TooltipAnchorPosition { Above, Below, Left, Right, Start, End };
@@ -768,8 +923,34 @@ struct TooltipPositionProvider {
     TooltipAnchorPosition positioning = TooltipAnchorPosition::Above;
     float spacingBetweenTooltipAndAnchor = 4;
 };
+namespace detail {
 void TooltipBox(const TooltipPositionProvider& positionProvider, const Content& tooltip, const TooltipState& state,
                 const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
+// TooltipBox(positionProvider = …, tooltip = { PlainTooltip { … } }, state = …, modifier = …) { content } as Compose
+// writes it; Kompoz's C++ forms, (tooltip, state, modifier, content) and (positionProvider, tooltip, state, modifier,
+// content), by place.
+struct TooltipBoxImpl {
+    using P = Params<names::PositionProvider, names::Tooltip, names::State, names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (sizeof...(A) >= 4 && !(isNamed<A> || ...) &&
+                      (std::is_invocable_v<std::remove_cvref_t<std::tuple_element_t<0, std::tuple<A...>>>&> ||
+                       std::is_same_v<std::remove_cvref_t<std::tuple_element_t<0, std::tuple<A...>>>, TooltipPositionProvider>)) {
+            TooltipBox(std::forward<A>(args)..., site);
+        } else {
+            static_assert(P::check<A...>());
+            static_assert(P::blockGiven<A...>(), "kompoz: TooltipBox takes a block: what the tooltip is about");
+            if constexpr (P::given<names::PositionProvider, A...>())
+                TooltipBox(TooltipPositionProvider(P::arg<names::PositionProvider>(args...)), Content(P::arg<names::Tooltip>(args...)),
+                           TooltipState(P::arg<names::State>(args...)), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+            else
+                TooltipBox(Content(P::arg<names::Tooltip>(args...)), TooltipState(P::arg<names::State>(args...)), P::get<names::Modifier>(Modifier{}, args...),
+                           P::block(std::forward<A>(args)...), site);
+        }
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::TooltipBoxImpl> TooltipBox;
 // Foundation's tooltip box (Compose's BasicTooltipBox): `tooltip` in a popup at `position` (given
 // the anchor, the tooltip's size and the window's, in dp) while `state` shows it, at once — no
 // animation, no caret. `enableUserInput`: a long press or a resting mouse shows it; `focusable`: it
@@ -781,7 +962,9 @@ BasicTooltipState rememberBasicTooltipState(bool initialIsVisible = false, bool 
 void BasicTooltipBox(const TooltipPosition& position, const Content& tooltip, const BasicTooltipState& state, const Modifier& modifier,
                      const Content& content, bool focusable = true, bool enableUserInput = true, CallSite site = CallSite::current());
 // A short label on inverseSurface, at most 200 dp wide.
+namespace detail {
 void PlainTooltip(const Content& content, const Modifier& modifier = {}, CallSite site = CallSite::current());
+} // namespace detail
 // A label over `content` (Compose's Label): `label` (a PlainTooltip, say) shown above it, where a
 // tooltip would be, while the interaction source tells of a press, a drag or the mouse over it —
 // or all the time, isPersistent. It takes no input.
@@ -807,7 +990,9 @@ struct RichTooltipSlots {
     Content title, text, action;  // action: e.g. a TextButton (make the state persistent)
 };
 // A card with an optional title, the text and an optional action, at most 320 dp wide.
+namespace detail {
 void RichTooltip(const RichTooltipSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
+} // namespace detail
 // With a caret (Compose's caretSize): a small triangle on the side towards the anchor, pointing
 // at its middle (in a TooltipBox; the tooltip moves away from the anchor by its height).
 namespace TooltipDefaults {
@@ -823,8 +1008,57 @@ inline TooltipPositionProvider rememberRichTooltipPositionProvider(float spacing
     return {TooltipAnchorPosition::Above, spacingBetweenTooltipAndAnchor};
 }
 } // namespace TooltipDefaults
+namespace detail {
 void PlainTooltip(const Content& content, const Modifier& modifier, Size caretSize, CallSite site = CallSite::current());
 void RichTooltip(const RichTooltipSlots& slots, const Modifier& modifier, Size caretSize, CallSite site = CallSite::current());
+// PlainTooltip(modifier = …, caretSize = …) { Text("…") } as Compose writes it; Kompoz's (content, modifier, caretSize) by place.
+struct PlainTooltipImpl {
+    using P = Params<names::Modifier, names::CaretSize, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (sizeof...(A) >= 1 && !(isNamed<A> || ...) && std::is_invocable_v<std::remove_cvref_t<std::tuple_element_t<0, std::tuple<A...>>>&> &&
+                      !(sizeof...(A) == 1)) {
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            if constexpr (sizeof...(A) >= 3) PlainTooltip(Content(std::get<0>(all)), std::get<1>(all), std::get<2>(all), site);
+            else PlainTooltip(Content(std::get<0>(all)), std::get<1>(all), site);
+        } else {
+            static_assert(P::check<A...>());
+            static_assert(P::blockGiven<A...>(), "kompoz: PlainTooltip takes a block: its text");
+            if constexpr (P::given<names::CaretSize, A...>())
+                PlainTooltip(P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), Size(P::arg<names::CaretSize>(args...)), site);
+            else
+                PlainTooltip(P::block(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), site);
+        }
+    }
+};
+// RichTooltip(modifier = …, title = { … }, action = { … }, caretSize = …) { Text("…") } as Compose writes it (its text the
+// block); Kompoz's forms with a RichTooltipSlots go by place.
+struct RichTooltipImpl {
+    using P = Params<names::Modifier, names::Title, names::Action, names::CaretSize, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: RichTooltip takes a block: its text");
+        RichTooltipSlots slots;
+        P::set<names::Title>(slots.title, args...);
+        P::set<names::Action>(slots.action, args...);
+        slots.text = P::block(std::forward<A>(args)...);
+        if constexpr (P::given<names::CaretSize, A...>()) RichTooltip(slots, P::get<names::Modifier>(Modifier{}, args...), Size(P::arg<names::CaretSize>(args...)), site);
+        else RichTooltip(slots, P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+struct RichTooltipCall : Composable<RichTooltipImpl> {
+    using Composable<RichTooltipImpl>::operator();
+    void operator()(const RichTooltipSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current()) const {
+        RichTooltip(slots, modifier, site);
+    }
+    void operator()(const RichTooltipSlots& slots, const Modifier& modifier, Size caretSize, CallSite site = CallSite::current()) const {
+        RichTooltip(slots, modifier, caretSize, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::PlainTooltipImpl> PlainTooltip;
+inline constexpr detail::RichTooltipCall RichTooltip;
 
 // ---- Pull to refresh -------------------------------------------------------------------------
 
@@ -3604,16 +3838,69 @@ struct Saver<SwipeToDismissBoxState> {
     static SavedValue save(const SwipeToDismissBoxState& s);
     static std::optional<SwipeToDismissBoxState> restore(const SavedValue& v);
 };
-SwipeToDismissBoxState rememberSwipeToDismissBoxState(std::function<bool(SwipeToDismissBoxValue)> confirmValueChange = {},
-                                                      CallSite site = CallSite::current());
-
 struct SwipeToDismissOptions {
     bool enableDismissFromStartToEnd = true, enableDismissFromEndToStart = true;
 };
+namespace detail {
+SwipeToDismissBoxState rememberSwipeToDismissBoxState(std::function<bool(SwipeToDismissBoxValue)> confirmValueChange = {},
+                                                      CallSite site = CallSite::current());
 // `content` follows the finger sideways over `backgroundContent` (sized like the content; read
 // state.dismissDirection() there to pick a color or icon).
 void SwipeToDismissBox(SwipeToDismissBoxState state, const Content& backgroundContent, const Content& content,
                        SwipeToDismissOptions options = {}, const Modifier& modifier = {},
                        CallSite site = CallSite::current());
+// rememberSwipeToDismissBoxState(confirmValueChange = { … }) as Compose writes it (and by place).
+struct RememberSwipeToDismissBoxStateCall {
+    SwipeToDismissBoxState operator()(std::function<bool(SwipeToDismissBoxValue)> confirmValueChange = {}, CallSite site = CallSite::current()) const {
+        return rememberSwipeToDismissBoxState(std::move(confirmValueChange), site);
+    }
+    template <class A1>
+        requires isNamed<A1>
+    SwipeToDismissBoxState operator()(A1&& a1, CallSite site = CallSite::current()) const {
+        using P = Params<names::ConfirmValueChange>;
+        static_assert(P::check<A1>());
+        return rememberSwipeToDismissBoxState(std::function<bool(SwipeToDismissBoxValue)>(P::arg<names::ConfirmValueChange>(a1)), site);
+    }
+};
+// SwipeToDismissBox(state = …, modifier = …, backgroundContent = { … }, enableDismissFromStartToEnd = …,
+// enableDismissFromEndToStart = …) { content }, as Compose writes it; Kompoz's C++ form, (state, backgroundContent,
+// content, options, modifier), goes by place (a callable second).
+struct SwipeToDismissBoxImpl {
+    using P = Params<names::State, names::Modifier, names::BackgroundContent, names::EnableDismissFromStartToEnd, names::EnableDismissFromEndToStart, Block>;
+    template <class... A>
+    static constexpr bool byPlace() {
+        if constexpr (sizeof...(A) < 3 || (isNamed<A> || ...)) return false;
+        else return std::is_invocable_v<std::remove_cvref_t<std::tuple_element_t<1, std::tuple<A...>>>&>;
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (byPlace<A...>()) {
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            SwipeToDismissOptions options;
+            Modifier modifier;
+            if constexpr (sizeof...(A) >= 4) options = std::get<3>(all);
+            if constexpr (sizeof...(A) >= 5) modifier = std::get<4>(all);
+            SwipeToDismissBox(std::get<0>(all), Content(std::get<1>(all)), Content(std::get<2>(all)), options, modifier, site);
+        } else {
+            static_assert(P::check<A...>());
+            static_assert(P::blockGiven<A...>(), "kompoz: SwipeToDismissBox takes a block: its content");
+            SwipeToDismissOptions options;
+            P::set<names::EnableDismissFromStartToEnd>(options.enableDismissFromStartToEnd, args...);
+            P::set<names::EnableDismissFromEndToStart>(options.enableDismissFromEndToStart, args...);
+            SwipeToDismissBox(SwipeToDismissBoxState(P::arg<names::State>(args...)), P::get<names::BackgroundContent>(Content{}, args...),
+                              P::block(std::forward<A>(args)...), options, P::get<names::Modifier>(Modifier{}, args...), site);
+        }
+    }
+};
+struct SwipeToDismissBoxCall : Composable<SwipeToDismissBoxImpl> {
+    using Composable<SwipeToDismissBoxImpl>::operator();
+    void operator()(SwipeToDismissBoxState state, const Content& backgroundContent, const Content& content, SwipeToDismissOptions options,
+                    const Modifier& modifier = {}, CallSite site = CallSite::current()) const {
+        SwipeToDismissBox(std::move(state), backgroundContent, content, options, modifier, site);
+    }
+};
+} // namespace detail
+inline constexpr detail::RememberSwipeToDismissBoxStateCall rememberSwipeToDismissBoxState;
+inline constexpr detail::SwipeToDismissBoxCall SwipeToDismissBox;
 
 } // namespace kompoz

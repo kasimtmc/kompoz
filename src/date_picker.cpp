@@ -463,7 +463,7 @@ void DateRangeInputFields(const DateRangePickerState& state, const DatePickerStr
 }
 } // namespace
 
-void DatePicker(const DatePickerState& state, const Modifier& modifier, DatePickerOptions options, CallSite site) {
+void detail::DatePicker(const DatePickerState& state, const Modifier& modifier, DatePickerOptions options, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     DatePickerStrings strings = options.strings.value_or(LocalStrings.current().datePicker);
@@ -492,7 +492,7 @@ void DatePicker(const DatePickerState& state, const Modifier& modifier, DatePick
                         });
                 });
             });
-            HorizontalDivider();
+            ::kompoz::HorizontalDivider();
             if (typing) DateInputField(state, strings);
             else Calendar(state.data_, options.today.value_or(localToday()), strings, days);
         });
@@ -549,7 +549,7 @@ std::optional<DateRangePickerState> Saver<DateRangePickerState>::restore(const S
     return DateRangePickerState(*start, *end, *shown, {int(*from), int(*to)}, *mode);
 }
 
-void DateRangePicker(const DateRangePickerState& state, const Modifier& modifier, DatePickerOptions options, CallSite site) {
+void detail::DateRangePicker(const DateRangePickerState& state, const Modifier& modifier, DatePickerOptions options, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     DatePickerStrings strings = options.strings.value_or(LocalStrings.current().datePicker);
@@ -626,14 +626,14 @@ void DateRangePicker(const DateRangePickerState& state, const Modifier& modifier
                         });
                 });
             });
-            HorizontalDivider();
+            ::kompoz::HorizontalDivider();
             if (typing) DateRangeInputFields(state, strings);
             else Calendar(d, options.today.value_or(localToday()), strings, days);
         });
     });
 }
 
-void DatePickerDialog(std::function<void()> onDismissRequest, const Content& confirmButton, const Content& dismissButton,
+void detail::DatePickerDialog(std::function<void()> onDismissRequest, const Content& confirmButton, const Content& dismissButton,
                       const Content& content, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();

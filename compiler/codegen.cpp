@@ -58,7 +58,7 @@ const std::map<std::string, std::string, std::less<>> kTypes = {
     {"ComposeTestRule", "::kompoz::testing::ComposeTestRule"}, {"AssertionError", "::kompoz::testing::AssertionError"},
     {"Dp", "float"},             {"List", "std::vector"},  {"MutableList", "std::vector"}, {"ArrayList", "std::vector"},
     {"Set", "std::set"},         {"MutableSet", "std::set"}, {"Map", "std::map"},    {"MutableMap", "std::map"},
-    {"Pair", "std::pair"},       {"Any", "std::any"}};
+    {"Pair", "std::pair"},       {"LocalDate", "std::chrono::year_month_day"}, {"Any", "std::any"}};
 
 // Objects whose Kotlin properties are calls here: MaterialTheme.colorScheme -> colorScheme().
 const std::map<std::string, std::string, std::less<>> kObjectProperties = {
@@ -99,7 +99,7 @@ const std::map<std::string, std::string, std::less<>> kComposableProperties = {
     {"currentCompositionLocalContext", "::kompoz::currentCompositionLocalContext()"}};
 
 // Named arguments whose lambda gives a value: items(list, key = { it.id }, contentType = { … }).
-const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType", "selector", "comparator", "span", "pageCount",
+const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType", "selector", "comparator", "span", "pageCount", "confirmValueChange",
                                                             "itemCount", "progress", "transitionSpec", "contentKey", "shouldStartDragAndDrop",
                                                             "enterTransition", "exitTransition", "popEnterTransition", "popExitTransition",
                                                             "initialOffsetX", "initialOffsetY", "targetOffsetX", "targetOffsetY"};
@@ -112,7 +112,7 @@ const std::set<std::string, std::less<>> kBareProperties = {"viewModelScope"};
 const std::set<std::string, std::less<>> kKtFunctions = {
     "listOf", "mutableListOf", "emptyList", "arrayListOf", "setOf", "mutableSetOf", "emptySet", "mapOf", "mutableMapOf",
     "emptyMap", "repeat", "println", "maxOf", "minOf", "require", "check", "error", "TODO", "onDispose", "onPauseOrDispose",
-    "onStopOrDispose", "floatArrayOf", "intArrayOf", "List", "MutableList", "Random"};
+    "onStopOrDispose", "floatArrayOf", "intArrayOf", "List", "MutableList", "Random", "Pair", "Triple"};
 
 // Members of Kotlin's standard types, from kotlin.hpp: text.trim() -> kt::trim(text). Each uses the
 // value's own member of that name where it has one.
@@ -146,6 +146,7 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"ButtonGroup", "ButtonGroupScope"},  // (its items: clickableItem(…); its buttons' Modifier.animateWidth(source))
     {"FloatingActionButtonMenu", "const FloatingActionButtonMenuScope"}, {"ToggleFloatingActionButton", "const ToggleFloatingActionButtonScope"},
     {"buildAnnotatedString", "AnnotatedStringBuilder"}, {"edit", "TextFieldBuffer"}, {"OutputTransformation", "TextFieldBuffer"},
+    {"focusProperties", "FocusProperties"},
     {"GenericShape", "Path"},                {"blur", "BlurScope"},
     {"AnimatedVisibility", "const AnimatedVisibilityScope"}, {"AnimatedContent", "const AnimatedContentScope"},
     {"SharedTransitionLayout", "const SharedTransitionScope"},
@@ -937,11 +938,11 @@ private:
                 out_.text(")");
                 return;
             case Node::Is: throw CompileError(e.pos, "`is` isn't supported yet");
-            case Node::If: return ifExpression(e);
+            case Node::If: return ifExpression(e, expected);
             case Node::Object: return objectExpression(e);
             case Node::When:
-                // A when as a value: run where it stands, each branch giving its value.
-                out_.text(capture("[&]") + "() {");
+                // A when as a value: run where it stands, each branch giving its value (a declared type the lambda's).
+                out_.text(capture("[&]") + "()" + (expected ? " -> " + type(*expected) : std::string()) + " {");
                 {
                     Scoped inside(global_);
                     whenStatement(e, true);
@@ -1105,6 +1106,10 @@ private:
         }
         if (qualifier(obj)) {
             out_.text(qualified(dotted(obj)) + "::" + cppName(e.text));
+            // WindowInsets.statusBars, a class's static function read as Compose's property: called.
+            std::string type = dotted(obj);
+            if (size_t dot = type.rfind('.'); dot != std::string::npos) type = type.substr(dot + 1);
+            if (&e != calleeNode_ && module_.structs && module_.structs->staticFunction(type, e.text)) out_.text("()");
             return;
         }
         // A property: a getter of the same name where the type has one (listState.firstVisibleItemIndex is
@@ -1258,7 +1263,9 @@ private:
             expr(companionless(*callee.kids[0]));
             out_.text(")." + member);
         } else {
+            const Node* wasCallee = std::exchange(calleeNode_, &callee);  // (Arrangement.spacedBy(8.dp): a static function called, not read)
             expr(callee);
+            calleeNode_ = wasCallee;
         }
         typeArguments(c);
         arguments(c, calleeName, false);
@@ -1684,7 +1691,7 @@ private:
     }
 
     // if as a value: a ? b : c where both branches are one expression, else run in place.
-    void ifExpression(const Node& n) {
+    void ifExpression(const Node& n, const Type* expected = nullptr) {
         auto single = [](const Node* b) { return b && b->kids.size() == 1 && b->kids[0]->kind == Node::ExprStmt && b->kids[0]->kids[0]->kind != Node::If && b->kids[0]->kids[0]->kind != Node::When; };
         if (n.kids.size() > 2 && single(n.kids[1].get()) && single(n.kids[2].get())) {
             // if (c) { { … } } else null: a lambda or none (kt::nullableLambda: the function type it goes to, empty for none).
@@ -1716,7 +1723,8 @@ private:
             return;
         }
         if (n.kids.size() < 3) throw CompileError(n.pos, "an if used as a value needs an else");
-        out_.text(capture("[&]") + "() {");
+        // (a declared type is the lambda's: `val x: T? = if (…) a else if (…) b else null` returns a T? in every branch)
+        out_.text(capture("[&]") + "()" + (expected ? " -> " + type(*expected) : std::string()) + " {");
         Scoped inside(global_);
         ifStatement(n, true);
         out_.text(" }()");
@@ -1727,6 +1735,7 @@ private:
     bool suspend_ = false;  // in a coroutine
     std::vector<std::string> receivers_;  // the receivers' types of the lambdas it is in, innermost last
     std::vector<bool> receiverConst_;     // and whether each is read-only (a "const X" receiver: copied into lambdas that keep it)
+    const Node* calleeNode_ = nullptr;    // the callee being written, when a member: called, not read as a property
     std::vector<std::string> receiverLabels_;  // and the calls they were given to (this@AnimatedContent)
     bool global_ = false;  // at namespace scope: a top-level val's value
     bool inClass_ = false;  // in a class's body: its members are reached by their names

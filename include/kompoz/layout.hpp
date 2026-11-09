@@ -2004,6 +2004,10 @@ public:
     // With an interaction source (told of presses, hovers and focus), without the overlay
     // (Compose's indication = null), long and double clicks: {.interactionSource = source}.
     Modifier clickable(std::function<void()> onClick, const ClickableOptions& options) const;
+    // clickable(interactionSource = …, indication = null, enabled = …) { … }: Compose's names (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier clickable(A&&... args) const;
     // A clickable that is selected or not (a radio button's row: role RadioButton), toggled on
     // and off (a checkbox's or switch's row), or in one of three states — with its semantics.
     // Give the control inside no callback (RadioButton(selected, {})) so the row takes the tap.
@@ -2096,6 +2100,13 @@ public:
     // the right), its value counting back from there (Compose's).
     Modifier verticalScroll(const ScrollState& state, bool enabled = true, bool reverseScrolling = false) const;
     Modifier horizontalScroll(const ScrollState& state, bool enabled = true, bool reverseScrolling = false) const;
+    // verticalScroll(state, reverseScrolling = true) and horizontalScroll's: Compose's names (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier verticalScroll(A&&... args) const;
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier horizontalScroll(A&&... args) const;
     // With an overscroll effect of its own (drawn here too), or none (nullptr).
     Modifier verticalScroll(const ScrollState& state, std::shared_ptr<OverscrollEffect> overscrollEffect, bool enabled = true,
                             bool reverseScrolling = false) const;
@@ -2303,6 +2314,14 @@ public:
     // in this node; NaN hides it) bigger (Compose's Modifier.magnifier).
     Modifier magnifier(std::function<Offset()> sourceCenter, MagnifierOptions options = {}) const;
     Modifier focusProperties(FocusProperties properties) const;
+    // focusProperties { canFocus = false; next = other }: Compose's block on the properties.
+    template <class F>
+        requires std::is_invocable_v<F&, FocusProperties&>
+    Modifier focusProperties(F&& f) const {
+        FocusProperties properties;
+        f(properties);
+        return focusProperties(properties);
+    }
     // Lets the user drag it — a finger's long press, then a drag; the mouse just drags — and
     // drop it on a dragAndDropTarget (Compose's dragAndDropSource); a faded copy of it follows
     // the pointer. transferData(where it was grabbed) says what goes with the drag (nothing: no

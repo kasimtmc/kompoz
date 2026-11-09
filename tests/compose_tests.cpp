@@ -1528,6 +1528,66 @@ TEST(text_field_transformations_as_compose_writes_them) {
     CHECK(rule.onNodeWithText("değer 5551234567", true).exists());
 }
 
+// A swipe-to-dismiss box, a search bar with its state, tooltips, a date picker dialog and focus
+// properties as Compose writes them; WindowInsets.statusBars read as a property, a nullable read after
+// its null check, Pair(a, b), tween(easing = …).
+@Composable
+fun SectionsForms() {
+    val tasks = remember { mutableStateListOf(1, 2) }
+    val search = rememberSearchBarState()
+    val query = rememberTextFieldState()
+    var chosen by remember { mutableStateOf("yok") }
+    var open by remember { mutableStateOf(false) }
+    var picked by remember { mutableStateOf<LocalDate?>(null) }
+    val requesters = remember { List(2) { FocusRequester() } }
+    val scope = rememberCoroutineScope()
+    val maybe: Pair<Int, Int>? = if (tasks.size > 1) Pair(3, 4) else null
+    val alpha by animateFloatAsState(if (open) 1f else 0.5f, animationSpec = tween(durationMillis = 10, easing = LinearEasing))
+    Column {
+        for (id in tasks) {
+            key(id) {
+                val state = rememberSwipeToDismissBoxState(confirmValueChange = { tasks.remove(id); true })
+                SwipeToDismissBox(state = state, backgroundContent = { Box(modifier = Modifier.fillMaxSize().background(Color.Red)) }) {
+                    Text("görev $id", modifier = Modifier.fillMaxWidth().testTag("görev$id"))
+                }
+            }
+        }
+        SearchBar(state = search, inputField = {
+            SearchBarDefaults.InputField(textFieldState = query, searchBarState = search, onSearch = { chosen = it },
+                                         placeholder = { Text("Ara") }, leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Ara") })
+        }, modifier = Modifier.testTag("arama"))
+        TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(), tooltip = { PlainTooltip(caretSize = TooltipDefaults.caretSize) { Text("İpucu") } },
+                   state = rememberTooltipState()) {
+            IconButton(onClick = { open = true }, modifier = Modifier.testTag("aç")) { Icon(Icons.Filled.Info, contentDescription = "Bilgi") }
+        }
+        if (open) {
+            val state = rememberDatePickerState(picked)
+            DatePickerDialog(onDismissRequest = { open = false }, confirmButton = { TextButton(onClick = { picked = state.selectedDate; open = false }) { Text("Tamam") } },
+                             dismissButton = { TextButton(onClick = { open = false }) { Text("İptal") } }) { DatePicker(state = state) }
+        }
+        Row {
+            for (i in 0 until 2) {
+                OutlinedButton(onClick = { }, modifier = Modifier.focusRequester(requesters[i]).focusProperties { if (i == 1) canFocus = false }.testTag("odak$i")) { Text("düğme $i") }
+            }
+        }
+        Text("tasks ${tasks.size} · ${chosen} · ${if (maybe != null) maybe.first + maybe.second else 0} · ${WindowInsets.statusBars.top.roundToInt()} · ${(alpha * 10).roundToInt()}",
+             modifier = Modifier.testTag("özet"))
+        Button(onClick = { scope.launch { requesters[1].requestFocus() } }) { Text("İkiye odaklan") }
+    }
+}
+
+TEST(sections_forms_as_compose_writes_them) {
+    ComposeTestRule rule([] { SectionsForms(); });
+    CHECK(rule.onNodeWithText("tasks 2 · yok · 7 · 0 · 5").exists() && rule.onNodeWithTag("görev1").exists() && rule.onNodeWithTag("arama").exists());
+    rule.onNodeWithTag("aç").performClick();
+    rule.mainClock().advanceTimeBy(500);
+    CHECK(rule.onNodeWithText("Tamam").exists());
+    CHECK(rule.onNodeWithText("tasks 2 · yok · 7 · 0 · 10").exists());  // (open: the tween went to 1)
+    rule.onNodeWithText("İptal").performClick();
+    rule.mainClock().advanceTimeBy(500);
+    CHECK(rule.onNodeWithText("tasks 2 · yok · 7 · 0 · 5").exists() && rule.onNodeWithText("düğme 1").exists());
+}
+
 TEST(navigation_as_compose_writes_it) {
     NavController nav;
     ComposeTestRule rule([&] { Navigator(nav); });

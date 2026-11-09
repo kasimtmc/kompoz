@@ -1042,6 +1042,21 @@
   karakterin `isDigit`, `isLetter`, `isLetterOrDigit`, `isWhitespace`, `isUpperCase` ve `isLowerCase`'i Kotlin'inkiler.
 - **Gösteri uygulamasının metin alanları ekranı Compose'un sözdizimiyle**: alanlar, dönüşümleri, renkleri, geri alma durumu,
   dekoratörü ve odak Kotlin'de bir `@Composable fun`.
+- **Kaydırma kutuları, arama çubukları, ipuçları, seçiciler, odak özellikleri ve tıklamalar Compose'un yazdığı gibi**:
+  `rememberSwipeToDismissBoxState(confirmValueChange = { })`, `SwipeToDismissBox(state = …, modifier = …, backgroundContent = { },
+  enableDismissFromStartToEnd = …) { }`; `SearchBar(state = …, inputField = { }, modifier = …)`, `ExpandedFullScreenSearchBar` ve
+  `ExpandedDockedSearchBar(state = …, inputField = { }) { }`, `SearchBarDefaults.InputField(textFieldState = …, searchBarState = …,
+  onSearch = { }, placeholder = { Text("…") } ya da bir metin, leadingIcon = { }, trailingIcon = { })` (`InputFieldOptions::placeholderContent`);
+  `TooltipBox(positionProvider = …, tooltip = { }, state = …, modifier = …) { }`, `PlainTooltip(modifier = …, caretSize = …) { }`,
+  `RichTooltip(modifier = …, title = { }, action = { }, caretSize = …) { metin }`; `DatePickerDialog(onDismissRequest = …,
+  confirmButton = { }, dismissButton = { }) { }`, `DatePicker(state = …)`, `DateRangePicker(state = …)`, `TimePicker(state = …)`,
+  `TimeInput(state = …)`, `TimePickerDialog(onDismissRequest = …, confirmButton = { }, dismissButton = { }, title = { }, modeToggleButton
+  = { }) { }`; `Modifier.focusProperties { canFocus = false; next = other }`, `clickable(interactionSource = …, indication = null,
+  enabled = …) { }` (`indication = null`: yok), `verticalScroll(state, reverseScrolling = true)` ve `horizontalScroll`'unki;
+  `tween(durationMillis = …, delayMillis = …, easing = …)`. Yerine göre C++ biçimleri duruyor. kompozc'de bir sınıfın statik işlevi
+  Compose'un özelliği gibi okunuyor (`WindowInsets.statusBars`, `WindowInsets.isImeVisible`); `LocalDate`, `std::chrono::year_month_day`;
+  `Pair(a, b)` ve `Triple(a, b, c)`; null denetiminden sonra bir null olabilirin üyesi okunuyor (Kotlin'in akıllı dönüştürmesi); bir
+  `if` ya da `when` ifadesinin dalları `val`'ın bildirilen türünü alıyor (`val palette: TonalPalette? = if (…) system else null`).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

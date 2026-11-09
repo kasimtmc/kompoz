@@ -25,6 +25,7 @@ struct Structs {
     // A class's (or struct's) public members, fields and functions, and the classes it derives from.
     struct Members {
         std::set<std::string, std::less<>> names;
+        std::set<std::string, std::less<>> staticFunctions;  // WindowInsets::statusBars(): Compose's WindowInsets.statusBars
         std::vector<std::string> bases;
     };
     std::map<std::string, Members, std::less<>> classes;
@@ -37,6 +38,8 @@ struct Structs {
     bool member(std::string_view type, std::string_view name) const;
     // Whether the class `type` is `base` or derives from it (a ViewModel: handed out as a shared pointer).
     bool derivesFrom(std::string_view type, std::string_view base) const;
+    // Whether `name` is a static function of the class `type` (read as a property in Kotlin: called).
+    bool staticFunction(std::string_view type, std::string_view name) const;
     // A header's structs, and those of the headers it includes with quotes, found next to it.
     void readHeader(const std::filesystem::path& header);
     // The C++ text of a source (not a header of its own): its quoted includes' structs.

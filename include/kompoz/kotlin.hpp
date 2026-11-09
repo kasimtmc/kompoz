@@ -53,6 +53,7 @@ template <class T>
 decltype(auto) deref(T&& x) {
     if constexpr (requires { x.kompoz_object(); }) return (x.kompoz_object());  // a kompozc class's handle: its object
     else if constexpr (PointerLike<T>) return (*x);
+    else if constexpr (requires { x.has_value(); *x; }) return (*x);  // a nullable after Kotlin's smart cast (if (x == null) return): its value
     else return std::forward<T>(x);
 }
 
@@ -1331,6 +1332,15 @@ decltype(auto) remove(C& c, const X& x, A&&... args) {
             return false;
         }
     }
+}
+// Pair(a, b) and Triple(a, b, c) as values (a to b is kt::to).
+template <class A, class B>
+std::pair<std::decay_t<A>, std::decay_t<B>> Pair(A&& a, B&& b) {
+    return {std::forward<A>(a), std::forward<B>(b)};
+}
+template <class A, class B, class C>
+std::tuple<std::decay_t<A>, std::decay_t<B>, std::decay_t<C>> Triple(A&& a, B&& b, C&& c) {
+    return {std::forward<A>(a), std::forward<B>(b), std::forward<C>(c)};
 }
 // Kotlin's Random(seed): a source for shuffle(random) and nextInt(n).
 struct KtRandom {

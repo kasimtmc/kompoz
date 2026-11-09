@@ -1486,14 +1486,14 @@ std::optional<SwipeToDismissBoxState> Saver<SwipeToDismissBoxState>::restore(con
     return s;
 }
 
-SwipeToDismissBoxState rememberSwipeToDismissBoxState(std::function<bool(SwipeToDismissBoxValue)> confirmValueChange,
+SwipeToDismissBoxState detail::rememberSwipeToDismissBoxState(std::function<bool(SwipeToDismissBoxValue)> confirmValueChange,
                                                       CallSite site) {
     auto& state = rememberSaveable([&] { return SwipeToDismissBoxState(confirmValueChange); }, site);
     state.data_->confirm = std::move(confirmValueChange);  // the latest callback
     return state;
 }
 
-void SwipeToDismissBox(SwipeToDismissBoxState state, const Content& backgroundContent, const Content& content,
+void detail::SwipeToDismissBox(SwipeToDismissBoxState state, const Content& backgroundContent, const Content& content,
                        SwipeToDismissOptions options, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     auto d = state.data_;
@@ -1551,7 +1551,7 @@ void SwipeToDismissBox(SwipeToDismissBoxState state, const Content& backgroundCo
     // composed while the content is moved off it (else it is covered, and out of the semantics).
     bool showBackground = state.dismissDirection() != SwipeToDismissBoxValue::Settled ||
                           state.currentValue() != SwipeToDismissBoxValue::Settled;
-    Layout(modifier.clipToBounds(), [&] {
+    ::kompoz::Layout(modifier.clipToBounds(), [&] {
         if (showBackground) detail::Box(Modifier(), backgroundContent);
         detail::Box(dragged, content);
     }, [d](const std::vector<Measurable>& children, const Constraints& c) {

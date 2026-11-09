@@ -518,4 +518,43 @@ Modifier Modifier::sharedBounds(A&&... args) const {
                         P::get<n::RenderInOverlayDuringTransition>(true, args...), P::get<n::ZIndexInOverlay>(0.f, args...));
 }
 
+// clickable(interactionSource = source, indication = null) { … }, clickable(enabled = …, onClick = …): Compose's names;
+// indication = null is none (Compose's), as Kompoz's indication = false.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::clickable(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::OnClick, n::Enabled, n::InteractionSource, n::Indication, detail::Block>;
+    static_assert(P::check<A...>());
+    ClickableOptions options;
+    P::set<n::Enabled>(options.enabled, args...);
+    P::set<n::InteractionSource>(options.interactionSource, args...);
+    if constexpr (P::given<n::Indication, A...>()) {
+        auto&& given = P::arg<n::Indication>(args...);
+        if constexpr (requires { std::remove_cvref_t<decltype(given)>::kompozNull; }) options.indication = Indication(false);
+        else options.indication = Indication(given);
+    }
+    std::function<void()> onClick;
+    if constexpr (P::given<n::OnClick, A...>()) onClick = P::arg<n::OnClick>(args...);
+    else onClick = P::block(std::forward<A>(args)...);
+    return clickable(std::move(onClick), options);
+}
+
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::verticalScroll(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::State, n::Enabled, n::ReverseScrolling>;
+    static_assert(P::check<A...>());
+    return verticalScroll(P::arg<n::State>(args...), P::get<n::Enabled>(true, args...), P::get<n::ReverseScrolling>(false, args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::horizontalScroll(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::State, n::Enabled, n::ReverseScrolling>;
+    static_assert(P::check<A...>());
+    return horizontalScroll(P::arg<n::State>(args...), P::get<n::Enabled>(true, args...), P::get<n::ReverseScrolling>(false, args...));
+}
+
 } // namespace kompoz

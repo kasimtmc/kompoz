@@ -7928,6 +7928,39 @@ TEST(tabs_and_fab_menu_take_compose_named_arguments) {
     CHECK(rule.onNodeWithText("seçili 1 · Konum").exists() && rule.onNodeWithContentDescription("Daha").exists());
 }
 
+// The sections' forms by name: SwipeToDismissBox(state = …, backgroundContent = …), SearchBar(state = …, inputField = …) with
+// SearchBarDefaults::InputField(textFieldState = …, searchBarState = …), TooltipBox(positionProvider = …, tooltip = …, state = …),
+// PlainTooltip(caretSize = …) { }, RichTooltip(title = …, action = …) { }, DatePickerDialog(onDismissRequest = …) { DatePicker(state = …) },
+// TimePickerDialog(…) { TimeInput(state = …) }, Modifier::focusProperties { }, clickable(interactionSource = …, indication = …) { }.
+TEST(sections_forms_take_compose_named_arguments) {
+    SnapshotStateList<int> tasks{1, 2};
+    ComposeTestRule rule([&] {
+        auto search = rememberSearchBarState();
+        Column([&] {
+            for (int id : std::vector<int>(tasks.begin(), tasks.end()))
+                key(id, [&] {
+                    auto state = rememberSwipeToDismissBoxState(arg::confirmValueChange = [&tasks, id](SwipeToDismissBoxValue) { tasks.removeIf([id](int t) { return t == id; }); return true; });
+                    SwipeToDismissBox(arg::state = state, arg::backgroundContent = [] { Box(Modifier().fillMaxSize().background(colors::Red)); },
+                                      [id] { Text("görev " + std::to_string(id), Modifier().fillMaxWidth().testTag("görev" + std::to_string(id))); });
+                });
+            auto query = rememberTextFieldState();
+            SearchBar(arg::state = search, arg::inputField = [&] {
+                SearchBarDefaults::InputField(arg::textFieldState = query, arg::searchBarState = search, arg::placeholder = [] { Text("Ara"); },
+                                              arg::leadingIcon = [] { Icon(Icons::Filled::Search, "Ara"); });
+            }, arg::modifier = Modifier().testTag("arama"));
+            TooltipBox(arg::positionProvider = TooltipDefaults::rememberTooltipPositionProvider(), arg::tooltip = [] { PlainTooltip(arg::caretSize = TooltipDefaults::caretSize, [] { Text("İpucu"); }); },
+                       arg::state = rememberTooltipState(), [] { IconButton(arg::onClick = [] {}, [] { Icon(Icons::Filled::Info, "Bilgi"); }); });
+            RichTooltip(arg::title = [] { Text("Başlık"); }, arg::action = [] { TextButton(arg::onClick = [] {}, [] { Text("Tamam"); }); }, [] { Text("Metin"); });
+            MutableInteractionSource source;
+            Box(Modifier().size(40).testTag("kart").clickable(arg::interactionSource = source, arg::indication = kt::null, [] {}));
+            Box(Modifier().size(40).focusProperties([](FocusProperties& p) { p.canFocus = false; }).testTag("odaksız"));
+            Text(std::format("tasks {} · {:.0f}", tasks.size(), WindowInsets::statusBars().top), Modifier().testTag("özet"));
+        });
+    }, {400, 800});
+    CHECK(rule.onNodeWithTag("görev1").exists() && rule.onNodeWithTag("arama").exists() && rule.onNodeWithText("Başlık").exists());
+    CHECK(rule.onNodeWithText("tasks 2 · 0").exists() && rule.onNodeWithTag("kart").exists() && rule.onNodeWithTag("odaksız").exists());
+}
+
 TEST(navigation_takes_compose_named_arguments) {
     // NavHost(navController =, startDestination =, enterTransition = { }) { … } with the graph builder's
     // composable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }
