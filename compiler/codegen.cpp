@@ -143,6 +143,7 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"mediaQuery", "const UiMediaScope"},    {"derivedMediaQuery", "const UiMediaScope"},
     {"SubcomposeLayout", "SubcomposeMeasureScope"},
     {"ButtonGroup", "ButtonGroupScope"},  // (its items: clickableItem(…); its buttons' Modifier.animateWidth(source))
+    {"FloatingActionButtonMenu", "const FloatingActionButtonMenuScope"}, {"ToggleFloatingActionButton", "const ToggleFloatingActionButtonScope"},
     {"buildAnnotatedString", "AnnotatedStringBuilder"}, {"edit", "TextFieldBuffer"},
     {"GenericShape", "Path"},                {"blur", "BlurScope"},
     {"AnimatedVisibility", "const AnimatedVisibilityScope"}, {"AnimatedContent", "const AnimatedContentScope"},
@@ -557,11 +558,13 @@ public:
             for (const Param& p : f.params) declare(p.name, Local);
             if (f.receiver) {  // its members reached by their names, as a lambda's receiver's
                 receivers_.push_back(qualified(f.receiver->name));
+                receiverConst_.push_back(true);
                 receiverLabels_.push_back({});
                 out_.text(" [[maybe_unused]] auto* kompoz_this_1 = &kompoz_receiver_1;");
             }
             statements(*f.body, false);
             receivers_.clear();
+            receiverConst_.clear();
             receiverLabels_.clear();
             scopes_.pop_back();
             out_.text(" }\n");
@@ -1451,7 +1454,17 @@ private:
     void lambda(const Node& l, bool value, bool suspend = false, bool produceState = false, const std::string* receiver = nullptr,
                 const std::string& label = {}) {
         bool wasSuspend = std::exchange(suspend_, suspend);
-        out_.text(capture(std::exchange(inline_, false) ? "[&]" : "[=]") + "(");
+        // A read-only receiver around (a "const X" one: an AnimatedContentScope, a ToggleFloatingActionButtonScope) is
+        // kept by a copy where the lambda may outlive the block (a graphicsLayer's reads checkedProgress as it draws):
+        // kt::heldReceiver copies what can be copied, the pointer stays for the rest.
+        std::string capture = this->capture(std::exchange(inline_, false) ? "[&]" : "[=]");
+        if (capture.starts_with("[=")) {
+            std::string held;
+            for (size_t r = 0; r < receivers_.size(); ++r)
+                if (receiverConst_[r]) held += ", kompoz_this_" + std::to_string(r + 1) + " = ::kompoz::kt::heldReceiver(kompoz_this_" + std::to_string(r + 1) + ")";
+            capture = capture.substr(0, capture.size() - 1) + held + "]";
+        }
+        out_.text(capture + "(");
         Scoped inside(global_);
         scopes_.emplace_back();
         std::string self;
@@ -1459,6 +1472,7 @@ private:
             bool isConst = receiver->starts_with("const "), isAuto = receiver->starts_with("auto ");
             std::string bare = isConst ? receiver->substr(6) : isAuto ? receiver->substr(5) : *receiver;
             receivers_.push_back(bare);
+            receiverConst_.push_back(isConst);
             receiverLabels_.push_back(label);
             self = std::to_string(receivers_.size());
             // (typed: an overload taking other parameters is never tried with it; "auto": a template's scope)
@@ -1500,6 +1514,7 @@ private:
         scopes_.pop_back();
         if (receiver) {
             receivers_.pop_back();
+            receiverConst_.pop_back();
             receiverLabels_.pop_back();
         }
         out_.text(" }");
@@ -1544,6 +1559,7 @@ private:
         // Its functions see only what it holds and their parameters (and `this` is the object).
         auto scopes = std::exchange(scopes_, {});
         auto receivers = std::exchange(receivers_, {});
+        auto receiverConst = std::exchange(receiverConst_, {});
         auto receiverLabels = std::exchange(receiverLabels_, {});
         bool wasSuspend = std::exchange(suspend_, false), wasGlobal = std::exchange(global_, false);
         for (auto& m : o.kids) {
@@ -1561,6 +1577,7 @@ private:
         }
         scopes_ = std::move(scopes);
         receivers_ = std::move(receivers);
+        receiverConst_ = std::move(receiverConst);
         receiverLabels_ = std::move(receiverLabels);
         suspend_ = wasSuspend, global_ = wasGlobal;
         out_.text(" }; return std::make_shared<kompoz_object>(");
@@ -1708,6 +1725,7 @@ private:
     const Module& module_;
     bool suspend_ = false;  // in a coroutine
     std::vector<std::string> receivers_;  // the receivers' types of the lambdas it is in, innermost last
+    std::vector<bool> receiverConst_;     // and whether each is read-only (a "const X" receiver: copied into lambdas that keep it)
     std::vector<std::string> receiverLabels_;  // and the calls they were given to (this@AnimatedContent)
     bool global_ = false;  // at namespace scope: a top-level val's value
     bool inClass_ = false;  // in a class's body: its members are reached by their names

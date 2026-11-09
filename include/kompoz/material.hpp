@@ -1300,9 +1300,54 @@ struct ToggleFloatingActionButtonOptions {
     std::optional<Color> containerColor, checkedContainerColor;  // primaryContainer, primary
     Alignment contentAlignment = Alignment::TopEnd;
 };
+namespace detail {
 void ToggleFloatingActionButton(bool checked, std::function<void(bool)> onCheckedChange,
                                 const std::function<void(const ToggleFloatingActionButtonScope&)>& content, const Modifier& modifier = {},
                                 const ToggleFloatingActionButtonOptions& options = {}, CallSite site = CallSite::current());
+// ToggleFloatingActionButton(checked = …, onCheckedChange = …, containerSize = …, checkedContainerSize = …, containerColor = …,
+// checkedContainerColor = …, contentAlignment = …) { Icon(…, Modifier.graphicsLayer { rotationZ = 45 * checkedProgress }) }, as
+// Compose writes it (and by place, the options in place: (checked, onCheckedChange, content, modifier, {.containerSize = 80})).
+struct ToggleFloatingActionButtonImpl {
+    using P = Params<names::Checked, names::OnCheckedChange, names::Modifier, names::ContainerSize, names::CheckedContainerSize, names::ContainerColor,
+                     names::CheckedContainerColor, names::ContentAlignment, BlockWith<const ToggleFloatingActionButtonScope&>>;
+    template <class... A>
+    static constexpr bool byPlace() {  // (checked, onCheckedChange, content, modifier, options): Kompoz's C++ order, the content third
+        if constexpr (sizeof...(A) < 4 || (isNamed<A> || ...)) return false;
+        else return std::is_invocable_v<std::remove_cvref_t<std::tuple_element_t<2, std::tuple<A...>>>&, const ToggleFloatingActionButtonScope&>;
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (byPlace<A...>()) {
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            ToggleFloatingActionButtonOptions options;
+            if constexpr (sizeof...(A) >= 5) options = std::get<4>(all);
+            ToggleFloatingActionButton(bool(std::get<0>(all)), std::function<void(bool)>(std::get<1>(all)),
+                                       std::function<void(const ToggleFloatingActionButtonScope&)>(std::get<2>(all)), std::get<3>(all), options, site);
+        } else {
+            static_assert(P::check<A...>());
+            static_assert(P::blockGiven<A...>(), "kompoz: ToggleFloatingActionButton takes a block: its content, on its scope");
+            ToggleFloatingActionButtonOptions options;
+            P::set<names::ContainerSize>(options.containerSize, args...);
+            P::set<names::CheckedContainerSize>(options.checkedContainerSize, args...);
+            P::set<names::ContainerColor>(options.containerColor, args...);
+            P::set<names::CheckedContainerColor>(options.checkedContainerColor, args...);
+            P::set<names::ContentAlignment>(options.contentAlignment, args...);
+            auto&& content = std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...));
+            ToggleFloatingActionButton(bool(P::arg<names::Checked>(args...)), std::function<void(bool)>(P::arg<names::OnCheckedChange>(args...)),
+                                       std::function<void(const ToggleFloatingActionButtonScope&)>(content), P::get<names::Modifier>(Modifier{}, args...),
+                                       options, site);
+        }
+    }
+};
+struct ToggleFloatingActionButtonCall : Composable<ToggleFloatingActionButtonImpl> {
+    using Composable<ToggleFloatingActionButtonImpl>::operator();
+    void operator()(bool checked, std::function<void(bool)> onCheckedChange, const std::function<void(const ToggleFloatingActionButtonScope&)>& content,
+                    const Modifier& modifier, const ToggleFloatingActionButtonOptions& options, CallSite site = CallSite::current()) const {
+        ToggleFloatingActionButton(checked, std::move(onCheckedChange), content, modifier, options, site);
+    }
+};
+} // namespace detail
+inline constexpr detail::ToggleFloatingActionButtonCall ToggleFloatingActionButton;
 
 // M3 Expressive's FAB menu (Compose's FloatingActionButtonMenu): its actions open in a column
 // above the button, one after another from the bottom, and close from the top.
@@ -1314,21 +1359,55 @@ void ToggleFloatingActionButton(bool checked, std::function<void(bool)> onChecke
 //   }, [&](const FloatingActionButtonMenuScope& menu) {
 //       FloatingActionButtonMenuItem(menu, [] { ... }, [] { Text("Belge"); }, [] { Icon(Icons::Filled::Edit, ""); });
 //   });
+class FloatingActionButtonMenuScope;
+// One action: a pill with an icon and a label (primaryContainer).
+void FloatingActionButtonMenuItem(const FloatingActionButtonMenuScope& menu, std::function<void()> onClick, const Content& text,
+                                  const Content& icon, const Modifier& modifier = {}, CallSite site = CallSite::current());
 class FloatingActionButtonMenuScope {
 public:
     struct Data;
     explicit FloatingActionButtonMenuScope(std::shared_ptr<Data> data) : data_(std::move(data)) {}
     const std::shared_ptr<Data>& data() const { return data_; }
+    // Compose's FloatingActionButtonMenuItem(onClick = …, text = { Text("…") }, icon = { Icon(…) }, modifier = …) in the menu's block
+    // (its scope's extension there): an item of this menu.
+    template <class A1, class A2>
+    void FloatingActionButtonMenuItem(A1&& a1, A2&& a2, CallSite site = CallSite::current()) const { item(site, std::forward<A1>(a1), std::forward<A2>(a2)); }
+    template <class A1, class A2, class A3>
+    void FloatingActionButtonMenuItem(A1&& a1, A2&& a2, A3&& a3, CallSite site = CallSite::current()) const { item(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3)); }
+    template <class A1, class A2, class A3, class A4>
+    void FloatingActionButtonMenuItem(A1&& a1, A2&& a2, A3&& a3, A4&& a4, CallSite site = CallSite::current()) const { item(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4)); }
 
 private:
+    template <class... A>
+    void item(CallSite site, A&&... args) const {
+        using P = detail::Params<detail::names::OnClick, detail::names::Text, detail::names::Icon, detail::names::Modifier>;
+        static_assert(P::check<A...>());
+        ::kompoz::FloatingActionButtonMenuItem(*this, std::function<void()>(P::arg<detail::names::OnClick>(args...)),
+                                               Content(P::arg<detail::names::Text>(args...)), P::get<detail::names::Icon>(Content{}, args...),
+                                               P::get<detail::names::Modifier>(Modifier{}, args...), site);
+    }
     std::shared_ptr<Data> data_;
 };
+namespace detail {
 void FloatingActionButtonMenu(bool expanded, const Content& button, const std::function<void(const FloatingActionButtonMenuScope&)>& content,
                               const Modifier& modifier = {}, HorizontalAlignment horizontalAlignment = Alignment::End,
                               CallSite site = CallSite::current());
-// One action: a pill with an icon and a label (primaryContainer).
-void FloatingActionButtonMenuItem(const FloatingActionButtonMenuScope& menu, std::function<void()> onClick, const Content& text,
-                                  const Content& icon, const Modifier& modifier = {}, CallSite site = CallSite::current());
+// FloatingActionButtonMenu(expanded = …, button = { ToggleFloatingActionButton(…) { } }, modifier = …, horizontalAlignment = …) {
+// FloatingActionButtonMenuItem(…) }, as Compose writes it (and by place: (expanded, button, content)).
+struct FloatingActionButtonMenuImpl {
+    using P = Params<names::Expanded, names::Button, names::Modifier, names::HorizontalAlignment, BlockWith<const FloatingActionButtonMenuScope&>>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: FloatingActionButtonMenu takes a block: its items, on its scope");
+        auto&& content = std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...));
+        FloatingActionButtonMenu(bool(P::arg<names::Expanded>(args...)), Content(P::arg<names::Button>(args...)),
+                                 std::function<void(const FloatingActionButtonMenuScope&)>(content), P::get<names::Modifier>(Modifier{}, args...),
+                                 P::get<names::HorizontalAlignment>(HorizontalAlignment(Alignment::End), args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::FloatingActionButtonMenuImpl> FloatingActionButtonMenu;
 
 // M3 Expressive's floating toolbar (Compose's HorizontalFloatingToolbar / VerticalFloatingToolbar):
 // a pill of actions over the content, usually near an edge; its leading and trailing actions
@@ -1421,12 +1500,13 @@ void HorizontalFloatingToolbar(bool expanded, const Content& floatingActionButto
                                const FloatingToolbarOptions& options = {}, CallSite site = CallSite::current());
 struct HorizontalFloatingToolbarImpl {
     // Its FAB (Compose's floatingActionButton), named or second without a name.
-    using P = Params<names::Expanded, names::Modifier, names::FloatingToolbarColors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, names::FloatingActionButton, Block>;
-    using FabSecond = Params<names::Expanded, names::FloatingActionButton, names::Modifier, names::FloatingToolbarColors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, Block>;
+    using P = Params<names::Expanded, names::Modifier, names::FloatingToolbarColors, names::Colors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, names::FloatingActionButton, Block>;
+    using FabSecond = Params<names::Expanded, names::FloatingActionButton, names::Modifier, names::FloatingToolbarColors, names::Colors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, Block>;
     template <class Q, class... A>
     static FloatingToolbarOptions options(A&... args) {
         FloatingToolbarOptions options;
         Q::template set<names::FloatingToolbarColors>(options.colors, args...);
+        Q::template set<names::Colors>(options.colors, args...);  // (Compose's name)
         Q::template set<names::ScrollBehavior>(options.scrollBehavior, args...);
         Q::template set<names::Shape>(options.shape, args...);
         Q::template set<names::LeadingContent>(options.leadingContent, args...);
@@ -1470,12 +1550,13 @@ void VerticalFloatingToolbar(bool expanded, const Content& floatingActionButton,
                              const FloatingToolbarOptions& options = {}, CallSite site = CallSite::current());
 struct VerticalFloatingToolbarImpl {
     // Its FAB (Compose's floatingActionButton), named or second without a name.
-    using P = Params<names::Expanded, names::Modifier, names::FloatingToolbarColors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, names::FloatingActionButton, Block>;
-    using FabSecond = Params<names::Expanded, names::FloatingActionButton, names::Modifier, names::FloatingToolbarColors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, Block>;
+    using P = Params<names::Expanded, names::Modifier, names::FloatingToolbarColors, names::Colors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, names::FloatingActionButton, Block>;
+    using FabSecond = Params<names::Expanded, names::FloatingActionButton, names::Modifier, names::FloatingToolbarColors, names::Colors, names::ScrollBehavior, names::Shape, names::LeadingContent, names::TrailingContent, names::ShadowElevation, Block>;
     template <class Q, class... A>
     static FloatingToolbarOptions options(A&... args) {
         FloatingToolbarOptions options;
         Q::template set<names::FloatingToolbarColors>(options.colors, args...);
+        Q::template set<names::Colors>(options.colors, args...);  // (Compose's name)
         Q::template set<names::ScrollBehavior>(options.scrollBehavior, args...);
         Q::template set<names::Shape>(options.shape, args...);
         Q::template set<names::LeadingContent>(options.leadingContent, args...);
@@ -2595,6 +2676,11 @@ inline ToggleButtonShapes connectedTrailingButtonShapes() {
 }
 } // namespace ButtonGroupDefaults
 
+struct ScrollableTabRowOptions {
+    std::optional<ScrollState> scrollState;  // by default one of its own
+    float edgePadding = 52;                  // before the first tab and after the last
+};
+namespace detail {
 // Tabs of equal width; the indicator slides to the selected one, as wide as its content.
 void PrimaryTabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs,
                    CallSite site = CallSite::current());
@@ -2602,16 +2688,54 @@ void PrimaryTabRow(int selectedTabIndex, const Modifier& modifier, const Content
 // in onSurface rather than primary.
 void SecondaryTabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs,
                      CallSite site = CallSite::current());
-struct ScrollableTabRowOptions {
-    std::optional<ScrollState> scrollState;  // by default one of its own
-    float edgePadding = 52;                  // before the first tab and after the last
-};
 // Tabs as wide as their content (at least 90 dp) in a row that scrolls sideways; a newly
 // selected tab scrolls into view, centered where it can be (Compose's ScrollableTabRow).
 void PrimaryScrollableTabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs,
                              ScrollableTabRowOptions options = {}, CallSite site = CallSite::current());
 void SecondaryScrollableTabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs,
                                ScrollableTabRowOptions options = {}, CallSite site = CallSite::current());
+// PrimaryTabRow(selectedTabIndex = …) { Tab(…) } and the scrollable ones' edgePadding = …, scrollState = …, as Compose
+// writes them (and by place: (selectedTabIndex, modifier, tabs)).
+template <bool Secondary>
+struct TabRowImpl {
+    using P = Params<names::SelectedTabIndex, names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: a tab row takes a block: its tabs");
+        (Secondary ? SecondaryTabRow : PrimaryTabRow)(int(P::arg<names::SelectedTabIndex>(args...)), P::get<names::Modifier>(Modifier{}, args...),
+                                                      P::block(std::forward<A>(args)...), site);
+    }
+};
+template <bool Secondary>
+struct ScrollableTabRowImpl {
+    using P = Params<names::SelectedTabIndex, names::Modifier, names::EdgePadding, names::ScrollState, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: a tab row takes a block: its tabs");
+        ScrollableTabRowOptions options;
+        P::set<names::EdgePadding>(options.edgePadding, args...);
+        P::set<names::ScrollState>(options.scrollState, args...);
+        (Secondary ? SecondaryScrollableTabRow : PrimaryScrollableTabRow)(int(P::arg<names::SelectedTabIndex>(args...)),
+                                                                          P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...),
+                                                                          options, site);
+    }
+};
+// The C++ form whose options are made in place: PrimaryScrollableTabRow(i, modifier, tabs, {.edgePadding = 16}).
+template <bool Secondary>
+struct ScrollableTabRowCall : Composable<ScrollableTabRowImpl<Secondary>> {
+    using Composable<ScrollableTabRowImpl<Secondary>>::operator();
+    void operator()(int selectedTabIndex, const Modifier& modifier, const Content& tabs, ScrollableTabRowOptions options,
+                    CallSite site = CallSite::current()) const {
+        (Secondary ? SecondaryScrollableTabRow : PrimaryScrollableTabRow)(selectedTabIndex, modifier, tabs, std::move(options), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::TabRowImpl<false>> PrimaryTabRow;
+inline constexpr Composable<detail::TabRowImpl<true>> SecondaryTabRow;
+inline constexpr detail::ScrollableTabRowCall<false> PrimaryScrollableTabRow;
+inline constexpr detail::ScrollableTabRowCall<true> SecondaryScrollableTabRow;
 // A tab's colors (Compose's selectedContentColor and unselectedContentColor): by default the
 // row's content color (primary, onSurface in a secondary row) selected or not, as in Compose —
 // pass unselectedContentColor (colorScheme().onSurfaceVariant) to tell them apart.
@@ -2620,6 +2744,7 @@ struct TabOptions {
     std::optional<Color> selectedContentColor, unselectedContentColor;
     std::optional<MutableInteractionSource> interactionSource;
 };
+namespace detail {
 // 48 dp, 72 with an icon above the text (lined up by the text's baselines, as Compose's).
 void Tab(bool selected, std::function<void()> onClick, const Content& text, const Content& icon = {},
          const Modifier& modifier = {}, CallSite site = CallSite::current());
@@ -2631,6 +2756,73 @@ void LeadingIconTab(bool selected, std::function<void()> onClick, const Content&
                     const Modifier& modifier = {}, CallSite site = CallSite::current());
 void LeadingIconTab(bool selected, std::function<void()> onClick, const Content& text, const Content& icon, const Modifier& modifier,
                     const TabOptions& options, CallSite site = CallSite::current());
+template <class P, class... A>
+TabOptions tabOptions(A&... args) {
+    TabOptions o;
+    P::template set<names::Enabled>(o.enabled, args...);
+    P::template set<names::SelectedContentColor>(o.selectedContentColor, args...);
+    P::template set<names::UnselectedContentColor>(o.unselectedContentColor, args...);
+    P::template set<names::InteractionSource>(o.interactionSource, args...);
+    return o;
+}
+// Tab(selected = …, onClick = …, text = { Text("…") }, icon = { Icon(…) }, enabled = …, selectedContentColor = …,
+// unselectedContentColor = …) as Compose writes it. Kompoz's C++ form, (selected, onClick, text, icon, modifier, options), has the
+// text third: a callable there goes by place.
+struct TabImpl {
+    using P = Params<names::Selected, names::OnClick, names::Modifier, names::Enabled, names::Text, names::Icon, names::SelectedContentColor,
+                     names::UnselectedContentColor, names::InteractionSource>;
+    template <class... A>
+    static constexpr bool byPlace() {
+        if constexpr (sizeof...(A) < 3 || (isNamed<A> || ...)) return false;
+        else return std::is_invocable_v<std::remove_cvref_t<std::tuple_element_t<2, std::tuple<A...>>>&>;
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (byPlace<A...>()) {
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            Content icon;
+            Modifier modifier;
+            TabOptions options;
+            if constexpr (sizeof...(A) >= 4) icon = Content(std::get<3>(all));
+            if constexpr (sizeof...(A) >= 5) modifier = std::get<4>(all);
+            if constexpr (sizeof...(A) >= 6) options = std::get<5>(all);
+            Tab(bool(std::get<0>(all)), std::function<void()>(std::get<1>(all)), Content(std::get<2>(all)), icon, modifier, options, site);
+        } else {
+            static_assert(P::check<A...>());
+            Tab(bool(P::arg<names::Selected>(args...)), std::function<void()>(P::arg<names::OnClick>(args...)), P::get<names::Text>(Content{}, args...),
+                P::get<names::Icon>(Content{}, args...), P::get<names::Modifier>(Modifier{}, args...), tabOptions<P>(args...), site);
+        }
+    }
+};
+struct TabCall : Composable<TabImpl> {
+    using Composable<TabImpl>::operator();
+    void operator()(bool selected, std::function<void()> onClick, const Content& text, const Content& icon, const Modifier& modifier = {},
+                    const TabOptions& options = {}, CallSite site = CallSite::current()) const {
+        Tab(selected, std::move(onClick), text, icon, modifier, options, site);
+    }
+};
+// LeadingIconTab(selected, onClick, text = { }, icon = { }, modifier, enabled, …): Compose's order is Kompoz's too.
+struct LeadingIconTabImpl {
+    using P = Params<names::Selected, names::OnClick, names::Text, names::Icon, names::Modifier, names::Enabled, names::SelectedContentColor,
+                     names::UnselectedContentColor, names::InteractionSource>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        LeadingIconTab(bool(P::arg<names::Selected>(args...)), std::function<void()>(P::arg<names::OnClick>(args...)),
+                       Content(P::arg<names::Text>(args...)), Content(P::arg<names::Icon>(args...)), P::get<names::Modifier>(Modifier{}, args...),
+                       tabOptions<P>(args...), site);
+    }
+};
+struct LeadingIconTabCall : Composable<LeadingIconTabImpl> {
+    using Composable<LeadingIconTabImpl>::operator();
+    void operator()(bool selected, std::function<void()> onClick, const Content& text, const Content& icon, const Modifier& modifier,
+                    const TabOptions& options, CallSite site = CallSite::current()) const {
+        LeadingIconTab(selected, std::move(onClick), text, icon, modifier, options, site);
+    }
+};
+} // namespace detail
+inline constexpr detail::TabCall Tab;
+inline constexpr detail::LeadingIconTabCall LeadingIconTab;
 
 // A pill to drag (Compose's VerticalDragHandle): 4 × 48 dp in outline, 12 × 52 dp in onSurface
 // while pressed or dragged, centered in the room it is given (paneExpansionDraggable).

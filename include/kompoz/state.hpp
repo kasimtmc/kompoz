@@ -98,7 +98,7 @@ public:
     const std::vector<T>& items() const { return state_.get(); }
     size_t size() const { return items().size(); }
     bool empty() const { return items().empty(); }
-    const T& operator[](size_t i) const { return items()[i]; }
+    decltype(auto) operator[](size_t i) const { return items()[i]; }  // (a vector<bool>'s is a value, not a reference)
     auto begin() const { return items().begin(); }
     auto end() const { return items().end(); }
 

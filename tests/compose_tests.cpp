@@ -1453,6 +1453,57 @@ TEST(containers_as_compose_writes_them) {
     CHECK(rule.onNodeWithTag("çubuk").bounds().height <= 80.5f);  // no inset padding
 }
 
+// Tabs, the FAB menu and a floating toolbar as Compose writes them; a lambda kept past its block
+// reads the scope it was in (graphicsLayer { rotationZ = 45 * checkedProgress }: a copy of the scope).
+@Composable
+fun Navigation() {
+    var tab by remember { mutableStateOf(0) }
+    var open by remember { mutableStateOf(false) }
+    var picked by remember { mutableStateOf("yok") }
+    var more by remember { mutableStateOf(false) }
+    Column {
+        PrimaryTabRow(selectedTabIndex = tab) {
+            for (i in 0 until 2) Tab(selected = tab == i, onClick = { tab = i }, text = { Text("sekme $i") }, icon = { Icon(Icons.Filled.Star, contentDescription = null) })
+        }
+        PrimaryScrollableTabRow(selectedTabIndex = tab, edgePadding = 0.dp) {
+            for (i in 0 until 2) LeadingIconTab(selected = tab == i, onClick = { tab = i }, text = { Text("kayan $i") }, icon = { Icon(Icons.Filled.Home, contentDescription = null) })
+        }
+        Text("seçili $tab · $picked · ${if (more) "fazla" else "az"}")
+        Box(modifier = Modifier.size(300.dp), contentAlignment = Alignment.BottomEnd) {
+            FloatingActionButtonMenu(
+                expanded = open,
+                button = {
+                    ToggleFloatingActionButton(checked = open, onCheckedChange = { open = it }, modifier = Modifier.testTag("aç")) {
+                        Icon(Icons.Filled.Add, contentDescription = "Menü", modifier = Modifier.testTag("artı").graphicsLayer { rotationZ = 45 * checkedProgress })
+                    }
+                },
+            ) {
+                for (label in listOf("Not", "Konum")) {
+                    FloatingActionButtonMenuItem(onClick = { picked = label; open = false }, text = { Text(label) }, icon = { Icon(Icons.Filled.Edit, contentDescription = null) })
+                }
+            }
+        }
+        HorizontalFloatingToolbar(expanded = more, colors = FloatingToolbarDefaults.vibrantFloatingToolbarColors(),
+                                  leadingContent = { IconButton(onClick = { }) { Icon(Icons.Filled.Favorite, contentDescription = "Beğen") } }) {
+            IconButton(onClick = { more = !more }, modifier = Modifier.testTag("daha")) { Icon(Icons.Filled.MoreVert, contentDescription = "Daha") }
+        }
+    }
+}
+
+TEST(tabs_and_fab_menu_as_compose_writes_them) {
+    ComposeTestRule rule([] { Navigation(); });
+    CHECK(rule.onNodeWithText("seçili 0 · yok · az").exists() && rule.onNodeWithText("sekme 1").exists() && rule.onNodeWithText("kayan 1").exists());
+    rule.onNodeWithText("kayan 1").performClick();
+    rule.onNodeWithTag("daha").performClick();
+    CHECK(rule.onNodeWithText("seçili 1 · yok · fazla").exists() && rule.onNodeWithContentDescription("Beğen").exists());
+    rule.onNodeWithTag("aç").performClick();
+    rule.mainClock().advanceTimeBy(1500);
+    CHECK(rule.onNodeWithText("Konum").exists());
+    rule.onNodeWithText("Konum").performClick();
+    rule.mainClock().advanceTimeBy(1500);
+    CHECK(rule.onNodeWithText("seçili 1 · Konum · fazla").exists());
+}
+
 TEST(navigation_as_compose_writes_it) {
     NavController nav;
     ComposeTestRule rule([&] { Navigator(nav); });

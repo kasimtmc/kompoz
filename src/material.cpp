@@ -650,8 +650,8 @@ void detail::ExtendedFloatingActionButton(std::function<void()> onClick, const C
     });
 }
 
-void ToggleFloatingActionButton(bool checked, std::function<void(bool)> onCheckedChange,
-                                const std::function<void(const ToggleFloatingActionButtonScope&)>& content, const Modifier& modifier,
+void detail::ToggleFloatingActionButton(bool checked, std::function<void(bool)> onCheckedChange,
+                                        const std::function<void(const ToggleFloatingActionButtonScope&)>& content, const Modifier& modifier,
                                 const ToggleFloatingActionButtonOptions& options, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
@@ -692,8 +692,8 @@ struct FloatingActionButtonMenuScope::Data {
     int count = 0;  // items the last time
 };
 
-void FloatingActionButtonMenu(bool expanded, const Content& button, const std::function<void(const FloatingActionButtonMenuScope&)>& content,
-                              const Modifier& modifier, HorizontalAlignment horizontalAlignment, CallSite site) {
+void detail::FloatingActionButtonMenu(bool expanded, const Content& button, const std::function<void(const FloatingActionButtonMenuScope&)>& content,
+                                      const Modifier& modifier, HorizontalAlignment horizontalAlignment, CallSite site) {
     ComposableScope scope(site);
     auto data = remember([] { return std::make_shared<FloatingActionButtonMenuScope::Data>(); });
     data->expanded = expanded;

@@ -1022,6 +1022,17 @@
 - **Gösteri uygulamasının material kapsayıcıları Compose'un sözdizimiyle**: animasyonlu görev listesi (`Random` ile karıştırılan
   bir `mutableStateListOf`, `animateItem`'lı bir `LazyColumn`'da), rozetli liste öğeleri ve bölümlü olanlar, dialog'lar, menüler
   (işaretli ve seçili öğeli gruplar) ve alt sayfalar, kartlar, FAB'lar ve alt uygulama çubuğu Kotlin'de `@Composable fun`'lar.
+- **Sekmeler, FAB menüsü ve kayan araç çubukları Compose'un yazdığı gibi; bloğundan uzun yaşayan bir lambda kapsamını
+  tutuyor**: `PrimaryTabRow(selectedTabIndex = …) { Tab(selected = …, onClick = …, text = { Text("…") }, icon = { Icon(…) },
+  enabled = …, selectedContentColor = …, unselectedContentColor = …) }`, `SecondaryTabRow`, `edgePadding = …`, `scrollState = …`
+  ile `PrimaryScrollableTabRow` ve `SecondaryScrollableTabRow`, `LeadingIconTab(selected, onClick, text = { }, icon = { }, …)` (yerine
+  göre C++ biçimleri duruyor); `FloatingActionButtonMenu(expanded = …, button = { }, horizontalAlignment = …) {
+  FloatingActionButtonMenuItem(onClick = …, text = { }, icon = { }) }` (öğe, Compose'daki gibi menü kapsamının bir uzantısı),
+  `ToggleFloatingActionButton(checked = …, onCheckedChange = …, containerSize = …, checkedContainerSize = …, containerColor = …,
+  checkedContainerColor = …, contentAlignment = …) { … }`; `HorizontalFloatingToolbar` ve `VerticalFloatingToolbar`,
+  `floatingToolbarColors = …`'un yanı sıra `colors = …` (Compose'un adı) alıyor. kompozc'de salt okunur alıcılı bir bloğun (bir
+  `AnimatedContentScope`, bir `ToggleFloatingActionButtonScope`) içinde yazılan bir lambda onun bir kopyasını tutuyor; böylece
+  bloktan sonra çalışan biri (`Modifier.graphicsLayer { rotationZ = 45 * checkedProgress }`, çizerken okunan) kapsamını hâlâ buluyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

@@ -210,6 +210,24 @@ auto nullable(bool has, F&& value) -> std::optional<std::decay_t<std::invoke_res
     return std::nullopt;
 }
 
+// A lambda's read-only receiver kept past its block (a graphicsLayer lambda reading a scope's
+// progress as it draws, after the scope is gone): a copy where the type can be copied, the pointer
+// otherwise; *held is the receiver either way.
+template <class T>
+struct ReceiverCopy {
+    T value;
+    const T& operator*() const { return value; }
+};
+template <class T>
+auto heldReceiver(T* p) {
+    if constexpr (std::is_copy_constructible_v<T>) return ReceiverCopy<std::remove_const_t<T>>{*p};
+    else return p;
+}
+template <class T>
+ReceiverCopy<T> heldReceiver(const ReceiverCopy<T>& held) {  // (a lambda inside one that already holds it: the same copy)
+    return held;
+}
+
 // a ?: b, b evaluated only when a is null.
 template <class T, class F>
 auto elvis(const T& a, F&& orElse) {

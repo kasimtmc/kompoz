@@ -587,6 +587,7 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 359. Compose'un `Slider(valueRange = 0f..100f)`, `RangeSlider(value = 200f..800f, onValueChange = { range -> }, valueRange = …, track = { })`, `rememberSliderState(value = …, steps = …, valueRange = …)`, `rememberRangeSliderState(activeRangeStart = …, activeRangeEnd = …, steps = …, valueRange = …)`, `DpSize(width, height)` ✅
 360. Compose'un `BadgedBox(badge = { Badge { Text("8") } }) { Icon(…) }`'u, `Badge()`, `SegmentedListItem(selected = …, onClick = …, shapes = …, headlineContent = { }, supportingContent = { }, leadingContent = { })`, `LoadingIndicator(modifier = …)` ve `LoadingIndicator(progress = …)`, genişletilmiş FAB'ların `icon = { Icon(…) }, text = { Text(…) }`'i, `BottomAppBar(windowInsets = WindowInsets(0.dp))` ✅
 361. Compose'un tembel bir yerleşimde `items(snapshotStateList) { }`'u (bir `mutableStateListOf`), `list.shuffle(Random(seed))`, birinde `list.addAll(…)` ✅
+362. Compose'un `PrimaryTabRow(selectedTabIndex = …) { Tab(selected = …, onClick = …, text = { }, icon = { }) }`'u, `SecondaryTabRow`, `PrimaryScrollableTabRow(selectedTabIndex, edgePadding = …) { LeadingIconTab(selected, onClick, text = { }, icon = { }, unselectedContentColor = …) }`, `FloatingActionButtonMenu(expanded = …, button = { ToggleFloatingActionButton(checked = …, onCheckedChange = …) { Icon(…, Modifier.graphicsLayer { rotationZ = 45 * checkedProgress }) } }) { FloatingActionButtonMenuItem(onClick = …, text = { }, icon = { }) }`, kayan araç çubuklarının `colors = …`'u ✅
 
 ## Sıradakiler
 

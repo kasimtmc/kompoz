@@ -1328,18 +1328,18 @@ void tabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs,
 
 } // namespace
 
-void PrimaryTabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs, CallSite site) {
+void detail::PrimaryTabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs, CallSite site) {
     tabRow(selectedTabIndex, modifier, tabs, {}, site);
 }
-void SecondaryTabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs, CallSite site) {
+void detail::SecondaryTabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs, CallSite site) {
     tabRow(selectedTabIndex, modifier, tabs, {.secondary = true}, site);
 }
-void PrimaryScrollableTabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs, ScrollableTabRowOptions options,
-                             CallSite site) {
+void detail::PrimaryScrollableTabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs, ScrollableTabRowOptions options,
+                                     CallSite site) {
     tabRow(selectedTabIndex, modifier, tabs, {.scrollable = true, .edgePadding = options.edgePadding, .scroll = options.scrollState}, site);
 }
-void SecondaryScrollableTabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs, ScrollableTabRowOptions options,
-                               CallSite site) {
+void detail::SecondaryScrollableTabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs, ScrollableTabRowOptions options,
+                                       CallSite site) {
     tabRow(selectedTabIndex, modifier, tabs,
            {.secondary = true, .scrollable = true, .edgePadding = options.edgePadding, .scroll = options.scrollState}, site);
 }
@@ -1360,13 +1360,13 @@ Modifier tabTap(const Modifier& m, bool selected, std::function<void()> onClick,
 }
 } // namespace
 
-void Tab(bool selected, std::function<void()> onClick, const Content& text, const Content& icon,
-         const Modifier& modifier, CallSite site) {
+void detail::Tab(bool selected, std::function<void()> onClick, const Content& text, const Content& icon,
+                 const Modifier& modifier, CallSite site) {
     Tab(selected, std::move(onClick), text, icon, modifier, {}, site);
 }
 
-void Tab(bool selected, std::function<void()> onClick, const Content& text, const Content& icon, const Modifier& modifier,
-         const TabOptions& options, CallSite site) {
+void detail::Tab(bool selected, std::function<void()> onClick, const Content& text, const Content& icon, const Modifier& modifier,
+                 const TabOptions& options, CallSite site) {
     ComposableScope scope(site);
     auto content = tabColor(selected, options);
     // Compose's TabBaselineLayout: the text 16 dp in from the sides; alone, it or the icon in the
@@ -1395,7 +1395,7 @@ void Tab(bool selected, std::function<void()> onClick, const Content& text, cons
     detail::Column(tabTap(modifier, selected, std::move(onClick), options).fillMaxWidth(),
            {.verticalArrangement = Arrangement::Center, .horizontalAlignment = Alignment::CenterHorizontally}, [&] {
                CompositionLocalProvider({LocalContentColor.provides(content)}, [&] {
-                   Layout(Modifier(), [&] {
+                   ::kompoz::Layout(Modifier(), [&] {
                        if (text)
                            detail::Box(Modifier().padding(16, 0), [&] {
                                CompositionLocalProvider({LocalTextStyle.provides(typography().titleSmall)}, text);
@@ -1406,13 +1406,13 @@ void Tab(bool selected, std::function<void()> onClick, const Content& text, cons
            });
 }
 
-void LeadingIconTab(bool selected, std::function<void()> onClick, const Content& text, const Content& icon,
-                    const Modifier& modifier, CallSite site) {
+void detail::LeadingIconTab(bool selected, std::function<void()> onClick, const Content& text, const Content& icon,
+                            const Modifier& modifier, CallSite site) {
     LeadingIconTab(selected, std::move(onClick), text, icon, modifier, {}, site);
 }
 
-void LeadingIconTab(bool selected, std::function<void()> onClick, const Content& text, const Content& icon, const Modifier& modifier,
-                    const TabOptions& options, CallSite site) {
+void detail::LeadingIconTab(bool selected, std::function<void()> onClick, const Content& text, const Content& icon, const Modifier& modifier,
+                            const TabOptions& options, CallSite site) {
     ComposableScope scope(site);
     auto content = tabColor(selected, options);
     detail::Row(tabTap(modifier.height(48), selected, std::move(onClick), options).padding(16, 0).fillMaxWidth(),

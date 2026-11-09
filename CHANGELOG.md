@@ -983,6 +983,17 @@
   `Random`, in a `LazyColumn` with `animateItem`), the list items with badges and the segmented ones, the dialogs, menus
   (groups with checked and selected items) and sheets, the cards, the FABs and the bottom app bar are `@Composable fun`s in
   Kotlin.
+- **Tabs, the FAB menu and the floating toolbars as Compose writes them; a lambda that outlives its block keeps its
+  scope**: `PrimaryTabRow(selectedTabIndex = …) { Tab(selected = …, onClick = …, text = { Text("…") }, icon = { Icon(…) }, enabled
+  = …, selectedContentColor = …, unselectedContentColor = …) }`, `SecondaryTabRow`, `PrimaryScrollableTabRow` and
+  `SecondaryScrollableTabRow` with `edgePadding = …`, `scrollState = …`, `LeadingIconTab(selected, onClick, text = { }, icon = { },
+  …)` (the C++ forms by place stay); `FloatingActionButtonMenu(expanded = …, button = { }, horizontalAlignment = …) {
+  FloatingActionButtonMenuItem(onClick = …, text = { }, icon = { }) }` (the item an extension of the menu's scope, as Compose's),
+  `ToggleFloatingActionButton(checked = …, onCheckedChange = …, containerSize = …, checkedContainerSize = …, containerColor = …,
+  checkedContainerColor = …, contentAlignment = …) { … }`; `HorizontalFloatingToolbar` and `VerticalFloatingToolbar` take `colors =
+  …` (Compose's name) as well as `floatingToolbarColors = …`. In kompozc, a lambda written inside a block with a read-only
+  receiver (an `AnimatedContentScope`, a `ToggleFloatingActionButtonScope`) keeps a copy of it, so one that runs after the
+  block (`Modifier.graphicsLayer { rotationZ = 45 * checkedProgress }`, read as it draws) still has its scope.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

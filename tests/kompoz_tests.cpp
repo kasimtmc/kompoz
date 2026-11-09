@@ -7884,6 +7884,50 @@ TEST(containers_take_compose_named_arguments) {
     CHECK(rule.onNodeWithTag("çubuk").bounds().height <= 80.5f);
 }
 
+// Tabs, the FAB menu (its items through the scope) and a toolbar's colors by name.
+TEST(tabs_and_fab_menu_take_compose_named_arguments) {
+    auto tab = mutableStateOf(0);
+    auto open = mutableStateOf(false);
+    auto picked = mutableStateOf(std::string("yok"));
+    ComposeTestRule rule([&] {
+        Column([&] {
+            PrimaryTabRow(arg::selectedTabIndex = tab.get(), [&] {
+                for (int i = 0; i < 2; ++i)
+                    Tab(arg::selected = tab.get() == i, arg::onClick = [&tab, i] { tab.set(i); }, arg::text = [i] { Text("sekme " + std::to_string(i)); },
+                        arg::icon = [] { Icon(Icons::Filled::Star, ""); });
+            });
+            SecondaryScrollableTabRow(arg::selectedTabIndex = tab.get(), arg::edgePadding = 0.f, [&] {
+                for (int i = 0; i < 2; ++i)
+                    LeadingIconTab(arg::selected = tab.get() == i, arg::onClick = [&tab, i] { tab.set(i); }, arg::text = [i] { Text("kayan " + std::to_string(i)); },
+                                   arg::icon = [] { Icon(Icons::Filled::Home, ""); }, arg::unselectedContentColor = colors::Red);
+            });
+            Text("seçili " + std::to_string(tab.get()) + " · " + picked.get());
+            Box(Modifier().size(300), Alignment::BottomEnd, [&] {
+                FloatingActionButtonMenu(arg::expanded = open.get(), arg::button = [&] {
+                    ToggleFloatingActionButton(arg::checked = open.get(), arg::onCheckedChange = [&open](bool on) { open.set(on); },
+                                               arg::modifier = Modifier().testTag("aç"), [](const ToggleFloatingActionButtonScope&) { Icon(Icons::Filled::Add, "Menü"); });
+                }, [&](const FloatingActionButtonMenuScope& menu) {
+                    for (const char* label : {"Not", "Konum"})
+                        menu.FloatingActionButtonMenuItem(arg::onClick = [picked, label, open] { picked.set(label); open.set(false); },
+                                                          arg::text = [label] { Text(label); }, arg::icon = [] { Icon(Icons::Filled::Edit, ""); });
+                });
+            });
+            HorizontalFloatingToolbar(arg::expanded = true, arg::colors = FloatingToolbarDefaults::vibrantFloatingToolbarColors(),
+                                      [] { IconButton(arg::onClick = [] {}, [] { Icon(Icons::Filled::MoreVert, "Daha"); }); });
+        });
+    }, {400, 800});
+    CHECK(rule.onNodeWithText("sekme 1").exists() && rule.onNodeWithText("kayan 1").exists());
+    rule.onNodeWithText("kayan 1").performClick();
+    CHECK(rule.onNodeWithText("seçili 1 · yok").exists());
+    rule.onNodeWithTag("aç").performClick();
+    rule.advanceFrame();
+    for (int i = 0; i < 90; ++i) rule.advanceFrame();
+    CHECK(rule.onNodeWithText("Konum").exists());
+    rule.onNodeWithText("Konum").performClick();
+    for (int i = 0; i < 90; ++i) rule.advanceFrame();
+    CHECK(rule.onNodeWithText("seçili 1 · Konum").exists() && rule.onNodeWithContentDescription("Daha").exists());
+}
+
 TEST(navigation_takes_compose_named_arguments) {
     // NavHost(navController =, startDestination =, enterTransition = { }) { … } with the graph builder's
     // composable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }
