@@ -786,11 +786,12 @@ std::string translate(const std::string& src, const fs::path& source, const std:
 
 int main(int argc, char** argv) {
     std::string input, output, depfile;
-    std::vector<std::string> headerDirs, moduleSources;
+    std::vector<std::string> headerDirs, includeDirs, moduleSources;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "-o" && i + 1 < argc) output = argv[++i];
         else if (a == "--headers" && i + 1 < argc) headerDirs.push_back(argv[++i]);
+        else if (a == "--include" && i + 1 < argc) includeDirs.push_back(argv[++i]);
         else if (a == "--depfile" && i + 1 < argc) depfile = argv[++i];
         else if (a == "--module" && i + 1 < argc) moduleSources.push_back(argv[++i]);
         else if (input.empty()) input = a;
@@ -800,7 +801,7 @@ int main(int argc, char** argv) {
         }
     }
     if (input.empty() || output.empty()) {
-        std::cerr << "usage: kompozc SOURCE -o OUTPUT [--headers DIR]... [--module OTHER_SOURCE]... [--depfile FILE]\n";
+        std::cerr << "usage: kompozc SOURCE -o OUTPUT [--headers DIR]... [--include DIR]... [--module OTHER_SOURCE]... [--depfile FILE]\n";
         return 2;
     }
     std::ifstream in(input, std::ios::binary);
@@ -813,8 +814,9 @@ int main(int argc, char** argv) {
     std::string src = buffer.str();
     std::string lineFile = fs::absolute(input).lexically_normal().generic_string();
     // The structs a call with named arguments may make: those of the headers in DIRs (Kompoz's),
-    // and of the source's own quoted includes.
+    // and of the source's own quoted includes (next to it, or in the target's include directories).
     Structs structs;
+    for (const std::string& dir : includeDirs) structs.includeDirs.emplace_back(dir);
     for (const std::string& dir : headerDirs) {
         std::error_code ec;
         for (const auto& entry : fs::directory_iterator(dir, ec))

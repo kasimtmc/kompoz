@@ -377,8 +377,17 @@ struct GridItemSpan {
 struct LazyGridItemSpanScope {
     int maxLineSpan = 1;  // the line's cells
 };
+// Compose's StaggeredGridItemSpan: a staggered grid's item in one lane (SingleLane) or across all
+// of them (FullLine, a header): item(span = StaggeredGridItemSpan.FullLine) { … }.
+struct StaggeredGridItemSpan {
+    int lanes = 1;
+    static const StaggeredGridItemSpan SingleLane, FullLine;
+};
+inline const StaggeredGridItemSpan StaggeredGridItemSpan::SingleLane{1};
+inline const StaggeredGridItemSpan StaggeredGridItemSpan::FullLine{1 << 20};
 namespace detail {
-// A span lambda given by name to item or items, passed on to the grid marked as one.
+// A span given by name to item or items, passed on to the grid marked as one: a lambda on the
+// span scope (and the item), or a span itself.
 template <class F>
 struct SpanArg {
     F span;
@@ -387,6 +396,15 @@ template <class A>
 constexpr bool isSpanArg = false;
 template <class F>
 constexpr bool isSpanArg<SpanArg<F>> = true;
+inline int spanCells(GridItemSpan s) { return s.currentLineSpan; }
+inline int spanCells(StaggeredGridItemSpan s) { return s.lanes; }
+inline int spanCells(int s) { return s; }
+template <class F, class... I>
+int spanCells(F& f, LazyGridItemSpanScope& scope, I&&... item) {
+    if constexpr (std::is_invocable_v<F&, LazyGridItemSpanScope&, I...>) return spanCells(f(scope, std::forward<I>(item)...));
+    else if constexpr (std::is_invocable_v<F&, LazyGridItemSpanScope&>) return spanCells(f(scope));  // (the item unused: { GridItemSpan(2) })
+    else return spanCells(f);
+}
 } // namespace detail
 class LazyGridScope {
 public:
@@ -415,7 +433,7 @@ public:
     void item(const Content& content, detail::SpanArg<F> span) {
         spanned(items_.size(), 1, [f = std::move(span.span)](int, int columns) mutable {
             LazyGridItemSpanScope scope{columns};
-            return GridItemSpan(f(scope)).currentLineSpan;
+            return detail::spanCells(f, scope);
         });
         items_.item(content);
     }
@@ -423,7 +441,7 @@ public:
     void item(const K& key, const Content& content, detail::SpanArg<F> span) {
         spanned(items_.size(), 1, [f = std::move(span.span)](int, int columns) mutable {
             LazyGridItemSpanScope scope{columns};
-            return GridItemSpan(f(scope)).currentLineSpan;
+            return detail::spanCells(f, scope);
         });
         items_.item(key, content);
     }
@@ -443,13 +461,13 @@ private:
         if constexpr (std::is_integral_v<std::remove_cvref_t<First>>) {
             spanned(start, int(first), [span](int i, int columns) mutable {
                 LazyGridItemSpanScope scope{columns};
-                return GridItemSpan(span(scope, i)).currentLineSpan;
+                return detail::spanCells(span, scope, i);
             });
         } else {
             std::vector<std::remove_cvref_t<decltype(*std::begin(first))>> list(std::begin(first), std::end(first));
             spanned(start, int(list.size()), [span, list](int i, int columns) mutable {
                 LazyGridItemSpanScope scope{columns};
-                return GridItemSpan(span(scope, list[size_t(i)])).currentLineSpan;
+                return detail::spanCells(span, scope, list[size_t(i)]);
             });
         }
         items_.items(std::forward<First>(first), std::forward<Rest>(rest)...);

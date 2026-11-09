@@ -7759,6 +7759,41 @@ TEST(gestures_take_compose_named_arguments) {
     CHECK(anchors.positionOf(2) == 120 && anchors.size() == 2);
 }
 
+// SegmentedButton by name (selected, onClick, shape, icon, label = or the block; checked,
+// onCheckedChange), the rows' modifier by name, SegmentedButtonDefaults::itemShape, and a
+// staggered grid's span given as a value (StaggeredGridItemSpan::FullLine).
+TEST(segmented_buttons_take_compose_named_arguments) {
+    auto pick = mutableStateOf(0);
+    auto bold = mutableStateOf(false);
+    ComposeTestRule rule([&] {
+        Column([&] {
+            SingleChoiceSegmentedButtonRow(arg::modifier = Modifier().width(300), [&] {
+                for (int i = 0; i < 2; ++i)
+                    SegmentedButton(arg::selected = pick.get() == i, arg::onClick = [&pick, i] { pick.set(i); },
+                                    arg::shape = SegmentedButtonDefaults::itemShape(i, 2), [i] { Text(i == 0 ? "Bir" : "İki"); });
+            });
+            MultiChoiceSegmentedButtonRow([&] {
+                SegmentedButton(arg::checked = bold.get(), arg::onCheckedChange = [&bold](bool on) { bold.set(on); },
+                                arg::label = [] { Text("Kalın"); });
+            });
+            Text(std::format("seçim {} {}", pick.get(), bold.get() ? "kalın" : "ince"));
+            LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().size(200), [&] {
+                item([] { Text("Başlık", Modifier().testTag("başlık")); }, arg::span = StaggeredGridItemSpan::FullLine);
+                items(2, [](int i) { Text(std::to_string(i), Modifier().height(40).testTag("kart" + std::to_string(i))); });
+            });
+        });
+    }, {400, 800});
+    rule.onNodeWithText("İki").performClick();
+    rule.onNodeWithText("Kalın").performClick();
+    CHECK(rule.onNodeWithText("seçim 1 kalın").exists());
+    Rect header = rule.onNodeWithTag("başlık").bounds(), a = rule.onNodeWithTag("kart0").bounds(), b = rule.onNodeWithTag("kart1").bounds();
+    CHECK(a.y >= header.y + header.height - 1 && std::abs(a.y - b.y) < 1 && a.x < b.x);
+    Shape first = SegmentedButtonDefaults::itemShape(0, 3), middle = SegmentedButtonDefaults::itemShape(1, 3), last = SegmentedButtonDefaults::itemShape(2, 3);
+    CHECK(first.perCorner && first.corners[0].percent == 50 && first.corners[1].percent == 0 && first.corners[3].percent == 50);
+    CHECK(middle.kind == Shape::Kind::Rectangle);
+    CHECK(last.perCorner && last.corners[1].percent == 50 && last.corners[2].percent == 50 && last.corners[0].percent == 0);
+}
+
 TEST(navigation_takes_compose_named_arguments) {
     // NavHost(navController =, startDestination =, enterTransition = { }) { … } with the graph builder's
     // composable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }

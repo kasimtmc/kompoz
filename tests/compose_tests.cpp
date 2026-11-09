@@ -1290,6 +1290,58 @@ fun Navigator(nav: NavController) {
     }
 }
 
+// A ViewModel parameter is the pointer its owner gives; a map's element is nullable, its keys and
+// values are lists; an enum's ordinal; a struct in a C++ namespace (routes.Item(…)); segmented
+// buttons and a staggered grid's header as Compose writes them.
+namespace routes {
+struct Item {
+    int n = 0;
+};
+}  // namespace routes
+
+enum class Side { Left, Right }
+
+@Composable
+fun SideLine(vm: TodoViewModel, side: Side) {
+    val items by vm.items.collectAsState()
+    val counts = mapOf(1 to 3)
+    val n = counts[1] ?: 0
+    val m = counts[2] ?: 0
+    Text("öğe ${items.size} · ${side.ordinal} · $n $m · ${counts.keys.sum()} · ${counts.values.sum()} · ${routes.Item(7).n}")
+}
+
+@Composable
+fun Mixed() {
+    val vm = viewModel<TodoViewModel>()
+    var pick by remember { mutableStateOf(0) }
+    var bold by remember { mutableStateOf(false) }
+    Column {
+        SideLine(vm, Side.Right)
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.width(300.dp)) {
+            val labels = listOf("Bir", "İki")
+            for (i in 0 until 2) {
+                SegmentedButton(selected = pick == i, onClick = { pick = i }, shape = SegmentedButtonDefaults.itemShape(i, 2)) { Text(labels[i]) }
+            }
+        }
+        MultiChoiceSegmentedButtonRow { SegmentedButton(checked = bold, onCheckedChange = { bold = it }) { Text("Kalın") } }
+        Text("seçim $pick ${if (bold) "kalın" else "ince"}")
+        LazyVerticalStaggeredGrid(columns = StaggeredGridCells.Fixed(2), modifier = Modifier.size(200.dp)) {
+            item(span = StaggeredGridItemSpan.FullLine) { Text("Başlık", modifier = Modifier.testTag("başlık")) }
+            items(listOf("a", "b"), span = { StaggeredGridItemSpan.SingleLane }) { Text(it, modifier = Modifier.height(40.dp).testTag("kart$it")) }
+        }
+    }
+}
+
+TEST(view_models_maps_and_segments_as_kotlin_writes_them) {
+    ComposeTestRule rule([] { Mixed(); });
+    CHECK(rule.onNodeWithText("öğe 2 · 1 · 3 0 · 1 · 3 · 7").exists());
+    rule.onNodeWithText("İki").performClick();
+    rule.onNodeWithText("Kalın").performClick();
+    CHECK(rule.onNodeWithText("seçim 1 kalın").exists());
+    Rect header = rule.onNodeWithTag("başlık").bounds(), a = rule.onNodeWithTag("karta").bounds(), b = rule.onNodeWithTag("kartb").bounds();
+    CHECK(a.y >= header.y + header.height - 1 && std::abs(a.y - b.y) < 1 && a.x < b.x);  // (the header across both lanes)
+}
+
 TEST(navigation_as_compose_writes_it) {
     NavController nav;
     ComposeTestRule rule([&] { Navigator(nav); });

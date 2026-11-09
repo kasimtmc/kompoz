@@ -973,7 +973,7 @@ void segment(bool selected, const std::function<Modifier(const Modifier&)>& clic
         text.place(18 + 8 + offset, (h - text.height) / 2);
         return Size{std::max(18.f, iw) + 8 + text.width, h};
     };
-    detail::Box(click(modifier.weight(1).fillMaxHeight().drawBehind([container, separator](DrawScope& d) {
+    detail::Box(click((options.shape ? modifier.clip(*options.shape) : modifier).weight(1).fillMaxHeight().drawBehind([container, separator](DrawScope& d) {
             Rect band = segmentBand(d.size());
             d.drawRect(container, {0, band.y}, Size{band.width, band.height});
             d.drawRect(separator, {band.width - 1, band.y}, Size{1, band.height});
@@ -1165,23 +1165,31 @@ void ButtonGroup(const std::vector<ButtonGroupItem>& items, const Modifier& modi
     });
 }
 
-void SingleChoiceSegmentedButtonRow(const Modifier& modifier, const Content& content, CallSite site) {
+Shape SegmentedButtonDefaults::itemShape(int index, int count) {
+    if (count <= 1) return CircleShape;
+    CornerSize round = CornerPercent(50), square{0};
+    if (index == 0) return RoundedCornerShape(round, square, square, round);
+    if (index == count - 1) return RoundedCornerShape(square, round, round, square);
+    return RectangleShape;
+}
+
+void detail::SingleChoiceSegmentedButtonRow(const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     segmentedRow(modifier.selectableGroup(), content);
 }
 
-void MultiChoiceSegmentedButtonRow(const Modifier& modifier, const Content& content, CallSite site) {
+void detail::MultiChoiceSegmentedButtonRow(const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     segmentedRow(modifier, content);
 }
 
-void SegmentedButton(bool selected, std::function<void()> onClick, const Content& label, const Modifier& modifier,
-                     CallSite site) {
+void detail::SegmentedButton(bool selected, std::function<void()> onClick, const Content& label, const Modifier& modifier,
+                             CallSite site) {
     SegmentedButton(selected, std::move(onClick), label, modifier, SegmentedButtonOptions{}, site);
 }
 
-void SegmentedButton(bool selected, std::function<void()> onClick, const Content& label, const Modifier& modifier,
-                     const SegmentedButtonOptions& options, CallSite site) {
+void detail::SegmentedButton(bool selected, std::function<void()> onClick, const Content& label, const Modifier& modifier,
+                             const SegmentedButtonOptions& options, CallSite site) {
     ComposableScope scope(site);
     segment(selected, [&](const Modifier& m) {
         return m.selectable(selected, std::move(onClick), SemanticsRole::RadioButton,
@@ -1189,8 +1197,8 @@ void SegmentedButton(bool selected, std::function<void()> onClick, const Content
     }, label, modifier, options);
 }
 
-void SegmentedButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& label, const Modifier& modifier,
-                     const SegmentedButtonOptions& options, CallSite site) {
+void detail::SegmentedButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& label, const Modifier& modifier,
+                             const SegmentedButtonOptions& options, CallSite site) {
     ComposableScope scope(site);
     segment(checked, [&](const Modifier& m) {
         return m.toggleable(checked, std::move(onCheckedChange), SemanticsRole::Checkbox,

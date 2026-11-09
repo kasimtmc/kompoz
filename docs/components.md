@@ -580,6 +580,8 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 353. Compose's `animateFloatAsState(targetValue, animationSpec = …, label = …)`, `AnimatedVisibility(visible, enter = …, exit = …) { }`, `AnimatedContent(targetState, transitionSpec = { … }) { }` with `togetherWith`/`using`, `Crossfade`, the slides' lambdas, `updateTransition(label = …)` and `animateDp(label = …) { }`, `SharedTransitionLayout { }`, `sharedElement(…, animatedVisibilityScope = …)`, `rememberSharedContentState(key = …)` ✅
 354. Compose's `pointerInput(Unit) { detectTapGestures(onTap = { }) }` and the other detectors by name, `draggable(orientation = …, state = …)`, the `DraggableAnchors { A at 0f }` builder, `dragAndDropSource { }` and `dragAndDropTarget(shouldStartDragAndDrop = { }, target = …)` ✅
 355. Compose's `NavHost(navController, startDestination, enterTransition = { }) { composable(route, deepLinks = …) { }; navigation(startDestination = …, route = …) { } }`, `navigate(route) { popUpTo(…) { }; launchSingleTop = true }`, `navDeepLink { uriPattern = … }`, `entry.destination.route`, `BackHandler(enabled = …) { }`, `combinedClickable(onClick = …, onLongClick = …)` ✅
+356. Compose's `SingleChoiceSegmentedButtonRow(modifier = …) { SegmentedButton(selected = …, onClick = …, shape = SegmentedButtonDefaults.itemShape(i, n), icon = { }) { Text(…) } }` and `MultiChoiceSegmentedButtonRow { SegmentedButton(checked = …, onCheckedChange = …) { } }` ✅
+357. Compose's `StaggeredGridItemSpan`: `item(span = StaggeredGridItemSpan.FullLine) { }`, `items(list, span = { StaggeredGridItemSpan.SingleLane }) { }` in a staggered grid ✅
 
 ## Next
 

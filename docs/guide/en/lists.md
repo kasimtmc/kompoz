@@ -172,11 +172,14 @@ LazyVerticalGrid(
 ```kotlin body
 #! val notes = listOf("A short note", "A longer note that takes more room")
 LazyVerticalStaggeredGrid(columns = StaggeredGridCells.Fixed(2), modifier = Modifier.fillMaxSize(), verticalItemSpacing = 8.dp) {
+    item(span = StaggeredGridItemSpan.FullLine) { Text("Notes", style = MaterialTheme.typography.titleLarge) }
     items(notes) { note ->
         OutlinedCard(modifier = Modifier.padding(4.dp)) { Text(note, modifier = Modifier.padding(12.dp)) }
     }
 }
 ```
+
+An item with `span = StaggeredGridItemSpan.FullLine` crosses all the lanes, below the longest one, like a header.
 
 ## Pagers
 

@@ -210,6 +210,16 @@ bool Structs::member(std::string_view type, std::string_view name) const {
     return false;
 }
 
+bool Structs::derivesFrom(std::string_view type, std::string_view base) const {
+    if (type == base) return true;
+    if (ambiguousClasses.contains(type)) return false;
+    auto c = classes.find(type);
+    if (c == classes.end()) return false;
+    for (const std::string& b : c->second.bases)
+        if (b != type && derivesFrom(b, base)) return true;
+    return false;
+}
+
 void Structs::readIncludes(std::string_view source, const fs::path& dir) {
     size_t i = 0;
     while (i < source.size()) {
@@ -223,7 +233,9 @@ void Structs::readIncludes(std::string_view source, const fs::path& dir) {
         size_t q = rest.find('"');
         size_t q2 = q == std::string::npos ? q : rest.find('"', q + 1);
         if (q2 == std::string::npos) continue;
-        fs::path target = dir / rest.substr(q + 1, q2 - q - 1);
+        std::string name = rest.substr(q + 1, q2 - q - 1);
+        fs::path target = dir / name;
+        for (size_t k = 0; !fs::exists(target) && k < includeDirs.size(); ++k) target = includeDirs[k] / name;  // (as the compiler's -I)
         if (fs::exists(target)) readHeader(target);
     }
 }
@@ -293,6 +305,18 @@ void Structs::readText(std::string_view src) {
             aliases[alias].insert(target);
             if (std::string ns = namespacesAt(text, i); !ns.empty()) aliases[ns + "::" + alias].insert(target);
         }
+    }
+
+    // namespace routes { … }: a name Kotlin writes before a dot (routes.Item(…)).
+    for (size_t i = 0; (i = text.find("namespace", i)) != std::string::npos; i += 9) {
+        if ((i > 0 && identChar(text[i - 1])) || (i + 9 < text.size() && identChar(text[i + 9]))) continue;
+        size_t k = i + 9;
+        while (k < text.size() && std::isspace(static_cast<unsigned char>(text[k]))) ++k;
+        size_t b = k;
+        while (k < text.size() && identChar(text[k])) ++k;
+        std::string name = text.substr(b, k - b);
+        while (k < text.size() && std::isspace(static_cast<unsigned char>(text[k]))) ++k;
+        if (!name.empty() && k < text.size() && text[k] == '{' && name != "kompoz" && name != "detail" && name != "std") namespaces.insert(name);
     }
 
     for (size_t i = 0; (i = text.find("struct", i)) != std::string::npos; i += 6) {

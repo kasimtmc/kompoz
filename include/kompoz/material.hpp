@@ -2147,7 +2147,14 @@ struct SegmentedButtonOptions {
     bool enabled = true;
     Content icon;  // shown instead of the check mark a selected one has
     std::optional<MutableInteractionSource> interactionSource;
+    std::optional<Shape> shape;  // the segment's own (SegmentedButtonDefaults::itemShape): clipped to it
 };
+namespace SegmentedButtonDefaults {
+// Compose's itemShape(index, count): the first segment round at its start, the last at its end, the
+// rest square (the row clips them all to its pill anyway).
+Shape itemShape(int index, int count);
+}  // namespace SegmentedButtonDefaults
+namespace detail {
 void SingleChoiceSegmentedButtonRow(const Modifier& modifier, const Content& content,
                                     CallSite site = CallSite::current());
 void MultiChoiceSegmentedButtonRow(const Modifier& modifier, const Content& content,
@@ -2159,6 +2166,97 @@ void SegmentedButton(bool selected, std::function<void()> onClick, const Content
 // In a MultiChoiceSegmentedButtonRow: onCheckedChange(!checked) on a tap.
 void SegmentedButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& label,
                      const Modifier& modifier = {}, const SegmentedButtonOptions& options = {}, CallSite site = CallSite::current());
+struct SingleChoiceSegmentedButtonRowImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: SingleChoiceSegmentedButtonRow takes a block: its SegmentedButtons");
+        SingleChoiceSegmentedButtonRow(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+};
+struct MultiChoiceSegmentedButtonRowImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: MultiChoiceSegmentedButtonRow takes a block: its SegmentedButtons");
+        MultiChoiceSegmentedButtonRow(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+};
+// SegmentedButton as Compose writes it: SegmentedButton(selected = …, onClick = …, shape =
+// SegmentedButtonDefaults.itemShape(i, n), icon = { … }) { Text("…") } in a single-choice row,
+// SegmentedButton(checked = …, onCheckedChange = …) { … } in a multi-choice one; the label is the
+// block or label = { … }. The C++ forms (selected, onClick, label, modifier, options) go by place.
+struct SegmentedButtonImpl {
+    using Single = Params<names::Selected, names::OnClick, names::Shape, names::Modifier, names::Enabled, names::InteractionSource, names::Icon,
+                          names::Label, Block>;
+    using Multi = Params<names::Checked, names::OnCheckedChange, names::Shape, names::Modifier, names::Enabled, names::InteractionSource,
+                         names::Icon, names::Label, Block>;
+    template <class... A>
+    static constexpr bool byPlace() {  // (selected, onClick, label, …): the third argument its label
+        if constexpr (sizeof...(A) < 3 || (isNamed<A> || ...)) return false;
+        else return std::is_convertible_v<std::tuple_element_t<2, std::tuple<A...>>, Content>;
+    }
+    template <class Q, class... A>
+    static Content labelOf(A&&... args) {
+        if constexpr (Q::template given<names::Label, A...>()) return Content(Q::template arg<names::Label>(args...));
+        else {
+            static_assert(Q::template blockGiven<A...>(), "kompoz: SegmentedButton takes a block: its label");
+            return Q::block(std::forward<A>(args)...);
+        }
+    }
+    template <class Q, class... A>
+    static SegmentedButtonOptions optionsOf(A&... args) {
+        SegmentedButtonOptions o;
+        Q::template set<names::Enabled>(o.enabled, args...);
+        Q::template set<names::Icon>(o.icon, args...);
+        Q::template set<names::InteractionSource>(o.interactionSource, args...);
+        if constexpr (Q::template given<names::Shape, A...>()) o.shape = Shape(Q::template arg<names::Shape>(args...));
+        return o;
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (byPlace<A...>()) {
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            Modifier modifier;
+            SegmentedButtonOptions options;
+            if constexpr (sizeof...(A) >= 4) modifier = std::get<3>(all);
+            if constexpr (sizeof...(A) >= 5) options = std::get<4>(all);
+            if constexpr (std::is_invocable_v<std::remove_cvref_t<std::tuple_element_t<1, std::tuple<A...>>>&, bool>)
+                detail::SegmentedButton(bool(std::get<0>(all)), std::function<void(bool)>(std::get<1>(all)), Content(std::get<2>(all)), modifier, options, site);
+            else
+                detail::SegmentedButton(bool(std::get<0>(all)), std::function<void()>(std::get<1>(all)), Content(std::get<2>(all)), modifier, options, site);
+        } else if constexpr (countOf<names::Checked, A...> + countOf<names::OnCheckedChange, A...> > 0) {
+            using Q = Multi;
+            static_assert(Q::check<A...>());
+            detail::SegmentedButton(bool(Q::arg<names::Checked>(args...)), std::function<void(bool)>(Q::arg<names::OnCheckedChange>(args...)),
+                                    labelOf<Q>(std::forward<A>(args)...), Q::get<names::Modifier>(Modifier{}, args...), optionsOf<Q>(args...), site);
+        } else {
+            using Q = Single;
+            static_assert(Q::check<A...>());
+            detail::SegmentedButton(bool(Q::arg<names::Selected>(args...)), std::function<void()>(Q::arg<names::OnClick>(args...)),
+                                    labelOf<Q>(std::forward<A>(args)...), Q::get<names::Modifier>(Modifier{}, args...), optionsOf<Q>(args...), site);
+        }
+    }
+};
+// The C++ forms whose options are made in place (SegmentedButton(on, onClick, label, modifier,
+// {.enabled = false})): a braced list goes to a parameter of its type, not through the template.
+struct SegmentedButtonCall : Composable<SegmentedButtonImpl> {
+    using Composable<SegmentedButtonImpl>::operator();
+    void operator()(bool selected, std::function<void()> onClick, const Content& label, const Modifier& modifier,
+                    const SegmentedButtonOptions& options, CallSite site = CallSite::current()) const {
+        SegmentedButton(selected, std::move(onClick), label, modifier, options, site);
+    }
+    void operator()(bool checked, std::function<void(bool)> onCheckedChange, const Content& label, const Modifier& modifier,
+                    const SegmentedButtonOptions& options, CallSite site = CallSite::current()) const {
+        SegmentedButton(checked, std::move(onCheckedChange), label, modifier, options, site);
+    }
+};
+}  // namespace detail
+inline constexpr Composable<detail::SingleChoiceSegmentedButtonRowImpl> SingleChoiceSegmentedButtonRow;
+inline constexpr Composable<detail::MultiChoiceSegmentedButtonRowImpl> MultiChoiceSegmentedButtonRow;
+inline constexpr detail::SegmentedButtonCall SegmentedButton;
 
 // M3 Expressive's button group (Compose's ButtonGroup): buttons in a row, spaced apart. The
 // one held grows by expandedRatio of its width and squeezes its neighbours (half each, or

@@ -581,6 +581,8 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 353. Compose'un `animateFloatAsState(targetValue, animationSpec = …, label = …)`, `AnimatedVisibility(visible, enter = …, exit = …) { }`, `togetherWith`/`using` ile `AnimatedContent(targetState, transitionSpec = { … }) { }`, `Crossfade`, kaymaların lambda'ları, `updateTransition(label = …)` ve `animateDp(label = …) { }`, `SharedTransitionLayout { }`, `sharedElement(…, animatedVisibilityScope = …)`, `rememberSharedContentState(key = …)` ✅
 354. Compose'un `pointerInput(Unit) { detectTapGestures(onTap = { }) }`'u ve öteki algılayıcılar adla, `draggable(orientation = …, state = …)`, `DraggableAnchors { A at 0f }` kurucusu, `dragAndDropSource { }` ve `dragAndDropTarget(shouldStartDragAndDrop = { }, target = …)` ✅
 355. Compose'un `NavHost(navController, startDestination, enterTransition = { }) { composable(route, deepLinks = …) { }; navigation(startDestination = …, route = …) { } }`'u, `navigate(route) { popUpTo(…) { }; launchSingleTop = true }`, `navDeepLink { uriPattern = … }`, `entry.destination.route`, `BackHandler(enabled = …) { }`, `combinedClickable(onClick = …, onLongClick = …)` ✅
+356. Compose'un `SingleChoiceSegmentedButtonRow(modifier = …) { SegmentedButton(selected = …, onClick = …, shape = SegmentedButtonDefaults.itemShape(i, n), icon = { }) { Text(…) } }`'u ve `MultiChoiceSegmentedButtonRow { SegmentedButton(checked = …, onCheckedChange = …) { } }` ✅
+357. Compose'un `StaggeredGridItemSpan`'i: kademeli bir ızgarada `item(span = StaggeredGridItemSpan.FullLine) { }`, `items(list, span = { StaggeredGridItemSpan.SingleLane }) { }` ✅
 
 ## Sıradakiler
 

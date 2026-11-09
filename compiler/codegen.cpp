@@ -111,7 +111,7 @@ const std::set<std::string, std::less<>> kBareProperties = {"viewModelScope"};
 const std::set<std::string, std::less<>> kKtFunctions = {
     "listOf", "mutableListOf", "emptyList", "arrayListOf", "setOf", "mutableSetOf", "emptySet", "mapOf", "mutableMapOf",
     "emptyMap", "repeat", "println", "maxOf", "minOf", "require", "check", "error", "TODO", "onDispose", "onPauseOrDispose",
-    "onStopOrDispose", "floatArrayOf", "intArrayOf"};
+    "onStopOrDispose", "floatArrayOf", "intArrayOf", "List", "MutableList"};
 
 // Members of Kotlin's standard types, from kotlin.hpp: text.trim() -> kt::trim(text). Each uses the
 // value's own member of that name where it has one.
@@ -246,6 +246,9 @@ public:
         }
         auto known = kTypes.find(t.name);
         s = known != kTypes.end() ? known->second : qualified(t.name);
+        // A ViewModel (a class deriving from it, here in Kotlin or in a header): its owner hands it out
+        // as a shared pointer (viewModel<T>()), and a parameter or property of the type is one too.
+        if (known == kTypes.end() && t.args.empty() && !plainTypes_ && isViewModel(t.name)) s = "std::shared_ptr<" + s + ">";
         if (!t.args.empty()) {
             s += "<";
             for (size_t i = 0; i < t.args.size(); ++i) s += (i ? ", " : "") + type(t.args[i]);
@@ -253,6 +256,22 @@ public:
         }
         if (t.nullable) s = "std::optional<" + s + ">";
         return s;
+    }
+
+    // The type as named: a base class, a call's type argument (viewModel<T>()), not what a value of it is.
+    std::string plainType(const Type& t) {
+        bool was = std::exchange(plainTypes_, true);
+        std::string s = type(t);
+        plainTypes_ = was;
+        return s;
+    }
+    bool plainTypes_ = false;
+    bool isViewModel(std::string_view name, int depth = 0) const {
+        if (name == "ViewModel") return true;
+        if (depth > 16) return false;
+        if (auto k = module_.classDecls.find(name); k != module_.classDecls.end())
+            return k->second->base && isViewModel(k->second->base->name, depth + 1);
+        return module_.structs && module_.structs->derivesFrom(name, "ViewModel");
     }
 
     // How a parameter is passed: small values by value, the rest by const reference.
@@ -369,7 +388,7 @@ public:
     void classDeclDefinition(const ClassDecl& k) {
         bool handle = !k.base;
         out_.at(k.pos);
-        out_.text("class " + k.name + (k.base ? " : public " + type(*k.base) : std::string()) + " {");
+        out_.text("class " + k.name + (k.base ? " : public " + plainType(*k.base) : std::string()) + " {");
         bool wasInClass = std::exchange(inClass_, true);
         scopes_.emplace_back();
         // Plain constructor parameters: only the constructor and the initializers see them.
@@ -434,7 +453,7 @@ public:
             if (k.ctorKinds[i] == ' ') declare(k.ctorParams[i].name, Local);
         bool any = false;
         if (k.base && !k.baseArgs.empty()) {
-            out_.text(" : " + type(*k.base) + "(");
+            out_.text(" : " + plainType(*k.base) + "(");
             for (size_t i = 0; i < k.baseArgs.size(); ++i) {
                 if (i) out_.text(", ");
                 expr(*k.baseArgs[i]);
@@ -759,6 +778,13 @@ private:
             out_.text(");");
             return;
         }
+        if (target.kind == Node::Index) {  // a[k] += v: the element itself
+            indexed(target);
+            out_.text(" " + op + " ");
+            expr(*a.kids[1]);
+            out_.text(";");
+            return;
+        }
         expr(target);
         out_.text(" " + op + " ");
         expr(*a.kids[1]);
@@ -886,13 +912,15 @@ private:
                 return call(e);
             case Node::Member: return member(e);
             case Node::Index:
-                expr(*e.kids[0]);
-                out_.text("[");
-                for (size_t i = 1; i < e.kids.size(); ++i) {
-                    if (i > 1) out_.text(", ");
-                    expr(*e.kids[i]);
+                if (e.kids.size() == 2) {  // a[k]: a map's element is nullable (kt::at), a list's is the element
+                    out_.text("::kompoz::kt::at(");
+                    expr(*e.kids[0]);
+                    out_.text(", ");
+                    expr(*e.kids[1]);
+                    out_.text(")");
+                    return;
                 }
-                out_.text("]");
+                indexed(e);
                 return;
             case Node::Lambda: return lambda(e, expected && expected->function && expected->result && expected->result->name != "Unit");
             case Node::Unary: return unary(e);
@@ -993,7 +1021,8 @@ private:
     // A name that stands for a type or a namespace here (Arrangement, Icons.Filled): what comes
     // after it is reached with ::, not with a dot.
     bool qualifier(const Node& e) const {
-        if (e.kind == Node::Name) return capitalized(e.text) && !lookup(e.text) && e.text != "Modifier";
+        if (e.kind == Node::Name)
+            return (capitalized(e.text) || (module_.structs && module_.structs->namespaces.contains(e.text))) && !lookup(e.text) && e.text != "Modifier";
         if (e.kind == Node::Member) return !e.flag && capitalized(e.text) && qualifier(*e.kids[0]) && !staticValue(e);
         return false;
     }
@@ -1056,6 +1085,12 @@ private:
             out_.text(")");
             return;
         }
+        if (e.text == "ordinal" || e.text == "keys" || e.text == "values") {  // an enum's place; a map's keys and values
+            out_.text("::kompoz::kt::" + e.text + "(");
+            expr(obj);
+            out_.text(")");
+            return;
+        }
         if (e.text == "value") {  // state.value
             out_.text("::kompoz::kt::value(");
             expr(obj);
@@ -1104,7 +1139,7 @@ private:
                 out_.text("(*kompoz_this_" + std::to_string(r) + ")." + cppName(callee.text));
                 if (!c.typeArgs.empty()) {  // composable<Profile> { } in a NavHost
                     out_.text("<");
-                    for (size_t i = 0; i < c.typeArgs.size(); ++i) out_.text((i ? ", " : "") + type(c.typeArgs[i]));
+                    for (size_t i = 0; i < c.typeArgs.size(); ++i) out_.text((i ? ", " : "") + plainType(c.typeArgs[i]));
                     out_.text(">");
                 }
                 return arguments(c, calleeName, false);
@@ -1218,7 +1253,7 @@ private:
     void typeArguments(const Node& c) {
         if (c.typeArgs.empty()) return;
         out_.text("<");
-        for (size_t i = 0; i < c.typeArgs.size(); ++i) out_.text((i ? ", " : "") + type(c.typeArgs[i]));
+        for (size_t i = 0; i < c.typeArgs.size(); ++i) out_.text((i ? ", " : "") + plainType(c.typeArgs[i]));
         out_.text(">");
     }
 
@@ -1485,7 +1520,7 @@ private:
         out_.text(capture("[=]") + "() {");
         // (each held one's type named outside the class: inside, the name is the member's)
         for (auto& [n, k] : captured) out_.text(" using kompoz_type_" + n + " = std::remove_cvref_t<decltype(" + cppName(n) + ")>;");
-        out_.text(" struct kompoz_object : " + type(*o.type) + " {");
+        out_.text(" struct kompoz_object : " + plainType(*o.type) + " {");
         for (auto& [n, k] : captured) out_.text(" kompoz_type_" + n + " " + cppName(n) + ";");
         if (!captured.empty()) {
             out_.text(" kompoz_object(");
@@ -1523,6 +1558,17 @@ private:
         out_.text("); }()");
     }
 
+    // a[i] (a[i, j]) as C++ writes it: the element itself, to assign to or count up.
+    void indexed(const Node& e) {
+        expr(*e.kids[0]);
+        out_.text("[");
+        for (size_t i = 1; i < e.kids.size(); ++i) {
+            if (i > 1) out_.text(", ");
+            expr(*e.kids[i]);
+        }
+        out_.text("]");
+    }
+
     void unary(const Node& u) {
         const Node& x = *u.kids[0];
         if (u.text == "!!") {
@@ -1533,11 +1579,13 @@ private:
             // nextId++ as a value on a state: the state set, the old (postfix) or new (prefix) value given.
             out_.text(std::string("::kompoz::kt::") + (u.flag ? "post" : "pre") + (u.text == "++" ? "Increment(" : "Decrement(") + cppName(x.text) + ")");
         } else if (u.flag) {
-            expr(x);
+            if (x.kind == Node::Index) indexed(x);  // counts[k]++: the element itself
+            else expr(x);
             out_.text(u.text);
         } else {
             out_.text(u.text);
-            expr(x);
+            if ((u.text == "++" || u.text == "--") && x.kind == Node::Index) indexed(x);
+            else expr(x);
         }
     }
 

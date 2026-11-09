@@ -86,10 +86,17 @@ For moving between screens with a back stack, see [Navigation](navigation.md).
 | `ButtonGroup`, `SplitButtonLayout`, `ToggleButton` | M3 Expressive's groups, split buttons and toggles. |
 
 ```kotlin body
+var view by remember { mutableStateOf(0) }
 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
     Button(onClick = { }) { Text("Save") }
     OutlinedButton(onClick = { }) { Text("Cancel") }
     IconButton(onClick = { }) { Icon(Icons.Filled.Favorite, contentDescription = "Like") }
+}
+SingleChoiceSegmentedButtonRow {
+    val labels = listOf("Day", "Week", "Month")
+    for (i in 0 until 3) {
+        SegmentedButton(selected = view == i, onClick = { view = i }, shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(labels[i]) }
+    }
 }
 ```
 

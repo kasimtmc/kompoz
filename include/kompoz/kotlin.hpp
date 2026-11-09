@@ -309,6 +309,51 @@ decltype(auto) size(const C& c) {
     }
 }
 
+// An enum's ordinal: its place among the values.
+template <class E>
+    requires std::is_enum_v<E>
+int ordinal(E e) {
+    return static_cast<int>(e);
+}
+
+// A map's keys and values (map.keys, map.values), as lists; of anything else, its member of the name.
+template <class C>
+decltype(auto) keys(const C& c) {
+    if constexpr (requires { typename C::key_type; typename C::mapped_type; }) {
+        std::vector<typename C::key_type> out;
+        for (const auto& [k, v] : c) out.push_back(k);
+        return out;
+    } else if constexpr (requires { c.keys(); }) {
+        return c.keys();
+    } else {
+        return (c.keys);
+    }
+}
+template <class C>
+decltype(auto) values(const C& c) {
+    if constexpr (requires { typename C::key_type; typename C::mapped_type; }) {
+        std::vector<typename C::mapped_type> out;
+        for (const auto& [k, v] : c) out.push_back(v);
+        return out;
+    } else if constexpr (requires { c.values(); }) {
+        return c.values();
+    } else {
+        return (c.values);
+    }
+}
+
+// a[k]: a map's element is nullable (Kotlin's Map.get), a list's or a text's the element itself.
+template <class C, class K>
+decltype(auto) at(C&& c, K&& k) {
+    using M = std::remove_cvref_t<C>;
+    if constexpr (requires { typename M::key_type; typename M::mapped_type; c.find(k); }) {
+        auto it = c.find(k);
+        return it == c.end() ? std::optional<typename M::mapped_type>() : std::optional<typename M::mapped_type>(it->second);
+    } else {
+        return std::forward<C>(c)[std::forward<K>(k)];
+    }
+}
+
 // a?.f(): f(a) when a isn't null; a nullable of what it gives (nothing, for a Unit f).
 template <class T, class F>
 auto safe(const T& a, F&& f) {
@@ -476,6 +521,18 @@ std::vector<T> listOf() {
 template <class... T>
 auto mutableListOf(T&&... v) {
     return listOf(std::forward<T>(v)...);
+}
+// List(n) { i -> … } and MutableList(n) { i -> … }: n elements, each from its index.
+template <class F>
+auto List(int n, F&& init) {
+    std::vector<std::decay_t<std::invoke_result_t<F&, int>>> out;
+    out.reserve(size_t(std::max(n, 0)));
+    for (int i = 0; i < n; ++i) out.push_back(init(i));
+    return out;
+}
+template <class F>
+auto MutableList(int n, F&& init) {
+    return List(n, std::forward<F>(init));
 }
 template <class T>
 std::vector<T> mutableListOf() {

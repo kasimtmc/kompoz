@@ -6,9 +6,10 @@
 #       Text("Merhaba $name", modifier = modifier.padding(16.dp))
 #   }
 #
-# Call it after the target's sources are all added. The target's sources are one module, as a
-# Kotlin module: a file calls another's functions with named arguments, no header needed. The C++
-# compiler's messages point at the sources' own lines.
+# Call it after the target's sources are all added and its include directories set (a source's
+# #include "x.hpp" is found there, as the compiler finds it). The target's sources are one module,
+# as a Kotlin module: a file calls another's functions with named arguments, no header needed. The
+# C++ compiler's messages point at the sources' own lines.
 #
 # kompozc runs on the machine that builds. Where Kompoz is built for another (Android, the web), it
 # is built for this one from its sources, with this machine's C++ compiler; set KOMPOZC to a
@@ -84,6 +85,16 @@ function(kompoz_compose target)
     foreach(m IN LISTS module)
         list(APPEND module_args --module ${m})
     endforeach()
+    # The target's include directories (those set before this call): a source's #include "x.hpp"
+    # is found there, as the compiler finds it, for the structs and classes it declares.
+    get_target_property(include_dirs ${target} INCLUDE_DIRECTORIES)
+    if(include_dirs)
+        foreach(dir IN LISTS include_dirs)
+            if(NOT dir MATCHES "^\\$<")
+                list(APPEND module_args --include ${dir})
+            endif()
+        endforeach()
+    endif()
     foreach(source IN LISTS sources)
         if(source MATCHES "\\.(cpp|cc|cxx)$" AND NOT source MATCHES "^\\$<")
             cmake_path(ABSOLUTE_PATH source BASE_DIRECTORY ${source_dir} NORMALIZE OUTPUT_VARIABLE absolute)

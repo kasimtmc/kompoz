@@ -933,6 +933,18 @@
   C++, which include `<kompoz/blocks.hpp>` themselves for the block form (the shared header no longer does: the blocks
   are macros of the composables' names, which a translated file must not see); `kOnAndroid` says where the app runs
   instead of `#ifdef`.
+- **kompozc: ViewModel parameters, a map's element, `ordinal`, a header's namespaces; `SegmentedButton` and a staggered
+  grid's span as Compose writes them**: a parameter or property typed with a `ViewModel` class, declared in Kotlin or
+  in a header, is the shared pointer its owner gives (`viewModel<T>()`); `map[k]` is nullable (`counts[k] ?: 0`) while
+  a list's or a text's element is itself, `map.keys` and `map.values` are lists, `e.ordinal` an enum's place;
+  `routes.Item(n)` reaches a struct in a C++ namespace; `List(n) { }` and `MutableList(n) { }`. A source's `#include
+  "x.hpp"` is found in the target's include directories too (`kompoz_compose` passes them, `--include DIR`), so the
+  classes and namespaces it declares are known.
+  `SingleChoiceSegmentedButtonRow(modifier = …) { SegmentedButton(selected = …, onClick = …, shape =
+  SegmentedButtonDefaults.itemShape(i, n), icon = { }) { Text(…) } }` and `MultiChoiceSegmentedButtonRow {
+  SegmentedButton(checked = …, onCheckedChange = …) { } }` (`SegmentedButtonOptions::shape`,
+  `SegmentedButtonDefaults::itemShape` in C++; the forms by place stay); `item(span = StaggeredGridItemSpan.FullLine) {
+  }` and `items(list, span = { StaggeredGridItemSpan.SingleLane }) { }` in a staggered grid.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

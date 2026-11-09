@@ -18,6 +18,7 @@ struct Structs {
     std::map<std::string, std::vector<std::string>, std::less<>> fields;  // by the struct's name
     std::set<std::string, std::less<>> ambiguous;  // two structs of that name with other fields: neither is used
     std::set<std::filesystem::path> read;          // the headers read (for the build's dependencies)
+    std::vector<std::filesystem::path> includeDirs;  // where a quoted include not next to its file is looked for (the target's -I)
     // using colors = TextFieldColors;: a struct under another name (TextFieldDefaults.colors(…)).
     std::map<std::string, std::set<std::string>, std::less<>> aliases;
 
@@ -28,10 +29,14 @@ struct Structs {
     };
     std::map<std::string, Members, std::less<>> classes;
     std::set<std::string, std::less<>> ambiguousClasses;  // two classes of that name with other members
+    // The namespaces declared: Kotlin's routes.Item(…) is C++'s routes::Item{…} when `routes` is one.
+    std::set<std::string, std::less<>> namespaces;
 
     const std::vector<std::string>* find(std::string_view name) const;
     // Whether `name` is a public member of the class `type` (or of a class it derives from).
     bool member(std::string_view type, std::string_view name) const;
+    // Whether the class `type` is `base` or derives from it (a ViewModel: handed out as a shared pointer).
+    bool derivesFrom(std::string_view type, std::string_view base) const;
     // A header's structs, and those of the headers it includes with quotes, found next to it.
     void readHeader(const std::filesystem::path& header);
     // The C++ text of a source (not a header of its own): its quoted includes' structs.

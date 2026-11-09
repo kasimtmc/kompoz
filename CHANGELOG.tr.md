@@ -973,6 +973,18 @@
   çevriliyorlar. O dosyalar blok biçimi için `<kompoz/blocks.hpp>`'yi kendileri içeriyor (ortak başlık artık içermiyor:
   bloklar, çevrilen bir dosyanın görmemesi gereken, composable'ların adlarını taşıyan makrolar); uygulamanın nerede
   çalıştığını `#ifdef` yerine `kOnAndroid` söylüyor.
+- **kompozc: ViewModel parametreleri, bir haritanın öğesi, `ordinal`, bir başlığın ad alanları; Compose'un yazdığı gibi
+  `SegmentedButton` ve kademeli ızgaranın span'i**: Kotlin'de ya da bir başlıkta bildirilmiş bir `ViewModel` sınıfı
+  tipindeki bir parametre ya da özellik, sahibinin verdiği paylaşılan işaretçi (`viewModel<T>()`); `map[k]` null
+  olabilir (`counts[k] ?: 0`), bir listenin ya da metnin öğesi ise kendisi, `map.keys` ve `map.values` liste, `e.ordinal`
+  bir enum'un sırası; `routes.Item(n)` bir C++ ad alanındaki yapıya ulaşıyor; `List(n) { }` ve `MutableList(n) { }`.
+  Bir kaynağın `#include "x.hpp"`'si hedefin include dizinlerinde de aranıyor (`kompoz_compose` onları veriyor,
+  `--include DIR`), böylece bildirdiği sınıflar ve ad alanları biliniyor.
+  `SingleChoiceSegmentedButtonRow(modifier = …) { SegmentedButton(selected = …, onClick = …, shape =
+  SegmentedButtonDefaults.itemShape(i, n), icon = { }) { Text(…) } }` ve `MultiChoiceSegmentedButtonRow {
+  SegmentedButton(checked = …, onCheckedChange = …) { } }` (C++'ta `SegmentedButtonOptions::shape`,
+  `SegmentedButtonDefaults::itemShape`; yerine göre biçimler duruyor); kademeli bir ızgarada `item(span =
+  StaggeredGridItemSpan.FullLine) { }` ve `items(list, span = { StaggeredGridItemSpan.SingleLane }) { }`.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine
