@@ -1009,6 +1009,16 @@
   ve `Modifier.animateWidth` ile buton grupları, açma/kapama ve bölünmüş butonlar), chip'ler (`leadingIcon = if (on) { {
   Icon(…) } } else null`) ve seçim kontrolleri (`valueRange` alan slider'lar, bir aralık üzerindeki fiyat `RangeSlider`'ı,
   seçilen imlecin çevresinde `Label`, adla slider durumları, bölümlü butonlar) Kotlin'de `@Composable fun`'lar.
+- **Rozetler, bölümlü liste öğeleri, yükleme göstergesi, genişletilmiş FAB'lar ve alt uygulama çubukları Compose'un yazdığı
+  gibi; bir `SnapshotStateList` üzerinde tembel listeler**: `BadgedBox(badge = { Badge { Text("8") } }) { Icon(…) }` ve
+  `Badge()`; `SegmentedListItem(selected = …, onClick = …, shapes = ListItemDefaults.segmentedShapes(i, n), headlineContent = { },
+  supportingContent = { }, leadingContent = { })` (ya da yalnız `onClick = …`; `ListItemSlots` alan C++ biçimleri duruyor);
+  `LoadingIndicator(modifier = …, color = …)` ve `LoadingIndicator(progress = …)`; `SmallExtendedFloatingActionButton` ile orta,
+  büyük ve klasik olanlar bir `ImageVector` ve bir metnin yanı sıra `icon = { Icon(…) }` ve `text = { Text("…") }` alıyor;
+  `BottomAppBar` ve `FlexibleBottomAppBar`, `false`'un yanı sıra `windowInsets = WindowInsets(0.dp)` alıyor
+  (`BottomAppBarSlots::insets`, `FlexibleBottomAppBarOptions::insets`). Tembel bir yerleşimin `items(list)`, `items(list, key = …)`
+  ve `itemsIndexed`'i bir vektör gibi bir `SnapshotStateList` (bir `mutableStateListOf`) de alıyor; kompozc'de bir
+  `SnapshotStateList`'te `list.shuffle()`, `list.shuffle(Random(seed))` (`kt::Random`; `nextInt`, `nextFloat`, `nextBoolean`) ve `addAll`.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

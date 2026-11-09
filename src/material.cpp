@@ -635,6 +635,20 @@ void detail::ExtendedFloatingActionButton(std::function<void()> onClick, const I
             });
     });
 }
+// Compose's slots: icon = { Icon(…) }, text = { Text("…") } (the text in labelLarge).
+void detail::ExtendedFloatingActionButton(std::function<void()> onClick, const Content& icon, const Content& text,
+                                  const Modifier& modifier, CallSite site) {
+    ComposableScope scope(site);
+    const ColorScheme& cs = colorScheme();
+    CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer), LocalTextStyle.provides(typography().labelLarge)}, [&] {
+        detail::Row(fab(modifier.heightIn(56).widthIn(80), RoundedCornerShape(16), std::move(onClick)).padding(16, 0, 20, 0),
+            {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
+            [&] {
+                icon();
+                text();
+            });
+    });
+}
 
 void ToggleFloatingActionButton(bool checked, std::function<void(bool)> onCheckedChange,
                                 const std::function<void(const ToggleFloatingActionButtonScope&)>& content, const Modifier& modifier,
@@ -729,19 +743,19 @@ struct ExtendedFabSize {
 };
 
 // An extended FAB that narrows to a square around its icon as `expanded` goes off, the label
-// fading out.
-void extendedFab(const ExtendedFabSize& size, std::function<void()> onClick, const ImageVector& icon, const std::string& text, bool expanded,
-                 const Modifier& modifier) {
+// fading out. The icon and the label composed (Compose's slots; their text style the size's), or
+// an ImageVector and a string (then the button's content description too).
+void extendedFab(const ExtendedFabSize& size, std::function<void()> onClick, const Content& icon, const Content& label,
+                 const std::string& description, bool expanded, const Modifier& modifier) {
     const ColorScheme& cs = colorScheme();
     auto p = animateFloatAsState(expanded ? 1.f : 0.f, spring(1, 700));  // read as it is laid out and drawn
-    CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
+    CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer), LocalTextStyle.provides(size.label)}, [&] {
         Layout(fab(modifier.height(size.height), RoundedCornerShape(size.radius), std::move(onClick))
-                   .semantics({.contentDescription = text})
+                   .semantics({.contentDescription = description})
                    .clipToBounds(),
                [&] {
-                   detail::Icon(icon, "", Modifier().size(size.icon));
-                   detail::Text(text, Modifier().graphicsLayer([p](GraphicsLayerScope& l) { l.alpha = std::clamp(p.value(), 0.f, 1.f); }),
-                        {.font = size.label, .maxLines = 1});
+                   icon();
+                   ::kompoz::Box(Modifier().graphicsLayer([p](GraphicsLayerScope& l) { l.alpha = std::clamp(p.value(), 0.f, 1.f); }), label);
                },
                [size, state = p](const std::vector<Measurable>& m, const Constraints& c) {
                    float p = state.value();
@@ -759,10 +773,24 @@ void extendedFab(const ExtendedFabSize& size, std::function<void()> onClick, con
 
 } // namespace
 
+namespace {
+// The plain form's slots: the icon at the size's, the text on one line, as before.
+void extendedFab(const ExtendedFabSize& size, std::function<void()> onClick, const ImageVector& icon, const std::string& text, bool expanded,
+                 const Modifier& modifier) {
+    extendedFab(size, std::move(onClick), [&] { detail::Icon(icon, "", Modifier().size(size.icon)); },
+                [&] { detail::Text(text, {.font = size.label, .maxLines = 1}); }, text, expanded, modifier);
+}
+} // namespace
+
 void detail::SmallExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded,
                                        const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     extendedFab({56, 16, 24, 16, 8, typography().titleMedium}, std::move(onClick), icon, text, expanded, modifier);
+}
+void detail::SmallExtendedFloatingActionButton(std::function<void()> onClick, const Content& icon, const Content& text, bool expanded,
+                                       const Modifier& modifier, CallSite site) {
+    ComposableScope scope(site);
+    extendedFab({56, 16, 24, 16, 8, typography().titleMedium}, std::move(onClick), icon, text, "", expanded, modifier);
 }
 
 void detail::MediumExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded,
@@ -770,11 +798,21 @@ void detail::MediumExtendedFloatingActionButton(std::function<void()> onClick, c
     ComposableScope scope(site);
     extendedFab({80, 20, 28, 26, 12, typography().titleLarge}, std::move(onClick), icon, text, expanded, modifier);
 }
+void detail::MediumExtendedFloatingActionButton(std::function<void()> onClick, const Content& icon, const Content& text, bool expanded,
+                                        const Modifier& modifier, CallSite site) {
+    ComposableScope scope(site);
+    extendedFab({80, 20, 28, 26, 12, typography().titleLarge}, std::move(onClick), icon, text, "", expanded, modifier);
+}
 
 void detail::LargeExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded,
                                        const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     extendedFab({96, 28, 36, 28, 16, typography().headlineSmall}, std::move(onClick), icon, text, expanded, modifier);
+}
+void detail::LargeExtendedFloatingActionButton(std::function<void()> onClick, const Content& icon, const Content& text, bool expanded,
+                                       const Modifier& modifier, CallSite site) {
+    ComposableScope scope(site);
+    extendedFab({96, 28, 36, 28, 16, typography().headlineSmall}, std::move(onClick), icon, text, "", expanded, modifier);
 }
 
 struct SnackbarHostState::Data {

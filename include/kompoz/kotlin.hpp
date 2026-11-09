@@ -9,6 +9,7 @@
 #include "runtime.hpp"
 
 #include <algorithm>
+#include <random>
 #include <charconv>
 #include <chrono>
 #include <coroutine>
@@ -1264,7 +1265,11 @@ decltype(auto) add(C& c, X&& x, A&&... args) {
 template <class C, class X, class... A>
 decltype(auto) addAll(C& c, const X& more, A&&... args) {
     KOMPOZ_KT_OWN(addAll(more)) {
-        c.insert(c.end(), std::begin(more), std::end(more));
+        if constexpr (requires { c.insert(c.end(), std::begin(more), std::end(more)); }) {
+            c.insert(c.end(), std::begin(more), std::end(more));
+        } else {  // a SnapshotStateList: one by one
+            for (const auto& x : more) c.add(x);
+        }
         return std::begin(more) != std::end(more);
     }
 }
@@ -1294,6 +1299,30 @@ decltype(auto) remove(C& c, const X& x, A&&... args) {
             return false;
         }
     }
+}
+// Kotlin's Random(seed): a source for shuffle(random) and nextInt(n).
+struct KtRandom {
+    std::mt19937 engine;
+    int nextInt(int until) { return int(engine() % unsigned(until)); }
+    int nextInt(int from, int until) { return from + nextInt(until - from); }
+    float nextFloat() { return std::uniform_real_distribution<float>(0, 1)(engine); }
+    bool nextBoolean() { return engine() & 1u; }
+};
+inline KtRandom Random(unsigned seed) { return {std::mt19937(seed)}; }
+// list.shuffle(), list.shuffle(random): in place (a SnapshotStateList through its update).
+template <class C, class R>
+void shuffleWith(C& c, R& random) {
+    if constexpr (requires { c.update([](auto&) {}); }) c.update([&](auto& v) { std::shuffle(v.begin(), v.end(), random); });
+    else std::shuffle(c.begin(), c.end(), random);
+}
+template <class C>
+void shuffle(C& c) {
+    std::mt19937 random{std::random_device{}()};
+    shuffleWith(c, random);
+}
+template <class C>
+void shuffle(C& c, KtRandom random) {
+    shuffleWith(c, random.engine);
 }
 // text.ifEmpty { "none" }, list.ifEmpty { … }, text.ifBlank { … }: the value, or the block's when it is empty (blank).
 template <class C, class F, class... A>

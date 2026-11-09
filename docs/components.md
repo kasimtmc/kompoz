@@ -584,6 +584,8 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 357. Compose's `StaggeredGridItemSpan`: `item(span = StaggeredGridItemSpan.FullLine) { }`, `items(list, span = { StaggeredGridItemSpan.SingleLane }) { }` in a staggered grid ✅
 358. Compose's `ButtonGroup(overflowIndicator = { menuState -> }) { clickableItem(onClick, label, icon = { }); toggleableItem(checked, onCheckedChange, label) }` and `ButtonGroup { Button(modifier = Modifier.animateWidth(interactionSource)) }`, `ToggleButton(checked = …, onCheckedChange = …, shapes = …) { }` and its Elevated, Tonal and Outlined kinds, `SplitButtonLayout(leadingButton = { SplitButtonDefaults.LeadingButton(onClick = …) { } }, trailingButton = { SplitButtonDefaults.TrailingButton(checked = …, onCheckedChange = …) { } })`, `Label(label = { PlainTooltip { } }, interactionSource = …) { }`, `ButtonDefaults.shapes()` ✅
 359. Compose's `Slider(valueRange = 0f..100f)`, `RangeSlider(value = 200f..800f, onValueChange = { range -> }, valueRange = …, track = { })`, `rememberSliderState(value = …, steps = …, valueRange = …)`, `rememberRangeSliderState(activeRangeStart = …, activeRangeEnd = …, steps = …, valueRange = …)`, `DpSize(width, height)` ✅
+360. Compose's `BadgedBox(badge = { Badge { Text("8") } }) { Icon(…) }`, `Badge()`, `SegmentedListItem(selected = …, onClick = …, shapes = …, headlineContent = { }, supportingContent = { }, leadingContent = { })`, `LoadingIndicator(modifier = …)` and `LoadingIndicator(progress = …)`, the extended FABs' `icon = { Icon(…) }, text = { Text(…) }`, `BottomAppBar(windowInsets = WindowInsets(0.dp))` ✅
+361. Compose's `items(snapshotStateList) { }` in a lazy layout (a `mutableStateListOf`), `list.shuffle(Random(seed))`, `list.addAll(…)` on one ✅
 
 ## Next
 

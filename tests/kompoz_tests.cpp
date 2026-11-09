@@ -7851,6 +7851,39 @@ TEST(expressive_buttons_take_compose_named_arguments) {
     CHECK(rule.onNodeWithText("son: sil · 3 · 17").exists());
 }
 
+// Badges, a segmented list item, the loading indicator, an extended FAB with composed slots and a
+// bottom app bar's insets by name; a lazy list over a SnapshotStateList.
+TEST(containers_take_compose_named_arguments) {
+    SnapshotStateList<int> tasks{1, 2, 3};
+    auto plan = mutableStateOf(0);
+    ComposeTestRule rule([&] {
+        Column([&] {
+            LazyColumn(arg::modifier = Modifier().height(200), [&] { items(tasks, arg::key = [](int v) { return v; }, [](int v) { Text("görev " + std::to_string(v)); }); });
+            BadgedBox(arg::badge = [] { Badge([] { Text("8"); }); }, [] { Icon(Icons::Filled::Email, "Posta"); });
+            BadgedBox(arg::badge = [] { Badge(arg::modifier = Modifier().testTag("nokta")); }, [] { Icon(Icons::Filled::Notifications, "Bildirim"); });
+            for (int i = 0; i < 2; ++i)
+                SegmentedListItem(arg::selected = plan.get() == i, arg::onClick = [&plan, i] { plan.set(i); }, arg::shapes = ListItemDefaults::segmentedShapes(i, 2),
+                                  arg::headlineContent = [i] { Text("plan " + std::to_string(i)); },
+                                  arg::supportingContent = [&plan, i] { Text(plan.get() == i ? "seçili" : ""); });
+            LoadingIndicator(arg::modifier = Modifier().size(48).testTag("yükleniyor"));
+            LoadingIndicator(arg::progress = 0.5f, arg::modifier = Modifier().testTag("yarım"));
+            SmallExtendedFloatingActionButton(arg::onClick = [] {}, arg::icon = [] { Icon(Icons::Filled::Add, ""); }, arg::text = [] { Text("Yeni"); },
+                                              arg::modifier = Modifier().testTag("fab"));
+            BottomAppBar(arg::actions = [] { IconButton(arg::onClick = [] {}, [] { Icon(Icons::Filled::Check, "Tamam"); }); },
+                         arg::windowInsets = WindowInsets{}, arg::modifier = Modifier().testTag("çubuk"));
+        });
+    }, {400, 800});
+    CHECK(rule.onNodeWithText("görev 2").exists());
+    tasks.add(0, 9);
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("görev 9").exists());
+    CHECK(rule.onNodeWithText("8").exists() && rule.onNodeWithTag("nokta").exists());
+    rule.onNodeWithText("plan 1").performClick();
+    CHECK(rule.onNodeWithText("seçili").exists() && plan.get() == 1);
+    CHECK(rule.onNodeWithTag("yükleniyor").exists() && rule.onNodeWithTag("yarım").exists() && rule.onNodeWithText("Yeni").exists());
+    CHECK(rule.onNodeWithTag("çubuk").bounds().height <= 80.5f);
+}
+
 TEST(navigation_takes_compose_named_arguments) {
     // NavHost(navController =, startDestination =, enterTransition = { }) { … } with the graph builder's
     // composable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }

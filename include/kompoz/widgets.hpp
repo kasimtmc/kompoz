@@ -1977,8 +1977,29 @@ namespace LoadingIndicatorDefaults {
 inline constexpr float ContainerSize = 48, IndicatorSize = 38;  // dp
 inline constexpr float MorphMillis = 650, TurnMillis = 4666;    // a shape to the next; a whole turn
 } // namespace LoadingIndicatorDefaults
+namespace detail {
 void LoadingIndicator(const Modifier& modifier = {}, std::optional<Color> color = {}, CallSite site = CallSite::current());
 void LoadingIndicator(float progress, const Modifier& modifier = {}, std::optional<Color> color = {}, CallSite site = CallSite::current());
+// LoadingIndicator(modifier = …, color = …) and LoadingIndicator(progress = …, modifier = …), as Compose writes them (and by place).
+struct LoadingIndicatorImpl {
+    using Indeterminate = Params<names::Modifier, names::Color>;
+    using Determinate = Params<names::Progress, names::Modifier, names::Color>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (countOf<names::Progress, A...> > 0 || startsWith<float, A...>() || startsWith<double, A...>()) {
+            using P = Determinate;
+            static_assert(P::check<A...>());
+            LoadingIndicator(float(P::arg<names::Progress>(args...)), P::get<names::Modifier>(Modifier{}, args...),
+                             P::get<names::Color>(std::optional<Color>(), args...), site);
+        } else {
+            using P = Indeterminate;
+            static_assert(P::check<A...>());
+            LoadingIndicator(P::get<names::Modifier>(Modifier{}, args...), P::get<names::Color>(std::optional<Color>(), args...), site);
+        }
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::LoadingIndicatorImpl> LoadingIndicator;
 void ContainedLoadingIndicator(const Modifier& modifier = {}, std::optional<Color> indicatorColor = {},
                                std::optional<Color> containerColor = {}, CallSite site = CallSite::current());
 void ContainedLoadingIndicator(float progress, const Modifier& modifier = {}, std::optional<Color> indicatorColor = {},

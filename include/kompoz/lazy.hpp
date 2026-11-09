@@ -114,8 +114,24 @@ template <class T, class A>
 constexpr bool isVectorOf<std::vector<T, A>> = true;
 template <class L>
 concept isVector = isVectorOf<std::remove_cvref_t<L>>;
+// A SnapshotStateList (Compose's mutableStateListOf): its items() are the vector read.
 template <class L>
-using ElementOf = typename std::remove_cvref_t<L>::value_type;
+concept isSnapshotList = requires(const std::remove_cvref_t<L>& l) { requires isVectorOf<std::remove_cvref_t<decltype(l.items())>>; };
+template <class L>
+concept isList = isVector<L> || isSnapshotList<L>;
+template <class L>
+using ElementOf = std::remove_cvref_t<decltype(*std::begin(std::declval<const std::remove_cvref_t<L>&>()))>;
+template <class F>
+struct SpanArg;
+template <class A>
+constexpr bool isSpanArg = false;
+template <class F>
+constexpr bool isSpanArg<SpanArg<F>> = true;
+template <class... Args>
+constexpr bool lastIsSpanArg() {
+    if constexpr (sizeof...(Args) == 0) return false;
+    else return isSpanArg<std::remove_cvref_t<std::tuple_element_t<sizeof...(Args) - 1, std::tuple<Args...>>>>;
+}
 } // namespace detail
 class LazyListScope {
 public:
@@ -154,7 +170,7 @@ public:
             [t = typeHash(contentType)](int) { return t; });
     }
     template <class L, class KeyFn, class TypeFn, class F>
-        requires detail::isVector<L> && std::invocable<F&, const detail::ElementOf<L>&>
+        requires detail::isList<L> && std::invocable<F&, const detail::ElementOf<L>&>
     void items(L&& list, KeyFn&& key, TypeFn&& contentType, F&& content) {
         auto l = held(std::forward<L>(list));
         add(int(l->size()), [l, key](int i) { return explicitKey(key((*l)[size_t(i)])); },
@@ -164,7 +180,7 @@ public:
 
     // items(list, [](const T& t) { ... })
     template <class L, class F>
-        requires detail::isVector<L> && std::invocable<F&, const detail::ElementOf<L>&>
+        requires detail::isList<L> && std::invocable<F&, const detail::ElementOf<L>&>
     void items(L&& list, F&& content) {
         auto l = held(std::forward<L>(list));
         int base = size();
@@ -174,7 +190,7 @@ public:
 
     // items(list, key, content): the key keeps an item's state when the list changes.
     template <class L, class KeyFn, class F>
-        requires detail::isVector<L> && std::invocable<F&, const detail::ElementOf<L>&>
+        requires detail::isList<L> && std::invocable<F&, const detail::ElementOf<L>&>
     void items(L&& list, KeyFn&& key, F&& content) {
         auto l = held(std::forward<L>(list));
         add(int(l->size()), [l, key](int i) { return explicitKey(key((*l)[size_t(i)])); },
@@ -182,7 +198,7 @@ public:
     }
 
     template <class L, class F>
-        requires detail::isVector<L>
+        requires detail::isList<L>
     void itemsIndexed(L&& list, F&& content) {
         auto l = held(std::forward<L>(list));
         int base = size();
@@ -208,8 +224,14 @@ public:
     template <class L>
     static auto held(L&& list) {
         using V = std::remove_cvref_t<L>;
-        if constexpr (std::is_lvalue_reference_v<L>) return std::shared_ptr<const V>(std::shared_ptr<const V>(), &list);
-        else return std::make_shared<const V>(std::move(list));
+        if constexpr (detail::isSnapshotList<L>) {  // (its items as they are now: read here, so the list recomposes when they change)
+            using Items = std::remove_cvref_t<decltype(list.items())>;
+            return std::make_shared<const Items>(list.items());
+        } else if constexpr (std::is_lvalue_reference_v<L>) {
+            return std::shared_ptr<const V>(std::shared_ptr<const V>(), &list);
+        } else {
+            return std::make_shared<const V>(std::move(list));
+        }
     }
 
     int size() const;
@@ -392,10 +414,6 @@ template <class F>
 struct SpanArg {
     F span;
 };
-template <class A>
-constexpr bool isSpanArg = false;
-template <class F>
-constexpr bool isSpanArg<SpanArg<F>> = true;
 inline int spanCells(GridItemSpan s) { return s.currentLineSpan; }
 inline int spanCells(StaggeredGridItemSpan s) { return s.lanes; }
 inline int spanCells(int s) { return s; }
@@ -420,8 +438,9 @@ public:
         items_.item(key, content);
     }
     template <class... Args>
+        requires(detail::lastIsSpanArg<Args...>() || requires(LazyListScope& l, Args&&... a) { l.items(std::forward<Args>(a)...); })
     void items(Args&&... args) {
-        if constexpr (sizeof...(Args) > 0 && detail::isSpanArg<std::remove_cvref_t<std::tuple_element_t<sizeof...(Args) - 1, std::tuple<Args...>>>>) {
+        if constexpr (detail::lastIsSpanArg<Args...>()) {
             detail::splitLast([&](auto&& span, auto&&... rest) { itemsSpanned(std::move(span.span), std::forward<decltype(rest)>(rest)...); },
                               std::forward<Args>(args)...);
         } else {

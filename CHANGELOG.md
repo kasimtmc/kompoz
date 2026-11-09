@@ -969,6 +969,16 @@
   `toggleableItem` and with `Modifier.animateWidth`, the toggle and split buttons), the chips (`leadingIcon = if (on) { {
   Icon(…) } } else null`) and the selection controls (the sliders with `valueRange`, the price `RangeSlider` on a range,
   `Label` around the picked thumb, the slider states by name, the segmented buttons) are `@Composable fun`s in Kotlin.
+- **Badges, segmented list items, the loading indicator, extended FABs and bottom app bars as Compose writes them; lazy
+  lists over a `SnapshotStateList`**: `BadgedBox(badge = { Badge { Text("8") } }) { Icon(…) }` and `Badge()`;
+  `SegmentedListItem(selected = …, onClick = …, shapes = ListItemDefaults.segmentedShapes(i, n), headlineContent = { },
+  supportingContent = { }, leadingContent = { })` (or `onClick = …` alone; the C++ forms with a `ListItemSlots` stay);
+  `LoadingIndicator(modifier = …, color = …)` and `LoadingIndicator(progress = …)`; `SmallExtendedFloatingActionButton` and the
+  medium, large and classic ones take `icon = { Icon(…) }` and `text = { Text("…") }` as well as an `ImageVector` and a string;
+  `BottomAppBar` and `FlexibleBottomAppBar` take `windowInsets = WindowInsets(0.dp)` (`BottomAppBarSlots::insets`,
+  `FlexibleBottomAppBarOptions::insets`) as well as `false`. A lazy layout's `items(list)`, `items(list, key = …)` and
+  `itemsIndexed` take a `SnapshotStateList` (a `mutableStateListOf`) as they take a vector; in kompozc, `list.shuffle()`,
+  `list.shuffle(Random(seed))` (`kt::Random`, with `nextInt`, `nextFloat`, `nextBoolean`) and `addAll` on a `SnapshotStateList`.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

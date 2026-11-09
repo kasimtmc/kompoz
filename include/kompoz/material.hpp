@@ -1163,15 +1163,30 @@ inline constexpr Composable<detail::LargeFloatingActionButtonImpl> LargeFloating
 namespace detail {
 void ExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text,
                                   const Modifier& modifier = {}, CallSite site = CallSite::current());
+void ExtendedFloatingActionButton(std::function<void()> onClick, const Content& icon, const Content& text,
+                                  const Modifier& modifier = {}, CallSite site = CallSite::current());
+// Whether an extended FAB's icon and text are given as Compose's composables (icon = { Icon(…) }, text = { Text("…") })
+// rather than an ImageVector and a string.
+template <class P, class... A>
+constexpr bool fabSlotsComposed() {
+    using I = std::remove_cvref_t<decltype(P::template arg<names::Icon>(std::declval<A&>()...))>;
+    using T = std::remove_cvref_t<decltype(P::template arg<names::Text>(std::declval<A&>()...))>;
+    constexpr bool composed = std::is_invocable_v<I&> || std::is_invocable_v<T&>;
+    static_assert(!composed || (std::is_invocable_v<I&> && std::is_invocable_v<T&>), "kompoz: an extended FAB's icon and text are both composables, or an ImageVector and a string");
+    return composed;
+}
 struct ExtendedFloatingActionButtonImpl {
     using P = Params<names::OnClick, names::Icon, names::Text, names::Modifier>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
         std::function<void()> onClick = P::arg<names::OnClick>(args...);
-        const ImageVector& icon = P::arg<names::Icon>(args...);
-        std::string text = P::arg<names::Text>(args...);
-        ExtendedFloatingActionButton(std::move(onClick), icon, std::move(text), P::get<names::Modifier>(Modifier{}, args...), site);
+        if constexpr (fabSlotsComposed<P, A...>())
+            ExtendedFloatingActionButton(std::move(onClick), Content(P::arg<names::Icon>(args...)), Content(P::arg<names::Text>(args...)),
+                                         P::get<names::Modifier>(Modifier{}, args...), site);
+        else
+            ExtendedFloatingActionButton(std::move(onClick), P::arg<names::Icon>(args...), std::string(P::arg<names::Text>(args...)),
+                                         P::get<names::Modifier>(Modifier{}, args...), site);
     }
 };
 } // namespace detail
@@ -1198,49 +1213,71 @@ inline constexpr Composable<detail::MediumFloatingActionButtonImpl> MediumFloati
 namespace detail {
 void SmallExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded = true,
                                        const Modifier& modifier = {}, CallSite site = CallSite::current());
-struct SmallExtendedFloatingActionButtonImpl {
+void SmallExtendedFloatingActionButton(std::function<void()> onClick, const Content& icon, const Content& text, bool expanded = true,
+                                       const Modifier& modifier = {}, CallSite site = CallSite::current());
+// The three sizes' named form: SmallExtendedFloatingActionButton(onClick = …, expanded = …, icon = { Icon(…) }, text = { Text("…") }).
+template <class Plain, class Slots>
+struct ExpressiveExtendedFabImpl {
     using P = Params<names::OnClick, names::Icon, names::Text, names::Modifier, names::Expanded>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
         std::function<void()> onClick = P::arg<names::OnClick>(args...);
-        const ImageVector& icon = P::arg<names::Icon>(args...);
-        std::string text = P::arg<names::Text>(args...);
-        SmallExtendedFloatingActionButton(std::move(onClick), icon, std::move(text), P::get<names::Expanded>(true, args...), P::get<names::Modifier>(Modifier{}, args...), site);
+        if constexpr (fabSlotsComposed<P, A...>())
+            Slots{}(std::move(onClick), Content(P::arg<names::Icon>(args...)), Content(P::arg<names::Text>(args...)), P::get<names::Expanded>(true, args...),
+                    P::get<names::Modifier>(Modifier{}, args...), site);
+        else
+            Plain{}(std::move(onClick), P::arg<names::Icon>(args...), std::string(P::arg<names::Text>(args...)), P::get<names::Expanded>(true, args...),
+                    P::get<names::Modifier>(Modifier{}, args...), site);
     }
 };
+struct SmallExtendedFabPlain {
+    void operator()(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded, const Modifier& modifier, CallSite site) const {
+        SmallExtendedFloatingActionButton(std::move(onClick), icon, std::move(text), expanded, modifier, site);
+    }
+};
+struct SmallExtendedFabSlots {
+    void operator()(std::function<void()> onClick, const Content& icon, const Content& text, bool expanded, const Modifier& modifier, CallSite site) const {
+        SmallExtendedFloatingActionButton(std::move(onClick), icon, text, expanded, modifier, site);
+    }
+};
+using SmallExtendedFloatingActionButtonImpl = ExpressiveExtendedFabImpl<SmallExtendedFabPlain, SmallExtendedFabSlots>;
 } // namespace detail
 inline constexpr Composable<detail::SmallExtendedFloatingActionButtonImpl> SmallExtendedFloatingActionButton;
 namespace detail {
 void MediumExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded = true,
                                         const Modifier& modifier = {}, CallSite site = CallSite::current());
-struct MediumExtendedFloatingActionButtonImpl {
-    using P = Params<names::OnClick, names::Icon, names::Text, names::Modifier, names::Expanded>;
-    template <class... A>
-    static void call(CallSite site, A&&... args) {
-        static_assert(P::check<A...>());
-        std::function<void()> onClick = P::arg<names::OnClick>(args...);
-        const ImageVector& icon = P::arg<names::Icon>(args...);
-        std::string text = P::arg<names::Text>(args...);
-        MediumExtendedFloatingActionButton(std::move(onClick), icon, std::move(text), P::get<names::Expanded>(true, args...), P::get<names::Modifier>(Modifier{}, args...), site);
+void MediumExtendedFloatingActionButton(std::function<void()> onClick, const Content& icon, const Content& text, bool expanded = true,
+                                        const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct MediumExtendedFabPlain {
+    void operator()(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded, const Modifier& modifier, CallSite site) const {
+        MediumExtendedFloatingActionButton(std::move(onClick), icon, std::move(text), expanded, modifier, site);
     }
 };
+struct MediumExtendedFabSlots {
+    void operator()(std::function<void()> onClick, const Content& icon, const Content& text, bool expanded, const Modifier& modifier, CallSite site) const {
+        MediumExtendedFloatingActionButton(std::move(onClick), icon, text, expanded, modifier, site);
+    }
+};
+using MediumExtendedFloatingActionButtonImpl = ExpressiveExtendedFabImpl<MediumExtendedFabPlain, MediumExtendedFabSlots>;
 } // namespace detail
 inline constexpr Composable<detail::MediumExtendedFloatingActionButtonImpl> MediumExtendedFloatingActionButton;
 namespace detail {
 void LargeExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded = true,
                                        const Modifier& modifier = {}, CallSite site = CallSite::current());
-struct LargeExtendedFloatingActionButtonImpl {
-    using P = Params<names::OnClick, names::Icon, names::Text, names::Modifier, names::Expanded>;
-    template <class... A>
-    static void call(CallSite site, A&&... args) {
-        static_assert(P::check<A...>());
-        std::function<void()> onClick = P::arg<names::OnClick>(args...);
-        const ImageVector& icon = P::arg<names::Icon>(args...);
-        std::string text = P::arg<names::Text>(args...);
-        LargeExtendedFloatingActionButton(std::move(onClick), icon, std::move(text), P::get<names::Expanded>(true, args...), P::get<names::Modifier>(Modifier{}, args...), site);
+void LargeExtendedFloatingActionButton(std::function<void()> onClick, const Content& icon, const Content& text, bool expanded = true,
+                                       const Modifier& modifier = {}, CallSite site = CallSite::current());
+struct LargeExtendedFabPlain {
+    void operator()(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded, const Modifier& modifier, CallSite site) const {
+        LargeExtendedFloatingActionButton(std::move(onClick), icon, std::move(text), expanded, modifier, site);
     }
 };
+struct LargeExtendedFabSlots {
+    void operator()(std::function<void()> onClick, const Content& icon, const Content& text, bool expanded, const Modifier& modifier, CallSite site) const {
+        LargeExtendedFloatingActionButton(std::move(onClick), icon, text, expanded, modifier, site);
+    }
+};
+using LargeExtendedFloatingActionButtonImpl = ExpressiveExtendedFabImpl<LargeExtendedFabPlain, LargeExtendedFabSlots>;
 } // namespace detail
 inline constexpr Composable<detail::LargeExtendedFloatingActionButtonImpl> LargeExtendedFloatingActionButton;
 
@@ -1807,10 +1844,71 @@ inline constexpr detail::ListItemCall ListItem;
 //   Column(Modifier(), verticalArrangement = Arrangement::spacedBy(ListItemDefaults::SegmentedGap), [=] {
 //       for (int i = 0; i < 3; ++i) SegmentedListItem(open(i), ListItemDefaults::segmentedShapes(i, 3), {...});
 //   });
+namespace detail {
 void SegmentedListItem(std::function<void()> onClick, const ListItemShapes& shapes, const ListItemSlots& slots,
                        const Modifier& modifier = {}, InteractiveListItemOptions options = {}, CallSite site = CallSite::current());
 void SegmentedListItem(bool selected, std::function<void()> onClick, const ListItemShapes& shapes, const ListItemSlots& slots,
                        const Modifier& modifier = {}, InteractiveListItemOptions options = {}, CallSite site = CallSite::current());
+// SegmentedListItem(selected = …, onClick = …, shapes = ListItemDefaults.segmentedShapes(i, n), headlineContent = { … },
+// supportingContent = …, leadingContent = …) as Compose writes it (or its headline the block); the C++ forms with a
+// ListItemSlots go by place.
+struct SegmentedListItemImpl {
+    template <class... Head>
+    using Q = Params<Head..., names::Shapes, names::Modifier, names::Enabled, names::HeadlineContent, names::LeadingContent, names::TrailingContent,
+                     names::OverlineContent, names::SupportingContent, names::OnLongClick, names::Colors, names::InteractionSource, Block>;
+    template <class P, class... A>
+    static ListItemSlots slots(A&&... args) {
+        ListItemSlots s;
+        P::template set<names::OverlineContent>(s.overline, args...);
+        P::template set<names::SupportingContent>(s.supporting, args...);
+        P::template set<names::LeadingContent>(s.leading, args...);
+        P::template set<names::TrailingContent>(s.trailing, args...);
+        if constexpr (P::template given<names::HeadlineContent, A...>()) P::template set<names::HeadlineContent>(s.headline, args...);
+        else s.headline = P::block(std::forward<A>(args)...);
+        return s;
+    }
+    template <class P, class... A>
+    static InteractiveListItemOptions options(A&... args) {
+        InteractiveListItemOptions o;
+        P::template set<names::Enabled>(o.enabled, args...);
+        P::template set<names::OnLongClick>(o.onLongClick, args...);
+        P::template set<names::Colors>(o.colors, args...);
+        P::template set<names::InteractionSource>(o.interactionSource, args...);
+        return o;
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr ((std::is_same_v<std::remove_cvref_t<A>, ListItemSlots> || ...)) {
+            static_assert(!(isNamed<A> || ...), "kompoz: SegmentedListItem's ListItemSlots form takes its arguments by place");
+            SegmentedListItem(std::forward<A>(args)..., site);
+        } else if constexpr (countOf<names::Selected, A...> > 0) {
+            using P = Q<names::Selected, names::OnClick>;
+            static_assert(P::check<A...>());
+            SegmentedListItem(bool(P::arg<names::Selected>(args...)), std::function<void()>(P::arg<names::OnClick>(args...)),
+                              ListItemShapes(P::arg<names::Shapes>(args...)), slots<P>(std::forward<A>(args)...),
+                              P::get<names::Modifier>(Modifier{}, args...), options<P>(args...), site);
+        } else {
+            using P = Q<names::OnClick>;
+            static_assert(P::check<A...>());
+            SegmentedListItem(std::function<void()>(P::arg<names::OnClick>(args...)), ListItemShapes(P::arg<names::Shapes>(args...)),
+                              slots<P>(std::forward<A>(args)...), P::get<names::Modifier>(Modifier{}, args...), options<P>(args...), site);
+        }
+    }
+};
+// The C++ forms whose slots are made in place (SegmentedListItem(on, onClick, shapes, {.headline = …})).
+struct SegmentedListItemCall : Composable<SegmentedListItemImpl> {
+    using Composable<SegmentedListItemImpl>::operator();
+    void operator()(std::function<void()> onClick, const ListItemShapes& shapes, const ListItemSlots& slots, const Modifier& modifier = {},
+                    InteractiveListItemOptions options = {}, CallSite site = CallSite::current()) const {
+        SegmentedListItem(std::move(onClick), shapes, slots, modifier, std::move(options), site);
+    }
+    void operator()(bool selected, std::function<void()> onClick, const ListItemShapes& shapes, const ListItemSlots& slots,
+                    const Modifier& modifier = {}, InteractiveListItemOptions options = {}, CallSite site = CallSite::current()) const {
+        SegmentedListItem(selected, std::move(onClick), shapes, slots, modifier, std::move(options), site);
+    }
+};
+} // namespace detail
+inline constexpr detail::SegmentedListItemCall SegmentedListItem;
 
 // Icons in chips are usually Modifier().size(18). A filter or input chip's icons come and go
 // growing in and fading (the check of a selected filter chip). An input chip's avatar (usually
@@ -2540,9 +2638,31 @@ void VerticalDragHandle(const Modifier& modifier = {}, std::optional<MutableInte
                         CallSite site = CallSite::current());
 
 // A dot, or a small pill with a count; BadgedBox puts it on the top-end corner of its content.
+// As Compose writes them: Badge { Text("8") }, Badge(), BadgedBox(badge = { Badge() }) { Icon(…) }.
+namespace detail {
 void Badge(const Modifier& modifier = {}, const Content& content = {}, CallSite site = CallSite::current());
 void BadgedBox(const Content& badge, const Modifier& modifier, const Content& content,
                CallSite site = CallSite::current());
+struct BadgeImpl {
+    using P = Params<names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        Badge(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+};
+struct BadgedBoxImpl {
+    using P = Params<names::Badge, names::Modifier, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: BadgedBox takes a block: what the badge sits on");
+        BadgedBox(Content(P::arg<names::Badge>(args...)), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::BadgeImpl> Badge;
+inline constexpr Composable<detail::BadgedBoxImpl> BadgedBox;
 
 // A bottom app bar that leaves as the content scrolls forwards and comes back as it scrolls
 // back (Compose's BottomAppBarScrollBehavior): the bar loses as much of its height, sliding down,
@@ -2567,8 +2687,20 @@ struct BottomAppBarSlots {
     std::optional<Color> containerColor;
     std::optional<Color> contentColor;  // unset: onSurfaceVariant (the content's: its container's own)
     bool windowInsets = true;  // pad by the navigation bar
+    std::optional<WindowInsets> insets;  // set: pad by these instead (Compose's windowInsets = WindowInsets(…))
     std::optional<BottomAppBarScrollBehavior> scrollBehavior;
 };
+namespace detail {
+// windowInsets = WindowInsets(0.dp) (Compose's) or windowInsets = false (Kompoz's): the insets, or whether the bars'.
+template <class P, class S, class... A>
+void setBarInsets(S& slots, A&... args) {
+    if constexpr (P::template given<names::WindowInsets, A...>()) {
+        auto&& w = P::template arg<names::WindowInsets>(args...);
+        if constexpr (std::is_same_v<std::remove_cvref_t<decltype(w)>, WindowInsets>) slots.insets = w;
+        else slots.windowInsets = bool(w);
+    }
+}
+} // namespace detail
 namespace detail {
 void BottomAppBar(const BottomAppBarSlots& slots, const Modifier& modifier = {}, CallSite site = CallSite::current());
 struct BottomAppBarImpl {
@@ -2583,7 +2715,7 @@ struct BottomAppBarImpl {
             slots.content = Q::block(std::forward<A>(args)...);
             Q::set<names::ContainerColor>(slots.containerColor, args...);
             Q::set<names::ContentColor>(slots.contentColor, args...);
-            Q::set<names::WindowInsets>(slots.windowInsets, args...);
+            setBarInsets<Q>(slots, args...);
             Q::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
             BottomAppBar(slots, Q::get<names::Modifier>(Modifier{}, args...), site);
         } else {
@@ -2593,7 +2725,7 @@ struct BottomAppBarImpl {
             P::set<names::FloatingActionButton>(slots.floatingActionButton, args...);
             P::set<names::ContainerColor>(slots.containerColor, args...);
             P::set<names::ContentColor>(slots.contentColor, args...);
-            P::set<names::WindowInsets>(slots.windowInsets, args...);
+            setBarInsets<P>(slots, args...);
             P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
             BottomAppBar(slots, P::get<names::Modifier>(Modifier{}, args...), site);
         }
@@ -2611,6 +2743,7 @@ struct FlexibleBottomAppBarOptions {
     PaddingValues contentPadding{16, 0, 16, 0};
     std::optional<BottomAppBarScrollBehavior> scrollBehavior;
     bool windowInsets = true;  // pad by the navigation bar
+    std::optional<WindowInsets> insets;  // set: pad by these instead (Compose's windowInsets = WindowInsets(…))
 };
 namespace detail {
 void FlexibleBottomAppBar(const Modifier& modifier, const Content& content, const FlexibleBottomAppBarOptions& options = {},
@@ -2626,7 +2759,7 @@ struct FlexibleBottomAppBarImpl {
         P::set<names::ContentPadding>(options.contentPadding, args...);
         P::set<names::HorizontalArrangement>(options.horizontalArrangement, args...);
         P::set<names::ExpandedHeight>(options.expandedHeight, args...);
-        P::set<names::WindowInsets>(options.windowInsets, args...);
+        setBarInsets<P>(options, args...);
         P::set<names::ScrollBehavior>(options.scrollBehavior, args...);
         FlexibleBottomAppBar(P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), options, site);
     }

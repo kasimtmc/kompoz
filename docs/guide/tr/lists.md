@@ -38,7 +38,7 @@ fun Conversation(messages: List<Message>) {
 | `item { … }`, `item(key = …) { … }` | Bir öğe. |
 | `items(count) { index -> … }` | `count` öğe. |
 | `items(list) { item -> … }` | Her eleman için bir öğe. |
-| `items(list, key = { it.id }) { … }` | Aynısı, her eleman için bir anahtarla. |
+| `items(list, key = { it.id }) { … }` | Aynısı, her eleman için bir anahtarla. Bir `mutableStateListOf` buraya olduğu gibi girer. |
 | `items(list, key = …, contentType = …) { … }` | Aynısı, bir içerik türüyle (`layoutInfo`'da bildirilir; bir türün öğeleri önceden kompoze etmek için birlikte zamanlanır). |
 | `itemsIndexed(list) { index, item -> … }` | Her eleman için bir öğe, sırasıyla. |
 | `stickyHeader { … }` | Arkasından gelen öğeler altından kayarken üstte kalan bir başlık. |

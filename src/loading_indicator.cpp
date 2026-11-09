@@ -123,11 +123,11 @@ void determinate(float progress, const Modifier& modifier, std::optional<Color> 
 
 } // namespace
 
-void LoadingIndicator(const Modifier& modifier, std::optional<Color> color, CallSite site) {
+void detail::LoadingIndicator(const Modifier& modifier, std::optional<Color> color, CallSite site) {
     composable(site, modifier, color, [=] { indeterminate(modifier, std::nullopt, color.value_or(colorScheme().primary), CallSite::current()); });
 }
 
-void LoadingIndicator(float progress, const Modifier& modifier, std::optional<Color> color, CallSite site) {
+void detail::LoadingIndicator(float progress, const Modifier& modifier, std::optional<Color> color, CallSite site) {
     composable(site, progress, modifier, color,
                [=] { determinate(progress, modifier, std::nullopt, color.value_or(colorScheme().primary), CallSite::current()); });
 }

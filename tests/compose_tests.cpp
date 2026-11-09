@@ -1403,6 +1403,56 @@ TEST(expressive_buttons_and_sliders_as_compose_writes_them) {
     CHECK(rule.onNodeWithText("son: sil · 200–800 · kimse · 3 · 17 · kalın · kapalı").exists());
 }
 
+// Badges, a segmented list item, the loading indicator, an extended FAB's slots and a bottom app
+// bar's insets as Compose writes them; a lazy list over a SnapshotStateList, shuffled and refilled.
+@Composable
+fun Containers() {
+    val tasks = remember { mutableStateListOf(1, 2, 3) }
+    var plan by remember { mutableStateOf(0) }
+    var open by remember { mutableStateOf(true) }
+    Column {
+        Row {
+            FilledTonalButton(onClick = { tasks.shuffle(Random(7)) }) { Text("Karıştır") }
+            FilledTonalButton(onClick = { tasks.clear(); tasks.addAll(listOf(4, 5)) }) { Text("Doldur") }
+        }
+        LazyColumn(modifier = Modifier.height(200.dp)) {
+            items(tasks, key = { it }) { Text("görev $it") }
+        }
+        Text("sıra: ${tasks.joinToString(",")}")
+        BadgedBox(badge = { Badge { Text("8") } }) { Icon(Icons.Filled.Email, contentDescription = "Posta") }
+        BadgedBox(badge = { Badge(modifier = Modifier.testTag("nokta")) }) { Icon(Icons.Filled.Notifications, contentDescription = "Bildirim") }
+        for (i in 0 until 2) {
+            SegmentedListItem(selected = plan == i, onClick = { plan = i }, shapes = ListItemDefaults.segmentedShapes(i, 2),
+                              headlineContent = { Text("plan $i") }, supportingContent = { Text(if (plan == i) "seçili" else "") })
+        }
+        LoadingIndicator(modifier = Modifier.size(48.dp).testTag("yükleniyor"))
+        LoadingIndicator(progress = 0.5f, modifier = Modifier.testTag("yarım"))
+        SmallExtendedFloatingActionButton(onClick = { open = !open }, expanded = open, icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                                          text = { Text("Yeni") }, modifier = Modifier.testTag("fab"))
+        BottomAppBar(actions = { IconButton(onClick = { }) { Icon(Icons.Filled.Check, contentDescription = "Tamam") } },
+                     windowInsets = WindowInsets(0.dp), modifier = Modifier.testTag("çubuk"))
+    }
+}
+
+TEST(containers_as_compose_writes_them) {
+    ComposeTestRule rule([] { Containers(); });
+    CHECK(rule.onNodeWithText("sıra: 1,2,3").exists() && rule.onNodeWithText("görev 2").exists());
+    rule.onNodeWithText("Karıştır").performClick();
+    std::string order = rule.onNodeWithText("sıra: ", true).text();
+    CHECK(order != "sıra: 1,2,3" && order.size() == std::string("sıra: 1,2,3").size());
+    rule.onNodeWithText("Doldur").performClick();
+    CHECK(rule.onNodeWithText("sıra: 4,5").exists() && rule.onNodeWithText("görev 5").exists() && !rule.onNodeWithText("görev 1").exists());
+    CHECK(rule.onNodeWithText("8").exists() && rule.onNodeWithTag("nokta").exists());
+    rule.onNodeWithText("plan 1").performClick();
+    CHECK(rule.onNodeWithText("seçili").exists());
+    CHECK(rule.onNodeWithTag("yükleniyor").exists() && rule.onNodeWithTag("yarım").exists());
+    Rect wide = rule.onNodeWithTag("fab").bounds();
+    rule.onNodeWithTag("fab").performClick();
+    rule.mainClock().advanceTimeBy(2000);
+    CHECK(rule.onNodeWithTag("fab").bounds().width < wide.width && rule.onNodeWithText("Yeni").exists());
+    CHECK(rule.onNodeWithTag("çubuk").bounds().height <= 80.5f);  // no inset padding
+}
+
 TEST(navigation_as_compose_writes_it) {
     NavController nav;
     ComposeTestRule rule([&] { Navigator(nav); });

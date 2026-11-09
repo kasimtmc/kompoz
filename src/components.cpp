@@ -184,13 +184,13 @@ void detail::ListItem(bool checked, std::function<void(bool)> onCheckedChange, c
               const InteractiveListItemOptions& options, CallSite site) {
     interactiveListItem(ListItemKind::Toggle, checked, {}, std::move(onCheckedChange), slots, modifier, options, site);
 }
-void SegmentedListItem(std::function<void()> onClick, const ListItemShapes& shapes, const ListItemSlots& slots, const Modifier& modifier,
+void detail::SegmentedListItem(std::function<void()> onClick, const ListItemShapes& shapes, const ListItemSlots& slots, const Modifier& modifier,
                        InteractiveListItemOptions options, CallSite site) {
     options.shapes = shapes;
     interactiveListItem(ListItemKind::Click, false, std::move(onClick), {}, slots, modifier, options, site);
 }
-void SegmentedListItem(bool selected, std::function<void()> onClick, const ListItemShapes& shapes, const ListItemSlots& slots,
-                       const Modifier& modifier, InteractiveListItemOptions options, CallSite site) {
+void detail::SegmentedListItem(bool selected, std::function<void()> onClick, const ListItemShapes& shapes, const ListItemSlots& slots,
+                               const Modifier& modifier, InteractiveListItemOptions options, CallSite site) {
     options.shapes = shapes;
     interactiveListItem(ListItemKind::Select, selected, std::move(onClick), {}, slots, modifier, options, site);
 }
@@ -1570,7 +1570,7 @@ void SwipeToDismissBox(SwipeToDismissBoxState state, const Content& backgroundCo
     });
 }
 
-void Badge(const Modifier& modifier, const Content& content, CallSite site) {
+void detail::Badge(const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     if (!content) {
@@ -1583,7 +1583,7 @@ void Badge(const Modifier& modifier, const Content& content, CallSite site) {
     });
 }
 
-void BadgedBox(const Content& badge, const Modifier& modifier, const Content& content, CallSite site) {
+void detail::BadgedBox(const Content& badge, const Modifier& modifier, const Content& content, CallSite site) {
     ComposableScope scope(site);
     // children: the anchor, then the badge on its top-end corner (outside its bounds).
     auto policy = [](LayoutNode& node, const Constraints& c) {
@@ -1612,7 +1612,9 @@ void BadgedBox(const Content& badge, const Modifier& modifier, const Content& co
 
 namespace {
 
-PaddingValues bottomBarInsets(bool padded) {
+// The insets given (Compose's windowInsets = WindowInsets(…)), else the system bars' when padded.
+PaddingValues bottomBarInsets(bool padded, const std::optional<WindowInsets>& insets) {
+    if (insets) return insets->asPaddingValues();
     return padded ? detail::systemBarsForVisualComponents().only(WindowInsetsSides::Horizontal | WindowInsetsSides::Bottom).asPaddingValues()
                   : PaddingValues{};
 }
@@ -1635,7 +1637,7 @@ Modifier exiting(const Modifier& m, const std::optional<BottomAppBarScrollBehavi
 void detail::FlexibleBottomAppBar(const Modifier& modifier, const Content& content, const FlexibleBottomAppBarOptions& options, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
-    PaddingValues insets = bottomBarInsets(options.windowInsets);
+    PaddingValues insets = bottomBarInsets(options.windowInsets, options.insets);
     CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
         detail::Row(exiting(modifier.fillMaxWidth(), options.scrollBehavior)
                 .background(options.containerColor.value_or(cs.surfaceContainer))
@@ -1649,7 +1651,7 @@ void detail::FlexibleBottomAppBar(const Modifier& modifier, const Content& conte
 void detail::BottomAppBar(const BottomAppBarSlots& slots, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
-    PaddingValues insets = bottomBarInsets(slots.windowInsets);
+    PaddingValues insets = bottomBarInsets(slots.windowInsets, slots.insets);
     Color container = slots.containerColor.value_or(cs.surfaceContainer);
     // The content form's color is its container's own (Compose's contentColorFor), the actions'
     // onSurfaceVariant (their icons' token).

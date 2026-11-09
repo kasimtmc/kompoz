@@ -38,7 +38,7 @@ fun Conversation(messages: List<Message>) {
 | `item { … }`, `item(key = …) { … }` | One item. |
 | `items(count) { index -> … }` | `count` items. |
 | `items(list) { item -> … }` | One item per element. |
-| `items(list, key = { it.id }) { … }` | The same, with a key per element. |
+| `items(list, key = { it.id }) { … }` | The same, with a key per element. A `mutableStateListOf` goes here as it is. |
 | `items(list, key = …, contentType = …) { … }` | The same, with a content type (reported in `layoutInfo`; items of a type are timed together for composing ahead). |
 | `itemsIndexed(list) { index, item -> … }` | One item per element, with its index. |
 | `stickyHeader { … }` | A header that stays at the top while the items after it scroll under it. |
