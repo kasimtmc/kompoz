@@ -990,6 +990,21 @@
   `ViewModel`'i kendi sınıfının bir parametresi, bölümlü butonlar `SegmentedButtonDefaults.itemShape` ile adla, kademeli
   ızgaranın başlığı bir `item(span = StaggeredGridItemSpan.FullLine)`, beğeniler `liked[index] ?: 0` ve
   `liked.values.sum()` olarak okunuyor.
+- **M3 Expressive'in butonları ve slider'lar Compose'un yazdığı gibi; lambda ya da null**: `ButtonGroup(overflowIndicator = {
+  menuState -> … }) { clickableItem(onClick = …, label = "…", icon = { }); toggleableItem(checked = …, onCheckedChange = …, label
+  = …) }` (bloğu öğeleri bildiriyor; `ButtonGroupMenuState`'in `isExpanded`'ı, `show()`'u, `dismiss()`'i; öğelerin simgeleri
+  artık composable, bir öğe kapatılabiliyor) ve bağlı `ButtonGroup(modifier = …, horizontalArrangement = …, expandedRatio = …) {
+  Button(modifier = Modifier.animateWidth(source)) { } }`; `ToggleButton(checked = …, onCheckedChange = …, shapes = …, enabled =
+  …) { }` ve Elevated, Tonal, Outlined türleri; `SplitButtonDefaults.LeadingButton(onClick = …) { }` ve `TrailingButton(checked =
+  …, onCheckedChange = …) { }` ile `SplitButtonLayout(leadingButton = { }, trailingButton = { })`; `Label(label = {
+  PlainTooltip { } }, interactionSource = …, isPersistent = …) { }`; `ButtonDefaults.shapes()`. `Slider`, `VerticalSlider` ve
+  `RangeSlider` `valueRange = 0f..100f` alıyor, bir `RangeSlider`'ın değeri bir aralık olabiliyor (`200f..800f`, öyle de
+  bildiriliyor) ve `track = { }`'i Compose'un adı; `rememberSliderState(value = …, steps = …, valueRange = …)` ve
+  `rememberRangeSliderState(activeRangeStart = …, activeRangeEnd = …, steps = …, valueRange = …)`; `DpSize(w, h)`. kompozc'de
+  `if (c) { { … } } else null` bir lambda ya da hiçbiri (gittiği işlev tipinde: `leadingIcon = if (selected) { { Icon(…) } } else
+  null`), `if (c) x else null` x'in null olabilir hâli; `text.ifEmpty { }`, `ifBlank`; bir aralığın `start`'ı ve `endInclusive`'i;
+  bir `SnapshotStateList`'te `list.remove(x)`; `listOf<String>()` tür argümanını koruyor. Bir Kotlin işlevinin prototipini
+  kendisi bildiren bir C++ dosyası kendi hâline bırakılıyor (kompozc onu yeniden bildirmiyor).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

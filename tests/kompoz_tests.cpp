@@ -7794,6 +7794,63 @@ TEST(segmented_buttons_take_compose_named_arguments) {
     CHECK(last.perCorner && last.corners[1].percent == 50 && last.corners[2].percent == 50 && last.corners[0].percent == 0);
 }
 
+// M3 Expressive's buttons and the sliders by name: ButtonGroup { Button(…, group.animateWidth(source)) },
+// ButtonGroup(overflowIndicator = …) { clickableItem(…); toggleableItem(…) }, ToggleButton(checked = …),
+// SplitButtonLayout(leadingButton = …, trailingButton = …), Label(label = …), Slider(valueRange = …),
+// rememberSliderState(value = …, valueRange = …), rememberRangeSliderState(activeRangeStart = …).
+TEST(expressive_buttons_take_compose_named_arguments) {
+    auto last = mutableStateOf(std::string());
+    auto bold = mutableStateOf(false);
+    auto open = mutableStateOf(false);
+    auto volume = mutableStateOf(40.f);
+    auto price = mutableStateOf(std::pair(200.f, 800.f));
+    MutableInteractionSource source;
+    ComposeTestRule rule([&] {
+        Column([&] {
+            ButtonGroup(arg::modifier = Modifier().testTag("grup"), [&](ButtonGroupScope& group) {
+                Button(arg::onClick = [&last] { last.set("oynat"); }, arg::modifier = group.animateWidth(source).testTag("oynat"),
+                       arg::interactionSource = source, [] { Text("Oynat"); });
+            });
+            ButtonGroup(arg::overflowIndicator = [](const ButtonGroupMenuState& menu) {
+                            IconButton(arg::onClick = [menu] { if (menu.isExpanded()) menu.dismiss(); else menu.show(); },
+                                       arg::modifier = Modifier().testTag("daha"), [] { Icon(Icons::Filled::MoreVert, "Daha"); });
+                        }, arg::modifier = Modifier().width(120), [&](ButtonGroupScope& items) {
+                items.clickableItem(arg::onClick = [&last] { last.set("kopyala"); }, arg::label = "Kopyala");
+                items.toggleableItem(arg::checked = bold.get(), arg::onCheckedChange = [&bold](bool on) { bold.set(on); }, arg::label = "Kalın");
+                items.clickableItem(arg::onClick = [&last] { last.set("sil"); }, arg::label = "Sil", arg::icon = [] { Icon(Icons::Filled::Delete, ""); });
+            });
+            ToggleButton(arg::checked = bold.get(), arg::onCheckedChange = [&bold](bool on) { bold.set(on); },
+                         arg::shapes = ButtonGroupDefaults::connectedLeadingButtonShapes(), [] { Text("Koyu"); });
+            SplitButtonLayout(arg::leadingButton = [&] { SplitButtonDefaults::LeadingButton(arg::onClick = [&last] { last.set("kaydet"); }, [] { Text("Kaydet"); }); },
+                              arg::trailingButton = [&] {
+                                  SplitButtonDefaults::TrailingButton(arg::checked = open.get(), arg::onCheckedChange = [&open](bool on) { open.set(on); },
+                                                                      [&] { SplitButtonDefaults::TrailingButtonIcon(open.get()); });
+                              });
+            Slider(arg::value = volume.get(), arg::onValueChange = [&volume](float v) { volume.set(v); }, arg::valueRange = std::pair(0.f, 100.f),
+                   arg::interactionSource = source, arg::thumb = [&](const SliderState& s) {
+                       Label(arg::label = [] { PlainTooltip([] { Text("x"); }); }, arg::interactionSource = source, [&] { SliderDefaults::Thumb(s); });
+                   });
+            RangeSlider(arg::value = price.get(), arg::onValueChange = [&price](std::pair<float, float> v) { price.set(v); },
+                        arg::valueRange = std::pair(0.f, 1000.f), arg::steps = 19);
+            SliderState stars = rememberSliderState(arg::value = 3.f, arg::steps = 3, arg::valueRange = std::pair(1.f, 5.f));
+            RangeSliderState hours = rememberRangeSliderState(arg::activeRangeStart = 9.f, arg::activeRangeEnd = 17.f, arg::steps = 23,
+                                                              arg::valueRange = std::pair(0.f, 24.f));
+            Text(std::format("son: {} · {:.0f} · {:.0f}", last.get().empty() ? std::string("yok") : last.get(), stars.value(), hours.activeRangeEnd()));
+        });
+    }, {400, 800});
+    CHECK(rule.onNodeWithText("son: yok · 3 · 17").exists());
+    rule.onNodeWithTag("oynat").performClick();
+    rule.onNodeWithText("Kaydet").performClick();
+    CHECK(rule.onNodeWithText("son: kaydet · 3 · 17").exists());
+    rule.onNodeWithText("Koyu").performClick();
+    CHECK(bold.get());
+    rule.onNodeWithTag("daha").performClick();
+    rule.waitForIdle();
+    auto sils = rule.onAllNodesWithText("Sil");  // the last one: the menu's (the group measures an unplaced copy of each item first)
+    sils[sils.size() - 1].performClick();
+    CHECK(rule.onNodeWithText("son: sil · 3 · 17").exists());
+}
+
 TEST(navigation_takes_compose_named_arguments) {
     // NavHost(navController =, startDestination =, enterTransition = { }) { … } with the graph builder's
     // composable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }

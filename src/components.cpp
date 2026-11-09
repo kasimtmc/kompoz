@@ -479,8 +479,8 @@ void detail::Slider(const SliderState& state, const Modifier& modifier, SliderOp
     slider(false, LocalLayoutDirection.current() == LayoutDirection::Rtl, state.data_, modifier, options);
 }
 
-SliderState rememberSliderState(float value, int steps, float valueFrom, float valueTo, std::function<void()> onValueChangeFinished,
-                                CallSite site) {
+SliderState detail::rememberSliderState(float value, int steps, float valueFrom, float valueTo, std::function<void()> onValueChangeFinished,
+                                        CallSite site) {
     auto data = remember([&] {
         auto d = std::make_shared<SliderState::Data>();
         d->valueFrom = valueFrom;
@@ -843,8 +843,8 @@ void detail::RangeSlider(const RangeSliderState& state, const Modifier& modifier
     rangeSlider(LocalLayoutDirection.current() == LayoutDirection::Rtl, state.data_, modifier, options);
 }
 
-RangeSliderState rememberRangeSliderState(float activeRangeStart, float activeRangeEnd, int steps, float valueFrom, float valueTo,
-                                          std::function<void()> onValueChangeFinished, CallSite site) {
+RangeSliderState detail::rememberRangeSliderState(float activeRangeStart, float activeRangeEnd, int steps, float valueFrom, float valueTo,
+                                                  std::function<void()> onValueChangeFinished, CallSite site) {
     auto data = remember([&] {
         auto d = std::make_shared<RangeSliderState::Data>();
         d->valueFrom = valueFrom;
@@ -1020,15 +1020,19 @@ Modifier ButtonGroupScope::animateWidth(const MutableInteractionSource& source, 
     return Modifier().then(std::move(item));
 }
 
-void ButtonGroup(const std::function<void(const ButtonGroupScope&)>& content, CallSite site) {
+void ButtonGroupScope::declare(ButtonGroupItem item) {
+    if (items) items->push_back(std::move(item));  // (in a connected group's block there is no menu to declare into)
+}
+
+void detail::ButtonGroup(const std::function<void(ButtonGroupScope&)>& content, CallSite site) {
     ButtonGroup(Modifier(), {}, content, site);
 }
 
-void ButtonGroup(const Modifier& modifier, const ButtonGroupOptions& options, const std::function<void(const ButtonGroupScope&)>& content,
-                 CallSite site) {
+void detail::ButtonGroup(const Modifier& modifier, const ButtonGroupOptions& options, const std::function<void(ButtonGroupScope&)>& content,
+                         CallSite site) {
     ComposableScope scope(site);
     ButtonGroupScope group;
-    Layout(modifier, [&] { content(group); }, [options](const std::vector<Measurable>& children, const Constraints& c) {
+    ::kompoz::Layout(modifier, [&] { content(group); }, [options](const std::vector<Measurable>& children, const Constraints& c) {
         size_t n = children.size();
         float spacing = options.spacing * float(n > 0 ? n - 1 : 0), used = 0;
         std::vector<Placeable> placed(n);
@@ -1082,36 +1086,38 @@ using GroupItems = std::shared_ptr<std::vector<ButtonGroupItem>>;  // the latest
 void groupButton(const GroupItems& items, size_t i, const Modifier& modifier, std::optional<MutableInteractionSource> source) {
     const ButtonGroupItem& item = (*items)[i];
     Content content = [icon = item.icon, label = item.label] {
-        if (icon) detail::Icon(*icon, "", Modifier().size(18));
+        if (icon) icon();
         detail::Text(label);
     };
     if (item.checked)
         ToggleButton(*item.checked, [items, i](bool on) {
             if (i < items->size() && (*items)[i].onCheckedChange) (*items)[i].onCheckedChange(on);
-        }, modifier, {.interactionSource = source}, content);
+        }, modifier, {.enabled = item.enabled, .interactionSource = source}, content);
     else
         detail::Button([items, i] {
             if (i < items->size() && (*items)[i].onClick) (*items)[i].onClick();
-        }, modifier, {.interactionSource = source}, content);
+        }, modifier, {.enabled = item.enabled, .interactionSource = source}, content);
 }
 
-// The ⋮ button and its menu of the items from `first` on.
-void groupOverflow(const GroupItems& items, size_t first, const MutableState<bool>& open) {
+// The ⋮ button (or the group's own overflowIndicator) and its menu of the items from `first` on.
+void groupOverflow(const GroupItems& items, size_t first, const MutableState<bool>& open,
+                   const std::function<void(const ButtonGroupMenuState&)>& indicator) {
     detail::Box([&] {
-        detail::IconButton([open] { open.set(true); }, [] { detail::Icon(Icons::Filled::MoreVert, LocalStrings.current().moreOptions); });
+        if (indicator) indicator(ButtonGroupMenuState(open));
+        else detail::IconButton([open] { open.set(true); }, [] { detail::Icon(Icons::Filled::MoreVert, LocalStrings.current().moreOptions); });
         detail::DropdownMenu(open.get(), [open] { open.set(false); }, [&] {
             for (size_t i = first; i < items->size(); ++i) {
                 const ButtonGroupItem& item = (*items)[i];
                 Content leading;
                 if (item.checked && *item.checked) leading = [] { detail::Icon(Icons::Filled::Check, LocalStrings.current().selected); };
-                else if (item.icon) leading = [icon = item.icon] { detail::Icon(*icon, ""); };
+                else if (item.icon) leading = item.icon;
                 detail::DropdownMenuItem([label = item.label] { detail::Text(label); }, [items, i, open] {
                     open.set(false);
                     if (i >= items->size()) return;
                     const ButtonGroupItem& it = (*items)[i];
                     if (it.checked && it.onCheckedChange) it.onCheckedChange(!*it.checked);
                     else if (it.onClick) it.onClick();
-                }, {.leadingIcon = leading});
+                }, {.leadingIcon = leading, .enabled = item.enabled});
             }
         });
     });
@@ -1119,15 +1125,16 @@ void groupOverflow(const GroupItems& items, size_t first, const MutableState<boo
 
 } // namespace
 
-void ButtonGroup(const std::vector<ButtonGroupItem>& items, const Modifier& modifier, const ButtonGroupOptions& options, CallSite site) {
+void detail::ButtonGroup(const std::vector<ButtonGroupItem>& items, const Modifier& modifier, const ButtonGroupOptions& options, CallSite site) {
     ComposableScope scope(site);
     GroupItems latest = remember([] { return std::make_shared<std::vector<ButtonGroupItem>>(); });
     *latest = items;
     size_t look = items.size();  // what the buttons show: their slots are composed again when it changes
     for (const ButtonGroupItem& item : items)
-        look = look * 1000003u ^ std::hash<std::string>{}(item.label) ^ std::hash<const void*>{}(item.icon) * 31u ^ size_t(item.checked ? 1 + *item.checked : 0);
+        look = look * 1000003u ^ std::hash<std::string>{}(item.label) ^ size_t(bool(item.icon)) * 31u ^ size_t(item.checked ? 1 + *item.checked : 0) ^
+               size_t(item.enabled) * 7u;
     auto open = remember([] { return mutableStateOf(false); });
-    SubcomposeLayout(modifier, [latest, look, open, options](SubcomposeMeasureScope& s, const Constraints& c) {
+    ::kompoz::SubcomposeLayout(modifier, [latest, look, open, options](SubcomposeMeasureScope& s, const Constraints& c) {
         size_t n = latest->size();
         // Each one's own width as a button, measured out of sight.
         std::vector<float> widths(n);
@@ -1147,12 +1154,12 @@ void ButtonGroup(const std::vector<ButtonGroupItem>& items, const Modifier& modi
             for (shown = 0; shown < n && used + widths[shown] + spacing <= room; ++shown) used += widths[shown] + spacing;
         }
         auto group = s.subcompose(std::string("group"), look * 31u + shown, [latest, shown, open, options] {
-            ButtonGroup(Modifier(), options, [&](const ButtonGroupScope& g) {
+            detail::ButtonGroup(Modifier(), options, [&](ButtonGroupScope& g) {
                 for (size_t i = 0; i < shown; ++i) {
                     auto source = remember([] { return MutableInteractionSource(); });
                     groupButton(latest, i, g.animateWidth(source), source);
                 }
-                if (shown < latest->size()) groupOverflow(latest, shown, open);
+                if (shown < latest->size()) groupOverflow(latest, shown, open, options.overflowIndicator);
             });
         });
         Size size{};

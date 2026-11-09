@@ -207,6 +207,8 @@ struct Size {
     float width = 0, height = 0;
     friend constexpr bool operator==(const Size&, const Size&) = default;
 };
+// Compose's DpSize(width, height): a Size, in dp as every size here is.
+constexpr Size DpSize(float width, float height) { return {width, height}; }
 constexpr Offset lerp(Offset a, Offset b, float t) { return {lerp(a.x, b.x, t), lerp(a.y, b.y, t)}; }
 constexpr Size lerp(Size a, Size b, float t) { return {lerp(a.width, b.width, t), lerp(a.height, b.height, t)}; }
 

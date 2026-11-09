@@ -346,8 +346,8 @@ void labelOver(bool visible, const Content& label, const Modifier& modifier, con
 }
 } // namespace
 
-void Label(const Content& label, const Modifier& modifier, std::optional<MutableInteractionSource> interactionSource, bool isPersistent,
-           const Content& content, CallSite site) {
+void detail::Label(const Content& label, const Modifier& modifier, std::optional<MutableInteractionSource> interactionSource, bool isPersistent,
+                   const Content& content, CallSite site) {
     ComposableScope scope(site);
     auto own = remember([] { return MutableInteractionSource(); });
     MutableInteractionSource source = interactionSource.value_or(own);

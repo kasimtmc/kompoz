@@ -187,6 +187,28 @@ decltype(auto) notNull(T&& v) {
     else return std::forward<T>(v);
 }
 
+// if (c) { { … } } else null: a lambda or none, as the function type it goes to (an empty one for none).
+template <class F>
+struct MaybeLambda {
+    bool has;
+    F f;
+    template <class R, class... A>
+    operator std::function<R(A...)>() const {
+        if (!has) return {};
+        return std::function<R(A...)>(f);
+    }
+};
+template <class F>
+MaybeLambda<std::decay_t<F>> nullableLambda(bool has, F&& f) {
+    return {has, std::forward<F>(f)};
+}
+// if (c) x else null: x, evaluated only then, or none.
+template <class F>
+auto nullable(bool has, F&& value) -> std::optional<std::decay_t<std::invoke_result_t<F&>>> {
+    if (has) return value();
+    return std::nullopt;
+}
+
 // a ?: b, b evaluated only when a is null.
 template <class T, class F>
 auto elvis(const T& a, F&& orElse) {
@@ -236,6 +258,8 @@ struct Range {
     T first, last;  // both in, as Kotlin's IntRange
     T step = 1;
     bool empty = false;  // (0 until 0 with an unsigned size: no last below the first to say so)
+    T start() const { return first; }         // Kotlin's ClosedRange: start, endInclusive
+    T endInclusive() const { return last; }
 
     struct iterator {
         T v, last, step;
@@ -1255,10 +1279,37 @@ decltype(auto) removeAt(C& c, int i, A&&... args) {
 template <class C, class X, class... A>
 decltype(auto) remove(C& c, const X& x, A&&... args) {
     KOMPOZ_KT_OWN(remove(x)) {
-        auto at = std::find(c.begin(), c.end(), x);
-        if (at == c.end()) return false;
-        c.erase(at);
-        return true;
+        if constexpr (requires { c.erase(c.begin()); }) {
+            auto at = std::find(c.begin(), c.end(), x);
+            if (at == c.end()) return false;
+            c.erase(at);
+            return true;
+        } else {  // a SnapshotStateList: by its index
+            size_t i = 0;
+            for (auto it = c.begin(); it != c.end(); ++it, ++i)
+                if (*it == x) {
+                    c.removeAt(i);
+                    return true;
+                }
+            return false;
+        }
+    }
+}
+// text.ifEmpty { "none" }, list.ifEmpty { … }, text.ifBlank { … }: the value, or the block's when it is empty (blank).
+template <class C, class F, class... A>
+auto ifEmpty(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(ifEmpty(f)) {
+        using T = std::decay_t<C>;
+        if (isEmpty(c)) return T(f());
+        return T(c);
+    }
+}
+template <class C, class F, class... A>
+auto ifBlank(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(ifBlank(f)) {
+        using T = std::decay_t<C>;
+        if (isBlank(c)) return T(f());
+        return T(c);
     }
 }
 

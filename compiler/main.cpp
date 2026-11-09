@@ -273,6 +273,32 @@ struct Boundary {
     std::string qualifier;
 };
 
+// Whether the C++'s first use of `name`, at `use`, is a prototype of the file's own (void Name(…);):
+// the statement around it ends in a ; with no block, and the name is called right after its type.
+// Such a file has declared the function itself (with its defaults): kompozc leaves it to it.
+bool declaredInCpp(std::string_view src, const std::vector<Boundary>& boundaries, size_t use, std::string_view name) {
+    size_t begin = 0;
+    for (const Boundary& b : boundaries)
+        if (b.at <= use && b.at >= begin) begin = b.at;
+    size_t end = src.find_first_of(";{", use);
+    if (end == std::string_view::npos || src[end] != ';') return false;
+    std::string before;  // (the statement's text before the name, its comments left out)
+    for (size_t i = begin; i < use;) {
+        if (src[i] == '/' && i + 1 < use && src[i + 1] == '/') {
+            while (i < use && src[i] != '\n') ++i;
+        } else if (src[i] == '/' && i + 1 < use && src[i + 1] == '*') {
+            size_t e = src.find("*/", i + 2);
+            i = e == std::string_view::npos || e + 2 > use ? use : e + 2;
+        } else {
+            before += src[i++];
+        }
+    }
+    if (before.find_first_of("({=") != std::string::npos) return false;  // (a call, an initializer: not a declaration)
+    size_t after = use + name.size();
+    while (after < end && std::isspace(static_cast<unsigned char>(src[after]))) ++after;
+    return after < end && src[after] == '(';
+}
+
 std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries = nullptr) {
     std::vector<Found> found;
     // The C++ namespaces around: each one's name ("" unnamed) and the brace depth inside it.
@@ -729,7 +755,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             bool definedBefore = false;
             for (const Found& f : found)
                 if (f.name() == w && f.begin < use) definedBefore = true;
-            if (definedBefore) continue;
+            if (definedBefore || declaredInCpp(src, boundaries, use, w)) continue;
             cppUsed.insert(w);
             first = std::min(first, use);
         }

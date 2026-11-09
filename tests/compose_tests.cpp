@@ -1342,6 +1342,67 @@ TEST(view_models_maps_and_segments_as_kotlin_writes_them) {
     CHECK(a.y >= header.y + header.height - 1 && std::abs(a.y - b.y) < 1 && a.x < b.x);  // (the header across both lanes)
 }
 
+// M3 Expressive's buttons as Compose writes them: a connected ButtonGroup (Modifier.animateWidth), a
+// group from items with its overflowIndicator, a toggle button, a split button, a Label; a slider's
+// valueRange and a RangeSlider's range value; a lambda or null, a value or null, ifEmpty.
+@Composable
+fun Expressive() {
+    var last by remember { mutableStateOf("") }
+    var bold by remember { mutableStateOf(false) }
+    var open by remember { mutableStateOf(false) }
+    var volume by remember { mutableStateOf(40f) }
+    var price by remember { mutableStateOf(200f..800f) }
+    val source = remember { MutableInteractionSource() }
+    val stars = rememberSliderState(value = 3f, steps = 3, valueRange = 1f..5f)
+    val hours = rememberRangeSliderState(activeRangeStart = 9f, activeRangeEnd = 17f, steps = 23, valueRange = 0f..24f)
+    Column {
+        ButtonGroup {
+            Button(onClick = { last = "oynat" }, modifier = Modifier.animateWidth(source).testTag("oynat"), interactionSource = source) { Text("Oynat") }
+        }
+        ButtonGroup(
+            overflowIndicator = { menuState ->
+                IconButton(onClick = { if (menuState.isExpanded) menuState.dismiss() else menuState.show() }, modifier = Modifier.testTag("daha")) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "Daha")
+                }
+            },
+            modifier = Modifier.width(120.dp),
+        ) {
+            clickableItem(onClick = { last = "kopyala" }, label = "Kopyala")
+            toggleableItem(checked = bold, onCheckedChange = { bold = it }, label = "Kalın")
+            clickableItem(onClick = { last = "sil" }, label = "Sil", icon = { Icon(Icons.Filled.Delete, contentDescription = null) })
+        }
+        ToggleButton(checked = bold, onCheckedChange = { bold = it }, shapes = ButtonGroupDefaults.connectedLeadingButtonShapes()) { Text("Koyu") }
+        SplitButtonLayout(
+            leadingButton = { SplitButtonDefaults.LeadingButton(onClick = { last = "kaydet" }) { Text("Kaydet") } },
+            trailingButton = {
+                SplitButtonDefaults.TrailingButton(checked = open, onCheckedChange = { open = it }) { SplitButtonDefaults.TrailingButtonIcon(open) }
+            },
+        )
+        Slider(value = volume, onValueChange = { volume = it }, valueRange = 0f..100f, interactionSource = source,
+               thumb = { s -> Label(label = { PlainTooltip { Text("%.0f".format(volume)) } }, interactionSource = source) { SliderDefaults.Thumb(s) } },
+               track = if (bold) { { s -> SliderDefaults.Track(s) } } else null)
+        RangeSlider(value = price, onValueChange = { price = it }, valueRange = 0f..1000f, steps = 19)
+        val names = listOf<String>()
+        Text("son: ${last.ifEmpty { "yok" }} · ${price.start.roundToInt()}–${price.endInclusive.roundToInt()} · ${names.ifEmpty { listOf("kimse") }.first()} · " +
+                 "${stars.value.roundToInt()} · ${hours.activeRangeEnd.roundToInt()} · ${if (bold) "kalın" else "ince"} · ${if (open) "açık" else "kapalı"}",
+             fontWeight = if (bold) FontWeight.Bold else null)
+    }
+}
+
+TEST(expressive_buttons_and_sliders_as_compose_writes_them) {
+    ComposeTestRule rule([] { Expressive(); });
+    CHECK(rule.onNodeWithText("son: yok · 200–800 · kimse · 3 · 17 · ince · kapalı").exists());
+    rule.onNodeWithTag("oynat").performClick();
+    rule.onNodeWithText("Kaydet").performClick();
+    rule.onNodeWithText("Koyu").performClick();
+    CHECK(rule.onNodeWithText("son: kaydet · 200–800 · kimse · 3 · 17 · kalın · kapalı").exists());
+    rule.onNodeWithTag("daha").performClick();
+    rule.waitForIdle();
+    auto sils = rule.onAllNodesWithText("Sil");  // the last one: the menu's (the group measures an unplaced copy of each item first)
+    sils[sils.size() - 1].performClick();
+    CHECK(rule.onNodeWithText("son: sil · 200–800 · kimse · 3 · 17 · kalın · kapalı").exists());
+}
+
 TEST(navigation_as_compose_writes_it) {
     NavController nav;
     ComposeTestRule rule([&] { Navigator(nav); });

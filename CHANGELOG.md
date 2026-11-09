@@ -950,6 +950,21 @@
   `ViewModel` a parameter of its class, the segmented buttons by name with `SegmentedButtonDefaults.itemShape`, the
   staggered grid's title an `item(span = StaggeredGridItemSpan.FullLine)`, the likes read as `liked[index] ?: 0` and
   `liked.values.sum()`.
+- **M3 Expressive's buttons and the sliders as Compose writes them; a lambda or null**: `ButtonGroup(overflowIndicator = {
+  menuState -> … }) { clickableItem(onClick = …, label = "…", icon = { }); toggleableItem(checked = …, onCheckedChange = …, label
+  = …) }` (its block declares the items; `ButtonGroupMenuState`'s `isExpanded`, `show()`, `dismiss()`; the items' icons are
+  composables now, an item can be disabled) and the connected `ButtonGroup(modifier = …, horizontalArrangement = …,
+  expandedRatio = …) { Button(modifier = Modifier.animateWidth(source)) { } }`; `ToggleButton(checked = …, onCheckedChange = …,
+  shapes = …, enabled = …) { }` and its Elevated, Tonal and Outlined kinds; `SplitButtonLayout(leadingButton = { }, trailingButton
+  = { })` with `SplitButtonDefaults.LeadingButton(onClick = …) { }` and `TrailingButton(checked = …, onCheckedChange = …) { }`;
+  `Label(label = { PlainTooltip { } }, interactionSource = …, isPersistent = …) { }`; `ButtonDefaults.shapes()`. `Slider`,
+  `VerticalSlider` and `RangeSlider` take `valueRange = 0f..100f`, a `RangeSlider`'s value may be a range (`200f..800f`, told
+  back as one) and its `track = { }` is Compose's name; `rememberSliderState(value = …, steps = …, valueRange = …)` and
+  `rememberRangeSliderState(activeRangeStart = …, activeRangeEnd = …, steps = …, valueRange = …)`; `DpSize(w, h)`. In kompozc,
+  `if (c) { { … } } else null` is a lambda or none (as the function type it goes to: `leadingIcon = if (selected) { { Icon(…) } }
+  else null`), `if (c) x else null` a nullable of x; `text.ifEmpty { }`, `ifBlank`; a range's `start` and `endInclusive`;
+  `list.remove(x)` on a `SnapshotStateList`; `listOf<String>()` keeps its type argument. A C++ file that declares a Kotlin
+  function's prototype itself is left to it (kompozc doesn't declare it again).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

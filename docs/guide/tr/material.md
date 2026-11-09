@@ -100,6 +100,17 @@ SingleChoiceSegmentedButtonRow {
 }
 ```
 
+M3 Expressive'in açma/kapama butonları, buton grupları ve bölünmüş butonları da Compose'un adlarını alır: `ToggleButton(checked = …, onCheckedChange = …) { }`, bağlı bir `ButtonGroup { Button(modifier = Modifier.animateWidth(interactionSource)) { } }`, kalanı bir menüye giden öğelerden bir grup ve `SplitButtonLayout(leadingButton = { }, trailingButton = { })`:
+
+```kotlin body
+var bold by remember { mutableStateOf(false) }
+ButtonGroup(overflowIndicator = { menu -> IconButton(onClick = { if (menu.isExpanded) menu.dismiss() else menu.show() }) { Icon(Icons.Filled.MoreVert, contentDescription = "Daha") } }) {
+    clickableItem(onClick = { }, label = "Kopyala")
+    toggleableItem(checked = bold, onCheckedChange = { bold = it }, label = "Kalın")
+    clickableItem(onClick = { }, label = "Paylaş", icon = { Icon(Icons.Filled.Share, contentDescription = null) })
+}
+```
+
 ## Kartlar ve listeler
 
 `Card`, `ElevatedCard` ve `OutlinedCard` ilgili içeriği gruplar; her birinin `onClick` alan tıklanabilir bir biçimi de vardır. `ListItem`, isteğe bağlı baş ve son içerikli bir, iki ya da üç satırlık bir satırdır:

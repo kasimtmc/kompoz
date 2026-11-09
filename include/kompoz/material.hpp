@@ -786,8 +786,23 @@ void PlainTooltip(const Content& content, const Modifier& modifier = {}, CallSit
 // tooltip would be, while the interaction source tells of a press, a drag or the mouse over it —
 // or all the time, isPersistent. It takes no input.
 //   Label([&] { PlainTooltip([&] { Text(std::format("{:.0f}", v)); }); }, Modifier(), source, false, [&] { ... });
+namespace detail {
 void Label(const Content& label, const Modifier& modifier, std::optional<MutableInteractionSource> interactionSource, bool isPersistent,
            const Content& content, CallSite site = CallSite::current());
+// Label(label = { PlainTooltip { … } }, interactionSource = …, isPersistent = …) { … } as Compose writes it (and by place as above).
+struct LabelImpl {
+    using P = Params<names::Label, names::Modifier, names::InteractionSource, names::IsPersistent, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: Label takes a block: what it labels");
+        Label(Content(P::arg<names::Label>(args...)), P::get<names::Modifier>(Modifier{}, args...),
+              P::get<names::InteractionSource>(std::optional<MutableInteractionSource>(), args...), P::get<names::IsPersistent>(false, args...),
+              P::block(std::forward<A>(args)...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::LabelImpl> Label;
 struct RichTooltipSlots {
     Content title, text, action;  // action: e.g. a TextButton (make the state persistent)
 };
@@ -1970,10 +1985,16 @@ namespace detail {
 void Slider(float value, std::function<void(float)> onValueChange, const Modifier& modifier = {},
             SliderOptions options = {}, CallSite site = CallSite::current());
 void Slider(const SliderState& state, const Modifier& modifier = {}, SliderOptions options = {}, CallSite site = CallSite::current());
+// Compose's valueRange = 0f..100f (a Kotlin range: its first and last) or a pair: the two ends.
+template <class R>
+std::pair<float, float> rangeEnds(const R& r) {
+    if constexpr (requires { r.first; r.last; }) return {float(r.first), float(r.last)};
+    else return {float(r.first), float(r.second)};
+}
 struct SliderImpl {
     template <class... A>
     static void valueForm(CallSite site, A&&... args) {
-        using P = Params<names::Value, names::OnValueChange, names::Modifier, names::Enabled, names::OnValueChangeFinished, names::SliderColors, names::Colors, names::InteractionSource, names::Steps, names::Thumb, names::Track, names::ValueFrom, names::ValueTo>;
+        using P = Params<names::Value, names::OnValueChange, names::Modifier, names::Enabled, names::OnValueChangeFinished, names::SliderColors, names::Colors, names::InteractionSource, names::Steps, names::Thumb, names::Track, names::ValueFrom, names::ValueTo, names::ValueRange>;
         static_assert(P::check<A...>());
         float value = P::arg<names::Value>(args...);
         std::function<void(float)> onValueChange = P::arg<names::OnValueChange>(args...);
@@ -1988,6 +2009,7 @@ struct SliderImpl {
         P::set<names::Track>(options.track, args...);
         P::set<names::ValueFrom>(options.valueFrom, args...);
         P::set<names::ValueTo>(options.valueTo, args...);
+        if constexpr (P::given<names::ValueRange, A...>()) std::tie(options.valueFrom, options.valueTo) = rangeEnds(P::arg<names::ValueRange>(args...));
         detail::Slider(value, std::move(onValueChange), P::get<names::Modifier>(Modifier{}, args...), options, site);
     }
     template <class... A>
@@ -2010,10 +2032,35 @@ struct SliderImpl {
         else valueForm(site, std::forward<A>(args)...);
     }
 };
-} // namespace detail
-inline constexpr Composable<detail::SliderImpl> Slider;
 SliderState rememberSliderState(float value = 0, int steps = 0, float valueFrom = 0, float valueTo = 1,
                                 std::function<void()> onValueChangeFinished = {}, CallSite site = CallSite::current());
+// rememberSliderState(value = …, steps = …, valueRange = 1f..5f) as Compose writes it (and by place as above).
+struct RememberSliderStateCall {
+    SliderState operator()(float value = 0, int steps = 0, float valueFrom = 0, float valueTo = 1, std::function<void()> onValueChangeFinished = {},
+                           CallSite site = CallSite::current()) const {
+        return rememberSliderState(value, steps, valueFrom, valueTo, std::move(onValueChangeFinished), site);
+    }
+    template <class... A>
+    static SliderState named(CallSite site, A&&... args) {
+        using P = Params<names::Value, names::Steps, names::OnValueChangeFinished, names::ValueRange>;
+        static_assert(P::check<A...>());
+        std::pair<float, float> range{0, 1};
+        if constexpr (P::given<names::ValueRange, A...>()) range = rangeEnds(P::arg<names::ValueRange>(args...));
+        return rememberSliderState(P::get<names::Value>(0.f, args...), P::get<names::Steps>(0, args...), range.first, range.second,
+                                   P::get<names::OnValueChangeFinished>(std::function<void()>(), args...), site);
+    }
+    template <class A1> requires isNamed<A1>
+    SliderState operator()(A1&& a1, CallSite site = CallSite::current()) const { return named(site, std::forward<A1>(a1)); }
+    template <class A1, class A2> requires isNamed<A1>
+    SliderState operator()(A1&& a1, A2&& a2, CallSite site = CallSite::current()) const { return named(site, std::forward<A1>(a1), std::forward<A2>(a2)); }
+    template <class A1, class A2, class A3> requires isNamed<A1>
+    SliderState operator()(A1&& a1, A2&& a2, A3&& a3, CallSite site = CallSite::current()) const { return named(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3)); }
+    template <class A1, class A2, class A3, class A4> requires isNamed<A1>
+    SliderState operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, CallSite site = CallSite::current()) const { return named(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4)); }
+};
+} // namespace detail
+inline constexpr Composable<detail::SliderImpl> Slider;
+inline constexpr detail::RememberSliderStateCall rememberSliderState;
 
 namespace SliderDefaults {
 SliderColors colors();         // Material 3's (the bar thumb and the thick track)
@@ -2058,7 +2105,7 @@ void VerticalSlider(float value, std::function<void(float)> onValueChange, const
 struct VerticalSliderImpl {
     template <class... A>
     static void call(CallSite site, A&&... args) {
-        using P = Params<names::Value, names::OnValueChange, names::Modifier, names::Enabled, names::OnValueChangeFinished, names::SliderColors, names::InteractionSource, names::Steps, names::Thumb, names::Track, names::ValueFrom, names::ValueTo, names::ReverseDirection>;
+        using P = Params<names::Value, names::OnValueChange, names::Modifier, names::Enabled, names::OnValueChangeFinished, names::SliderColors, names::InteractionSource, names::Steps, names::Thumb, names::Track, names::ValueFrom, names::ValueTo, names::ValueRange, names::ReverseDirection>;
         static_assert(P::check<A...>());
         float value = P::arg<names::Value>(args...);
         std::function<void(float)> onValueChange = P::arg<names::OnValueChange>(args...);
@@ -2072,6 +2119,7 @@ struct VerticalSliderImpl {
         P::set<names::Track>(options.track, args...);
         P::set<names::ValueFrom>(options.valueFrom, args...);
         P::set<names::ValueTo>(options.valueTo, args...);
+        if constexpr (P::given<names::ValueRange, A...>()) std::tie(options.valueFrom, options.valueTo) = rangeEnds(P::arg<names::ValueRange>(args...));
         detail::VerticalSlider(value, std::move(onValueChange), P::get<names::Modifier>(Modifier{}, args...), options,
                        P::get<names::ReverseDirection>(false, args...), site);
     }
@@ -2087,10 +2135,14 @@ void RangeSlider(const RangeSliderState& state, const Modifier& modifier = {}, S
 struct RangeSliderImpl {
     template <class... A>
     static void valueForm(CallSite site, A&&... args) {
-        using P = Params<names::Value, names::OnValueChange, names::Modifier, names::Enabled, names::ValueFrom, names::ValueTo, names::Steps, names::OnValueChangeFinished, names::SliderColors, names::Colors, names::InteractionSource, names::EndInteractionSource, names::Thumb, names::StartThumb, names::EndThumb, names::RangeTrack>;
+        using P = Params<names::Value, names::OnValueChange, names::Modifier, names::Enabled, names::ValueFrom, names::ValueTo, names::Steps, names::OnValueChangeFinished, names::SliderColors, names::Colors, names::InteractionSource, names::EndInteractionSource, names::Thumb, names::StartThumb, names::EndThumb, names::RangeTrack, names::Track, names::ValueRange>;
         static_assert(P::check<A...>());
-        std::pair<float, float> value = P::arg<names::Value>(args...);
-        std::function<void(std::pair<float, float>)> onValueChange = P::arg<names::OnValueChange>(args...);
+        // The value as a pair of ends or Compose's range (200f..800f): told back as what it was given.
+        auto&& given = P::arg<names::Value>(args...);
+        using V = std::remove_cvref_t<decltype(given)>;
+        std::pair<float, float> value = rangeEnds(given);
+        auto change = P::arg<names::OnValueChange>(args...);
+        std::function<void(std::pair<float, float>)> onValueChange = [change](std::pair<float, float> v) mutable { change(V{v.first, v.second}); };
         SliderOptions options;
         P::set<names::Enabled>(options.enabled, args...);
         P::set<names::ValueFrom>(options.valueFrom, args...);
@@ -2105,11 +2157,13 @@ struct RangeSliderImpl {
         P::set<names::StartThumb>(options.startThumb, args...);
         P::set<names::EndThumb>(options.endThumb, args...);
         P::set<names::RangeTrack>(options.rangeTrack, args...);
+        P::set<names::Track>(options.rangeTrack, args...);  // (Compose's name for a RangeSlider's track)
+        if constexpr (P::given<names::ValueRange, A...>()) std::tie(options.valueFrom, options.valueTo) = rangeEnds(P::arg<names::ValueRange>(args...));
         detail::RangeSlider(value, std::move(onValueChange), P::get<names::Modifier>(Modifier{}, args...), options, site);
     }
     template <class... A>
     static void stateForm(CallSite site, A&&... args) {
-        using P = Params<names::State, names::Modifier, names::Enabled, names::SliderColors, names::Colors, names::InteractionSource, names::EndInteractionSource, names::Thumb, names::StartThumb, names::EndThumb, names::RangeTrack>;
+        using P = Params<names::State, names::Modifier, names::Enabled, names::SliderColors, names::Colors, names::InteractionSource, names::EndInteractionSource, names::Thumb, names::StartThumb, names::EndThumb, names::RangeTrack, names::Track>;
         static_assert(P::check<A...>());
         const RangeSliderState& state = P::arg<names::State>(args...);
         SliderOptions options;
@@ -2130,11 +2184,39 @@ struct RangeSliderImpl {
         else valueForm(site, std::forward<A>(args)...);
     }
 };
-} // namespace detail
-inline constexpr Composable<detail::RangeSliderImpl> RangeSlider;
 RangeSliderState rememberRangeSliderState(float activeRangeStart = 0, float activeRangeEnd = 1, int steps = 0, float valueFrom = 0,
                                           float valueTo = 1, std::function<void()> onValueChangeFinished = {},
                                           CallSite site = CallSite::current());
+// rememberRangeSliderState(activeRangeStart = …, activeRangeEnd = …, steps = …, valueRange = 0f..24f) as Compose writes it.
+struct RememberRangeSliderStateCall {
+    RangeSliderState operator()(float activeRangeStart = 0, float activeRangeEnd = 1, int steps = 0, float valueFrom = 0, float valueTo = 1,
+                                std::function<void()> onValueChangeFinished = {}, CallSite site = CallSite::current()) const {
+        return rememberRangeSliderState(activeRangeStart, activeRangeEnd, steps, valueFrom, valueTo, std::move(onValueChangeFinished), site);
+    }
+    template <class... A>
+    static RangeSliderState named(CallSite site, A&&... args) {
+        using P = Params<names::ActiveRangeStart, names::ActiveRangeEnd, names::Steps, names::OnValueChangeFinished, names::ValueRange>;
+        static_assert(P::check<A...>());
+        std::pair<float, float> range{0, 1};
+        if constexpr (P::given<names::ValueRange, A...>()) range = rangeEnds(P::arg<names::ValueRange>(args...));
+        return rememberRangeSliderState(P::get<names::ActiveRangeStart>(0.f, args...), P::get<names::ActiveRangeEnd>(1.f, args...),
+                                        P::get<names::Steps>(0, args...), range.first, range.second,
+                                        P::get<names::OnValueChangeFinished>(std::function<void()>(), args...), site);
+    }
+    template <class A1> requires isNamed<A1>
+    RangeSliderState operator()(A1&& a1, CallSite site = CallSite::current()) const { return named(site, std::forward<A1>(a1)); }
+    template <class A1, class A2> requires isNamed<A1>
+    RangeSliderState operator()(A1&& a1, A2&& a2, CallSite site = CallSite::current()) const { return named(site, std::forward<A1>(a1), std::forward<A2>(a2)); }
+    template <class A1, class A2, class A3> requires isNamed<A1>
+    RangeSliderState operator()(A1&& a1, A2&& a2, A3&& a3, CallSite site = CallSite::current()) const { return named(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3)); }
+    template <class A1, class A2, class A3, class A4> requires isNamed<A1>
+    RangeSliderState operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, CallSite site = CallSite::current()) const { return named(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4)); }
+    template <class A1, class A2, class A3, class A4, class A5> requires isNamed<A1>
+    RangeSliderState operator()(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, CallSite site = CallSite::current()) const { return named(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5)); }
+};
+} // namespace detail
+inline constexpr Composable<detail::RangeSliderImpl> RangeSlider;
+inline constexpr detail::RememberRangeSliderStateCall rememberRangeSliderState;
 
 // Connected toggle buttons: SegmentedButtons inside a SingleChoiceSegmentedButtonRow (one of
 // them selected: radio buttons to accessibility services) or a MultiChoiceSegmentedButtonRow
@@ -2267,29 +2349,125 @@ inline constexpr detail::SegmentedButtonCall SegmentedButton;
 //       Button(onClick, group.animateWidth(source), interactionSource = source, [] { Text("Oynat"); });
 //       ...
 //   });
+// Compose's ButtonGroupMenuState, what the items form's overflowIndicator lambda gets: whether the
+// menu of the items that didn't fit is open, show() and dismiss().
+class ButtonGroupMenuState {
+public:
+    explicit ButtonGroupMenuState(MutableState<bool> open) : open_(std::move(open)) {}
+    bool isExpanded() const { return open_.get(); }
+    void show() const { open_.set(true); }
+    void dismiss() const { open_.set(false); }
+
+private:
+    MutableState<bool> open_;
+};
 struct ButtonGroupOptions {
     float expandedRatio = 0.15f;
     float spacing = 12;  // dp between the buttons
+    // The items form's menu button, composed in place of its ⋮ IconButton (Compose's overflowIndicator):
+    // it shows or dismisses the menu through the state.
+    std::function<void(const ButtonGroupMenuState&)> overflowIndicator;
+};
+// A button group from items (Compose's ButtonGroup with an overflowIndicator): buttons while they
+// fit — toggle buttons for items with a checked state — and the rest in a ⋮ menu at its end.
+struct ButtonGroupItem {
+    std::string label;
+    Content icon;                             // before the label (Compose's icon = { Icon(…) })
+    std::function<void()> onClick;            // a button
+    std::optional<bool> checked;              // set: a toggle button (in the menu, a check mark)
+    std::function<void(bool)> onCheckedChange;
+    bool enabled = true;
 };
 class ButtonGroupScope {
 public:
     // Chain more with .then() or after it: group.animateWidth(source).testTag("oynat").
     Modifier animateWidth(const MutableInteractionSource& source, CallSite site = CallSite::current()) const;
+    // Compose's ButtonGroupMenuScope, in a ButtonGroup(overflowIndicator = …) { … } block: the items it
+    // declares, clickableItem(onClick = …, label = "…", icon = { … }, enabled = …) and
+    // toggleableItem(checked = …, onCheckedChange = …, label = …, icon = …, enabled = …).
+    template <class... A>
+    void clickableItem(A&&... args) {
+        using P = detail::Params<detail::names::OnClick, detail::names::Label, detail::names::Icon, detail::names::Enabled>;
+        static_assert(P::check<A...>());
+        ButtonGroupItem item;
+        item.onClick = std::function<void()>(P::arg<detail::names::OnClick>(args...));
+        item.label = std::string(P::arg<detail::names::Label>(args...));
+        P::set<detail::names::Icon>(item.icon, args...);
+        P::set<detail::names::Enabled>(item.enabled, args...);
+        declare(std::move(item));
+    }
+    template <class... A>
+    void toggleableItem(A&&... args) {
+        using P = detail::Params<detail::names::Checked, detail::names::OnCheckedChange, detail::names::Label, detail::names::Icon, detail::names::Enabled>;
+        static_assert(P::check<A...>());
+        ButtonGroupItem item;
+        item.checked = bool(P::arg<detail::names::Checked>(args...));
+        item.onCheckedChange = std::function<void(bool)>(P::arg<detail::names::OnCheckedChange>(args...));
+        item.label = std::string(P::arg<detail::names::Label>(args...));
+        P::set<detail::names::Icon>(item.icon, args...);
+        P::set<detail::names::Enabled>(item.enabled, args...);
+        declare(std::move(item));
+    }
+    std::vector<ButtonGroupItem>* items = nullptr;  // (the items form's, as its block declares them)
+
+private:
+    void declare(ButtonGroupItem item);
 };
-void ButtonGroup(const std::function<void(const ButtonGroupScope&)>& content, CallSite site = CallSite::current());
-void ButtonGroup(const Modifier& modifier, const ButtonGroupOptions& options, const std::function<void(const ButtonGroupScope&)>& content,
+namespace detail {
+void ButtonGroup(const std::function<void(ButtonGroupScope&)>& content, CallSite site = CallSite::current());
+void ButtonGroup(const Modifier& modifier, const ButtonGroupOptions& options, const std::function<void(ButtonGroupScope&)>& content,
                  CallSite site = CallSite::current());
-// A button group from items (Compose's ButtonGroup with an overflowIndicator): buttons while they
-// fit — toggle buttons for items with a checked state — and the rest in a ⋮ menu at its end.
-struct ButtonGroupItem {
-    std::string label;
-    const ImageVector* icon = nullptr;
-    std::function<void()> onClick;            // a button
-    std::optional<bool> checked;              // set: a toggle button (in the menu, a check mark)
-    std::function<void(bool)> onCheckedChange;
-};
 void ButtonGroup(const std::vector<ButtonGroupItem>& items, const Modifier& modifier = {}, const ButtonGroupOptions& options = {},
                  CallSite site = CallSite::current());
+// ButtonGroup as Compose writes it: ButtonGroup(modifier = …, horizontalArrangement = Arrangement.spacedBy(…),
+// expandedRatio = …) { Button(modifier = Modifier.animateWidth(source), …) { } } for the connected
+// group, and with overflowIndicator = { menuState -> … } the group from items, its block declaring
+// them (clickableItem, toggleableItem). The C++ forms with a vector of items or a ButtonGroupOptions
+// go by place.
+struct ButtonGroupImpl {
+    using P = Params<names::OverflowIndicator, names::Modifier, names::HorizontalArrangement, names::ExpandedRatio, BlockWith<ButtonGroupScope&>>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr ((std::is_same_v<std::remove_cvref_t<A>, std::vector<ButtonGroupItem>> || ...) ||
+                      (std::is_same_v<std::remove_cvref_t<A>, ButtonGroupOptions> || ...)) {
+            static_assert(!(isNamed<A> || ...), "kompoz: ButtonGroup's forms with items or options take their arguments by place");
+            detail::ButtonGroup(std::forward<A>(args)..., site);
+        } else {
+            static_assert(P::check<A...>());
+            static_assert(P::blockGiven<A...>(), "kompoz: ButtonGroup takes a block: its buttons, or with an overflowIndicator its items");
+            ButtonGroupOptions options;
+            P::set<names::ExpandedRatio>(options.expandedRatio, args...);
+            P::set<names::OverflowIndicator>(options.overflowIndicator, args...);
+            if constexpr (P::given<names::HorizontalArrangement, A...>()) options.spacing = P::get<names::HorizontalArrangement>(Arrangement{}, args...).spacing;
+            Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
+            auto&& block = std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...));
+            if (options.overflowIndicator) {  // the items form: the block declares them
+                std::vector<ButtonGroupItem> items;
+                ButtonGroupScope scope;
+                scope.items = &items;
+                block(scope);
+                detail::ButtonGroup(items, modifier, options, site);
+            } else {
+                detail::ButtonGroup(modifier, options, std::function<void(ButtonGroupScope&)>(block), site);
+            }
+        }
+    }
+};
+// The C++ forms whose options or items are made in place (ButtonGroup(modifier, {.expandedRatio = …}, [&](const
+// ButtonGroupScope& g) { … }), ButtonGroup({{.label = …}, …})): a braced list goes to a parameter of its type.
+struct ButtonGroupCall : Composable<ButtonGroupImpl> {
+    using Composable<ButtonGroupImpl>::operator();
+    void operator()(const Modifier& modifier, const ButtonGroupOptions& options, const std::function<void(ButtonGroupScope&)>& content,
+                    CallSite site = CallSite::current()) const {
+        ButtonGroup(modifier, options, content, site);
+    }
+    void operator()(const std::vector<ButtonGroupItem>& items, const Modifier& modifier = {}, const ButtonGroupOptions& options = {},
+                    CallSite site = CallSite::current()) const {
+        ButtonGroup(items, modifier, options, site);
+    }
+};
+} // namespace detail
+inline constexpr detail::ButtonGroupCall ButtonGroup;
 
 // A connected button group (M3 Expressive's successor to segmented buttons): ToggleButtons
 // 2 dp apart in a Row, the first and last rounded on their outer side, the others squarish;

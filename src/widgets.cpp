@@ -1411,36 +1411,36 @@ void detail::TextButton(std::function<void()> onClick, const Modifier& modifier,
     buttonImpl(ButtonKind::Text, std::move(onClick), modifier, style, content, site);
 }
 
-void ToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
+void detail::ToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
     toggleButtonImpl(ToggleKind::Standard, checked, std::move(onCheckedChange), Modifier{}, {}, content, site);
 }
-void ToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, const ToggleButtonStyle& style,
-                  const Content& content, CallSite site) {
+void detail::ToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, const ToggleButtonStyle& style,
+                          const Content& content, CallSite site) {
     toggleButtonImpl(ToggleKind::Standard, checked, std::move(onCheckedChange), modifier, style, content, site);
 }
-void ElevatedToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
+void detail::ElevatedToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
     toggleButtonImpl(ToggleKind::Elevated, checked, std::move(onCheckedChange), Modifier{}, {}, content, site);
 }
-void ElevatedToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
-                          const ToggleButtonStyle& style, const Content& content, CallSite site) {
+void detail::ElevatedToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
+                                  const ToggleButtonStyle& style, const Content& content, CallSite site) {
     toggleButtonImpl(ToggleKind::Elevated, checked, std::move(onCheckedChange), modifier, style, content, site);
 }
-void TonalToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
+void detail::TonalToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
     toggleButtonImpl(ToggleKind::Tonal, checked, std::move(onCheckedChange), Modifier{}, {}, content, site);
 }
-void TonalToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
-                       const ToggleButtonStyle& style, const Content& content, CallSite site) {
+void detail::TonalToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
+                               const ToggleButtonStyle& style, const Content& content, CallSite site) {
     toggleButtonImpl(ToggleKind::Tonal, checked, std::move(onCheckedChange), modifier, style, content, site);
 }
-void OutlinedToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
+void detail::OutlinedToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
     toggleButtonImpl(ToggleKind::Outlined, checked, std::move(onCheckedChange), Modifier{}, {}, content, site);
 }
-void OutlinedToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
-                          const ToggleButtonStyle& style, const Content& content, CallSite site) {
+void detail::OutlinedToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
+                                  const ToggleButtonStyle& style, const Content& content, CallSite site) {
     toggleButtonImpl(ToggleKind::Outlined, checked, std::move(onCheckedChange), modifier, style, content, site);
 }
 
-void SplitButtonLayout(const Content& leadingButton, const Content& trailingButton, const Modifier& modifier, CallSite site) {
+void detail::SplitButtonLayout(const Content& leadingButton, const Content& trailingButton, const Modifier& modifier, CallSite site) {
     ComposableScope scope(site);
     detail::Row(modifier, {.horizontalArrangement = Arrangement::spacedBy(SplitButtonDefaults::Spacing), .verticalAlignment = Alignment::CenterVertically},
         [&] {
@@ -1462,19 +1462,19 @@ ButtonKind buttonKind(SplitButtonKind kind) {
 
 } // namespace
 
-void LeadingButton(std::function<void()> onClick, const Content& content, CallSite site) {
+void detail::LeadingButton(std::function<void()> onClick, const Content& content, CallSite site) {
     LeadingButton(std::move(onClick), Modifier(), {}, content, site);
 }
-void LeadingButton(std::function<void()> onClick, const Modifier& modifier, const SplitButtonStyle& style, const Content& content,
-                   CallSite site) {
+void detail::LeadingButton(std::function<void()> onClick, const Modifier& modifier, const SplitButtonStyle& style, const Content& content,
+                           CallSite site) {
     buttonImpl(buttonKind(style.kind), std::move(onClick), modifier,
                {.enabled = style.enabled, .interactionSource = style.interactionSource, .shapes = leadingButtonShapes()}, content, site);
 }
-void TrailingButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
+void detail::TrailingButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site) {
     TrailingButton(checked, std::move(onCheckedChange), Modifier(), {}, content, site);
 }
-void TrailingButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, const SplitButtonStyle& style,
-                    const Content& content, CallSite site) {
+void detail::TrailingButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, const SplitButtonStyle& style,
+                            const Content& content, CallSite site) {
     // The leading button's colors either way; checked, it turns round.
     ToggleButtonShapes shapes = trailingButtonShapes();
     ButtonShapes now = checked ? ButtonShapes{shapes.checkedShape, shapes.checkedShape} : ButtonShapes{shapes.shape, shapes.pressedShape};
@@ -1485,7 +1485,7 @@ void TrailingButton(bool checked, std::function<void(bool)> onCheckedChange, con
 void TrailingButtonIcon(bool checked, CallSite site) {
     ComposableScope scope(site);
     auto turn = animateFloatAsState(checked ? 180.f : 0.f, motionScheme().fastSpatialSpec);  // (read as it is drawn)
-    detail::Icon(Icons::Filled::KeyboardArrowDown, checked ? LocalStrings.current().closeMenu : LocalStrings.current().openMenu,
+    ::kompoz::detail::Icon(Icons::Filled::KeyboardArrowDown, checked ? LocalStrings.current().closeMenu : LocalStrings.current().openMenu,
          Modifier().size(18).graphicsLayer([turn](GraphicsLayerScope& l) { l.rotationZ = turn.value(); }));
 }
 

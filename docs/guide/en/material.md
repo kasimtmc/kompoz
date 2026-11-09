@@ -100,6 +100,17 @@ SingleChoiceSegmentedButtonRow {
 }
 ```
 
+M3 Expressive's toggle buttons, button groups and split buttons take Compose's names too: `ToggleButton(checked = …, onCheckedChange = …) { }`, a connected `ButtonGroup { Button(modifier = Modifier.animateWidth(interactionSource)) { } }`, a group from items whose rest goes into a menu, and `SplitButtonLayout(leadingButton = { }, trailingButton = { })`:
+
+```kotlin body
+var bold by remember { mutableStateOf(false) }
+ButtonGroup(overflowIndicator = { menu -> IconButton(onClick = { if (menu.isExpanded) menu.dismiss() else menu.show() }) { Icon(Icons.Filled.MoreVert, contentDescription = "More") } }) {
+    clickableItem(onClick = { }, label = "Copy")
+    toggleableItem(checked = bold, onCheckedChange = { bold = it }, label = "Bold")
+    clickableItem(onClick = { }, label = "Share", icon = { Icon(Icons.Filled.Share, contentDescription = null) })
+}
+```
+
 ## Cards and lists
 
 `Card`, `ElevatedCard` and `OutlinedCard` group related content; each also comes in a clickable form with `onClick`. `ListItem` is a one-, two- or three-line row with optional leading and trailing content:

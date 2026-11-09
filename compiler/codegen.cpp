@@ -46,7 +46,7 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "shader", "compositionLocalOf",
     "slideInVertically", "slideInHorizontally", "slideOutVertically", "slideOutHorizontally", "animateFloat", "animateDp", "animateColor",
     "dragAndDropSource", "update", "LifecycleResumeEffect", "LifecycleStartEffect", "flatMapLatest", "mapLatest", "flatMapConcat",
-    "removeIf", "removeAll",
+    "removeIf", "removeAll", "ifEmpty", "ifBlank",
     "staticCompositionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent", "mediaQuery",
     "derivedMediaQuery", "SubcomposeLayout", "rememberPagerState", "rememberCarouselState"};
 
@@ -123,7 +123,8 @@ const std::set<std::string, std::less<>> kKtMembers = {
     "getOrNull", "let", "also", "takeIf", "withIndex", "toList", "toMutableList", "distinct", "split", "replace",
     "coerceIn", "coerceAtLeast", "coerceAtMost", "roundToInt", "toPx", "roundToPx", "toDp", "find", "add", "addAll", "removeAt", "remove",
     "format", "indexOfFirst", "indexOfLast", "removeIf", "removeAll", "flatMap", "sortedByDescending", "maxByOrNull", "minByOrNull",
-    "mapNotNull", "filterIndexed", "distinctBy", "takeUnless", "groupBy", "associateBy", "associateWith", "chunked", "partition"};
+    "mapNotNull", "filterIndexed", "distinctBy", "takeUnless", "groupBy", "associateBy", "associateWith", "chunked", "partition",
+    "ifEmpty", "ifBlank"};
 
 // Calls whose lambda has a receiver, Kotlin's T.() -> R: the C++ lambda takes it
 // first, and the names the body doesn't declare that are the receiver's members are the receiver's
@@ -141,6 +142,7 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     // ("const ": a receiver only read)
     {"mediaQuery", "const UiMediaScope"},    {"derivedMediaQuery", "const UiMediaScope"},
     {"SubcomposeLayout", "SubcomposeMeasureScope"},
+    {"ButtonGroup", "ButtonGroupScope"},  // (its items: clickableItem(…); its buttons' Modifier.animateWidth(source))
     {"buildAnnotatedString", "AnnotatedStringBuilder"}, {"edit", "TextFieldBuffer"},
     {"GenericShape", "Path"},                {"blur", "BlurScope"},
     {"AnimatedVisibility", "const AnimatedVisibilityScope"}, {"AnimatedContent", "const AnimatedContentScope"},
@@ -1186,6 +1188,7 @@ private:
                 if (const auto* fields = module_.structs->find(callee.text); fields && structCall(c, callee.text, *fields)) return;
             if (kKtFunctions.contains(callee.text) || (suspend_ && callee.text == "delay")) {
                 out_.text("::kompoz::kt::" + callee.text);
+                typeArguments(c);  // listOf<String>()
                 return arguments(c, calleeName, false);
             }
         }
@@ -1209,6 +1212,13 @@ private:
             if (auto f = module_.functions.find(callee.text); f != module_.functions.end() && f->second->receiver && !qualifier(obj))
                 return moduleCall(c, *f->second, &obj);  // an extension: x.card() is card(x)
             if (obj.kind == Node::Name && obj.text == "Modifier" && !lookup("Modifier")) {
+                // Modifier.animateWidth(source) in a ButtonGroup's block: the scope's, as Compose's extension is, where
+                // Modifier has no member of the name.
+                if (module_.structs && !module_.structs->member("Modifier", callee.text))
+                    if (size_t r = receiverOf(callee.text)) {
+                        out_.text("(*kompoz_this_" + std::to_string(r) + ")." + cppName(callee.text));
+                        return arguments(c, calleeName, false);
+                    }
                 out_.text("::kompoz::Modifier()." + cppName(callee.text));
                 return arguments(c, calleeName, false);
             }
@@ -1659,6 +1669,25 @@ private:
     void ifExpression(const Node& n) {
         auto single = [](const Node* b) { return b && b->kids.size() == 1 && b->kids[0]->kind == Node::ExprStmt && b->kids[0]->kids[0]->kind != Node::If && b->kids[0]->kids[0]->kind != Node::When; };
         if (n.kids.size() > 2 && single(n.kids[1].get()) && single(n.kids[2].get())) {
+            // if (c) { { … } } else null: a lambda or none (kt::nullableLambda: the function type it goes to, empty for none).
+            const Node& then = *n.kids[1]->kids[0]->kids[0];
+            const Node& otherwise = *n.kids[2]->kids[0]->kids[0];
+            if ((then.kind == Node::Lambda && otherwise.kind == Node::Null) || (then.kind == Node::Null && otherwise.kind == Node::Lambda)) {
+                out_.text(std::string("::kompoz::kt::nullableLambda(") + (then.kind == Node::Null ? "!(" : "("));
+                expr(*n.kids[0]);
+                out_.text("), ");
+                lambda(then.kind == Node::Lambda ? then : otherwise, false);
+                out_.text(")");
+                return;
+            }
+            if (then.kind == Node::Null || otherwise.kind == Node::Null) {  // if (c) x else null: a nullable of x (kt::nullable, x only then)
+                out_.text(std::string("::kompoz::kt::nullable(") + (then.kind == Node::Null ? "!(" : "("));
+                expr(*n.kids[0]);
+                out_.text("), " + capture("[&]") + "() { return ");
+                expr(then.kind == Node::Null ? otherwise : then);
+                out_.text("; })");
+                return;
+            }
             out_.text("(");
             expr(*n.kids[0]);
             out_.text(" ? ");

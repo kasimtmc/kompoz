@@ -1162,6 +1162,7 @@ inline void applyColors(ButtonStyle& style, const ButtonColors& colors) {
 // Compose 1.4's ButtonDefaults sizes: an icon before the label takes ButtonWithIconContentPadding
 // (TextButtonWithIconContentPadding for a TextButton), IconSize big and IconSpacing from it.
 namespace ButtonDefaults {
+inline ButtonShapes shapes() { return {}; }  // Compose's ButtonDefaults.shapes(): the corners morph while the button is held
 using buttonColors = ButtonColors;
 using textButtonColors = ButtonColors;
 using outlinedButtonColors = ButtonColors;
@@ -1317,6 +1318,7 @@ struct ToggleButtonStyle {
     std::optional<MutableInteractionSource> interactionSource;
     ToggleButtonShapes shapes;
 };
+namespace detail {
 void ToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site = CallSite::current());
 void ToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, const ToggleButtonStyle& style,
                   const Content& content, CallSite site = CallSite::current());
@@ -1332,6 +1334,44 @@ void OutlinedToggleButton(bool checked, std::function<void(bool)> onCheckedChang
                           CallSite site = CallSite::current());
 void OutlinedToggleButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
                           const ToggleButtonStyle& style, const Content& content, CallSite site = CallSite::current());
+// The four kinds, as Compose writes them: ToggleButton(checked = …, onCheckedChange = …, shapes = …, enabled = …) { Text("…") }.
+// (The C++ forms, (checked, onCheckedChange, modifier, {.shapes = …}, content), go by place.)
+template <int Kind>
+void toggleButtonOf(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, const ToggleButtonStyle& style,
+                    const Content& content, CallSite site) {
+    if constexpr (Kind == 0) ToggleButton(checked, std::move(onCheckedChange), modifier, style, content, site);
+    else if constexpr (Kind == 1) ElevatedToggleButton(checked, std::move(onCheckedChange), modifier, style, content, site);
+    else if constexpr (Kind == 2) TonalToggleButton(checked, std::move(onCheckedChange), modifier, style, content, site);
+    else OutlinedToggleButton(checked, std::move(onCheckedChange), modifier, style, content, site);
+}
+template <int Kind>
+struct ToggleButtonImpl {
+    using P = Params<names::Checked, names::OnCheckedChange, names::Modifier, names::Enabled, names::Shapes, names::InteractionSource, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: a toggle button takes a block: its content");
+        ToggleButtonStyle style;
+        P::set<names::Enabled>(style.enabled, args...);
+        P::set<names::Shapes>(style.shapes, args...);
+        P::set<names::InteractionSource>(style.interactionSource, args...);
+        toggleButtonOf<Kind>(bool(P::arg<names::Checked>(args...)), std::function<void(bool)>(P::arg<names::OnCheckedChange>(args...)),
+                             P::get<names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+    }
+};
+template <int Kind>
+struct ToggleButtonCall : Composable<ToggleButtonImpl<Kind>> {
+    using Composable<ToggleButtonImpl<Kind>>::operator();
+    void operator()(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, const ToggleButtonStyle& style,
+                    const Content& content, CallSite site = CallSite::current()) const {
+        toggleButtonOf<Kind>(checked, std::move(onCheckedChange), modifier, style, content, site);
+    }
+};
+} // namespace detail
+inline constexpr detail::ToggleButtonCall<0> ToggleButton;
+inline constexpr detail::ToggleButtonCall<1> ElevatedToggleButton;
+inline constexpr detail::ToggleButtonCall<2> TonalToggleButton;
+inline constexpr detail::ToggleButtonCall<3> OutlinedToggleButton;
 
 // M3 Expressive's split button (Compose's SplitButtonLayout and SplitButtonDefaults' buttons):
 // a main action and a menu button 2 dp apart, rounded on their outer sides, squarish where they
@@ -1343,8 +1383,21 @@ void OutlinedToggleButton(bool checked, std::function<void(bool)> onCheckedChang
 //           SplitButtonDefaults::TrailingButton(open.get(), [open](bool on) { open.set(on); },
 //                                               [&] { SplitButtonDefaults::TrailingButtonIcon(open.get()); });
 //       });
+namespace detail {
 void SplitButtonLayout(const Content& leadingButton, const Content& trailingButton, const Modifier& modifier = {},
                        CallSite site = CallSite::current());
+// SplitButtonLayout(leadingButton = { … }, trailingButton = { … }, modifier = …), as Compose writes it (and by place).
+struct SplitButtonLayoutImpl {
+    using P = Params<names::LeadingButton, names::TrailingButton, names::Modifier>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        SplitButtonLayout(Content(P::arg<names::LeadingButton>(args...)), Content(P::arg<names::TrailingButton>(args...)),
+                          P::get<names::Modifier>(Modifier{}, args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::SplitButtonLayoutImpl> SplitButtonLayout;
 enum class SplitButtonKind { Filled, Tonal, Elevated, Outlined };
 struct SplitButtonStyle {
     SplitButtonKind kind = SplitButtonKind::Filled;  // the colors of Button, FilledTonalButton, ...
@@ -1361,12 +1414,59 @@ inline ToggleButtonShapes trailingButtonShapes() {
     return {RoundedCornerShape({InnerCornerSize}, CornerPercent(50), CornerPercent(50), {InnerCornerSize}),
             RoundedCornerShape({PressedInnerCornerSize}, CornerPercent(50), CornerPercent(50), {PressedInnerCornerSize}), CircleShape};
 }
+namespace detail {
 void LeadingButton(std::function<void()> onClick, const Content& content, CallSite site = CallSite::current());
 void LeadingButton(std::function<void()> onClick, const Modifier& modifier, const SplitButtonStyle& style, const Content& content,
                    CallSite site = CallSite::current());
 void TrailingButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& content, CallSite site = CallSite::current());
 void TrailingButton(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, const SplitButtonStyle& style,
                     const Content& content, CallSite site = CallSite::current());
+namespace kd = ::kompoz::detail;
+// SplitButtonDefaults.LeadingButton(onClick = …, enabled = …) { … } and TrailingButton(checked = …, onCheckedChange = …) { … },
+// as Compose writes them; the C++ forms with a SplitButtonStyle ({.kind = …}) go by place.
+struct LeadingButtonImpl {
+    using P = kd::Params<kd::names::OnClick, kd::names::Modifier, kd::names::Enabled, kd::names::InteractionSource, kd::Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: SplitButtonDefaults::LeadingButton takes a block: its content");
+        SplitButtonStyle style;
+        P::set<kd::names::Enabled>(style.enabled, args...);
+        P::set<kd::names::InteractionSource>(style.interactionSource, args...);
+        LeadingButton(std::function<void()>(P::arg<kd::names::OnClick>(args...)), P::get<kd::names::Modifier>(Modifier{}, args...), style,
+                      P::block(std::forward<A>(args)...), site);
+    }
+};
+struct LeadingButtonCall : Composable<LeadingButtonImpl> {
+    using Composable<LeadingButtonImpl>::operator();
+    void operator()(std::function<void()> onClick, const Modifier& modifier, const SplitButtonStyle& style, const Content& content,
+                    CallSite site = CallSite::current()) const {
+        LeadingButton(std::move(onClick), modifier, style, content, site);
+    }
+};
+struct TrailingButtonImpl {
+    using P = kd::Params<kd::names::Checked, kd::names::OnCheckedChange, kd::names::Modifier, kd::names::Enabled, kd::names::InteractionSource, kd::Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: SplitButtonDefaults::TrailingButton takes a block: its content");
+        SplitButtonStyle style;
+        P::set<kd::names::Enabled>(style.enabled, args...);
+        P::set<kd::names::InteractionSource>(style.interactionSource, args...);
+        TrailingButton(bool(P::arg<kd::names::Checked>(args...)), std::function<void(bool)>(P::arg<kd::names::OnCheckedChange>(args...)),
+                       P::get<kd::names::Modifier>(Modifier{}, args...), style, P::block(std::forward<A>(args)...), site);
+    }
+};
+struct TrailingButtonCall : Composable<TrailingButtonImpl> {
+    using Composable<TrailingButtonImpl>::operator();
+    void operator()(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, const SplitButtonStyle& style,
+                    const Content& content, CallSite site = CallSite::current()) const {
+        TrailingButton(checked, std::move(onCheckedChange), modifier, style, content, site);
+    }
+};
+} // namespace detail
+inline constexpr detail::LeadingButtonCall LeadingButton;
+inline constexpr detail::TrailingButtonCall TrailingButton;
 // The menu arrow, turned over (animated) while `checked`.
 void TrailingButtonIcon(bool checked, CallSite site = CallSite::current());
 } // namespace SplitButtonDefaults
