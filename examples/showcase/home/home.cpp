@@ -2,161 +2,152 @@
 
 #include "showcase.hpp"
 
-struct Todo {
-    int id;
-    std::string title;
-    bool done = false;
-    bool operator==(const Todo&) const = default;
-};
+data class Todo(val id: Int, val title: String, val done: Boolean = false)
 
 // Seconds since start, counted by a coroutine: LaunchedEffect starts it, leaving the
 // composition cancels it. Only this scope recomposes every second.
-void Uptime(CallSite site = CallSite::current()) {
-    composable(site, [=] {
-        auto seconds = remember([] { return mutableStateOf(0); });
-        LaunchedEffect(0, [seconds]() -> Task {
-            while (true) {
-                co_await delay(std::chrono::seconds(1));
-                seconds.set(seconds.get() + 1);
-            }
-        });
-        Text(std::format("{} sn önce açıldı", seconds.get()), traced(),
-             color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
-    });
+@Composable
+fun Uptime() {
+    var seconds by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            seconds++
+        }
+    }
+    Text("$seconds sn önce açıldı", modifier = traced(),
+         color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
 }
 
-void CounterCard(CallSite site = CallSite::current()) {
-    composable(site, [=] {
-        auto count = remember([] { return mutableStateOf(0); });
-        float progress = animateFloatAsState(float(std::clamp(count.get(), 0, 10)) / 10.f);
-        const ColorScheme& cs = colorScheme();
+@Composable
+fun CounterCard() {
+    var count by remember { mutableStateOf(0) }
+    val progress by animateFloatAsState(count.coerceIn(0, 10) / 10f)
+    val cs = MaterialTheme.colorScheme
 
-        Card(traced(Modifier().fillMaxWidth())) {
-            Column(Modifier().padding(20), verticalArrangement = Arrangement::spacedBy(12)) {
-                Text("Sayaç", style = typography().titleMedium);
-                Text(std::to_string(count.get()), fontSize = 48, fontWeight = FontWeight::Bold, color = cs.primary);
-                Box(Modifier().fillMaxWidth().height(8).background(cs.outlineVariant, 4)) {
-                    Box(Modifier().fillMaxWidth(progress).fillMaxHeight().background(cs.primary, 4)) {};
-                };
-                Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                    OutlinedButton([count] { count.set(count.get() - 1); }, Modifier(), enabled = count.get() > 0) { Text("−"); };
-                    Button([count] { count.set(count.get() + 1); }) { Text("+ Arttır"); };
-                    TextButton([count] { count.set(0); }) { Text("Sıfırla"); };
-                };
-            };
-        };
-    });
+    Card(modifier = traced(Modifier.fillMaxWidth())) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Sayaç", style = MaterialTheme.typography.titleMedium)
+            Text("$count", fontSize = 48.sp, fontWeight = FontWeight.Bold, color = cs.primary)
+            Box(modifier = Modifier.fillMaxWidth().height(8.dp).background(cs.outlineVariant, RoundedCornerShape(4.dp))) {
+                Box(modifier = Modifier.fillMaxWidth(progress).fillMaxHeight().background(cs.primary, RoundedCornerShape(4.dp)))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { count-- }, enabled = count > 0) { Text("−") }
+                Button(onClick = { count++ }) { Text("+ Arttır") }
+                TextButton(onClick = { count = 0 }) { Text("Sıfırla") }
+            }
+        }
+    }
 }
 
 // Skipped whenever the list recomposes but this item is unchanged.
-void TodoRow(const Todo& todo, MutableState<std::vector<Todo>> todos, CallSite site = CallSite::current()) {
-    composable(site, todo, todos, [=] {
-        int id = todo.id;
-        auto setDone = [todos, id](bool done) {
-            todos.update([&](auto& list) {
-                for (auto& t : list)
-                    if (t.id == id) t.done = done;
-            });
-        };
-        auto remove = [todos, id] {
-            todos.update([&](auto& list) { std::erase_if(list, [&](const Todo& t) { return t.id == id; }); });
-        };
+@Composable
+fun TodoRow(todo: Todo, todos: SnapshotStateList<Todo>) {
+    val id = todo.id
+    val setDone: (Boolean) -> Unit = { done ->
+        val i = todos.indexOfFirst { it.id == id }
+        if (i >= 0) todos[i] = todos[i].copy(done = done)
+    }
+    val remove = { todos.removeIf { it.id == id } }
 
-        Row(traced(Modifier().fillMaxWidth().background(colors::Transparent, 12).clickable([setDone, done = todo.done] {
-                setDone(!done);
-            })),
-            verticalAlignment = Alignment::CenterVertically) {
-                Checkbox(todo.done, setDone);
-                Text(todo.title, Modifier().weight(1),
-                     color = todo.done ? std::optional(colorScheme().onSurfaceVariant) : std::nullopt, textDecoration = todo.done ? TextDecoration::LineThrough : TextDecoration::None);
-                TextButton(remove) { Text("Sil"); };
-            };
-    });
+    Row(modifier = traced(Modifier.fillMaxWidth().background(Color.Transparent, RoundedCornerShape(12.dp)).clickable { setDone(!todo.done) }),
+        verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = todo.done, onCheckedChange = setDone)
+        Text(todo.title, modifier = Modifier.weight(1f),
+             color = if (todo.done) MaterialTheme.colorScheme.onSurfaceVariant else LocalContentColor.current,
+             textDecoration = if (todo.done) TextDecoration.LineThrough else TextDecoration.None)
+        TextButton(onClick = remove) { Text("Sil") }
+    }
 }
 
-void TodoCard(CallSite site = CallSite::current()) {
-    composable(site, [=] {
-        auto todos = remember([] {
-            return mutableStateOf(std::vector<Todo>{
-                {1, "Compose runtime'ını incele", true}, {2, "Slot table yaz"}, {3, "Android'de çalıştır"}});
-        });
-        auto input = remember([] { return mutableStateOf(std::string{}); });
-        auto nextId = remember([] { return std::make_shared<int>(4); });
+@Composable
+fun TodoCard() {
+    val todos = remember {
+        mutableStateListOf(Todo(1, "Compose runtime'ını incele", true), Todo(2, "Slot table yaz"), Todo(3, "Android'de çalıştır"))
+    }
+    var input by remember { mutableStateOf("") }
+    var nextId by remember { mutableStateOf(4) }
 
-        auto add = [todos, input, nextId] {
-            std::string title = input.get();
-            if (title.find_first_not_of(' ') == std::string::npos) return;
-            todos.update([&](auto& list) { list.push_back({(*nextId)++, title}); });
-            input.set("");
-        };
-        auto remaining = std::ranges::count_if(todos.get(), [](const Todo& t) { return !t.done; });
+    val add = {
+        val title = input
+        if (title.isNotBlank()) {
+            todos.add(Todo(nextId++, title))
+            input = ""
+        }
+    }
+    val remaining = todos.count { !it.done }
 
-        Card(traced(Modifier().fillMaxWidth())) {
-            Column(Modifier().padding(20), verticalArrangement = Arrangement::spacedBy(8)) {
-                Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
-                    Text("Yapılacaklar", Modifier().weight(1), style = typography().titleMedium);
-                    Text(std::format("{} / {} kaldı", remaining, todos->size()),
-                         color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
-                };
-                Row(Modifier().fillMaxWidth(),
-                    horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                        OutlinedTextField(input.get(), [input](std::string v) { input.set(std::move(v)); },
-                                          Modifier().weight(1).testTag("todo-input"),
-                                          singleLine = true, placeholder = "örn. Slot table yaz", onSubmit = add, label = "Yeni görev",
-                                          keyboardOptions = KeyboardOptions{.capitalization = KeyboardCapitalization::Sentences});
-                        Button(add) { Text("Ekle"); };
-                    };
-                for (const Todo& todo : todos.get()) key(todo.id, [&] { TodoRow(todo, todos); });
-                if (todos->empty())
-                    Text("Hepsi bitti!", Modifier().fillMaxWidth().padding(8),
-                         color = colorScheme().onSurfaceVariant, textAlign = TextAlign::Center);
-            };
-        };
-    });
+    Card(modifier = traced(Modifier.fillMaxWidth())) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Yapılacaklar", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                Text("$remaining / ${todos.size} kaldı",
+                     color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            }
+            Row(modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(value = input, onValueChange = { input = it },
+                                  modifier = Modifier.weight(1f).testTag("todo-input"),
+                                  singleLine = true, placeholder = { Text("örn. Slot table yaz") }, label = { Text("Yeni görev") },
+                                  keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                                  keyboardActions = KeyboardActions(onDone = { add() }))
+                Button(onClick = add) { Text("Ekle") }
+            }
+            for (todo in todos) key(todo.id) { TodoRow(todo, todos) }
+            if (todos.isEmpty())
+                Text("Hepsi bitti!", modifier = Modifier.fillMaxWidth().padding(8.dp),
+                     color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+        }
+    }
 }
 
 // The list screen's FAB. derivedStateOf: this scope recomposes only when "scrolled or not"
 // flips, not on every item that scrolls by.
-void ScrollToTopButton(LazyListState state, CallSite site) {
-    composable(site, state, [=] {
-        auto scrolled = remember([state] { return derivedStateOf([state] { return state.firstVisibleItemIndex() > 0; }); });
-        AnimatedVisibility(scrolled.get(), Modifier(), fadeIn() + expandIn(), fadeOut() + shrinkOut(), [&] {
-            FloatingActionButton([state] { state.scrollToItem(0); }) { Icon(Icons::Filled::KeyboardArrowUp, "Başa dön"); };
-        });
-    });
+@Composable
+fun ScrollToTopButton(state: LazyListState) {
+    val scrolled by remember { derivedStateOf { state.firstVisibleItemIndex > 0 } }
+    val scope = rememberCoroutineScope()
+    AnimatedVisibility(visible = scrolled, enter = fadeIn() + expandIn(), exit = fadeOut() + shrinkOut()) {
+        FloatingActionButton(onClick = { scope.launch { state.scrollToItem(0) } }) { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Başa dön") }
+    }
 }
 
-void HomeScreen(Modifier modifier, CallSite site) {
-    composable(site, modifier, [=] {
-        auto scroll = rememberScrollState();
-        Column(modifier.verticalScroll(scroll).padding(20, 8, 20, 96), verticalArrangement = Arrangement::spacedBy(16)) {
-                   Card(Modifier().fillMaxWidth()) {
-                       Row(Modifier().padding(20, 16), horizontalArrangement = Arrangement::spacedBy(16), verticalAlignment = Alignment::CenterVertically) {
-                               Icon(Icons::Filled::Info, "Bilgi", Modifier().size(32), colorScheme().primary);
-                               Column(Modifier().weight(1)) {
-                                   Text("C++20 ile Compose tarzı arayüz", style = typography().titleMedium);
-                                   Uptime();
-                                   WindowClassLine();
-                                   MediaLine();
-                               };
-                           };
-                   };
-                   CounterCard();
-                   TodoCard();
-                   Text("Kompoz · C++20", Modifier().fillMaxWidth(),
-                        fontSize = 12, color = colorScheme().onSurfaceVariant, textAlign = TextAlign::Center);
-               };
-    });
+@Composable
+fun HomeScreen(modifier: Modifier) {
+    val scroll = rememberScrollState()
+    Column(modifier = modifier.verticalScroll(scroll).padding(20.dp, 8.dp, 20.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Row(modifier = Modifier.padding(20.dp, 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Info, contentDescription = "Bilgi", modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("C++20 ile Compose tarzı arayüz", style = MaterialTheme.typography.titleMedium)
+                    Uptime()
+                    WindowClassLine()
+                    MediaLine()
+                }
+            }
+        }
+        CounterCard()
+        TodoCard()
+        Text("Kompoz · C++20", modifier = Modifier.fillMaxWidth(),
+             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+    }
 }
 
 // Previews (KOMPOZ_PREVIEW=CounterCardPreview ./build/showcase, or =* for all of them).
-KOMPOZ_PREVIEW(CounterCardPreview, .width = 400, .height = 220) {
-    MaterialTheme(isSystemInDarkTheme() ? darkColorScheme() : lightColorScheme(), [] {
-        Surface(Modifier().fillMaxSize()) { (Box)(Modifier().padding(16), [] { CounterCard(); }); };
-    });
+@Preview(widthDp = 400, heightDp = 220)
+@Composable
+fun CounterCardPreview() {
+    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
+        Surface(modifier = Modifier.fillMaxSize()) { Box(modifier = Modifier.padding(16.dp)) { CounterCard() } }
+    }
 }
-KOMPOZ_PREVIEW(TodoCardDarkPreview, .width = 400, .height = 360, .darkTheme = true) {
-    MaterialTheme(isSystemInDarkTheme() ? darkColorScheme() : lightColorScheme(), [] {
-        Surface(Modifier().fillMaxSize()) { (Box)(Modifier().padding(16), [] { TodoCard(); }); };
-    });
+
+@Preview(widthDp = 400, heightDp = 360, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+fun TodoCardDarkPreview() {
+    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
+        Surface(modifier = Modifier.fillMaxSize()) { Box(modifier = Modifier.padding(16.dp)) { TodoCard() } }
+    }
 }

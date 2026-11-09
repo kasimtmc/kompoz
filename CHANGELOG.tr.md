@@ -967,6 +967,12 @@
   ile okunan bir durumda değer olarak `nextId++`. Başlıklardan, `constexpr` ya da `inline` bir kurucu kurucu sayılıyor
   (`CornerRadius(24f)` kuruyor, `CornerRadius(x = …)` yine belirlenmiş biçim) ve bir ad alanında bildirilen bir takma ad
   o ad alanının: `ListItemDefaults.colors(containerColor = …)` bir `ListItemColors`, düz `ListItem(colors = …)` da alıyor.
+- **Gösteri uygulaması Compose'un sözdizimiyle** (ilk bölümü): ortak `Section` ve `DesktopNote`, ana ekran (açık kalma
+  süresi, sayaç ve yapılacaklar kartları), material ve bileşenler ekranlarının çerçeveleri ve yerler ekranı (bir
+  haritanın üstünde `BottomSheetScaffold`) Kotlin'de `@Composable fun`'lar; hâlâ C++ olan dosyaların yanında kompozc'yle
+  çevriliyorlar. O dosyalar blok biçimi için `<kompoz/blocks.hpp>`'yi kendileri içeriyor (ortak başlık artık içermiyor:
+  bloklar, çevrilen bir dosyanın görmemesi gereken, composable'ların adlarını taşıyan makrolar); uygulamanın nerede
+  çalıştığını `#ifdef` yerine `kOnAndroid` söylüyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

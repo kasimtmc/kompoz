@@ -2,68 +2,67 @@
 
 #include "showcase.hpp"
 
-void ComponentsScreen(Modifier modifier, CallSite site) {
-    composable(site, modifier, [=] {
-        // A LazyColumn, as Compose has a long list: only the sections in view (and a little past
-        // them) are composed, laid out and drawn; one scrolled away leaves the composition.
-        LazyColumn(modifier, contentPadding = PaddingValues{20, 8, 20, 20}, verticalArrangement = Arrangement::spacedBy(16)) {
-            item("PredictiveBackSection", [] { PredictiveBackSection(); });
-            item("ShapesSection", [] { ShapesSection(); });
-            item("MaterialShapesSection", [] { MaterialShapesSection(); });
-            item("DrawingSection", [] { DrawingSection(); });
-            item("PagerSection", [] { PagerSection(); });
-            item("HorizontalGridSection", [] { HorizontalGridSection(); });
-            item("BlendModeSection", [] { BlendModeSection(); });
-            item("TileModeSection", [] { TileModeSection(); });
-            item("ColorSpaceSection", [] { ColorSpaceSection(); });
-            item("CanvasSection", [] { CanvasSection(); });
-            item("BlurSection", [] { BlurSection(); });
-            item("PointerPassSection", [] { PointerPassSection(); });
-            item("ScrollableSection", [] { ScrollableSection(); });
-            item("OverscrollSection", [] { OverscrollSection(); });
-            item("BringIntoViewSection", [] { BringIntoViewSection(); });
-            item("CustomIndicationSection", [] { CustomIndicationSection(); });
-            item("TextToolbarSection", [] { TextToolbarSection(); });
-            item("ColorVectorSection", [] { ColorVectorSection(); });
-            item("ScrollbarSection", [] { ScrollbarSection(); });
-#ifndef __ANDROID__  // a right click and a mouse: desktops (and browsers) only
-            item("ContextMenuSection", [] { ContextMenuSection(); });
-            item("PointerSection", [] { PointerSection(); });
-#endif
-            item("DrawersSection", [] { DrawersSection(); });
-            item("SharedElementSection", [] { SharedElementSection(); });
-            item("SelectableTextSection", [] { SelectableTextSection(); });
-            item("NestedScrollSection", [] { NestedScrollSection(); });
-            item("PullToRefreshSection", [] { PullToRefreshSection(); });
-            item("MultiTouchSection", [] { MultiTouchSection(); });
-            item("KeyboardSection", [] { KeyboardSection(); });
-            item("TextSection", [] { TextSection(); });
-            item("TextMeasureSection", [] { TextMeasureSection(); });
-            item("LayoutSection", [] { LayoutSection(); });
-            item("FlexBoxSection", [] { FlexBoxSection(); });
-            item("GridSection", [] { GridSection(); });
-            item("PositionSection", [] { PositionSection(); });
-            item("ZIndexSection", [] { ZIndexSection(); });
-            item("DragAndDropSection", [] { DragAndDropSection(); });
-            item("AnimationsSection", [] { AnimationsSection(); });
-            item("FlingSection", [] { FlingSection(); });
-            item("ImagesSection", [] { ImagesSection(); });
-            item("AsyncImageSection", [] { AsyncImageSection(); });
-            item("CarouselSection", [] { CarouselSection(); });
-            item("SnapRowSection", [] { SnapRowSection(); });
-            item("PlatformServicesSection", [] { PlatformServicesSection(); });
-            item("ChatSection", [] { ChatSection(); });
-            item("LayoutInfoSection", [] { LayoutInfoSection(); });
-            item("ListDetailSection", [] { ListDetailSection(); });
-            item("SupportingPaneSection", [] { SupportingPaneSection(); });
-            item("ProgressSection", [] { ProgressSection(); });
-            item("StateFlowSection", [] { StateFlowSection(); });
-            item("FlowSearchSection", [] { FlowSearchSection(); });
-            item("ChannelSection", [] { ChannelSection(); });
-            item("MovableContentSection", [] { MovableContentSection(); });
-            item("LifecycleSection", [] { LifecycleSection(); });
-            item("IconButtons", [] { IconButtons(); });
-            item("IconGallery", [] { IconGallery(); });
-        };
-    });
+@Composable
+fun ComponentsScreen(modifier: Modifier) {
+    // A LazyColumn, as Compose has a long list: only the sections in view (and a little past
+    // them) are composed, laid out and drawn; one scrolled away leaves the composition.
+    LazyColumn(modifier = modifier, contentPadding = PaddingValues(20.dp, 8.dp, 20.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item(key = "PredictiveBackSection") { PredictiveBackSection() }
+        item(key = "ShapesSection") { ShapesSection() }
+        item(key = "MaterialShapesSection") { MaterialShapesSection() }
+        item(key = "DrawingSection") { DrawingSection() }
+        item(key = "PagerSection") { PagerSection() }
+        item(key = "HorizontalGridSection") { HorizontalGridSection() }
+        item(key = "BlendModeSection") { BlendModeSection() }
+        item(key = "TileModeSection") { TileModeSection() }
+        item(key = "ColorSpaceSection") { ColorSpaceSection() }
+        item(key = "CanvasSection") { CanvasSection() }
+        item(key = "BlurSection") { BlurSection() }
+        item(key = "PointerPassSection") { PointerPassSection() }
+        item(key = "ScrollableSection") { ScrollableSection() }
+        item(key = "OverscrollSection") { OverscrollSection() }
+        item(key = "BringIntoViewSection") { BringIntoViewSection() }
+        item(key = "CustomIndicationSection") { CustomIndicationSection() }
+        item(key = "TextToolbarSection") { TextToolbarSection() }
+        item(key = "ColorVectorSection") { ColorVectorSection() }
+        item(key = "ScrollbarSection") { ScrollbarSection() }
+        if (!kOnAndroid) {  // a right click and a mouse: desktops (and browsers) only
+            item(key = "ContextMenuSection") { ContextMenuSection() }
+            item(key = "PointerSection") { PointerSection() }
+        }
+        item(key = "DrawersSection") { DrawersSection() }
+        item(key = "SharedElementSection") { SharedElementSection() }
+        item(key = "SelectableTextSection") { SelectableTextSection() }
+        item(key = "NestedScrollSection") { NestedScrollSection() }
+        item(key = "PullToRefreshSection") { PullToRefreshSection() }
+        item(key = "MultiTouchSection") { MultiTouchSection() }
+        item(key = "KeyboardSection") { KeyboardSection() }
+        item(key = "TextSection") { TextSection() }
+        item(key = "TextMeasureSection") { TextMeasureSection() }
+        item(key = "LayoutSection") { LayoutSection() }
+        item(key = "FlexBoxSection") { FlexBoxSection() }
+        item(key = "GridSection") { GridSection() }
+        item(key = "PositionSection") { PositionSection() }
+        item(key = "ZIndexSection") { ZIndexSection() }
+        item(key = "DragAndDropSection") { DragAndDropSection() }
+        item(key = "AnimationsSection") { AnimationsSection() }
+        item(key = "FlingSection") { FlingSection() }
+        item(key = "ImagesSection") { ImagesSection() }
+        item(key = "AsyncImageSection") { AsyncImageSection() }
+        item(key = "CarouselSection") { CarouselSection() }
+        item(key = "SnapRowSection") { SnapRowSection() }
+        item(key = "PlatformServicesSection") { PlatformServicesSection() }
+        item(key = "ChatSection") { ChatSection() }
+        item(key = "LayoutInfoSection") { LayoutInfoSection() }
+        item(key = "ListDetailSection") { ListDetailSection() }
+        item(key = "SupportingPaneSection") { SupportingPaneSection() }
+        item(key = "ProgressSection") { ProgressSection() }
+        item(key = "StateFlowSection") { StateFlowSection() }
+        item(key = "FlowSearchSection") { FlowSearchSection() }
+        item(key = "ChannelSection") { ChannelSection() }
+        item(key = "MovableContentSection") { MovableContentSection() }
+        item(key = "LifecycleSection") { LifecycleSection() }
+        item(key = "IconButtons") { IconButtons() }
+        item(key = "IconGallery") { IconGallery() }
+    }
 }

@@ -2,6 +2,8 @@
 
 #include "showcase.hpp"
 
+#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
+
 // One task row that can be swiped away (left: delete, right: done).
 void SwipeableTask(int id, SnapshotStateList<int> tasks, CallSite site) {
     composable(site, id, tasks, [=] {

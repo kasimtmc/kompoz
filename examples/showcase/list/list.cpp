@@ -2,6 +2,8 @@
 
 #include "showcase.hpp"
 
+#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
+
 // One row of the 10,000-row list. Skipped whenever the list recomposes and `index` is unchanged.
 void ListRow(int index, NavController nav, CallSite site = CallSite::current()) {
     composable(site, index, nav, [=] {

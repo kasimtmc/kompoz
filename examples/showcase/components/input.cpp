@@ -2,6 +2,8 @@
 
 #include "showcase.hpp"
 
+#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
+
 // HorizontalPager with page dots, animateContentSize and BoxWithConstraints.
 // SelectionContainer: long press a word, drag the handles from text to text, copy;
 // DisableSelection keeps a line out of it.

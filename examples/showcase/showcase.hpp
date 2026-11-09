@@ -4,7 +4,8 @@
 // sections in files of their own, so that an edit rebuilds only its file. What the parts share.
 
 #include <kompoz/kompoz.hpp>
-#include <kompoz/blocks.hpp>  // (last: the block form, Column(…) { … };)
+// (A file still written in C++ includes <kompoz/blocks.hpp> itself, for the block form Column(…) { … };
+// one written in Compose's syntax through kompozc must not: the blocks are macros of those names.)
 
 #include <algorithm>
 #include <array>
@@ -64,15 +65,18 @@ public:
     }
 };
 
-// common.cpp
+// Where the app runs, for what differs (a phone has no hardware keyboard).
+#ifdef __ANDROID__
+inline constexpr bool kOnAndroid = true;
+#else
+inline constexpr bool kOnAndroid = false;
+#endif
+
+// common.cpp (Section and DesktopNote are @Composable there: the module declares them)
 ColorScheme animateColorScheme(const ColorScheme& t, CallSite site = CallSite::current());
 Color hueColor(int i);
-void Section(const char* title, const Content& content, CallSite site = CallSite::current());
-void DesktopNote(const char* text, CallSite site = CallSite::current());
 
-// home/home.cpp
-void ScrollToTopButton(LazyListState state, CallSite site = CallSite::current());
-void HomeScreen(Modifier modifier, CallSite site = CallSite::current());
+// home/home.cpp: ScrollToTopButton and HomeScreen are @Composable there (the module declares them)
 
 // list/list.cpp
 void WindowClassLine(CallSite site = CallSite::current());
@@ -152,7 +156,6 @@ void DragAndDropSection(CallSite site = CallSite::current());
 void TextSection(CallSite site = CallSite::current());
 
 // components/components.cpp
-void ComponentsScreen(Modifier modifier, CallSite site = CallSite::current());
 
 // material/sections.cpp
 void SwipeableTask(int id, SnapshotStateList<int> tasks, CallSite site = CallSite::current());
@@ -197,7 +200,5 @@ void WideNavigationRailSection(CallSite site = CallSite::current());
 void FloatingToolbarsSection(CallSite site = CallSite::current());
 
 // places/places.cpp
-void PlacesScreen(Modifier modifier, CallSite site = CallSite::current());
 
 // material/material.cpp
-void MaterialScreen(Modifier modifier, MutableState<ColorSource> colorSource, NavController nav, CallSite site = CallSite::current());

@@ -2,37 +2,36 @@
 
 #include "showcase.hpp"
 
-void MaterialScreen(Modifier modifier, MutableState<ColorSource> colorSource, NavController nav, CallSite site) {
-    composable(site, modifier, colorSource, nav, [=] {
-        auto scroll = rememberScrollState();
-        Column(modifier.verticalScroll(scroll).padding(20, 8, 20, 20), verticalArrangement = Arrangement::spacedBy(16)) {
-                   SearchSection();
-                   TooltipSection();
-                   DropdownSection();
-                   DatePickerSection();
-                   TimePickerSection();
-                   InteractionSection();
-                   AnchoredDraggableSection();
-                   RippleSection();
-                   SelectableRowsSection();
-                   SemanticsSection();
-                   DynamicColorSection(colorSource);
-                   InsetsSection();
-                   ImeNestedScrollSection();
-                   FrameRateSection();
-                   TextFieldsSection();
-                   AnimateItemSection();
-                   ButtonsSection();
-                   ChipsSection();
-                   SelectionControlsSection();
-                   TabsSection();
-                   ListItemSection();
-                   DialogsSection(nav);
-                   FabMenuSection();
-                   ShortNavigationBarSection();
-                   WideNavigationRailSection();
-                   FloatingToolbarsSection();
-                   CardsSection();
-               };
-    });
+@Composable
+fun MaterialScreen(modifier: Modifier, colorSource: MutableState<ColorSource>, nav: NavController) {
+    val scroll = rememberScrollState()
+    Column(modifier = modifier.verticalScroll(scroll).padding(20.dp, 8.dp, 20.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        SearchSection()
+        TooltipSection()
+        DropdownSection()
+        DatePickerSection()
+        TimePickerSection()
+        InteractionSection()
+        AnchoredDraggableSection()
+        RippleSection()
+        SelectableRowsSection()
+        SemanticsSection()
+        DynamicColorSection(colorSource)
+        InsetsSection()
+        ImeNestedScrollSection()
+        FrameRateSection()
+        TextFieldsSection()
+        AnimateItemSection()
+        ButtonsSection()
+        ChipsSection()
+        SelectionControlsSection()
+        TabsSection()
+        ListItemSection()
+        DialogsSection(nav)
+        FabMenuSection()
+        ShortNavigationBarSection()
+        WideNavigationRailSection()
+        FloatingToolbarsSection()
+        CardsSection()
+    }
 }

@@ -927,6 +927,12 @@
   Of the headers, a `constexpr` or `inline` constructor is one (`CornerRadius(24f)` constructs, `CornerRadius(x = …)`
   is still the designated form) and an alias declared in a namespace is that namespace's:
   `ListItemDefaults.colors(containerColor = …)` is a `ListItemColors`, which the plain `ListItem(colors = …)` takes too.
+- **The showcase in Compose's syntax** (its first part): the shared `Section` and `DesktopNote`, the home screen (the
+  uptime, the counter and to-do cards), the material and components screens' frames and the places screen (a
+  `BottomSheetScaffold` over a map) are `@Composable fun`s in Kotlin, translated by kompozc beside the files still in
+  C++, which include `<kompoz/blocks.hpp>` themselves for the block form (the shared header no longer does: the blocks
+  are macros of the composables' names, which a translated file must not see); `kOnAndroid` says where the app runs
+  instead of `#ifdef`.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

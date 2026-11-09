@@ -2,6 +2,8 @@
 
 #include "showcase.hpp"
 
+#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
+
 // LazyListState.layoutInfo: the items in view. Near the end of the list, 20 more are loaded
 // (a pretend 700 ms fetch); derivedStateOf recomposes only when its answer changes, not on
 // every scrolled frame.

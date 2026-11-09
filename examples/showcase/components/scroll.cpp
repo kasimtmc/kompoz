@@ -2,6 +2,8 @@
 
 #include "showcase.hpp"
 
+#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
+
 // Flings: a VelocityTracker measures how fast the finger let go; one puck slides on from that
 // speed and slows down (animateDecay, stopping at the track's ends: updateBounds), the other
 // springs back to the middle carrying it (animateTo with an initial velocity).

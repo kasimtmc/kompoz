@@ -24,27 +24,24 @@ Color hueColor(int i) {
 }
 
 // A small titled section of the components screen.
-void Section(const char* title, const Content& content, CallSite site) {
-    ComposableScope scope(site);
-    Card(Modifier().fillMaxWidth()) {
-        Column(Modifier().padding(16), verticalArrangement = Arrangement::spacedBy(12)) {
-            Text(title, style = typography().titleMedium);
-            content();
-        };
-    };
+@Composable
+fun Section(title: String, content: @Composable () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            content()
+        }
+    }
 }
 
 // On a phone, above a section that needs what phones seldom have (a hardware keyboard): a warning.
-void DesktopNote(const char* text, CallSite site) {
-    ComposableScope scope(site);
-#ifdef __ANDROID__
-    const ColorScheme& cs = colorScheme();
-    Row(Modifier().fillMaxWidth().background(cs.tertiaryContainer, 12).padding(12, 8),
-        horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-            Icon(Icons::Filled::Info, "Uyarı", Modifier().size(18), cs.onTertiaryContainer);
-            Text(text, Modifier().weight(1), color = cs.onTertiaryContainer, style = typography().bodySmall);
-        };
-#else
-    (void)text;
-#endif
+@Composable
+fun DesktopNote(text: String) {
+    if (!kOnAndroid) return
+    val cs = MaterialTheme.colorScheme
+    Row(modifier = Modifier.fillMaxWidth().background(cs.tertiaryContainer, RoundedCornerShape(12.dp)).padding(12.dp, 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Filled.Info, contentDescription = "Uyarı", modifier = Modifier.size(18.dp), tint = cs.onTertiaryContainer)
+        Text(text, modifier = Modifier.weight(1f), color = cs.onTertiaryContainer, style = MaterialTheme.typography.bodySmall)
+    }
 }

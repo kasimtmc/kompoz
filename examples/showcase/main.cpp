@@ -3,6 +3,8 @@
 
 #include "showcase.hpp"
 
+#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
+
 void ShowcaseApp() {
     auto dark = remember([] { return mutableStateOf(isSystemInDarkTheme()); });
     // The system's, as it changes, until the switch is used: then the user's.

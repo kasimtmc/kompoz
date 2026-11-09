@@ -2,6 +2,8 @@
 
 #include "showcase.hpp"
 
+#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
+
 void TabsSection(CallSite site) {
     composable(site, [=] {
         const ColorScheme& cs = colorScheme();

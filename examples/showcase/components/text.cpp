@@ -2,6 +2,8 @@
 
 #include "showcase.hpp"
 
+#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
+
 // AnnotatedString (styles, a link), overflow and the system font scale.
 void TextSection(CallSite site) {
     composable(site, [=] {

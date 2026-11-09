@@ -2,6 +2,8 @@
 
 #include "showcase.hpp"
 
+#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
+
 void AnimateItemSection(CallSite site) {
     composable(site, [=] {
         auto tasks = remember([] { return mutableStateListOf<int>({1, 2, 3, 4, 5}); });

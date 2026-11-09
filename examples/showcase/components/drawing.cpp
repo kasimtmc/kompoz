@@ -2,6 +2,8 @@
 
 #include "showcase.hpp"
 
+#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
+
 // Canvas, drawBehind and drawWithCache, Brush and Path, graphicsLayer, pointerInput gestures,
 // combinedClickable, aspectRatio and scaleIn.
 void DrawingSection(CallSite site) {

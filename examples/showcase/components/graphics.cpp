@@ -2,6 +2,8 @@
 
 #include "showcase.hpp"
 
+#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
+
 // Progress indicators, an Animatable driven by a coroutine, and a bouncy spring.
 void ProgressSection(CallSite site) {
     composable(site, [=] {
