@@ -1027,6 +1027,8 @@
   with those (`Font::copy` with a `TextStyle`'s names); `Modifier.basicMarquee(iterations = …, animationMode = …,
   repeatDelayMillis = …, initialDelayMillis = …, spacing = …, velocity = …)`; `TextAutoSize.StepBased(10.sp, 48.sp, 1.sp)` and
   `TextIndent(24.sp)` take text units; `rememberTextMeasurer().measure(text, style = …)` takes a typography style too.
+- **The showcase's text screen in Compose's syntax**: the annotated strings, fonts, overflow, styles, inline content, HTML and
+  marquee samples are a `@Composable fun` in Kotlin (the variable-font sample stays C++ in the file).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

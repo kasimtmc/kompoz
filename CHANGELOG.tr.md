@@ -1066,6 +1066,8 @@
   `TextStyle`'ı (`Font::copy` bir `TextStyle`'ın adlarıyla); `Modifier.basicMarquee(iterations = …, animationMode = …,
   repeatDelayMillis = …, initialDelayMillis = …, spacing = …, velocity = …)`; `TextAutoSize.StepBased(10.sp, 48.sp, 1.sp)` ve
   `TextIndent(24.sp)` metin birimleri alıyor; `rememberTextMeasurer().measure(text, style = …)` bir tipografi stili de alıyor.
+- **Gösteri uygulamasının metin ekranı Compose'un sözdizimiyle**: biçimli metinler, yazı tipleri, taşma, stiller, satır içi içerik,
+  HTML ve kayan yazı örnekleri Kotlin'de bir `@Composable fun` (değişken yazı tipi örneği dosyada C++ olarak kalıyor).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

@@ -147,8 +147,7 @@ void KeyboardSection(CallSite site = CallSite::current());
 void SelectableCard(int index, MutableState<int> selected, CallSite site = CallSite::current());
 void DragAndDropSection(CallSite site = CallSite::current());
 
-// components/text.cpp
-void TextSection(CallSite site = CallSite::current());
+// components/text.cpp: TextSection is @Composable there (the module declares it)
 
 // components/components.cpp
 
