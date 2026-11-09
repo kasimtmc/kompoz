@@ -1053,6 +1053,10 @@
   counts); `items = { }`, `keyboardModifiers = { }` and `canPan = { }` give their value; a destructuring (`val (a, b) = …`,
   `for ((k, v) in …)`) takes its parts with `kt::component<i>` (copies, as Kotlin's) instead of a structured binding, which
   GCC 16 loses inside a composable's nested blocks.
+- **The showcase's input screen in Compose's syntax**: selectable text, the context menu, the mouse (pointer events, clicks by
+  button, tooltip areas), the custom indications, the app's own text toolbar in a Popup, multi-touch, the keyboard, the
+  selectable cards and drag and drop are `@Composable fun`s in Kotlin (the indication nodes, the toolbar class and the key
+  names stay C++ in the same file).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

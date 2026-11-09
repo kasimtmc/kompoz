@@ -135,16 +135,7 @@ void ColorVectorSection(CallSite site = CallSite::current());
 
 // components/drawing.cpp: DrawingSection is @Composable there (the module declares it)
 
-// components/input.cpp
-void SelectableTextSection(CallSite site = CallSite::current());
-void ContextMenuSection(CallSite site = CallSite::current());
-void PointerSection(CallSite site = CallSite::current());
-void CustomIndicationSection(CallSite site = CallSite::current());
-void TextToolbarSection(CallSite site = CallSite::current());
-void MultiTouchSection(CallSite site = CallSite::current());
-void KeyboardSection(CallSite site = CallSite::current());
-void SelectableCard(int index, MutableState<int> selected, CallSite site = CallSite::current());
-void DragAndDropSection(CallSite site = CallSite::current());
+// components/input.cpp: its sections and SelectableCard are @Composable there (the module declares them)
 
 // components/text.cpp: TextSection is @Composable there (the module declares it)
 

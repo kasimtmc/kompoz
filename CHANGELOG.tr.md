@@ -1091,6 +1091,10 @@
   kompozc: `event.changes.first()` değişikliğin kendisidir (üzerindeki `consume()` sayılır); `items = { }`, `keyboardModifiers = { }`
   ve `canPan = { }` değerlerini verir; bir parçalama (`val (a, b) = …`, `for ((k, v) in …)`) parçalarını yapılandırılmış bağlama
   yerine `kt::component<i>` ile alır (Kotlin'deki gibi kopyalar); GCC 16 bağlamayı bir composable'ın iç içe bloklarında yitiriyordu.
+- **Vitrinin girdi ekranı Compose söz dizimiyle**: seçilebilir metin, bağlam menüsü, fare (işaretçi olayları, düğmeye göre
+  tıklamalar, ipucu alanları), özel göstergeler, uygulamanın kendi metin araç çubuğu bir Popup içinde, çoklu dokunma, klavye,
+  seçilebilir kartlar ve sürükle-bırak Kotlin'de `@Composable fun`lar (gösterge düğümleri, araç çubuğu sınıfı ve tuş adları
+  aynı dosyada C++ kalır).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine
