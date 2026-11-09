@@ -979,6 +979,10 @@
   `FlexibleBottomAppBarOptions::insets`) as well as `false`. A lazy layout's `items(list)`, `items(list, key = …)` and
   `itemsIndexed` take a `SnapshotStateList` (a `mutableStateListOf`) as they take a vector; in kompozc, `list.shuffle()`,
   `list.shuffle(Random(seed))` (`kt::Random`, with `nextInt`, `nextFloat`, `nextBoolean`) and `addAll` on a `SnapshotStateList`.
+- **The showcase's material containers in Compose's syntax**: the animated task list (a `mutableStateListOf` shuffled with
+  `Random`, in a `LazyColumn` with `animateItem`), the list items with badges and the segmented ones, the dialogs, menus
+  (groups with checked and selected items) and sheets, the cards, the FABs and the bottom app bar are `@Composable fun`s in
+  Kotlin.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

@@ -178,11 +178,8 @@ void TextFieldsSection(CallSite site = CallSite::current());
 
 // material/controls.cpp: ButtonsSection, ChipsSection and SelectionControlsSection are @Composable there (the module declares them)
 
-// material/containers.cpp
-void AnimateItemSection(CallSite site = CallSite::current());
-void ListItemSection(CallSite site = CallSite::current());
-void DialogsSection(NavController nav, CallSite site = CallSite::current());
-void CardsSection(CallSite site = CallSite::current());
+// material/containers.cpp: AnimateItemSection, ListItemSection, DialogsSection and CardsSection are @Composable there
+// (the module declares them)
 
 // material/navigation.cpp
 void TabsSection(CallSite site = CallSite::current());

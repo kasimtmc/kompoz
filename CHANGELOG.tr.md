@@ -1019,6 +1019,9 @@
   (`BottomAppBarSlots::insets`, `FlexibleBottomAppBarOptions::insets`). Tembel bir yerleşimin `items(list)`, `items(list, key = …)`
   ve `itemsIndexed`'i bir vektör gibi bir `SnapshotStateList` (bir `mutableStateListOf`) de alıyor; kompozc'de bir
   `SnapshotStateList`'te `list.shuffle()`, `list.shuffle(Random(seed))` (`kt::Random`; `nextInt`, `nextFloat`, `nextBoolean`) ve `addAll`.
+- **Gösteri uygulamasının material kapsayıcıları Compose'un sözdizimiyle**: animasyonlu görev listesi (`Random` ile karıştırılan
+  bir `mutableStateListOf`, `animateItem`'lı bir `LazyColumn`'da), rozetli liste öğeleri ve bölümlü olanlar, dialog'lar, menüler
+  (işaretli ve seçili öğeli gruplar) ve alt sayfalar, kartlar, FAB'lar ve alt uygulama çubuğu Kotlin'de `@Composable fun`'lar.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine
