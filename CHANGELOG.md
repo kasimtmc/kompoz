@@ -1018,6 +1018,10 @@
   (`WindowInsets.statusBars`, `WindowInsets.isImeVisible`); `LocalDate` is `std::chrono::year_month_day`; `Pair(a, b)` and
   `Triple(a, b, c)`; a nullable's member is read after its null check (Kotlin's smart cast); an `if` or `when` expression's branches
   take the `val`'s declared type (`val palette: TonalPalette? = if (…) system else null`).
+- **The showcase's material sections in Compose's syntax**: search bars, tooltips, exposed dropdowns, interactions, anchored
+  drags, ripples, semantics, focus properties, selectable rows, the date and time pickers, dynamic color (and its preview),
+  the IME nested scroll, the frame rate and the insets are `@Composable fun`s in Kotlin (a few helpers for Turkish case folding
+  and date and time formatting stay C++ in the same file).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

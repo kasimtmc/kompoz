@@ -152,26 +152,11 @@ void TextSection(CallSite site = CallSite::current());
 
 // components/components.cpp
 
-// material/sections.cpp
-void SwipeableTask(int id, SnapshotStateList<int> tasks, CallSite site = CallSite::current());
-void SearchSection(CallSite site = CallSite::current());
-void TooltipSection(CallSite site = CallSite::current());
-void DropdownSection(CallSite site = CallSite::current());
-void InteractionSection(CallSite site = CallSite::current());
-void AnchoredDraggableSection(CallSite site = CallSite::current());
-void RippleSection(CallSite site = CallSite::current());
-void SemanticsSection(CallSite site = CallSite::current());
-void FocusPropertiesDemo(CallSite site = CallSite::current());
-void SelectableRowsSection(CallSite site = CallSite::current());
-void DatePickerSection(CallSite site = CallSite::current());
-void TimePickerSection(CallSite site = CallSite::current());
+// material/sections.cpp: its sections (SearchSection … InsetsSection), SwipeableTask, FocusPropertiesDemo and
+// DynamicColorSection are @Composable there (the module declares them).
 // Where the theme's colors come from: the app's own scheme, the system's accent color, or the
 // wallpaper. The library offers all three; the app (here its user) picks.
 enum class ColorSource { App, System, Wallpaper };
-void DynamicColorSection(MutableState<ColorSource> source, CallSite site = CallSite::current());
-void ImeNestedScrollSection(CallSite site = CallSite::current());
-void FrameRateSection(CallSite site = CallSite::current());
-void InsetsSection(CallSite site = CallSite::current());
 
 // material/text_fields.cpp: TextFieldsSection is @Composable there (the module declares it)
 

@@ -1057,6 +1057,10 @@
   Compose'un özelliği gibi okunuyor (`WindowInsets.statusBars`, `WindowInsets.isImeVisible`); `LocalDate`, `std::chrono::year_month_day`;
   `Pair(a, b)` ve `Triple(a, b, c)`; null denetiminden sonra bir null olabilirin üyesi okunuyor (Kotlin'in akıllı dönüştürmesi); bir
   `if` ya da `when` ifadesinin dalları `val`'ın bildirilen türünü alıyor (`val palette: TonalPalette? = if (…) system else null`).
+- **Gösteri uygulamasının material bölümleri Compose'un sözdizimiyle**: arama çubukları, ipuçları, açılır menüler, etkileşimler,
+  çapalı sürüklemeler, dalgalar, anlambilim, odak özellikleri, seçilebilir satırlar, tarih ve saat seçiciler, dinamik renk (ve
+  önizlemesi), klavye iç içe kaydırması, kare hızı ve kenar boşlukları Kotlin'de `@Composable fun`'lar (Türkçe küçük harfe çevirme
+  ile tarih ve saat biçimleme yardımcıları aynı dosyada C++ olarak kalıyor).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine
