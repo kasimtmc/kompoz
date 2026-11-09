@@ -17,8 +17,10 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <set>
+#include <utility>
 #include <sstream>
 
 namespace fs = std::filesystem;
@@ -264,7 +266,14 @@ size_t valEnd(std::string_view src, size_t at) {
 
 // Walks the C++ around the functions: skips comments, strings, characters and raw strings, and
 // finds each @Composable.
-std::vector<Found> scan(std::string_view src) {
+// Where a statement of the C++ at a namespace's depth may begin (right after a ; or a } there), and
+// the namespaces open there: where a declaration can be put before a use.
+struct Boundary {
+    size_t at;
+    std::string qualifier;
+};
+
+std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries = nullptr) {
     std::vector<Found> found;
     // The C++ namespaces around: each one's name ("" unnamed) and the brace depth inside it.
     std::vector<std::pair<std::string, int>> namespaces;
@@ -276,6 +285,9 @@ std::vector<Found> scan(std::string_view src) {
             q += name + "::";
         }
         return q;
+    };
+    auto boundary = [&](size_t at) {
+        if (boundaries && depth == (namespaces.empty() ? 0 : namespaces.back().second)) boundaries->push_back({at, qualifier()});
     };
     size_t i = 0;
     while (i < src.size()) {
@@ -411,6 +423,9 @@ std::vector<Found> scan(std::string_view src) {
             } else if (c == '}') {
                 while (!namespaces.empty() && namespaces.back().second == depth) namespaces.pop_back();
                 --depth;
+                boundary(i + 1);
+            } else if (c == ';') {
+                boundary(i + 1);
             }
             ++i;
         }
@@ -514,6 +529,29 @@ void names(const Found& f, std::set<std::string, std::less<>>& out) {
     }
 }
 
+// Where a file's leading lines end: its comments, #includes, #pragmas and using-directives, after
+// which what it calls can be declared (a C++ file's prototypes would stand there).
+size_t includesEnd(std::string_view src) {
+    size_t at = 0;
+    bool inComment = false;
+    while (at < src.size()) {
+        size_t eol = src.find('\n', at);
+        if (eol == std::string_view::npos) eol = src.size();
+        std::string_view line = src.substr(at, eol - at);
+        size_t b = line.find_first_not_of(" \t\r");
+        std::string_view t = b == std::string_view::npos ? std::string_view() : line.substr(b);
+        if (inComment) {
+            if (t.find("*/") != std::string_view::npos) inComment = false;
+        } else if (t.starts_with("/*")) {
+            if (t.find("*/", 2) == std::string_view::npos) inComment = true;
+        } else if (!(t.empty() || t.starts_with("//") || t.starts_with("#") || t.starts_with("using "))) {
+            return at;
+        }
+        at = eol + 1;
+    }
+    return src.size();
+}
+
 // Another source of the module (the target): its declarations, for the calls to them here.
 struct OtherSource {
     std::string lineFile;
@@ -522,7 +560,8 @@ struct OtherSource {
 
 std::string translate(const std::string& src, const fs::path& source, const std::string& lineFile, const Structs& structs,
                       const std::vector<OtherSource>& others) {
-    std::vector<Found> found = scan(src);
+    std::vector<Boundary> boundaries;
+    std::vector<Found> found = scan(src, &boundaries);
     Module module;
     module.structs = &structs;
     for (const Found& f : found) {
@@ -535,10 +574,47 @@ std::string translate(const std::string& src, const fs::path& source, const std:
     }
     // The other sources' declarations this one uses, and those they use in turn (a data class in
     // a parameter's type): declared here too, as C++ needs (Kotlin's module needs nothing).
+    // The identifiers in this file's C++ (outside its Kotlin, its comments and strings), each where
+    // it is first used: the module's functions among them are declared before that (below), so
+    // they are imported too.
+    std::set<std::string, std::less<>> cppIdentifiers;
+    std::map<std::string, size_t, std::less<>> cppFirstUse;
+    {
+        auto scanText = [&](size_t from, size_t to) {
+            for (size_t i = from; i < to;) {
+                char c = src[i];
+                if (c == '/' && i + 1 < to && src[i + 1] == '/') {
+                    while (i < to && src[i] != '\n') ++i;
+                } else if (c == '/' && i + 1 < to && src[i + 1] == '*') {
+                    size_t e = src.find("*/", i + 2);
+                    i = e == std::string::npos || e + 2 > to ? to : e + 2;
+                } else if (c == '"' || (c == '\'' && !(i > 0 && std::isxdigit(static_cast<unsigned char>(src[i - 1]))))) {
+                    for (++i; i < to && src[i] != c; ++i)
+                        if (src[i] == '\\') ++i;
+                    ++i;
+                } else if (!identChar(c)) {
+                    ++i;
+                } else {
+                    size_t b = i;
+                    while (i < to && identChar(src[i])) ++i;
+                    if (cppIdentifiers.insert(src.substr(b, i - b)).second) cppFirstUse[src.substr(b, i - b)] = b;
+                }
+            }
+        };
+        size_t at = 0;
+        for (const Found& f : found) {
+            scanText(at, f.begin);
+            at = f.end;
+        }
+        scanText(at, src.size());
+    }
     std::vector<std::pair<const OtherSource*, const Found*>> imported;
     {
         std::set<std::string, std::less<>> used;
         for (const Found& f : found) names(f, used);
+        for (const OtherSource& o : others)
+            for (const Found& f : o.found)
+                if (cppIdentifiers.contains(f.name())) used.insert(f.name());
         std::set<const Found*> taken;
         for (bool more = true; more;) {
             more = false;
@@ -615,29 +691,80 @@ std::string translate(const std::string& src, const fs::path& source, const std:
         else generateDefinition(out, *g.function, module);
         out.setFile(lineFile);
     };
+    // Before the first declaration: the helpers the translations use, and the data classes, enums
+    // and objects, so that every function may use them (as Kotlin's do, in any order).
+    bool preludeDone = false;
+    auto prelude = [&] {
+        if (std::exchange(preludeDone, true)) return;
+        out.text("\n#include <kompoz/kotlin.hpp>\n");
+        for (auto [o, g] : imported) {  // (from their own files: #line says which)
+            out.setFile(o->lineFile);
+            if (g->enumClass) generateEnum(out, *g->enumClass);
+            if (g->dataClass) generateClass(out, *g->dataClass, module);
+            if (g->object) generateObject(out, *g->object);
+        }
+        out.setFile(lineFile);
+        for (const Found& g : found) {
+            if (g.enumClass) generateEnum(out, *g.enumClass);
+            if (g.dataClass) generateClass(out, *g.dataClass, module);
+            if (g.object) generateObject(out, *g.object);
+        }
+    };
+    // The module's functions, classes and vals that this file's C++ (not its Kotlin) names before
+    // they are defined here (or defined in another file): declared where the statement using them
+    // first begins, as a prototype of their own would be (after the file's own types, which a
+    // parameter may be of): a C++ file of the target calling Section(…), written in Compose's
+    // syntax in another file.
+    std::set<std::string, std::less<>> cppUsed;
+    size_t declareAt = std::string::npos;
+    std::string declareWhere = "::";
+    {
+        size_t first = std::string::npos;
+        for (const std::string& w : cppIdentifiers) {
+            // (a data class or object named there wants the prelude by then; it needs no declaration of its own)
+            if (!(module.functions.contains(w) || module.classDecls.contains(w) || module.properties.contains(w) || module.classes.contains(w) ||
+                  module.objects.contains(w)))
+                continue;
+            size_t use = cppFirstUse.at(w);
+            bool definedBefore = false;
+            for (const Found& f : found)
+                if (f.name() == w && f.begin < use) definedBefore = true;
+            if (definedBefore) continue;
+            cppUsed.insert(w);
+            first = std::min(first, use);
+        }
+        if (!cppUsed.empty()) {
+            declareAt = std::min(includesEnd(src), found.empty() ? src.size() : found.front().begin);
+            for (const Boundary& b : boundaries) {
+                bool inside = false;  // (not within a Kotlin declaration's text)
+                for (const Found& f : found) inside = inside || (f.begin < b.at && b.at < f.end);
+                if (b.at <= first && b.at >= declareAt && !inside) declareAt = b.at, declareWhere = b.qualifier;
+            }
+        }
+    }
+    // The C++ up to `to` passed through, the declarations above where they go.
+    auto passUntil = [&](size_t to) {
+        if (declareAt != std::string::npos && declareAt >= done && declareAt <= to) {
+            if (declareAt > done) {
+                if (done > 0) out.line(positionOf(src, done).line);
+                out.text(passThrough(std::string_view(src).substr(done, declareAt - done), dir));
+            }
+            prelude();
+            for (const std::string& u : cppUsed) define(define, u, declareWhere);
+            declare(cppUsed);
+            done = declareAt;
+            declareAt = std::string::npos;
+        }
+        if (to > done) {
+            if (done > 0) out.line(positionOf(src, done).line);
+            out.text(passThrough(std::string_view(src).substr(done, to - done), dir));
+            done = to;
+        }
+    };
     for (size_t k = 0; k < found.size(); ++k) {
         const Found& f = found[k];
-        if (f.begin > done) {
-            if (done > 0) out.line(positionOf(src, done).line);
-            out.text(passThrough(std::string_view(src).substr(done, f.begin - done), dir));
-        }
-        if (k == 0) {
-            // Before the first: the helpers the translations use, and the data classes, so that
-            // every function may use them (as Kotlin's do, in any order).
-            out.text("\n#include <kompoz/kotlin.hpp>\n");
-            for (auto [o, g] : imported) {  // (from their own files: #line says which)
-                out.setFile(o->lineFile);
-                if (g->enumClass) generateEnum(out, *g->enumClass);
-                if (g->dataClass) generateClass(out, *g->dataClass, module);
-                if (g->object) generateObject(out, *g->object);
-            }
-            out.setFile(lineFile);
-            for (const Found& g : found) {
-                if (g.enumClass) generateEnum(out, *g.enumClass);
-                if (g.dataClass) generateClass(out, *g.dataClass, module);
-                if (g.object) generateObject(out, *g.object);
-            }
-        }
+        passUntil(f.begin);
+        if (k == 0) prelude();
         if (f.property || f.classDecl || (f.function && !f.function->composable)) {
             define(define, f.name(), f.qualifier);
         } else if (f.function) {
@@ -651,10 +778,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
         }
         done = f.end;
     }
-    if (done < src.size()) {
-        if (done > 0) out.line(positionOf(src, done).line);
-        out.text(passThrough(std::string_view(src).substr(done), dir));
-    }
+    passUntil(src.size());
     return std::move(out).str();
 }
 

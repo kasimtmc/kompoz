@@ -957,6 +957,16 @@
   okunuyor; `ComposeTestRule { … }` ve `AssertionError`, `kompoz::testing`'inkiler; `LocalUriHandler.current`,
   `LocalClipboardManager.current`, `LocalHapticFeedback.current` ve `LocalSoftwareKeyboardController.current` host'un
   verdikleri (`uriHandler()` ve ötekiler). Test kuralının `mainClock.advanceTimeBy(ms)`'si, Compose'un adı.
+- **kompozc: bir hedefin C++ dosyalarının Kotlin'inden çağırdıkları, `String.format`, Kotlin'in koleksiyonlarından daha
+  fazlası**: bir dosyada Compose'un sözdizimiyle yazılmış bir işlev, sınıf ya da `val`, başka bir dosyanın düz C++'ında
+  da onu ilk kullanan deyimden önce, dosyanın kendi türlerinden sonra, bir prototipin duracağı yerde bildiriliyor (hâlâ
+  C++ olan bir gösteri ekranı, yanında Kotlin'le yazılmış bir `Section(…)`'ı başlık olmadan çağırıyor). Java'nın belirteçleri `std::format`'ınkiler olarak
+  `"%.1f km · %d dk".format(x, n)` (`%d %s %f %x %c %%`, genişlik, duyarlık, `0` ve `-` bayrakları); `indexOfFirst`,
+  `indexOfLast`, `removeIf`, `removeAll`, `flatMap`, `sortedByDescending`, `maxByOrNull`, `minByOrNull`, `mapNotNull`,
+  `filterIndexed`, `distinctBy`, `takeUnless`, `groupBy`, `associateBy`, `associateWith`, `chunked`, `partition`; `by`
+  ile okunan bir durumda değer olarak `nextId++`. Başlıklardan, `constexpr` ya da `inline` bir kurucu kurucu sayılıyor
+  (`CornerRadius(24f)` kuruyor, `CornerRadius(x = …)` yine belirlenmiş biçim) ve bir ad alanında bildirilen bir takma ad
+  o ad alanının: `ListItemDefaults.colors(containerColor = …)` bir `ListItemColors`, düz `ListItem(colors = …)` da alıyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

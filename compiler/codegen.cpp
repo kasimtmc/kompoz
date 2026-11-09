@@ -46,6 +46,7 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "shader", "compositionLocalOf",
     "slideInVertically", "slideInHorizontally", "slideOutVertically", "slideOutHorizontally", "animateFloat", "animateDp", "animateColor",
     "dragAndDropSource", "update", "LifecycleResumeEffect", "LifecycleStartEffect", "flatMapLatest", "mapLatest", "flatMapConcat",
+    "removeIf", "removeAll",
     "staticCompositionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent", "mediaQuery",
     "derivedMediaQuery", "SubcomposeLayout", "rememberPagerState", "rememberCarouselState"};
 
@@ -120,7 +121,9 @@ const std::set<std::string, std::less<>> kKtMembers = {
     "first", "last", "firstOrNull", "lastOrNull", "joinToString", "startsWith", "endsWith", "contains", "substring",
     "take", "drop", "reversed", "sorted", "sortedBy", "any", "all", "none", "count", "sum", "sumOf", "maxOf", "minOf", "maxOfOrNull", "minOfOrNull", "indexOf",
     "getOrNull", "let", "also", "takeIf", "withIndex", "toList", "toMutableList", "distinct", "split", "replace",
-    "coerceIn", "coerceAtLeast", "coerceAtMost", "roundToInt", "toPx", "roundToPx", "toDp", "find", "add", "addAll", "removeAt", "remove"};
+    "coerceIn", "coerceAtLeast", "coerceAtMost", "roundToInt", "toPx", "roundToPx", "toDp", "find", "add", "addAll", "removeAt", "remove",
+    "format", "indexOfFirst", "indexOfLast", "removeIf", "removeAll", "flatMap", "sortedByDescending", "maxByOrNull", "minByOrNull",
+    "mapNotNull", "filterIndexed", "distinctBy", "takeUnless", "groupBy", "associateBy", "associateWith", "chunked", "partition"};
 
 // Calls whose lambda has a receiver, Kotlin's T.() -> R: the C++ lambda takes it
 // first, and the names the body doesn't declare that are the receiver's members are the receiver's
@@ -1176,7 +1179,10 @@ private:
             }
             if (callee.text == "copy" && dataClassCopy(c, obj)) return;
             if (module_.structs && !c.lambda && c.kids.size() > 1 && qualifier(obj)) {  // TextFieldDefaults.colors(…)
-                if (const auto* fields = module_.structs->find(callee.text); fields && structCall(c, qualified(dotted(callee)), *fields)) return;
+                std::string name = qualified(dotted(callee));
+                const auto* fields = module_.structs->find(name);  // (its own namespace's alias first: ListItemDefaults::colors)
+                if (!fields) fields = module_.structs->find(callee.text);
+                if (fields && structCall(c, name, *fields)) return;
             }
             if (kKtMembers.contains(callee.text) && !qualifier(obj)) {
                 out_.text("::kompoz::kt::" + callee.text + "(");
@@ -1524,7 +1530,8 @@ private:
             expr(x);
             out_.text(")");
         } else if ((u.text == "++" || u.text == "--") && delegatedName(x)) {
-            throw CompileError(u.pos, u.text + " on a state only as a statement");
+            // nextId++ as a value on a state: the state set, the old (postfix) or new (prefix) value given.
+            out_.text(std::string("::kompoz::kt::") + (u.flag ? "post" : "pre") + (u.text == "++" ? "Increment(" : "Decrement(") + cppName(x.text) + ")");
         } else if (u.flag) {
             expr(x);
             out_.text(u.text);

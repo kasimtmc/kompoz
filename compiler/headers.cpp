@@ -80,14 +80,20 @@ bool looksLikeFunction(std::string_view st) {
 // `constructor` set if it declares one.
 std::vector<std::string> fieldsOf(const std::string& statement, const std::string& structName, bool& constructor) {
     std::string st = trim(statement);
-    // (static data members are the type's values: Color::White; its static functions have parentheses)
-    if (startsWithWord(st, "static") && !startsWithWord(st, "static_assert")) st = trim(std::string_view(st).substr(6));
-    for (std::string_view word : {"static", "using", "typedef", "friend", "template", "enum", "struct", "class", "union",
-                                  "static_assert", "operator", "virtual", "inline", "constexpr", "consteval", "explicit"}) {
-        if (startsWithWord(st, word)) {
-            if (word == "explicit") constructor = true;
-            return {};
+    // (static data members are the type's values: Color::White; its static functions have parentheses;
+    // constexpr / inline / explicit say nothing of what follows: a constexpr constructor is one)
+    for (bool more = true; more;) {
+        more = false;
+        for (std::string_view word : {"static", "constexpr", "consteval", "inline", "explicit"}) {
+            if (startsWithWord(st, word) && !startsWithWord(st, "static_assert")) {
+                if (word == "explicit") constructor = true;
+                st = trim(std::string_view(st).substr(word.size()));
+                more = true;
+            }
         }
+    }
+    for (std::string_view word : {"using", "typedef", "friend", "template", "enum", "struct", "class", "union", "static_assert", "operator", "virtual"}) {
+        if (startsWithWord(st, word)) return {};
     }
     if (st.empty() || st[0] == '~' || st[0] == '#' || st[0] == '[') return {};
     // A function: a parenthesis in what comes before the first initializer, outside <>.
@@ -236,9 +242,42 @@ void Structs::readHeader(const fs::path& header) {
     readText(src);
 }
 
+// The namespaces open at `at` (below kompoz's own): "ListItemDefaults" for an alias declared in it.
+std::string namespacesAt(std::string_view text, size_t at) {
+    std::vector<std::pair<std::string, int>> open;  // name, the depth it opened at
+    int depth = 0;
+    for (size_t i = 0; i < at && i < text.size(); ++i) {
+        char c = text[i];
+        if (c == '{') {
+            ++depth;
+        } else if (c == '}') {
+            while (!open.empty() && open.back().second == depth) open.pop_back();
+            --depth;
+        } else if (c == 'n' && text.compare(i, 9, "namespace") == 0 && (i == 0 || !identChar(text[i - 1])) && i + 9 < text.size() &&
+                   !identChar(text[i + 9])) {
+            size_t k = i + 9;
+            while (k < text.size() && std::isspace(static_cast<unsigned char>(text[k]))) ++k;
+            size_t b = k;
+            while (k < text.size() && (identChar(text[k]) || text[k] == ':')) ++k;
+            std::string name(text.substr(b, k - b));
+            while (k < text.size() && std::isspace(static_cast<unsigned char>(text[k]))) ++k;
+            if (k < text.size() && text[k] == '{' && !name.empty()) {
+                open.emplace_back(name, depth + 1);
+                ++depth;
+                i = k;
+            }
+        }
+    }
+    std::string path;
+    for (const auto& [name, d] : open)
+        if (name != "kompoz") path += (path.empty() ? "" : "::") + name;
+    return path;
+}
+
 void Structs::readText(std::string_view src) {
     std::string text = stripped(src);
-    // using Name = Some::Struct;
+    // using Name = Some::Struct; (recorded under its name and, in a namespace, its qualified name:
+    // TextFieldDefaults::colors and ListItemDefaults::colors are different structs)
     for (size_t i = 0; (i = text.find("using", i)) != std::string::npos; i += 5) {
         if ((i > 0 && identChar(text[i - 1])) || (i + 5 < text.size() && identChar(text[i + 5]))) continue;
         size_t semi = text.find(';', i);
@@ -250,7 +289,10 @@ void Structs::readText(std::string_view src) {
         if (size_t colon = target.rfind("::"); colon != std::string::npos) target = target.substr(colon + 2);
         bool plain = !alias.empty() && !target.empty();
         for (char c : alias + target) plain = plain && identChar(c);
-        if (plain) aliases[alias].insert(target);
+        if (plain) {
+            aliases[alias].insert(target);
+            if (std::string ns = namespacesAt(text, i); !ns.empty()) aliases[ns + "::" + alias].insert(target);
+        }
     }
 
     for (size_t i = 0; (i = text.find("struct", i)) != std::string::npos; i += 6) {

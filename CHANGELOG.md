@@ -917,6 +917,16 @@
   annotation; `ComposeTestRule { … }` and `AssertionError` are `kompoz::testing`'s; `LocalUriHandler.current`,
   `LocalClipboardManager.current`, `LocalHapticFeedback.current` and `LocalSoftwareKeyboardController.current` are what
   the host gives (`uriHandler()` and the others). The test rule's `mainClock.advanceTimeBy(ms)`, Compose's name.
+- **kompozc: what a target's C++ files call of its Kotlin, `String.format`, more of Kotlin's collections**: a function,
+  class or `val` written in Compose's syntax in one file is declared in another file's plain C++ too, before the
+  statement that first uses it and after the file's own types, where a prototype would stand (a showcase screen still
+  in C++ calls a `Section(…)` written in Kotlin next to it, no header needed). `"%.1f km · %d dk".format(x, n)` with Java's specifiers as `std::format`'s (`%d %s %f %x %c
+  %%`, a width, a precision, the `0` and `-` flags); `indexOfFirst`, `indexOfLast`, `removeIf`, `removeAll`, `flatMap`,
+  `sortedByDescending`, `maxByOrNull`, `minByOrNull`, `mapNotNull`, `filterIndexed`, `distinctBy`, `takeUnless`,
+  `groupBy`, `associateBy`, `associateWith`, `chunked`, `partition`; `nextId++` as a value on a state read through `by`.
+  Of the headers, a `constexpr` or `inline` constructor is one (`CornerRadius(24f)` constructs, `CornerRadius(x = …)`
+  is still the designated form) and an alias declared in a namespace is that namespace's:
+  `ListItemDefaults.colors(containerColor = …)` is a `ListItemColors`, which the plain `ListItem(colors = …)` takes too.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

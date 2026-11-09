@@ -459,6 +459,52 @@ TEST(another_files_composables) {
     CHECK(rule.onNodeWithText("yeni:3!").exists() && rule.onNodeWithText("eski:0").exists());
 }
 
+// From this file's C++ too: a file of the target still in C++ calls the module's Kotlin (the
+// other file's function and data class) with no header, as the showcase's files do.
+TEST(cpp_calls_the_modules_kotlin) {
+    ComposeTestRule rule([] { StickerRow(Sticker{"çıkartma", 3}, "", "!"); });
+    CHECK(rule.onNodeWithText("çıkartma:3!").exists());
+}
+
+// Kotlin's String.format with Java's specifiers, more of its collection functions, x++ as a value
+// on a state, ListItemDefaults.colors and a constexpr constructor called by place (CornerRadius(24f)).
+@Composable
+fun KotlinHelpers() {
+    var nextId by remember { mutableStateOf(4) }
+    val ids = remember { mutableStateListOf(1, 2, 3) }
+    val words = listOf("elma", "armut", "erik", "ayva", "kiraz")
+    val (a, rest) = words.partition { it.startsWith("a") }
+    val byLetter = words.groupBy { it.first() }
+    val best = words.maxByOrNull { it.length }
+    Column {
+        Text("%.1f km · %03d dk · %-4s| · %x".format(1.25f, 7, "ab", 255))
+        Text("ilk ${words.indexOfFirst { it.startsWith("e") }} son ${words.indexOfLast { it.startsWith("e") }}")
+        Text("a: ${a.joinToString()} · öteki: ${rest.size} · gruplar: ${byLetter.size} · en uzun: $best")
+        Text("azalan: ${words.sortedByDescending { it.length }.first()} · parça: ${words.chunked(2).size} · tek: ${words.distinctBy { it.first() }.size}")
+        Text("eşle: ${words.associateWith { it.length }.size} · düz: ${listOf(listOf(1, 2), listOf(3)).flatMap { it }.sum()}")
+        Button(onClick = { ids.add(nextId++) }) { Text("Ekle") }
+        Button(onClick = { ids.removeIf { it % 2 == 0 } }) { Text("Çiftleri sil") }
+        Text("kimlikler: ${ids.joinToString(",")} · sonraki: $nextId")
+        ListItem(headlineContent = { Text("Saydam satır") }, colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+        Canvas(modifier = Modifier.size(40.dp)) { drawRoundRect(Color.Red, cornerRadius = CornerRadius(24f)) }
+    }
+}
+
+TEST(kotlin_helpers_through_kompozc) {
+    ComposeTestRule rule([] { KotlinHelpers(); });
+    CHECK(rule.onNodeWithText("1.2 km · 007 dk · ab  | · ff").exists() || rule.onNodeWithText("1.3 km · 007 dk · ab  | · ff").exists());
+    CHECK(rule.onNodeWithText("ilk 0 son 2").exists());
+    CHECK(rule.onNodeWithText("a: armut, ayva · öteki: 3 · gruplar: 3 · en uzun: armut").exists());
+    CHECK(rule.onNodeWithText("azalan: armut · parça: 3 · tek: 3").exists());
+    CHECK(rule.onNodeWithText("eşle: 5 · düz: 6").exists());
+    rule.onNodeWithText("Ekle").performClick();
+    rule.onNodeWithText("Ekle").performClick();
+    CHECK(rule.onNodeWithText("kimlikler: 1,2,3,4,5 · sonraki: 6").exists());
+    rule.onNodeWithText("Çiftleri sil").performClick();
+    CHECK(rule.onNodeWithText("kimlikler: 1,3,5 · sonraki: 6").exists());
+    CHECK(rule.onNodeWithText("Saydam satır").exists());
+}
+
 // What Compose code says most: a lazy list's items, DisposableEffect, providing a local, a themed surface.
 struct Mail {
     std::string from;  // (no ==: a list of it is never compared, so its composable isn't skipped)

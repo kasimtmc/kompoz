@@ -1675,6 +1675,10 @@ struct ListItemColors {
     std::optional<Color> containerColor, contentColor, leadingContentColor, trailingContentColor, supportingContentColor;
     std::optional<Color> selectedContainerColor, selectedContentColor;
 };
+namespace ListItemDefaults {
+// Compose's ListItemDefaults.colors(containerColor = …): a ListItemColors (a plain ListItem takes its containerColor).
+using colors = ListItemColors;
+}  // namespace ListItemDefaults
 struct InteractiveListItemOptions {
     bool enabled = true;
     std::function<void()> onLongClick;
@@ -1700,7 +1704,7 @@ void ListItem(bool checked, std::function<void(bool)> onCheckedChange, const Lis
 // forms with a ListItemSlots ({.headline = …}) take their arguments by place, as before.
 struct ListItemImpl {
     using Plain = Params<names::HeadlineContent, names::Modifier, names::OverlineContent, names::SupportingContent, names::LeadingContent,
-                         names::TrailingContent>;
+                         names::TrailingContent, names::Colors>;
     template <class Head>
     using Interactive = Params<Head, names::Modifier, names::Enabled, names::LeadingContent, names::TrailingContent, names::OverlineContent,
                                names::SupportingContent, names::OnLongClick, names::Shapes, names::Colors, names::InteractionSource, Block>;
@@ -1719,6 +1723,8 @@ struct ListItemImpl {
         Q::template set<names::TrailingContent>(s.trailing, args...);
         if constexpr (oneOfParams<names::HeadlineContent, Q>) Q::template set<names::HeadlineContent>(s.headline, args...);
         else s.headline = Q::block(std::forward<A>(args)...);
+        if constexpr (std::is_same_v<Q, Plain> && Q::template given<names::Colors, A...>())  // colors = ListItemDefaults.colors(containerColor = …)
+            s.containerColor = ListItemColors(Q::template arg<names::Colors>(args...)).containerColor;
         return s;
     }
     template <class Q, class... A>

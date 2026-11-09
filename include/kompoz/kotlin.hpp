@@ -13,6 +13,7 @@
 #include <chrono>
 #include <coroutine>
 #include <cmath>
+#include <format>
 #include <functional>
 #include <limits>
 #include <map>
@@ -209,6 +210,16 @@ decltype(auto) value(const S& s) {
     else return (s);  // (produceState's value: delegated to as it is)
 }
 
+// x++ / ++x / x-- / --x on a state read through `by`, as a value: the state set, the old or the new value.
+template <class S>
+auto postIncrement(const S& s) { auto v = s.get(); s.set(v + 1); return v; }
+template <class S>
+auto preIncrement(const S& s) { auto v = s.get() + 1; s.set(v); return v; }
+template <class S>
+auto postDecrement(const S& s) { auto v = s.get(); s.set(v - 1); return v; }
+template <class S>
+auto preDecrement(const S& s) { auto v = s.get() - 1; s.set(v); return v; }
+
 // What a `by` delegate reads: a state's value (get()), else the value itself (a Transition's animateColor
 // gives a Color, whose own value() is its packed bits, not what `by` means).
 template <class S>
@@ -334,6 +345,61 @@ std::function<void()> onPauseOrDispose(F&& f) {
 template <class F>
 std::function<void()> onStopOrDispose(F&& f) {
     return std::function<void()>(std::forward<F>(f));
+}
+
+// "%.1f km · %d dk".format(x, n): Kotlin's String.format, Java's specifiers as std::format's — %d %s %f %x
+// %c %%, with a width, a precision, '0' and '-' flags ("%5.1f", "%-8s", "%03d").
+namespace detail {
+inline std::string javaFormatToStd(std::string_view fmt) {
+    std::string out;
+    for (size_t i = 0; i < fmt.size(); ++i) {
+        char c = fmt[i];
+        if (c == '{' || c == '}') {
+            out += c;
+            out += c;
+            continue;
+        }
+        if (c != '%') {
+            out += c;
+            continue;
+        }
+        if (i + 1 < fmt.size() && fmt[i + 1] == '%') {
+            out += '%';
+            ++i;
+            continue;
+        }
+        size_t j = i + 1;
+        std::string flags, width, precision;
+        while (j < fmt.size() && (fmt[j] == '-' || fmt[j] == '0' || fmt[j] == '+' || fmt[j] == ' ')) flags += fmt[j++];
+        while (j < fmt.size() && std::isdigit(static_cast<unsigned char>(fmt[j]))) width += fmt[j++];
+        if (j < fmt.size() && fmt[j] == '.') {
+            ++j;
+            while (j < fmt.size() && std::isdigit(static_cast<unsigned char>(fmt[j]))) precision += fmt[j++];
+        }
+        char conv = j < fmt.size() ? fmt[j] : 's';
+        std::string spec;
+        if (flags.find('-') != std::string::npos) spec += '<';
+        if (flags.find('+') != std::string::npos) spec += '+';
+        if (flags.find('0') != std::string::npos && flags.find('-') == std::string::npos) spec += '0';
+        spec += width;
+        if (!precision.empty()) spec += "." + precision;
+        switch (conv) {
+            case 'f': spec += 'f'; break;
+            case 'e': spec += 'e'; break;
+            case 'x': spec += 'x'; break;
+            case 'X': spec += 'X'; break;
+            case 'd': case 's': case 'c': case 'b': break;
+            default: break;
+        }
+        out += spec.empty() ? std::string("{}") : "{:" + spec + "}";
+        i = j;
+    }
+    return out;
+}
+}  // namespace detail
+template <class... A>
+std::string format(std::string_view fmt, A&&... args) {
+    return std::vformat(detail::javaFormatToStd(fmt), std::make_format_args(args...));
 }
 
 // ---- Coroutines: delay(300) in a LaunchedEffect ----
@@ -919,6 +985,166 @@ auto distinct(const C& c, A&&... args) {
         std::vector<detail::Element<C>> out;
         for (const auto& v : c)
             if (std::find(out.begin(), out.end(), v) == out.end()) out.push_back(v);
+        return out;
+    }
+}
+// More of Kotlin's collection functions (a type's own member of the name wins, as above).
+template <class C, class F, class... A>
+int indexOfFirst(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(indexOfFirst(f)) {
+        int i = 0;
+        for (const auto& v : c) {
+            if (f(v)) return i;
+            ++i;
+        }
+        return -1;
+    }
+}
+template <class C, class F, class... A>
+int indexOfLast(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(indexOfLast(f)) {
+        int i = 0, found = -1;
+        for (const auto& v : c) {
+            if (f(v)) found = i;
+            ++i;
+        }
+        return found;
+    }
+}
+template <class C, class F, class... A>
+bool removeIf(C& c, F&& f, A&&... args) {
+    if constexpr (requires { c.removeIf(f); }) {  // (a state list's, which says nothing back)
+        if constexpr (std::is_void_v<decltype(c.removeIf(f))>) {
+            c.removeIf(f);
+            return true;
+        } else {
+            return c.removeIf(f);
+        }
+    } else {
+        auto it = std::remove_if(c.begin(), c.end(), [&](const auto& v) { return bool(f(v)); });
+        bool any = it != c.end();
+        c.erase(it, c.end());
+        return any;
+    }
+}
+template <class C, class F, class... A>
+    requires std::is_invocable_v<F&, const detail::Element<C>&>
+bool removeAll(C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(removeAll(f)) return removeIf(c, std::forward<F>(f));
+}
+template <class C, class F, class... A>
+auto flatMap(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(flatMap(f)) {
+        std::vector<detail::Element<std::decay_t<decltype(f(*std::begin(c)))>>> out;
+        for (const auto& v : c)
+            for (const auto& w : f(v)) out.push_back(w);
+        return out;
+    }
+}
+template <class C, class F, class... A>
+auto sortedByDescending(const C& c, F&& key, A&&... args) {
+    KOMPOZ_KT_OWN(sortedByDescending(key)) {
+        std::vector<detail::Element<C>> out(std::begin(c), std::end(c));
+        std::stable_sort(out.begin(), out.end(), [&](const auto& a, const auto& b) { return key(b) < key(a); });
+        return out;
+    }
+}
+template <class C, class F, class... A>
+auto maxByOrNull(const C& c, F&& key, A&&... args) {
+    KOMPOZ_KT_OWN(maxByOrNull(key)) {
+        std::optional<detail::Element<C>> best;
+        for (const auto& v : c)
+            if (!best || key(*best) < key(v)) best = v;
+        return best;
+    }
+}
+template <class C, class F, class... A>
+auto minByOrNull(const C& c, F&& key, A&&... args) {
+    KOMPOZ_KT_OWN(minByOrNull(key)) {
+        std::optional<detail::Element<C>> best;
+        for (const auto& v : c)
+            if (!best || key(v) < key(*best)) best = v;
+        return best;
+    }
+}
+template <class C, class F, class... A>
+auto mapNotNull(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(mapNotNull(f)) {
+        std::vector<std::decay_t<decltype(*f(*std::begin(c)))>> out;
+        for (const auto& v : c)
+            if (auto r = f(v); !isNull(r)) out.push_back(*r);
+        return out;
+    }
+}
+template <class C, class F, class... A>
+auto filterIndexed(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(filterIndexed(f)) {
+        std::vector<detail::Element<C>> out;
+        int i = 0;
+        for (const auto& v : c)
+            if (f(i++, v)) out.push_back(v);
+        return out;
+    }
+}
+template <class C, class F, class... A>
+auto distinctBy(const C& c, F&& key, A&&... args) {
+    KOMPOZ_KT_OWN(distinctBy(key)) {
+        std::vector<detail::Element<C>> out;
+        std::vector<std::decay_t<decltype(key(*std::begin(c)))>> keys;
+        for (const auto& v : c) {
+            auto k = key(v);
+            if (std::find(keys.begin(), keys.end(), k) == keys.end()) {
+                keys.push_back(k);
+                out.push_back(v);
+            }
+        }
+        return out;
+    }
+}
+template <class T, class F, class... A>
+std::optional<T> takeUnless(const T& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(takeUnless(f)) return f(c) ? std::nullopt : std::optional<T>(c);
+}
+template <class C, class F, class... A>
+auto groupBy(const C& c, F&& key, A&&... args) {
+    KOMPOZ_KT_OWN(groupBy(key)) {
+        std::map<std::decay_t<decltype(key(*std::begin(c)))>, std::vector<detail::Element<C>>> out;
+        for (const auto& v : c) out[key(v)].push_back(v);
+        return out;
+    }
+}
+template <class C, class F, class... A>
+auto associateBy(const C& c, F&& key, A&&... args) {
+    KOMPOZ_KT_OWN(associateBy(key)) {
+        std::map<std::decay_t<decltype(key(*std::begin(c)))>, detail::Element<C>> out;
+        for (const auto& v : c) out.insert_or_assign(key(v), v);
+        return out;
+    }
+}
+template <class C, class F, class... A>
+auto associateWith(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(associateWith(f)) {
+        std::map<detail::Element<C>, std::decay_t<decltype(f(*std::begin(c)))>> out;
+        for (const auto& v : c) out.insert_or_assign(v, f(v));
+        return out;
+    }
+}
+template <class C, class... A>
+auto chunked(const C& c, int size, A&&... args) {
+    KOMPOZ_KT_OWN(chunked(size)) {
+        std::vector<std::vector<detail::Element<C>>> out;
+        for (const auto& v : c) {
+            if (out.empty() || int(out.back().size()) >= size) out.emplace_back();
+            out.back().push_back(v);
+        }
+        return out;
+    }
+}
+template <class C, class F, class... A>
+auto partition(const C& c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(partition(f)) {
+        std::pair<std::vector<detail::Element<C>>, std::vector<detail::Element<C>>> out;
+        for (const auto& v : c) (f(v) ? out.first : out.second).push_back(v);
         return out;
     }
 }
