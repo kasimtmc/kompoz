@@ -7961,6 +7961,25 @@ TEST(sections_forms_take_compose_named_arguments) {
     CHECK(rule.onNodeWithText("tasks 2 · 0").exists() && rule.onNodeWithTag("kart").exists() && rule.onNodeWithTag("odaksız").exists());
 }
 
+// A typography style's copy(shadow = …, brush = …) is a TextStyle; basicMarquee by name; TextAutoSize::StepBased and
+// TextIndent from text units; the measurer's style = a Font.
+TEST(text_styles_take_compose_named_arguments) {
+    ComposeTestRule rule([&] {
+        Column([&] {  // (made in the Column's block: it is run again on its own, after the lambda around it returned)
+            auto measurer = rememberTextMeasurer();
+            TextStyle shaded = typography().titleLarge.copy(arg::shadow = Shadow{colors::Black, {2, 3}, 4}, arg::textIndent = TextIndent(TextUnit(24)));
+            Font bolder = typography().titleLarge.copy(arg::fontWeight = FontWeight::Bold);
+            Text("gölge", arg::style = shaded);
+            Text("kalın", arg::style = bolder);
+            Text("kayan yazı kayan yazı kayan yazı", Modifier().width(100).basicMarquee(arg::iterations = 3, arg::velocity = 40.f).testTag("kayan"));
+            Text("sığ", Modifier().width(60), maxLines = 1, autoSize = TextAutoSize::StepBased(TextUnit(8), TextUnit(40), TextUnit(1)));
+            Text(measurer.measure("Kompoz", arg::style = typography().titleMedium).size().width > 10 ? "ölçü var" : "ölçü yok");
+        });
+    }, {400, 800});
+    CHECK(rule.onNodeWithText("gölge").exists() && rule.onNodeWithText("kalın").exists() && rule.onNodeWithTag("kayan").exists());
+    CHECK(rule.onNodeWithText("sığ").exists() && rule.onNodeWithText("ölçü var").exists());
+}
+
 TEST(navigation_takes_compose_named_arguments) {
     // NavHost(navController =, startDestination =, enterTransition = { }) { … } with the graph builder's
     // composable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }

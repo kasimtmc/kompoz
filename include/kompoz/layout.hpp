@@ -2228,6 +2228,9 @@ public:
     // a ticker. Only the drawing moves (taps land where the content is laid out); it pauses
     // `repeatDelayMillis` between passes and stops after `iterations`. Uses composition (remember).
     Modifier basicMarquee(const MarqueeOptions& options = {}, CallSite site = CallSite::current()) const;
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier basicMarquee(A&&... args) const;  // Compose's names (named_members.hpp)
     // On a LazyColumn/LazyRow item: glides to its new place when items are added, removed or
     // reordered (instead of jumping), fades in when it is inserted (not when scrolled in) and
     // out where it was when it is removed (shown as it last was, taking no input).

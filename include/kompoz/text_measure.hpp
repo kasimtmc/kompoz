@@ -93,7 +93,13 @@ TextLayoutResult TextLayoutMeasurer::measure(const T& text, A&&... args) const {
     namespace n = detail::names;
     using P = detail::Params<n::Style, n::MaxWidth>;
     static_assert(P::check<A...>());
-    return measure(text, P::get<n::Style>(TextStyle{}, args...), P::get<n::MaxWidth>(kInfinity, args...));
+    TextStyle style;
+    if constexpr (P::given<n::Style, A...>()) {
+        auto&& given = P::arg<n::Style>(args...);
+        if constexpr (std::is_convertible_v<decltype(given), Font>) style.font = Font(given);  // (style = MaterialTheme.typography.titleMedium)
+        else style = TextStyle(given);
+    }
+    return measure(text, style, P::get<n::MaxWidth>(kInfinity, args...));
 }
 
 

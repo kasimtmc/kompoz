@@ -947,6 +947,9 @@ struct TextAutoSize {
     static TextAutoSize StepBased(float minFontSize = 12, float maxFontSize = 112, float stepSize = 0.25f) {
         return {minFontSize, maxFontSize, stepSize};
     }
+    static TextAutoSize StepBased(TextUnit minFontSize, TextUnit maxFontSize, TextUnit stepSize = 0.25f) {  // Compose's: 12.sp, 48.sp, 1.sp
+        return {minFontSize.value, maxFontSize.value, stepSize.value};
+    }
     friend bool operator==(const TextAutoSize&, const TextAutoSize&) = default;
 };
 

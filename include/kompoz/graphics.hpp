@@ -397,7 +397,7 @@ struct Font {
     // letterSpacing = …, lineHeight = …) (named_members.hpp).
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
-    Font copy(A&&... args) const;
+    auto copy(A&&... args) const;  // (a TextStyle when a name is a TextStyle's: brush, shadow, lineHeightStyle, …)
     float strokeMiter = 4;
     // Its glyphs stretched across (their advances too) and slanted: a point y above the baseline
     // moved y * skewX to the right (a text style's TextGeometricTransform).

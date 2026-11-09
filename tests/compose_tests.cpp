@@ -1588,6 +1588,33 @@ TEST(sections_forms_as_compose_writes_them) {
     CHECK(rule.onNodeWithText("tasks 2 · yok · 7 · 0 · 5").exists() && rule.onNodeWithText("düğme 1").exists());
 }
 
+// Text styles as Compose writes them: a typography style's copy(brush = …, shadow = …, lineHeightStyle = …,
+// textIndent = TextIndent(24.sp), fontFeatureSettings = …, lineBreak = …), basicMarquee by name, TextAutoSize.StepBased in sp,
+// the measurer's style = a typography style.
+@Composable
+fun TextStyles() {
+    val typography = MaterialTheme.typography
+    val measurer = rememberTextMeasurer()
+    val width = measurer.measure("Kompoz", style = typography.titleMedium).size.width
+    Column {
+        Text("degrade", style = typography.headlineSmall.copy(brush = Brush.horizontalGradient(listOf(Color.Red, Color.Blue))))
+        Text("gölge", style = typography.titleLarge.copy(shadow = Shadow(Color.Black, Offset(2f, 3f), 4f)))
+        Text("girinti", style = typography.bodyMedium.copy(textIndent = TextIndent(24.sp), lineBreak = LineBreak.Paragraph,
+                                                           lineHeightStyle = LineHeightStyle(alignment = LineHeightStyle.Alignment.Top, trim = LineHeightStyle.Trim.None)))
+        Text("küçük büyük", style = typography.titleMedium.copy(fontFeatureSettings = "smcp"))
+        Text("kayan yazı kayan yazı kayan yazı kayan yazı kayan yazı", modifier = Modifier.width(120.dp).basicMarquee(iterations = Int.MAX_VALUE, velocity = 60.dp).testTag("kayan"))
+        Text("sığ", modifier = Modifier.width(60.dp), maxLines = 1, autoSize = TextAutoSize.StepBased(8.sp, 40.sp, 1.sp))
+        Text("ölçü ${if (width > 10f) "var" else "yok"}")
+    }
+}
+
+TEST(text_styles_as_compose_writes_them) {
+    ComposeTestRule rule([] { TextStyles(); });
+    CHECK(rule.onNodeWithText("degrade").exists() && rule.onNodeWithText("gölge").exists() && rule.onNodeWithText("girinti").exists());
+    CHECK(rule.onNodeWithText("küçük büyük").exists() && rule.onNodeWithTag("kayan").exists() && rule.onNodeWithText("sığ").exists());
+    CHECK(rule.onNodeWithText("ölçü var").exists());
+}
+
 TEST(navigation_as_compose_writes_it) {
     NavController nav;
     ComposeTestRule rule([&] { Navigator(nav); });

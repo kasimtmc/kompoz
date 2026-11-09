@@ -218,10 +218,15 @@ Modifier Modifier::selectable(A&&... args) const {
 // (its sp) or a number of sp; a family is a FontFamily (its id) or an id.
 template <class... A>
     requires(detail::anyNamedArgument<A...>)
-Font Font::copy(A&&... args) const {
+auto Font::copy(A&&... args) const {
     namespace n = detail::names;
-    using P = detail::Params<n::FontFamily, n::FontWeight, n::FontSize, n::FontStyle, n::LetterSpacing, n::LineHeight>;
+    using P = detail::Params<n::FontFamily, n::FontWeight, n::FontSize, n::FontStyle, n::LetterSpacing, n::LineHeight, n::Brush, n::Shadow,
+                             n::LineHeightStyle, n::TextIndent, n::FontFeatureSettings, n::LineBreak, n::DrawStyle, n::TextGeometricTransform, n::Color>;
     static_assert(P::check<A...>());
+    // Compose's typography.titleLarge.copy(brush = …, shadow = …): a TextStyle of this font with those (a Font has none of them).
+    constexpr bool styled = P::template given<n::Brush, A...>() || P::template given<n::Shadow, A...>() || P::template given<n::LineHeightStyle, A...>() ||
+                            P::template given<n::TextIndent, A...>() || P::template given<n::FontFeatureSettings, A...>() || P::template given<n::LineBreak, A...>() ||
+                            P::template given<n::DrawStyle, A...>() || P::template given<n::TextGeometricTransform, A...>() || P::template given<n::Color, A...>();
     Font f = *this;
     auto sp = [](auto&& v) {
         if constexpr (requires { v.value; }) return float(v.value);
@@ -237,7 +242,40 @@ Font Font::copy(A&&... args) const {
     if constexpr (P::given<n::FontSize, A...>()) f.size = sp(P::arg<n::FontSize>(args...));
     if constexpr (P::given<n::LetterSpacing, A...>()) f.letterSpacing = sp(P::arg<n::LetterSpacing>(args...));
     if constexpr (P::given<n::LineHeight, A...>()) f.lineHeight = sp(P::arg<n::LineHeight>(args...));
-    return f;
+    if constexpr (styled) {
+        TextStyle style;
+        style.font = f;
+        P::set<n::Brush>(style.brush, args...);
+        P::set<n::Shadow>(style.shadow, args...);
+        P::set<n::LineHeightStyle>(style.lineHeightStyle, args...);
+        P::set<n::TextIndent>(style.textIndent, args...);
+        P::set<n::FontFeatureSettings>(style.fontFeatureSettings, args...);
+        P::set<n::LineBreak>(style.lineBreak, args...);
+        P::set<n::DrawStyle>(style.drawStyle, args...);
+        P::set<n::TextGeometricTransform>(style.textGeometricTransform, args...);
+        P::set<n::Color>(style.color, args...);
+        return style;
+    } else {
+        return f;
+    }
+}
+
+// basicMarquee(iterations = Int.MAX_VALUE, animationMode = …, repeatDelayMillis = …, initialDelayMillis = …, spacing = …, velocity = 60.dp):
+// Compose's names for the MarqueeOptions.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::basicMarquee(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::Iterations, n::AnimationMode, n::RepeatDelayMillis, n::InitialDelayMillis, n::Spacing, n::Velocity>;
+    static_assert(P::check<A...>());
+    MarqueeOptions options;
+    P::set<n::Iterations>(options.iterations, args...);
+    P::set<n::AnimationMode>(options.animationMode, args...);
+    P::set<n::RepeatDelayMillis>(options.repeatDelayMillis, args...);
+    P::set<n::InitialDelayMillis>(options.initialDelayMillis, args...);
+    P::set<n::Spacing>(options.spacing, args...);
+    P::set<n::Velocity>(options.velocity, args...);
+    return basicMarquee(options);
 }
 
 template <class... A>

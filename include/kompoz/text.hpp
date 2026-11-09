@@ -116,7 +116,9 @@ enum class TextAlign { Start, Center, End, Left, Right, Justify };
 // How far in (sp, from the start) a paragraph's first line and its other lines begin
 // (Compose's TextIndent).
 struct TextIndent {
-    float firstLine = 0, restLine = 0;
+    float firstLine = 0, restLine = 0;  // sp
+    constexpr TextIndent() = default;
+    constexpr TextIndent(TextUnit firstLine, TextUnit restLine = {}) : firstLine(firstLine.value), restLine(restLine.value) {}  // (Compose's: 24.sp)
     friend bool operator==(const TextIndent&, const TextIndent&) = default;
 };
 // How a paragraph's lines are broken (Compose's LineBreak). Strategy: Simple fills each line in
