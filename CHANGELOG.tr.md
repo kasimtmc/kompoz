@@ -1033,6 +1033,9 @@
   `floatingToolbarColors = …`'un yanı sıra `colors = …` (Compose'un adı) alıyor. kompozc'de salt okunur alıcılı bir bloğun (bir
   `AnimatedContentScope`, bir `ToggleFloatingActionButtonScope`) içinde yazılan bir lambda onun bir kopyasını tutuyor; böylece
   bloktan sonra çalışan biri (`Modifier.graphicsLayer { rotationZ = 45 * checkedProgress }`, çizerken okunan) kapsamını hâlâ buluyor.
+- **Gösteri uygulamasının material gezinmesi Compose'un sözdizimiyle**: sekme satırları, FAB menüsü, kısa gezinme çubuğu, geniş
+  gezinme rayı ve kayan araç çubukları Kotlin'de `@Composable fun`'lar (hedefler bir data class, FAB'ın artısı `checkedProgress`
+  okuyan bir `graphicsLayer`'da dönüyor).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

@@ -994,6 +994,9 @@
   …` (Compose's name) as well as `floatingToolbarColors = …`. In kompozc, a lambda written inside a block with a read-only
   receiver (an `AnimatedContentScope`, a `ToggleFloatingActionButtonScope`) keeps a copy of it, so one that runs after the
   block (`Modifier.graphicsLayer { rotationZ = 45 * checkedProgress }`, read as it draws) still has its scope.
+- **The showcase's material navigation in Compose's syntax**: the tab rows, the FAB menu, the short navigation bar, the wide
+  navigation rail and the floating toolbars are `@Composable fun`s in Kotlin (the destinations a data class, the FAB's plus
+  turning in a `graphicsLayer` that reads `checkedProgress`).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

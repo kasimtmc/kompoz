@@ -2,190 +2,184 @@
 
 #include "showcase.hpp"
 
-#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
+// A place to go: its label and icon (the navigation bar's and rail's items, the FAB menu's actions).
+data class Destination(val label: String, val icon: ImageVector)
 
-void TabsSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto tab = remember([] { return mutableStateOf(0); });
-        auto subTab = remember([] { return mutableStateOf(0); });
-        auto travel = remember([] { return mutableStateOf(0); });
-        auto city = remember([] { return mutableStateOf(0); });
-        Section("Sekmeler", [=] {
-            PrimaryTabRow(tab.get(), Modifier(), [&] {
-                const char* titles[] = {"Gelen", "Yıldızlı", "Ayarlar"};
-                const ImageVector* icons[] = {&Icons::Filled::Email, &Icons::Filled::Star, &Icons::Filled::Settings};
-                for (int i = 0; i < 3; ++i)
-                    Tab(tab.get() == i, [tab, i] { tab.set(i); }, [&, i] { Text(titles[i]); },
-                        [&, i] { Icon(*icons[i], titles[i]); });
-            });
-            SecondaryTabRow(subTab.get(), Modifier(), [&] {
-                for (int i = 0; i < 3; ++i)
-                    Tab(subTab.get() == i, [subTab, i] { subTab.set(i); }, [i] { Text(i == 0 ? "Tümü" : i == 1 ? "Yeni" : "Arşiv"); });
-            });
-            // LeadingIconTab: the icon beside the text, a lower row; unselected ones in
-            // onSurfaceVariant (by default they take the selected color, as in Compose).
-            PrimaryTabRow(travel.get(), Modifier(), [&] {
-                const char* titles[] = {"Uçuş", "Otel", "Yer"};
-                const ImageVector* icons[] = {&Icons::Filled::Send, &Icons::Filled::Home, &Icons::Filled::Place};
-                for (int i = 0; i < 3; ++i)
-                    LeadingIconTab(travel.get() == i, [travel, i] { travel.set(i); }, [&, i] { Text(titles[i]); },
-                                   [&, i] { Icon(*icons[i], titles[i], Modifier().size(18)); }, Modifier(),
-                                   {.unselectedContentColor = cs.onSurfaceVariant});
-            });
-            AnimatedContent(tab.get(), [&](const int& t) {
-                const char* texts[] = {"3 yeni ileti var.", "Yıldızlı ileti yok.", "Bildirimler ve hesap ayarları."};
-                Text(texts[t], Modifier().padding(4, 8), color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            });
-            static const char* cities[] = {"İstanbul", "Ankara", "İzmir", "Bursa", "Antalya", "Konya", "Adana", "Gaziantep",
-                                           "Kayseri", "Trabzon", "Eskişehir", "Samsun"};
-            PrimaryScrollableTabRow(city.get(), Modifier(), [&] {
-                for (int i = 0; i < 12; ++i) Tab(city.get() == i, [city, i] { city.set(i); }, [i] { Text(cities[i]); });
-            }, {.edgePadding = 16});
-            Text(std::string("PrimaryScrollableTabRow: ") + cities[city.get()] + " — seçilen sekme ortaya kayar.",
-                 Modifier().padding(4, 8), color = cs.onSurfaceVariant, style = typography().bodyMedium);
-        });
-    });
-}
-
-void FabMenuSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        // M3 Expressive's FAB menu: its actions open above the button, which turns into a round close button.
-        Section("FloatingActionButtonMenu", [=] {
-            auto fabOpen = remember([] { return mutableStateOf(false); });
-            auto fabPicked = remember([] { return mutableStateOf(std::string("yok")); });
-            BackHandler(fabOpen.get(), [fabOpen] { fabOpen.set(false); });
-            Box(Modifier().fillMaxWidth().height(280), Alignment::BottomEnd) {
-                Text("Seçilen: " + fabPicked.get(), Modifier().align(Alignment::BottomStart),
-                     color = cs.onSurfaceVariant, style = typography().bodyMedium);
-                FloatingActionButtonMenu(fabOpen.get(), [&] {
-                    ToggleFloatingActionButton(fabOpen.get(), [fabOpen](bool on) { fabOpen.set(on); },
-                                               [](const ToggleFloatingActionButtonScope& s) {  // (turned as it is drawn)
-                                                   Icon(Icons::Filled::Add, "Menü",
-                                                        Modifier().graphicsLayer([s](GraphicsLayerScope& l) { l.rotationZ = 45 * s.checkedProgress(); }));
-                                               });
-                }, [&](const FloatingActionButtonMenuScope& menu) {
-                    struct Action {
-                        const char* label;
-                        const ImageVector* icon;
-                    };
-                    for (Action a : {Action{"Not", &Icons::Filled::Edit}, Action{"Konum", &Icons::Filled::Place},
-                                     Action{"E-posta", &Icons::Filled::Email}})
-                        FloatingActionButtonMenuItem(menu, [fabOpen, fabPicked, a] {
-                            fabPicked.set(a.label);
-                            fabOpen.set(false);
-                        }, [a] { Text(a.label); }, [a] { Icon(*a.icon, ""); });
-                });
-            };
-        });
-    });
-}
-
-void ShortNavigationBarSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        // M3 Expressive's short navigation bar: items sharing the width (compact) or together in the middle (wider).
-        Section("ShortNavigationBar", [=] {
-            auto page = remember([] { return mutableStateOf(0); });
-            struct Tab {
-                const char* label;
-                const ImageVector* icon;
-            };
-            const Tab tabs[] = {{"Ana sayfa", &Icons::Filled::Home}, {"Ara", &Icons::Filled::Search}, {"Profil", &Icons::Filled::Person}};
-            for (ShortNavigationBarArrangement arrangement : {ShortNavigationBarArrangement::EqualWeight, ShortNavigationBarArrangement::Centered}) {
-                Text(arrangement == ShortNavigationBarArrangement::EqualWeight ? "Eşit paylaşım" : "Ortada",
-                     color = cs.onSurfaceVariant, style = typography().labelLarge);
-                ShortNavigationBar(Modifier().clip(RoundedCornerShape(16)), kompoz::arrangement = arrangement, windowInsets = WindowInsets{}) {
-                    for (int i = 0; i < 3; ++i)
-                        ShortNavigationBarItem(page.get() == i, [page, i] { page.set(i); },
-                                               [&, i] { Icon(*tabs[i].icon, ""); }, [&, i] { Text(tabs[i].label); });
-                };
+@Composable
+fun TabsSection() {
+    val cs = MaterialTheme.colorScheme
+    var tab by remember { mutableStateOf(0) }
+    var subTab by remember { mutableStateOf(0) }
+    var travel by remember { mutableStateOf(0) }
+    var city by remember { mutableStateOf(0) }
+    Section("Sekmeler") {
+        val titles = listOf("Gelen", "Yıldızlı", "Ayarlar")
+        val icons = listOf(Icons.Filled.Email, Icons.Filled.Star, Icons.Filled.Settings)
+        PrimaryTabRow(selectedTabIndex = tab) {
+            for (i in 0 until 3) {
+                Tab(selected = tab == i, onClick = { tab = i }, text = { Text(titles[i]) }, icon = { Icon(icons[i], contentDescription = titles[i]) })
             }
-        });
-    });
+        }
+        SecondaryTabRow(selectedTabIndex = subTab) {
+            for (i in 0 until 3) {
+                Tab(selected = subTab == i, onClick = { subTab = i }, text = { Text(if (i == 0) "Tümü" else if (i == 1) "Yeni" else "Arşiv") })
+            }
+        }
+        // LeadingIconTab: the icon beside the text, a lower row; unselected ones in
+        // onSurfaceVariant (by default they take the selected color, as in Compose).
+        val trips = listOf("Uçuş", "Otel", "Yer")
+        val tripIcons = listOf(Icons.Filled.Send, Icons.Filled.Home, Icons.Filled.Place)
+        PrimaryTabRow(selectedTabIndex = travel) {
+            for (i in 0 until 3) {
+                LeadingIconTab(selected = travel == i, onClick = { travel = i }, text = { Text(trips[i]) },
+                               icon = { Icon(tripIcons[i], contentDescription = trips[i], modifier = Modifier.size(18.dp)) },
+                               unselectedContentColor = cs.onSurfaceVariant)
+            }
+        }
+        AnimatedContent(targetState = tab) { t ->
+            val texts = listOf("3 yeni ileti var.", "Yıldızlı ileti yok.", "Bildirimler ve hesap ayarları.")
+            Text(texts[t], modifier = Modifier.padding(4.dp, 8.dp), color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        }
+        val cities = listOf("İstanbul", "Ankara", "İzmir", "Bursa", "Antalya", "Konya", "Adana", "Gaziantep", "Kayseri", "Trabzon", "Eskişehir", "Samsun")
+        PrimaryScrollableTabRow(selectedTabIndex = city, edgePadding = 16.dp) {
+            for (i in 0 until 12) Tab(selected = city == i, onClick = { city = i }, text = { Text(cities[i]) })
+        }
+        Text("PrimaryScrollableTabRow: ${cities[city]} — seçilen sekme ortaya kayar.", modifier = Modifier.padding(4.dp, 8.dp),
+             color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
-void WideNavigationRailSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        // M3 Expressive's wide navigation rail: ☰ widens it, the labels going after the icons.
-        Section("WideNavigationRail", [=] {
-            auto rail = rememberWideNavigationRailState();
-            auto box = remember([] { return mutableStateOf(0); });
-            struct Box_ {
-                const char* label;
-                const ImageVector* icon;
-            };
-            const Box_ boxes[] = {{"Gelen", &Icons::Filled::Email}, {"Yıldızlı", &Icons::Filled::Star}, {"Ayarlar", &Icons::Filled::Settings}};
-            // Modal: it opens over everything from the window's start edge, above a scrim.
-            auto modal = remember([] { return mutableStateOf(false); });
-            Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
-                Switch(modal.get(), [modal, rail](bool on) {
-                    rail.collapse();
-                    modal.set(on);
-                });
-                Text("  Modal (ModalWideNavigationRail)", style = typography().bodyMedium);
-            };
-            Row(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16)).background(cs.surfaceContainerHigh)) {
-                auto items = [=] {  // (by value: the rail's block keeps it)
-                    for (int i = 0; i < 3; ++i)
-                        WideNavigationRailItem(box.get() == i, [box, i, rail, modal] {
-                            box.set(i);
-                            if (modal.peek()) rail.collapse();  // a modal one closes once a destination is picked
-                        }, [&, i] { Icon(*boxes[i].icon, ""); }, [&, i] { Text(boxes[i].label); });
-                };
-                Content header = [rail] {
-                    IconButton([rail] { rail.toggle(); }) { Icon(rail.isExpanded() ? Icons::AutoMirrored::Filled::ArrowBack : Icons::Filled::Menu, "Rayı aç/kapat"); };
-                };
-                if (modal.get())
-                    ModalWideNavigationRail(Modifier(), state = rail, kompoz::header = header) { items(); };
-                else
-                    WideNavigationRail(Modifier(), state = rail, kompoz::header = header, windowInsets = WindowInsets{}) { items(); };
-                Box(Modifier().weight(1).fillMaxHeight(), Alignment::Center) { Text(boxes[box.get()].label, style = typography().headlineSmall); };
-            };
-        });
-    });
+@Composable
+fun FabMenuSection() {
+    val cs = MaterialTheme.colorScheme
+    // M3 Expressive's FAB menu: its actions open above the button, which turns into a round close button.
+    Section("FloatingActionButtonMenu") {
+        var fabOpen by remember { mutableStateOf(false) }
+        var fabPicked by remember { mutableStateOf("yok") }
+        BackHandler(enabled = fabOpen) { fabOpen = false }
+        Box(modifier = Modifier.fillMaxWidth().height(280.dp), contentAlignment = Alignment.BottomEnd) {
+            Text("Seçilen: $fabPicked", modifier = Modifier.align(Alignment.BottomStart), color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            FloatingActionButtonMenu(
+                expanded = fabOpen,
+                button = {
+                    ToggleFloatingActionButton(checked = fabOpen, onCheckedChange = { fabOpen = it }) {
+                        // The plus turns into a cross, as it is drawn.
+                        Icon(Icons.Filled.Add, contentDescription = "Menü", modifier = Modifier.graphicsLayer { rotationZ = 45 * checkedProgress })
+                    }
+                },
+            ) {
+                val actions = listOf(Destination("Not", Icons.Filled.Edit), Destination("Konum", Icons.Filled.Place), Destination("E-posta", Icons.Filled.Email))
+                for (a in actions) {
+                    FloatingActionButtonMenuItem(onClick = { fabPicked = a.label; fabOpen = false }, text = { Text(a.label) },
+                                                 icon = { Icon(a.icon, contentDescription = null) })
+                }
+            }
+        }
+    }
 }
 
-void FloatingToolbarsSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        // M3 Expressive's floating toolbars over a list: they leave as it scrolls on and come back as it scrolls back.
-        Section("Kayan araç çubukları", [=] {
-            auto below = FloatingToolbarDefaults::exitAlwaysScrollBehavior(FloatingToolbarExitDirection::Bottom);
-            auto aside = FloatingToolbarDefaults::exitAlwaysScrollBehavior(FloatingToolbarExitDirection::End);
-            auto more = remember([] { return mutableStateOf(false); });
-            auto tools = remember([] { return mutableStateOf(false); });
-            Box(Modifier()
-                    .fillMaxWidth()
-                    .height(340)
-                    .clip(RoundedCornerShape(16))
-                    .background(cs.surfaceContainerHigh)
-                    .nestedScroll(below.nestedScrollConnection)
-                    .nestedScroll(aside.nestedScrollConnection)) {
-                    LazyColumn(Modifier().fillMaxSize()) {
-                        items(40, [](int i) { Text(std::format("Satır {}", i + 1), Modifier().fillMaxWidth().padding(16, 12)); });
-                    };
-                    // The middle actions stay; ⋮ shows the ones on the sides.
-                    HorizontalFloatingToolbar(more.get(), Modifier().align(Alignment::BottomCenter).offset(0, -FloatingToolbarDefaults::ScreenOffset),
-                        scrollBehavior = below,
-                        leadingContent = [] { IconButton([] {}) { Icon(Icons::Filled::Favorite, "Beğen"); }; },
-                        trailingContent = [] { IconButton([] {}) { Icon(Icons::Filled::Delete, "Sil"); }; }) {
-                        IconButton([] {}) { Icon(Icons::Filled::Edit, "Düzenle"); };
-                        IconButton([] {}) { Icon(Icons::Filled::Share, "Paylaş"); };
-                        IconButton([more] { more.set(!more.get()); }) { Icon(Icons::Filled::MoreVert, "Daha fazla"); };
-                    };
-                    // A vibrant one with a FAB: collapsed, only the FAB is left.
-                    VerticalFloatingToolbar(tools.get(), [&] {
-                        FloatingToolbarDefaults::VibrantFloatingActionButton([tools] { tools.set(!tools.get()); },
-                                                                            [&] { Icon(tools.get() ? Icons::Filled::Close : Icons::Filled::Add, "Araçlar"); });
-                    }, Modifier().align(Alignment::TopEnd).offset(-FloatingToolbarDefaults::ScreenOffset, FloatingToolbarDefaults::ScreenOffset),
-                        floatingToolbarColors = FloatingToolbarDefaults::vibrantFloatingToolbarColors(), scrollBehavior = aside) {
-                        IconButton([] {}) { Icon(Icons::Filled::Place, "Konum"); };
-                        IconButton([] {}) { Icon(Icons::Filled::Email, "E-posta"); };
-                    };
-                };
-        });
-    });
+@Composable
+fun ShortNavigationBarSection() {
+    val cs = MaterialTheme.colorScheme
+    // M3 Expressive's short navigation bar: items sharing the width (compact) or together in the middle (wider).
+    Section("ShortNavigationBar") {
+        var page by remember { mutableStateOf(0) }
+        val tabs = listOf(Destination("Ana sayfa", Icons.Filled.Home), Destination("Ara", Icons.Filled.Search), Destination("Profil", Icons.Filled.Person))
+        for (arrangement in listOf(ShortNavigationBarArrangement.EqualWeight, ShortNavigationBarArrangement.Centered)) {
+            Text(if (arrangement == ShortNavigationBarArrangement.EqualWeight) "Eşit paylaşım" else "Ortada", color = cs.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
+            ShortNavigationBar(modifier = Modifier.clip(RoundedCornerShape(16.dp)), arrangement = arrangement, windowInsets = WindowInsets(0.dp)) {
+                for (i in 0 until 3) {
+                    ShortNavigationBarItem(selected = page == i, onClick = { page = i }, icon = { Icon(tabs[i].icon, contentDescription = null) }, label = { Text(tabs[i].label) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun WideNavigationRailSection() {
+    val cs = MaterialTheme.colorScheme
+    // M3 Expressive's wide navigation rail: ☰ widens it, the labels going after the icons.
+    Section("WideNavigationRail") {
+        val rail = rememberWideNavigationRailState()
+        val scope = rememberCoroutineScope()
+        var box by remember { mutableStateOf(0) }
+        val boxes = listOf(Destination("Gelen", Icons.Filled.Email), Destination("Yıldızlı", Icons.Filled.Star), Destination("Ayarlar", Icons.Filled.Settings))
+        // Modal: it opens over everything from the window's start edge, above a scrim.
+        var modal by remember { mutableStateOf(false) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = modal, onCheckedChange = {
+                scope.launch { rail.collapse() }
+                modal = it
+            })
+            Text("  Modal (ModalWideNavigationRail)", style = MaterialTheme.typography.bodyMedium)
+        }
+        Row(modifier = Modifier.fillMaxWidth().height(380.dp).clip(RoundedCornerShape(16.dp)).background(cs.surfaceContainerHigh)) {
+            val items: @Composable () -> Unit = {
+                for (i in 0 until 3) {
+                    WideNavigationRailItem(selected = box == i, onClick = {
+                                               box = i
+                                               if (modal) scope.launch { rail.collapse() }  // a modal one closes once a destination is picked
+                                           },
+                                           icon = { Icon(boxes[i].icon, contentDescription = null) }, label = { Text(boxes[i].label) })
+                }
+            }
+            val header: @Composable () -> Unit = {
+                IconButton(onClick = { scope.launch { rail.toggle() } }) {
+                    Icon(if (rail.isExpanded) Icons.AutoMirrored.Filled.ArrowBack else Icons.Filled.Menu, contentDescription = "Rayı aç/kapat")
+                }
+            }
+            if (modal) {
+                ModalWideNavigationRail(state = rail, header = header) { items() }
+            } else {
+                WideNavigationRail(state = rail, header = header, windowInsets = WindowInsets(0.dp)) { items() }
+            }
+            Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { Text(boxes[box].label, style = MaterialTheme.typography.headlineSmall) }
+        }
+    }
+}
+
+@Composable
+fun FloatingToolbarsSection() {
+    val cs = MaterialTheme.colorScheme
+    // M3 Expressive's floating toolbars over a list: they leave as it scrolls on and come back as it scrolls back.
+    Section("Kayan araç çubukları") {
+        val below = FloatingToolbarDefaults.exitAlwaysScrollBehavior(FloatingToolbarExitDirection.Bottom)
+        val aside = FloatingToolbarDefaults.exitAlwaysScrollBehavior(FloatingToolbarExitDirection.End)
+        var more by remember { mutableStateOf(false) }
+        var tools by remember { mutableStateOf(false) }
+        Box(modifier = Modifier.fillMaxWidth().height(340.dp).clip(RoundedCornerShape(16.dp)).background(cs.surfaceContainerHigh)
+                .nestedScroll(below.nestedScrollConnection).nestedScroll(aside.nestedScrollConnection)) {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                items(40) { i -> Text("Satır ${i + 1}", modifier = Modifier.fillMaxWidth().padding(16.dp, 12.dp)) }
+            }
+            // The middle actions stay; ⋮ shows the ones on the sides.
+            HorizontalFloatingToolbar(
+                expanded = more,
+                modifier = Modifier.align(Alignment.BottomCenter).offset(y = -FloatingToolbarDefaults.ScreenOffset),
+                scrollBehavior = below,
+                leadingContent = { IconButton(onClick = { }) { Icon(Icons.Filled.Favorite, contentDescription = "Beğen") } },
+                trailingContent = { IconButton(onClick = { }) { Icon(Icons.Filled.Delete, contentDescription = "Sil") } },
+            ) {
+                IconButton(onClick = { }) { Icon(Icons.Filled.Edit, contentDescription = "Düzenle") }
+                IconButton(onClick = { }) { Icon(Icons.Filled.Share, contentDescription = "Paylaş") }
+                IconButton(onClick = { more = !more }) { Icon(Icons.Filled.MoreVert, contentDescription = "Daha fazla") }
+            }
+            // A vibrant one with a FAB: collapsed, only the FAB is left.
+            VerticalFloatingToolbar(
+                expanded = tools,
+                floatingActionButton = {
+                    FloatingToolbarDefaults.VibrantFloatingActionButton(onClick = { tools = !tools }) {
+                        Icon(if (tools) Icons.Filled.Close else Icons.Filled.Add, contentDescription = "Araçlar")
+                    }
+                },
+                modifier = Modifier.align(Alignment.TopEnd).offset(x = -FloatingToolbarDefaults.ScreenOffset, y = FloatingToolbarDefaults.ScreenOffset),
+                colors = FloatingToolbarDefaults.vibrantFloatingToolbarColors(),
+                scrollBehavior = aside,
+            ) {
+                IconButton(onClick = { }) { Icon(Icons.Filled.Place, contentDescription = "Konum") }
+                IconButton(onClick = { }) { Icon(Icons.Filled.Email, contentDescription = "E-posta") }
+            }
+        }
+    }
 }

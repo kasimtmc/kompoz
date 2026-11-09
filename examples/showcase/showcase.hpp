@@ -181,12 +181,8 @@ void TextFieldsSection(CallSite site = CallSite::current());
 // material/containers.cpp: AnimateItemSection, ListItemSection, DialogsSection and CardsSection are @Composable there
 // (the module declares them)
 
-// material/navigation.cpp
-void TabsSection(CallSite site = CallSite::current());
-void FabMenuSection(CallSite site = CallSite::current());
-void ShortNavigationBarSection(CallSite site = CallSite::current());
-void WideNavigationRailSection(CallSite site = CallSite::current());
-void FloatingToolbarsSection(CallSite site = CallSite::current());
+// material/navigation.cpp: TabsSection, FabMenuSection, ShortNavigationBarSection, WideNavigationRailSection and
+// FloatingToolbarsSection are @Composable there (the module declares them)
 
 // places/places.cpp
 
