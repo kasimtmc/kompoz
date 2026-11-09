@@ -985,6 +985,11 @@
   SegmentedButton(checked = …, onCheckedChange = …) { } }` (C++'ta `SegmentedButtonOptions::shape`,
   `SegmentedButtonDefaults::itemShape`; yerine göre biçimler duruyor); kademeli bir ızgarada `item(span =
   StaggeredGridItemSpan.FullLine) { }` ve `items(list, span = { StaggeredGridItemSpan.SingleLane }) { }`.
+- **Gösteri uygulamasının liste ve öğe ekranları Compose'un sözdizimiyle**: satırlar, pencere ve ortam satırları, listenin
+  durumu, ızgara ve kademeli kareler, `ListScreen` ve `ItemScreen` Kotlin'de `@Composable fun`'lar: beğeniler
+  `ViewModel`'i kendi sınıfının bir parametresi, bölümlü butonlar `SegmentedButtonDefaults.itemShape` ile adla, kademeli
+  ızgaranın başlığı bir `item(span = StaggeredGridItemSpan.FullLine)`, beğeniler `liked[index] ?: 0` ve
+  `liked.values.sum()` olarak okunuyor.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

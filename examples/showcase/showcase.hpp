@@ -78,12 +78,7 @@ Color hueColor(int i);
 
 // home/home.cpp: ScrollToTopButton and HomeScreen are @Composable there (the module declares them)
 
-// list/list.cpp
-void WindowClassLine(CallSite site = CallSite::current());
-void MediaLine(CallSite site = CallSite::current());
-void ListScreen(Modifier modifier, LazyListState state, NavController nav, std::shared_ptr<LikesViewModel> likes,
-                CallSite site = CallSite::current());
-void ItemScreen(int index, NavController nav, std::shared_ptr<LikesViewModel> vm, CallSite site = CallSite::current());
+// list/list.cpp: WindowClassLine, MediaLine, ListScreen and ItemScreen are @Composable there (the module declares them)
 
 // components/state.cpp
 void IconGallery(CallSite site = CallSite::current());

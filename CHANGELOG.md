@@ -945,6 +945,11 @@
   SegmentedButton(checked = …, onCheckedChange = …) { } }` (`SegmentedButtonOptions::shape`,
   `SegmentedButtonDefaults::itemShape` in C++; the forms by place stay); `item(span = StaggeredGridItemSpan.FullLine) {
   }` and `items(list, span = { StaggeredGridItemSpan.SingleLane }) { }` in a staggered grid.
+- **The showcase's list and item screens in Compose's syntax**: the rows, the window and media lines, the list's
+  status, the grid and staggered tiles, `ListScreen` and `ItemScreen` are `@Composable fun`s in Kotlin: the likes
+  `ViewModel` a parameter of its class, the segmented buttons by name with `SegmentedButtonDefaults.itemShape`, the
+  staggered grid's title an `item(span = StaggeredGridItemSpan.FullLine)`, the likes read as `liked[index] ?: 0` and
+  `liked.values.sum()`.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

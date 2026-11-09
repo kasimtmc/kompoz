@@ -2,240 +2,214 @@
 
 #include "showcase.hpp"
 
-#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
-
 // One row of the 10,000-row list. Skipped whenever the list recomposes and `index` is unchanged.
-void ListRow(int index, NavController nav, CallSite site = CallSite::current()) {
-    composable(site, index, nav, [=] {
-        const ColorScheme& cs = colorScheme();
-        Row(traced(Modifier()
-                       .fillMaxWidth()
-                       .clip(RoundedCornerShape(12))
-                       .background(cs.surfaceContainer)
-                       .clickable([nav, index] { nav.navigate(routes::Item{index}); })
-                       .padding(12)),
-            horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
-                Box(Modifier().size(40).background(hueColor(index), 20), Alignment::Center) {
-                    Text(std::to_string(index % 100), fontWeight = FontWeight::Bold, color = colors::White);
-                };
-                Column(Modifier().weight(1)) {
-                    Text(std::format("Öğe {}", index), style = typography().titleMedium);
-                    Text("Sadece ekrandakiler kompoze edilir",
-                         color = cs.onSurfaceVariant, style = typography().bodyMedium);
-                };
-            };
-    });
+@Composable
+fun ListRow(index: Int, nav: NavController) {
+    val cs = MaterialTheme.colorScheme
+    Row(modifier = traced(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(cs.surfaceContainer)
+                              .clickable { nav.navigate(routes.Item(index)) }.padding(12.dp)),
+        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(40.dp).background(hueColor(index), CircleShape), contentAlignment = Alignment.Center) {
+            Text("${index % 100}", fontWeight = FontWeight.Bold, color = Color.White)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Öğe $index", style = MaterialTheme.typography.titleMedium)
+            Text("Sadece ekrandakiler kompoze edilir", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
 }
 
-// Reads the list's first visible index, so only this small scope recomposes while scrolling.
 // The window's size class (currentWindowAdaptiveInfo): what NavigationSuiteScaffold goes by.
-void WindowClassLine(CallSite site) {
-    composable(site, [=] {
-        WindowSizeClass c = currentWindowAdaptiveInfo().windowSizeClass;
-        Size window = LocalWindowSize.current();
-        const char* widths[] = {"Compact", "Medium", "Expanded"};
-        Text(std::format("Pencere: {} × {} ({:.0f} × {:.0f} dp)", widths[int(c.windowWidthSizeClass)], widths[int(c.windowHeightSizeClass)],
-                         window.width, window.height),
-             color = colorScheme().onSurfaceVariant, style = typography().bodySmall);
-    });
+@Composable
+fun WindowClassLine() {
+    val c = currentWindowAdaptiveInfo().windowSizeClass
+    val window = LocalWindowSize.current
+    val widths = listOf("Compact", "Medium", "Expanded")
+    Text("Pencere: %s × %s (%.0f × %.0f dp)".format(widths[c.windowWidthSizeClass.ordinal], widths[c.windowHeightSizeClass.ordinal],
+                                                    window.width, window.height),
+         color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
 }
 
 // What the app runs on (mediaQuery): the pointer, the keyboard, a microphone and a camera, how
 // far the screen is seen from. Not recomposed as the window is resized.
-void MediaLine(CallSite site) {
-    composable(site, [=] {
-        std::string line = mediaQuery([](const UiMediaScope& m) {
-            const char* pointers[] = {"yok", "kumanda", "dokunmatik", "fare/kalem"};
-            const char* keyboards[] = {"yok", "ekranda", "fiziksel"};
-            const char* distances[] = {"yakın", "orta", "uzak"};
-            return std::format("İşaretçi: {} · Klavye: {} · Mikrofon {} · Kamera {} · Mesafe: {}", pointers[int(m.pointerPrecision())],
-                               keyboards[int(m.keyboardKind())], m.hasMicrophone() ? "var" : "yok", m.hasCamera() ? "var" : "yok",
-                               distances[int(m.viewingDistance())]);
-        });
-        Text(line, color = colorScheme().onSurfaceVariant, style = typography().bodySmall);
-    });
+@Composable
+fun MediaLine() {
+    val line = mediaQuery {
+        val pointers = listOf("yok", "kumanda", "dokunmatik", "fare/kalem")
+        val keyboards = listOf("yok", "ekranda", "fiziksel")
+        val distances = listOf("yakın", "orta", "uzak")
+        "İşaretçi: %s · Klavye: %s · Mikrofon %s · Kamera %s · Mesafe: %s".format(
+            pointers[pointerPrecision.ordinal], keyboards[keyboardKind.ordinal], if (hasMicrophone) "var" else "yok",
+            if (hasCamera) "var" else "yok", distances[viewingDistance.ordinal])
+    }
+    Text(line, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
 }
 
-void ListStatus(LazyListState state, CallSite site = CallSite::current()) {
-    composable(site, state, [=] {
-        int first = state.firstVisibleItemIndex();
-        auto scope = rememberCoroutineScope();
-        // snapshotFlow: a coroutine told of each new section the top of the list is in.
-        auto sections = remember([] { return mutableStateOf(0); });
-        LaunchedEffect(state, [state, sections]() -> Task {
-            co_await snapshotFlow([state] { return state.firstVisibleItemIndex() / 50; }).collect([sections](int) {
-                sections.set(sections.peek() + 1);
-            });
-        });
-        Row(Modifier().fillMaxWidth().padding(16, 4), verticalAlignment = Alignment::CenterVertically) {
-            // isScrollInProgress: while dragged, flung or animated.
-            Text(std::format("İlk görünen öğe: {} · bölüm değişimi: {}{}", first, sections.get() - 1, state.isScrollInProgress() ? " · kayıyor" : ""),
-                 traced(Modifier().weight(1)), color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
-            // Animated: from far down it jumps close first, then glides (animateScrollToItem).
-            TextButton([state, scope] { scope.launch([state]() -> Task { co_await state.animateScrollToItem(0); }); }, Modifier(),
-                       enabled = first > 0) { Text("Başa dön"); };
-        };
-    });
+// Reads the list's first visible index, so only this small scope recomposes while scrolling.
+@Composable
+fun ListStatus(state: LazyListState) {
+    val first = state.firstVisibleItemIndex
+    val scope = rememberCoroutineScope()
+    // snapshotFlow: a coroutine told of each new section the top of the list is in.
+    var sections by remember { mutableStateOf(0) }
+    LaunchedEffect(state) {
+        snapshotFlow { state.firstVisibleItemIndex / 50 }.collect { sections++ }
+    }
+    Row(modifier = Modifier.fillMaxWidth().padding(16.dp, 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        // isScrollInProgress: while dragged, flung or animated.
+        Text("İlk görünen öğe: $first · bölüm değişimi: ${sections - 1}${if (state.isScrollInProgress) " · kayıyor" else ""}",
+             modifier = traced(Modifier.weight(1f)), color = MaterialTheme.colorScheme.onSurfaceVariant,
+             style = MaterialTheme.typography.bodyMedium)
+        // Animated: from far down it jumps close first, then glides (animateScrollToItem).
+        TextButton(onClick = { scope.launch { state.animateScrollToItem(0) } }, enabled = first > 0) { Text("Başa dön") }
+    }
 }
 
 // A square grid tile (aspectRatio keeps it square whatever the column width).
-void GridTile(int index, CallSite site = CallSite::current()) {
-    composable(site, index, [=] {
-        Box(Modifier().fillMaxWidth().aspectRatio(1).background(hueColor(index), 16), Alignment::Center) { Text(std::to_string(index), fontWeight = FontWeight::Bold, color = colors::White); };
-    });
+@Composable
+fun GridTile(index: Int) {
+    Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f).background(hueColor(index), RoundedCornerShape(16.dp)),
+        contentAlignment = Alignment.Center) {
+        Text("$index", fontWeight = FontWeight.Bold, color = Color.White)
+    }
 }
 
 // A card of its own height for the staggered grid.
-void StaggeredTile(int index, CallSite site = CallSite::current()) {
-    composable(site, index, [=] {
-        float height = float(72 + (index * 53) % 140);
-        Box(Modifier().fillMaxWidth().height(height).background(hueColor(index), 16).padding(12), Alignment::BottomStart) {
-            Text(std::format("#{} · {:.0f} dp", index, height), fontWeight = FontWeight::Bold, color = colors::White);
-        };
-    });
+@Composable
+fun StaggeredTile(index: Int) {
+    val height = (72 + (index * 53) % 140).toFloat()
+    Box(modifier = Modifier.fillMaxWidth().height(height.dp).background(hueColor(index), RoundedCornerShape(16.dp)).padding(12.dp),
+        contentAlignment = Alignment.BottomStart) {
+        Text("#%d · %.0f dp".format(index, height), fontWeight = FontWeight.Bold, color = Color.White)
+    }
 }
 
-void ListScreen(Modifier modifier, LazyListState state, NavController nav, std::shared_ptr<LikesViewModel> likes,
-                CallSite site) {
-    composable(site, modifier, state, nav, likes, [=] {
-        auto mode = remember([] { return mutableStateOf(0); });  // list, grid, staggered grid
-        auto gridState = rememberLazyGridState();
-        auto staggeredScroll = rememberLazyStaggeredGridState();
-        // Pull down at the top to refresh (a pretend reload of a second and a half).
-        auto refreshing = remember([] { return mutableStateOf(false); });
-        auto refreshes = remember([] { return mutableStateOf(0); });
-        auto scope = rememberCoroutineScope();
-        auto refresh = [refreshing, refreshes, scope] {
-            refreshing.set(true);
-            scope.launch([refreshing, refreshes]() -> Task {
-                co_await delay(std::chrono::milliseconds(1500));
-                refreshes.set(refreshes.peek() + 1);
-                refreshing.set(false);
-            });
-        };
-        auto rows = remember([] {
-            std::vector<int> v(10'000);
-            for (int i = 0; i < int(v.size()); ++i) v[size_t(i)] = i;
-            return v;
-        });
-        const ColorScheme& cs = colorScheme();
-        Column(modifier) {
-            LazyRow(Modifier().fillMaxWidth(), contentPadding = PaddingValues{16, 4, 16, 4}, horizontalArrangement = Arrangement::spacedBy(8)) {
-                        items(40, [&](int i) {
-                            Box(Modifier().background(cs.primaryContainer, 16).padding(14, 8)) {
-                                Text(std::format("Etiket {}", i + 1),
-                                     color = cs.onPrimaryContainer, style = typography().labelLarge);
-                            };
-                        });
-                    };
-            SingleChoiceSegmentedButtonRow(Modifier().fillMaxWidth().padding(16, 4), [&] {
-                const char* labels[] = {"Liste", "Izgara", "Kademeli"};
-                for (int i = 0; i < 3; ++i) SegmentedButton(mode.get() == i, [mode, i] { mode.set(i); }, [&, i] { Text(labels[i]); });
-            });
-            Text(refreshes.get() ? std::format("Aşağı çekip yenileyin · {} kez yenilendi", refreshes.get())
-                                 : std::string("Aşağı çekip yenileyin (PullToRefreshBox)"),
-                 Modifier().padding(16, 0), color = cs.onSurfaceVariant, style = typography().bodySmall);
-            std::map<int, int> liked = likes->likes.collectAsState();
-            int total = 0;
-            for (const auto& [item, n] : liked) total += n;
-            Text(liked.empty() ? std::string("Bir satıra girip beğenin: beğeniler liste grafiğinin ViewModel'inde")
-                               : std::format("{} öğede {} beğeni (liste grafiğinin ViewModel'i)", liked.size(), total),
-                 Modifier().padding(16, 0), color = cs.primary, style = typography().bodySmall);
-            if (mode.get() == 0) {
-                ListStatus(state);
-                PullToRefreshBox(refreshing.get(), refresh, Modifier().fillMaxWidth().weight(1), [&] {
-                    // Sections of 50 rows under sticky headers (opaque: the rows scroll under them).
-                    Color headerColor = cs.background, headerText = cs.primary;
-                    LazyColumn(Modifier().fillMaxSize(), kompoz::state = state, contentPadding = PaddingValues{16, 4, 16, 88}, verticalArrangement = Arrangement::spacedBy(6)) {
-                                   for (int g = 0; g < int(rows.size()); g += 50) {
-                                       stickyHeader(std::format("section{}", g), [g, headerColor, headerText] {
-                                           Box(Modifier().fillMaxWidth().background(headerColor).padding(4, 10)) {
-                                               Text(std::format("{} – {}", g, g + 49),
-                                                    color = headerText, style = typography().labelLarge);
-                                           };
-                                       });
-                                       items(50, [g](int i) { return size_t(g + i); }, [g, nav](int i) { ListRow(g + i, nav); });
-                                   }
-                               };
-                });
-            } else if (mode.get() == 1) {
-                // LazyGridState: the tiles in view (layoutInfo) and scrolls to an item.
-                Row(Modifier().fillMaxWidth().padding(16, 0), verticalAlignment = Alignment::CenterVertically) {
-                    LazyGridLayoutInfo info = gridState.layoutInfo();
-                    // Item 0 is the title row: tile n is item n + 1.
-                    std::string seen = info.visibleItemsInfo.empty()
-                                           ? "—"
-                                           : std::format("{}–{}", std::max(0, info.visibleItemsInfo.front().index - 1),
-                                                         std::max(0, info.visibleItemsInfo.back().index - 1));
-                    Text(std::format("Görünen kareler: {} · {} sütun", seen, info.maxSpan), Modifier().weight(1),
-                         color = cs.onSurfaceVariant, style = typography().bodySmall);
-                    TextButton([gridState, scope] { scope.launch([gridState]() -> Task { co_await gridState.animateScrollToItem(0); }); }) { Text("Başa"); };
-                    TextButton([gridState] { gridState.scrollToItem(5001); }) { Text("Kare 5000"); };
-                };
-                // 10,000 tiles, as many columns of at least 88 dp as fit; only rows in view are composed.
-                PullToRefreshBox(refreshing.get(), refresh, Modifier().fillMaxWidth().weight(1), [&] {
-                    LazyVerticalGrid(GridCells::Adaptive(88), Modifier().fillMaxSize(),
-                                     kompoz::state = gridState, contentPadding = PaddingValues{16, 8, 16, 88}, verticalArrangement = Arrangement::spacedBy(8),
-                                     horizontalArrangement = Arrangement::spacedBy(8)) {
-                                         item([&] { Text("10.000 kare", Modifier().padding(4, 0, 0, 4),
-                                                               style = typography().titleMedium); },
-                                                    LazyGridScope::FullLine);
-                                         items(rows, [](int v) { return v; }, [](int v) { GridTile(v); });
-                                     };
-                });
-            } else {
-                // LazyStaggeredGridState: the cards in view and scrolls to one (item 0 is the title).
-                Row(Modifier().fillMaxWidth().padding(16, 0), verticalAlignment = Alignment::CenterVertically) {
-                    LazyStaggeredGridLayoutInfo info = staggeredScroll.layoutInfo();
-                    std::string seen = info.visibleItemsInfo.empty()
-                                           ? "—"
-                                           : std::format("{}–{}", std::max(0, info.visibleItemsInfo.front().index - 1),
-                                                         std::max(0, info.visibleItemsInfo.back().index - 1));
-                    Text(std::format("Görünen kartlar: {} · {} şerit", seen, info.lanes), Modifier().weight(1),
-                         color = cs.onSurfaceVariant, style = typography().bodySmall);
-                    TextButton([staggeredScroll, scope] {
-                        scope.launch([staggeredScroll]() -> Task { co_await staggeredScroll.animateScrollToItem(0); });
-                    }) { Text("Başa"); };
-                    TextButton([staggeredScroll] { staggeredScroll.scrollToItem(3001); }) { Text("Kart 3000"); };
-                };
-                // Cards of their own heights, each under the shorter lane (LazyVerticalStaggeredGrid).
-                LazyVerticalStaggeredGrid(StaggeredGridCells::Adaptive(150), Modifier().fillMaxWidth().weight(1),
-                                          kompoz::state = staggeredScroll, contentPadding = PaddingValues{16, 8, 16, 88}, verticalItemSpacing = 8,
-                                          horizontalArrangement = Arrangement::spacedBy(8)) {
-                                              item([&] { Text("10.000 kart, kendi yükseklikleriyle", Modifier().padding(4, 0, 0, 4),
-                                                                    style = typography().titleMedium); },
-                                                         LazyGridScope::FullLine);
-                                              items(rows, [](int v) { return v; }, [](int v) { StaggeredTile(v); });
-                                          };
+@Composable
+fun ListScreen(modifier: Modifier, state: LazyListState, nav: NavController, likes: LikesViewModel) {
+    var mode by remember { mutableStateOf(0) }  // list, grid, staggered grid
+    val gridState = rememberLazyGridState()
+    val staggeredScroll = rememberLazyStaggeredGridState()
+    // Pull down at the top to refresh (a pretend reload of a second and a half).
+    var refreshing by remember { mutableStateOf(false) }
+    var refreshes by remember { mutableStateOf(0) }
+    val scope = rememberCoroutineScope()
+    val refresh = {
+        refreshing = true
+        scope.launch {
+            delay(1500)
+            refreshes++
+            refreshing = false
+        }
+    }
+    val rows = remember { List(10000) { it } }
+    val cs = MaterialTheme.colorScheme
+    Column(modifier = modifier) {
+        LazyRow(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp, 4.dp, 16.dp, 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(40) { i ->
+                Box(modifier = Modifier.background(cs.primaryContainer, RoundedCornerShape(16.dp)).padding(14.dp, 8.dp)) {
+                    Text("Etiket ${i + 1}", color = cs.onPrimaryContainer, style = MaterialTheme.typography.labelLarge)
+                }
             }
-        };
-    });
+        }
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(16.dp, 4.dp)) {
+            val labels = listOf("Liste", "Izgara", "Kademeli")
+            for (i in 0 until 3) {
+                SegmentedButton(selected = mode == i, onClick = { mode = i }, shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(labels[i]) }
+            }
+        }
+        Text(if (refreshes > 0) "Aşağı çekip yenileyin · $refreshes kez yenilendi" else "Aşağı çekip yenileyin (PullToRefreshBox)",
+             modifier = Modifier.padding(16.dp, 0.dp), color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        val liked by likes.likes.collectAsState()
+        val total = liked.values.sum()
+        Text(if (liked.isEmpty()) "Bir satıra girip beğenin: beğeniler liste grafiğinin ViewModel'inde"
+             else "${liked.size} öğede $total beğeni (liste grafiğinin ViewModel'i)",
+             modifier = Modifier.padding(16.dp, 0.dp), color = cs.primary, style = MaterialTheme.typography.bodySmall)
+        if (mode == 0) {
+            ListStatus(state)
+            PullToRefreshBox(isRefreshing = refreshing, onRefresh = refresh, modifier = Modifier.fillMaxWidth().weight(1f)) {
+                // Sections of 50 rows under sticky headers (opaque: the rows scroll under them).
+                LazyColumn(modifier = Modifier.fillMaxSize(), state = state, contentPadding = PaddingValues(16.dp, 4.dp, 16.dp, 88.dp),
+                           verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (g in 0 until rows.size step 50) {
+                        stickyHeader(key = "section$g") {
+                            Box(modifier = Modifier.fillMaxWidth().background(cs.background).padding(4.dp, 10.dp)) {
+                                Text("$g – ${g + 49}", color = cs.primary, style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                        items(50, key = { g + it }) { i -> ListRow(g + i, nav) }
+                    }
+                }
+            }
+        } else if (mode == 1) {
+            // LazyGridState: the tiles in view (layoutInfo) and scrolls to an item.
+            Row(modifier = Modifier.fillMaxWidth().padding(16.dp, 0.dp), verticalAlignment = Alignment.CenterVertically) {
+                val info = gridState.layoutInfo
+                // Item 0 is the title row: tile n is item n + 1.
+                val seen = if (info.visibleItemsInfo.isEmpty()) "—"
+                           else "%d–%d".format(maxOf(0, info.visibleItemsInfo.first().index - 1), maxOf(0, info.visibleItemsInfo.last().index - 1))
+                Text("Görünen kareler: $seen · ${info.maxSpan} sütun", modifier = Modifier.weight(1f),
+                     color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { scope.launch { gridState.animateScrollToItem(0) } }) { Text("Başa") }
+                TextButton(onClick = { scope.launch { gridState.scrollToItem(5001) } }) { Text("Kare 5000") }
+            }
+            // 10,000 tiles, as many columns of at least 88 dp as fit; only rows in view are composed.
+            PullToRefreshBox(isRefreshing = refreshing, onRefresh = refresh, modifier = Modifier.fillMaxWidth().weight(1f)) {
+                LazyVerticalGrid(columns = GridCells.Adaptive(88.dp), modifier = Modifier.fillMaxSize(), state = gridState,
+                                 contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 88.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
+                                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text("10.000 kare", modifier = Modifier.padding(4.dp, 0.dp, 0.dp, 4.dp), style = MaterialTheme.typography.titleMedium)
+                    }
+                    items(rows, key = { it }) { GridTile(it) }
+                }
+            }
+        } else {
+            // LazyStaggeredGridState: the cards in view and scrolls to one (item 0 is the title).
+            Row(modifier = Modifier.fillMaxWidth().padding(16.dp, 0.dp), verticalAlignment = Alignment.CenterVertically) {
+                val info = staggeredScroll.layoutInfo
+                val seen = if (info.visibleItemsInfo.isEmpty()) "—"
+                           else "%d–%d".format(maxOf(0, info.visibleItemsInfo.first().index - 1), maxOf(0, info.visibleItemsInfo.last().index - 1))
+                Text("Görünen kartlar: $seen · ${info.lanes} şerit", modifier = Modifier.weight(1f),
+                     color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { scope.launch { staggeredScroll.animateScrollToItem(0) } }) { Text("Başa") }
+                TextButton(onClick = { scope.launch { staggeredScroll.scrollToItem(3001) } }) { Text("Kart 3000") }
+            }
+            // Cards of their own heights, each under the shorter lane (LazyVerticalStaggeredGrid).
+            LazyVerticalStaggeredGrid(columns = StaggeredGridCells.Adaptive(150.dp), modifier = Modifier.fillMaxWidth().weight(1f),
+                                      state = staggeredScroll, contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 88.dp),
+                                      verticalItemSpacing = 8.dp, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item(span = StaggeredGridItemSpan.FullLine) {
+                    Text("10.000 kart, kendi yükseklikleriyle", modifier = Modifier.padding(4.dp, 0.dp, 0.dp, 4.dp),
+                         style = MaterialTheme.typography.titleMedium)
+                }
+                items(rows, key = { it }) { StaggeredTile(it) }
+            }
+        }
+    }
 }
 
 // A row of the list, opened in the "list" navigation graph ("item/{n}"): its likes are in the
 // graph's ViewModel, which the list shows too.
-void ItemScreen(int index, NavController nav, std::shared_ptr<LikesViewModel> vm, CallSite site) {
-    composable(site, index, nav, vm, [=] {
-        const ColorScheme& cs = colorScheme();
-        std::map<int, int> liked = vm->likes.collectAsState();
-        int likes = liked.contains(index) ? liked.at(index) : 0;
-        Column(Modifier().fillMaxSize().verticalScroll(rememberScrollState()).padding(20),
-               verticalArrangement = Arrangement::spacedBy(16), horizontalAlignment = Alignment::CenterHorizontally) {
-                   Box(Modifier().size(120).background(hueColor(index), 60), Alignment::Center) {
-                       Text(std::to_string(index % 100), color = colors::White, style = typography().displaySmall);
-                   };
-                   Text(std::format("Öğe {}", index), style = typography().headlineSmall);
-                   Text("NavHost'taki \"list\" grafiğinin \"item/{n}\" rotası; n argümanı yoldan okunur. Beğeniler "
-                        "grafiğin ViewModel'inde, liste ekranı da gösterir. Başka sekmeye geçip Liste'ye dönünce "
-                        "grafik, bu ekran ve beğeniler yerinde durur (saveState / restoreState). kompoz://item/" +
-                            std::to_string(index) + " bağlantısı da bu ekranı açar (geri: liste, sonra ana sayfa).",
-                        color = cs.onSurfaceVariant, textAlign = TextAlign::Center, style = typography().bodyMedium);
-                   Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                       FilledTonalButton([vm, index] { vm->like(index); }, Modifier()) {
-                           Text(std::format("Beğen · {}", likes));
-                       };
-                       TextButton([nav] { nav.popBackStack(); }) { Text("Listeye dön"); };
-                   };
-               };
-    });
+@Composable
+fun ItemScreen(index: Int, nav: NavController, vm: LikesViewModel) {
+    val cs = MaterialTheme.colorScheme
+    val liked by vm.likes.collectAsState()
+    val likes = liked[index] ?: 0
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+           verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(modifier = Modifier.size(120.dp).background(hueColor(index), CircleShape), contentAlignment = Alignment.Center) {
+            Text("${index % 100}", color = Color.White, style = MaterialTheme.typography.displaySmall)
+        }
+        Text("Öğe $index", style = MaterialTheme.typography.headlineSmall)
+        Text("NavHost'taki \"list\" grafiğinin \"item/{n}\" rotası; n argümanı yoldan okunur. Beğeniler " +
+             "grafiğin ViewModel'inde, liste ekranı da gösterir. Başka sekmeye geçip Liste'ye dönünce " +
+             "grafik, bu ekran ve beğeniler yerinde durur (saveState / restoreState). kompoz://item/$index " +
+             "bağlantısı da bu ekranı açar (geri: liste, sonra ana sayfa).",
+             color = cs.onSurfaceVariant, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            FilledTonalButton(onClick = { vm.like(index) }) { Text("Beğen · $likes") }
+            TextButton(onClick = { nav.popBackStack() }) { Text("Listeye dön") }
+        }
+    }
 }
