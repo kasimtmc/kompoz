@@ -162,6 +162,24 @@ fun HoverCard() {
 
 `hoverable(source)` reports the mouse coming over a node and leaving. `pointerHoverIcon(PointerIcon.Hand)` changes the cursor. Text fields and selections show a context menu on a right click.
 
+Compose Multiplatform's desktop APIs are here with their names: `onPointerEvent(type) { event -> }` for the mouse coming in and out, moving, pressing and the wheel (`event.changes.first().consume()` keeps the wheel from scrolling the page), `onClick(matcher = PointerMatcher.mouse(PointerButton.Secondary)) { }` and `onClick(keyboardModifiers = { it.isCtrlPressed }) { }` for clicks by button or with keys held, `ContextMenuArea` for a menu of your own on a right click, and `TooltipArea` for a tooltip that follows the mouse:
+
+```kotlin
+@Composable
+fun DesktopMouse() {
+    var last by remember { mutableStateOf("-") }
+    Column {
+        ContextMenuArea(items = { listOf(ContextMenuItem("Refresh") { last = "Refresh" }, ContextMenuItem("Copy name") { last = "Copy name" }) }) {
+            Box(modifier = Modifier.size(200.dp, 80.dp).background(MaterialTheme.colorScheme.secondaryContainer))
+        }
+        TooltipArea(tooltip = { Text("Shown under the pointer") }, delayMillis = 300) {
+            Box(modifier = Modifier.size(200.dp, 40.dp).onClick(matcher = PointerMatcher.mouse(PointerButton.Secondary)) { last = "right click" })
+        }
+        Text(last)
+    }
+}
+```
+
 ## Interactions
 
 A `MutableInteractionSource` is told of the presses, hovers, focus and drags of the components it is given to. Read whether one is going on with `collectIsPressedAsState()`, `collectIsHoveredAsState()`, `collectIsFocusedAsState()` and `collectIsDraggedAsState()` (read with `by`); they recompose when it changes.

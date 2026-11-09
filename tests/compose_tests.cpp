@@ -1686,6 +1686,76 @@ TEST(drawing_forms_as_compose_writes_them) {
     CHECK(rule.onNodeWithText("sürüklendi").exists());
 }
 
+// Input forms as Compose writes them: ContextMenuArea(items = { listOf(ContextMenuItem("…") { }) }) { }, TooltipArea(tooltip = { },
+// delayMillis =, tooltipPlacement =) { }, Modifier.onClick(matcher =, keyboardModifiers = { }) { }, an event's changes.first(),
+// transformable(state, canPan = { }), clickable(interactionSource = null, indication = null) { }, Popup(popupPositionProvider =
+// object : PopupPositionProvider { … }, properties = PopupProperties(focusable = false)) { }, Offset arithmetic, DpOffset.
+@Composable
+fun InputForms() {
+    var picked by remember { mutableStateOf("yok") }
+    var clicks by remember { mutableStateOf(0) }
+    var moved by remember { mutableStateOf(Offset.Zero) }
+    var zoom by remember { mutableStateOf(1f) }
+    val transform = rememberTransformableState { z, pan, _ ->
+        zoom *= z
+        moved += pan
+    }
+    Column {
+        ContextMenuArea(items = { listOf(ContextMenuItem("Yenile") { picked = "Yenile" }, ContextMenuItem("Sil", {}, false)) }) {
+            Box(modifier = Modifier.size(100.dp, 40.dp).testTag("alan"))
+        }
+        Text("seçim: $picked")
+        TooltipArea(tooltip = { Text("ipucu", modifier = Modifier.testTag("ipucu")) }, delayMillis = 100,
+                    tooltipPlacement = TooltipPlacement.ComponentRect(Alignment.BottomCenter, Alignment.BottomCenter, DpOffset(0.dp, 4.dp))) {
+            Box(modifier = Modifier.size(100.dp, 40.dp).testTag("ipuçlu"))
+        }
+        Box(modifier = Modifier.size(100.dp, 40.dp).testTag("tıklanır")
+                .onClick(matcher = PointerMatcher.mouse(PointerButton.Secondary)) { clicks++ }
+                .onClick(keyboardModifiers = { it.isCtrlPressed }) { clicks += 10 }
+                .onPointerEvent(PointerEventType.Move) { moved = it.changes.first().position }
+                .transformable(transform, canPan = { zoom > 1f })
+                .clickable(interactionSource = null, indication = null) { clicks += 100 })
+        Text("tık: $clicks · ${moved.x.roundToInt()}")
+        var open by remember { mutableStateOf(true) }
+        if (open) {
+            Popup(popupPositionProvider = object : PopupPositionProvider {
+                override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+                    return IntOffset(anchorBounds.left + 10, anchorBounds.bottom + popupContentSize.height)
+                }
+            }, onDismissRequest = { open = false }, properties = PopupProperties(focusable = false)) {
+                Text("açılır", modifier = Modifier.testTag("açılır"))
+            }
+        }
+    }
+}
+
+TEST(input_forms_as_compose_writes_them) {
+    ComposeTestRule rule([] { InputForms(); }, {400, 800});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("seçim: yok").exists() && rule.onNodeWithTag("açılır").exists() && rule.host().overlayCount() == 1);
+    CHECK(std::abs(rule.onNodeWithTag("açılır").bounds().x - 10) < 0.5f);
+    Rect area = rule.onNodeWithTag("alan").bounds();
+    CHECK(rule.host().secondaryClick({area.x + 50, area.y + 20}));
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("Yenile").exists());
+    rule.onNodeWithText("Yenile").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("seçim: Yenile").exists());
+    Rect tipped = rule.onNodeWithTag("ipuçlu").bounds();
+    rule.host().pointerMove({tipped.x + 50, tipped.y + 20});
+    rule.advanceTimeBy(300);
+    CHECK(rule.onNodeWithTag("ipucu").exists());
+    Rect clickable = rule.onNodeWithTag("tıklanır").bounds();
+    rule.host().pointerMove({clickable.x + 50, clickable.y + 20});
+    rule.waitForIdle();
+    rule.host().mouseButton({clickable.x + 50, clickable.y + 20}, PointerButton::Secondary, true);
+    rule.host().mouseButton({clickable.x + 50, clickable.y + 20}, PointerButton::Secondary, false);
+    rule.advanceTimeBy(400);
+    rule.onNodeWithTag("tıklanır").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("tık: 101 · 50").exists());
+}
+
 TEST(navigation_as_compose_writes_it) {
     NavController nav;
     ComposeTestRule rule([&] { Navigator(nav); });

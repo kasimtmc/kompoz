@@ -1042,6 +1042,17 @@
   PathMeasure, Path.combine in drawWithCache, clipPath and withTransform, brushes), the spinning icon, the corner shapes,
   the draggable ball and the long-press card, scrollable2D, the GraphicsLayer reflection, taps and combinedClickable are a
   `@Composable fun` in Kotlin.
+- **Desktop input as Compose Multiplatform writes it**: `Popup(popupPositionProvider = object : PopupPositionProvider { … },
+  onDismissRequest = …, properties = PopupProperties(focusable = …)) { }` and `Popup(alignment = …, offset = …) { }` (the
+  `OverlaySpec` form stays; a non-focusable popup's content still takes presses); `ContextMenuArea(items = { listOf(ContextMenuItem("…")
+  { }) }, enabled = …) { }` and `TooltipArea(tooltip = { }, modifier = …, delayMillis = …, tooltipPlacement = …) { }` as Composables
+  (the positional forms as before); `Modifier.onClick(enabled = …, matcher = …, keyboardModifiers = { it.isCtrlPressed }, onLongClick = …,
+  onDoubleClick = …) { }` and `Modifier.transformable(state, canPan = { }, lockRotationOnZoomPan = …, enabled = …)` by name;
+  `clickable(interactionSource = null, …)`; a pointer event's `keyboardModifiers.isCtrlPressed` / `isShiftPressed` / `isAltPressed`;
+  `Offset + Offset`, `-`, `*`, `/`; `DpOffset(x, y)`; `IntRect`. kompozc: `event.changes.first()` is the change itself (`consume()` on it
+  counts); `items = { }`, `keyboardModifiers = { }` and `canPan = { }` give their value; a destructuring (`val (a, b) = …`,
+  `for ((k, v) in …)`) takes its parts with `kt::component<i>` (copies, as Kotlin's) instead of a structured binding, which
+  GCC 16 loses inside a composable's nested blocks.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

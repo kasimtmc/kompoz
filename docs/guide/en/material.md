@@ -194,6 +194,25 @@ fun DeleteButton(onDelete: () -> Unit) {
 | `DatePicker`, `DateRangePicker`, `TimePicker`, `TimeInput` | Dates and times, alone or in `DatePickerDialog` / `TimePickerDialog`. |
 | `TooltipBox` + `PlainTooltip` / `RichTooltip` | A hint on long press or hover. |
 
+### Popups
+
+`Popup` is what dialogs and menus are built on: content above everything else, placed by its anchor (the node it is composed in). As Compose's it takes `alignment` and `offset`, or a `PopupPositionProvider` of your own, `onDismissRequest` for back, Escape and clicks outside, and `PopupProperties` (`focusable = false` lets input outside it through):
+
+```kotlin
+@Composable
+fun Above(shown: Boolean, onClose: () -> Unit) {
+    if (shown) {
+        Popup(popupPositionProvider = object : PopupPositionProvider {
+            override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+                return IntOffset(anchorBounds.left, anchorBounds.top - popupContentSize.height - 8)
+            }
+        }, onDismissRequest = onClose, properties = PopupProperties(focusable = false)) {
+            Text("Above its anchor", modifier = Modifier.background(MaterialTheme.colorScheme.inverseSurface).padding(8.dp))
+        }
+    }
+}
+```
+
 ## Snackbars
 
 A `SnackbarHost` shows the messages of a `SnackbarHostState`. `showSnackbar` suspends until the snackbar is gone and tells how it went, so call it in a coroutine, as in Compose (from a plain callback it only shows the message):

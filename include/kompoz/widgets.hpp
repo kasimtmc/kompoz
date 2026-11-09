@@ -868,7 +868,54 @@ struct BoxWithConstraintsImpl {
 inline constexpr Composable<detail::BoxWithConstraintsImpl> BoxWithConstraints;
 
 // Content shown above everything else (see OverlaySpec): the building block of dialogs and menus.
+// Compose's Popup(popupPositionProvider = …, onDismissRequest = …, properties = PopupProperties(…)) { } and
+// Popup(alignment = …, offset = …) { } by name too.
+namespace detail {
 void Popup(OverlaySpec spec, const Content& content, CallSite site = CallSite::current());
+struct PopupImpl {
+    using P = Params<names::PopupPositionProvider, names::Alignment, names::Offset, names::OnDismissRequest, names::Properties, Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (sizeof...(A) >= 2 && std::is_same_v<std::remove_cvref_t<std::tuple_element_t<0, std::tuple<A...>>>, OverlaySpec>) {
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            Popup(std::get<0>(all), Content(std::get<1>(all)), site);
+        } else {
+            static_assert(P::check<A...>());
+            static_assert(P::blockGiven<A...>(), "kompoz: Popup takes a block: its content");
+            PopupProperties properties = P::get<names::Properties>(PopupProperties{}, args...);
+            OverlaySpec spec;
+            spec.onDismissRequest = P::get<names::OnDismissRequest>(std::function<void()>(), args...);
+            spec.dismissOnOutsideClick = properties.dismissOnClickOutside;
+            spec.focusable = properties.focusable;
+            spec.touchable = !properties.focusable;  // (Compose's: its own content takes presses either way)
+            if constexpr (P::given<names::PopupPositionProvider, A...>()) {
+                std::shared_ptr<PopupPositionProvider> provider = P::arg<names::PopupPositionProvider>(args...);
+                LayoutDirection direction = LocalLayoutDirection.current();
+                spec.position = [provider, direction](const Rect& anchor, Size size, Size viewport) {
+                    auto whole = [](float v) { return int(std::lround(v)); };
+                    IntRect bounds{whole(anchor.x), whole(anchor.y), whole(anchor.right()), whole(anchor.bottom())};
+                    IntOffset at = provider->calculatePosition(bounds, IntSize{whole(viewport.width), whole(viewport.height)}, direction,
+                                                               IntSize{whole(size.width), whole(size.height)});
+                    return Offset(at);
+                };
+            } else {
+                Alignment alignment = P::get<names::Alignment>(Alignment{Alignment::TopStart}, args...);
+                Offset offset = P::get<names::Offset>(Offset{}, args...);
+                spec.position = [alignment, offset](const Rect& anchor, Size size, Size) {
+                    Offset in = alignment.align(size, Size{anchor.width, anchor.height});
+                    return Offset{anchor.x + in.x + offset.x, anchor.y + in.y + offset.y};
+                };
+            }
+            Popup(std::move(spec), P::block(std::forward<A>(args)...), site);
+        }
+    }
+};
+struct PopupCall : Composable<PopupImpl> {
+    using Composable<PopupImpl>::operator();
+    void operator()(OverlaySpec spec, const Content& content, CallSite site = CallSite::current()) const { Popup(std::move(spec), content, site); }
+};
+} // namespace detail
+inline constexpr detail::PopupCall Popup;
 
 // Where a TooltipArea's tooltip goes (Compose Multiplatform's TooltipPlacement): at the mouse
 // pointer moved by `offset` (and kept `windowMargin` inside the window, above it when there is
@@ -893,10 +940,48 @@ struct TooltipAreaOptions {
     TooltipPlacement tooltipPlacement;
 };
 // Compose Multiplatform's desktop TooltipArea: `tooltip` shows a moment after the mouse comes
-// over `content` (and follows it), until it leaves or presses. Input passes through it.
+// over `content` (and follows it), until it leaves or presses. Input passes through it. By name as
+// Compose's: TooltipArea(tooltip = { … }, modifier = …, delayMillis = …, tooltipPlacement = …) { … }.
+namespace detail {
 void TooltipArea(const Content& tooltip, const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 void TooltipArea(const Content& tooltip, const Modifier& modifier, const TooltipAreaOptions& options, const Content& content,
                  CallSite site = CallSite::current());
+struct TooltipAreaImpl {
+    using P = Params<names::Tooltip, names::Modifier, names::DelayMillis, names::TooltipPlacement, Block>;
+    template <class... A>
+    static constexpr bool byPlace() {  // (tooltip, modifier, [options,] content): Kompoz's C++ order
+        if constexpr (sizeof...(A) < 3 || (isNamed<A> || ...)) return false;
+        else return std::is_invocable_v<std::remove_cvref_t<std::tuple_element_t<0, std::tuple<A...>>>&>;
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (byPlace<A...>()) {
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            if constexpr (sizeof...(A) >= 4) TooltipArea(Content(std::get<0>(all)), std::get<1>(all), std::get<2>(all), Content(std::get<3>(all)), site);
+            else TooltipArea(Content(std::get<0>(all)), std::get<1>(all), Content(std::get<2>(all)), site);
+        } else {
+            static_assert(P::check<A...>());
+            static_assert(P::blockGiven<A...>(), "kompoz: TooltipArea takes a block: its content");
+            TooltipAreaOptions options;
+            P::set<names::DelayMillis>(options.delayMillis, args...);
+            P::set<names::TooltipPlacement>(options.tooltipPlacement, args...);
+            TooltipArea(Content(P::arg<names::Tooltip>(args...)), P::get<names::Modifier>(Modifier{}, args...), options,
+                        P::block(std::forward<A>(args)...), site);
+        }
+    }
+};
+struct TooltipAreaCall : Composable<TooltipAreaImpl> {
+    using Composable<TooltipAreaImpl>::operator();
+    void operator()(const Content& tooltip, const Modifier& modifier, const Content& content, CallSite site = CallSite::current()) const {
+        TooltipArea(tooltip, modifier, content, site);
+    }
+    void operator()(const Content& tooltip, const Modifier& modifier, const TooltipAreaOptions& options, const Content& content,
+                    CallSite site = CallSite::current()) const {
+        TooltipArea(tooltip, modifier, options, content, site);
+    }
+};
+} // namespace detail
+inline constexpr detail::TooltipAreaCall TooltipArea;
 
 // Handles the back button (Escape on desktop) while enabled; the most recently composed wins.
 namespace detail {
@@ -2749,8 +2834,43 @@ struct ContextMenuItem {
 // picking one runs it and closes the menu, as do a click outside and Escape. Text fields have
 // their own (cut, copy, paste, select all).
 //   ContextMenuArea([&] { return std::vector<ContextMenuItem>{{"Yenile", reload}, {"Sil", remove}}; }, [&] { Card(...); });
+// By name as Compose Multiplatform's: ContextMenuArea(items = { listOf(ContextMenuItem("Yenile") { … }) }, enabled = …) { … }.
+namespace detail {
 void ContextMenuArea(std::function<std::vector<ContextMenuItem>()> items, const Content& content, const Modifier& modifier = {},
                      bool enabled = true, CallSite site = CallSite::current());
+struct ContextMenuAreaImpl {
+    using P = Params<names::Items, names::Modifier, names::Enabled, Block>;
+    template <class... A>
+    static constexpr bool byPlace() {  // (items, content[, modifier[, enabled]]): Kompoz's C++ order
+        if constexpr (sizeof...(A) < 2 || (isNamed<A> || ...)) return false;
+        else return std::is_invocable_v<std::remove_cvref_t<std::tuple_element_t<1, std::tuple<A...>>>&>;
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (byPlace<A...>()) {
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            Modifier modifier;
+            bool enabled = true;
+            if constexpr (sizeof...(A) >= 3) modifier = std::get<2>(all);
+            if constexpr (sizeof...(A) >= 4) enabled = std::get<3>(all);
+            ContextMenuArea(std::get<0>(all), Content(std::get<1>(all)), modifier, enabled, site);
+        } else {
+            static_assert(P::check<A...>());
+            static_assert(P::blockGiven<A...>(), "kompoz: ContextMenuArea takes a block: its content");
+            ContextMenuArea(std::function<std::vector<ContextMenuItem>()>(P::arg<names::Items>(args...)), P::block(std::forward<A>(args)...),
+                            P::get<names::Modifier>(Modifier{}, args...), P::get<names::Enabled>(true, args...), site);
+        }
+    }
+};
+struct ContextMenuAreaCall : Composable<ContextMenuAreaImpl> {
+    using Composable<ContextMenuAreaImpl>::operator();
+    void operator()(std::function<std::vector<ContextMenuItem>()> items, const Content& content, const Modifier& modifier = {},
+                    bool enabled = true, CallSite site = CallSite::current()) const {
+        ContextMenuArea(std::move(items), content, modifier, enabled, site);
+    }
+};
+} // namespace detail
+inline constexpr detail::ContextMenuAreaCall ContextMenuArea;
 
 // How a secure field shows its text (Compose's TextObfuscationMode).
 enum class TextObfuscationMode {

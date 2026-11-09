@@ -204,6 +204,12 @@ struct Offset {
     friend constexpr bool operator==(const Offset&, const Offset&) = default;
 };
 inline const Offset Offset::Zero{};
+// Compose's Offset arithmetic: a + b, a - b, -a, a * k, a / k.
+constexpr Offset operator+(Offset a, Offset b) { return {a.x + b.x, a.y + b.y}; }
+constexpr Offset operator-(Offset a, Offset b) { return {a.x - b.x, a.y - b.y}; }
+constexpr Offset operator-(Offset a) { return {-a.x, -a.y}; }
+constexpr Offset operator*(Offset a, float k) { return {a.x * k, a.y * k}; }
+constexpr Offset operator/(Offset a, float k) { return {a.x / k, a.y / k}; }
 
 struct Size {
     float width = 0, height = 0;
@@ -213,6 +219,7 @@ struct Size {
 inline const Size Size::Zero{};
 // Compose's DpSize(width, height): a Size, in dp as every size here is.
 constexpr Size DpSize(float width, float height) { return {width, height}; }
+constexpr Offset DpOffset(float x, float y) { return {x, y}; }  // Compose's DpOffset(x.dp, y.dp)
 constexpr Offset lerp(Offset a, Offset b, float t) { return {lerp(a.x, b.x, t), lerp(a.y, b.y, t)}; }
 constexpr Size lerp(Size a, Size b, float t) { return {lerp(a.width, b.width, t), lerp(a.height, b.height, t)}; }
 
@@ -261,6 +268,17 @@ struct IntSize {
     int width = 0, height = 0;
     constexpr operator Size() const { return {float(width), float(height)}; }
     friend constexpr bool operator==(const IntSize&, const IntSize&) = default;
+};
+// Compose's IntRect: edges in whole dp (a popup's anchor bounds); width(), height(), topLeft(), size(), center().
+struct IntRect {
+    int left = 0, top = 0, right = 0, bottom = 0;
+    constexpr int width() const { return right - left; }
+    constexpr int height() const { return bottom - top; }
+    constexpr IntOffset topLeft() const { return {left, top}; }
+    constexpr IntSize size() const { return {width(), height()}; }
+    constexpr IntOffset center() const { return {(left + right) / 2, (top + bottom) / 2}; }
+    constexpr operator Rect() const { return {float(left), float(top), float(width()), float(height())}; }
+    friend constexpr bool operator==(const IntRect&, const IntRect&) = default;
 };
 
 // How an image is sampled where it is drawn bigger or smaller than its pixels (Compose's

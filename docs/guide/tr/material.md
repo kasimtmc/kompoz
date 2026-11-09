@@ -194,6 +194,25 @@ fun DeleteButton(onDelete: () -> Unit) {
 | `DatePicker`, `DateRangePicker`, `TimePicker`, `TimeInput` | Tek başına ya da `DatePickerDialog` / `TimePickerDialog` içinde tarihler ve saatler. |
 | `TooltipBox` + `PlainTooltip` / `RichTooltip` | Uzun basınca ya da üzerine gelince bir ipucu. |
 
+### Popup'lar
+
+`Popup`, diyalogların ve menülerin üzerine kurulduğu yapı taşıdır: her şeyin üstünde, bağlı olduğu düğüme (içinde kompoze edildiği) göre yerleştirilen içerik. Compose'daki gibi `alignment` ve `offset` ya da kendi `PopupPositionProvider`'ınızı, geri, Escape ve dışarı tıklamalar için `onDismissRequest`'i ve `PopupProperties`'i alır (`focusable = false` dışındaki girdiyi geçirir):
+
+```kotlin
+@Composable
+fun Above(shown: Boolean, onClose: () -> Unit) {
+    if (shown) {
+        Popup(popupPositionProvider = object : PopupPositionProvider {
+            override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+                return IntOffset(anchorBounds.left, anchorBounds.top - popupContentSize.height - 8)
+            }
+        }, onDismissRequest = onClose, properties = PopupProperties(focusable = false)) {
+            Text("Bağlandığı öğenin üstünde", modifier = Modifier.background(MaterialTheme.colorScheme.inverseSurface).padding(8.dp))
+        }
+    }
+}
+```
+
 ## Snackbar'lar
 
 Bir `SnackbarHost`, bir `SnackbarHostState`'in mesajlarını gösterir. `showSnackbar`, snackbar gidene kadar askıya alır ve nasıl gittiğini söyler; bu yüzden onu Compose'daki gibi bir coroutine içinde çağırın (düz bir geri çağrıdan yalnızca mesajı gösterir):

@@ -179,6 +179,10 @@ enum class Key {
 struct KeyModifiers {
     bool shift = false, ctrl = false;  // ctrl: Command on macOS
     bool alt = false;
+    // Compose's PointerKeyboardModifiers names.
+    constexpr bool isCtrlPressed() const { return ctrl; }
+    constexpr bool isShiftPressed() const { return shift; }
+    constexpr bool isAltPressed() const { return alt; }
 };
 enum class KeyEventType { KeyDown, KeyUp };
 struct KeyEvent {
@@ -2075,6 +2079,10 @@ public:
     // finger only pans when canPan says so (e.g. once zoomed in), leaving it to scrolling otherwise.
     Modifier transformable(const TransformableState& state, std::function<bool(Offset pan)> canPan = {},
                            bool lockRotationOnZoomPan = false, bool enabled = true) const;
+    // Compose's transformable(state, canPan = { … }, lockRotationOnZoomPan = …, enabled = …) by name (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier transformable(const TransformableState& state, A&&... args) const;
     // Handles raw pointer input with a coroutine (see gestures.hpp); restarts when `key` changes.
     template <class K, class F>
     Modifier pointerInput(const K& key, F block) const;
@@ -2311,6 +2319,43 @@ public:
     // the keys `keyboardModifiers` wants held down; no ripple, focus or semantics (clickable has
     // those). Uses composition (remember).
     Modifier onClick(std::function<void()> onClick, OnClickOptions options = {}, CallSite site = CallSite::current()) const;
+    // Compose Multiplatform's onClick(enabled = …, matcher = …, keyboardModifiers = { … }, onLongClick = …, onDoubleClick = …) { }
+    // by name (named_members.hpp): the call site after the arguments, as a Composable's call takes it.
+    template <class A1>
+        requires(detail::anyNamedArgument<A1>)
+    Modifier onClick(A1&& a1, CallSite site = CallSite::current()) const { return onClickBy(site, std::forward<A1>(a1)); }
+    template <class A1, class A2>
+        requires(detail::anyNamedArgument<A1, A2>)
+    Modifier onClick(A1&& a1, A2&& a2, CallSite site = CallSite::current()) const { return onClickBy(site, std::forward<A1>(a1), std::forward<A2>(a2)); }
+    template <class A1, class A2, class A3>
+        requires(detail::anyNamedArgument<A1, A2, A3>)
+    Modifier onClick(A1&& a1, A2&& a2, A3&& a3, CallSite site = CallSite::current()) const {
+        return onClickBy(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3));
+    }
+    template <class A1, class A2, class A3, class A4>
+        requires(detail::anyNamedArgument<A1, A2, A3, A4>)
+    Modifier onClick(A1&& a1, A2&& a2, A3&& a3, A4&& a4, CallSite site = CallSite::current()) const {
+        return onClickBy(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4));
+    }
+    template <class A1, class A2, class A3, class A4, class A5>
+        requires(detail::anyNamedArgument<A1, A2, A3, A4, A5>)
+    Modifier onClick(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, CallSite site = CallSite::current()) const {
+        return onClickBy(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5));
+    }
+    template <class A1, class A2, class A3, class A4, class A5, class A6>
+        requires(detail::anyNamedArgument<A1, A2, A3, A4, A5, A6>)
+    Modifier onClick(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, CallSite site = CallSite::current()) const {
+        return onClickBy(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5),
+                         std::forward<A6>(a6));
+    }
+    template <class A1, class A2, class A3, class A4, class A5, class A6, class A7>
+        requires(detail::anyNamedArgument<A1, A2, A3, A4, A5, A6, A7>)
+    Modifier onClick(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, A6&& a6, A7&& a7, CallSite site = CallSite::current()) const {
+        return onClickBy(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5),
+                         std::forward<A6>(a6), std::forward<A7>(a7));
+    }
+    template <class... A>
+    Modifier onClickBy(CallSite site, A&&... args) const;
     Modifier onKeyEvent(std::function<bool(const KeyEvent&)> onKeyEvent) const;
     Modifier onPreviewKeyEvent(std::function<bool(const KeyEvent&)> onPreviewKeyEvent) const;
     Modifier focusRequester(const FocusRequester& requester) const;
@@ -2378,6 +2423,22 @@ private:
 
 // A popup root (Popup, Dialog, DropdownMenu): composed where it is called, so it keeps its
 // state and CompositionLocals, but laid out and drawn above everything else by the host.
+// Compose's PopupPositionProvider: where a popup goes, from its anchor's bounds (the node it was
+// composed in), the window's size and its own, in whole dp. Implement it (in Kotlin an object
+// expression) and give it to Popup(popupPositionProvider = …).
+class PopupPositionProvider {
+public:
+    virtual ~PopupPositionProvider() = default;
+    virtual IntOffset calculatePosition(IntRect anchorBounds, IntSize windowSize, LayoutDirection layoutDirection, IntSize popupContentSize) = 0;
+};
+// Compose's PopupProperties: focusable (false: input outside the popup passes through; its own
+// content takes presses either way), dismissOnClickOutside (Popup's onDismissRequest), the rest kept.
+struct PopupProperties {
+    bool focusable = false;
+    bool dismissOnBackPress = true, dismissOnClickOutside = true;
+    bool clippingEnabled = true, usePlatformDefaultWidth = false;
+};
+
 struct OverlaySpec {
     bool fullScreen = false;  // measured at the window size (dialogs, sheets); otherwise wraps its content
     // Where a wrapping popup goes, given its anchor (the node it was composed in), in dp.

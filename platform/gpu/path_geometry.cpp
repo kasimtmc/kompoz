@@ -9,9 +9,6 @@
 namespace kompoz::gpu {
 namespace {
 
-Offset operator+(Offset a, Offset b) { return {a.x + b.x, a.y + b.y}; }
-Offset operator-(Offset a, Offset b) { return {a.x - b.x, a.y - b.y}; }
-Offset operator*(Offset a, float k) { return {a.x * k, a.y * k}; }
 float dot(Offset a, Offset b) { return a.x * b.x + a.y * b.y; }
 float cross(Offset a, Offset b) { return a.x * b.y - a.y * b.x; }
 float length(Offset a) { return std::hypot(a.x, a.y); }

@@ -1080,6 +1080,17 @@
 - **Vitrinin çizim ekranı Compose söz dizimiyle**: Canvas örnekleri (halka, sinüs dalgası, path efektleri, PathMeasure,
   drawWithCache içinde Path.combine, clipPath ve withTransform, fırçalar), dönen simge, köşe şekilleri, sürüklenen top ve
   uzun basılan kart, scrollable2D, GraphicsLayer yansıması, dokunuşlar ve combinedClickable Kotlin'de bir `@Composable fun`.
+- **Masaüstü girdisi Compose Multiplatform'un yazdığı gibi**: `Popup(popupPositionProvider = object : PopupPositionProvider { … },
+  onDismissRequest = …, properties = PopupProperties(focusable = …)) { }` ve `Popup(alignment = …, offset = …) { }` (`OverlaySpec`
+  biçimi duruyor; odaklanmayan bir popup'ın içeriği yine basışları alır); Composable olarak `ContextMenuArea(items = {
+  listOf(ContextMenuItem("…") { }) }, enabled = …) { }` ve `TooltipArea(tooltip = { }, modifier = …, delayMillis = …,
+  tooltipPlacement = …) { }` (konumsal biçimler eskisi gibi); adıyla `Modifier.onClick(enabled = …, matcher = …,
+  keyboardModifiers = { it.isCtrlPressed }, onLongClick = …, onDoubleClick = …) { }` ve `Modifier.transformable(state, canPan = { },
+  lockRotationOnZoomPan = …, enabled = …)`; `clickable(interactionSource = null, …)`; bir işaretçi olayının
+  `keyboardModifiers.isCtrlPressed` / `isShiftPressed` / `isAltPressed`'i; `Offset + Offset`, `-`, `*`, `/`; `DpOffset(x, y)`; `IntRect`.
+  kompozc: `event.changes.first()` değişikliğin kendisidir (üzerindeki `consume()` sayılır); `items = { }`, `keyboardModifiers = { }`
+  ve `canPan = { }` değerlerini verir; bir parçalama (`val (a, b) = …`, `for ((k, v) in …)`) parçalarını yapılandırılmış bağlama
+  yerine `kt::component<i>` ile alır (Kotlin'deki gibi kopyalar); GCC 16 bağlamayı bir composable'ın iç içe bloklarında yitiriyordu.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

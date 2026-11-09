@@ -100,6 +100,7 @@ const std::map<std::string, std::string, std::less<>> kComposableProperties = {
 
 // Named arguments whose lambda gives a value: items(list, key = { it.id }, contentType = { … }).
 const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType", "selector", "comparator", "span", "pageCount", "confirmValueChange",
+                                                            "items", "keyboardModifiers", "canPan",
                                                             "itemCount", "progress", "transitionSpec", "contentKey", "shouldStartDragAndDrop",
                                                             "enterTransition", "exitTransition", "popEnterTransition", "popExitTransition",
                                                             "initialOffsetX", "initialOffsetY", "targetOffsetX", "targetOffsetY"};
@@ -727,11 +728,11 @@ private:
 
     void declaration(const Node& d) {
         if (!d.names.empty()) {  // val (a, b) = pair
-            out_.text("auto [");
-            for (size_t i = 0; i < d.names.size(); ++i) out_.text((i ? ", " : "") + cppName(d.names[i]));
-            out_.text("] = ");
+            std::string held = destructured();
+            out_.text("auto&& " + held + " = ");
             expr(*d.kids[0]);
             out_.text(";");
+            destructuredNames(d.names, held);
             for (auto& n : d.names) declare(n, Local);
             return;
         }
@@ -881,16 +882,31 @@ private:
         for (auto& n : f.names) declare(n, Local);
         if (f.names.size() == 1) {
             out_.text("for (auto&& " + cppName(f.names[0]) + " : ");
+            expr(it);
+            out_.text(")");
+            braced(*f.kids[1], false);
         } else {
-            out_.text("for (auto&& [");
-            for (size_t i = 0; i < f.names.size(); ++i) out_.text((i ? ", " : "") + cppName(f.names[i]));
-            out_.text("] : ");
+            std::string held = destructured();
+            out_.text("for (auto&& " + held + " : ");
+            expr(it);
+            out_.text(") {");
+            destructuredNames(f.names, held);
+            statements(*f.kids[1], false);
+            out_.text(" }");
         }
-        expr(it);
-        out_.text(")");
-        braced(*f.kids[1], false);
         scopes_.pop_back();
     }
+
+    // A destructuring (val (a, b) = x; for ((k, v) in m)) holds the whole and takes each part with
+    // kt::component<i>: a copy, as Kotlin's component vals are. (Not a structured binding: GCC 16 loses
+    // one inside a generic lambda nested in another, which every composable's block is.) `_` declares nothing.
+    std::string destructured() { return "kompoz_d" + std::to_string(destructured_++); }
+    void destructuredNames(const std::vector<std::string>& names, const std::string& held) {
+        for (size_t i = 0; i < names.size(); ++i)
+            if (names[i] != "_")
+                out_.text(" [[maybe_unused]] auto " + cppName(names[i]) + " = ::kompoz::kt::component<" + std::to_string(i) + ">(" + held + ");");
+    }
+    int destructured_ = 0;
 
     // ---- Expressions ----
 

@@ -824,10 +824,12 @@ std::string toString(const C& c, A&&... args) {
     KOMPOZ_KT_OWN(toString()) return str(c);
 }
 template <class C, class... A>
-decltype(auto) first(const C& c, A&&... args) {
+decltype(auto) first(C&& c, A&&... args) {
     KOMPOZ_KT_OWN(first()) {
         if (std::begin(c) == std::end(c)) throw std::out_of_range("the list is empty");
-        return *std::begin(c);
+        // The element itself from a list that stays (event.changes.first().consume()); a copy from one that goes.
+        if constexpr (std::is_lvalue_reference_v<C>) return (*std::begin(c));
+        else return std::remove_cvref_t<decltype(*std::begin(c))>(*std::begin(c));
     }
 }
 template <class C, class... A>
@@ -1400,6 +1402,48 @@ T copy(const T& value, F&& change) {
 template <class A, class B>
 std::pair<A, B> to(A a, B b) {
     return {std::move(a), std::move(b)};
+}
+
+// A destructuring's parts, val (a, b) = x and for ((k, v) in m): a tuple's or a pair's by std::get, a data
+// class's (any struct's) fields in their order, up to eight.
+namespace detail {
+struct AnyField {
+    template <class T>
+    operator T() const;
+};
+template <class U, class... I>
+constexpr bool bracesWith = requires { U{std::declval<I>()...}; };
+template <class U>
+constexpr size_t fieldCount() {
+    using F = AnyField;
+    if constexpr (bracesWith<U, F, F, F, F, F, F, F, F>) return 8;
+    else if constexpr (bracesWith<U, F, F, F, F, F, F, F>) return 7;
+    else if constexpr (bracesWith<U, F, F, F, F, F, F>) return 6;
+    else if constexpr (bracesWith<U, F, F, F, F, F>) return 5;
+    else if constexpr (bracesWith<U, F, F, F, F>) return 4;
+    else if constexpr (bracesWith<U, F, F, F>) return 3;
+    else if constexpr (bracesWith<U, F, F>) return 2;
+    else if constexpr (bracesWith<U, F>) return 1;
+    else return 0;
+}
+}  // namespace detail
+template <size_t I, class T>
+decltype(auto) component(T& t) {
+    using U = std::remove_cvref_t<T>;
+    if constexpr (requires { std::tuple_size<U>::value; }) {
+        return std::get<I>(t);
+    } else {
+        constexpr size_t n = detail::fieldCount<U>();
+        static_assert(n > 0 && n <= 8, "kompoz: a destructuring takes a tuple, a pair or a class of up to eight fields");
+        if constexpr (n == 1) { auto&& [a] = t; return std::get<I>(std::forward_as_tuple(a)); }
+        else if constexpr (n == 2) { auto&& [a, b] = t; return std::get<I>(std::forward_as_tuple(a, b)); }
+        else if constexpr (n == 3) { auto&& [a, b, c] = t; return std::get<I>(std::forward_as_tuple(a, b, c)); }
+        else if constexpr (n == 4) { auto&& [a, b, c, d] = t; return std::get<I>(std::forward_as_tuple(a, b, c, d)); }
+        else if constexpr (n == 5) { auto&& [a, b, c, d, e] = t; return std::get<I>(std::forward_as_tuple(a, b, c, d, e)); }
+        else if constexpr (n == 6) { auto&& [a, b, c, d, e, f] = t; return std::get<I>(std::forward_as_tuple(a, b, c, d, e, f)); }
+        else if constexpr (n == 7) { auto&& [a, b, c, d, e, f, g] = t; return std::get<I>(std::forward_as_tuple(a, b, c, d, e, f, g)); }
+        else { auto&& [a, b, c, d, e, f, g, h] = t; return std::get<I>(std::forward_as_tuple(a, b, c, d, e, f, g, h)); }
+    }
 }
 
 // kotlin.math: sin(x), sqrt(x), abs(x), max(a, b), PI… (a Float in, a Float out; an Int in, a Double).

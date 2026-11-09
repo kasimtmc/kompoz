@@ -390,6 +390,14 @@ struct OnDragStopped {};
 struct MinDurationMs {};
 struct MinFractionVisible {};
 struct ViewportBounds {};
+struct Items {};
+struct Matcher {};
+struct KeyboardModifiers {};
+struct CanPan {};
+struct LockRotationOnZoomPan {};
+struct TooltipPlacement {};
+struct PopupPositionProvider {};
+struct Offset {};
 struct PositionProvider {};
 struct CaretSize {};
 struct ModeToggleButton {};
@@ -813,6 +821,13 @@ inline constexpr Param<detail::names::OnDragStopped> onDragStopped;
 inline constexpr Param<detail::names::MinDurationMs> minDurationMs;
 inline constexpr Param<detail::names::MinFractionVisible> minFractionVisible;
 inline constexpr Param<detail::names::ViewportBounds> viewportBounds;
+inline constexpr Param<detail::names::Matcher> matcher;
+inline constexpr Param<detail::names::KeyboardModifiers> keyboardModifiers;
+inline constexpr Param<detail::names::CanPan> canPan;
+inline constexpr Param<detail::names::LockRotationOnZoomPan> lockRotationOnZoomPan;
+inline constexpr Param<detail::names::TooltipPlacement> tooltipPlacement;
+inline constexpr Param<detail::names::PopupPositionProvider> popupPositionProvider;
+inline constexpr Param<detail::names::Offset> offset;
 inline constexpr Param<detail::names::PositionProvider> positionProvider;
 inline constexpr Param<detail::names::CaretSize> caretSize;
 inline constexpr Param<detail::names::ModeToggleButton> modeToggleButton;
@@ -963,6 +978,8 @@ inline constexpr Param<detail::names::Saver> saver;
 // (kompoz::key(id) { … } is the composable that gives an identity: these are a lazy item's)
 inline constexpr Param<detail::names::Key> key;
 inline constexpr Param<detail::names::ContentType> contentType;
+// (kompoz::items(…) adds a lazy list's items: this is ContextMenuArea's items = { … })
+inline constexpr Param<detail::names::Items> items;
 // (kompoz::colorScheme() and motionScheme() read the theme's: these are MaterialTheme's names)
 inline constexpr Param<detail::names::ColorScheme> colorScheme;
 inline constexpr Param<detail::names::MotionScheme> motionScheme;

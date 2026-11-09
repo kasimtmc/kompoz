@@ -162,6 +162,24 @@ fun HoverCard() {
 
 `hoverable(source)` farenin bir düğümün üzerine gelişini ve ayrılışını bildirir. `pointerHoverIcon(PointerIcon.Hand)` imleci değiştirir. Metin alanları ve seçimler sağ tıklamada bir bağlam menüsü gösterir.
 
+Compose Multiplatform'un masaüstü API'leri adlarıyla burada: farenin girip çıkması, hareketi, basması ve tekerleği için `onPointerEvent(type) { event -> }` (`event.changes.first().consume()` tekerleğin sayfayı kaydırmasını önler), düğmeye ya da basılı tuşlara göre tıklamalar için `onClick(matcher = PointerMatcher.mouse(PointerButton.Secondary)) { }` ve `onClick(keyboardModifiers = { it.isCtrlPressed }) { }`, sağ tıklamada kendi menünüz için `ContextMenuArea`, fareyi izleyen bir ipucu için `TooltipArea`:
+
+```kotlin
+@Composable
+fun DesktopMouse() {
+    var last by remember { mutableStateOf("-") }
+    Column {
+        ContextMenuArea(items = { listOf(ContextMenuItem("Yenile") { last = "Yenile" }, ContextMenuItem("Adını kopyala") { last = "Adını kopyala" }) }) {
+            Box(modifier = Modifier.size(200.dp, 80.dp).background(MaterialTheme.colorScheme.secondaryContainer))
+        }
+        TooltipArea(tooltip = { Text("İmlecin altında çıkar") }, delayMillis = 300) {
+            Box(modifier = Modifier.size(200.dp, 40.dp).onClick(matcher = PointerMatcher.mouse(PointerButton.Secondary)) { last = "sağ tık" })
+        }
+        Text(last)
+    }
+}
+```
+
 ## Etkileşimler
 
 Bir `MutableInteractionSource`'a, verildiği bileşenlerin basmaları, üzerine gelmeleri, odakları ve sürüklemeleri bildirilir. Birinin sürüp sürmediğini `collectIsPressedAsState()`, `collectIsHoveredAsState()`, `collectIsFocusedAsState()` ve `collectIsDraggedAsState()` (`by` ile okunur) ile okuyun; bunlar değiştiğinde yeniden kompoze ederler.

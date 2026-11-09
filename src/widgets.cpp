@@ -552,7 +552,7 @@ namespace {
 const CompositionLocal<std::shared_ptr<const void>> LocalBackScope{std::shared_ptr<const void>{}};
 } // namespace
 
-void Popup(OverlaySpec spec, const Content& content, CallSite site) {
+void detail::Popup(OverlaySpec spec, const Content& content, CallSite site) {
     auto shared = std::make_shared<const OverlaySpec>(std::move(spec));
     std::shared_ptr<const void> backScope = LocalBackScope.current();
     detail::Composer::require().emit(
@@ -3703,8 +3703,8 @@ void detail::BasicSecureTextField(const TextFieldState& state, const Modifier& m
     secureTextField(FieldKind::Plain, state, modifier, std::move(options), site);
 }
 
-void ContextMenuArea(std::function<std::vector<ContextMenuItem>()> items, const Content& content, const Modifier& modifier, bool enabled,
-                     CallSite site) {
+void detail::ContextMenuArea(std::function<std::vector<ContextMenuItem>()> items, const Content& content, const Modifier& modifier, bool enabled,
+                             CallSite site) {
     ComposableScope scope(site);
     auto at = remember([] { return mutableStateOf(std::optional<Offset>()); });
     auto element = std::make_shared<ContextMenuElement>();

@@ -8034,6 +8034,69 @@ TEST(drawing_forms_take_compose_named_arguments) {
     CHECK(pulled.peek().x > 30 && pulled.peek().y > 20);
 }
 
+TEST(input_forms_take_compose_named_arguments) {
+    // ContextMenuArea(items =) { }, TooltipArea(tooltip =, delayMillis =, tooltipPlacement =) { }, onClick(matcher =,
+    // keyboardModifiers =) { }, transformable(state, canPan =), clickable(interactionSource = null, indication = null) { },
+    // Popup(popupPositionProvider =, properties =) { } and Popup(alignment =, offset =, onDismissRequest =) { } by name act as the
+    // positional forms; Offset arithmetic, DpOffset, IntRect, the keyboard modifiers' Compose names, kt::first as the element itself.
+    CHECK((Offset{1, 2} + Offset{3, 4} == Offset{4, 6} && Offset{3, 4} - Offset{1, 2} == Offset{2, 2} && -Offset{1, -1} == Offset{-1, 1} &&
+           Offset{1, 2} * 2 == Offset{2, 4} && Offset{2, 4} / 2 == Offset{1, 2}));
+    CHECK((DpOffset(1, 2) == Offset{1, 2} && IntRect{10, 20, 40, 60}.width() == 30 && IntRect{10, 20, 40, 60}.center() == IntOffset{25, 40} &&
+           Rect(IntRect{10, 20, 40, 60}) == Rect{10, 20, 30, 40}));
+    CHECK(KeyModifiers{.ctrl = true}.isCtrlPressed() && !KeyModifiers{}.isShiftPressed() && !PopupProperties{}.focusable);
+    std::vector<int> list{1, 2};
+    kt::first(list) = 5;
+    CHECK(list[0] == 5 && kt::first(std::vector<int>{7}) == 7);
+    struct Below final : PopupPositionProvider {
+        IntOffset calculatePosition(IntRect anchor, IntSize, LayoutDirection, IntSize content) override {
+            return {anchor.left + 10, anchor.bottom + content.height};
+        }
+    };
+    int picked = 0, secondary = 0, plain = 0;
+    auto pan = mutableStateOf(Offset{});
+    ComposeTestRule rule([&] {
+        Column([&] {  // (made in the Column's block: it is run again on its own, after the lambda around it returned)
+            auto state = rememberTransformableState([pan](float, Offset p, float) { pan.set(pan.peek() + p); });
+            ContextMenuArea(arg::items = [&] { return std::vector<ContextMenuItem>{{"Yenile", [&] { ++picked; }}}; },
+                            [] { Box(Modifier().size(100, 40).testTag("alan")); });
+            TooltipArea(arg::tooltip = [] { Text("ipucu", Modifier().testTag("ipucu")); }, arg::delayMillis = 100,
+                        arg::tooltipPlacement = TooltipPlacement::ComponentRect(), [] { Box(Modifier().size(100, 40).testTag("ipuçlu")); });
+            Box(Modifier()
+                    .size(100, 40)
+                    .testTag("tıklanır")
+                    .onClick(arg::matcher = PointerMatcher::mouse(PointerButton::Secondary), [&] { ++secondary; })
+                    .onClick(arg::keyboardModifiers = [](const KeyModifiers& m) { return m.ctrl; }, [] {})
+                    .transformable(state, arg::canPan = [](Offset) { return true; })
+                    .clickable(arg::interactionSource = kt::null, arg::indication = kt::null, [&] { ++plain; }));
+            Popup(arg::popupPositionProvider = std::make_shared<Below>(), arg::properties = PopupProperties{.focusable = false},
+                  [] { Text("açılır", Modifier().testTag("açılır")); });
+            Popup(arg::alignment = Alignment::BottomStart, arg::offset = IntOffset{4, 0}, arg::onDismissRequest = [] {},
+                  [] { Text("hizalı", Modifier().testTag("hizalı")); });
+        });
+    }, {400, 800});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithTag("açılır").exists() && rule.onNodeWithTag("hizalı").exists() && rule.host().overlayCount() == 2);
+    CHECK(near(rule.onNodeWithTag("açılır").bounds().x, 10) && near(rule.onNodeWithTag("hizalı").bounds().x, 4));
+    Rect area = rule.onNodeWithTag("alan").bounds();
+    CHECK(rule.host().secondaryClick({area.x + 50, area.y + 20}));
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("Yenile").exists());
+    rule.onNodeWithText("Yenile").performClick();
+    rule.waitForIdle();
+    CHECK(picked == 1);
+    Rect tipped = rule.onNodeWithTag("ipuçlu").bounds();
+    rule.host().pointerMove({tipped.x + 50, tipped.y + 20});
+    rule.advanceTimeBy(300);
+    CHECK(rule.onNodeWithTag("ipucu").exists());
+    Rect clickable = rule.onNodeWithTag("tıklanır").bounds();
+    rule.host().mouseButton({clickable.x + 50, clickable.y + 20}, PointerButton::Secondary, true);
+    rule.host().mouseButton({clickable.x + 50, clickable.y + 20}, PointerButton::Secondary, false);
+    rule.advanceTimeBy(400);
+    rule.onNodeWithTag("tıklanır").performClick();
+    rule.waitForIdle();
+    CHECK(secondary == 1 && plain == 1);
+}
+
 TEST(navigation_takes_compose_named_arguments) {
     // NavHost(navController =, startDestination =, enterTransition = { }) { … } with the graph builder's
     // composable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }

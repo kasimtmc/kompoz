@@ -264,12 +264,12 @@ void detail::RichTooltip(const RichTooltipSlots& slots, const Modifier& modifier
     });
 }
 
-void TooltipArea(const Content& tooltip, const Modifier& modifier, const Content& content, CallSite site) {
+void detail::TooltipArea(const Content& tooltip, const Modifier& modifier, const Content& content, CallSite site) {
     TooltipArea(tooltip, modifier, TooltipAreaOptions{}, content, site);
 }
 
-void TooltipArea(const Content& tooltip, const Modifier& modifier, const TooltipAreaOptions& options, const Content& content,
-                 CallSite site) {
+void detail::TooltipArea(const Content& tooltip, const Modifier& modifier, const TooltipAreaOptions& options, const Content& content,
+                         CallSite site) {
     ComposableScope scope(site);
     auto cursor = remember([] { return mutableStateOf(Offset{}); });  // in the area
     auto visible = remember([] { return mutableStateOf(false); });

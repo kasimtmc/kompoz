@@ -567,7 +567,10 @@ Modifier Modifier::clickable(A&&... args) const {
     static_assert(P::check<A...>());
     ClickableOptions options;
     P::set<n::Enabled>(options.enabled, args...);
-    P::set<n::InteractionSource>(options.interactionSource, args...);
+    if constexpr (P::given<n::InteractionSource, A...>()) {  // (interactionSource = null: none, as Compose's)
+        auto&& source = P::arg<n::InteractionSource>(args...);
+        if constexpr (!requires { std::remove_cvref_t<decltype(source)>::kompozNull; }) options.interactionSource = source;
+    }
     if constexpr (P::given<n::Indication, A...>()) {
         auto&& given = P::arg<n::Indication>(args...);
         if constexpr (requires { std::remove_cvref_t<decltype(given)>::kompozNull; }) options.indication = Indication(false);
@@ -575,8 +578,37 @@ Modifier Modifier::clickable(A&&... args) const {
     }
     std::function<void()> onClick;
     if constexpr (P::given<n::OnClick, A...>()) onClick = P::arg<n::OnClick>(args...);
-    else onClick = P::block(std::forward<A>(args)...);
+    else onClick = std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...));  // (a click, not content: as it is)
     return clickable(std::move(onClick), options);
+}
+
+// onClick(enabled = …, matcher = …, keyboardModifiers = { … }, onLongClick = …, onDoubleClick = …) { }: the click last.
+template <class... A>
+Modifier Modifier::onClickBy(CallSite site, A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::Enabled, n::Matcher, n::KeyboardModifiers, n::OnLongClick, n::OnDoubleClick, n::OnClick, detail::Block>;
+    static_assert(P::check<A...>());
+    OnClickOptions options;
+    P::set<n::Enabled>(options.enabled, args...);
+    P::set<n::Matcher>(options.matcher, args...);
+    P::set<n::KeyboardModifiers>(options.keyboardModifiers, args...);
+    P::set<n::OnLongClick>(options.onLongClick, args...);
+    P::set<n::OnDoubleClick>(options.onDoubleClick, args...);
+    std::function<void()> onClick;
+    if constexpr (P::given<n::OnClick, A...>()) onClick = P::arg<n::OnClick>(args...);
+    else onClick = std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...));
+    return this->onClick(std::move(onClick), std::move(options), site);
+}
+
+// transformable(state, canPan = { … }, lockRotationOnZoomPan = …, enabled = …).
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::transformable(const TransformableState& state, A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::CanPan, n::LockRotationOnZoomPan, n::Enabled>;
+    static_assert(P::check<A...>());
+    return transformable(state, P::get<n::CanPan>(std::function<bool(Offset)>(), args...), P::get<n::LockRotationOnZoomPan>(false, args...),
+                         P::get<n::Enabled>(true, args...));
 }
 
 template <class... A>

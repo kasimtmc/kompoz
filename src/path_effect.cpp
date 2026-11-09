@@ -21,9 +21,6 @@ namespace {
 
 using Verb = PathCommand::Verb;
 
-Offset operator+(Offset a, Offset b) { return {a.x + b.x, a.y + b.y}; }
-Offset operator-(Offset a, Offset b) { return {a.x - b.x, a.y - b.y}; }
-Offset operator*(Offset a, float s) { return {a.x * s, a.y * s}; }
 bool finite(Offset p) { return std::isfinite(p.x) && std::isfinite(p.y); }
 
 float interp(float a, float b, float t) { return a + (b - a) * t; }  // (SkScalarInterp)

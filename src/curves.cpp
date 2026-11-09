@@ -8,9 +8,6 @@ namespace kompoz::detail::curves {
 
 namespace {
 
-Offset operator+(Offset a, Offset b) { return {a.x + b.x, a.y + b.y}; }
-Offset operator-(Offset a, Offset b) { return {a.x - b.x, a.y - b.y}; }
-Offset operator*(Offset a, float s) { return {a.x * s, a.y * s}; }
 float dot(Offset a, Offset b) { return a.x * b.x + a.y * b.y; }
 float cross(Offset a, Offset b) { return a.x * b.y - a.y * b.x; }
 Offset along(Offset a, Offset b, float t) { return {a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t}; }
