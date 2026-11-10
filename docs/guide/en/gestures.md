@@ -180,6 +180,31 @@ fun DesktopMouse() {
 }
 ```
 
+A window's menus are Compose Multiplatform's `MenuBar { Menu("…") { … } }`, drawn as a strip at the top of the content: `Item`, `CheckboxItem`, `RadioButtonItem`, `Separator` and submenus, each with a `KeyShortcut` that works while the window has the keys (key names as Compose's: `Key.DirectionLeft`):
+
+```kotlin
+@Composable
+fun Menus() {
+    var dark by remember { mutableStateOf(false) }
+    var size by remember { mutableStateOf(1) }
+    Column {
+        MenuBar {
+            Menu("File") {
+                Item("Open", shortcut = KeyShortcut(Key.O, ctrl = true)) { }
+                Menu("Recent") { Item("notes.txt") { } }
+            }
+            Menu("View") {
+                CheckboxItem("Dark theme", checked = dark, shortcut = KeyShortcut(Key.D, ctrl = true), onCheckedChange = { dark = it })
+                Separator()
+                RadioButtonItem("Small", selected = size == 1, onClick = { size = 1 })
+                RadioButtonItem("Large", selected = size == 2, onClick = { size = 2 })
+            }
+        }
+        Text("Size $size")
+    }
+}
+```
+
 ## Interactions
 
 A `MutableInteractionSource` is told of the presses, hovers, focus and drags of the components it is given to. Read whether one is going on with `collectIsPressedAsState()`, `collectIsHoveredAsState()`, `collectIsFocusedAsState()` and `collectIsDraggedAsState()` (read with `by`); they recompose when it changes.

@@ -183,6 +183,9 @@ enum class Key {
     A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
     Zero, One, Two, Three, Four, Five, Six, Seven, Eight, Nine,
     F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
+    // Compose's names for the same keys.
+    DirectionLeft = Left, DirectionRight = Right, DirectionUp = Up, DirectionDown = Down, MoveHome = Home, MoveEnd = End,
+    Spacebar = Space,
 };
 struct KeyModifiers {
     bool shift = false, ctrl = false;  // ctrl: Command on macOS

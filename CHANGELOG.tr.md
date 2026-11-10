@@ -1150,6 +1150,15 @@
   painter'lar, Material'ın şekilleri ve dönüşümleri, şekiller ve gölgeler, paylaşılan öğeler, karışım ve döşeme kipleri, renk
   uzayları, tuval, bulanıklık ve renkli vektörler Kotlin'de `@Composable fun`lar (yıldız ana hattı, pikselle yapılan bitmap ve
   bir `VectorConfig` C++ kalır). Bileşenler ekranlarının bütün bölümleri artık Kotlin.
+- **Compose'un yazdığı gibi uygulama kabuğu**: `NavDestination` grafiklerini taşır: Compose'unki gibi `destination.hierarchy` ve
+  `destination.hasRoute<T>()` (gösterilen sekme için `hierarchy.any { it.hasRoute<Tab>() }`); `navOptions { popUpTo<Home> { saveState =
+  true }; … }` ve türlü bir `popUpTo<T> { }`; adlarıyla türlü `composable<T>(deepLinks = …) { }` ve `navigation<T>(startDestination = …)
+  { }`. Compose 1.4'ün `NavigationSuiteScaffold(navigationItems = { … }, navigationSuiteType = …)`'ı ve Composable olarak
+  `NavigationSuiteItem` (`selected`, `onClick`, `icon`, `label`, `enabled`, `navigationSuiteType`, `badge`, `interactionSource`
+  adlarıyla; yerine göre seçenek struct'ı adıyla yazılır: `NavigationSuiteItemOptions{…}`). Compose Multiplatform'un menü kurucusu:
+  `MenuBar { Menu("…") { Item(…); CheckboxItem(…); RadioButtonItem(…); Separator(); Menu("…") { } } }` (`MenuBarScope`, `MenuScope`).
+  `SnackbarData::visuals()` (Compose'un `data.visuals`'ı; boş `actionLabel` yok sayılır). Kompoz'unkilerin yanında Compose'un tuş
+  adları: `Key::DirectionLeft`, `MoveHome`, `Spacebar`, … kompozc: `a?.f<T>()` tür argümanlarını korur.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

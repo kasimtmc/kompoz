@@ -1112,6 +1112,15 @@
   images and painters, Material's shapes and morphs, shapes and shadows, shared elements, blend and tile modes, color spaces,
   the canvas, blur and the color vectors are `@Composable fun`s in Kotlin (the star outline, a pixel-made bitmap and a
   `VectorConfig` stay C++). Every components screen's sections are now in Kotlin.
+- **The app shell as Compose writes it**: `NavDestination` carries its graphs: `destination.hierarchy` and
+  `destination.hasRoute<T>()` as Compose's (`hierarchy.any { it.hasRoute<Tab>() }` for the tab shown); `navOptions { popUpTo<Home>
+  { saveState = true }; … }` and a typed `popUpTo<T> { }`; typed `composable<T>(deepLinks = …) { }` and `navigation<T>(startDestination =
+  …) { }` by name. Compose 1.4's `NavigationSuiteScaffold(navigationItems = { … }, navigationSuiteType = …)` and `NavigationSuiteItem`
+  as a Composable (`selected`, `onClick`, `icon`, `label`, `enabled`, `navigationSuiteType`, `badge`, `interactionSource` by name; by
+  place its options struct is named: `NavigationSuiteItemOptions{…}`). Compose Multiplatform's menu builder: `MenuBar { Menu("…") {
+  Item(…); CheckboxItem(…); RadioButtonItem(…); Separator(); Menu("…") { } } }` (`MenuBarScope`, `MenuScope`). `SnackbarData::visuals()`
+  (Compose's `data.visuals`, `actionLabel` none when empty). Compose's key names beside Kompoz's: `Key::DirectionLeft`, `MoveHome`,
+  `Spacebar`, … kompozc: `a?.f<T>()` keeps its type arguments.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

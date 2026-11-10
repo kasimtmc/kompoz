@@ -199,9 +199,22 @@ T routeFrom(const NavArguments& args);
 // Also a LifecycleOwner (the LocalLifecycleOwner of its screen): resumed while it is the screen
 // shown, started while a transition to or from it runs, created on the back stack (or in a
 // saved one), destroyed once popped and off the screen — the NavHost's own lifecycle at most.
-// What an entry is of (Compose's NavDestination): its route pattern.
+// What an entry is of (Compose's NavDestination): its route pattern, and those of the graphs
+// around it (innermost first).
 struct NavDestination {
     std::string route;
+    std::vector<std::string> graphs;
+    // Compose's destination.hierarchy: this one, then the graphs it is in, innermost first
+    // (destination.hierarchy.any { it.hasRoute<Tab>() }: whether a tab's graph is shown).
+    std::vector<NavDestination> hierarchy() const {
+        std::vector<NavDestination> out{*this};
+        for (size_t i = 0; i < graphs.size(); ++i) out.push_back({graphs[i], {graphs.begin() + std::ptrdiff_t(i) + 1, graphs.end()}});
+        return out;
+    }
+    template <TypedRoute T>
+    bool hasRoute() const {
+        return route == routePattern<T>();
+    }
     friend bool operator==(const NavDestination&, const NavDestination&) = default;
 };
 
@@ -209,7 +222,7 @@ class NavBackStackEntry : public ViewModelStoreOwner, public LifecycleOwner {
 public:
     uint64_t id() const { return id_; }
     const std::string& route() const { return route_; }  // the destination's pattern ("detail/{id}")
-    NavDestination destination() const { return {route_}; }  // Compose's entry.destination.route
+    NavDestination destination() const;  // Compose's entry.destination (its route, its hierarchy)
     const std::string& path() const { return path_; }    // as navigated to ("detail/42")
     const NavArguments& arguments() const { return arguments_; }
     bool isGraph() const { return graph_; }
@@ -325,10 +338,24 @@ struct NavOptionsBuilder {
     }
     template <TypedRoute T>
     void popUpTo() { popUpToRoute = routePattern<T>(); }
+    template <TypedRoute T, class F>
+        requires std::is_invocable_v<F&, PopUpToBuilder&>
+    void popUpTo(F&& build) {
+        popUpTo(routePattern<T>(), std::forward<F>(build));
+    }
     NavOptions options() const {
         return {popUpToRoute, popUpToOptions.inclusive, popUpToOptions.saveState, launchSingleTop, restoreState};
     }
 };
+// Compose's navOptions { popUpTo<Home> { saveState = true }; launchSingleTop = true }: the options, built
+// once, for navigate(route, options).
+template <class F>
+    requires std::is_invocable_v<F&, NavOptionsBuilder&>
+NavOptions navOptions(F&& build) {
+    NavOptionsBuilder b;
+    build(b);
+    return b.options();
+}
 
 class NavController {
 public:
@@ -420,6 +447,29 @@ public:
     template <TypedRoute T, TypedRoute S>
     void navigation(const S& startDestination, const std::function<void(NavGraphBuilder&)>& builder) {
         (void)startDestination;
+        navigation(routePattern<S>(), routePattern<T>(), builder);
+    }
+    // The same by name, as Compose writes them: composable<Item>(deepLinks = listOf(…)) { entry -> … } and
+    // navigation<ListGraph>(startDestination = ListAll) { … }.
+    template <TypedRoute T, class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void composable(A&&... args) {
+        namespace n = detail::names;
+        using P = detail::Params<n::DeepLinks, detail::BlockWith<const NavBackStackEntry&>>;
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: composable<T>(…) { entry -> … } takes its content");
+        std::function<void(const NavBackStackEntry&)> content = std::get<sizeof...(A) - 1>(std::forward_as_tuple(args...));
+        composable(routePattern<T>(), P::get<n::DeepLinks>(std::vector<NavDeepLink>(), args...), std::move(content));
+    }
+    template <TypedRoute T, class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void navigation(A&&... args) {
+        namespace n = detail::names;
+        using P = detail::Params<n::StartDestination, detail::BlockWith<NavGraphBuilder&>>;
+        static_assert(P::check<A...>());
+        static_assert(P::blockGiven<A...>(), "kompoz: navigation<T>(startDestination) { … } takes its destinations");
+        std::function<void(NavGraphBuilder&)> builder = std::get<sizeof...(A) - 1>(std::forward_as_tuple(args...));
+        using S = std::remove_cvref_t<decltype(P::arg<n::StartDestination>(args...))>;
         navigation(routePattern<S>(), routePattern<T>(), builder);
     }
     // Compose's names: composable(route, deepLinks = listOf(…)) { entry -> … } and

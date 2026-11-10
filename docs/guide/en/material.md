@@ -86,6 +86,24 @@ fun App() {
 }
 ```
 
+Compose 1.4's form takes plain content instead, `NavigationSuiteItem` calls, and by default M3 Expressive's navigation for the window (a short bar on a phone, its labels beside the icons when it lies on its side, a wide rail on a wider window); `navigationSuiteType` picks one:
+
+```kotlin
+@Composable
+fun ExpressiveApp() {
+    var tab by rememberSaveable { mutableStateOf(0) }
+    NavigationSuiteScaffold(
+        navigationItems = {
+            NavigationSuiteItem(selected = tab == 0, onClick = { tab = 0 }, icon = { Icon(Icons.Filled.Home, contentDescription = null) }, label = { Text("Home") })
+            NavigationSuiteItem(selected = tab == 1, onClick = { tab = 1 }, icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                                label = { Text("Settings") }, badge = { Badge { Text("2") } })
+        },
+    ) {
+        Text("Tab $tab")
+    }
+}
+```
+
 For moving between screens with a back stack, see [Navigation](navigation.md).
 
 ## Buttons

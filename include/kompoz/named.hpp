@@ -787,6 +787,9 @@ struct InitialAlpha {};
 struct TargetAlpha {};
 struct InitialScale {};
 struct TargetScale {};
+struct NavigationItems {};
+struct NavigationSuiteType {};
+struct Shortcut {};
 } // namespace detail::names
 inline namespace args {
 inline constexpr Param<detail::names::Modifier> modifier;
@@ -1052,6 +1055,8 @@ inline constexpr Param<detail::names::InitialAlpha> initialAlpha;
 inline constexpr Param<detail::names::TargetAlpha> targetAlpha;
 inline constexpr Param<detail::names::InitialScale> initialScale;
 inline constexpr Param<detail::names::TargetScale> targetScale;
+inline constexpr Param<detail::names::NavigationItems> navigationItems;
+inline constexpr Param<detail::names::Shortcut> shortcut;
 } // namespace args
 // The names as kompozc writes them (arg::colors = …): all of args', and those that are something
 // else of Kompoz's too (colors: the colors' namespace).
@@ -1064,6 +1069,8 @@ inline constexpr Param<detail::names::Key> key;
 inline constexpr Param<detail::names::ContentType> contentType;
 // (kompoz::items(…) adds a lazy list's items: this is ContextMenuArea's items = { … })
 inline constexpr Param<detail::names::Items> items;
+// (NavigationSuiteScaffoldDefaults::navigationSuiteType(…) is the function: this is NavigationSuiteItem's and the scaffold's argument)
+inline constexpr Param<detail::names::NavigationSuiteType> navigationSuiteType;
 // (kompoz::colorScheme() and motionScheme() read the theme's: these are MaterialTheme's names)
 inline constexpr Param<detail::names::ColorScheme> colorScheme;
 inline constexpr Param<detail::names::MotionScheme> motionScheme;

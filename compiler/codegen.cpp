@@ -175,6 +175,8 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"AppBarRow", "AppBarScope"},            {"AppBarColumn", "AppBarScope"},
     {"DraggableAnchors", "auto DraggableAnchors"},  // (the builder's anchors: DragValue.Start at 0f)
     {"keyframes", "KeyframesConfig"},  // (keyframes { durationMillis = 420; 1.35f at 110 }: the spec's frames)
+    {"navOptions", "NavOptionsBuilder"},
+    {"MenuBar", "MenuBarScope"},             {"Menu", "MenuScope"},  // (Compose Multiplatform's menu builder)
     {"NavHost", "NavGraphBuilder"},          {"navigation", "NavGraphBuilder"},
     {"navigate", "NavOptionsBuilder"},       {"popUpTo", "PopUpToBuilder"},     {"navDeepLink", "NavDeepLink"},
     // (an ImageVector's builder: group(…) { path(…) { moveTo(…) } })
@@ -1345,8 +1347,9 @@ private:
                 if (kKtMembers.contains(callee.text)) {
                     out_.text("::kompoz::kt::" + callee.text + "(kompoz_safe");
                     arguments(c, calleeName, true, true);
-                } else {
-                    out_.text("kompoz_safe." + cppName(callee.text));
+                } else {  // (a?.hasRoute<T>(): the template's arguments, on a dependent object)
+                    out_.text("kompoz_safe." + std::string(c.typeArgs.empty() ? "" : "template ") + cppName(callee.text));
+                    typeArguments(c);
                     arguments(c, calleeName, false);
                 }
                 out_.text("; })");

@@ -2020,6 +2020,86 @@ TEST(graphics_forms_as_compose_writes_them) {
     CHECK(rule.onNodeWithTag("kalp").exists() && rule.onNodeWithTag("büyüteç").exists() && rule.onNodeWithContentDescription("şerit").exists());
 }
 
+// App shell forms as Compose writes them: destination.hierarchy.any { it.hasRoute<T>() }, destination?.hasRoute<T>(),
+// navOptions { popUpTo<T> { saveState = true } }, composable<T>(deepLinks =) and navigation<T>(startDestination =),
+// NavigationSuiteScaffold(navigationItems = { NavigationSuiteItem(…) }, navigationSuiteType =), MenuBar { Menu { … } },
+// data.visuals.actionLabel and Compose's key names.
+@Serializable
+object Shell
+
+@Serializable
+object AccountGraph
+
+@Serializable
+data class Member(val n: Int)
+
+@Composable
+fun AppShellForms(nav: NavController) {
+    val entry by nav.currentBackStackEntryAsState()
+    val destination = entry?.destination
+    val inAccount = destination?.hierarchy?.any { it.hasRoute<AccountGraph>() } == true
+    val tabs = navOptions {
+        popUpTo<Shell> { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+    var dark by remember { mutableStateOf(false) }
+    var size by remember { mutableStateOf(1) }
+    val data = SnackbarData(message = "m", actionLabel = "Geri al")
+    Column {
+        MenuBar {
+            Menu("Görünüm") {
+                CheckboxItem("Koyu", checked = dark, shortcut = KeyShortcut(Key.D, ctrl = true), onCheckedChange = { dark = it })
+                Separator()
+                RadioButtonItem("Büyük", selected = size == 2, onClick = { size = 2 })
+                Item("Geri", enabled = nav.previousBackStackEntry != null, shortcut = KeyShortcut(Key.DirectionLeft, alt = true)) { nav.popBackStack() }
+            }
+        }
+        Text("koyu $dark boy $size eylem ${data.visuals.actionLabel?.length ?: 0}")
+        NavigationSuiteScaffold(
+            navigationItems = {
+                NavigationSuiteItem(selected = !inAccount, onClick = { nav.navigate(Shell, tabs) },
+                                    icon = { Icon(Icons.Filled.Home, contentDescription = null) }, label = { Text("Kabuk") })
+                NavigationSuiteItem(selected = inAccount, onClick = { nav.navigate(AccountGraph, tabs) },
+                                    icon = { Icon(Icons.Filled.Settings, contentDescription = null) }, label = { Text("Hesap") })
+            },
+            navigationSuiteType = NavigationSuiteType.NavigationRail,
+            modifier = Modifier.weight(1f),
+        ) {
+            NavHost(navController = nav, startDestination = Shell) {
+                composable<Shell> { Text(if (destination?.hasRoute<Shell>() == true) "kabuk ekranı" else "yolda") }
+                navigation<AccountGraph>(startDestination = Member(0)) {
+                    composable<Member>(deepLinks = listOf(navDeepLink<Member>("kompoz://member"))) { e -> Text("hesap ${e.toRoute<Member>().n}") }
+                }
+            }
+        }
+        Text(if (inAccount) "sekme hesap" else "sekme kabuk")
+    }
+}
+
+TEST(app_shell_as_compose_writes_it) {
+    NavController nav;
+    ComposeTestRule rule([&] { AppShellForms(nav); }, {600, 800});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("kabuk ekranı").exists() && rule.onNodeWithText("sekme kabuk").exists());
+    CHECK(rule.onNodeWithText("koyu false boy 1 eylem 7").exists());
+    rule.onNodeWithText("Hesap").performClick();
+    rule.waitForIdle();
+    rule.advanceTimeBy(1000);
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("hesap 0").exists() && rule.onNodeWithText("sekme hesap").exists());
+    rule.onNodeWithText("Görünüm").performClick();
+    rule.waitForIdle();
+    rule.onNodeWithText("Koyu").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("koyu true boy 1 eylem 7").exists());
+    CHECK(nav.handleDeepLink("kompoz://member/5"));
+    rule.waitForIdle();
+    rule.advanceTimeBy(1000);
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("hesap 5").exists());
+}
+
 TEST(navigation_as_compose_writes_it) {
     NavController nav;
     ComposeTestRule rule([&] { Navigator(nav); });

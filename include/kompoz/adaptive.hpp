@@ -154,27 +154,34 @@ void NavigationSuiteScaffold(const Content& navigationItems, const Modifier& mod
 // modifier, layoutType = …, state = …, containerColor = …, contentColor = …, primaryActionContent = …) { … }
 // as Compose's: its items block on a NavigationSuiteScope (a block of plain content, Compose 1.4's
 // NavigationSuiteItem calls, is taken too); or (items, modifier, NavigationSuiteScaffoldOptions{…}) { … }.
+// Compose 1.4's NavigationSuiteScaffold(navigationItems = { NavigationSuiteItem(…) }, navigationSuiteType = …) { … } too.
 struct NavigationSuiteScaffoldImpl {
     using P = Params<names::NavigationSuiteItems, names::Modifier, names::Options, names::LayoutType, names::State, names::RailHeader,
-                     names::DrawerHeader, names::ContainerColor, names::ContentColor, names::PrimaryActionContent, Block>;
+                     names::DrawerHeader, names::ContainerColor, names::ContentColor, names::PrimaryActionContent, names::NavigationItems,
+                     names::NavigationSuiteType, Block>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
         NavigationSuiteScaffoldOptions options = P::get<names::Options>(NavigationSuiteScaffoldOptions{}, args...);
         P::set<names::LayoutType>(options.layoutType, args...);
+        P::set<names::NavigationSuiteType>(options.layoutType, args...);
         P::set<names::State>(options.state, args...);
         P::set<names::RailHeader>(options.railHeader, args...);
         P::set<names::DrawerHeader>(options.drawerHeader, args...);
         P::set<names::ContainerColor>(options.containerColor, args...);
         P::set<names::ContentColor>(options.contentColor, args...);
         P::set<names::PrimaryActionContent>(options.primaryActionContent, args...);
-        auto&& items = P::arg<names::NavigationSuiteItems>(args...);
         Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
         Content content = P::plainBlock(std::forward<A>(args)...);
-        if constexpr (std::is_invocable_v<decltype(items)&, NavigationSuiteScope&>)
-            NavigationSuiteScaffold(std::function<void(NavigationSuiteScope&)>(items), modifier, options, content, site);
-        else
-            NavigationSuiteScaffold(Content(items), modifier, options, content, site);
+        if constexpr (P::template given<names::NavigationItems, A...>()) {  // plain content: NavigationSuiteItem calls
+            NavigationSuiteScaffold(Content(P::arg<names::NavigationItems>(args...)), modifier, options, content, site);
+        } else {
+            auto&& items = P::arg<names::NavigationSuiteItems>(args...);
+            if constexpr (std::is_invocable_v<decltype(items)&, NavigationSuiteScope&>)
+                NavigationSuiteScaffold(std::function<void(NavigationSuiteScope&)>(items), modifier, options, content, site);
+            else
+                NavigationSuiteScaffold(Content(items), modifier, options, content, site);
+        }
     }
 };
 } // namespace detail
@@ -200,8 +207,29 @@ struct NavigationSuiteItemOptions {
     Content badge;  // over the icon
     std::optional<MutableInteractionSource> interactionSource;
 };
+namespace detail {
 void NavigationSuiteItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label,
                          const Modifier& modifier = {}, const NavigationSuiteItemOptions& options = {}, CallSite site = CallSite::current());
+// NavigationSuiteItem(selected = …, onClick = …, icon = { }, label = { }, modifier = …, enabled = …, navigationSuiteType = …,
+// badge = { }, interactionSource = …), as Compose 1.4 writes it, and by place (…, modifier, NavigationSuiteItemOptions{…}).
+struct NavigationSuiteItemImpl {
+    using P = Params<names::Selected, names::OnClick, names::Icon, names::Label, names::Modifier, names::Options, names::Enabled,
+                     names::NavigationSuiteType, names::Badge, names::InteractionSource>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        NavigationSuiteItemOptions options = P::get<names::Options>(NavigationSuiteItemOptions{}, args...);
+        P::set<names::Enabled>(options.enabled, args...);
+        P::set<names::NavigationSuiteType>(options.navigationSuiteType, args...);
+        P::set<names::Badge>(options.badge, args...);
+        P::set<names::InteractionSource>(options.interactionSource, args...);
+        NavigationSuiteItem(bool(P::arg<names::Selected>(args...)), std::function<void()>(P::arg<names::OnClick>(args...)),
+                            Content(P::arg<names::Icon>(args...)), Content(P::arg<names::Label>(args...)),
+                            P::get<names::Modifier>(Modifier{}, args...), options, site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::NavigationSuiteItemImpl> NavigationSuiteItem;
 // ...and the layout: the navigation at the bottom (bars) or the start (the others), sliding away
 // as `state` hides it; a bar's primary action above it, 16 dp from the edge it is aligned to.
 void NavigationSuiteScaffoldLayout(const Content& navigationSuite, NavigationSuiteType navigationSuiteType, const Content& content,

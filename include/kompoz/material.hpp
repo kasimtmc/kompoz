@@ -989,6 +989,89 @@ struct MenuBarMenu {
     std::vector<MenuBarItem> items;
 };
 void MenuBar(const std::vector<MenuBarMenu>& menus, const Modifier& modifier = {}, CallSite site = CallSite::current());
+// Compose Multiplatform's builder for the same menus: MenuBar { Menu("Dosya") { Item("Aç", shortcut = KeyShortcut(Key.O, ctrl =
+// true), onClick = open); CheckboxItem("Satır numaraları", checked = numbers, onCheckedChange = { numbers = it }); Separator();
+// RadioButtonItem("Büyük", selected = large, onClick = { … }); Menu("Son açılanlar") { Item("notlar.txt") { … } } } }. A radio
+// item is drawn as a checked one is.
+class MenuScope {
+public:
+    // Item(text, enabled = …, shortcut = …, onClick = …), the click by name or as the block.
+    template <class... A>
+    void Item(std::string text, A&&... args) {
+        using P = detail::Params<detail::names::Enabled, detail::names::Shortcut, detail::names::OnClick, detail::Block>;
+        static_assert(P::check<A...>());
+        MenuBarItem item{.text = std::move(text)};
+        set<P>(item, args...);
+        if constexpr (P::template given<detail::names::OnClick, A...>()) item.onClick = P::template arg<detail::names::OnClick>(args...);
+        else if constexpr (sizeof...(A) > 0 && P::template blockGiven<A...>()) item.onClick = std::get<sizeof...(A) - 1>(std::forward_as_tuple(args...));
+        items_.push_back(std::move(item));
+    }
+    // CheckboxItem(text, checked = …, enabled = …, shortcut = …, onCheckedChange = { checked -> … }): a click gives !checked.
+    template <class... A>
+    void CheckboxItem(std::string text, A&&... args) {
+        using P = detail::Params<detail::names::Checked, detail::names::Enabled, detail::names::Shortcut, detail::names::OnCheckedChange>;
+        static_assert(P::check<A...>());
+        bool checked = P::template arg<detail::names::Checked>(args...);
+        MenuBarItem item{.text = std::move(text), .checked = checked};
+        set<P>(item, args...);
+        if constexpr (P::template given<detail::names::OnCheckedChange, A...>())
+            item.onClick = [change = std::function<void(bool)>(P::template arg<detail::names::OnCheckedChange>(args...)), checked] { change(!checked); };
+        items_.push_back(std::move(item));
+    }
+    // RadioButtonItem(text, selected = …, enabled = …, shortcut = …, onClick = …), the click by name or as the block.
+    template <class... A>
+    void RadioButtonItem(std::string text, A&&... args) {
+        using P = detail::Params<detail::names::Selected, detail::names::Enabled, detail::names::Shortcut, detail::names::OnClick, detail::Block>;
+        static_assert(P::check<A...>());
+        MenuBarItem item{.text = std::move(text), .checked = bool(P::template arg<detail::names::Selected>(args...))};
+        set<P>(item, args...);
+        if constexpr (P::template given<detail::names::OnClick, A...>()) item.onClick = P::template arg<detail::names::OnClick>(args...);
+        else if constexpr (sizeof...(A) > 0 && P::template blockGiven<A...>()) item.onClick = std::get<sizeof...(A) - 1>(std::forward_as_tuple(args...));
+        items_.push_back(std::move(item));
+    }
+    void Separator() { items_.push_back(MenuBarItem::Separator()); }
+    // A submenu: Menu(text, enabled = …) { … }.
+    template <class... A>
+    void Menu(std::string text, A&&... args) {
+        using P = detail::Params<detail::names::Enabled, detail::BlockWith<MenuScope&>>;
+        static_assert(P::check<A...>());
+        static_assert(P::template blockGiven<A...>(), "kompoz: Menu(text) { … } takes its items");
+        MenuScope inner;
+        std::get<sizeof...(A) - 1>(std::forward_as_tuple(args...))(inner);
+        MenuBarItem item{.text = std::move(text), .submenu = std::move(inner.items_)};
+        P::template set<detail::names::Enabled>(item.enabled, args...);
+        items_.push_back(std::move(item));
+    }
+    std::vector<MenuBarItem> takeItems() { return std::move(items_); }
+
+private:
+    template <class P, class... A>
+    static void set(MenuBarItem& item, A&... args) {
+        P::template set<detail::names::Enabled>(item.enabled, args...);
+        if constexpr (P::template given<detail::names::Shortcut, A...>()) item.shortcut = KeyShortcut(P::template arg<detail::names::Shortcut>(args...));
+    }
+    std::vector<MenuBarItem> items_;
+};
+class MenuBarScope {
+public:
+    // Menu(text) { Item(…); … }: one of the bar's menus.
+    template <class F>
+        requires std::is_invocable_v<F&, MenuScope&>
+    void Menu(std::string text, F&& content) {
+        MenuScope scope;
+        content(scope);
+        menus_.push_back({std::move(text), scope.takeItems()});
+    }
+    std::vector<MenuBarMenu> takeMenus() { return std::move(menus_); }
+
+private:
+    std::vector<MenuBarMenu> menus_;
+};
+inline void MenuBar(const std::function<void(MenuBarScope&)>& content, const Modifier& modifier = {}, CallSite site = CallSite::current()) {
+    MenuBarScope scope;
+    content(scope);
+    MenuBar(scope.takeMenus(), modifier, site);
+}
 
 // ---- Tooltips ----------------------------------------------------------------------------------
 
@@ -2010,7 +2093,18 @@ enum class SnackbarDuration { Short, Long, Indefinite };
 
 enum class SnackbarResult { Dismissed, ActionPerformed };
 
+// What a snackbar shows (Compose's SnackbarVisuals): its message, its action's label if it has one, ...
+struct SnackbarVisuals {
+    std::string message;
+    std::optional<std::string> actionLabel;
+    bool withDismissAction = false;
+    SnackbarDuration duration = SnackbarDuration::Short;
+};
 struct SnackbarData {
+    // Compose's data.visuals (actionLabel: none for an empty one).
+    SnackbarVisuals visuals() const {
+        return {message, actionLabel.empty() ? std::nullopt : std::optional(actionLabel), withDismissAction, duration};
+    }
     uint64_t id = 0;
     std::string message, actionLabel;
     std::function<void()> onAction;

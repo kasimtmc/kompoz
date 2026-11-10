@@ -180,6 +180,31 @@ fun DesktopMouse() {
 }
 ```
 
+Bir pencerenin menüleri Compose Multiplatform'un `MenuBar { Menu("…") { … } }`'ıdır, içeriğin üstünde bir şerit olarak çizilir: `Item`, `CheckboxItem`, `RadioButtonItem`, `Separator` ve alt menüler, her biri pencere tuşları alırken çalışan bir `KeyShortcut` ile (tuş adları Compose'unki gibi: `Key.DirectionLeft`):
+
+```kotlin
+@Composable
+fun Menus() {
+    var dark by remember { mutableStateOf(false) }
+    var size by remember { mutableStateOf(1) }
+    Column {
+        MenuBar {
+            Menu("Dosya") {
+                Item("Aç", shortcut = KeyShortcut(Key.O, ctrl = true)) { }
+                Menu("Son açılanlar") { Item("notlar.txt") { } }
+            }
+            Menu("Görünüm") {
+                CheckboxItem("Koyu tema", checked = dark, shortcut = KeyShortcut(Key.D, ctrl = true), onCheckedChange = { dark = it })
+                Separator()
+                RadioButtonItem("Küçük", selected = size == 1, onClick = { size = 1 })
+                RadioButtonItem("Büyük", selected = size == 2, onClick = { size = 2 })
+            }
+        }
+        Text("Boy $size")
+    }
+}
+```
+
 ## Etkileşimler
 
 Bir `MutableInteractionSource`'a, verildiği bileşenlerin basmaları, üzerine gelmeleri, odakları ve sürüklemeleri bildirilir. Birinin sürüp sürmediğini `collectIsPressedAsState()`, `collectIsHoveredAsState()`, `collectIsFocusedAsState()` ve `collectIsDraggedAsState()` (`by` ile okunur) ile okuyun; bunlar değiştiğinde yeniden kompoze ederler.

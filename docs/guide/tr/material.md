@@ -86,6 +86,24 @@ fun App() {
 }
 ```
 
+Compose 1.4'ün biçimi bunun yerine düz içerik, `NavigationSuiteItem` çağrıları alır ve varsayılan olarak pencereye göre M3 Expressive'in gezinmesini gösterir (telefonda kısa bir çubuk, yan yattığında etiketleri simgelerin yanında; daha geniş pencerede geniş bir ray); `navigationSuiteType` birini seçer:
+
+```kotlin
+@Composable
+fun ExpressiveApp() {
+    var tab by rememberSaveable { mutableStateOf(0) }
+    NavigationSuiteScaffold(
+        navigationItems = {
+            NavigationSuiteItem(selected = tab == 0, onClick = { tab = 0 }, icon = { Icon(Icons.Filled.Home, contentDescription = null) }, label = { Text("Ana sayfa") })
+            NavigationSuiteItem(selected = tab == 1, onClick = { tab = 1 }, icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                                label = { Text("Ayarlar") }, badge = { Badge { Text("2") } })
+        },
+    ) {
+        Text("Sekme $tab")
+    }
+}
+```
+
 Ekranlar arasında bir geri yığınıyla geçiş için bkz. [Gezinme](navigation.md).
 
 ## Butonlar

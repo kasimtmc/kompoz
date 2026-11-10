@@ -86,6 +86,31 @@ nav.navigate(tab) {
 }
 ```
 
+Which tab is shown is the destination's `hierarchy` (the destination, then the graphs it is in): a tab's nested graph counts with all its screens. `navOptions { }` builds the options once, for `navigate(route, options)`:
+
+```kotlin
+@Serializable
+object HomeTab
+
+@Serializable
+object SettingsTab
+
+@Composable
+fun Tabs(nav: NavController) {
+    val entry by nav.currentBackStackEntryAsState()
+    val inSettings = entry?.destination?.hierarchy?.any { it.hasRoute<SettingsTab>() } == true
+    val tabs = navOptions {
+        popUpTo<HomeTab> { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+    Row {
+        TextButton(onClick = { nav.navigate(HomeTab, tabs) }, enabled = inSettings) { Text("Home") }
+        TextButton(onClick = { nav.navigate(SettingsTab, tabs) }, enabled = !inSettings) { Text("Settings") }
+    }
+}
+```
+
 After a login flow, clear it from the stack:
 
 ```kotlin body

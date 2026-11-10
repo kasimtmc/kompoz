@@ -188,8 +188,8 @@ void NavigationSuite(NavigationSuiteType navigationSuiteType, const Modifier& mo
     }
 }
 
-void NavigationSuiteItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier,
-                         const NavigationSuiteItemOptions& options, CallSite site) {
+void detail::NavigationSuiteItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier,
+                                 const NavigationSuiteItemOptions& options, CallSite site) {
     ComposableScope scope(site);
     NavigationSuiteType type = options.navigationSuiteType.value_or(NavigationSuiteScaffoldDefaults::navigationSuiteType(currentWindowAdaptiveInfo()));
     Content badge = options.badge;
@@ -300,8 +300,8 @@ void detail::NavigationSuiteScaffold(const std::function<void(NavigationSuiteSco
                     std::string label = item.label;
                     Content iconContent = item.iconContent ? item.iconContent : Content([icon] { detail::Icon(icon, ""); });
                     Content labelContent = item.labelContent ? item.labelContent : Content([label] { detail::Text(label); });
-                    NavigationSuiteItem(item.selected, item.onClick, iconContent, labelContent, Modifier(),
-                                        {.navigationSuiteType = type, .enabled = item.enabled, .badge = item.badge});
+                    detail::NavigationSuiteItem(item.selected, item.onClick, iconContent, labelContent, Modifier(),
+                                                {.navigationSuiteType = type, .enabled = item.enabled, .badge = item.badge});
                 }
             }, options.primaryActionContent, options.navigationItemVerticalArrangement);
             break;

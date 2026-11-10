@@ -486,6 +486,12 @@ bool NavController::canNavigateBack() const {
     return data_->screens() > 1;
 }
 
+NavDestination NavBackStackEntry::destination() const {
+    NavDestination d{route_, {}};
+    for (const NavBackStackEntry* e = parent_.get(); e; e = e->parent_.get()) d.graphs.push_back(e->route_);
+    return d;
+}
+
 std::vector<std::string> NavBackStackEntry::hierarchy() const {
     std::vector<std::string> routes;
     for (const NavBackStackEntry* e = this; e; e = e->parent_.get()) routes.push_back(e->route_);

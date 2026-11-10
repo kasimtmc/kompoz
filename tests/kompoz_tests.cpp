@@ -8290,6 +8290,81 @@ TEST(graphics_forms_take_compose_named_arguments) {
     CHECK(rule.onNodeWithTag("büyüteç").exists());
 }
 
+TEST(app_shell_forms_take_compose_named_arguments) {
+    // NavDestination::hierarchy / hasRoute<T>, navOptions { popUpTo<T> { saveState } }, composable<T>(arg::deepLinks =) and
+    // navigation<T>(arg::startDestination =); the menu builder (MenuBar { Menu { Item / CheckboxItem / RadioButtonItem / Separator /
+    // Menu } }); NavigationSuiteItem by name and NavigationSuiteScaffold(arg::navigationItems =, arg::navigationSuiteType =);
+    // SnackbarData::visuals; Compose's key names.
+    CHECK(Key::DirectionLeft == Key::Left && Key::MoveEnd == Key::End && Key::Spacebar == Key::Space);
+    SnackbarData data;
+    data.message = "m";
+    CHECK(!data.visuals().actionLabel && data.visuals().message == "m");
+    data.actionLabel = "Geri al";
+    CHECK(data.visuals().actionLabel == std::optional<std::string>("Geri al"));
+    NavOptions tabs = navOptions([](NavOptionsBuilder& b) {
+        b.popUpTo<HomeRoute>([](PopUpToBuilder& p) { p.saveState = true; });
+        b.launchSingleTop = true;
+    });
+    CHECK(tabs.popUpTo == routePattern<HomeRoute>() && tabs.saveState && tabs.launchSingleTop && !tabs.restoreState);
+    bool opened = false, dark = false;
+    int picked = 0;
+    MenuBarScope bar;
+    bar.Menu("Dosya", [&](MenuScope& m) {
+        m.Item("Aç", arg::shortcut = KeyShortcut{Key::O, true}, arg::onClick = [&] { opened = true; });
+        m.CheckboxItem("Koyu", arg::checked = true, arg::onCheckedChange = [&](bool on) { dark = !on; });
+        m.Separator();
+        m.RadioButtonItem("Büyük", arg::selected = true, arg::enabled = false, [&] { picked = 2; });
+        m.Menu("Son", [](MenuScope& sub) { sub.Item("notlar.txt", [] {}); });
+    });
+    std::vector<MenuBarMenu> menus = bar.takeMenus();
+    CHECK(menus.size() == 1 && menus[0].text == "Dosya" && menus[0].items.size() == 5);
+    const auto& items = menus[0].items;
+    CHECK(items[0].shortcut == (KeyShortcut{Key::O, true}) && !items[0].checked && items[1].checked == true && items[2].separator);
+    CHECK(items[3].checked == true && !items[3].enabled && items[4].submenu.size() == 1 && items[4].submenu[0].text == "notlar.txt");
+    items[0].onClick();
+    items[1].onClick();  // (checked: a click unchecks it)
+    items[3].onClick();
+    CHECK(opened && dark && picked == 2);
+    NavController nav;
+    ComposeTestRule rule([&] {
+        auto entry = nav.currentBackStackEntryAsState();
+        std::optional<NavDestination> destination = entry ? std::optional(entry->destination()) : std::nullopt;
+        bool inLogin = destination && std::ranges::any_of(destination->hierarchy(), [](const NavDestination& d) { return d.hasRoute<LoginGraph>(); });
+        Column([=, &nav] {  // (by value: these blocks run again on their own, after the lambda around them returned)
+            NavigationSuiteScaffold(arg::navigationItems = [=, &nav] {
+                NavigationSuiteItem(arg::selected = !inLogin, arg::onClick = [=, &nav] { nav.navigate(HomeRoute{}, tabs); },
+                                    arg::icon = [] { Icon(Icons::Filled::Home, ""); }, arg::label = [] { Text("Ev"); });
+                NavigationSuiteItem(arg::selected = inLogin, arg::onClick = [=, &nav] { nav.navigate(LoginGraph{}, tabs); },
+                                    arg::icon = [] { Icon(Icons::Filled::Settings, ""); }, arg::label = [] { Text("Giriş"); },
+                                    arg::badge = [] { Badge(Modifier(), [] { Text("1"); }); });
+            }, arg::navigationSuiteType = NavigationSuiteType::NavigationRail, arg::modifier = Modifier().weight(1), [&nav] {
+                NavHost(nav, HomeRoute{}, Modifier(), [&](NavGraphBuilder& g) {
+                    g.composable<HomeRoute>([](const NavBackStackEntry&) { Text("ev ekranı"); });
+                    g.navigation<LoginGraph>(arg::startDestination = UsernameRoute{}, [&](NavGraphBuilder& login) {
+                        login.composable<UsernameRoute>(arg::deepLinks = std::vector{navDeepLink<UsernameRoute>("kompoz://username")},
+                                                        [](const NavBackStackEntry& e) { Text("kullanıcı " + std::to_string(e.toRoute<UsernameRoute>().attempt)); });
+                    });
+                });
+            });
+            Text(inLogin ? "sekme giriş" : "sekme ev");
+        });
+    }, {600, 800});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("ev ekranı").exists() && rule.onNodeWithText("sekme ev").exists());
+    rule.onNodeWithText("Giriş").performClick();
+    rule.waitForIdle();
+    rule.advanceTimeBy(1000);
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("kullanıcı 0").exists() && rule.onNodeWithText("sekme giriş").exists());
+    NavDestination now = nav.currentBackStackEntry()->destination();
+    CHECK(now.hierarchy().size() == 2 && now.hierarchy()[1].hasRoute<LoginGraph>() && now.hasRoute<UsernameRoute>());
+    CHECK(nav.handleDeepLink("kompoz://username/3"));
+    rule.waitForIdle();
+    rule.advanceTimeBy(1000);
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("kullanıcı 3").exists());
+}
+
 TEST(navigation_takes_compose_named_arguments) {
     // NavHost(navController =, startDestination =, enterTransition = { }) { … } with the graph builder's
     // composable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }
@@ -13570,7 +13645,7 @@ TEST(navigation_suite_scaffold_with_its_own_items_a_primary_action_and_hiding) {
             [&] {
                 NavigationSuiteItem(tab.get() == 0, [&] { tab.set(0); }, [] { Icon(Icons::Filled::Home, ""); }, [] { Text("Ev"); });
                 NavigationSuiteItem(tab.get() == 1, [&] { tab.set(1); }, [] { Icon(Icons::Filled::Settings, ""); }, [] { Text("Ayarlar"); },
-                                    Modifier(), {.badge = [] { Badge(Modifier(), [] { Text("3"); }); }});
+                                    Modifier(), NavigationSuiteItemOptions{.badge = [] { Badge(Modifier(), [] { Text("3"); }); }});
             },
             Modifier().fillMaxSize(),
             NavigationSuiteScaffoldOptions{.state = s, .primaryActionContent = [] { Box(Modifier().size(56).testTag("eylem")); }},
@@ -13631,9 +13706,9 @@ TEST(navigation_suite_items_suit_each_type) {
     ComposeTestRule rule([&] {
         NavigationSuiteType t = type.get();
         NavigationSuite(t, Modifier().testTag("suite"), [&] {
-            NavigationSuiteItem(true, [] {}, [] { Icon(Icons::Filled::Home, ""); }, [] { Text("Ev"); }, Modifier(), {.navigationSuiteType = t});
+            NavigationSuiteItem(true, [] {}, [] { Icon(Icons::Filled::Home, ""); }, [] { Text("Ev"); }, Modifier(), NavigationSuiteItemOptions{.navigationSuiteType = t});
             NavigationSuiteItem(false, [&] { clicked = true; }, [] { Icon(Icons::Filled::Settings, ""); }, [] { Text("Kapalı"); }, Modifier(),
-                                {.navigationSuiteType = t, .enabled = false});
+                                NavigationSuiteItemOptions{.navigationSuiteType = t, .enabled = false});
         }, [] { Box(Modifier().size(40).testTag("başlık")); }, Arrangement::Kind::End);
     }, {1000, 800});
     // A rail: the header at the top, the items at the bottom.

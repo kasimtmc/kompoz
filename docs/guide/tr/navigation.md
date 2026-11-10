@@ -86,6 +86,31 @@ nav.navigate(tab) {
 }
 ```
 
+Hangi sekmenin gösterildiği hedefin `hierarchy`'sidir (hedef, sonra içinde bulunduğu grafikler): bir sekmenin iç içe grafiği bütün ekranlarıyla sayılır. `navOptions { }` seçenekleri bir kez, `navigate(route, options)` için kurar:
+
+```kotlin
+@Serializable
+object HomeTab
+
+@Serializable
+object SettingsTab
+
+@Composable
+fun Tabs(nav: NavController) {
+    val entry by nav.currentBackStackEntryAsState()
+    val inSettings = entry?.destination?.hierarchy?.any { it.hasRoute<SettingsTab>() } == true
+    val tabs = navOptions {
+        popUpTo<HomeTab> { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+    Row {
+        TextButton(onClick = { nav.navigate(HomeTab, tabs) }, enabled = inSettings) { Text("Ana sayfa") }
+        TextButton(onClick = { nav.navigate(SettingsTab, tabs) }, enabled = !inSettings) { Text("Ayarlar") }
+    }
+}
+```
+
 Bir giriş akışından sonra onu yığından temizleyin:
 
 ```kotlin body
