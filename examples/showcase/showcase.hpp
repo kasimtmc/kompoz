@@ -86,20 +86,7 @@ Color hueColor(int i);
 
 // components/scroll.cpp: its sections are @Composable there (the module declares them)
 
-// components/graphics.cpp
-void ProgressSection(CallSite site = CallSite::current());
-void AnimationsSection(CallSite site = CallSite::current());
-void AsyncImageSection(CallSite site = CallSite::current());
-void ImagesSection(CallSite site = CallSite::current());
-void MaterialShapesSection(CallSite site = CallSite::current());
-void ShapesSection(CallSite site = CallSite::current());
-void SharedElementSection(CallSite site = CallSite::current());
-void BlendModeSection(CallSite site = CallSite::current());
-void TileModeSection(CallSite site = CallSite::current());
-void ColorSpaceSection(CallSite site = CallSite::current());
-void CanvasSection(CallSite site = CallSite::current());
-void BlurSection(CallSite site = CallSite::current());
-void ColorVectorSection(CallSite site = CallSite::current());
+// components/graphics.cpp: its sections are @Composable there (the module declares them)
 
 // components/drawing.cpp: DrawingSection is @Composable there (the module declares it)
 

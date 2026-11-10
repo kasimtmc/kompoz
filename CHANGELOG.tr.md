@@ -1146,6 +1146,10 @@
   değer olarak `MaterialShapes.Heart`, `x and y` (`or`, `xor`, `shl`, `shr`), `return@Label`, `X().apply { }`, ayarlayıcısıyla
   özelliğe atama (`state.targetState = false`, `paint.alpha = 0.6f`), üst düzey bir val'in üyesi (`BallVector.root`) ve sondaki
   lambdasıyla çağrılan işlev türünde bir yerel.
+- **Vitrinin grafik ekranı Compose söz dizimiyle**: ilerleme ve yükleme göstergeleri, animasyonlar, AsyncImage, resimler ve
+  painter'lar, Material'ın şekilleri ve dönüşümleri, şekiller ve gölgeler, paylaşılan öğeler, karışım ve döşeme kipleri, renk
+  uzayları, tuval, bulanıklık ve renkli vektörler Kotlin'de `@Composable fun`lar (yıldız ana hattı, pikselle yapılan bitmap ve
+  bir `VectorConfig` C++ kalır). Bileşenler ekranlarının bütün bölümleri artık Kotlin.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

@@ -1108,6 +1108,10 @@
   `MaterialShapes.Heart` as a value, `x and y` (`or`, `xor`, `shl`, `shr`), `return@Label`, `X().apply { }`, a property set
   through its setter (`state.targetState = false`, `paint.alpha = 0.6f`), a top-level val's member (`BallVector.root`), and a
   local of a function type called with its trailing lambda.
+- **The showcase's graphics screen in Compose's syntax**: progress and loading indicators, the animations, AsyncImage,
+  images and painters, Material's shapes and morphs, shapes and shadows, shared elements, blend and tile modes, color spaces,
+  the canvas, blur and the color vectors are `@Composable fun`s in Kotlin (the star outline, a pixel-made bitmap and a
+  `VectorConfig` stay C++). Every components screen's sections are now in Kotlin.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and
