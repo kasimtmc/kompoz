@@ -1134,8 +1134,8 @@
   gives kompozc's own diagnostics. kompozc's translation is now a library of its own (`translate.cpp`), and a missing property
   read in Kotlin is reported by its name ("no property, member or field named x").
 - **A CLion plugin for files with Compose code** (`editors/clion`): it starts `kompozc --lsp` for the C++ files with
-  Kotlin in them and turns CLion's own highlighting off there (its C++ engine would mark the Kotlin); the server's
-  diagnostics take its place. kompozc is found in Settings, Tools, Kompoz, or in `KOMPOZC`, or built in the project, or on
+  Kotlin in them and turns CLion's own highlighting off there (its C++ engine would mark the Kotlin; when the engine takes
+  a file up it puts its own level back, and the plugin turns it off again); the server's diagnostics take its place. kompozc is found in Settings, Tools, Kompoz, or in `KOMPOZC`, or built in the project, or on
   `PATH`. Built against a CLion of yours (`./gradlew buildPlugin -PclionPath=…`) and installed from disk; CI builds it and
   checks it with JetBrains' Plugin Verifier against CLion 2026.3.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for

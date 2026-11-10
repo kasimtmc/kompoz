@@ -18,4 +18,10 @@
         <applicationConfigurable parentId="tools" instance="dev.kompoz.clion.KompozConfigurable" id="dev.kompoz.compose.settings"
                                  displayName="Kompoz"/>
     </extensions>
+
+    <projectListeners>
+        <listener class="dev.kompoz.clion.KompozEditorListener" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+        <listener class="dev.kompoz.clion.KompozHighlightingListener"
+                  topic="com.intellij.codeInsight.daemon.impl.analysis.FileHighlightingSettingListener"/>
+    </projectListeners>
 </idea-plugin>

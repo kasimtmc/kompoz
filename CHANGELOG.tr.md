@@ -1171,8 +1171,8 @@
   olmadan kompozc'nin kendi tanılarını verir. kompozc'nin çevirisi artık kendi kitaplığında (`translate.cpp`), Kotlin'de
   olmayan bir özelliğin okunması adıyla bildirilir ("no property, member or field named x").
 - **Compose kodu içeren dosyalar için bir CLion eklentisi** (`editors/clion`): içinde Kotlin olan C++ dosyaları için
-  `kompozc --lsp`'yi başlatır ve onlarda CLion'un kendi vurgulamasını kapatır (C++ motoru Kotlin'i hatalı işaretlerdi);
-  yerini sunucunun tanıları alır. kompozc Ayarlar, Araçlar, Kompoz'da, ya da `KOMPOZC`'de, ya da projede derlenmiş, ya da
+  `kompozc --lsp`'yi başlatır ve onlarda CLion'un kendi vurgulamasını kapatır (C++ motoru Kotlin'i hatalı işaretlerdi;
+  motor bir dosyayı ele alınca kendi düzeyini geri koyar, eklenti onu yeniden kapatır); yerini sunucunun tanıları alır. kompozc Ayarlar, Araçlar, Kompoz'da, ya da `KOMPOZC`'de, ya da projede derlenmiş, ya da
   `PATH`'te bulunur. Kendi CLion'unuza karşı derlenir (`./gradlew buildPlugin -PclionPath=…`) ve diskten kurulur; CI onu
   derler ve JetBrains'in Plugin Verifier'ıyla CLion 2026.3'e karşı denetler.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
