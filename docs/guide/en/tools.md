@@ -1,6 +1,35 @@
 # Tools
 
-Previews, rebuilding on save, scripted screenshots, profiling and the environment variables that help while you work.
+Editors, previews, rebuilding on save, scripted screenshots, profiling and the environment variables that help while you work.
+
+## Editors
+
+A `.cpp` file with `@Composable` functions in Compose's syntax is both C++ and Kotlin, which a C++ editor alone reads as broken C++. `kompozc --lsp` is a language server for such files: editors start it where they would start clangd, and it starts clangd behind itself.
+
+- In the C++ around the Kotlin, everything is clangd's: completion, hover, going to definitions, diagnostics.
+- In the Kotlin, the diagnostics are kompozc's (a syntax error, a name it can't place) and the C++ compiler's on the translation, each on the Kotlin line it comes from. clangd's completion and hover aren't given there, and formatting leaves such a file alone.
+- Files without Kotlin go to clangd as they are.
+
+It finds the build by the `compile_commands.json` and `kompozc_commands.json` that a CMake build with `kompoz_compose` writes (Kompoz sets `CMAKE_EXPORT_COMPILE_COMMANDS`; set it in your project too), in the file's directory or one above it, or in a directory there such as `build/` or CLion's `cmake-build-debug/`. Arguments it doesn't know are clangd's; `--clangd PATH` names the clangd to start. Without a clangd it still gives kompozc's own diagnostics.
+
+**VS Code** (with the clangd extension), in the workspace's `.vscode/settings.json`:
+
+```json
+{
+    "clangd.path": "${workspaceFolder}/build/compiler/kompozc",
+    "clangd.arguments": ["--lsp"]
+}
+```
+
+**Kate**: in Settings, LSP Client, User Server Settings (the `c` server is Kate's for C and C++):
+
+```json
+{
+    "servers": {
+        "c": { "command": ["/path/to/build/compiler/kompozc", "--lsp", "--background-index"] }
+    }
+}
+```
 
 ## Previews
 

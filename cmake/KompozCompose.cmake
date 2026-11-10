@@ -14,6 +14,10 @@
 # kompozc runs on the machine that builds. Where Kompoz is built for another (Android, the web), it
 # is built for this one from its sources, with this machine's C++ compiler; set KOMPOZC to a
 # kompozc of yours instead (one built from Kompoz's compiler/, or installed with it).
+#
+# For editors (kompozc --lsp), the build directory gets kompozc_commands.json: each source's
+# translation and what kompozc reads for it, beside CMake's compile_commands.json
+# (CMAKE_EXPORT_COMPILE_COMMANDS ON) with the translations' compile commands.
 
 # Kompoz's headers (kompozc reads their structs), and kompozc's sources: beside this file in
 # Kompoz's tree; in an installed Kompoz, its include directory and compiler/ here.
@@ -66,6 +70,27 @@ function(kompoz_kompozc command depends)
     endif()
 endfunction()
 
+# A JSON string of a CMake one.
+function(_kompoz_json_string out value)
+    string(REPLACE "\\" "\\\\" value "${value}")
+    string(REPLACE "\"" "\\\"" value "${value}")
+    set(${out} "\"${value}\"" PARENT_SCOPE)
+endfunction()
+function(_kompoz_json_strings out)
+    set(items)
+    foreach(value IN LISTS ARGN)
+        _kompoz_json_string(quoted "${value}")
+        list(APPEND items "${quoted}")
+    endforeach()
+    list(JOIN items ", " joined)
+    set(${out} "[${joined}]" PARENT_SCOPE)
+endfunction()
+# kompozc_commands.json, once every kompoz_compose of the project has added its sources.
+function(_kompoz_write_commands)
+    get_property(entries GLOBAL PROPERTY KOMPOZ_COMPOSE_COMMANDS)
+    file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/kompozc_commands.json CONTENT "[\n${entries}\n]\n")
+endfunction()
+
 function(kompoz_compose target)
     kompoz_kompozc(kompozc kompozc_depends)
     get_target_property(sources ${target} SOURCES)
@@ -85,6 +110,7 @@ function(kompoz_compose target)
     foreach(m IN LISTS module)
         list(APPEND module_args --module ${m})
     endforeach()
+    set(include_list)
     # The target's include directories (those set before this call): a source's #include "x.hpp"
     # is found there, as the compiler finds it, for the structs and classes it declares.
     get_target_property(include_dirs ${target} INCLUDE_DIRECTORIES)
@@ -92,6 +118,7 @@ function(kompoz_compose target)
         foreach(dir IN LISTS include_dirs)
             if(NOT dir MATCHES "^\\$<")
                 list(APPEND module_args --include ${dir})
+                list(APPEND include_list ${dir})
             endif()
         endforeach()
     endif()
@@ -108,9 +135,25 @@ function(kompoz_compose target)
                 COMMENT "kompozc ${relative}"
                 VERBATIM)
             list(APPEND translated ${output})
+            _kompoz_json_string(source_json "${absolute}")
+            _kompoz_json_string(output_json "${output}")
+            _kompoz_json_strings(headers_json "${KOMPOZ_HEADERS_DIR}")
+            _kompoz_json_strings(includes_json ${include_list})
+            _kompoz_json_strings(modules_json ${module})
+            get_property(entries GLOBAL PROPERTY KOMPOZ_COMPOSE_COMMANDS)
+            if(entries)
+                set_property(GLOBAL APPEND_STRING PROPERTY KOMPOZ_COMPOSE_COMMANDS ",\n")
+            endif()
+            set_property(GLOBAL APPEND_STRING PROPERTY KOMPOZ_COMPOSE_COMMANDS
+                "  {\"source\": ${source_json}, \"output\": ${output_json}, \"headers\": ${headers_json}, \"includes\": ${includes_json}, \"modules\": ${modules_json}}")
         else()
             list(APPEND translated ${source})
         endif()
     endforeach()
     set_property(TARGET ${target} PROPERTY SOURCES ${translated})
+    get_property(scheduled GLOBAL PROPERTY KOMPOZ_COMPOSE_COMMANDS_SCHEDULED)
+    if(NOT scheduled)
+        set_property(GLOBAL PROPERTY KOMPOZ_COMPOSE_COMMANDS_SCHEDULED ON)
+        cmake_language(DEFER DIRECTORY ${CMAKE_SOURCE_DIR} CALL _kompoz_write_commands)
+    endif()
 endfunction()

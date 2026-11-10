@@ -1,6 +1,35 @@
 # Araçlar
 
-Önizlemeler, kaydedince yeniden derleme, betikle ekran görüntüleri, profil çıkarma ve çalışırken işe yarayan ortam değişkenleri.
+Editörler, önizlemeler, kaydedince yeniden derleme, betikle ekran görüntüleri, profil çıkarma ve çalışırken işe yarayan ortam değişkenleri.
+
+## Editörler
+
+Compose söz dizimiyle `@Composable` işlevler içeren bir `.cpp` dosyası hem C++ hem Kotlin'dir; yalnız C++ bilen bir editör onu bozuk C++ diye okur. `kompozc --lsp` böyle dosyalar için bir dil sunucusudur: editörler onu clangd'yi başlatacakları yerde başlatır, o da clangd'yi kendi arkasında başlatır.
+
+- Kotlin'in çevresindeki C++'ta her şey clangd'nindir: tamamlama, üzerine gelince bilgi, tanıma gitme, tanılar.
+- Kotlin'de tanılar kompozc'nin (bir söz dizimi hatası, yerini bulamadığı bir ad) ve çeviri üzerinde C++ derleyicisinindir; her biri geldiği Kotlin satırında görünür. clangd'nin tamamlaması ve bilgi kutusu orada verilmez, biçimlendirme de böyle bir dosyaya dokunmaz.
+- Kotlin içermeyen dosyalar clangd'ye oldukları gibi gider.
+
+Derlemeyi, `kompoz_compose` kullanan bir CMake derlemesinin yazdığı `compile_commands.json` ve `kompozc_commands.json` dosyalarından bulur (Kompoz `CMAKE_EXPORT_COMPILE_COMMANDS`'ı açar; kendi projenizde de açın): dosyanın dizininde ya da üstündekilerden birinde, ya da oradaki `build/` veya CLion'un `cmake-build-debug/`'ı gibi bir dizinde. Tanımadığı argümanlar clangd'nindir; `--clangd YOL` başlatılacak clangd'yi söyler. clangd olmadan da kompozc'nin kendi tanılarını verir.
+
+**VS Code** (clangd eklentisiyle), çalışma alanının `.vscode/settings.json` dosyasında:
+
+```json
+{
+    "clangd.path": "${workspaceFolder}/build/compiler/kompozc",
+    "clangd.arguments": ["--lsp"]
+}
+```
+
+**Kate**: Ayarlar, LSP İstemcisi, Kullanıcı Sunucu Ayarları'nda (`c` sunucusu Kate'in C ve C++ için olanıdır):
+
+```json
+{
+    "servers": {
+        "c": { "command": ["/yol/build/compiler/kompozc", "--lsp", "--background-index"] }
+    }
+}
+```
 
 ## Önizlemeler
 

@@ -1162,6 +1162,14 @@
 - **Vitrinin uygulama kabuğu Compose söz dizimiyle**: `ShowcaseApp` (tema ve renk kaynağı, çekmece, üst çubuk ve menüsü, FAB
   ve snackbar'ları, iç içe grafiği ve derin bağlantılarıyla NavHost, gezinme takımı ve Android dışında pencerenin menüleri)
   Kotlin'de bir `@Composable fun`; yalnızca `createApplication` C++ kalır. Vitrinin her ekranı artık Compose söz dizimiyle yazılı.
+- **Compose kodu içeren dosyalar için bir dil sunucusu**: `kompozc --lsp` clangd'nin önünde durur. Kotlin'in çevresindeki
+  C++'ta clangd her zamanki gibi yanıt verir (dosyayı Kotlin'i boşaltılmış, yerine Kotlin'in bildirimleri konmuş olarak okur);
+  Kotlin'de kompozc'nin kendi hataları ve C++ derleyicisinin çeviri üzerindeki hataları Kotlin'in kendi satırlarında görünür,
+  clangd'nin tamamlaması, bilgi kutusu ve biçimlendirmesi oraya girmez. Derleme dizini `compile_commands.json` ile
+  `kompoz_compose`'un yazdığı yeni `kompozc_commands.json`'dan bulunur (`build/`, CLion'un `cmake-build-*/`'ı, ...). VS Code
+  (clangd eklentisinin `clangd.path`'i) ve Kate (LSP istemcisinin `c` sunucusu) rehberin Araçlar sayfasında kurulur. clangd
+  olmadan kompozc'nin kendi tanılarını verir. kompozc'nin çevirisi artık kendi kitaplığında (`translate.cpp`), Kotlin'de
+  olmayan bir özelliğin okunması adıyla bildirilir ("no property, member or field named x").
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

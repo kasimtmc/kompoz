@@ -1,0 +1,922 @@
+// kompozc's translation of a source (translate.hpp).
+
+#include "translate.hpp"
+
+#include <algorithm>
+#include <cstdio>
+#include <filesystem>
+#include <map>
+#include <optional>
+#include <set>
+#include <fstream>
+#include <sstream>
+#include <utility>
+
+namespace fs = std::filesystem;
+
+namespace kompozc {
+
+namespace {
+bool identChar(char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; }
+
+// The position (line, column) of an offset.
+Pos positionOf(std::string_view src, size_t offset) {
+    Pos p;
+    for (size_t i = 0; i < offset; ++i) {
+        if (src[i] == '\n') {
+            ++p.line;
+            p.column = 1;
+        } else if ((static_cast<unsigned char>(src[i]) & 0xC0) != 0x80) {
+            ++p.column;
+        }
+    }
+    p.offset = offset;
+    return p;
+}
+
+// Whether only blanks come before `at` on its line.
+bool startsLine(std::string_view src, size_t at) {
+    while (at > 0 && (src[at - 1] == ' ' || src[at - 1] == '\t')) --at;
+    return at == 0 || src[at - 1] == '\n';
+}
+
+// Whether Kotlin's enum class starts at `at`: enum class Name { A, B } with entries only (C++'s with
+// a base, enum class X : int, or values, A = 1, is C++ and stays as it is; one with entries only is
+// the same in both, so it may be written either way).
+bool startsEnumClass(std::string_view src, size_t at) {
+    size_t k = at;
+    auto word = [&] {
+        while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
+        size_t b = k;
+        while (k < src.size() && identChar(src[k])) ++k;
+        return src.substr(b, k - b);
+    };
+    if (word() != "enum" || word() != "class" || word().empty()) return false;
+    while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
+    if (k >= src.size() || src[k] != '{') return false;
+    size_t close = src.find('}', k);
+    if (close == std::string_view::npos) return false;
+    for (size_t i = k + 1; i < close; ++i)
+        if (!identChar(src[i]) && !std::isspace(static_cast<unsigned char>(src[i])) && src[i] != ',' && src[i] != ';') return false;
+    return true;
+}
+
+// Whether Kotlin's class starts at `at`: [private | internal | public | open | abstract]... class Name, then a
+// primary constructor `(`, a base with its arguments `: Base(…)`, or a body that begins as Kotlin's do
+// (val, var, fun, init, override, …; C++'s begin with public: or a type).
+bool startsClass(std::string_view src, size_t at) {
+    size_t k = at;
+    auto word = [&] {
+        while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+        size_t b = k;
+        while (k < src.size() && identChar(src[k])) ++k;
+        return src.substr(b, k - b);
+    };
+    std::string_view w = word();
+    while (w == "private" || w == "internal" || w == "public" || w == "open" || w == "abstract") w = word();
+    if (w != "class" || word().empty()) return false;
+    while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+    if (k >= src.size()) return false;
+    if (src[k] == '(') return true;
+    if (src[k] == ':') {  // a base: Kotlin's is constructed, Base(…)
+        size_t brace = src.find_first_of("{\n", k);
+        return src.substr(k, (brace == std::string_view::npos ? src.size() : brace) - k).find('(') != std::string_view::npos;
+    }
+    if (src[k] != '{') return false;
+    ++k;
+    while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;  // (the body may start on the next line)
+    std::string_view first = word();
+    if (first == "private" || first == "public" || first == "internal" || first == "protected") {
+        if (k < src.size() && src[k] == ':') return false;  // C++'s access label
+        first = word();
+    }
+    static const std::set<std::string_view> kotlin = {"val", "var", "fun", "init", "override", "open", "abstract", "suspend", "lateinit"};
+    return kotlin.contains(first);
+}
+
+// Whether Kotlin's object starts at `at`: object Name, with no body or an empty one (C++ has no `object`).
+bool startsObject(std::string_view src, size_t at) {
+    size_t k = at;
+    auto word = [&] {
+        while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+        size_t b = k;
+        while (k < src.size() && identChar(src[k])) ++k;
+        return src.substr(b, k - b);
+    };
+    std::string_view w = word();
+    while (w == "private" || w == "internal" || w == "public" || w == "data") w = word();
+    if (w != "object") return false;
+    return !word().empty();
+}
+
+// What annotated Kotlin declaration starts at `at` (an '@'): 'd' a data class, 'o' an object, 'c' a class,
+// 'f' a function (@Preview @Composable fun, @Test fun), ' ' none (annotations in C++ don't exist).
+char annotatedDeclaration(std::string_view src, size_t at) {
+    size_t k = at;
+    for (;;) {
+        if (k >= src.size() || src[k] != '@') break;
+        ++k;
+        size_t b = k;
+        while (k < src.size() && (identChar(src[k]) || src[k] == '.')) ++k;
+        if (k == b) return ' ';
+        if (k < src.size() && src[k] == '(') {  // its arguments
+            int depth = 0;
+            for (; k < src.size(); ++k) {
+                if (src[k] == '(') ++depth;
+                else if (src[k] == ')' && --depth == 0) {
+                    ++k;
+                    break;
+                }
+            }
+        }
+        while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
+    }
+    size_t b = k;
+    while (k < src.size() && identChar(src[k])) ++k;
+    std::string_view w = src.substr(b, k - b);
+    while (w == "private" || w == "internal" || w == "public" || w == "open" || w == "abstract") {
+        while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+        b = k;
+        while (k < src.size() && identChar(src[k])) ++k;
+        w = src.substr(b, k - b);
+    }
+    if (w == "data") {
+        size_t j = k;
+        while (j < src.size() && std::isspace(static_cast<unsigned char>(src[j]))) ++j;
+        if (src.substr(j, 5) == "class") return 'd';
+        if (src.substr(j, 6) == "object") return 'o';
+        return ' ';
+    }
+    if (w == "object") return 'o';
+    if (w == "class" && startsClass(src, b)) return 'c';
+    if (w == "fun") return 'f';
+    return ' ';
+}
+
+// Whether a top-level val starts at `at`: [private | internal | public | const]... val name, then
+// `:`, `=` or `by` (C++ has no `val`; a variable named so is followed by none of those).
+bool startsVal(std::string_view src, size_t at) {
+    auto word = [&](size_t& k) {
+        while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+        size_t b = k;
+        while (k < src.size() && identChar(src[k])) ++k;
+        return src.substr(b, k - b);
+    };
+    size_t k = at;
+    std::string_view w = word(k);
+    while (w == "private" || w == "internal" || w == "public" || w == "const") w = word(k);
+    if (w != "val" && w != "var") return false;
+    if (word(k).empty()) return false;
+    while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+    if (k < src.size() && (src[k] == ':' || (src[k] == '=' && (k + 1 >= src.size() || src[k + 1] != '=')))) return true;
+    return src.substr(k, 2) == "by" && (k + 2 >= src.size() || !identChar(src[k + 2]));
+}
+
+// Whether a plain (not @Composable) function starts at `at`: [private | internal | public | inline]...
+// fun name or fun Receiver.name (C++ has no `fun`).
+bool startsFun(std::string_view src, size_t at) {
+    size_t k = at;
+    for (;;) {
+        while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+        size_t b = k;
+        while (k < src.size() && identChar(src[k])) ++k;
+        std::string_view w = src.substr(b, k - b);
+        if (w == "private" || w == "internal" || w == "public" || w == "inline") continue;
+        if (w != "fun") return false;
+        while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+        return k < src.size() && identChar(src[k]);
+    }
+}
+
+// Where a top-level val's Kotlin (or an expression body's) ends: the end of the line its brackets
+// close on, unless the line ends wanting more (=, an operator, a comma) or the next line goes on
+// with it (.member, ?.member, ?: x, && x, || x), as Kotlin reads it. (The C++ after it is never
+// read: it may hold what Kotlin's lexer takes for an error, a #.)
+size_t valEnd(std::string_view src, size_t at) {
+    int depth = 0;
+    size_t i = at;
+    char last = 0;  // the line's last character outside comments
+    while (i < src.size()) {
+        char c = src[i];
+        if (c == '/' && i + 1 < src.size() && src[i + 1] == '/') {
+            while (i < src.size() && src[i] != '\n') ++i;
+            continue;
+        }
+        if (c == '/' && i + 1 < src.size() && src[i + 1] == '*') {
+            size_t e = src.find("*/", i + 2);
+            i = e == std::string_view::npos ? src.size() : e + 2;
+            continue;
+        }
+        if (src.substr(i, 3) == "\"\"\"") {
+            size_t e = src.find("\"\"\"", i + 3);
+            i = e == std::string_view::npos ? src.size() : e + 3;
+            continue;
+        }
+        if (c == '"' || c == '\'') {
+            ++i;
+            while (i < src.size() && src[i] != c && src[i] != '\n') i += src[i] == '\\' ? 2 : 1;
+            ++i;
+            last = c;
+            continue;
+        }
+        if (!std::isspace(static_cast<unsigned char>(c))) last = c;
+        if (c == '(' || c == '[' || c == '{') ++depth;
+        else if (c == ')' || c == ']' || c == '}') --depth;
+        else if (c == '\n' && depth <= 0) {
+            size_t k = i;
+            while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
+            std::string_view next = src.substr(k, 2);
+            bool wantsMore = std::string_view("=+-*/%,.&|:>!").find(last) != std::string_view::npos;
+            bool elseNext = src.substr(k, 4) == "else" && (k + 4 >= src.size() || !identChar(src[k + 4]));  // if … \n else …
+            if (!wantsMore && !elseNext && !(next.starts_with('.') || next == "?." || next == "?:" || next == "&&" || next == "||")) return i;
+        }
+        ++i;
+    }
+    return src.size();
+}
+
+
+// Whether the C++'s first use of `name`, at `use`, is a prototype of the file's own (void Name(…);):
+// the statement around it ends in a ; with no block, and the name is called right after its type.
+// Such a file has declared the function itself (with its defaults): kompozc leaves it to it.
+bool declaredInCpp(std::string_view src, const std::vector<Boundary>& boundaries, size_t use, std::string_view name) {
+    size_t begin = 0;
+    for (const Boundary& b : boundaries)
+        if (b.at <= use && b.at >= begin) begin = b.at;
+    size_t end = src.find_first_of(";{", use);
+    if (end == std::string_view::npos || src[end] != ';') return false;
+    std::string before;  // (the statement's text before the name, its comments left out)
+    for (size_t i = begin; i < use;) {
+        if (src[i] == '/' && i + 1 < use && src[i + 1] == '/') {
+            while (i < use && src[i] != '\n') ++i;
+        } else if (src[i] == '/' && i + 1 < use && src[i + 1] == '*') {
+            size_t e = src.find("*/", i + 2);
+            i = e == std::string_view::npos || e + 2 > use ? use : e + 2;
+        } else {
+            before += src[i++];
+        }
+    }
+    if (before.find_first_of("({=") != std::string::npos) return false;  // (a call, an initializer: not a declaration)
+    size_t after = use + name.size();
+    while (after < end && std::isspace(static_cast<unsigned char>(src[after]))) ++after;
+    return after < end && src[after] == '(';
+}
+
+}  // namespace
+
+namespace {
+// Where a declaration that can't be read ends: after the line its block closes on at the left edge
+// (`}`), or before the next line that starts there with something else.
+size_t guessedEnd(std::string_view src, size_t at) {
+    size_t line = src.find('\n', at);
+    while (line != std::string_view::npos && line + 1 < src.size()) {
+        char first = src[line + 1];
+        if (first == '}') {
+            size_t eol = src.find('\n', line + 1);
+            return eol == std::string_view::npos ? src.size() : eol;
+        }
+        if (!std::isspace(static_cast<unsigned char>(first)) && first != ')') return line;
+        line = src.find('\n', line + 1);
+    }
+    return src.size();
+}
+}  // namespace
+
+// Walks the C++ around the functions: skips comments, strings, characters and raw strings, and
+// finds each @Composable.
+std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries, std::vector<CompileError>* errors) {
+    std::vector<Found> found;
+    // The C++ namespaces around: each one's name ("" unnamed) and the brace depth inside it.
+    std::vector<std::pair<std::string, int>> namespaces;
+    int depth = 0;
+    auto qualifier = [&] {
+        std::string q = "::";
+        for (auto& [name, d] : namespaces) {
+            if (name.empty()) return std::string();
+            q += name + "::";
+        }
+        return q;
+    };
+    auto boundary = [&](size_t at) {
+        if (boundaries && depth == (namespaces.empty() ? 0 : namespaces.back().second)) boundaries->push_back({at, qualifier()});
+    };
+    size_t i = 0;
+    while (i < src.size()) {
+        size_t declarationAt = i;
+        try {
+            char c = src[i];
+            if (c == '/' && i + 1 < src.size() && src[i + 1] == '/') {
+                while (i < src.size() && src[i] != '\n') ++i;
+            } else if (c == '/' && i + 1 < src.size() && src[i + 1] == '*') {
+                size_t e = src.find("*/", i + 2);
+                i = e == std::string_view::npos ? src.size() : e + 2;
+            } else if (c == '"' && i > 0 && src[i - 1] == 'R' && (i < 2 || !identChar(src[i - 2]) || src[i - 2] == '8' || src[i - 2] == 'u' || src[i - 2] == 'U' || src[i - 2] == 'L')) {
+                size_t open = src.find('(', i);
+                if (open == std::string_view::npos) break;
+                std::string close = ")" + std::string(src.substr(i + 1, open - i - 1)) + "\"";
+                size_t e = src.find(close, open);
+                i = e == std::string_view::npos ? src.size() : e + close.size();
+            } else if (c == '"' || c == '\'') {
+                // A ' after a digit inside a number is a separator (1'000), not a character.
+                if (c == '\'' && i > 0 && std::isxdigit(static_cast<unsigned char>(src[i - 1]))) {
+                    size_t w = i;
+                    while (w > 0 && (identChar(src[w - 1]) || src[w - 1] == '\'' || src[w - 1] == '.')) --w;
+                    if (std::isdigit(static_cast<unsigned char>(src[w]))) {
+                        ++i;
+                        continue;
+                    }
+                }
+                ++i;
+                while (i < src.size() && src[i] != c && src[i] != '\n') {
+                    if (src[i] == '\\') ++i;
+                    ++i;
+                }
+                ++i;
+            } else if (c == '@' && annotatedDeclaration(src, i) != ' ') {
+                // @Serializable data class / object / class: read from the annotation
+                char kind = annotatedDeclaration(src, i);
+                Parser parser(src, positionOf(src, i));
+                Found f;
+                if (kind == 'd') f.dataClass = parser.dataClass();
+                else if (kind == 'o') f.object = parser.objectDecl();
+                else if (kind == 'c') f.classDecl = parser.classDecl();
+                else {
+                    f.function = parser.function();
+                    if (f.function->expressionBody) {  // (its expression ends with its line, as a val's: measured from `fun`)
+                        size_t funAt = i;
+                        while ((funAt = src.find("fun", funAt + 1)) != std::string_view::npos &&
+                               (identChar(src[funAt - 1]) || (funAt + 3 < src.size() && identChar(src[funAt + 3]))))
+                            ;
+                        Parser again(src.substr(0, valEnd(src, funAt)), positionOf(src, i));
+                        f.function = again.function();
+                    }
+                }
+                f.begin = i;
+                f.end = f.dataClass ? f.dataClass->end.offset : f.object ? f.object->end.offset : f.classDecl ? f.classDecl->end.offset : f.function->end.offset;
+                f.qualifier = qualifier();
+                found.push_back(std::move(f));
+                i = f.end;
+            } else if (c == '@' && src.substr(i + 1, 10) == "Composable" && (i + 11 >= src.size() || !identChar(src[i + 11]))) {
+                Parser parser(src, positionOf(src, i));
+                Function f = parser.function();
+                size_t end = f.end.offset;
+                found.push_back({std::move(f), std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
+                i = end;
+            } else if (c == 'd' && (i == 0 || !identChar(src[i - 1])) && src.substr(i, 4) == "data" && i + 4 < src.size() &&
+                       std::isspace(static_cast<unsigned char>(src[i + 4]))) {
+                // data class: never C++ (a name, then the class keyword)
+                size_t k = i + 4;
+                while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
+                if (src.substr(k, 5) == "class" && (k + 5 >= src.size() || !identChar(src[k + 5]))) {
+                    Parser parser(src, positionOf(src, i));
+                    DataClass d = parser.dataClass();
+                    size_t end = d.end.offset;
+                    found.push_back({std::nullopt, std::move(d), std::nullopt, std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
+                    i = end;
+                } else {
+                    i += 4;
+                }
+            } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsClass(src, i)) {
+                Parser parser(src, positionOf(src, i));
+                ClassDecl k = parser.classDecl();
+                size_t end = k.end.offset;
+                Found f;
+                f.classDecl = std::move(k);
+                f.begin = i, f.end = end, f.qualifier = qualifier();
+                found.push_back(std::move(f));
+                i = end;
+            } else if (c == 'o' && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsObject(src, i)) {
+                Parser parser(src, positionOf(src, i));
+                Found f;
+                f.object = parser.objectDecl();
+                f.begin = i, f.end = f.object->end.offset, f.qualifier = qualifier();
+                found.push_back(std::move(f));
+                i = f.end;
+            } else if (c == 'e' && (i == 0 || !identChar(src[i - 1])) && startsEnumClass(src, i)) {
+                Parser parser(src, positionOf(src, i));
+                EnumClass e = parser.enumClass();
+                size_t end = e.end.offset;
+                found.push_back({std::nullopt, std::nullopt, std::nullopt, std::move(e), std::nullopt, std::nullopt, i, end, qualifier()});
+                i = end;
+            } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsFun(src, i)) {
+                Parser parser(src, positionOf(src, i));
+                Function f = parser.function();
+                size_t end = f.end.offset;
+                if (f.expressionBody) {  // (its expression ends with its line, as a val's: what follows is C++)
+                    Parser again(src.substr(0, valEnd(src, i)), positionOf(src, i));
+                    f = again.function();
+                    end = f.end.offset;
+                }
+                found.push_back({std::move(f), std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
+                i = end;
+            } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsVal(src, i)) {
+                Parser parser(src.substr(0, valEnd(src, i)), positionOf(src, i));
+                Property p = parser.property();
+                size_t end = p.end.offset;
+                found.push_back({std::nullopt, std::nullopt, std::move(p), std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
+                i = end;
+            } else if (identChar(c)) {
+                size_t b = i;
+                while (i < src.size() && identChar(src[i])) ++i;  // (a name: "data" inside one isn't a declaration)
+                if (src.substr(b, i - b) == "namespace" && (b == 0 || !identChar(src[b - 1]))) {
+                    // namespace a::b { (not using namespace x; nor an alias, namespace x = y;)
+                    size_t k = i;
+                    std::string name;
+                    while (k < src.size() && (std::isspace(static_cast<unsigned char>(src[k])) || identChar(src[k]) || src[k] == ':'))
+                        if (!std::isspace(static_cast<unsigned char>(src[k]))) name += src[k++];
+                        else ++k;
+                    if (k < src.size() && src[k] == '{') {
+                        namespaces.emplace_back(name, depth + 1);
+                        i = k;
+                    }
+                }
+            } else {
+                if (c == '{') {
+                    ++depth;
+                } else if (c == '}') {
+                    while (!namespaces.empty() && namespaces.back().second == depth) namespaces.pop_back();
+                    --depth;
+                    boundary(i + 1);
+                } else if (c == ';') {
+                    boundary(i + 1);
+                }
+                ++i;
+            }
+        } catch (const CompileError& e) {
+            if (!errors) throw;
+            errors->push_back(e);
+            Found f;
+            f.failed = true;
+            f.begin = declarationAt;
+            f.end = guessedEnd(src, declarationAt);
+            f.qualifier = qualifier();
+            i = f.end;
+            found.push_back(std::move(f));
+        }
+    }
+    return found;
+}
+
+namespace {
+// The C++ between the functions, its quoted #includes made absolute: the output is elsewhere,
+// and "x.hpp" is looked for next to the file that includes it first.
+std::string passThrough(std::string_view text, const fs::path& dir) {
+    std::string out;
+    size_t i = 0;
+    while (i < text.size()) {
+        size_t eol = text.find('\n', i);
+        size_t end = eol == std::string_view::npos ? text.size() : eol + 1;
+        std::string_view line = text.substr(i, end - i);
+        size_t h = line.find_first_not_of(" \t");
+        if (h != std::string_view::npos && line[h] == '#') {
+            size_t d = line.find_first_not_of(" \t", h + 1);
+            if (d != std::string_view::npos && line.substr(d, 7) == "include") {
+                size_t q = line.find('"', d + 7);
+                size_t q2 = q == std::string_view::npos ? q : line.find('"', q + 1);
+                if (q2 != std::string_view::npos) {
+                    fs::path target = dir / std::string(line.substr(q + 1, q2 - q - 1));
+                    if (fs::exists(target)) {
+                        out += std::string(line.substr(0, q + 1)) + fs::absolute(target).lexically_normal().generic_string() +
+                               std::string(line.substr(q2));
+                        i = end;
+                        continue;
+                    }
+                }
+            }
+        }
+        out += line;
+        i = end;
+    }
+    return out;
+}
+
+// The names a declaration uses (calls, types): what of the module's other sources it needs.
+void typeNames(const Type& t, std::set<std::string, std::less<>>& out) {
+    if (!t.name.empty()) out.insert(t.name);
+    for (const Type& a : t.args) typeNames(a, out);
+    for (const Type& p : t.params) typeNames(p, out);
+    if (t.result) typeNames(*t.result, out);
+    if (t.receiver) typeNames(*t.receiver, out);
+}
+void names(const Node* n, std::set<std::string, std::less<>>& out) {
+    if (!n) return;
+    if (n->kind == Node::Name) out.insert(n->text);
+    if (n->type) typeNames(*n->type, out);
+    for (const Type& t : n->typeArgs) typeNames(t, out);
+    for (const NodeP& k : n->kids) names(k.get(), out);
+    names(n->lambda.get(), out);
+    for (const auto& b : n->branches) {
+        for (const auto& c : b.conds) names(c.second.get(), out);
+        for (const Type& t : b.types) typeNames(t, out);
+        names(b.body.get(), out);
+    }
+}
+void names(const Found& f, std::set<std::string, std::less<>>& out) {
+    if (f.function) {
+        for (const Param& p : f.function->params) {
+            typeNames(p.type, out);
+            names(p.defaultValue.get(), out);
+        }
+        if (f.function->result) typeNames(*f.function->result, out);
+        if (f.function->receiver) typeNames(*f.function->receiver, out);
+        names(f.function->body.get(), out);
+    } else if (f.property) {
+        if (f.property->decl->type) typeNames(*f.property->decl->type, out);
+        names(f.property->decl.get(), out);
+    } else if (f.enumClass || f.object) {
+        // (nothing: its entries are its own; an object is its name)
+    } else if (f.classDecl) {
+        const ClassDecl& c = *f.classDecl;
+        for (const Param& p : c.ctorParams) {
+            typeNames(p.type, out);
+            names(p.defaultValue.get(), out);
+        }
+        if (c.base) typeNames(*c.base, out);
+        for (const NodeP& a : c.baseArgs) names(a.get(), out);
+        for (const ClassProperty& p : c.properties) {
+            if (p.type) typeNames(*p.type, out);
+            names(p.init.get(), out);
+        }
+        for (const Function& m : c.methods) {
+            for (const Param& p : m.params) {
+                typeNames(p.type, out);
+                names(p.defaultValue.get(), out);
+            }
+            if (m.result) typeNames(*m.result, out);
+            names(m.body.get(), out);
+        }
+        for (const NodeP& b : c.initBlocks) names(b.get(), out);
+    } else {
+        for (const Param& p : f.dataClass->fields) {
+            typeNames(p.type, out);
+            names(p.defaultValue.get(), out);
+        }
+    }
+}
+
+// Where a file's leading lines end: its comments, #includes, #pragmas and using-directives, after
+// which what it calls can be declared (a C++ file's prototypes would stand there).
+size_t includesEnd(std::string_view src) {
+    size_t at = 0;
+    bool inComment = false;
+    while (at < src.size()) {
+        size_t eol = src.find('\n', at);
+        if (eol == std::string_view::npos) eol = src.size();
+        std::string_view line = src.substr(at, eol - at);
+        size_t b = line.find_first_not_of(" \t\r");
+        std::string_view t = b == std::string_view::npos ? std::string_view() : line.substr(b);
+        if (inComment) {
+            if (t.find("*/") != std::string_view::npos) inComment = false;
+        } else if (t.starts_with("/*")) {
+            if (t.find("*/", 2) == std::string_view::npos) inComment = true;
+        } else if (!(t.empty() || t.starts_with("//") || t.starts_with("#") || t.starts_with("using "))) {
+            return at;
+        }
+        at = eol + 1;
+    }
+    return src.size();
+}
+
+}  // namespace
+
+std::string translate(const std::string& src, const fs::path& source, const std::string& lineFile, const Structs& structs,
+                      const std::vector<OtherSource>& others) {
+    std::vector<Boundary> boundaries;
+    std::vector<Found> found = scan(src, &boundaries);
+    Module module;
+    module.structs = &structs;
+    for (const Found& f : found) {
+        if (f.function && f.function->composable) module.qualifiers[f.function->name] = f.qualifier;
+        if (f.function) module.functions[f.function->name] = &*f.function;
+        else if (f.dataClass) module.classes[f.dataClass->name] = &*f.dataClass;
+        else if (f.property) module.properties[f.property->name] = &*f.property;
+        else if (f.classDecl) module.classDecls[f.classDecl->name] = &*f.classDecl;
+        else if (f.object) module.objects.insert(f.object->name);
+    }
+    // The other sources' declarations this one uses, and those they use in turn (a data class in
+    // a parameter's type): declared here too, as C++ needs (Kotlin's module needs nothing).
+    // The identifiers in this file's C++ (outside its Kotlin, its comments and strings), each where
+    // it is first used: the module's functions among them are declared before that (below), so
+    // they are imported too.
+    std::set<std::string, std::less<>> cppIdentifiers;
+    std::map<std::string, size_t, std::less<>> cppFirstUse;
+    {
+        auto scanText = [&](size_t from, size_t to) {
+            for (size_t i = from; i < to;) {
+                char c = src[i];
+                if (c == '/' && i + 1 < to && src[i + 1] == '/') {
+                    while (i < to && src[i] != '\n') ++i;
+                } else if (c == '/' && i + 1 < to && src[i + 1] == '*') {
+                    size_t e = src.find("*/", i + 2);
+                    i = e == std::string::npos || e + 2 > to ? to : e + 2;
+                } else if (c == '"' || (c == '\'' && !(i > 0 && std::isxdigit(static_cast<unsigned char>(src[i - 1]))))) {
+                    for (++i; i < to && src[i] != c; ++i)
+                        if (src[i] == '\\') ++i;
+                    ++i;
+                } else if (!identChar(c)) {
+                    ++i;
+                } else {
+                    size_t b = i;
+                    while (i < to && identChar(src[i])) ++i;
+                    if (cppIdentifiers.insert(src.substr(b, i - b)).second) cppFirstUse[src.substr(b, i - b)] = b;
+                }
+            }
+        };
+        size_t at = 0;
+        for (const Found& f : found) {
+            scanText(at, f.begin);
+            at = f.end;
+        }
+        scanText(at, src.size());
+    }
+    std::vector<std::pair<const OtherSource*, const Found*>> imported;
+    {
+        std::set<std::string, std::less<>> used;
+        for (const Found& f : found) names(f, used);
+        for (const OtherSource& o : others)
+            for (const Found& f : o.found)
+                if (cppIdentifiers.contains(f.name())) used.insert(f.name());
+        std::set<const Found*> taken;
+        for (bool more = true; more;) {
+            more = false;
+            for (const OtherSource& o : others)
+                for (const Found& f : o.found) {
+                    const std::string& name = f.name();
+                    if (taken.contains(&f) || !used.contains(name) || module.functions.contains(name) || module.classes.contains(name) ||
+                        module.properties.contains(name) || module.classDecls.contains(name))
+                        continue;
+                    // A private val or function only for what is taken from its own file (uses it there).
+                    bool isPrivate = (f.property && f.property->isPrivate) || (f.function && f.function->isPrivate);
+                    if (isPrivate && std::none_of(imported.begin(), imported.end(), [&](const auto& i) {
+                            if (i.first != &o) return false;
+                            std::set<std::string, std::less<>> its;
+                            names(*i.second, its);
+                            return its.contains(name);
+                        }))
+                        continue;
+                    taken.insert(&f);
+                    imported.emplace_back(&o, &f);
+                    names(f, used);
+                    more = true;
+                }
+        }
+        for (auto [o, f] : imported) {
+            if (f->function) module.functions[f->function->name] = &*f->function;
+            else if (f->dataClass) module.classes[f->dataClass->name] = &*f->dataClass;
+            else if (f->property) module.properties[f->property->name] = &*f->property;
+            else if (f->classDecl) module.classDecls[f->classDecl->name] = &*f->classDecl;
+            else if (f->object) module.objects.insert(f->object->name);
+        }
+    }
+    Output out(lineFile);
+    out.line(1);
+    fs::path dir = source.parent_path();
+    size_t done = 0;
+    std::set<std::string, std::less<>> declared;  // the functions declared so far
+    // The @Composable functions a definition uses, declared before it (their prototypes), of this
+    // file or another, as late as can be (a parameter's type may be a struct of the file's declared
+    // above the function, not at its top).
+    auto declare = [&](const std::set<std::string, std::less<>>& used) {
+        for (auto [o, g] : imported)
+            if (g->function && g->function->composable && used.contains(g->function->name) && declared.insert(g->function->name).second) {
+                out.setFile(o->lineFile);
+                generatePrototype(out, *g->function, module);
+            }
+        out.setFile(lineFile);
+        for (const Found& g : found)
+            if (g.function && g.function->composable && used.contains(g.function->name) && declared.insert(g.function->name).second)
+                generatePrototype(out, *g.function, module);
+    };
+    // A top-level val or a plain function (whose type may be its body's), defined where it is or
+    // before the first definition that uses it (C++ reads in order, Kotlin doesn't), after what it
+    // uses; one of another file, from its file.
+    std::map<std::string, std::pair<std::string, const Found*>, std::less<>> early;
+    for (const Found& g : found)
+        if (g.property || g.classDecl || (g.function && !g.function->composable)) early[g.name()] = {lineFile, &g};
+    for (auto [o, g] : imported)
+        if (g->property || g->classDecl || (g->function && !g->function->composable)) early[g->name()] = {o->lineFile, g};
+    std::set<std::string, std::less<>> defined;
+    // (`where`: the qualifier of where it is defined, the namespace its calls name)
+    auto define = [&](auto&& self, const std::string& name, const std::string& where) -> void {
+        auto v = early.find(name);
+        if (v == early.end() || !defined.insert(name).second) return;
+        const Found& g = *v->second.second;
+        module.qualifiers[name] = where;
+        std::set<std::string, std::less<>> used;
+        names(g, used);
+        for (const std::string& u : used) self(self, u, where);
+        declare(used);
+        out.setFile(v->second.first);
+        if (g.property) generateProperty(out, *g.property, module);
+        else if (g.classDecl) generateClassDecl(out, *g.classDecl, module);
+        else generateDefinition(out, *g.function, module);
+        out.setFile(lineFile);
+    };
+    // Before the first declaration: the helpers the translations use, and the data classes, enums
+    // and objects, so that every function may use them (as Kotlin's do, in any order).
+    bool preludeDone = false;
+    auto prelude = [&] {
+        if (std::exchange(preludeDone, true)) return;
+        out.text("\n#include <kompoz/kotlin.hpp>\n");
+        for (auto [o, g] : imported) {  // (from their own files: #line says which)
+            out.setFile(o->lineFile);
+            if (g->enumClass) generateEnum(out, *g->enumClass);
+            if (g->dataClass) generateClass(out, *g->dataClass, module);
+            if (g->object) generateObject(out, *g->object);
+        }
+        out.setFile(lineFile);
+        for (const Found& g : found) {
+            if (g.enumClass) generateEnum(out, *g.enumClass);
+            if (g.dataClass) generateClass(out, *g.dataClass, module);
+            if (g.object) generateObject(out, *g.object);
+        }
+    };
+    // The module's functions, classes and vals that this file's C++ (not its Kotlin) names before
+    // they are defined here (or defined in another file): declared where the statement using them
+    // first begins, as a prototype of their own would be (after the file's own types, which a
+    // parameter may be of): a C++ file of the target calling Section(…), written in Compose's
+    // syntax in another file.
+    std::set<std::string, std::less<>> cppUsed;
+    size_t declareAt = std::string::npos;
+    std::string declareWhere = "::";
+    {
+        size_t first = std::string::npos;
+        for (const std::string& w : cppIdentifiers) {
+            // (a data class or object named there wants the prelude by then; it needs no declaration of its own)
+            if (!(module.functions.contains(w) || module.classDecls.contains(w) || module.properties.contains(w) || module.classes.contains(w) ||
+                  module.objects.contains(w)))
+                continue;
+            size_t use = cppFirstUse.at(w);
+            bool definedBefore = false;
+            for (const Found& f : found)
+                if (f.name() == w && f.begin < use) definedBefore = true;
+            if (definedBefore || declaredInCpp(src, boundaries, use, w)) continue;
+            cppUsed.insert(w);
+            first = std::min(first, use);
+        }
+        if (!cppUsed.empty()) {
+            declareAt = std::min(includesEnd(src), found.empty() ? src.size() : found.front().begin);
+            for (const Boundary& b : boundaries) {
+                bool inside = false;  // (not within a Kotlin declaration's text)
+                for (const Found& f : found) inside = inside || (f.begin < b.at && b.at < f.end);
+                if (b.at <= first && b.at >= declareAt && !inside) declareAt = b.at, declareWhere = b.qualifier;
+            }
+        }
+    }
+    // The C++ up to `to` passed through, the declarations above where they go.
+    auto passUntil = [&](size_t to) {
+        if (declareAt != std::string::npos && declareAt >= done && declareAt <= to) {
+            if (declareAt > done) {
+                if (done > 0) out.line(positionOf(src, done).line);
+                out.text(passThrough(std::string_view(src).substr(done, declareAt - done), dir));
+            }
+            prelude();
+            for (const std::string& u : cppUsed) define(define, u, declareWhere);
+            declare(cppUsed);
+            done = declareAt;
+            declareAt = std::string::npos;
+        }
+        if (to > done) {
+            if (done > 0) out.line(positionOf(src, done).line);
+            out.text(passThrough(std::string_view(src).substr(done, to - done), dir));
+            done = to;
+        }
+    };
+    for (size_t k = 0; k < found.size(); ++k) {
+        const Found& f = found[k];
+        passUntil(f.begin);
+        if (k == 0) prelude();
+        if (f.property || f.classDecl || (f.function && !f.function->composable)) {
+            define(define, f.name(), f.qualifier);
+        } else if (f.function) {
+            // The function itself declared, and what it uses declared or defined, before it.
+            std::set<std::string, std::less<>> used;
+            names(f, used);
+            for (const std::string& u : used) define(define, u, f.qualifier);
+            used.insert(f.function->name);
+            declare(used);
+            generateDefinition(out, *f.function, module);
+        }
+        done = f.end;
+    }
+    passUntil(src.size());
+    return std::move(out).str();
+}
+
+
+Structs readStructs(const std::vector<std::string>& headerDirs, const std::vector<std::string>& includeDirs) {
+    Structs structs;
+    for (const std::string& dir : includeDirs) structs.includeDirs.emplace_back(dir);
+    for (const std::string& dir : headerDirs) {
+        std::error_code ec;
+        for (const auto& entry : fs::directory_iterator(dir, ec))
+            if (entry.path().extension() == ".hpp" || entry.path().extension() == ".h") structs.readHeader(entry.path());
+    }
+    return structs;
+}
+
+std::vector<OtherSource> readOthers(const std::vector<std::string>& moduleSources, const fs::path& input,
+                                    const std::function<std::optional<std::string>(const fs::path&)>& textOf) {
+    std::vector<OtherSource> others;
+    for (const std::string& other : moduleSources) {
+        std::error_code ec;
+        if (fs::equivalent(other, input, ec)) continue;
+        std::optional<std::string> text = textOf ? textOf(fs::path(other)) : std::nullopt;
+        if (!text) {
+            std::ifstream o(other, std::ios::binary);
+            if (!o) continue;
+            std::stringstream read;
+            read << o.rdbuf();
+            text = read.str();
+        }
+        OtherSource os;
+        os.lineFile = fs::absolute(other).lexically_normal().generic_string();
+        try {
+            os.found = scan(*text);
+        } catch (const CompileError&) {
+            continue;  // (its own translation says what is wrong in it)
+        }
+        others.push_back(std::move(os));
+    }
+    return others;
+}
+
+std::string maskedView(std::string_view src, const std::vector<Found>& found, const Structs& structs) {
+    Module module;
+    module.structs = &structs;
+    for (const Found& f : found) {
+        if (f.failed) continue;
+        if (f.function && f.function->composable) module.qualifiers[f.function->name] = f.qualifier;
+        if (f.function) module.functions[f.function->name] = &*f.function;
+        else if (f.dataClass) module.classes[f.dataClass->name] = &*f.dataClass;
+        else if (f.property) module.properties[f.property->name] = &*f.property;
+        else if (f.classDecl) module.classDecls[f.classDecl->name] = &*f.classDecl;
+        else if (f.object) module.objects.insert(f.object->name);
+    }
+    std::string out;
+    size_t done = 0;
+    bool prelude = false;
+    std::string pending;  // what single-line declarations need, not placed yet
+    for (const Found& f : found) {
+        out.append(src.substr(done, f.begin - done));
+        // What C++ needs of it, on one line: its #line directives left out, its lines joined.
+        std::string cpp;
+        if (!f.failed) {
+            Output o("");
+            if (f.function && f.function->composable) generatePrototype(o, *f.function, module);
+            else if (f.function) generateDefinition(o, *f.function, module);
+            else if (f.dataClass) generateClass(o, *f.dataClass, module);
+            else if (f.property) generateProperty(o, *f.property, module);
+            else if (f.classDecl) generateClassDecl(o, *f.classDecl, module);
+            else if (f.object) generateObject(o, *f.object);
+            else if (f.enumClass) generateEnum(o, *f.enumClass);
+            std::string text = std::move(o).str();
+            std::istringstream lines(text);
+            for (std::string line; std::getline(lines, line);) {
+                size_t b = line.find_first_not_of(" \t");
+                if (b != std::string::npos && line.compare(b, 5, "#line") == 0) continue;
+                cpp += line + ' ';
+            }
+        }
+        // On its lines but the last (what follows it there keeps its columns): kotlin.hpp's #include
+        // before the first, as the translation has it, then what C++ needs of it, the rest blank.
+        std::string_view text = src.substr(f.begin, f.end - f.begin);
+        size_t lineCount = size_t(std::count(text.begin(), text.end(), '\n'));  // (the lines before its last)
+        std::vector<std::string> payloads;
+        if (lineCount > 0 && !prelude) {
+            payloads.push_back("#include <kompoz/kotlin.hpp>");
+            prelude = true;
+        }
+        // (one of a single line has none to spare: it goes with the next that has)
+        if (!cpp.empty()) pending += cpp;
+        if (lineCount > 0 && !pending.empty()) payloads.push_back(std::exchange(pending, std::string()));
+        while (payloads.size() > lineCount) {  // (more than its lines: the declarations on one)
+            payloads[payloads.size() - 2] += ' ' + payloads.back();
+            payloads.pop_back();
+        }
+        size_t line = 0;
+        for (size_t k = 0; k < text.size(); ++k) {
+            unsigned char c = static_cast<unsigned char>(text[k]);
+            if (c == '\n') {
+                ++line;
+                out += char(c);
+                continue;
+            }
+            if (line < payloads.size()) {  // (the line given to it: its text, then on to its end)
+                out += payloads[line];
+                size_t eol = text.find('\n', k);
+                k = (eol == std::string_view::npos ? text.size() : eol) - 1;
+                continue;
+            }
+            // Blanked: each character a space (two for one of UTF-16's surrogate pairs).
+            if (c == '\r') out += char(c);
+            else if ((c & 0xC0) == 0x80) continue;
+            else out += c >= 0xF0 ? "  " : " ";
+        }
+        done = f.end;
+    }
+    out.append(src.substr(done));
+    return out;
+}
+
+}  // namespace kompozc

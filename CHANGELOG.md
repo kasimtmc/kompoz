@@ -1125,6 +1125,14 @@
   and its menu, the FAB and its snackbars, the NavHost with its nested graph and deep links, the navigation suite and, off
   Android, the window's menus) is a `@Composable fun` in Kotlin; only `createApplication` stays C++. Every screen of the showcase
   is now written in Compose's syntax.
+- **A language server for files with Compose code**: `kompozc --lsp` stands in front of clangd. In the C++ around the
+  Kotlin, clangd answers as it does (it reads the file with the Kotlin blanked and the Kotlin's declarations in its place);
+  in the Kotlin, kompozc's own errors and the C++ compiler's on the translation show on the Kotlin's own lines, and clangd's
+  completion, hover and formatting stay out. The build directory is found by `compile_commands.json` and the new
+  `kompozc_commands.json` that `kompoz_compose` writes (in `build/`, CLion's `cmake-build-*/`, ...). VS Code (the clangd
+  extension's `clangd.path`) and Kate (the LSP client's `c` server) are set up in the guide's Tools page. Without a clangd it
+  gives kompozc's own diagnostics. kompozc's translation is now a library of its own (`translate.cpp`), and a missing property
+  read in Kotlin is reported by its name ("no property, member or field named x").
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

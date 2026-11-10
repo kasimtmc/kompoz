@@ -52,7 +52,7 @@ jobs:
       - name: Packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ninja-build g++-14 clang-19 lld-19 dbus \
+          sudo apt-get install -y --no-install-recommends ninja-build g++-14 clang-19 lld-19 clangd-19 dbus \
             libturbojpeg0-dev libwebp-dev libcurl4-openssl-dev libvulkan-dev mesa-vulkan-drivers vulkan-validationlayers
           # The headers Kompoz's Wayland and X11 platforms are built with; Mesa's EGL and OpenGL ES (llvmpipe) for
           # the OpenGL ES tests.
@@ -74,6 +74,10 @@ jobs:
         run: build/kompoz_tests
       - name: Compose syntax tests (kompozc)
         run: build/kompoz_compose_tests
+      - name: Language server (kompozc --lsp, in front of clangd and without one)
+        run: |
+          python3 tests/kompozc_lsp_test.py --kompozc build/compiler/kompozc --clangd clangd-19
+          python3 tests/kompozc_lsp_test.py --kompozc build/compiler/kompozc --no-clangd
       - name: Platform tests
         run: build/kompoz_platform_tests
       # Vulkan on lavapipe (Mesa's, on the CPU), which LeakSanitizer can't follow into, with the

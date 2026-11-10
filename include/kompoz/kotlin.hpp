@@ -35,7 +35,11 @@
         [](auto&& kompoz_o) -> decltype(auto) {                              \
             if constexpr (requires { kompoz_o.name(); }) return kompoz_o.name(); \
             else if constexpr (requires { kompoz_o.name; }) return (kompoz_o.name); \
-            else return (kompoz_o.properties().name); /* a GraphicsLayer's: Compose's layer.alpha */ \
+            else if constexpr (requires { kompoz_o.properties().name; })      \
+                return (kompoz_o.properties().name); /* a GraphicsLayer's: Compose's layer.alpha */ \
+            else                                                             \
+                static_assert(::kompoz::kt::detail::noMember<decltype(kompoz_o)>, \
+                              "kompoz: no property, member or field named " #name); \
         },                                                                   \
         ::kompoz::kt::deref(object))
 
@@ -72,6 +76,8 @@ decltype(auto) deref(T&& x) {
 }
 
 namespace detail {
+template <class T>
+inline constexpr bool noMember = false;  // (KOMPOZ_KT_GET's: false, but only once the type is known)
 template <class F, class T>
 decltype(auto) get(F&& f, T&& object) {
     return f(std::forward<T>(object));
