@@ -139,6 +139,22 @@ Canvas(modifier = Modifier.size(96.dp)) {
 
 Canvas'ın kaydedip dönüştürdüğü, Compose'daki gibi, içinde bulunduğu blok bitene dek kapsamın sonraki çizimleri için geçerlidir.
 
+`Canvas(image)` ise bir `ImageBitmap`'e çizer, birimi bir piksel; bir kez çizilip `Image` ile gösterilen bir desen için. Bir `Paint`'in alanları Compose'un özellikleri gibi atanır (`paint.alpha = 0.6f`):
+
+```kotlin body
+val rings = remember {
+    val bitmap = ImageBitmap(96, 96)
+    val canvas = Canvas(bitmap)
+    val paint = Paint(color = Color(0xFF6750A4))
+    for (i in 0 until 6) {
+        paint.alpha = 1f - i * 0.15f
+        canvas.drawCircle(Offset(48f, 48f), 46f - i * 8, paint)
+    }
+    bitmap
+}
+Image(rings, contentDescription = "Halkalar")
+```
+
 ## Path'ler
 
 Bir `Path`, çizgiler, eğriler ve yaylarla herhangi bir dış hattı tanımlar:
@@ -185,7 +201,7 @@ Path'in çizildiği yerde, çizildiği piksellerde uygulanır; böylece bir eğr
 
 ## Şekiller ve kırpma
 
-Bir `Shape`, arka planların, çerçevelerin, kırpmaların ve gölgelerin kullandığı dış hattır: `RectangleShape`, `CircleShape`, `RoundedCornerShape(16.dp)` (ya da köşe başına bir yarıçap), `CutCornerShape(8.dp)` ve Material 3 Expressive'in şekilleri (`MaterialShapes.Cookie9Sided()` ve diğerleri, `toShape` ile).
+Bir `Shape`, arka planların, çerçevelerin, kırpmaların ve gölgelerin kullandığı dış hattır: `RectangleShape`, `CircleShape`, `RoundedCornerShape(16.dp)` (ya da köşe başına bir yarıçap), `CutCornerShape(8.dp)` ve Material 3 Expressive'in şekilleri (`MaterialShapes.Cookie9Sided.toShape()` ve diğerleri).
 
 ```kotlin body
 Box(modifier = Modifier.size(96.dp).clip(CircleShape).background(MaterialTheme.colorScheme.tertiaryContainer))
@@ -327,6 +343,20 @@ AsyncImage(
 ```
 
 JPEG, PNG ve WebP desteklenir. `ContentScale`, resmi Compose'daki gibi kutusuna yerleştirir: `Fit`, `Crop`, `FillBounds`, `FillWidth`, `FillHeight`, `Inside`, `None`.
+
+Kendi `Painter`'ınız Compose'un `object : Painter()`'ıdır: `intrinsicSize`'ı (`Image` ve `Modifier.paint` boyutlarını ona göre alır) ve o boyuttaki bir `DrawScope`'ta çizdikleri:
+
+```kotlin body
+val target = remember {
+    object : Painter() {
+        override val intrinsicSize: Size get() = Size(56f, 56f)
+        override fun DrawScope.onDraw() {
+            for (i in 0 until 4) drawCircle(if (i % 2 == 0) Color.Red else Color.White, size.width / 2 - i * 7)
+        }
+    }
+}
+Image(target, contentDescription = "Hedef")
+```
 
 ## Vektörler ve simgeler
 

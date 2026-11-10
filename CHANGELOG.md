@@ -1096,6 +1096,18 @@
 - **The showcase's layout screen in Compose's syntax**: the pane scaffolds, layout info, the measured bar chart, positions,
   the snapping row, carousels, horizontal grids, pagers, z-index, FlexBox, Grid and the custom layouts (Layout, SubcomposeLayout,
   intrinsic sizes, LookaheadScope, approachLayout) are `@Composable fun`s in Kotlin.
+- **Graphics and animation as Compose writes them**: `keyframes { durationMillis = …; 1.35f at 110 using LinearEasing }`
+  (`KeyframesConfig`), `spring(dampingRatio = …, stiffness = …)`, the enter and exit transitions by name (`fadeIn(animationSpec =
+  …)`, `slideInVertically(animationSpec = …) { it }`, `scaleOut(targetScale = …)`, …), `animateEnterExit(enter = …, exit = …)`,
+  `AnimatedVisibility(visibleState = …)`; `LinearWavyProgressIndicator`, `CircularWavyProgressIndicator` and
+  `ContainedLoadingIndicator` as Composables (`progress = { }`, the options' fields by name; by place the options struct is
+  named: `WavyProgressIndicatorOptions{…}`); `Modifier.shadow`, `paint`, `blur` and `magnifier` by name; `drawRect(brush = …,
+  blendMode = …)`, the paint by name too; `Offset::Unspecified`; `ColorMatrix(std::vector<float>)`; `ShapeOutline::toShape()`;
+  a `Morph`'s copies share its outlines, `toShape` is const; Kotlin's `list - element` and `list - list`. kompozc: `object :
+  Painter() { override val intrinsicSize …; override fun DrawScope.onDraw() { } }` (`Painter::custom`), `Canvas(imageBitmap)`,
+  `MaterialShapes.Heart` as a value, `x and y` (`or`, `xor`, `shl`, `shr`), `return@Label`, `X().apply { }`, a property set
+  through its setter (`state.targetState = false`, `paint.alpha = 0.6f`), a top-level val's member (`BallVector.root`), and a
+  local of a function type called with its trailing lambda.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

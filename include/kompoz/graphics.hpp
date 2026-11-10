@@ -200,10 +200,14 @@ std::array<float, 4> srgbComponents(Color c);
 
 struct Offset {
     float x = 0, y = 0;
-    static const Offset Zero;  // Compose's Offset.Zero
+    static const Offset Zero;         // Compose's Offset.Zero
+    static const Offset Unspecified;  // Compose's Offset.Unspecified: NaN both ways (a magnifier's sourceCenter: none)
+    bool isSpecified() const { return !isUnspecified(); }
+    bool isUnspecified() const { return std::isnan(x) || std::isnan(y); }
     friend constexpr bool operator==(const Offset&, const Offset&) = default;
 };
 inline const Offset Offset::Zero{};
+inline const Offset Offset::Unspecified{std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN()};
 // Compose's Offset arithmetic: a + b, a - b, -a, a * k, a / k.
 constexpr Offset operator+(Offset a, Offset b) { return {a.x + b.x, a.y + b.y}; }
 constexpr Offset operator-(Offset a, Offset b) { return {a.x - b.x, a.y - b.y}; }
@@ -667,12 +671,14 @@ inline Shape AbsoluteCutCornerShape(float topLeft, float topRight, float bottomR
 // static) while shapes refer to it.
 struct ShapeOutline {
     std::vector<Offset> points;
+    Shape toShape() const;  // OutlineShape(*this), as Compose's RoundedPolygon.toShape() (keep the outline alive too)
 };
 inline Shape OutlineShape(const ShapeOutline& outline) {
     Shape s{Shape::Kind::Outline};
     s.outline = &outline;
     return s;
 }
+inline Shape ShapeOutline::toShape() const { return OutlineShape(*this); }
 
 // The shape `t` of the way from `a` to `b` (corners that morph): radii and shares blended,
 // corner by corner when either has corners of its own. Outlines switch half way.
@@ -901,6 +907,12 @@ public:
 // (Compose's ColorMatrix, row by row).
 struct ColorMatrix {
     std::array<float, 20> values{1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0};
+    ColorMatrix() = default;
+    ColorMatrix(std::array<float, 20> values) : values(values) {}
+    // Compose's ColorMatrix(floatArrayOf(…)): its 20 values, four rows of five (fewer: the rest as the identity's).
+    template <class V>  // (a template: ColorMatrix{{…}} stays the array's)
+        requires std::same_as<V, std::vector<float>>
+    explicit ColorMatrix(const V& values) { std::copy_n(values.begin(), std::min(values.size(), this->values.size()), this->values.begin()); }
     void reset() { *this = {}; }
     void setToSaturation(float saturation);  // 0: gray, 1: as it is
     void setToScale(float red, float green, float blue, float alpha);

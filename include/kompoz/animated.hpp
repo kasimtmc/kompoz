@@ -120,6 +120,94 @@ ExitTransition slideOutHorizontally(float targetOffsetFraction = -0.5f, Animatio
 ExitTransition slideOutVertically(std::function<float(float fullHeight)> targetOffsetY, AnimationSpec spec = defaultVisibilitySpec());
 ExitTransition slideOutHorizontally(std::function<float(float fullWidth)> targetOffsetX, AnimationSpec spec = defaultVisibilitySpec());
 
+// The same by name, as Compose writes them: fadeIn(animationSpec = tween(300), initialAlpha = 0.2f),
+// slideInVertically(animationSpec = …) { it } (or initialOffsetY = { it }), scaleIn(initialScale = …, transformOrigin = …), …
+namespace detail {
+template <class P, class... A>
+AnimationSpec visibilitySpec(A&&... args) {
+    return P::template get<names::AnimationSpec>(defaultVisibilitySpec(), args...);
+}
+template <class P, class Offset, class... A>
+std::function<float(float)> slideOffset(float fraction, A&&... args) {  // the block, the named lambda, or Compose's default fraction
+    if constexpr (P::template blockGiven<A...>()) return std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...));
+    else if constexpr (P::template given<Offset, A...>()) return P::template arg<Offset>(args...);
+    else return [fraction](float full) { return fraction * full; };
+}
+} // namespace detail
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+EnterTransition fadeIn(A&&... args) {
+    using P = detail::Params<detail::names::AnimationSpec, detail::names::InitialAlpha>;
+    static_assert(P::check<A...>());
+    return fadeIn(float(P::get<detail::names::InitialAlpha>(0.f, args...)), detail::visibilitySpec<P>(args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+ExitTransition fadeOut(A&&... args) {
+    using P = detail::Params<detail::names::AnimationSpec, detail::names::TargetAlpha>;
+    static_assert(P::check<A...>());
+    return fadeOut(float(P::get<detail::names::TargetAlpha>(0.f, args...)), detail::visibilitySpec<P>(args...));
+}
+#define KOMPOZ_SPEC_ONLY_TRANSITION(Transition, name)                        \
+    template <class... A>                                                    \
+        requires(detail::anyNamedArgument<A...>)                             \
+    Transition name(A&&... args) {                                           \
+        using P = detail::Params<detail::names::AnimationSpec>;              \
+        static_assert(P::check<A...>());                                     \
+        return name(detail::visibilitySpec<P>(args...));                     \
+    }
+KOMPOZ_SPEC_ONLY_TRANSITION(EnterTransition, expandVertically)
+KOMPOZ_SPEC_ONLY_TRANSITION(EnterTransition, expandHorizontally)
+KOMPOZ_SPEC_ONLY_TRANSITION(EnterTransition, expandIn)
+KOMPOZ_SPEC_ONLY_TRANSITION(ExitTransition, shrinkVertically)
+KOMPOZ_SPEC_ONLY_TRANSITION(ExitTransition, shrinkHorizontally)
+KOMPOZ_SPEC_ONLY_TRANSITION(ExitTransition, shrinkOut)
+#undef KOMPOZ_SPEC_ONLY_TRANSITION
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+EnterTransition slideInVertically(A&&... args) {
+    using P = detail::Params<detail::names::AnimationSpec, detail::names::InitialOffsetY, detail::BlockWith<float>>;
+    static_assert(P::check<A...>());
+    return slideInVertically(detail::slideOffset<P, detail::names::InitialOffsetY>(-0.5f, std::forward<A>(args)...), detail::visibilitySpec<P>(args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+EnterTransition slideInHorizontally(A&&... args) {
+    using P = detail::Params<detail::names::AnimationSpec, detail::names::InitialOffsetX, detail::BlockWith<float>>;
+    static_assert(P::check<A...>());
+    return slideInHorizontally(detail::slideOffset<P, detail::names::InitialOffsetX>(-0.5f, std::forward<A>(args)...), detail::visibilitySpec<P>(args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+ExitTransition slideOutVertically(A&&... args) {
+    using P = detail::Params<detail::names::AnimationSpec, detail::names::TargetOffsetY, detail::BlockWith<float>>;
+    static_assert(P::check<A...>());
+    return slideOutVertically(detail::slideOffset<P, detail::names::TargetOffsetY>(-0.5f, std::forward<A>(args)...), detail::visibilitySpec<P>(args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+ExitTransition slideOutHorizontally(A&&... args) {
+    using P = detail::Params<detail::names::AnimationSpec, detail::names::TargetOffsetX, detail::BlockWith<float>>;
+    static_assert(P::check<A...>());
+    return slideOutHorizontally(detail::slideOffset<P, detail::names::TargetOffsetX>(-0.5f, std::forward<A>(args)...), detail::visibilitySpec<P>(args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+EnterTransition scaleIn(A&&... args) {
+    using P = detail::Params<detail::names::AnimationSpec, detail::names::InitialScale, detail::names::TransformOrigin>;
+    static_assert(P::check<A...>());
+    return scaleIn(float(P::get<detail::names::InitialScale>(0.f, args...)), P::get<detail::names::TransformOrigin>(Offset{0.5f, 0.5f}, args...),
+                   detail::visibilitySpec<P>(args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+ExitTransition scaleOut(A&&... args) {
+    using P = detail::Params<detail::names::AnimationSpec, detail::names::TargetScale, detail::names::TransformOrigin>;
+    static_assert(P::check<A...>());
+    return scaleOut(float(P::get<detail::names::TargetScale>(0.f, args...)), P::get<detail::names::TransformOrigin>(Offset{0.5f, 0.5f}, args...),
+                    detail::visibilitySpec<P>(args...));
+}
+
 // The content of an AnimatedVisibility or AnimatedContent, for shared elements inside it to
 // know whether they enter or leave (Compose's AnimatedVisibilityScope).
 class AnimatedVisibilityScope {
@@ -186,8 +274,9 @@ struct AnimatedVisibilityImpl {
     template <class... A>
     static void call(CallSite site, A&&... args) {
         constexpr bool plain = lastIsBlock<A...>();  // [] { … }, not [](const AnimatedVisibilityScope&) { … }
-        using P = std::conditional_t<plain, Params<names::Visible, names::Modifier, names::Enter, names::Exit, names::Label, Block>,
-                                     Params<names::Visible, names::Modifier, names::Enter, names::Exit, names::Label,
+        // (visibleState = …: Compose's MutableTransitionState form; by place, the state goes where the bool does)
+        using P = std::conditional_t<plain, Params<names::Visible, names::Modifier, names::Enter, names::Exit, names::Label, names::VisibleState, Block>,
+                                     Params<names::Visible, names::Modifier, names::Enter, names::Exit, names::Label, names::VisibleState,
                                             BlockWith<const AnimatedVisibilityScope&>>>;
         static_assert(P::template check<A...>());
         static_assert(P::template blockGiven<A...>(), "kompoz: AnimatedVisibility shows its block: AnimatedVisibility(visible) { … }");
@@ -196,9 +285,13 @@ struct AnimatedVisibilityImpl {
         if constexpr (plain) content = [&block](const AnimatedVisibilityScope&) { block(); };
         else content = block;
         P::template get<names::Label>(std::string(), args...);
-        AnimatedVisibility(P::template arg<names::Visible>(args...), P::template get<names::Modifier>(Modifier{}, args...),
-                           P::template get<names::Enter>(fadeIn() + expandVertically(), args...),
-                           P::template get<names::Exit>(fadeOut() + shrinkVertically(), args...), content, site);
+        auto show = [&](auto&& visible) {
+            AnimatedVisibility(visible, P::template get<names::Modifier>(Modifier{}, args...),
+                               P::template get<names::Enter>(fadeIn() + expandVertically(), args...),
+                               P::template get<names::Exit>(fadeOut() + shrinkVertically(), args...), content, site);
+        };
+        if constexpr (P::template given<names::VisibleState, A...>()) show(P::template arg<names::VisibleState>(args...));
+        else show(P::template arg<names::Visible>(args...));
     }
 };
 } // namespace detail

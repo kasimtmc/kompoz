@@ -181,7 +181,7 @@ void drawCircular(GraphicsContext& canvas, const Rect& b, float start, float swe
 
 } // namespace
 
-void LinearWavyProgressIndicator(float progress, const Modifier& modifier, const WavyProgressIndicatorOptions& options, CallSite site) {
+void detail::LinearWavyProgressIndicator(float progress, const Modifier& modifier, const WavyProgressIndicatorOptions& options, CallSite site) {
     composable(site, progress, modifier, options, [=] {
         Resolved r = resolve(options, WavyProgressIndicatorDefaults::LinearDeterminateWavelength);
         float p = std::clamp(progress, 0.f, 1.f);
@@ -199,7 +199,7 @@ void LinearWavyProgressIndicator(float progress, const Modifier& modifier, const
     });
 }
 
-void LinearWavyProgressIndicator(const Modifier& modifier, const WavyProgressIndicatorOptions& options, CallSite site) {
+void detail::LinearWavyProgressIndicator(const Modifier& modifier, const WavyProgressIndicatorOptions& options, CallSite site) {
     composable(site, modifier, options, [=] {
         Resolved r = resolve(options, WavyProgressIndicatorDefaults::LinearIndeterminateWavelength);
         float amplitude = std::clamp(options.indeterminateAmplitude, 0.f, 1.f);
@@ -217,7 +217,7 @@ void LinearWavyProgressIndicator(const Modifier& modifier, const WavyProgressInd
     });
 }
 
-void CircularWavyProgressIndicator(float progress, const Modifier& modifier, const WavyProgressIndicatorOptions& options, CallSite site) {
+void detail::CircularWavyProgressIndicator(float progress, const Modifier& modifier, const WavyProgressIndicatorOptions& options, CallSite site) {
     composable(site, progress, modifier, options, [=] {
         Resolved r = resolve(options, WavyProgressIndicatorDefaults::CircularWavelength);
         float p = std::clamp(progress, 0.f, 1.f);
@@ -233,7 +233,7 @@ void CircularWavyProgressIndicator(float progress, const Modifier& modifier, con
     });
 }
 
-void CircularWavyProgressIndicator(const Modifier& modifier, const WavyProgressIndicatorOptions& options, CallSite site) {
+void detail::CircularWavyProgressIndicator(const Modifier& modifier, const WavyProgressIndicatorOptions& options, CallSite site) {
     composable(site, modifier, options, [=] {
         Resolved r = resolve(options, WavyProgressIndicatorDefaults::CircularWavelength);
         float amplitude = std::clamp(options.indeterminateAmplitude, 0.f, 1.f);

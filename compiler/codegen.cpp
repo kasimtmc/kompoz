@@ -107,7 +107,8 @@ const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType"
                                                             "items", "keyboardModifiers", "canPan", "isMeasurementApproachInProgress", "approachMeasure",
                                                             "itemCount", "progress", "transitionSpec", "contentKey", "shouldStartDragAndDrop",
                                                             "enterTransition", "exitTransition", "popEnterTransition", "popExitTransition",
-                                                            "initialOffsetX", "initialOffsetY", "targetOffsetX", "targetOffsetY"};
+                                                            "initialOffsetX", "initialOffsetY", "targetOffsetX", "targetOffsetY",
+                                                            "sourceCenter", "magnifierCenter", "amplitude"};
 
 // Properties of a class's own that are functions here, read by their bare name in its body (Kotlin's
 // viewModelScope in a ViewModel).
@@ -173,6 +174,7 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"produce", "auto Channel"},  // (scope.produce<Int> { send(i) }: the channel it sends to)
     {"AppBarRow", "AppBarScope"},            {"AppBarColumn", "AppBarScope"},
     {"DraggableAnchors", "auto DraggableAnchors"},  // (the builder's anchors: DragValue.Start at 0f)
+    {"keyframes", "KeyframesConfig"},  // (keyframes { durationMillis = 420; 1.35f at 110 }: the spec's frames)
     {"NavHost", "NavGraphBuilder"},          {"navigation", "NavGraphBuilder"},
     {"navigate", "NavOptionsBuilder"},       {"popUpTo", "PopUpToBuilder"},     {"navDeepLink", "NavDeepLink"},
     // (an ImageVector's builder: group(…) { path(…) { moveTo(…) } })
@@ -637,7 +639,7 @@ public:
     }
 
 private:
-    enum VarKind { Local, Delegated };
+    enum VarKind { Local, Delegated, Callable };  // (Callable: a local of a function type, val f: (Int) -> Unit = { … })
 
     void declare(const std::string& name, VarKind kind) { scopes_.back()[name] = kind; }
     const VarKind* lookup(const std::string& name) const {
@@ -714,6 +716,10 @@ private:
             case Node::Decl: return declaration(s);
             case Node::Assign: return assignment(s);
             case Node::Return:
+                // return@Label: from the lambda given to Label, which must be the one just around it (C++ returns from that one only)
+                if (!s.text.empty() && (lambdaLabels_.empty() || lambdaLabels_.back() != s.text))
+                    throw CompileError(s.pos, "return@" + s.text + ": only from the lambda just around it" +
+                                                  (lambdaLabels_.empty() || lambdaLabels_.back().empty() ? std::string() : " (" + lambdaLabels_.back() + "'s)"));
                 out_.text(suspend_ ? "co_return" : "return");
                 if (!s.kids.empty()) {
                     out_.text(" ");
@@ -777,7 +783,7 @@ private:
             throw CompileError(d.pos, "a variable without a value needs a type");
         }
         out_.text(";");
-        declare(d.text, Local);
+        declare(d.text, d.type && d.type->function ? Callable : Local);
     }
 
     void assignment(const Node& a) {
@@ -805,6 +811,28 @@ private:
             rhs();
             out_.text(");");
             return;
+        }
+        // obj.name = v, or name = v on a receiver's member: the property set (its setter where it has one: setName)
+        auto setter = [&](const std::string& name) {
+            std::string set = "set" + name;
+            set[3] = char(std::toupper(static_cast<unsigned char>(set[3])));
+            return set;
+        };
+        if (op == "=" && target.kind == Node::Member && !target.flag && target.text != "value") {
+            out_.text("KOMPOZ_KT_SET((");
+            expr(*target.kids[0]);
+            out_.text("), " + cppName(target.text) + ", " + setter(target.text) + ", (");
+            rhs();
+            out_.text("));");
+            return;
+        }
+        if (op == "=" && target.kind == Node::Name && !lookup(target.text)) {
+            if (size_t r = receiverOf(target.text)) {
+                out_.text("KOMPOZ_KT_SET((*kompoz_this_" + std::to_string(r) + "), " + cppName(target.text) + ", " + setter(target.text) + ", (");
+                rhs();
+                out_.text("));");
+                return;
+            }
         }
         if (target.kind == Node::Index && target.kids.size() == 2 && op == "=") {  // a[k] = v: set(k, v) where there is one (a SavedStateHandle's)
             out_.text("::kompoz::kt::setAt(");
@@ -1112,8 +1140,10 @@ private:
     bool qualifier(const Node& e) const {
         if (e.kind == Node::Name)
             return (capitalized(e.text) || (module_.structs && module_.structs->namespaces.contains(e.text))) && !lookup(e.text) && e.text != "Modifier" &&
-                   !kBareConstants.contains(e.text);
-        if (e.kind == Node::Member) return !e.flag && capitalized(e.text) && qualifier(*e.kids[0]) && !staticValue(e);
+                   !kBareConstants.contains(e.text) && !module_.properties.contains(e.text);  // (BadgeIcon.root: a top-level val's)
+        if (e.kind == Node::Member)
+            return !e.flag && capitalized(e.text) && qualifier(*e.kids[0]) && !staticValue(e) &&
+                   !(e.kids[0]->kind == Node::Name && e.kids[0]->text == "MaterialShapes");  // (MaterialShapes.Heart: a shape, a value)
         return false;
     }
     // Color.White: a type's member of its own (a static value), so Color.White.copy(…) calls on it.
@@ -1143,6 +1173,10 @@ private:
                 auto special = kObjectProperties.find(dotted(obj) + "." + e.text);
                 if (special != kObjectProperties.end()) {
                     out_.text(special->second);
+                    return;
+                }
+                if (dotted(obj) == "MaterialShapes" && capitalized(e.text)) {  // Compose's MaterialShapes.Cookie9Sided (a property): a function here
+                    out_.text("::kompoz::MaterialShapes::" + e.text + "()");
                     return;
                 }
             }
@@ -1222,6 +1256,18 @@ private:
         std::string calleeName = callee.kind == Node::Name ? callee.text : callee.kind == Node::Member ? callee.text : "";
         // A local of the callee's name is not what is called when the call has a trailing lambda or named
         // arguments (a value can't take them): items(items, key = { }) { } calls the function, as Kotlin does.
+        if (const VarKind* k = callee.kind == Node::Name ? lookup(callee.text) : nullptr; k && *k == Callable && c.lambda) {
+            // strip("x") { t -> … }: a local of a function type called with its trailing lambda (a value: what the type returns)
+            out_.text(cppName(callee.text) + "(");
+            for (size_t i = 1; i < c.kids.size(); ++i) {
+                if (i > 1) out_.text(", ");
+                expr(*c.kids[i]);
+            }
+            if (c.kids.size() > 1) out_.text(", ");
+            lambda(*c.lambda, true);
+            out_.text(")");
+            return;
+        }
         if (callee.kind == Node::Name && lookup(callee.text) && (c.lambda || named(c))) {
             if (auto f = module_.functions.find(callee.text); f != module_.functions.end()) return moduleCall(c, *f->second);
             out_.text("::kompoz::" + cppName(callee.text));  // (qualified: C++ would take the local)
@@ -1263,6 +1309,11 @@ private:
             if (auto k = module_.classDecls.find(callee.text); k != module_.classDecls.end() && named(c)) return constructClass(c, *k->second);
             if (auto t = kTypes.find(callee.text); t != kTypes.end() && t->second.starts_with("::")) {  // a type named in full (ComposeTestRule { })
                 out_.text(t->second);
+                return arguments(c, calleeName, false);
+            }
+            if (callee.text == "Canvas" && c.kids.size() == 2 && c.names[0].empty() && !c.lambda) {
+                // Compose's Canvas(image): drawing into an ImageBitmap (graphics::Canvas), not the composable, which takes its block
+                out_.text("::kompoz::graphics::Canvas");
                 return arguments(c, calleeName, false);
             }
             if (callee.text == "Color" && c.kids.size() == 2 && c.names[0].empty() && !c.lambda) {
@@ -1320,6 +1371,21 @@ private:
                 const auto* fields = module_.structs->find(name);  // (its own namespace's alias first: ListItemDefaults::colors)
                 if (!fields) fields = module_.structs->find(callee.text);
                 if (fields && structCall(c, name, *fields)) return;
+            }
+            if (callee.text == "apply" && c.lambda && c.kids.size() == 1 && !qualifier(obj)) {
+                // X(…).apply { … }: the block with the object as its receiver (Kotlin's this), the object given back; the
+                // receiver's type is the constructor's (what the block's names are looked up in).
+                const Node* made = &obj;
+                while (made->kind == Node::Paren) made = made->kids[0].get();
+                std::string type;
+                if (made->kind == Node::Call && made->kids[0]->kind == Node::Name && capitalized(made->kids[0]->text)) type = "auto " + made->kids[0]->text;
+                if (type.empty()) throw CompileError(c.pos, "apply { }: the receiver's type must show, as X(…).apply { … }");
+                out_.text("::kompoz::kt::apply(");
+                expr(obj);
+                out_.text(", ");
+                lambda(*c.lambda, false, false, false, &type);
+                out_.text(")");
+                return;
             }
             if (kKtMembers.contains(callee.text) && !qualifier(obj)) {
                 out_.text("::kompoz::kt::" + callee.text + "(");
@@ -1617,7 +1683,9 @@ private:
         }
         out_.text(suspend ? ") -> ::kompoz::Task {" : ") {");
         if (receiver) out_.text(" [[maybe_unused]] auto* kompoz_this_" + self + " = &kompoz_receiver_" + self + ";");
+        lambdaLabels_.push_back(label);
         for (size_t i = 0; i < l.kids.size(); ++i) statement(*l.kids[i], value && i + 1 == l.kids.size());
+        lambdaLabels_.pop_back();
         if (suspend) out_.text(" co_return;");
         scopes_.pop_back();
         if (receiver) {
@@ -1644,7 +1712,58 @@ private:
     // object : NestedScrollConnection { override fun … }: a class of its own deriving from the type,
     // made where it stands, its functions the overrides; the locals they use are copied into it,
     // as a lambda's captures are. A shared_ptr to it, as Kompoz takes such objects.
+    // object : Painter() { override val intrinsicSize = Size(…); override fun DrawScope.onDraw() { … } }: Kompoz's Painter
+    // isn't derived from; it is Painter::custom(onDraw, intrinsicSize), the drawing a lambda in the DrawScope.
+    void painterObject(const Node& o) {
+        const Node* size = nullptr;
+        const Node* draw = nullptr;
+        for (auto& m : o.kids) {
+            if (m->flag && m->text == "intrinsicSize") size = m.get();
+            else if (!m->flag && m->text == "onDraw" && m->names.empty() && m->kids.size() == 2 && m->kids[1]->text == "DrawScope") draw = m.get();
+            else throw CompileError(m->pos, "a Painter object has override val intrinsicSize and override fun DrawScope.onDraw() only");
+        }
+        if (!draw) throw CompileError(o.pos, "a Painter object needs override fun DrawScope.onDraw()");
+        out_.text("::kompoz::Painter::custom(" + capture("[=]") + "(");
+        {
+            Scoped inside(global_);
+            scopes_.emplace_back();
+            receivers_.push_back("DrawScope");
+            receiverConst_.push_back(false);
+            receiverLabels_.push_back({});
+            std::string self = std::to_string(receivers_.size());
+            bool wasSuspend = std::exchange(suspend_, false);
+            out_.text("::kompoz::DrawScope& kompoz_receiver_" + self + ") { [[maybe_unused]] auto* kompoz_this_" + self + " = &kompoz_receiver_" + self + ";");
+            auto lambdaLabels = std::exchange(lambdaLabels_, {});
+            statements(*draw->kids[0], false);
+            lambdaLabels_ = std::move(lambdaLabels);
+            out_.text(" }");
+            suspend_ = wasSuspend;
+            scopes_.pop_back();
+            receivers_.pop_back();
+            receiverConst_.pop_back();
+            receiverLabels_.pop_back();
+        }
+        if (size) {
+            out_.text(", ");
+            const Node& body = *size->kids[0];
+            if (body.kids.size() == 1 && body.kids[0]->kind == Node::Return && !body.kids[0]->kids.empty()) {
+                expr(*body.kids[0]->kids[0]);
+            } else {
+                out_.text(capture("[&]") + "() {");
+                Scoped inside(global_);
+                statements(body, false);
+                out_.text(" }()");
+            }
+        }
+        out_.text(")");
+    }
+
     void objectExpression(const Node& o) {
+        if (std::string base = plainType(*o.type); base == "::kompoz::Painter" || base == "Painter") return painterObject(o);
+        for (auto& m : o.kids) {
+            if (m->flag) throw CompileError(m->pos, "an object's property (override val) here: a Painter's intrinsicSize only; the rest are functions");
+            if (m->kids.size() > 1) throw CompileError(m->pos, "an object's function with a receiver here: a Painter's DrawScope.onDraw() only");
+        }
         std::set<std::string, std::less<>> used;
         for (auto& m : o.kids) usedNames(m.get(), used);
         std::vector<std::pair<std::string, VarKind>> captured;
@@ -1669,6 +1788,7 @@ private:
         auto receivers = std::exchange(receivers_, {});
         auto receiverConst = std::exchange(receiverConst_, {});
         auto receiverLabels = std::exchange(receiverLabels_, {});
+        auto lambdaLabels = std::exchange(lambdaLabels_, {});
         bool wasSuspend = std::exchange(suspend_, false), wasGlobal = std::exchange(global_, false);
         for (auto& m : o.kids) {
             out_.at(m->pos);
@@ -1687,6 +1807,7 @@ private:
         receivers_ = std::move(receivers);
         receiverConst_ = std::move(receiverConst);
         receiverLabels_ = std::move(receiverLabels);
+        lambdaLabels_ = std::move(lambdaLabels);
         suspend_ = wasSuspend, global_ = wasGlobal;
         out_.text(" }; return std::make_shared<kompoz_object>(");
         for (size_t i = 0; i < captured.size(); ++i) out_.text((i ? ", " : "") + cppName(captured[i].first));
@@ -1745,9 +1866,13 @@ private:
             return helper("contains", r, l);
         }
         if (op == "to") return helper("to", l, r);
-        if (op == "using") {  // (enter togetherWith exit) using SizeTransform(clip = false)
+        // (enter togetherWith exit) using SizeTransform(clip = false); 0.4f at 75 using FastOutSlowInEasing
+        if (op == "using") return helper("infixUsing", l, r);
+        static const std::map<std::string, std::string, std::less<>> bitwise = {{"and", "&"}, {"or", "|"}, {"xor", "^"}, {"shl", "<<"}, {"shr", ">>"}};
+        if (auto bit = bitwise.find(op); bit != bitwise.end()) {  // Kotlin's bitwise infix functions on integers
+            out_.text("(");
             expr(l);
-            out_.text(".withSizeTransform(");
+            out_.text(" " + bit->second + " ");
             expr(r);
             out_.text(")");
             return;
@@ -1836,6 +1961,7 @@ private:
     std::vector<std::string> receivers_;  // the receivers' types of the lambdas it is in, innermost last
     std::vector<bool> receiverConst_;     // and whether each is read-only (a "const X" receiver: copied into lambdas that keep it)
     const Node* calleeNode_ = nullptr;    // the callee being written, when a member: called, not read as a property
+    std::vector<std::string> lambdaLabels_;    // the lambdas being written, each its call's name (return@LaunchedEffect)
     std::vector<std::string> receiverLabels_;  // and the calls they were given to (this@AnimatedContent)
     bool global_ = false;  // at namespace scope: a top-level val's value
     bool inClass_ = false;  // in a class's body: its members are reached by their names

@@ -45,7 +45,7 @@ A color animates as Compose's does (`Color.VectorConverter`): in Oklab, its ligh
 |---|---|
 | `spring(dampingRatio, stiffness)` | Physics-based. The default; it keeps its velocity when the target changes mid-way. `Spring.DampingRatioMediumBouncy`, `Spring.StiffnessLow` and the other constants are Compose's. |
 | `tween(durationMillis, delayMillis, easing)` | A fixed duration along an easing curve: `FastOutSlowInEasing` (the default), `LinearOutSlowInEasing`, `FastOutLinearInEasing`, `LinearEasing`. |
-| `keyframes(durationMillis, listOf(Keyframe(atMillis, value), …))` | Values at given times, each with the easing of the stretch that starts there (Compose's `keyframes { }` builder, as a list). |
+| `keyframes { durationMillis = 400; 1.3f at 100 using LinearEasing; 0.9f at 250 }` | Values at given times, each with the easing of the stretch that starts there (`using`), as Compose's builder. |
 | `repeatable(iterations, spec, mode)`, `infiniteRepeatable(spec, mode)` | A spec repeated, restarting or reversing (`RepeatMode.Reverse`). |
 | `snap(delayMillis)` | Jumps to the target. |
 
@@ -69,6 +69,22 @@ fun Details() {
 ```
 
 Enter transitions are `fadeIn`, `slideInHorizontally`, `slideInVertically`, `scaleIn`, `expandIn`, `expandHorizontally` and `expandVertically`; exit transitions are their `fadeOut`, `slideOut…`, `scaleOut` and `shrink…` counterparts. Combine them with `+`; the slides take Compose's lambda of the full size (`slideInVertically { it / 2 }`). `EnterTransition.None` and `ExitTransition.None` animate nothing, for when the children animate themselves with `animateEnterExit` from the content's `AnimatedVisibilityScope`.
+
+Each transition takes its spec by name too (`fadeIn(animationSpec = tween(300))`, `slideInVertically(animationSpec = tween(450)) { it }`, `scaleOut(targetScale = 0.5f)`). A row that should come in the first time it shows is given a `MutableTransitionState` made hidden with a visible target, as Compose's `visibleState`; its `currentState` and `isIdle` say where it is:
+
+```kotlin
+@Composable
+fun Arriving() {
+    val shown = remember { MutableTransitionState(false).apply { targetState = true } }
+    AnimatedVisibility(visibleState = shown, enter = fadeIn(animationSpec = tween(500)) + expandVertically()) {
+        Box(modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            Box(modifier = Modifier.animateEnterExit(enter = slideInVertically { it }, exit = fadeOut()).matchParentSize())
+            IconButton(onClick = { shown.targetState = false }) { Icon(Icons.Filled.Close, contentDescription = "Remove") }
+        }
+    }
+    if (shown.isIdle && !shown.currentState) Text("Removed")
+}
+```
 
 As in Compose, a transition is read as its content is laid out and drawn: the composable around it is composed again when it starts and when it is done, not on the frames in between.
 

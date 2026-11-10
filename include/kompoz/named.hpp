@@ -762,6 +762,31 @@ struct AmbientShadowColor {};
 struct SpotShadowColor {};
 struct CompositingStrategy {};
 struct BlendMode {};
+struct VisibleState {};
+struct TrackStrokeWidth {};
+struct StopSize {};
+struct Amplitude {};
+struct IndeterminateAmplitude {};
+struct Wavelength {};
+struct WaveSpeed {};
+struct IndicatorColor {};
+struct AmbientColor {};
+struct SpotColor {};
+struct SizeToIntrinsics {};
+struct SourceCenter {};
+struct MagnifierCenter {};
+struct Zoom {};
+struct EdgeTreatment {};
+struct BlurType {};
+struct RadiusX {};
+struct RadiusY {};
+struct BlurRadiusSpec {};
+struct DampingRatio {};
+struct Stiffness {};
+struct InitialAlpha {};
+struct TargetAlpha {};
+struct InitialScale {};
+struct TargetScale {};
 } // namespace detail::names
 inline namespace args {
 inline constexpr Param<detail::names::Modifier> modifier;
@@ -1002,6 +1027,31 @@ inline constexpr Param<detail::names::Painter> painter;
 inline constexpr Param<detail::names::Bitmap> bitmap;
 inline constexpr Param<detail::names::ContentDescription> contentDescription;
 inline constexpr Param<detail::names::Data> data;
+inline constexpr Param<detail::names::VisibleState> visibleState;
+inline constexpr Param<detail::names::TrackStrokeWidth> trackStrokeWidth;
+inline constexpr Param<detail::names::StopSize> stopSize;
+inline constexpr Param<detail::names::Amplitude> amplitude;
+inline constexpr Param<detail::names::IndeterminateAmplitude> indeterminateAmplitude;
+inline constexpr Param<detail::names::Wavelength> wavelength;
+inline constexpr Param<detail::names::WaveSpeed> waveSpeed;
+inline constexpr Param<detail::names::IndicatorColor> indicatorColor;
+inline constexpr Param<detail::names::AmbientColor> ambientColor;
+inline constexpr Param<detail::names::SpotColor> spotColor;
+inline constexpr Param<detail::names::SizeToIntrinsics> sizeToIntrinsics;
+inline constexpr Param<detail::names::SourceCenter> sourceCenter;
+inline constexpr Param<detail::names::MagnifierCenter> magnifierCenter;
+inline constexpr Param<detail::names::Zoom> zoom;
+inline constexpr Param<detail::names::EdgeTreatment> edgeTreatment;
+inline constexpr Param<detail::names::BlurType> blurType;
+inline constexpr Param<detail::names::RadiusX> radiusX;
+inline constexpr Param<detail::names::RadiusY> radiusY;
+inline constexpr Param<detail::names::BlurRadiusSpec> blurRadiusSpec;
+inline constexpr Param<detail::names::DampingRatio> dampingRatio;
+inline constexpr Param<detail::names::Stiffness> stiffness;
+inline constexpr Param<detail::names::InitialAlpha> initialAlpha;
+inline constexpr Param<detail::names::TargetAlpha> targetAlpha;
+inline constexpr Param<detail::names::InitialScale> initialScale;
+inline constexpr Param<detail::names::TargetScale> targetScale;
 } // namespace args
 // The names as kompozc writes them (arg::colors = …): all of args', and those that are something
 // else of Kompoz's too (colors: the colors' namespace).
@@ -1267,6 +1317,9 @@ auto rememberSaveable(const K& inputs, const Named<detail::names::Saver, CustomS
 }
 
 namespace detail {
+// A color or a brush given by name (drawRect(brush = …, blendMode = …)): a draw's paint, its arguments all named.
+template <class N>
+constexpr bool isPaintArgument = std::is_same_v<TagOf<N>, names::Color> || std::is_same_v<TagOf<N>, names::Brush>;
 // content = { … } given by name (Compose's content parameter, often passed on, as in
 // MaterialTheme(colorScheme = c, content = content)): the block, last, as the composable takes it.
 template <class Impl, class... A>

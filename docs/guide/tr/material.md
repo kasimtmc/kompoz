@@ -253,6 +253,8 @@ Bir `progress` lambdasıyla ya da onsuz (belirsiz) `CircularProgressIndicator` v
 #! val progress = 0.4f
 CircularProgressIndicator()                      // belirsiz
 LinearProgressIndicator(progress = { progress }) // %40
+LinearWavyProgressIndicator(progress = { progress }, amplitude = { 0.5f })  // daha alçak bir dalga
+ContainedLoadingIndicator(progress = { progress }, containerColor = MaterialTheme.colorScheme.tertiaryContainer)
 ```
 
 ## Diğer bileşenler

@@ -507,6 +507,10 @@ NodeP Parser::statement() {
         if (t.text == "val" || t.text == "var") return declaration();
         if (t.text == "return") {
             auto r = make(Node::Return, take().pos);
+            if (isOp("@") && !cur().spaceBefore && peekRaw(1).kind == Tok::Ident) {  // return@Label: from the lambda (a C++ lambda's return)
+                take();
+                r->text = take().text;
+            }
             const Token& n = peekRaw();
             if (!(n.kind == Tok::Newline || n.kind == Tok::End || (n.kind == Tok::Op && (n.text == ";" || n.text == "}"))))
                 r->kids.push_back(expression());
@@ -913,10 +917,45 @@ NodeP Parser::objectExpression() {
         bool overrides = false;
         while (isIdent("override") || isIdent("public") || isIdent("private"))
             overrides = take().text == "override" || overrides;
-        if (!isIdent("fun")) fail("an object here has functions only (override fun …)");
+        if (isIdent("val")) {  // override val name: Type get() = …, or = …: a property (flag), its value the body's
+            auto m = make(Node::Method, take().pos);
+            m->flag = true;
+            m->text = expectIdent();
+            if (!overrides) fail("an object's property here overrides one of its type's (override val …)");
+            if (acceptOp(":")) m->type = type();
+            {
+                NewlineMode mode(newlines_, false);
+                if (isIdent("get")) {
+                    take();
+                    expectOp("(");
+                    expectOp(")");
+                }
+            }
+            if (isOp("=")) {
+                Pos at = take().pos;
+                skipNewlines();
+                auto ret = make(Node::Return, at);
+                ret->kids.push_back(expression());
+                auto body = make(Node::Block, at);
+                body->kids.push_back(std::move(ret));
+                m->kids.push_back(std::move(body));
+            } else {
+                skipNewlines();
+                m->kids.push_back(block());
+            }
+            o->kids.push_back(std::move(m));
+            continue;
+        }
+        if (!isIdent("fun")) fail("an object here has functions (override fun …) and properties (override val …) only");
         if (!overrides) fail("an object's function here overrides one of its type's (override fun …)");
         auto m = make(Node::Method, take().pos);
         m->text = expectIdent();
+        NodeP receiver;  // fun DrawScope.onDraw(): the receiver's type (kids[1], after the body)
+        if (acceptOp(".")) {
+            receiver = make(Node::Name, m->pos);
+            receiver->text = m->text;
+            m->text = expectIdent();
+        }
         for (Param& p : params()) {
             m->names.push_back(p.name);
             m->typeArgs.push_back(std::move(p.type));
@@ -934,6 +973,7 @@ NodeP Parser::objectExpression() {
             skipNewlines();
             m->kids.push_back(block());
         }
+        if (receiver) m->kids.push_back(std::move(receiver));
         o->kids.push_back(std::move(m));
     }
     expectOp("}");

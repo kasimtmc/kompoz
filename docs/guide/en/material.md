@@ -253,6 +253,8 @@ SnackbarHost(hostState = snackbars)
 #! val progress = 0.4f
 CircularProgressIndicator()                      // indeterminate
 LinearProgressIndicator(progress = { progress }) // 40 %
+LinearWavyProgressIndicator(progress = { progress }, amplitude = { 0.5f })  // a lower wave
+ContainedLoadingIndicator(progress = { progress }, containerColor = MaterialTheme.colorScheme.tertiaryContainer)
 ```
 
 ## Other components

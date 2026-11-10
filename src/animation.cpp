@@ -232,6 +232,12 @@ AnimationSpec keyframes(float durationMillis, std::vector<Keyframe> frames, floa
     return s;
 }
 
+AnimationSpec keyframes(const std::function<void(KeyframesConfig&)>& config) {
+    KeyframesConfig c;
+    config(c);
+    return keyframes(c.durationMillis, std::move(c.keyframes), c.delayMillis);
+}
+
 AnimationSpec repeatable(int iterations, AnimationSpec spec, RepeatMode mode) {
     spec.iterations = std::max(1, iterations);
     spec.repeatMode = mode;

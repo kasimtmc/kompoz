@@ -317,9 +317,9 @@ Morph::Morph(const ShapeOutline& start, const ShapeOutline& end) {
     std::copy(b.begin(), b.end(), to_.begin());
 }
 
-const ShapeOutline& Morph::outlineAt(float progress) {
+const ShapeOutline& Morph::outlineAt(float progress) const {
     int step = std::clamp(int(std::lround(std::clamp(progress, 0.f, 1.f) * kSteps)), 0, kSteps);
-    auto& slot = steps_[size_t(step)];
+    auto& slot = (*steps_)[size_t(step)];
     if (!slot) {
         float t = float(step) / kSteps;
         auto outline = std::make_unique<ShapeOutline>();

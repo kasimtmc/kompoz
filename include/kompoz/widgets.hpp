@@ -2048,6 +2048,7 @@ struct WavyProgressIndicatorOptions {
 // M3 Expressive's wavy progress (Compose's LinearWavyProgressIndicator and
 // CircularWavyProgressIndicator): the indicator waves while it moves, the track stays flat
 // behind a gap. Linear ones start at the layout's start side.
+namespace detail {
 void LinearWavyProgressIndicator(float progress, const Modifier& modifier = {}, const WavyProgressIndicatorOptions& options = {},
                                  CallSite site = CallSite::current());
 void LinearWavyProgressIndicator(const Modifier& modifier = {}, const WavyProgressIndicatorOptions& options = {},
@@ -2056,6 +2057,48 @@ void CircularWavyProgressIndicator(float progress, const Modifier& modifier = {}
                                    CallSite site = CallSite::current());
 void CircularWavyProgressIndicator(const Modifier& modifier = {}, const WavyProgressIndicatorOptions& options = {},
                                    CallSite site = CallSite::current());
+// LinearWavyProgressIndicator(progress = { … }, modifier = …, color = …, trackColor = …, strokeWidth = …, trackStrokeWidth = …,
+// gapSize = …, stopSize = …, amplitude = …, wavelength = …, waveSpeed = …) and the indeterminate one (modifier = …,
+// indeterminateAmplitude = …), as Compose writes them (the options' fields by name), and by place (progress, modifier, options).
+template <bool Circular>
+struct WavyProgressIndicatorImpl {
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        constexpr bool determinate = countOf<names::Progress, A...> > 0 || startsWith<float, A...>() || startsWith<double, A...>();
+        using Spinning = Params<names::Modifier, names::Options, names::Color, names::TrackColor, names::StrokeWidth, names::TrackStrokeWidth,
+                                names::GapSize, names::IndeterminateAmplitude, names::Wavelength, names::WaveSpeed>;
+        using Determinate = Params<names::Progress, names::Modifier, names::Options, names::Color, names::TrackColor, names::StrokeWidth,
+                                   names::TrackStrokeWidth, names::GapSize, names::StopSize, names::Amplitude, names::Wavelength, names::WaveSpeed>;
+        using P = std::conditional_t<determinate, Determinate, Spinning>;
+        static_assert(P::template check<A...>());
+        WavyProgressIndicatorOptions options = P::template get<names::Options>(WavyProgressIndicatorOptions{}, args...);
+        P::template set<names::Color>(options.color, args...);
+        P::template set<names::TrackColor>(options.trackColor, args...);
+        P::template set<names::StrokeWidth>(options.strokeWidth, args...);
+        P::template set<names::TrackStrokeWidth>(options.trackStrokeWidth, args...);
+        P::template set<names::GapSize>(options.gapSize, args...);
+        P::template set<names::Wavelength>(options.wavelength, args...);
+        P::template set<names::WaveSpeed>(options.waveSpeed, args...);
+        Modifier modifier = P::template get<names::Modifier>(Modifier{}, args...);
+        if constexpr (determinate) {
+            P::template set<names::StopSize>(options.stopSize, args...);
+            P::template set<names::Amplitude>(options.amplitude, args...);
+            auto&& given = P::template arg<names::Progress>(args...);  // a value, or Compose's { progress } read here
+            float progress;
+            if constexpr (std::is_invocable_v<decltype(given)&>) progress = float(given());
+            else progress = float(given);
+            if constexpr (Circular) CircularWavyProgressIndicator(progress, modifier, options, site);
+            else LinearWavyProgressIndicator(progress, modifier, options, site);
+        } else {
+            P::template set<names::IndeterminateAmplitude>(options.indeterminateAmplitude, args...);
+            if constexpr (Circular) CircularWavyProgressIndicator(modifier, options, site);
+            else LinearWavyProgressIndicator(modifier, options, site);
+        }
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::WavyProgressIndicatorImpl<false>> LinearWavyProgressIndicator;
+inline constexpr Composable<detail::WavyProgressIndicatorImpl<true>> CircularWavyProgressIndicator;
 
 // M3 Expressive's loading indicator (Compose's LoadingIndicator / ContainedLoadingIndicator): a
 // shape that keeps turning and morphing from one to the next (soft burst, cookie, pentagon, pill,
@@ -2092,10 +2135,36 @@ struct LoadingIndicatorImpl {
 };
 } // namespace detail
 inline constexpr Composable<detail::LoadingIndicatorImpl> LoadingIndicator;
+namespace detail {
 void ContainedLoadingIndicator(const Modifier& modifier = {}, std::optional<Color> indicatorColor = {},
                                std::optional<Color> containerColor = {}, CallSite site = CallSite::current());
 void ContainedLoadingIndicator(float progress, const Modifier& modifier = {}, std::optional<Color> indicatorColor = {},
                                std::optional<Color> containerColor = {}, CallSite site = CallSite::current());
+// ContainedLoadingIndicator(progress = { … }, modifier = …, containerColor = …, indicatorColor = …) and the indeterminate one, as
+// Compose writes them, and by place (progress, modifier, indicatorColor, containerColor).
+struct ContainedLoadingIndicatorImpl {
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        constexpr bool determinate = countOf<names::Progress, A...> > 0 || startsWith<float, A...>() || startsWith<double, A...>();
+        using P = std::conditional_t<determinate, Params<names::Progress, names::Modifier, names::IndicatorColor, names::ContainerColor>,
+                                     Params<names::Modifier, names::IndicatorColor, names::ContainerColor>>;
+        static_assert(P::template check<A...>());
+        Modifier modifier = P::template get<names::Modifier>(Modifier{}, args...);
+        std::optional<Color> indicator = P::template get<names::IndicatorColor>(std::optional<Color>(), args...);
+        std::optional<Color> container = P::template get<names::ContainerColor>(std::optional<Color>(), args...);
+        if constexpr (determinate) {
+            auto&& given = P::template arg<names::Progress>(args...);
+            float progress;
+            if constexpr (std::is_invocable_v<decltype(given)&>) progress = float(given());
+            else progress = float(given);
+            ContainedLoadingIndicator(progress, modifier, indicator, container, site);
+        } else {
+            ContainedLoadingIndicator(modifier, indicator, container, site);
+        }
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::ContainedLoadingIndicatorImpl> ContainedLoadingIndicator;
 
 // A card's colors (Compose's CardColors, CardDefaults.cardColors(containerColor = …)): those
 // left unset are its kind's, from the theme; its content's color goes with its container's

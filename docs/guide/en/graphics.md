@@ -139,6 +139,22 @@ Canvas(modifier = Modifier.size(96.dp)) {
 
 What the canvas leaves saved or transformed holds for the scope's later draws until the block it is in ends, as in Compose.
 
+`Canvas(image)` draws into an `ImageBitmap` instead, a unit a pixel, for a pattern drawn once and shown by `Image`; a `Paint`'s fields are set as Compose's properties are (`paint.alpha = 0.6f`):
+
+```kotlin body
+val rings = remember {
+    val bitmap = ImageBitmap(96, 96)
+    val canvas = Canvas(bitmap)
+    val paint = Paint(color = Color(0xFF6750A4))
+    for (i in 0 until 6) {
+        paint.alpha = 1f - i * 0.15f
+        canvas.drawCircle(Offset(48f, 48f), 46f - i * 8, paint)
+    }
+    bitmap
+}
+Image(rings, contentDescription = "Rings")
+```
+
 ## Paths
 
 A `Path` describes any outline with lines, curves and arcs:
@@ -185,7 +201,7 @@ It is applied where the path is drawn, at the pixels it is drawn at, so a dash o
 
 ## Shapes and clipping
 
-A `Shape` is the outline used by backgrounds, borders, clips and shadows: `RectangleShape`, `CircleShape`, `RoundedCornerShape(16.dp)` (or one radius per corner), `CutCornerShape(8.dp)`, and Material 3 Expressive's shapes (`MaterialShapes.Cookie9Sided()` and others, with `toShape`).
+A `Shape` is the outline used by backgrounds, borders, clips and shadows: `RectangleShape`, `CircleShape`, `RoundedCornerShape(16.dp)` (or one radius per corner), `CutCornerShape(8.dp)`, and Material 3 Expressive's shapes (`MaterialShapes.Cookie9Sided.toShape()` and others).
 
 ```kotlin body
 Box(modifier = Modifier.size(96.dp).clip(CircleShape).background(MaterialTheme.colorScheme.tertiaryContainer))
@@ -327,6 +343,20 @@ AsyncImage(
 ```
 
 JPEG, PNG and WebP are supported. `ContentScale` fits the image into its box as Compose's does: `Fit`, `Crop`, `FillBounds`, `FillWidth`, `FillHeight`, `Inside`, `None`.
+
+A `Painter` of your own is Compose's `object : Painter()`: its `intrinsicSize` (for `Image` and `Modifier.paint` to size by) and what it draws in a `DrawScope` of that size:
+
+```kotlin body
+val target = remember {
+    object : Painter() {
+        override val intrinsicSize: Size get() = Size(56f, 56f)
+        override fun DrawScope.onDraw() {
+            for (i in 0 until 4) drawCircle(if (i % 2 == 0) Color.Red else Color.White, size.width / 2 - i * 7)
+        }
+    }
+}
+Image(target, contentDescription = "Target")
+```
 
 ## Vectors and icons
 

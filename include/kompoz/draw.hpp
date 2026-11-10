@@ -311,48 +311,72 @@ public:
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawLine(const Brush& brush, A&&... args);
+    template <class N, class... A>
+        requires(detail::isPaintArgument<N>)
+    void drawLine(N&& paint, A&&... args);  // (the color or brush by name too)
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawRect(Color color, A&&... args);
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawRect(const Brush& brush, A&&... args);
+    template <class N, class... A>
+        requires(detail::isPaintArgument<N>)
+    void drawRect(N&& paint, A&&... args);  // (the color or brush by name too)
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawRoundRect(Color color, A&&... args);
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawRoundRect(const Brush& brush, A&&... args);
+    template <class N, class... A>
+        requires(detail::isPaintArgument<N>)
+    void drawRoundRect(N&& paint, A&&... args);  // (the color or brush by name too)
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawCircle(Color color, A&&... args);
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawCircle(const Brush& brush, A&&... args);
+    template <class N, class... A>
+        requires(detail::isPaintArgument<N>)
+    void drawCircle(N&& paint, A&&... args);  // (the color or brush by name too)
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawOval(Color color, A&&... args);
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawOval(const Brush& brush, A&&... args);
+    template <class N, class... A>
+        requires(detail::isPaintArgument<N>)
+    void drawOval(N&& paint, A&&... args);  // (the color or brush by name too)
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawArc(Color color, A&&... args);
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawArc(const Brush& brush, A&&... args);
+    template <class N, class... A>
+        requires(detail::isPaintArgument<N>)
+    void drawArc(N&& paint, A&&... args);  // (the color or brush by name too)
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawPath(const Path& path, Color color, A&&... args);
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawPath(const Path& path, const Brush& brush, A&&... args);
+    template <class N, class... A>
+        requires(detail::isPaintArgument<N>)
+    void drawPath(const Path& path, N&& paint, A&&... args);
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawPoints(const std::vector<Offset>& points, PointMode pointMode, Color color, A&&... args);
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     void drawPoints(const std::vector<Offset>& points, PointMode pointMode, const Brush& brush, A&&... args);
+    template <class N, class... A>
+        requires(detail::isPaintArgument<N>)
+    void drawPoints(const std::vector<Offset>& points, PointMode pointMode, N&& paint, A&&... args);
     void drawText(const TextLayoutResult& layout, const Brush& brush, Offset topLeft = {}, std::optional<float> alpha = {},
                   std::optional<Shadow> shadow = {}, std::optional<TextDecoration> textDecoration = {},
                   std::optional<DrawStyle> drawStyle = {}, BlendMode blendMode = BlendMode::SrcOver);

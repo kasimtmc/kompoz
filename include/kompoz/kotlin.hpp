@@ -39,6 +39,19 @@
         },                                                                   \
         ::kompoz::kt::deref(object))
 
+// object.name = value (Kotlin's property set: state.targetState = false, paint.alpha = 0.6f): the setter
+// where there is one (setName), else the field, a reference a function of the name gives, or a
+// GraphicsLayer's properties().name.
+#define KOMPOZ_KT_SET(object, name, setter, value)                                                      \
+    ::kompoz::kt::detail::set(                                                                           \
+        [](auto&& kompoz_o, auto&& kompoz_v) {                                                           \
+            if constexpr (requires { kompoz_o.setter(kompoz_v); }) kompoz_o.setter(kompoz_v);            \
+            else if constexpr (requires { kompoz_o.name = kompoz_v; }) kompoz_o.name = kompoz_v;         \
+            else if constexpr (requires { kompoz_o.name() = kompoz_v; }) kompoz_o.name() = kompoz_v;     \
+            else kompoz_o.properties().name = kompoz_v;                                                   \
+        },                                                                                               \
+        ::kompoz::kt::deref(object), (value))
+
 namespace kompoz::kt {
 
 // A pointer to an object: a raw one, or a smart one (a shared_ptr: get() gives the raw pointer; a
@@ -62,6 +75,10 @@ namespace detail {
 template <class F, class T>
 decltype(auto) get(F&& f, T&& object) {
     return f(std::forward<T>(object));
+}
+template <class F, class T, class V>
+void set(F&& f, T&& object, V&& value) {
+    f(std::forward<T>(object), std::forward<V>(value));
 }
 }  // namespace detail
 
@@ -980,6 +997,15 @@ T also(const T& c, F&& f, A&&... args) {
         return c;
     }
 }
+// Kotlin's x.apply { … }: the block with x as its receiver (kompozc names its type from the constructor,
+// Matrix().apply { scale(2f, 2f) }), x given back.
+template <class T, class F, class... A>
+T apply(T c, F&& f, A&&... args) {
+    KOMPOZ_KT_OWN(apply(f)) {
+        f(c);
+        return c;
+    }
+}
 template <class T, class F, class... A>
 std::optional<T> takeIf(const T& c, F&& f, A&&... args) {
     KOMPOZ_KT_OWN(takeIf(f)) return f(c) ? std::optional<T>(c) : std::nullopt;
@@ -1562,6 +1588,32 @@ std::vector<T> operator+(const std::vector<T>& a, const std::type_identity_t<T>&
     out.push_back(b);
     return out;
 }
+// Kotlin's list - element (the first equal one left out) and list - list (every element of the second).
+template <class T>
+std::vector<T> operator-(const std::vector<T>& a, const std::type_identity_t<T>& b) {
+    std::vector<T> out = a;
+    if (auto it = std::find(out.begin(), out.end(), b); it != out.end()) out.erase(it);
+    return out;
+}
+template <class T>
+std::vector<T> operator-(const std::vector<T>& a, const std::vector<T>& b) {
+    std::vector<T> out;
+    for (const T& x : a)
+        if (std::find(b.begin(), b.end(), x) == b.end()) out.push_back(x);
+    return out;
+}
+
+namespace kt {
+// Kotlin's `using` infix: a ContentTransform's SizeTransform ((enter togetherWith exit) using SizeTransform()), or a
+// keyframe's easing (keyframes { 0.4f at 75 using FastOutSlowInEasing }).
+inline ContentTransform infixUsing(const ContentTransform& transform, const std::optional<SizeTransform>& sizeTransform) {
+    return transform.withSizeTransform(sizeTransform);
+}
+inline Keyframe& infixUsing(Keyframe& frame, const Easing& easing) {
+    frame.easing = easing;
+    return frame;
+}
+}  // namespace kt
 }  // namespace kompoz
 
 // Unit as a key (LaunchedEffect(Unit), LifecycleResumeEffect(Unit)): one value, one hash.

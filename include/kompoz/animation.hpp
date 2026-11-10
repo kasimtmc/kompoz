@@ -91,10 +91,29 @@ template <class T>
 AnimationSpec spring(float dampingRatio = Spring::DampingRatioNoBouncy, float stiffness = Spring::StiffnessMedium) {
     return spring(dampingRatio, stiffness);
 }
+// spring(dampingRatio = …, stiffness = …), as Compose writes it.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+AnimationSpec spring(A&&... args) {
+    using P = detail::Params<detail::names::DampingRatio, detail::names::Stiffness>;
+    static_assert(P::check<A...>());
+    return spring(float(P::get<detail::names::DampingRatio>(Spring::DampingRatioNoBouncy, args...)),
+                  float(P::get<detail::names::Stiffness>(Spring::StiffnessMedium, args...)));
+}
 AnimationSpec snap(float delayMillis = 0);
 // Compose's keyframes { durationMillis = 375; 0.4f at 75 using FastOutSlowInEasing; 1.1f at 225 }:
-// keyframes(375, {{75, 0.4f, FastOutSlowInEasing}, {225, 1.1f}}).
+// keyframes(375, {{75, 0.4f, FastOutSlowInEasing}, {225, 1.1f}}), or keyframes(config) with that block.
 AnimationSpec keyframes(float durationMillis, std::vector<Keyframe> frames, float delayMillis = 0);
+// What Compose's keyframes { } block sets (KeyframesSpecConfig): the duration, a delay, and the
+// frames (`at`: a value at a time; atFraction: at a fraction of the duration). Each frame's easing
+// is the one that starts there (kotlinc's `using`: kt::infixUsing(frame, easing)).
+struct KeyframesConfig {
+    float durationMillis = 300, delayMillis = 0;
+    std::vector<Keyframe> keyframes;
+    Keyframe& at(float value, float millis) { return keyframes.emplace_back(Keyframe{millis, value}); }
+    Keyframe& atFraction(float value, float fraction) { return at(value, fraction * durationMillis); }
+};
+AnimationSpec keyframes(const std::function<void(KeyframesConfig&)>& config);
 AnimationSpec repeatable(int iterations, AnimationSpec spec, RepeatMode mode = RepeatMode::Restart);
 AnimationSpec infiniteRepeatable(AnimationSpec spec, RepeatMode mode = RepeatMode::Restart);
 

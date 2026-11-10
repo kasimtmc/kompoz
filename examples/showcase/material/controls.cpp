@@ -238,9 +238,9 @@ fun SelectionControlsSection() {
                 when (thumbKind) {
                     1 -> SliderDefaults.Thumb(s)
                     2 -> SliderDefaults.ShapeThumb(s, RoundedCornerShape(6.dp), DpSize(22.dp, 22.dp))
-                    3 -> SliderDefaults.ShapeThumb(s, OutlineShape(MaterialShapes.Diamond()), DpSize(26.dp, 26.dp))
-                    4 -> SliderDefaults.ShapeThumb(s, OutlineShape(MaterialShapes.Cookie9Sided()), DpSize(28.dp, 28.dp))
-                    5 -> SliderDefaults.ShapeThumb(s, OutlineShape(MaterialShapes.Sunny()), DpSize(28.dp, 28.dp))
+                    3 -> SliderDefaults.ShapeThumb(s, MaterialShapes.Diamond.toShape(), DpSize(26.dp, 26.dp))
+                    4 -> SliderDefaults.ShapeThumb(s, MaterialShapes.Cookie9Sided.toShape(), DpSize(28.dp, 28.dp))
+                    5 -> SliderDefaults.ShapeThumb(s, MaterialShapes.Sunny.toShape(), DpSize(28.dp, 28.dp))
                     6 -> SliderDefaults.IconThumb(s, Icons.Filled.Favorite)
                     7 -> SliderDefaults.ValueThumb(s)
                     else -> SliderDefaults.CircleThumb(s)  // the classic circle

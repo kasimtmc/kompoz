@@ -1937,6 +1937,89 @@ TEST(layout_forms_as_compose_writes_them) {
     CHECK(rule.onNodeWithText("görüldü 1").exists());
 }
 
+// Graphics forms as Compose writes them: keyframes { } with `at` and `using`, spring(dampingRatio =, stiffness =),
+// fadeIn(animationSpec =), slideInVertically(animationSpec =) { }, scaleOut(targetScale =), animateEnterExit(enter =, exit =),
+// AnimatedVisibility(visibleState =) with MutableTransitionState(…).apply { targetState = … }, the wavy and contained
+// indicators by name, an object : Painter(), Canvas(bitmap), ColorMatrix(floatArrayOf(…)), MaterialShapes.Heart, Offset.Unspecified,
+// magnifier / shadow / paint / blur by name, drawRect(brush =, blendMode =), `and`, list - element, return@Label, Matrix().apply { },
+// a top-level val's member (StripeVector.root) and a local of a function type called with its trailing lambda.
+val StripeVector = ImageVector.Builder("stripe", 24.dp, 24.dp, 24f, 24f)
+    .addPath(pathData = addPathNodes("M0,0h24v24h-24z"), fill = Brush.solid(Color.Red))
+    .build()
+
+@Composable
+fun GraphicsForms() {
+    val rows = listOf(1, 2, 3)
+    var lens by remember { mutableStateOf(Offset.Unspecified) }
+    var fed by remember { mutableStateOf(false) }
+    val pulse = keyframes {
+        durationMillis = 400
+        1.5f at 100 using LinearEasing
+        0.5f at 300
+    }
+    val bouncy = spring(dampingRatio = Spring.DampingRatioHighBouncy, stiffness = Spring.StiffnessLow)
+    val shown = remember { MutableTransitionState(false).apply { targetState = true } }
+    val half = remember {
+        object : Painter() {
+            override val intrinsicSize: Size get() = Size(20f, 10f)
+            override fun DrawScope.onDraw() {
+                drawRect(Color.Blue, size = Size(size.width / 2, size.height))
+            }
+        }
+    }
+    val bitmap = remember {
+        val b = ImageBitmap(4, 4)
+        val c = Canvas(b)
+        c.drawRect(Rect(0f, 0f, 4f, 4f), Paint(color = Color.Red))
+        b
+    }
+    val gray = ColorMatrix(floatArrayOf(0.5f, 0.5f, 0f, 0f, 0f))
+    val doubled = Matrix().apply { scale(2f, 2f) }
+    val label: @Composable (String, (Int) -> String) -> Unit = { name, format -> Text(name + format(7)) }
+    LaunchedEffect(fed) {
+        if (fed) return@LaunchedEffect
+        fed = true
+    }
+    Column {
+        Text("kare ${pulse.keyframes.size} yay ${bouncy.stiffness.toInt()} bit ${0xF0 and 0x3C} satır ${(rows - 2).size}")
+        Text("gri ${(gray.values[1] * 10).toInt()} matris ${doubled.map(Offset(1f, 1f)).x.toInt()} akış $fed")
+        label("ad") { "-$it" }
+        AnimatedVisibility(visibleState = shown, enter = fadeIn(animationSpec = tween(100)) + expandVertically(animationSpec = tween(100)),
+                           exit = fadeOut(animationSpec = tween(100))) {
+            Box(modifier = Modifier.animateEnterExit(enter = slideInVertically(animationSpec = tween(100)) { it }, exit = scaleOut(targetScale = 0.5f))
+                    .size(10.dp).testTag("giren"))
+        }
+        Text("durum ${shown.currentState}")
+        LinearWavyProgressIndicator(progress = { 0.5f }, modifier = Modifier.width(100.dp).testTag("dalga"), amplitude = { 0.5f }, stopSize = 0.dp)
+        CircularWavyProgressIndicator(trackColor = Color.Gray)
+        ContainedLoadingIndicator(progress = { 0.3f }, modifier = Modifier.testTag("kap"), containerColor = Color.Yellow)
+        Box(modifier = Modifier.size(20.dp).background(Color.Red, MaterialShapes.Heart.toShape()).testTag("kalp"))
+        Box(modifier = Modifier.size(40.dp).magnifier(sourceCenter = { lens }, zoom = 2f, size = DpSize(40.dp, 20.dp)).testTag("büyüteç"))
+        Box(modifier = Modifier.size(20.dp).shadow(elevation = 4.dp, shape = CircleShape, clip = false, ambientColor = Color.Red, spotColor = Color.Red))
+        Box(modifier = Modifier.paint(painter = half).testTag("boya"))
+        Box(modifier = Modifier.size(20.dp).blur(radius = 4.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded, blurType = BlurType.Self))
+        Canvas(modifier = Modifier.size(10.dp)) {
+            drawRect(brush = Brush.verticalGradient(listOf(Color.Red, Color.Blue)), blendMode = BlendMode.SrcOver)
+        }
+        Image(bitmap = bitmap, contentDescription = "bit", colorFilter = ColorFilter.colorMatrix(gray))
+        Image(painter = rememberVectorPainter(24.dp, 24.dp, 24f, 24f) { _, _ -> vector.RenderVectorGroup(StripeVector.root, mapOf()) },
+              contentDescription = "şerit")
+    }
+}
+
+TEST(graphics_forms_as_compose_writes_them) {
+    ComposeTestRule rule([] { GraphicsForms(); }, {400, 800});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("kare 2 yay 200 bit 48 satır 2").exists());
+    CHECK(rule.onNodeWithText("gri 5 matris 2 akış true").exists() && rule.onNodeWithText("ad-7").exists());
+    rule.advanceTimeBy(500);
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("durum true").exists() && rule.onNodeWithTag("giren").exists());
+    CHECK(std::abs(rule.onNodeWithTag("dalga").bounds().width - 100) < 0.5f && std::abs(rule.onNodeWithTag("kap").bounds().width - 48) < 0.5f);
+    CHECK(std::abs(rule.onNodeWithTag("boya").bounds().width - 20) < 0.5f && std::abs(rule.onNodeWithTag("boya").bounds().height - 10) < 0.5f);
+    CHECK(rule.onNodeWithTag("kalp").exists() && rule.onNodeWithTag("büyüteç").exists() && rule.onNodeWithContentDescription("şerit").exists());
+}
+
 TEST(navigation_as_compose_writes_it) {
     NavController nav;
     ComposeTestRule rule([&] { Navigator(nav); });

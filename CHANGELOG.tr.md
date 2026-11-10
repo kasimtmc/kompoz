@@ -1134,6 +1134,18 @@
 - **Vitrinin yerleşim ekranı Compose söz dizimiyle**: bölme iskeletleri, yerleşim bilgisi, ölçülen çubuk grafiği, konumlar,
   yapışan satır, carousel'ler, yatay ızgaralar, pager'lar, z-index, FlexBox, Grid ve özel yerleşimler (Layout, SubcomposeLayout,
   içsel boyutlar, LookaheadScope, approachLayout) Kotlin'de `@Composable fun`lar.
+- **Compose'un yazdığı gibi grafik ve animasyon**: `keyframes { durationMillis = …; 1.35f at 110 using LinearEasing }`
+  (`KeyframesConfig`), `spring(dampingRatio = …, stiffness = …)`, adlarıyla giriş ve çıkış geçişleri (`fadeIn(animationSpec =
+  …)`, `slideInVertically(animationSpec = …) { it }`, `scaleOut(targetScale = …)`, …), `animateEnterExit(enter = …, exit = …)`,
+  `AnimatedVisibility(visibleState = …)`; Composable olarak `LinearWavyProgressIndicator`, `CircularWavyProgressIndicator` ve
+  `ContainedLoadingIndicator` (`progress = { }`, seçeneklerin alanları adlarıyla; yerine göre verilen seçenek struct'ı adıyla
+  yazılır: `WavyProgressIndicatorOptions{…}`); adlarıyla `Modifier.shadow`, `paint`, `blur` ve `magnifier`; boyası da adıyla
+  `drawRect(brush = …, blendMode = …)`; `Offset::Unspecified`; `ColorMatrix(std::vector<float>)`; `ShapeOutline::toShape()`; bir
+  `Morph`'un kopyaları ana hatlarını paylaşır, `toShape` const; Kotlin'in `list - element`'i ve `list - list`'i. kompozc: `object :
+  Painter() { override val intrinsicSize …; override fun DrawScope.onDraw() { } }` (`Painter::custom`), `Canvas(imageBitmap)`,
+  değer olarak `MaterialShapes.Heart`, `x and y` (`or`, `xor`, `shl`, `shr`), `return@Label`, `X().apply { }`, ayarlayıcısıyla
+  özelliğe atama (`state.targetState = false`, `paint.alpha = 0.6f`), üst düzey bir val'in üyesi (`BallVector.root`) ve sondaki
+  lambdasıyla çağrılan işlev türünde bir yerel.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

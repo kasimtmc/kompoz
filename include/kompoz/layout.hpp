@@ -2033,6 +2033,9 @@ public:
                     Color spotColor = DefaultShadowColor) const;
     // The same with RoundedCornerShape(cornerRadius).
     Modifier shadow(float elevation, float cornerRadius) const { return shadow(elevation, RoundedCornerShape(cornerRadius)); }
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier shadow(A&&... args) const;
     // Compose 1.9's shadows of a shape, drawn before what comes after: under it (dropShadow:
     // spread out, moved, blurred) or inside it (innerShadow: as if its edge cast it in). The
     // shape's rounded rect (outline shapes: their bounds).
@@ -2126,6 +2129,9 @@ public:
     // painter (scaled to fit what it may be) unless its size is fixed.
     Modifier paint(const Painter& painter, bool sizeToIntrinsics = true, Alignment alignment = Alignment::Center,
                    ContentScale contentScale = ContentScale::Inside, float alpha = 1, std::optional<ColorFilter> colorFilter = {}) const;
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier paint(A&&... args) const;
     // Scales, rotates, moves or fades the content as drawn (through an offscreen layer).
     Modifier graphicsLayer(const GraphicsLayerScope& layer) const;
     // The content blurred by `radius` dp across and down (Compose's Modifier.blur): a graphicsLayer
@@ -2145,6 +2151,9 @@ public:
                   float alpha = 1, BlurType type = BlurType::Family) const;
     // The same, set by `block` while drawing: animated values read there never recompose.
     Modifier blur(std::function<void(BlurScope&)> block) const;
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier blur(A&&... args) const;
     // Evaluated while drawing: animated values read here never recompose.
     Modifier graphicsLayer(std::function<void(GraphicsLayerScope&)> block) const;
     // `enabled` false: scrolled only in code; `reverseScrolling`: it starts at the end (the bottom,
@@ -2432,6 +2441,9 @@ public:
     // A magnifier over everything showing the content around sourceCenter (read as it is drawn,
     // in this node; NaN hides it) bigger (Compose's Modifier.magnifier).
     Modifier magnifier(std::function<Offset()> sourceCenter, MagnifierOptions options = {}) const;
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier magnifier(A&&... args) const;
     Modifier focusProperties(FocusProperties properties) const;
     // focusProperties { canFocus = false; next = other }: Compose's block on the properties.
     template <class F>

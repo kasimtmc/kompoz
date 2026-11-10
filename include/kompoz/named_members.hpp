@@ -102,6 +102,65 @@ Modifier Modifier::offset(A&&... args) const {
     return offset(P::get<n::X>(0.f, args...), P::get<n::Y>(0.f, args...));
 }
 
+// shadow(elevation, shape, clip, ambientColor, spotColor), as Compose's.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::shadow(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::Elevation, n::Shape, n::Clip, n::AmbientColor, n::SpotColor>;
+    static_assert(P::check<A...>());
+    return shadow(float(P::arg<n::Elevation>(args...)), P::get<n::Shape>(Shape(RectangleShape), args...),
+                  P::get<n::Clip>(std::optional<bool>(), args...), P::get<n::AmbientColor>(DefaultShadowColor, args...),
+                  P::get<n::SpotColor>(DefaultShadowColor, args...));
+}
+
+// paint(painter, sizeToIntrinsics, alignment, contentScale, alpha, colorFilter), as Compose's.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::paint(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::Painter, n::SizeToIntrinsics, n::Alignment, n::ContentScale, n::Alpha, n::ColorFilter>;
+    static_assert(P::check<A...>());
+    return paint(P::arg<n::Painter>(args...), P::get<n::SizeToIntrinsics>(true, args...), P::get<n::Alignment>(Alignment::Center, args...),
+                 P::get<n::ContentScale>(ContentScale::Inside, args...), float(P::get<n::Alpha>(1.f, args...)),
+                 P::get<n::ColorFilter>(std::optional<ColorFilter>(), args...));
+}
+
+// blur(radius, edgeTreatment), blur(radiusX, radiusY, edgeTreatment) as Compose's, and blur(blurRadiusSpec, edgeTreatment, alpha), each
+// with blurType (Kompoz's).
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::blur(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::Radius, n::RadiusX, n::RadiusY, n::BlurRadiusSpec, n::EdgeTreatment, n::Alpha, n::BlurType>;
+    static_assert(P::check<A...>());
+    const BlurredEdgeTreatment& edge = P::get<n::EdgeTreatment>(BlurredEdgeTreatment::Rectangle, args...);
+    BlurType type = P::get<n::BlurType>(BlurType::Family, args...);
+    if constexpr (P::given<n::BlurRadiusSpec, A...>())
+        return blur(P::arg<n::BlurRadiusSpec>(args...), edge, float(P::get<n::Alpha>(1.f, args...)), type);
+    else if constexpr (P::given<n::Radius, A...>())
+        return blur(float(P::arg<n::Radius>(args...)), edge, type);
+    else
+        return blur(float(P::arg<n::RadiusX>(args...)), float(P::arg<n::RadiusY>(args...)), edge, type);
+}
+
+// magnifier(sourceCenter = { … }, magnifierCenter = { … }, zoom, size, cornerRadius, elevation), as Compose's (the
+// size a DpSize, as every size here is).
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::magnifier(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::SourceCenter, n::MagnifierCenter, n::Zoom, n::Size, n::CornerRadius, n::Elevation>;
+    static_assert(P::check<A...>());
+    MagnifierOptions options;
+    P::set<n::MagnifierCenter>(options.magnifierCenter, args...);
+    P::set<n::Zoom>(options.zoom, args...);
+    P::set<n::Size>(options.size, args...);
+    P::set<n::CornerRadius>(options.cornerRadius, args...);
+    P::set<n::Elevation>(options.elevation, args...);
+    return magnifier(P::arg<n::SourceCenter>(args...), options);
+}
+
 // graphicsLayer(scaleX, scaleY, alpha, translationX, translationY, shadowElevation, rotationX, rotationY,
 // rotationZ, cameraDistance, transformOrigin, shape, clip, renderEffect, ambientShadowColor,
 // spotShadowColor, compositingStrategy, blendMode, colorFilter), as Compose's: a layer of those values,
@@ -381,6 +440,12 @@ void drawPointsBy(DrawScope& d, const std::vector<Offset>& points, PointMode poi
         requires(detail::anyNamedArgument<A...>)                                                   \
     void DrawScope::method(__VA_ARGS__ Color color, A&&... args) {                                 \
         detail::helper(*this, KOMPOZ_DRAW_FIRST color, std::forward<A>(args)...);                 \
+    }                                                                                              \
+    /* all by name, the color or brush too: drawRect(brush = …, blendMode = …) */                  \
+    template <class N, class... A>                                                                 \
+        requires(detail::isPaintArgument<N>)                                                       \
+    void DrawScope::method(__VA_ARGS__ N&& paint, A&&... args) {                                   \
+        detail::helper(*this, KOMPOZ_DRAW_FIRST paint.value, std::forward<A>(args)...);           \
     }                                                                                              \
     template <class... A>                                                                          \
         requires(detail::anyNamedArgument<A...>)                                                   \

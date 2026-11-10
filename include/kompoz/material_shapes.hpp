@@ -82,19 +82,19 @@ const std::array<Named, 35>& all();
 // angle by angle, blended. Both should be star-shaped about the middle (Material's are). The
 // shapes along the way come in 64 steps, each its own outline (made when first asked for), so
 // a shape animating through them changes as a Shape does. Keep the morph alive while its shapes
-// are in use (remember it).
+// are in use (remember it); its copies share the outlines it made.
 class Morph {
 public:
     Morph(const ShapeOutline& start, const ShapeOutline& end);
-    const ShapeOutline& outlineAt(float progress);  // 0: the start, 1: the end
-    Shape toShape(float progress) { return OutlineShape(outlineAt(progress)); }
+    const ShapeOutline& outlineAt(float progress) const;  // 0: the start, 1: the end
+    Shape toShape(float progress) const { return OutlineShape(outlineAt(progress)); }
 
     static constexpr int kSteps = 64;
     static constexpr int kSamples = 180;  // directions around the middle
 
 private:
     std::array<float, kSamples> from_{}, to_{};
-    std::array<std::unique_ptr<ShapeOutline>, kSteps + 1> steps_;
+    std::shared_ptr<std::array<std::unique_ptr<ShapeOutline>, kSteps + 1>> steps_ = std::make_shared<std::array<std::unique_ptr<ShapeOutline>, kSteps + 1>>();
 };
 
 // How far `outline` reaches from the middle of the unit square in each of `n` directions (from 3

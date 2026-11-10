@@ -45,7 +45,7 @@ Bir renk Compose'unki gibi canlanır (`Color.VectorConverter`): Oklab'da, açık
 |---|---|
 | `spring(dampingRatio, stiffness)` | Fiziğe dayalı. Varsayılandır; hedef yolun ortasında değişirse hızını korur. `Spring.DampingRatioMediumBouncy`, `Spring.StiffnessLow` ve diğer sabitler Compose'unkilerdir. |
 | `tween(durationMillis, delayMillis, easing)` | Bir yumuşatma eğrisi boyunca sabit bir süre: `FastOutSlowInEasing` (varsayılan), `LinearOutSlowInEasing`, `FastOutLinearInEasing`, `LinearEasing`. |
-| `keyframes(durationMillis, listOf(Keyframe(atMillis, value), …))` | Belirli zamanlarda belirli değerler, her biri oradan başlayan parçanın yumuşatmasıyla (Compose'un `keyframes { }` kurucusu, bir liste olarak). |
+| `keyframes { durationMillis = 400; 1.3f at 100 using LinearEasing; 0.9f at 250 }` | Belirli zamanlarda belirli değerler, her biri oradan başlayan parçanın yumuşatmasıyla (`using`), Compose'un kurucusu gibi. |
 | `repeatable(iterations, spec, mode)`, `infiniteRepeatable(spec, mode)` | Baştan başlayarak ya da tersine dönerek (`RepeatMode.Reverse`) tekrarlanan bir tanım. |
 | `snap(delayMillis)` | Doğrudan hedefe atlar. |
 
@@ -69,6 +69,22 @@ fun Details() {
 ```
 
 Giriş geçişleri `fadeIn`, `slideInHorizontally`, `slideInVertically`, `scaleIn`, `expandIn`, `expandHorizontally` ve `expandVertically`'dir; çıkış geçişleri bunların karşılıkları olan `fadeOut`, `slideOut…`, `scaleOut` ve `shrink…`'tir. Bunları `+` ile birleştirin; kaymalar Compose'un tam boyut lambda'sını alır (`slideInVertically { it / 2 }`). `EnterTransition.None` ve `ExitTransition.None` hiçbir şeyi canlandırmaz; çocuklar kendilerini içeriğin `AnimatedVisibilityScope`'undan `animateEnterExit` ile canlandırdığında kullanılır.
+
+Her geçiş belirtimini adıyla da alır (`fadeIn(animationSpec = tween(300))`, `slideInVertically(animationSpec = tween(450)) { it }`, `scaleOut(targetScale = 0.5f)`). İlk göründüğünde içeri gelmesi gereken bir satıra, Compose'un `visibleState`'i gibi, gizli yapılıp hedefi görünür olan bir `MutableTransitionState` verilir; `currentState` ve `isIdle` nerede olduğunu söyler:
+
+```kotlin
+@Composable
+fun Arriving() {
+    val shown = remember { MutableTransitionState(false).apply { targetState = true } }
+    AnimatedVisibility(visibleState = shown, enter = fadeIn(animationSpec = tween(500)) + expandVertically()) {
+        Box(modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            Box(modifier = Modifier.animateEnterExit(enter = slideInVertically { it }, exit = fadeOut()).matchParentSize())
+            IconButton(onClick = { shown.targetState = false }) { Icon(Icons.Filled.Close, contentDescription = "Kaldır") }
+        }
+    }
+    if (shown.isIdle && !shown.currentState) Text("Kaldırıldı")
+}
+```
 
 Compose'taki gibi bir geçiş, içeriği yerleştirilip çizilirken okunur: çevresindeki composable geçiş başladığında ve bittiğinde yeniden oluşturulur, aradaki karelerde değil.
 

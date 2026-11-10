@@ -8237,6 +8237,59 @@ TEST(layout_forms_take_compose_named_arguments) {
     CHECK(near(rule.onNodeWithTag("nokta").bounds().x, 76) && seen == 1 && approached > 0);
 }
 
+TEST(graphics_forms_take_compose_named_arguments) {
+    // keyframes { } (KeyframesConfig, kt::infixUsing), spring(arg::dampingRatio =, arg::stiffness =), fadeIn(arg::animationSpec =),
+    // slideOutVertically(arg::animationSpec =, block), Offset::Unspecified, ColorMatrix(vector), list - element and list - list,
+    // ShapeOutline::toShape, a Morph's copies sharing its outlines; the wavy indicators and ContainedLoadingIndicator by name and by
+    // place, AnimatedVisibility(arg::visibleState =), animateEnterExit by name, Modifier shadow / paint / blur / magnifier by name.
+    AnimationSpec frames = keyframes([](KeyframesConfig& k) {
+        k.durationMillis = 400;
+        kt::infixUsing(k.at(1.5f, 100), LinearEasing);
+        k.atFraction(0.5f, 0.75f);
+    });
+    CHECK(frames.durationMillis == 400 && frames.keyframes.size() == 2 && frames.keyframes[1].atMillis == 300);
+    AnimationSpec bouncy = spring(arg::dampingRatio = 0.2f, arg::stiffness = 200.f);
+    CHECK(bouncy.dampingRatio == 0.2f && bouncy.stiffness == 200);
+    CHECK(fadeIn(arg::animationSpec = tween(100)).parts.spec == tween(100) && fadeIn(arg::animationSpec = tween(100)).parts.fade);
+    CHECK(fadeOut(arg::targetAlpha = 0.5f).parts.hiddenAlpha == 0.5f);
+    (void)slideOutVertically(arg::animationSpec = tween(100), [](float h) { return h; });
+    CHECK(Offset::Unspecified.isUnspecified() && Offset::Zero.isSpecified());
+    CHECK(ColorMatrix(std::vector<float>{2, 0, 0}).values[0] == 2 && ColorMatrix(std::vector<float>{2}).values[6] == 1);
+    std::vector<int> rows{1, 2, 3, 2};
+    CHECK((rows - 2) == std::vector<int>({1, 3, 2}) && (rows - std::vector<int>{2, 3}) == std::vector<int>({1}));
+    CHECK(MaterialShapes::Heart().toShape() == OutlineShape(MaterialShapes::Heart()));
+    Morph morph(MaterialShapes::Heart(), MaterialShapes::Pill());
+    Morph copy = morph;
+    CHECK(&copy.outlineAt(0.5f) == &morph.outlineAt(0.5f));
+    MutableTransitionState<bool> shown(false);
+    shown.setTargetState(true);
+    ComposeTestRule rule([&] {
+        Column([&] {
+            LinearWavyProgressIndicator(arg::progress = [] { return 0.5f; }, arg::modifier = Modifier().width(100).testTag("dalga"), arg::stopSize = 0.f);
+            LinearWavyProgressIndicator(0.5f, Modifier().width(80).testTag("yerinde"), WavyProgressIndicatorOptions{.strokeWidth = 2});
+            CircularWavyProgressIndicator(arg::trackColor = colors::Gray);
+            ContainedLoadingIndicator(arg::progress = 0.3f, arg::containerColor = colors::Yellow, arg::modifier = Modifier().testTag("kap"));
+            ContainedLoadingIndicator(Modifier().testTag("dönen"));
+            AnimatedVisibility(arg::visibleState = shown, arg::enter = fadeIn(arg::animationSpec = tween(100)), [](const AnimatedVisibilityScope& s) {
+                Box(s.animateEnterExit(arg::exit = scaleOut(arg::targetScale = 0.5f)).size(10).testTag("giren"));
+            });
+            Box(Modifier().size(20).shadow(arg::elevation = 4.f, arg::shape = CircleShape, arg::clip = false));
+            Box(Modifier().size(30, 10).paint(arg::painter = ColorPainter(colors::Red), arg::sizeToIntrinsics = false).testTag("boya"));  // (as Compose's: a paint not sized to its painter fills what it is given)
+            Box(Modifier().size(20).blur(arg::radius = 4.f, arg::blurType = BlurType::Self));
+            Box(Modifier().size(20).blur(arg::radiusX = 4.f, arg::radiusY = 2.f, arg::edgeTreatment = BlurredEdgeTreatment::Unbounded));
+            Box(Modifier().size(40).magnifier(arg::sourceCenter = [] { return Offset::Unspecified; }, arg::zoom = 2.f, arg::size = DpSize(40, 20)).testTag("büyüteç"));
+        });
+    }, {400, 800});
+    rule.waitForIdle();
+    rule.advanceTimeBy(1000);  // (the child's own enter, the default spring, ends after the content's 100 ms fade)
+    rule.waitForIdle();
+    CHECK(near(rule.onNodeWithTag("dalga").bounds().width, 100) && near(rule.onNodeWithTag("yerinde").bounds().width, 80));
+    CHECK(near(rule.onNodeWithTag("kap").bounds().width, 48) && near(rule.onNodeWithTag("dönen").bounds().width, 48));
+    CHECK(shown.currentState() && rule.onNodeWithTag("giren").exists());
+    CHECK(near(rule.onNodeWithTag("boya").bounds().width, 30));
+    CHECK(rule.onNodeWithTag("büyüteç").exists());
+}
+
 TEST(navigation_takes_compose_named_arguments) {
     // NavHost(navController =, startDestination =, enterTransition = { }) { … } with the graph builder's
     // composable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }
@@ -18075,8 +18128,8 @@ TEST(wavy_progress_waves_in_the_middle_and_keeps_a_gap_to_its_track) {
 
     ComposeTestRule custom([&] {
         Column([=] {
-            LinearWavyProgressIndicator(1.f, Modifier().width(200), {.amplitude = [](float) { return 0.5f; }, .wavelength = 20, .waveSpeed = 0});
-            CircularWavyProgressIndicator(1.f, Modifier(), {.amplitude = [](float) { return 1.f; }, .waveSpeed = 0});
+            LinearWavyProgressIndicator(1.f, Modifier().width(200), WavyProgressIndicatorOptions{.amplitude = [](float) { return 0.5f; }, .wavelength = 20, .waveSpeed = 0});
+            CircularWavyProgressIndicator(1.f, Modifier(), WavyProgressIndicatorOptions{.amplitude = [](float) { return 1.f; }, .waveSpeed = 0});
         });
     });
     testing::RecordingCanvas still;
@@ -18093,7 +18146,7 @@ TEST(wavy_progress_waves_in_the_middle_and_keeps_a_gap_to_its_track) {
 TEST(wavy_amplitude_rises_and_falls_on_their_own_curves) {
     auto big = mutableStateOf(false);
     ComposeTestRule rule([&] {
-        LinearWavyProgressIndicator(0.5f, Modifier().width(200), {.amplitude = [big](float) { return big.get() ? 1.f : 0.f; }});
+        LinearWavyProgressIndicator(0.5f, Modifier().width(200), WavyProgressIndicatorOptions{.amplitude = [big](float) { return big.get() ? 1.f : 0.f; }});
     });
     auto wave = [&] {  // the wave's height: twice its amplitude (3 dp at most)
         testing::RecordingCanvas canvas;
