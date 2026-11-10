@@ -1133,6 +1133,11 @@
   extension's `clangd.path`) and Kate (the LSP client's `c` server) are set up in the guide's Tools page. Without a clangd it
   gives kompozc's own diagnostics. kompozc's translation is now a library of its own (`translate.cpp`), and a missing property
   read in Kotlin is reported by its name ("no property, member or field named x").
+- **A CLion plugin for files with Compose code** (`editors/clion`): it starts `kompozc --lsp` for the C++ files with
+  Kotlin in them and turns CLion's own highlighting off there (its C++ engine would mark the Kotlin); the server's
+  diagnostics take its place. kompozc is found in Settings, Tools, Kompoz, or in `KOMPOZC`, or built in the project, or on
+  `PATH`. Built against a CLion of yours (`./gradlew buildPlugin -PclionPath=…`) and installed from disk; CI builds it and
+  checks it with JetBrains' Plugin Verifier against CLion 2026.3.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

@@ -1,0 +1,21 @@
+<idea-plugin>
+    <id>dev.kompoz.compose</id>
+    <name>Kompoz</name>
+    <vendor url="https://github.com/kasimtmc/kompoz">Kompoz</vendor>
+    <description><![CDATA[
+        For C++ sources with <code>@Composable</code> functions written in Compose's syntax (Kompoz's
+        <code>kompoz_compose</code>): kompozc's language server, <code>kompozc --lsp</code>, in front of clangd.
+        In such a file CLion's own C++ highlighting is turned off (it would read the Kotlin as broken C++);
+        kompozc's errors, and the C++ compiler's on the translation, show on their own lines, and clangd's
+        answers in the C++ around the Kotlin.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.lsp</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <platform.lsp.integrationProvider implementation="dev.kompoz.clion.KompozLspIntegrationProvider"/>
+        <applicationConfigurable parentId="tools" instance="dev.kompoz.clion.KompozConfigurable" id="dev.kompoz.compose.settings"
+                                 displayName="Kompoz"/>
+    </extensions>
+</idea-plugin>

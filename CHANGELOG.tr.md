@@ -1170,6 +1170,11 @@
   (clangd eklentisinin `clangd.path`'i) ve Kate (LSP istemcisinin `c` sunucusu) rehberin Araçlar sayfasında kurulur. clangd
   olmadan kompozc'nin kendi tanılarını verir. kompozc'nin çevirisi artık kendi kitaplığında (`translate.cpp`), Kotlin'de
   olmayan bir özelliğin okunması adıyla bildirilir ("no property, member or field named x").
+- **Compose kodu içeren dosyalar için bir CLion eklentisi** (`editors/clion`): içinde Kotlin olan C++ dosyaları için
+  `kompozc --lsp`'yi başlatır ve onlarda CLion'un kendi vurgulamasını kapatır (C++ motoru Kotlin'i hatalı işaretlerdi);
+  yerini sunucunun tanıları alır. kompozc Ayarlar, Araçlar, Kompoz'da, ya da `KOMPOZC`'de, ya da projede derlenmiş, ya da
+  `PATH`'te bulunur. Kendi CLion'unuza karşı derlenir (`./gradlew buildPlugin -PclionPath=…`) ve diskten kurulur; CI onu
+  derler ve JetBrains'in Plugin Verifier'ıyla CLion 2026.3'e karşı denetler.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine
