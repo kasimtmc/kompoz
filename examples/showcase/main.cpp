@@ -3,269 +3,299 @@
 
 #include "showcase.hpp"
 
-#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
-
-void ShowcaseApp() {
-    auto dark = remember([] { return mutableStateOf(isSystemInDarkTheme()); });
+@Composable
+fun ShowcaseApp() {
+    val system = isSystemInDarkTheme()
+    var dark by remember { mutableStateOf(system) }
     // The system's, as it changes, until the switch is used: then the user's.
-    auto darkChosen = remember([] { return mutableStateOf(false); });
-    LaunchedEffect(isSystemInDarkTheme(), [dark, darkChosen, system = isSystemInDarkTheme()]() -> Task {
-        if (!darkChosen.peek()) dark.set(system);
-        co_return;
-    });
-    auto colorSource = rememberSaveable([] { return mutableStateOf(ColorSource::System); });  // Material You where the system has it
-    auto showRecompositions = remember([] { return mutableStateOf(false); });
+    var darkChosen by remember { mutableStateOf(false) }
+    LaunchedEffect(system) {
+        if (!darkChosen) dark = system
+    }
+    val colorSource = rememberSaveable { mutableStateOf(ColorSource.System) }  // Material You where the system has it
+    var showRecompositions by remember { mutableStateOf(false) }
     // The screens are routes of a NavHost; the tabs keep their own back stacks (and scroll
     // positions), saved while another tab is shown, as Compose's bottom navigation does.
-    auto nav = rememberNavController();
-    auto entry = nav.currentBackStackEntryAsState();
-    std::string route = entry ? entry->route() : "home";
-    auto in = [&](std::string_view graph) {  // the screen is in this graph (or is this destination)
-        auto routes = entry ? entry->hierarchy() : std::vector<std::string>{};
-        return std::find(routes.begin(), routes.end(), graph) != routes.end();
-    };
-    int tab = in(routePattern<routes::ListGraph>())    ? 1
-              : in(routePattern<routes::Components>()) ? 2
-              : in(routePattern<routes::Material>())   ? 3
-                                                       : 0;
-    auto goTab = [nav](int i) {
-        NavOptions tabs{.popUpTo = routePattern<routes::Home>(), .saveState = true, .launchSingleTop = true, .restoreState = true};
-        if (i == 0) nav.navigate(routes::Home{}, tabs);
-        else if (i == 1) nav.navigate(routes::ListGraph{}, tabs);
-        else if (i == 2) nav.navigate(routes::Components{}, tabs);
-        else nav.navigate(routes::Material{}, tabs);
-    };
-    auto listState = rememberLazyListState();
-    auto snackbar = rememberSnackbarHostState();
-    auto overflow = remember([] { return mutableStateOf(false); });
+    val nav = rememberNavController()
+    val entry by nav.currentBackStackEntryAsState()
+    val destination = entry?.destination
+    val route = destination?.route ?: "home"
+    val tab = when {
+        destination?.hierarchy?.any { it.hasRoute<routes.ListGraph>() } == true -> 1
+        destination?.hierarchy?.any { it.hasRoute<routes.Components>() } == true -> 2
+        destination?.hierarchy?.any { it.hasRoute<routes.Material>() } == true -> 3
+        else -> 0
+    }
+    val tabs = navOptions {
+        popUpTo<routes.Home> { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+    val goTab: (Int) -> Unit = { i ->
+        when (i) {
+            0 -> nav.navigate(routes.Home(), tabs)
+            1 -> nav.navigate(routes.ListGraph(), tabs)
+            2 -> nav.navigate(routes.Components(), tabs)
+            else -> nav.navigate(routes.Material(), tabs)
+        }
+    }
+    val listState = rememberLazyListState()
+    val snackbar = remember { SnackbarHostState() }
+    var overflow by remember { mutableStateOf(false) }
     // The whole app laid out right to left: the system language's direction at first, then the menu's.
-    auto rightToLeft = remember([] { return mutableStateOf(LocalLayoutDirection.current() == LayoutDirection::Rtl); });
-    auto about = remember([] { return mutableStateOf(false); });
-    auto drawer = rememberDrawerState();
-    auto scope = rememberCoroutineScope();
+    val systemDirection = LocalLayoutDirection.current
+    var rightToLeft by remember { mutableStateOf(systemDirection == LayoutDirection.Rtl) }
+    var about by remember { mutableStateOf(false) }
+    val drawer = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
     // The app bar scrolls away with the content and comes back when it scrolls the other way.
-    auto barScroll = TopAppBarDefaults::enterAlwaysScrollBehavior();
+    val barScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
     // A new screen starts with the bar shown; the screen it was on keeps it as it was (after
     // Android ended the app too: the bar's state and the screen seen last are saved).
-    auto& seen = rememberSaveable([&] { return mutableStateOf(route); });
-    LaunchedEffect(route, [barScroll, seen, route]() -> Task {
-        if (seen.peek() != route) {
-            barScroll.state.setHeightOffset(0);
-            barScroll.state.setContentOffset(0);
-            seen.set(route);
+    var seen by rememberSaveable { mutableStateOf(route) }
+    LaunchedEffect(route) {
+        if (seen != route) {
+            barScroll.state.heightOffset = 0f
+            barScroll.state.contentOffset = 0f
+            seen = route
         }
-        co_return;
-    });
-    struct Destination {
-        const char* label;
-        const ImageVector* icon;
-    };
-    const Destination destinations[] = {{"Ana sayfa", &Icons::Filled::Home},
-                                        {"Liste", &Icons::Filled::List},
-                                        {"Bileşenler", &Icons::Filled::Star},
-                                        {"Material", &Icons::Filled::CheckCircle}};
-    auto closeDrawer = [drawer, scope] { scope.launch([drawer]() -> Task { co_await drawer.close(); }); };
+    }
+    val destinations = listOf("Ana sayfa" to Icons.Filled.Home, "Liste" to Icons.Filled.List,
+                              "Bileşenler" to Icons.Filled.Star, "Material" to Icons.Filled.CheckCircle)
+    val closeDrawer: () -> Unit = { scope.launch { drawer.close() } }
+    var notified by remember { mutableStateOf(0) }
 
-    // The content lambdas below capture by value, as event handlers do: the blocks they are
-    // called in (the drawer's, the Scaffold's) keep them and run again on their own.
-    auto drawerContent = [=] {
-        ModalDrawerSheet(Modifier()) {
-            Text("Kompoz", Modifier().padding(16, 8, 16, 16), style = typography().titleLarge);
-            for (int i = 0; i < 4; ++i) {
-                const Destination& dest = destinations[i];
-                NavigationDrawerItem([&] { Text(dest.label); }, tab == i,
-                                     [goTab, i, closeDrawer] {
-                                         goTab(i);
-                                         closeDrawer();
-                                     },
-                                     icon = [&] { Icon(*dest.icon, dest.label); },
-                                     badge = i == 3 ? Content([] { Badge(Modifier(), [] { Text("Yeni"); }); }) : Content());
+    val drawerContent: @Composable () -> Unit = {
+        ModalDrawerSheet {
+            Text("Kompoz", modifier = Modifier.padding(16.dp, 8.dp, 16.dp, 16.dp), style = MaterialTheme.typography.titleLarge)
+            for (i in 0 until 4) {
+                val (label, icon) = destinations[i]
+                NavigationDrawerItem(
+                    label = { Text(label) },
+                    selected = tab == i,
+                    onClick = {
+                        goTab(i)
+                        closeDrawer()
+                    },
+                    icon = { Icon(icon, contentDescription = label) },
+                    badge = if (i == 3) { { Badge { Text("Yeni") } } } else null)
             }
-            HorizontalDivider(Modifier().padding(16, 8));
-            NavigationDrawerItem([] { Text("Hakkında"); }, false,
-                                 [about, closeDrawer] {
-                                     about.set(true);
-                                     closeDrawer();
-                                 },
-                                 icon = [] { Icon(Icons::Filled::Info, "Hakkında"); });
-        };
-    };
+            HorizontalDivider(modifier = Modifier.padding(16.dp, 8.dp))
+            NavigationDrawerItem(
+                label = { Text("Hakkında") },
+                selected = false,
+                onClick = {
+                    about = true
+                    closeDrawer()
+                },
+                icon = { Icon(Icons.Filled.Info, contentDescription = "Hakkında") })
+        }
+    }
 
-    auto topBar = [=] {
+    val topBar: @Composable () -> Unit = {
         TopAppBar(
-            title = [] { Text("Kompoz"); },
-            navigationIcon = [drawer, scope] {
-                    IconButton([drawer, scope] { scope.launch([drawer]() -> Task { co_await drawer.open(); }); }) { Icon(Icons::Filled::Menu, "Menü"); };
-                },
-            actions = [&] {
-                    IconButton([dark, darkChosen] { dark.set(!dark.get()), darkChosen.set(true); }) { Icon(Icons::Filled::DarkMode, "Koyu tema"); };
-                    IconButton([showRecompositions, snackbar] {
-                            bool on = !showRecompositions.get();
-                            showRecompositions.set(on);
-                            snackbar.showSnackbar(on ? "Recomposition vurgusu açık" : "Recomposition vurgusu kapalı");
-                        }) {
-                            Icon(Icons::Filled::Visibility, "Recomposition'ları göster",
-                                 tint = showRecompositions.get() ? std::optional(colorScheme().primary) : std::nullopt);
-                        };
-                    Box() {  // the menu opens below its anchor, this Box
-                        IconButton([overflow] { overflow.set(true); }) { Icon(Icons::Filled::MoreVert, "Diğer seçenekler"); };
-                        DropdownMenu(overflow.get(), [overflow] { overflow.set(false); }) {
-                            DropdownMenuItem([] { Text("Hakkında"); },
-                                             [overflow, about] {
-                                                 overflow.set(false);
-                                                 about.set(true);
-                                             },
-                                             leadingIcon = [] { Icon(Icons::Filled::Info, "Hakkında"); });
-                            DropdownMenuItem([] { Text("Material bileşenleri"); },
-                                             [overflow, goTab] {
-                                                 overflow.set(false);
-                                                 goTab(3);
-                                             },
-                                             leadingIcon = [] { Icon(Icons::Filled::CheckCircle, "Material"); });
-                            // LocalLayoutDirection: rows from the right, Start is the right, horizontal lists start there.
-                            DropdownMenuItem([rightToLeft] { Text(rightToLeft.get() ? "Soldan sağa (LTR)" : "Sağdan sola (RTL)"); },
-                                             [overflow, rightToLeft] {
-                                                 overflow.set(false);
-                                                 rightToLeft.set(!rightToLeft.get());
-                                             },
-                                             leadingIcon = [] { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Yön"); });
-                        };
-                    };
-                },
-            scrollBehavior = barScroll);
-    };
+            title = { Text("Kompoz") },
+            navigationIcon = {
+                IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Filled.Menu, contentDescription = "Menü") }
+            },
+            actions = {
+                IconButton(onClick = {
+                    dark = !dark
+                    darkChosen = true
+                }) { Icon(Icons.Filled.DarkMode, contentDescription = "Koyu tema") }
+                IconButton(onClick = {
+                    showRecompositions = !showRecompositions
+                    snackbar.showSnackbar(if (showRecompositions) "Recomposition vurgusu açık" else "Recomposition vurgusu kapalı")
+                }) {
+                    Icon(Icons.Filled.Visibility, contentDescription = "Recomposition'ları göster",
+                         tint = if (showRecompositions) MaterialTheme.colorScheme.primary else LocalContentColor.current)
+                }
+                Box {  // the menu opens below its anchor, this Box
+                    IconButton(onClick = { overflow = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Diğer seçenekler") }
+                    DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Hakkında") },
+                            onClick = {
+                                overflow = false
+                                about = true
+                            },
+                            leadingIcon = { Icon(Icons.Filled.Info, contentDescription = "Hakkında") })
+                        DropdownMenuItem(
+                            text = { Text("Material bileşenleri") },
+                            onClick = {
+                                overflow = false
+                                goTab(3)
+                            },
+                            leadingIcon = { Icon(Icons.Filled.CheckCircle, contentDescription = "Material") })
+                        // LocalLayoutDirection: rows from the right, Start is the right, horizontal lists start there.
+                        DropdownMenuItem(
+                            text = { Text(if (rightToLeft) "Soldan sağa (LTR)" else "Sağdan sola (RTL)") },
+                            onClick = {
+                                overflow = false
+                                rightToLeft = !rightToLeft
+                            },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Yön") })
+                    }
+                }
+            },
+            scrollBehavior = barScroll)
+    }
 
-    auto fab = [=] {
-        if (entry && entry->hasRoute<routes::Home>())
+    val fab: @Composable () -> Unit = {
+        if (destination?.hasRoute<routes.Home>() == true) {
             ExtendedFloatingActionButton(
-                [snackbar, scope, notified = remember([] { return std::make_shared<int>(0); })] {
+                onClick = {
                     // As Compose apps do: wait for how it went (with an action it stays until answered or closed).
                     // Every other one has a long action, which goes on a line of its own (see snackbarHost).
-                    bool longAction = (*notified)++ % 2 == 1;
-                    scope.launch([snackbar, longAction]() -> Task {
-                        SnackbarResult r = co_await snackbar.showSnackbarAsync(
-                            longAction ? "Bildirimler kapalı; önemli haberleri kaçırabilirsiniz." : "Merhaba! Bu bir Snackbar.",
-                            longAction ? "Bildirimleri aç" : "Geri al", std::nullopt, true);
-                        if (r == SnackbarResult::ActionPerformed) snackbar.showSnackbar(longAction ? "Bildirimler açıldı" : "Geri alındı");
-                    });
+                    val longAction = notified++ % 2 == 1
+                    scope.launch {
+                        val result = snackbar.showSnackbar(
+                            if (longAction) "Bildirimler kapalı; önemli haberleri kaçırabilirsiniz." else "Merhaba! Bu bir Snackbar.",
+                            actionLabel = if (longAction) "Bildirimleri aç" else "Geri al",
+                            withDismissAction = true)
+                        if (result == SnackbarResult.ActionPerformed) snackbar.showSnackbar(if (longAction) "Bildirimler açıldı" else "Geri alındı")
+                    }
                 },
-                Icons::Filled::Notifications, "Bildir");
-        else if (entry && entry->hasRoute<routes::ListAll>())
-            ScrollToTopButton(listState);
-    };
+                icon = { Icon(Icons.Filled.Notifications, contentDescription = null) },
+                text = { Text("Bildir") })
+        } else if (destination?.hasRoute<routes.ListAll>() == true) {
+            ScrollToTopButton(listState)
+        }
+    }
 
-    auto screen = [=](PaddingValues padding) {
+    val screen: @Composable (PaddingValues) -> Unit = { padding ->
         // Clear of the bars; the keyboard only takes what the bottom bar doesn't already cover.
-        Modifier m = Modifier().fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding();
-        ContentTransform fade = togetherWith(fadeIn(0, tween(220, 60)), fadeOut(0, tween(120)));
-        NavHost(nav, routes::Home{}, m, [&](NavGraphBuilder& graph) {
-            graph.composable<routes::Home>([&](const NavBackStackEntry&) { HomeScreen(Modifier().fillMaxSize()); });
+        NavHost(
+            navController = nav,
+            startDestination = routes.Home(),
+            modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding(),
+            enterTransition = { fadeIn(animationSpec = tween(220, delayMillis = 60)) },
+            exitTransition = { fadeOut(animationSpec = tween(120)) },
+        ) {
+            composable<routes.Home> { HomeScreen(Modifier.fillMaxSize()) }
             // The list and its items: a nested graph, with a ViewModel of its own.
-            graph.navigation<routes::ListGraph>(routes::ListAll{}, [&](NavGraphBuilder& list) {
-                list.composable<routes::ListAll>([&](const NavBackStackEntry& e) {
-                    ListScreen(Modifier().fillMaxSize(), listState, nav, viewModel<LikesViewModel>(*e.parent()));
-                });
+            navigation<routes.ListGraph>(startDestination = routes.ListAll()) {
+                composable<routes.ListAll> { e ->
+                    ListScreen(Modifier.fillMaxSize(), listState, nav, viewModel<LikesViewModel>(e.parent!!))
+                }
                 // Also opened by a link: `showcase kompoz://item/42`, an Android intent, or #item/42 on the web.
-                list.composable<routes::Item>({navDeepLink<routes::Item>("kompoz://item")}, [&](const NavBackStackEntry& e) {
-                    ItemScreen(e.toRoute<routes::Item>().n, nav, viewModel<LikesViewModel>(*e.parent()));
-                });
-            });
-            graph.composable<routes::Components>({navDeepLink("kompoz://components")},
-                                                 [&](const NavBackStackEntry&) { ComponentsScreen(Modifier().fillMaxSize()); });
-            graph.composable<routes::Material>({navDeepLink("kompoz://material")},
-                                               [&](const NavBackStackEntry&) { MaterialScreen(Modifier().fillMaxSize(), colorSource, nav); });
-            graph.composable<routes::Places>({navDeepLink("kompoz://places")},
-                                             [&](const NavBackStackEntry&) { PlacesScreen(Modifier().fillMaxSize()); });
-        }, NavHostOptions{.transition = fade, .popTransition = fade});
-        if (about.get())
-            AlertDialog([about] { about.set(false); },
-                        confirmButton = [about] { TextButton([about] { about.set(false); }) { Text("Tamam"); }; },
-                        icon = [] { Icon(Icons::Filled::Info, "Bilgi"); },
-                        title = [] { Text("Kompoz"); },
-                        text = [] {
-                            Text("C++20 ile Jetpack Compose tarzı, çok platformlu bir arayüz kütüphanesi: Linux, Windows, Android "
-                                 "ve web. Apache 2.0 lisanslı.\n\n"
-                                 "İçindekiler: Noto Sans fontları (SIL OFL 1.1), FreeType (portions of this software are "
-                                 "copyright © 2026 The FreeType Project, www.freetype.org), HarfBuzz (MIT), libpng ve zlib. "
-                                 "Lisans metinleri uygulamanın licenses klasöründe.");
-                        });
-    };
+                composable<routes.Item>(deepLinks = listOf(navDeepLink<routes.Item>("kompoz://item"))) { e ->
+                    ItemScreen(e.toRoute<routes.Item>().n, nav, viewModel<LikesViewModel>(e.parent!!))
+                }
+            }
+            composable<routes.Components>(deepLinks = listOf(navDeepLink { uriPattern = "kompoz://components" })) {
+                ComponentsScreen(Modifier.fillMaxSize())
+            }
+            composable<routes.Material>(deepLinks = listOf(navDeepLink { uriPattern = "kompoz://material" })) {
+                MaterialScreen(Modifier.fillMaxSize(), colorSource, nav)
+            }
+            composable<routes.Places>(deepLinks = listOf(navDeepLink { uriPattern = "kompoz://places" })) {
+                PlacesScreen(Modifier.fillMaxSize())
+            }
+        }
+        if (about) {
+            AlertDialog(
+                onDismissRequest = { about = false },
+                confirmButton = { TextButton(onClick = { about = false }) { Text("Tamam") } },
+                icon = { Icon(Icons.Filled.Info, contentDescription = "Bilgi") },
+                title = { Text("Kompoz") },
+                text = {
+                    Text("C++20 ile Jetpack Compose tarzı, çok platformlu bir arayüz kütüphanesi: Linux, Windows, Android " +
+                             "ve web. Apache 2.0 lisanslı.\n\n" +
+                             "İçindekiler: Noto Sans fontları (SIL OFL 1.1), FreeType (portions of this software are " +
+                             "copyright © 2026 The FreeType Project, www.freetype.org), HarfBuzz (MIT), libpng ve zlib. " +
+                             "Lisans metinleri uygulamanın licenses klasöründe.")
+                })
+        }
+    }
 
     // The colors from where the user chose, the app's own where that has none.
-    ColorScheme scheme = colorSource.get() == ColorSource::System && isDynamicColorAvailable()
-                             ? (dark.get() ? dynamicDarkColorScheme() : dynamicLightColorScheme())
-                         : colorSource.get() == ColorSource::Wallpaper && isWallpaperColorAvailable()
-                             ? (dark.get() ? wallpaperDarkColorScheme() : wallpaperLightColorScheme())
-                             : (dark.get() ? darkColorScheme() : lightColorScheme());
-    SystemBarsAppearance(!dark.get());  // dark status bar icons over the light theme
-    MaterialTheme(animateColorScheme(scheme), [&] {
+    val scheme = when {
+        colorSource.value == ColorSource.System && isDynamicColorAvailable() -> if (dark) dynamicDarkColorScheme() else dynamicLightColorScheme()
+        colorSource.value == ColorSource.Wallpaper && isWallpaperColorAvailable() -> if (dark) wallpaperDarkColorScheme() else wallpaperLightColorScheme()
+        else -> if (dark) darkColorScheme() else lightColorScheme()
+    }
+    SystemBarsAppearance(!dark)  // dark status bar icons over the light theme
+    MaterialTheme(colorScheme = animateColorScheme(scheme)) {
         // The showcase speaks Turkish, and so do the library's own texts in it (LocalStrings).
-        CompositionLocalProvider({LocalStrings.provides(Strings::turkish()),
-                                  LocalShowRecompositions.provides(showRecompositions.get()),
-                                  LocalLayoutDirection.provides(rightToLeft.get() ? LayoutDirection::Rtl : LayoutDirection::Ltr)}, [&] {
-            auto app = [=] {
-                ModalNavigationDrawer(drawerContent, drawer) {
+        CompositionLocalProvider(
+            LocalStrings provides Strings.turkish(),
+            LocalShowRecompositions provides showRecompositions,
+            LocalLayoutDirection provides (if (rightToLeft) LayoutDirection.Rtl else LayoutDirection.Ltr),
+        ) {
+            val app: @Composable () -> Unit = {
+                ModalNavigationDrawer(drawerContent = drawerContent, drawerState = drawer) {
                     // The tabs where they suit the window (currentWindowAdaptiveInfo), as M3
                     // Expressive's: a short bar on a phone (its labels beside the icons when it lies
                     // on its side), a wide rail on a wider window.
                     NavigationSuiteScaffold(
-                        [&] {
-                            for (int i = 0; i < 4; ++i) {
-                                const ImageVector& icon = *destinations[i].icon;
-                                std::string label = destinations[i].label;
-                                NavigationSuiteItem(tab == i, [goTab, i] { goTab(i); }, [&icon] { Icon(icon, ""); }, [label] { Text(label); });
+                        navigationItems = {
+                            for (i in 0 until 4) {
+                                val (label, icon) = destinations[i]
+                                NavigationSuiteItem(selected = tab == i, onClick = { goTab(i) }, icon = { Icon(icon, contentDescription = null) },
+                                                    label = { Text(label) })
                             }
                         },
-                        Modifier().fillMaxSize(), NavigationSuiteScaffoldOptions{}, [&] {
-                            Scaffold(Modifier().fillMaxSize().nestedScroll(barScroll.nestedScrollConnection),
-                                     kompoz::topBar = topBar,
-                                     floatingActionButton = fab,
-                                     // A snackbar of the app's own (here the standard one): a long action under the text.
-                                     snackbarHost = [&] {
-                                         SnackbarHost(snackbar, Modifier(), [](const SnackbarData& data) {
-                                             Snackbar(data, Modifier(), actionOnNewLine = data.actionLabel.size() > 12);
-                                         });
-                                     }) [=](PaddingValues padding) { screen(padding); };
-                        });
-                };
-            };
-#ifdef __ANDROID__
-            app();
-#else
-            // On a desktop (and the web), the window's menus and their shortcuts above the app.
-            Column(Modifier().fillMaxSize()) {
-                std::vector<MenuBarItem> go;
-                for (int i = 0; i < 4; ++i)
-                    go.push_back({.text = destinations[i].label, .onClick = [goTab, i] { goTab(i); },
-                                  .shortcut = KeyShortcut{Key(int(Key::One) + i), true}, .checked = tab == i});
-                go.push_back(MenuBarItem::Separator());
-                go.push_back({.text = "Geri", .onClick = [nav] { nav.popBackStack(); }, .shortcut = KeyShortcut{Key::Left, false, false, true},
-                              .enabled = nav.previousBackStackEntry() != nullptr});
-                MenuBar({{"Dosya", {{.text = "Hakkında", .onClick = [about] { about.set(true); }, .shortcut = KeyShortcut{Key::F1}}}},
-                         {"Görünüm",
-                          {{.text = "Koyu tema", .onClick = [dark, darkChosen] { dark.set(!dark.get()), darkChosen.set(true); }, .shortcut = KeyShortcut{Key::D, true},
-                            .checked = dark.get()},
-                           MenuBarItem::Separator(),
-                           {.text = "Uygulamanın renkleri", .onClick = [colorSource] { colorSource.set(ColorSource::App); },
-                            .checked = colorSource.get() == ColorSource::App},
-                           {.text = "Sistemin renkleri", .onClick = [colorSource] { colorSource.set(ColorSource::System); },
-                            .checked = colorSource.get() == ColorSource::System},
-                           {.text = "Duvar kağıdının renkleri", .onClick = [colorSource] { colorSource.set(ColorSource::Wallpaper); },
-                            .checked = colorSource.get() == ColorSource::Wallpaper},
-                           MenuBarItem::Separator(),
-                           {.text = "Sağdan sola", .onClick = [rightToLeft] { rightToLeft.set(!rightToLeft.get()); },
-                            .shortcut = KeyShortcut{Key::R, true, true}, .checked = rightToLeft.get()},
-                           MenuBarItem::Separator(),
-                           {.text = "Yeniden çizimleri göster", .onClick = [showRecompositions] { showRecompositions.set(!showRecompositions.get()); },
-                            .checked = showRecompositions.get()}}},
-                         {"Git", std::move(go)}});
-                Box(Modifier().fillMaxWidth().weight(1)) { app(); };
-            };
-#endif
-        });
-    });
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        Scaffold(
+                            modifier = Modifier.fillMaxSize().nestedScroll(barScroll.nestedScrollConnection),
+                            topBar = topBar,
+                            floatingActionButton = fab,
+                            // A snackbar of the app's own (here the standard one): a long action under the text.
+                            snackbarHost = {
+                                SnackbarHost(snackbar) { data ->
+                                    Snackbar(data, actionOnNewLine = (data.visuals.actionLabel?.length ?: 0) > 12)
+                                }
+                            },
+                        ) { padding -> screen(padding) }
+                    }
+                }
+            }
+            if (kOnAndroid) {
+                app()
+            } else {
+                // On a desktop (and the web), the window's menus and their shortcuts above the app.
+                Column(modifier = Modifier.fillMaxSize()) {
+                    MenuBar {
+                        Menu("Dosya") {
+                            Item("Hakkında", shortcut = KeyShortcut(Key.F1), onClick = { about = true })
+                        }
+                        Menu("Görünüm") {
+                            CheckboxItem("Koyu tema", checked = dark, shortcut = KeyShortcut(Key.D, ctrl = true), onCheckedChange = {
+                                dark = it
+                                darkChosen = true
+                            })
+                            Separator()
+                            RadioButtonItem("Uygulamanın renkleri", selected = colorSource.value == ColorSource.App,
+                                            onClick = { colorSource.value = ColorSource.App })
+                            RadioButtonItem("Sistemin renkleri", selected = colorSource.value == ColorSource.System,
+                                            onClick = { colorSource.value = ColorSource.System })
+                            RadioButtonItem("Duvar kağıdının renkleri", selected = colorSource.value == ColorSource.Wallpaper,
+                                            onClick = { colorSource.value = ColorSource.Wallpaper })
+                            Separator()
+                            CheckboxItem("Sağdan sola", checked = rightToLeft, shortcut = KeyShortcut(Key.R, ctrl = true, shift = true),
+                                         onCheckedChange = { rightToLeft = it })
+                            Separator()
+                            CheckboxItem("Yeniden çizimleri göster", checked = showRecompositions, onCheckedChange = { showRecompositions = it })
+                        }
+                        Menu("Git") {
+                            val keys = listOf(Key.One, Key.Two, Key.Three, Key.Four)
+                            for (i in 0 until 4)
+                                RadioButtonItem(destinations[i].first, selected = tab == i, shortcut = KeyShortcut(keys[i], ctrl = true),
+                                                onClick = { goTab(i) })
+                            Separator()
+                            Item("Geri", enabled = nav.previousBackStackEntry != null, shortcut = KeyShortcut(Key.DirectionLeft, alt = true),
+                                 onClick = { nav.popBackStack() })
+                        }
+                    }
+                    Box(modifier = Modifier.fillMaxWidth().weight(1f)) { app() }
+                }
+            }
+        }
+    }
 }
 
 kompoz::Application kompoz::createApplication(int, char**) {
-    return {.title = "Kompoz Showcase", .width = 440, .height = 900, .content = ShowcaseApp};
+    return {.title = "Kompoz Showcase", .width = 440, .height = 900, .content = [] { ShowcaseApp(); }};
 }

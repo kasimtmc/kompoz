@@ -1121,6 +1121,10 @@
   Item(…); CheckboxItem(…); RadioButtonItem(…); Separator(); Menu("…") { } } }` (`MenuBarScope`, `MenuScope`). `SnackbarData::visuals()`
   (Compose's `data.visuals`, `actionLabel` none when empty). Compose's key names beside Kompoz's: `Key::DirectionLeft`, `MoveHome`,
   `Spacebar`, … kompozc: `a?.f<T>()` keeps its type arguments.
+- **The showcase's app shell in Compose's syntax**: `ShowcaseApp` (the theme and its color source, the drawer, the top bar
+  and its menu, the FAB and its snackbars, the NavHost with its nested graph and deep links, the navigation suite and, off
+  Android, the window's menus) is a `@Composable fun` in Kotlin; only `createApplication` stays C++. Every screen of the showcase
+  is now written in Compose's syntax.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

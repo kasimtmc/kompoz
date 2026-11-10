@@ -1159,6 +1159,9 @@
   `MenuBar { Menu("…") { Item(…); CheckboxItem(…); RadioButtonItem(…); Separator(); Menu("…") { } } }` (`MenuBarScope`, `MenuScope`).
   `SnackbarData::visuals()` (Compose'un `data.visuals`'ı; boş `actionLabel` yok sayılır). Kompoz'unkilerin yanında Compose'un tuş
   adları: `Key::DirectionLeft`, `MoveHome`, `Spacebar`, … kompozc: `a?.f<T>()` tür argümanlarını korur.
+- **Vitrinin uygulama kabuğu Compose söz dizimiyle**: `ShowcaseApp` (tema ve renk kaynağı, çekmece, üst çubuk ve menüsü, FAB
+  ve snackbar'ları, iç içe grafiği ve derin bağlantılarıyla NavHost, gezinme takımı ve Android dışında pencerenin menüleri)
+  Kotlin'de bir `@Composable fun`; yalnızca `createApplication` C++ kalır. Vitrinin her ekranı artık Compose söz dizimiyle yazılı.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine
