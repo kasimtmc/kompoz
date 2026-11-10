@@ -1,8 +1,9 @@
 // Kompoz's CLion plugin. Built against a CLion of yours (-PclionPath=/path/to/clion: no download) or
 // against CLion 2026.3 downloaded:
 //
-//   ./gradlew buildPlugin -PclionPath=$HOME/.local/share/JetBrains/Toolbox/apps/clion
+//   JAVA_HOME=/path/to/clion/jbr ./gradlew buildPlugin -PclionPath=/path/to/clion
 //
+// (Gradle needs a JDK: CLion's own, its jbr/, will do.)
 // build/distributions/kompoz-clion-*.zip is then installed in CLion from disk (Settings, Plugins).
 
 plugins {

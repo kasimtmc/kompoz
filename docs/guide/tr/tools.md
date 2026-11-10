@@ -31,10 +31,10 @@ Derlemeyi, `kompoz_compose` kullanan bir CMake derlemesinin yazdığı `compile_
 }
 ```
 
-**CLion**: Kompoz'un `editors/clion` içindeki eklentisi, Compose kodu içeren C++ dosyaları için dil sunucusunu başlatır ve onlarda CLion'un kendi vurgulamasını kapatır (C++ motoru Kotlin'i hatalı işaretlerdi; yerini sunucunun tanıları alır). Onu kendi CLion'unuza karşı derleyin ve arşivi diskten kurun (Ayarlar, Eklentiler, Eklentiyi Diskten Kur):
+**CLion**: Kompoz'un `editors/clion` içindeki eklentisi, Compose kodu içeren C++ dosyaları için dil sunucusunu başlatır ve onlarda CLion'un kendi vurgulamasını kapatır (C++ motoru Kotlin'i hatalı işaretlerdi; yerini sunucunun tanıları alır). Onu kendi CLion'unuza karşı derleyin ve `build/distributions/` içindeki arşivi diskten kurun (Ayarlar, Eklentiler, Eklentiyi Diskten Kur). Gradle bir JDK ister; CLion'un kendi `jbr/` dizinindeki yeter:
 
 ```bash
-cd editors/clion && ./gradlew buildPlugin -PclionPath=/yol/clion
+cd editors/clion && JAVA_HOME=/yol/clion/jbr ./gradlew buildPlugin -PclionPath=/yol/clion
 ```
 
 kompozc'yi Ayarlar, Araçlar, Kompoz'da; yoksa `KOMPOZC`'de; yoksa projede derlenmişini (`build/` ya da `cmake-build-*/compiler/kompozc`); yoksa `PATH`'te bulur.

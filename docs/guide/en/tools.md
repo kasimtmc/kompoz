@@ -31,10 +31,10 @@ It finds the build by the `compile_commands.json` and `kompozc_commands.json` th
 }
 ```
 
-**CLion**: Kompoz's plugin, in `editors/clion`, starts the language server for the C++ files with Compose code and turns CLion's own highlighting off in them (its C++ engine would mark the Kotlin; the server's diagnostics take its place). Build it against your CLion and install the archive from disk (Settings, Plugins, Install Plugin from Disk):
+**CLion**: Kompoz's plugin, in `editors/clion`, starts the language server for the C++ files with Compose code and turns CLion's own highlighting off in them (its C++ engine would mark the Kotlin; the server's diagnostics take its place). Build it against your CLion and install the archive in `build/distributions/` from disk (Settings, Plugins, Install Plugin from Disk). Gradle needs a JDK; CLion's own, in its `jbr/`, will do:
 
 ```bash
-cd editors/clion && ./gradlew buildPlugin -PclionPath=/path/to/clion
+cd editors/clion && JAVA_HOME=/path/to/clion/jbr ./gradlew buildPlugin -PclionPath=/path/to/clion
 ```
 
 It finds kompozc in Settings, Tools, Kompoz, or else in `KOMPOZC`, or else built in the project (`build/` or `cmake-build-*/compiler/kompozc`), or else on `PATH`.
