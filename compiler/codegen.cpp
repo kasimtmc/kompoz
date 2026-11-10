@@ -104,7 +104,7 @@ const std::map<std::string, std::string, std::less<>> kComposableProperties = {
 
 // Named arguments whose lambda gives a value: items(list, key = { it.id }, contentType = { … }).
 const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType", "selector", "comparator", "span", "pageCount", "confirmValueChange",
-                                                            "items", "keyboardModifiers", "canPan",
+                                                            "items", "keyboardModifiers", "canPan", "isMeasurementApproachInProgress", "approachMeasure",
                                                             "itemCount", "progress", "transitionSpec", "contentKey", "shouldStartDragAndDrop",
                                                             "enterTransition", "exitTransition", "popEnterTransition", "popExitTransition",
                                                             "initialOffsetX", "initialOffsetY", "targetOffsetX", "targetOffsetY"};
@@ -140,7 +140,7 @@ const std::set<std::string, std::less<>> kKtMembers = {
     "first", "last", "firstOrNull", "lastOrNull", "joinToString", "startsWith", "endsWith", "contains", "substring",
     "take", "drop", "reversed", "sorted", "sortedBy", "any", "all", "none", "count", "sum", "sumOf", "maxOf", "minOf", "maxOfOrNull", "minOfOrNull", "indexOf",
     "getOrNull", "let", "also", "takeIf", "withIndex", "toList", "toMutableList", "distinct", "split", "replace",
-    "coerceIn", "coerceAtLeast", "coerceAtMost", "roundToInt", "toPx", "roundToPx", "toDp", "find", "add", "addAll", "removeAt", "remove",
+    "coerceIn", "coerceAtLeast", "coerceAtMost", "roundToInt", "toPx", "roundToPx", "toDp", "find", "add", "addAll", "removeAt", "remove", "repeat",
     "format", "indexOfFirst", "indexOfLast", "removeIf", "removeAll", "flatMap", "sortedByDescending", "maxByOrNull", "minByOrNull",
     "mapNotNull", "filterIndexed", "distinctBy", "takeUnless", "groupBy", "associateBy", "associateWith", "chunked", "partition",
     "ifEmpty", "ifBlank", "shuffle", "isDigit", "isLetter", "isLetterOrDigit", "isWhitespace", "isUpperCase", "isLowerCase"};

@@ -1122,6 +1122,15 @@
 - **Vitrinin kaydırma ekranı Compose söz dizimiyle**: fırlatmalar, çekmeceler, kaydırma çubukları ve görünüme getirme, öngörülü
   geri, işaretçi geçişleri, kaydırılabilirler ve cetvel, overscroll (özel efekti C++ kalır), görünüme getirme belirtimi,
   uygulama çubukları, pager'lar ve aramalı çubukla iç içe kaydırma ve çekip yenileme Kotlin'de `@Composable fun`lar.
+- **Compose'un yazdığı gibi yerleşimler, kalanlar**: Composable olarak `ListDetailPaneScaffold(navigator = …, listPane = { },
+  detailPane = { key -> }, listPaneWidth = …, paneExpansionState = …, paneExpansionDragHandle = { state -> })` ve
+  `SupportingPaneScaffold(navigator = …, mainPane = { }, supportingPane = { key -> }, supportingPaneWidth = …)`; anahtar türü
+  navigator'ınki (C++'taki `ListDetailPaneScaffold(navigator, …)` de çıkarır: `<int>` yok); `VerticalDragHandle(modifier = …,
+  interactionSource = …)`; `Modifier.paneExpansionDraggable(state, interactionSource)`; adıyla `Modifier.onFirstVisible(minDurationMs = …,
+  minFractionVisible = …) { }` ve `approachLayout(isMeasurementApproachInProgress = { }, approachMeasure = { })`;
+  `Arrangement.spacedBy(space, Alignment.CenterHorizontally)`; `spring<Float>(…)`; pager'lar Compose'un `key = { }`'ini alır;
+  `DeferredTargetAnimation::updateTarget` kapsamını const referansla alır. kompozc: `"ab".repeat(n)`; null denetiminden sonra null
+  olabilenle indekslenen liste (`cities[city]`).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

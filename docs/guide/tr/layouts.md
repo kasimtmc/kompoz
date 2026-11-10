@@ -217,6 +217,28 @@ BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
 
 Compose'unki gibi bir `SubcomposeLayout`'tur: içeriği kutu ölçülürken, aldığı kısıtlarla (ilk seferde de) kompoze edilir; kısıtlar değişince yeniden kompoze edilir.
 
+### Uyarlanır bölmeler
+
+`ListDetailPaneScaffold` ve `SupportingPaneScaffold`, Compose Material 3 Adaptive'inkilerdir: dar bir pencerede bir seferde bir bölme (geri tuşu geri döner), geniş bir pencerede yan yana. Navigator'ları hangi bölmenin ve neyin gösterildiğini söyler: `navigateTo(role, key)`, `navigateBack()`. Bir `paneExpansionState` ile `paneExpansionDragHandle = { state -> VerticalDragHandle(modifier = Modifier.paneExpansionDraggable(state)) }` ayrımın sürüklenmesini sağlar.
+
+```kotlin
+@Composable
+fun Mail() {
+    val navigator = rememberListDetailPaneScaffoldNavigator<Int>()
+    val mails = listOf("Hoş geldiniz", "Fatura", "Bülten")
+    ListDetailPaneScaffold(
+        navigator = navigator,
+        listPane = {
+            Column {
+                for (i in 0 until mails.size)
+                    Text(mails[i], modifier = Modifier.clickable { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, i) }.padding(16.dp))
+            }
+        },
+        detailPane = { mail -> Text(if (mail == null) "Bir posta seçin" else mails[mail], modifier = Modifier.padding(16.dp)) },
+    )
+}
+```
+
 ## Pencere kenar boşlukları
 
 Telefonlarda sistem çubukları, ekran çentiği ve klavye pencerenin bazı kısımlarını örter. *Kenar boşlukları* (insets) bunun ne kadar olduğunu söyler, böylece içerik onlardan uzak durabilir:

@@ -86,6 +86,11 @@ AnimationSpec tween(A&&... args) {
                  P::get<detail::names::Easing>(::kompoz::Easing(FastOutSlowInEasing), args...));
 }
 AnimationSpec spring(float dampingRatio = Spring::DampingRatioNoBouncy, float stiffness = Spring::StiffnessMedium);
+// Compose's spring<Float>(…): the value type is Kotlin's; the spec is one for all.
+template <class T>
+AnimationSpec spring(float dampingRatio = Spring::DampingRatioNoBouncy, float stiffness = Spring::StiffnessMedium) {
+    return spring(dampingRatio, stiffness);
+}
 AnimationSpec snap(float delayMillis = 0);
 // Compose's keyframes { durationMillis = 375; 0.4f at 75 using FastOutSlowInEasing; 1.1f at 225 }:
 // keyframes(375, {{75, 0.4f, FastOutSlowInEasing}, {225, 1.1f}}).
@@ -462,7 +467,7 @@ public:
     explicit DeferredTargetAnimation(AnimationSpec spec = spring()) : s_(std::make_shared<State>()) { s_->spec = spec; }
     // Its value now (read where it is, it is read again each frame it moves), animating towards
     // `target` once that changes.
-    T updateTarget(T target, CoroutineScope& scope) const {
+    T updateTarget(T target, const CoroutineScope& scope) const {  // (const: a lambda holding a copy of the scope may call it)
         if (!s_->animation) {
             s_->animation.emplace(target);
             s_->target = target;

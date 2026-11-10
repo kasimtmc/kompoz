@@ -217,6 +217,28 @@ BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
 
 As Compose's, it is a `SubcomposeLayout`: its content is composed while the box is measured, with the constraints it gets (the first time too), and again when they change.
 
+### Adaptive panes
+
+`ListDetailPaneScaffold` and `SupportingPaneScaffold` are Compose Material 3 Adaptive's: one pane at a time on a compact window (Back goes back), side by side on an expanded one. Their navigator says which pane shows and what it shows: `navigateTo(role, key)`, `navigateBack()`. With a `paneExpansionState`, `paneExpansionDragHandle = { state -> VerticalDragHandle(modifier = Modifier.paneExpansionDraggable(state)) }` lets the split be dragged.
+
+```kotlin
+@Composable
+fun Mail() {
+    val navigator = rememberListDetailPaneScaffoldNavigator<Int>()
+    val mails = listOf("Welcome", "Invoice", "Newsletter")
+    ListDetailPaneScaffold(
+        navigator = navigator,
+        listPane = {
+            Column {
+                for (i in 0 until mails.size)
+                    Text(mails[i], modifier = Modifier.clickable { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, i) }.padding(16.dp))
+            }
+        },
+        detailPane = { mail -> Text(if (mail == null) "Pick a mail" else mails[mail], modifier = Modifier.padding(16.dp)) },
+    )
+}
+```
+
 ## Window insets
 
 On phones, the system bars, the display cutout and the keyboard cover parts of the window. *Insets* tell you how much, so content can stay clear of them:

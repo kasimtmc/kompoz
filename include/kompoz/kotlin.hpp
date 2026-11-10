@@ -395,7 +395,9 @@ decltype(auto) values(const C& c) {
 template <class C, class K>
 decltype(auto) at(C&& c, K&& k) {
     using M = std::remove_cvref_t<C>;
-    if constexpr (requires { typename M::key_type; typename M::mapped_type; c.find(k); }) {
+    if constexpr (requires { k.has_value(); *k; } && !requires { typename M::key_type; }) {  // a nullable key after Kotlin's smart cast
+        return at(std::forward<C>(c), *k);
+    } else if constexpr (requires { typename M::key_type; typename M::mapped_type; c.find(k); }) {
         auto it = c.find(k);
         return it == c.end() ? std::optional<typename M::mapped_type>() : std::optional<typename M::mapped_type>(it->second);
     } else {
@@ -1513,6 +1515,13 @@ template <class A, class B>
 auto min(A a, B b) {
     using C = std::common_type_t<A, B>;
     return C(b) < C(a) ? C(b) : C(a);
+}
+
+// "ab".repeat(3): the string that many times.
+inline std::string repeat(const std::string& s, int times) {
+    std::string out;
+    for (int i = 0; i < times; ++i) out += s;
+    return out;
 }
 
 // Compose's Rect(left, top, right, bottom) and Rect(topLeft, size): Kompoz's Rect holds x, y, width, height.

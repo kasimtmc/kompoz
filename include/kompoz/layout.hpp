@@ -37,6 +37,7 @@ class DraggableState;
 class Draggable2DState;
 class Scrollable2DState;
 struct Draggable2DOptions;
+class PaneExpansionState;
 struct MagnifierOptions;
 class TransformableState;
 struct AnimationSpec;
@@ -151,6 +152,13 @@ struct Arrangement {
     float spacing = 0;
 
     static constexpr Arrangement spacedBy(float space, Kind kind = Kind::Start) { return {kind, space}; }
+    // Compose's spacedBy(space, alignment): the items together at the start, the middle or the end.
+    static constexpr Arrangement spacedBy(float space, HorizontalAlignment alignment) {
+        return {alignment.bias < 0 ? Kind::Start : alignment.bias > 0 ? Kind::End : Kind::Center, space};
+    }
+    static constexpr Arrangement spacedBy(float space, VerticalAlignment alignment) {
+        return {alignment.bias < 0 ? Kind::Start : alignment.bias > 0 ? Kind::End : Kind::Center, space};
+    }
 
     // Writes the main-axis position of each child into `positions`.
     void arrange(float total, const std::vector<float>& sizes, std::vector<float>& positions) const;
@@ -1845,6 +1853,10 @@ public:
     Modifier onLayoutRectChanged(std::function<void(const RelativeLayoutBounds&)> callback, int64_t throttleMillis = 0,
                                  int64_t debounceMillis = 64) const;
     Modifier onFirstVisible(std::function<void()> callback, VisibilityOptions options = {}) const;
+    // Compose's onFirstVisible(minDurationMs = …, minFractionVisible = …, viewportBounds = …) { } by name (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier onFirstVisible(A&&... args) const;
     // Keeps where it is laid out in `holder`, as a viewport for onVisibilityChanged.
     Modifier layoutBounds(const LayoutBoundsHolder& holder) const;
     // Edge swipes that start on it are the app's, not the system's back or home (Android 10+
@@ -2073,6 +2085,8 @@ public:
     // Drags in any direction (past the touch slop, or at once) go to the state as offsets
     // (Compose's Modifier.draggable2D); the drag is consumed, so scrolling around it leaves it.
     Modifier draggable2D(const Draggable2DState& state) const;
+    // Compose's paneExpansionDraggable(state, interactionSource): a pane scaffold's drag handle (adaptive.hpp).
+    Modifier paneExpansionDraggable(const PaneExpansionState& state, std::optional<MutableInteractionSource> interactionSource = {}) const;
     // Scrolls the state in any direction (Compose's Modifier.scrollable2D): a drag past the
     // touch slop, a fling after it (the scrollables' decay, axis by axis until an end), the
     // mouse wheel (and its sideways one). The gesture is consumed; a press stops a fling.
@@ -2282,6 +2296,11 @@ public:
                             std::function<Size(const ApproachMeasureScope& scope, const MeasureNext& measure, const Constraints& constraints,
                                                Offset& placeAt)>
                                 approachMeasure) const;
+    // Compose's approachLayout(isMeasurementApproachInProgress = { lookaheadSize -> … }, approachMeasure = { scope, measure,
+    // constraints, placeAt -> … }) by name (named_members.hpp).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier approachLayout(A&&... args) const;
     Modifier animateBounds(const AnimationSpec& spec, CallSite site = CallSite::current()) const;
     // Compose's basicMarquee: content wider than the room it has (measured without a width limit)
     // scrolls through it towards its start, followed by a copy of itself, `spacing` behind, as on

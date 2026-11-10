@@ -600,6 +600,31 @@ Modifier Modifier::onClickBy(CallSite site, A&&... args) const {
     return this->onClick(std::move(onClick), std::move(options), site);
 }
 
+// onFirstVisible(minDurationMs = …, minFractionVisible = …, viewportBounds = …) { }: the callback last.
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::onFirstVisible(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::MinDurationMs, n::MinFractionVisible, n::ViewportBounds, detail::Block>;
+    static_assert(P::check<A...>());
+    VisibilityOptions options;
+    P::set<n::MinDurationMs>(options.minDurationMs, args...);
+    P::set<n::MinFractionVisible>(options.minFractionVisible, args...);
+    P::set<n::ViewportBounds>(options.viewport, args...);
+    return onFirstVisible(std::function<void()>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...))), options);
+}
+
+// approachLayout(isMeasurementApproachInProgress = { … }, approachMeasure = { … }).
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::approachLayout(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::IsMeasurementApproachInProgress, n::ApproachMeasure>;
+    static_assert(P::check<A...>());
+    return approachLayout(std::function<bool(Size)>(P::arg<n::IsMeasurementApproachInProgress>(args...)),
+                          std::function<Size(const ApproachMeasureScope&, const MeasureNext&, const Constraints&, Offset&)>(P::arg<n::ApproachMeasure>(args...)));
+}
+
 // pullToRefresh(isRefreshing = …, state = …, onRefresh = …, enabled = …, threshold = …).
 template <class... A>
 Modifier Modifier::pullToRefreshBy(CallSite site, A&&... args) const {

@@ -142,7 +142,7 @@ namespace detail {
 void HorizontalPager(PagerState state, const Modifier& modifier, const std::function<void(int page)>& content,
                      PagerOptions options = {}, CallSite site = CallSite::current());
 struct HorizontalPagerImpl {
-    using P = Params<names::State, names::Modifier, names::ContentPadding, names::PageSize, names::BeyondViewportPageCount, names::PageSpacing, names::VerticalAlignment, names::FlingBehavior, names::UserScrollEnabled, names::ReverseLayout, names::PageKey, names::SnapPosition, names::OverscrollEffect, BlockWith<int>>;
+    using P = Params<names::State, names::Modifier, names::ContentPadding, names::PageSize, names::BeyondViewportPageCount, names::PageSpacing, names::VerticalAlignment, names::FlingBehavior, names::UserScrollEnabled, names::ReverseLayout, names::PageKey, names::Key, names::SnapPosition, names::OverscrollEffect, BlockWith<int>>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -158,6 +158,7 @@ struct HorizontalPagerImpl {
         P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
         P::set<names::ReverseLayout>(options.reverseLayout, args...);
         P::set<names::PageKey>(options.key, args...);
+        P::set<names::Key>(options.key, args...);  // (Compose's name)
         P::set<names::SnapPosition>(options.snapPosition, args...);
         setOverscroll<P>(options.overscrollEffect, args...);
         HorizontalPager(std::move(state), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), options, site);
@@ -170,7 +171,7 @@ namespace detail {
 void VerticalPager(PagerState state, const Modifier& modifier, const std::function<void(int page)>& content,
                    PagerOptions options = {}, CallSite site = CallSite::current());
 struct VerticalPagerImpl {
-    using P = Params<names::State, names::Modifier, names::ContentPadding, names::PageSize, names::BeyondViewportPageCount, names::PageSpacing, names::HorizontalAlignment, names::FlingBehavior, names::UserScrollEnabled, names::ReverseLayout, names::PageKey, names::SnapPosition, names::OverscrollEffect, BlockWith<int>>;
+    using P = Params<names::State, names::Modifier, names::ContentPadding, names::PageSize, names::BeyondViewportPageCount, names::PageSpacing, names::HorizontalAlignment, names::FlingBehavior, names::UserScrollEnabled, names::ReverseLayout, names::PageKey, names::Key, names::SnapPosition, names::OverscrollEffect, BlockWith<int>>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -186,6 +187,7 @@ struct VerticalPagerImpl {
         P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
         P::set<names::ReverseLayout>(options.reverseLayout, args...);
         P::set<names::PageKey>(options.key, args...);
+        P::set<names::Key>(options.key, args...);  // (Compose's name)
         P::set<names::SnapPosition>(options.snapPosition, args...);
         setOverscroll<P>(options.overscrollEffect, args...);
         VerticalPager(std::move(state), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), options, site);

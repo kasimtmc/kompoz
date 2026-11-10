@@ -1875,6 +1875,68 @@ TEST(scroll_forms_as_compose_writes_them) {
     CHECK(rule.onNodeWithContentDescription("Menü").exists() && rule.onNodeWithTag("çekilir").exists());
 }
 
+// Layout forms as Compose writes them: ListDetailPaneScaffold(navigator =, listPane =, detailPane = { key -> }) with a
+// VerticalDragHandle on Modifier.paneExpansionDraggable, onFirstVisible(minDurationMs =) { }, approachLayout(isMeasurementApproachInProgress =,
+// approachMeasure =), Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), spring<Float>(…), HorizontalPager(key = { }), a list
+// indexed by a smart-cast nullable, "ab".repeat(2).
+@Composable
+fun LayoutForms() {
+    val navigator = rememberListDetailPaneScaffoldNavigator<Int>()
+    val expansion = rememberPaneExpansionState(listOf(PaneExpansionAnchor.Proportion(0.5f)))
+    val cities = listOf("Ankara", "İzmir")
+    var seen by remember { mutableStateOf(0) }
+    val pages = listOf(3, 4)
+    val pager = rememberPagerState(pageCount = { pages.size })
+    val glide = spring<Float>(Spring.DampingRatioLowBouncy, Spring.StiffnessLow)
+    val tagSize = remember { DeferredTargetAnimation<Size>(glide) }
+    val scope = rememberCoroutineScope()
+    Column {
+        Box(modifier = Modifier.size(400.dp, 200.dp)) {
+            ListDetailPaneScaffold(
+                navigator = navigator,
+                listPane = {
+                    Column { for (i in 0 until 2) Text(cities[i], modifier = Modifier.clickable { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, i) }) }
+                },
+                detailPane = { city -> if (city == null) Text("seçin") else Text("şehir: ${cities[city]}") },
+                listPaneWidth = 160.dp,
+                paneExpansionState = expansion,
+                paneExpansionDragHandle = { state -> VerticalDragHandle(modifier = Modifier.paneExpansionDraggable(state)) })
+        }
+        Row(modifier = Modifier.width(200.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
+            Box(modifier = Modifier.size(20.dp).onFirstVisible(minDurationMs = 0) { seen++ }.testTag("nokta"))
+            Box(modifier = Modifier.size(20.dp))
+        }
+        HorizontalPager(state = pager, modifier = Modifier.size(200.dp, 40.dp), key = { pages[it] }) { i -> Text("sayfa ${pages[i]}") }
+        Box(modifier = Modifier
+                .approachLayout(
+                    isMeasurementApproachInProgress = { target ->
+                        tagSize.updateTarget(target, scope)
+                        !tagSize.isIdle()
+                    },
+                    approachMeasure = { s, measure, _, _ ->
+                        val now = tagSize.updateTarget(s.lookaheadSize, scope)
+                        measure(Constraints.fixed(now.width, now.height))
+                        now
+                    })
+                .testTag("etiket")) { Text("ab".repeat(2)) }
+        Text("görüldü $seen")
+    }
+}
+
+TEST(layout_forms_as_compose_writes_them) {
+    ComposeTestRule rule([] { LayoutForms(); }, {400, 800});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("Ankara").exists());
+    rule.onNodeWithText("İzmir").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("şehir: İzmir").exists());
+    CHECK(rule.onNodeWithText("abab").exists() && rule.onNodeWithText("sayfa 3").exists());
+    CHECK(std::abs(rule.onNodeWithTag("nokta").bounds().x - 76) < 1);  // two 20 dp dots and their 8 dp gap, centered in 200
+    rule.advanceTimeBy(100);
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("görüldü 1").exists());
+}
+
 TEST(navigation_as_compose_writes_it) {
     NavController nav;
     ComposeTestRule rule([&] { Navigator(nav); });

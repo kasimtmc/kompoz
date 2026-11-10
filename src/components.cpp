@@ -1425,7 +1425,7 @@ void detail::LeadingIconTab(bool selected, std::function<void()> onClick, const 
         });
 }
 
-void VerticalDragHandle(const Modifier& modifier, std::optional<MutableInteractionSource> interactionSource, CallSite site) {
+void detail::VerticalDragHandle(const Modifier& modifier, std::optional<MutableInteractionSource> interactionSource, CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
     auto own = remember([] { return MutableInteractionSource(); });

@@ -1085,6 +1085,14 @@
 - **The showcase's scroll screen in Compose's syntax**: the flings, the drawers, the scrollbars and bring-into-view, predictive
   back, pointer passes, the scrollables and the ruler, overscroll (its custom effect stays C++), the bring-into-view spec, nested
   scrolling with the app bars, pagers and the search app bar, and pull to refresh are `@Composable fun`s in Kotlin.
+- **Layouts as Compose writes them, the rest**: `ListDetailPaneScaffold(navigator = …, listPane = { }, detailPane = { key -> },
+  listPaneWidth = …, paneExpansionState = …, paneExpansionDragHandle = { state -> })` and `SupportingPaneScaffold(navigator = …,
+  mainPane = { }, supportingPane = { key -> }, supportingPaneWidth = …)` as Composables, the key type the navigator's (the C++
+  `ListDetailPaneScaffold(navigator, …)` deduces it too: no `<int>`); `VerticalDragHandle(modifier = …, interactionSource = …)`;
+  `Modifier.paneExpansionDraggable(state, interactionSource)`; `Modifier.onFirstVisible(minDurationMs = …, minFractionVisible = …)
+  { }` and `approachLayout(isMeasurementApproachInProgress = { }, approachMeasure = { })` by name; `Arrangement.spacedBy(space,
+  Alignment.CenterHorizontally)`; `spring<Float>(…)`; pagers take Compose's `key = { }`; `DeferredTargetAnimation::updateTarget`
+  takes its scope by const reference. kompozc: `"ab".repeat(n)`; a list indexed by a nullable after its null check (`cities[city]`).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

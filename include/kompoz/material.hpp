@@ -3238,8 +3238,19 @@ inline constexpr detail::LeadingIconTabCall LeadingIconTab;
 
 // A pill to drag (Compose's VerticalDragHandle): 4 × 48 dp in outline, 12 × 52 dp in onSurface
 // while pressed or dragged, centered in the room it is given (paneExpansionDraggable).
+namespace detail {
 void VerticalDragHandle(const Modifier& modifier = {}, std::optional<MutableInteractionSource> interactionSource = {},
                         CallSite site = CallSite::current());
+struct VerticalDragHandleImpl {  // VerticalDragHandle(modifier = …, interactionSource = …)
+    using P = Params<names::Modifier, names::InteractionSource>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        static_assert(P::check<A...>());
+        VerticalDragHandle(P::get<names::Modifier>(Modifier{}, args...), P::get<names::InteractionSource>(std::optional<MutableInteractionSource>(), args...), site);
+    }
+};
+} // namespace detail
+inline constexpr Composable<detail::VerticalDragHandleImpl> VerticalDragHandle;
 
 // A dot, or a small pill with a count; BadgedBox puts it on the top-end corner of its content.
 // As Compose writes them: Badge { Text("8") }, Badge(), BadgedBox(badge = { Badge() }) { Icon(…) }.

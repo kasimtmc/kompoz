@@ -8185,6 +8185,58 @@ TEST(scroll_forms_take_compose_named_arguments) {
     CHECK(rule.onNodeWithContentDescription("Menü").exists() && rule.onNodeWithTag("çekilir").exists());
 }
 
+TEST(layout_forms_take_compose_named_arguments) {
+    // ListDetailPaneScaffold(navigator =, listPane =, detailPane =, listPaneWidth =, paneExpansionDragHandle =) and
+    // SupportingPaneScaffold(navigator =, mainPane =, supportingPane =, supportingPaneWidth =) by name (the key type the navigator's),
+    // VerticalDragHandle(modifier =), Modifier::paneExpansionDraggable, onFirstVisible(minDurationMs =) { }, approachLayout by name,
+    // Arrangement::spacedBy(space, alignment), spring<float>, kt::repeat, kt::at with a nullable key.
+    CHECK(Arrangement::spacedBy(8, Alignment::CenterHorizontally).kind == Arrangement::Kind::Center &&
+          Arrangement::spacedBy(8, Alignment::Bottom).kind == Arrangement::Kind::End && Arrangement::spacedBy(8, Alignment::Start).spacing == 8);
+    AnimationSpec typed = spring<float>(0.5f, 400);
+    (void)typed;
+    std::vector<std::string> names{"a", "b"};
+    std::optional<int> picked = 1;
+    CHECK(kt::repeat(std::string("ab"), 3) == "ababab" && kt::at(names, picked) == "b");
+    int seen = 0, approached = 0;
+    ComposeTestRule rule([&] {
+        Column([&] {
+            auto navigator = rememberListDetailPaneScaffoldNavigator<int>();
+            auto support = rememberSupportingPaneScaffoldNavigator<int>();
+            Box(Modifier().size(400, 200), [=] {  // (by value: the block runs again on its own, after the lambda around it returned)
+                ListDetailPaneScaffold(arg::navigator = navigator,
+                                       arg::listPane = [navigator] { Text("liste", Modifier().clickable([navigator] { navigator.navigateTo(ListDetailPaneScaffoldRole::Detail, 1); })); },
+                                       arg::detailPane = [](const std::optional<int>& key) { Text(key ? "ayrıntı " + std::to_string(*key) : "seçin"); },
+                                       arg::listPaneWidth = 160.f,
+                                       arg::paneExpansionDragHandle = [](PaneExpansionState state) { VerticalDragHandle(arg::modifier = Modifier().paneExpansionDraggable(state)); });
+            });
+            Box(Modifier().size(400, 100), [=] {
+                SupportingPaneScaffold(arg::navigator = support, arg::mainPane = [] { Text("ana"); },
+                                       arg::supportingPane = [](const std::optional<int>&) { Text("destek"); }, arg::supportingPaneWidth = 120.f);
+            });
+            Row(Modifier().width(200), arg::horizontalArrangement = Arrangement::spacedBy(8, Alignment::CenterHorizontally), [&] {
+                Box(Modifier().size(20).onFirstVisible(arg::minDurationMs = 0, [&] { ++seen; }).testTag("nokta"));
+                Box(Modifier().size(20));
+            });
+            Box(Modifier()
+                    .approachLayout(arg::isMeasurementApproachInProgress = [&](Size) { ++approached; return false; },
+                                    arg::approachMeasure = [](const ApproachMeasureScope& s, const MeasureNext& measure, const Constraints&, Offset&) {
+                                        measure(Constraints::fixed(s.lookaheadSize.width, s.lookaheadSize.height));
+                                        return s.lookaheadSize;
+                                    })
+                    .testTag("etiket"),
+                [] { Text("etiket"); });
+        });
+    }, {400, 800});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("liste").exists() && rule.onNodeWithText("ana").exists());
+    rule.onNodeWithText("liste").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("ayrıntı 1").exists());
+    rule.advanceTimeBy(100);
+    rule.waitForIdle();
+    CHECK(near(rule.onNodeWithTag("nokta").bounds().x, 76) && seen == 1 && approached > 0);
+}
+
 TEST(navigation_takes_compose_named_arguments) {
     // NavHost(navController =, startDestination =, enterTransition = { }) { … } with the graph builder's
     // composable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }
@@ -17896,7 +17948,7 @@ TEST(list_detail_pane_scaffold_shows_one_pane_or_two) {
     auto scaffold = [&] {
         auto n = rememberListDetailPaneScaffoldNavigator<int>();
         nav = n;
-        ListDetailPaneScaffold<int>(
+        ListDetailPaneScaffold(
             n,
             [&] {
                 Column([=] {
@@ -18881,7 +18933,7 @@ TEST(supporting_pane_scaffold_puts_its_supporting_pane_at_the_end_or_slides_it_i
     auto scaffold = [&] {
         auto n = rememberSupportingPaneScaffoldNavigator<int>();
         nav = n;
-        SupportingPaneScaffold<int>(
+        SupportingPaneScaffold(
             n,
             [&] {
                 Column([=] {
@@ -18916,7 +18968,7 @@ TEST(supporting_pane_scaffold_puts_its_supporting_pane_at_the_end_or_slides_it_i
         ComposeTestRule rule([&] {  // two panes asked for, wherever: and right to left, the supporting one on the left
             CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] {
                 auto n = rememberSupportingPaneScaffoldNavigator<int>();
-                SupportingPaneScaffold<int>(n, [] { Text("Makale", Modifier().testTag("ana")); }, [](const std::optional<int>&) { Text("Destek", Modifier().testTag("destek")); },
+                SupportingPaneScaffold(n, [] { Text("Makale", Modifier().testTag("ana")); }, [](const std::optional<int>&) { Text("Destek", Modifier().testTag("destek")); },
                                             Modifier(), {.maxHorizontalPartitions = 2, .supportingPaneWidth = 200});
             });
         }, {600, 800});
@@ -19660,7 +19712,7 @@ TEST(pane_expansion_handle_drags_the_split_and_settles_on_an_anchor) {
             auto e = rememberPaneExpansionState({PaneExpansionAnchor::Proportion(0), PaneExpansionAnchor::Offset(360),
                                                  PaneExpansionAnchor::Proportion(0.5f), PaneExpansionAnchor::Offset(-100)});
             expansion = e;
-            ListDetailPaneScaffold<int>(
+            ListDetailPaneScaffold(
                 n, [] { Box(Modifier().fillMaxSize().testTag("liste")); },
                 [](const std::optional<int>&) { Box(Modifier().fillMaxSize().testTag("ayrıntı")); }, Modifier(),
                 {.maxHorizontalPartitions = 2, .paneExpansionState = e, .paneExpansionDragHandle = [](PaneExpansionState s) {
@@ -19757,7 +19809,7 @@ TEST(pane_expansion_handle_drags_the_split_and_settles_on_an_anchor) {
 TEST(pane_expansion_handle_alone_brings_its_own_state) {
     ComposeTestRule rule([&] {
         auto n = rememberListDetailPaneScaffoldNavigator<int>();
-        ListDetailPaneScaffold<int>(
+        ListDetailPaneScaffold(
             n, [] { Box(Modifier().fillMaxSize().testTag("liste")); }, [](const std::optional<int>&) { Box(Modifier().fillMaxSize()); },
             Modifier(),
             {.maxHorizontalPartitions = 2,
@@ -19779,7 +19831,7 @@ TEST(pane_expansion_without_a_handle_and_on_a_supporting_pane_scaffold) {
         auto n = rememberSupportingPaneScaffoldNavigator<int>();
         auto e = rememberPaneExpansionState();
         expansion = e;
-        SupportingPaneScaffold<int>(
+        SupportingPaneScaffold(
             n, [] { Box(Modifier().fillMaxSize().testTag("ana")); },
             [](const std::optional<int>&) { Box(Modifier().fillMaxSize().testTag("destek")); }, Modifier(),
             {.maxHorizontalPartitions = panes.get(), .paneExpansionState = e});

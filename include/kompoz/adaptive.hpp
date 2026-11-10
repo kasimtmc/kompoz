@@ -259,6 +259,9 @@ PaneExpansionState rememberPaneExpansionState(std::vector<PaneExpansionAnchor> a
 // nearest anchor (the next one the way it was flung; without anchors, where it was let go). At
 // least 48 dp tall and as wide as the space between the panes, to be easy to grab.
 Modifier paneExpansionDraggable(const PaneExpansionState& state, std::optional<MutableInteractionSource> interactionSource = {});
+inline Modifier Modifier::paneExpansionDraggable(const PaneExpansionState& state, std::optional<MutableInteractionSource> interactionSource) const {
+    return then(::kompoz::paneExpansionDraggable(state, std::move(interactionSource)));
+}
 
 // ---- ListDetailPaneScaffold ---------------------------------------------------------------
 //
@@ -290,6 +293,7 @@ template <class Role, class T>
 class PaneScaffoldNavigator {
 public:
     using Destination = ThreePaneScaffoldDestinationItem<T, Role>;
+    using Key = T;  // what the second pane shows
     PaneScaffoldNavigator() : history_(mutableStateOf(std::vector<Destination>{Destination{}})) {}
     Destination currentDestination() const { return history_.get().back(); }  // observable; the first pane at first
     void navigateTo(Role pane, std::optional<T> contentKey = std::nullopt) const {
@@ -392,6 +396,7 @@ struct ListDetailPaneScaffoldOptions {
     std::function<void(PaneExpansionState)> paneExpansionDragHandle;  // between the panes (a VerticalDragHandle)
 };
 
+namespace detail {
 template <class T>
 void ListDetailPaneScaffold(const ListDetailPaneScaffoldNavigator<T>& navigator, const Content& listPane,
                             const std::function<void(const std::optional<T>&)>& detailPane, const Modifier& modifier = {},
@@ -404,6 +409,7 @@ void ListDetailPaneScaffold(const ListDetailPaneScaffoldNavigator<T>& navigator,
                             detail::expansionOf(options.paneExpansionState, options.paneExpansionDragHandle),
                             options.paneExpansionDragHandle, modifier);
 }
+} // namespace detail
 
 // ---- SupportingPaneScaffold ----------------------------------------------------------------
 //
@@ -436,6 +442,7 @@ struct SupportingPaneScaffoldOptions {
     std::function<void(PaneExpansionState)> paneExpansionDragHandle;  // between the panes (a VerticalDragHandle)
 };
 
+namespace detail {
 template <class T>
 void SupportingPaneScaffold(const SupportingPaneScaffoldNavigator<T>& navigator, const Content& mainPane,
                             const std::function<void(const std::optional<T>&)>& supportingPane, const Modifier& modifier = {},
@@ -448,5 +455,72 @@ void SupportingPaneScaffold(const SupportingPaneScaffoldNavigator<T>& navigator,
                             detail::expansionOf(options.paneExpansionState, options.paneExpansionDragHandle),
                             options.paneExpansionDragHandle, modifier);
 }
+
+// Compose's names: ListDetailPaneScaffold(navigator = …, listPane = { }, detailPane = { key -> }, listPaneWidth = …, paneExpansionState = …,
+// paneExpansionDragHandle = { state -> }) and SupportingPaneScaffold(navigator = …, mainPane = { }, supportingPane = { key -> },
+// supportingPaneWidth = …); the key type is the navigator's. The C++ order (navigator, panes, modifier, options) by place.
+template <class X>
+concept PaneNavigator = requires { typename std::remove_cvref_t<X>::Key; } && requires(const std::remove_cvref_t<X>& n) { n.currentDestination(); };
+template <bool Supporting>
+struct PaneScaffoldImpl {
+    using First = std::conditional_t<Supporting, names::MainPane, names::ListPane>;
+    using Second = std::conditional_t<Supporting, names::SupportingPane, names::DetailPane>;
+    using Width = std::conditional_t<Supporting, names::SupportingPaneWidth, names::ListPaneWidth>;
+    using Options = std::conditional_t<Supporting, SupportingPaneScaffoldOptions, ListDetailPaneScaffoldOptions>;
+    using P = Params<names::Navigator, First, Second, names::Modifier, Width, names::SpacerSize, names::HandleBack, names::MaxHorizontalPartitions,
+                     names::PaneExpansionState, names::PaneExpansionDragHandle>;
+    template <class T, class Nav>
+    static void run(const Nav& navigator, const Content& first, const std::function<void(const std::optional<T>&)>& second, const Modifier& modifier,
+                    const Options& options, CallSite site) {
+        if constexpr (Supporting) SupportingPaneScaffold<T>(navigator, first, second, modifier, options, site);
+        else ListDetailPaneScaffold<T>(navigator, first, second, modifier, options, site);
+    }
+    template <class... A>
+    static constexpr bool byPlace() {  // (navigator, firstPane, secondPane[, modifier[, options]]): Kompoz's C++ order
+        if constexpr (sizeof...(A) < 3 || (isNamed<A> || ...)) return false;
+        else return PaneNavigator<std::tuple_element_t<0, std::tuple<A...>>>;
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (byPlace<A...>()) {
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            using T = typename std::remove_cvref_t<std::tuple_element_t<0, std::tuple<A...>>>::Key;
+            Modifier modifier;
+            Options options;
+            if constexpr (sizeof...(A) >= 4) modifier = std::get<3>(all);
+            if constexpr (sizeof...(A) >= 5) options = std::get<4>(all);
+            run<T>(std::get<0>(all), Content(std::get<1>(all)), std::function<void(const std::optional<T>&)>(std::get<2>(all)), modifier, options, site);
+        } else {
+            static_assert(P::template check<A...>());
+            auto&& navigator = P::template arg<names::Navigator>(args...);
+            using T = typename std::remove_cvref_t<decltype(navigator)>::Key;
+            Options options;
+            if constexpr (Supporting) P::template set<Width>(options.supportingPaneWidth, args...);
+            else P::template set<Width>(options.listPaneWidth, args...);
+            P::template set<names::SpacerSize>(options.spacerSize, args...);
+            P::template set<names::HandleBack>(options.handleBack, args...);
+            P::template set<names::MaxHorizontalPartitions>(options.maxHorizontalPartitions, args...);
+            P::template set<names::PaneExpansionState>(options.paneExpansionState, args...);
+            P::template set<names::PaneExpansionDragHandle>(options.paneExpansionDragHandle, args...);
+            run<T>(navigator, Content(P::template arg<First>(args...)), std::function<void(const std::optional<T>&)>(P::template arg<Second>(args...)),
+                   P::template get<names::Modifier>(Modifier{}, args...), options, site);
+        }
+    }
+};
+template <bool Supporting>
+struct PaneScaffoldCall : Composable<PaneScaffoldImpl<Supporting>> {
+    using Composable<PaneScaffoldImpl<Supporting>>::operator();
+    using Options = typename PaneScaffoldImpl<Supporting>::Options;
+    template <class Nav, class L, class D>
+        requires PaneNavigator<Nav>
+    void operator()(const Nav& navigator, const L& first, const D& second, const Modifier& modifier, const Options& options,
+                    CallSite site = CallSite::current()) const {
+        using T = typename Nav::Key;
+        PaneScaffoldImpl<Supporting>::template run<T>(navigator, Content(first), std::function<void(const std::optional<T>&)>(second), modifier, options, site);
+    }
+};
+} // namespace detail
+inline constexpr detail::PaneScaffoldCall<false> ListDetailPaneScaffold;
+inline constexpr detail::PaneScaffoldCall<true> SupportingPaneScaffold;
 
 } // namespace kompoz
