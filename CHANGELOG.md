@@ -1093,6 +1093,9 @@
   { }` and `approachLayout(isMeasurementApproachInProgress = { }, approachMeasure = { })` by name; `Arrangement.spacedBy(space,
   Alignment.CenterHorizontally)`; `spring<Float>(…)`; pagers take Compose's `key = { }`; `DeferredTargetAnimation::updateTarget`
   takes its scope by const reference. kompozc: `"ab".repeat(n)`; a list indexed by a nullable after its null check (`cities[city]`).
+- **The showcase's layout screen in Compose's syntax**: the pane scaffolds, layout info, the measured bar chart, positions,
+  the snapping row, carousels, horizontal grids, pagers, z-index, FlexBox, Grid and the custom layouts (Layout, SubcomposeLayout,
+  intrinsic sizes, LookaheadScope, approachLayout) are `@Composable fun`s in Kotlin.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

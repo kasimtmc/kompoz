@@ -2,686 +2,656 @@
 
 #include "showcase.hpp"
 
-#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
+// ListDetailPaneScaffold: cities and the one picked — one pane at a time on a phone held
+// upright (Back goes back), side by side on an expanded window (a phone on its side, a desktop),
+// where the handle between them drags the split (settling on a third, half or two thirds).
+@Composable
+fun ListDetailSection() {
+    val navigator = rememberListDetailPaneScaffoldNavigator<Int>()
+    val expansion = rememberPaneExpansionState(listOf(PaneExpansionAnchor.Proportion(1 / 3f), PaneExpansionAnchor.Proportion(0.5f), PaneExpansionAnchor.Proportion(2 / 3f)))
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val cities = listOf("İstanbul", "Ankara", "İzmir", "Bursa", "Antalya", "Trabzon")
+    val notes = listOf("İki kıtada bir şehir", "Başkent", "Ege'nin incisi", "Yeşil Bursa", "Turizmin merkezi", "Karadeniz'in kıyısında")
+    Section("ListDetailPaneScaffold") {
+        Text("Dikey telefonda liste ya da ayrıntı (geri tuşu listeye döner); yatayda ya da geniş pencerede yan yana, aradaki " +
+                 "tutamaçla genişlikleri sürüklenir.",
+             color = cs.onSurfaceVariant, style = typography.bodySmall)
+        Box(modifier = Modifier.fillMaxWidth().height(280.dp).background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp))) {
+            ListDetailPaneScaffold(
+                navigator = navigator,
+                listPane = {
+                    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        for (i in 0 until 6)
+                            ListItem(headlineContent = { Text(cities[i]) }, supportingContent = { Text(notes[i]) },
+                                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                     modifier = Modifier.clickable { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, i) })
+                    }
+                },
+                detailPane = { city ->
+                    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (city == null) {
+                            Text("Bir şehir seçin", color = cs.onSurfaceVariant)
+                        } else {
+                            Text(cities[city], style = typography.headlineSmall)
+                            Text(notes[city], color = cs.onSurfaceVariant)
+                            TextButton(onClick = { navigator.navigateBack() }) { Text("Geri") }
+                        }
+                    }
+                },
+                listPaneWidth = 260.dp,
+                paneExpansionState = expansion,
+                paneExpansionDragHandle = { state ->
+                    val source = remember { MutableInteractionSource() }
+                    VerticalDragHandle(modifier = Modifier.paneExpansionDraggable(state, source), interactionSource = source)
+                })
+        }
+    }
+}
+
+// A main pane with a supporting one: side by side on a wide window, slid in on a narrow one.
+@Composable
+fun SupportingPaneSection() {
+    val navigator = rememberSupportingPaneScaffoldNavigator<Int>()
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    Section("SupportingPaneScaffold") {
+        Text("Dikey telefonda ana bölme; \"İlgili\" destek bölmesini kaydırarak getirir (geri tuşu döner). Geniş pencerede destek bölmesi sonda.",
+             color = cs.onSurfaceVariant, style = typography.bodySmall)
+        Box(modifier = Modifier.fillMaxWidth().height(240.dp).background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp))) {
+            SupportingPaneScaffold(
+                navigator = navigator,
+                mainPane = {
+                    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Kapadokya", style = typography.headlineSmall)
+                        Text("Peri bacaları, balonlar ve yer altı şehirleri.", color = cs.onSurfaceVariant)
+                        FilledTonalButton(onClick = { navigator.navigateTo(SupportingPaneScaffoldRole.Supporting, 1) }) { Text("İlgili") }
+                    }
+                },
+                supportingPane = {
+                    Column(modifier = Modifier.fillMaxSize().background(cs.surfaceContainerHighest).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("İlgili yerler", style = typography.titleMedium)
+                        for (place in listOf("Göreme", "Ürgüp", "Derinkuyu")) Text(place)
+                        TextButton(onClick = { navigator.navigateBack() }) { Text("Geri") }
+                    }
+                },
+                supportingPaneWidth = 220.dp)
+        }
+    }
+}
 
 // LazyListState.layoutInfo: the items in view. Near the end of the list, 20 more are loaded
 // (a pretend 700 ms fetch); derivedStateOf recomposes only when its answer changes, not on
 // every scrolled frame.
-// ListDetailPaneScaffold: cities and the one picked — one pane at a time on a phone held
-// upright (Back goes back), side by side on an expanded window (a phone on its side, a desktop),
-// where the handle between them drags the split (settling on a third, half or two thirds).
-void ListDetailSection(CallSite site) {
-    composable(site, [=] {
-        auto navigator = rememberListDetailPaneScaffoldNavigator<int>();
-        auto expansion = rememberPaneExpansionState(
-            {PaneExpansionAnchor::Proportion(1 / 3.f), PaneExpansionAnchor::Proportion(0.5f), PaneExpansionAnchor::Proportion(2 / 3.f)});
-        const ColorScheme& cs = colorScheme();
-        static constexpr const char* cities[] = {"İstanbul", "Ankara", "İzmir", "Bursa", "Antalya", "Trabzon"};
-        static constexpr const char* notes[] = {"İki kıtada bir şehir", "Başkent", "Ege'nin incisi", "Yeşil Bursa", "Turizmin merkezi",
-                                                "Karadeniz'in kıyısında"};
-        Section("ListDetailPaneScaffold", [=] {
-            Text("Dikey telefonda liste ya da ayrıntı (geri tuşu listeye döner); yatayda ya da geniş pencerede yan yana, aradaki "
-                 "tutamaçla genişlikleri sürüklenir.",
-                 color = cs.onSurfaceVariant, style = typography().bodySmall);
-            Box(Modifier().fillMaxWidth().height(280).background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12))) {
-                ListDetailPaneScaffold<int>(
-                    navigator,
-                    [&] {
-                        Column(Modifier().fillMaxSize().verticalScroll(rememberScrollState())) {
-                            for (int i = 0; i < 6; ++i)
-                                ListItem({.headline = [i] { Text(cities[i]); }, .supporting = [i] { Text(notes[i]); },
-                                          .containerColor = colors::Transparent},
-                                         Modifier().clickable([navigator, i] { navigator.navigateTo(ListDetailPaneScaffoldRole::Detail, i); }));
-                        };
-                    },
-                    [&](const std::optional<int>& city) {
-                        Column(Modifier().fillMaxSize().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
-                            if (!city) {
-                                Text("Bir şehir seçin", color = cs.onSurfaceVariant);
-                                return;
-                            }
-                            Text(cities[*city], style = typography().headlineSmall);
-                            Text(notes[*city], color = cs.onSurfaceVariant);
-                            TextButton([navigator] { navigator.navigateBack(); }) { Text("Geri"); };
-                        };
-                    },
-                    Modifier(),
-                    {.listPaneWidth = 260,
-                     .paneExpansionState = expansion,
-                     .paneExpansionDragHandle = [](PaneExpansionState state) {
-                         auto source = remember([] { return MutableInteractionSource(); });
-                         VerticalDragHandle(paneExpansionDraggable(state, source), source);
-                     }});
-            };
-        });
-    });
-}
-
-// A main pane with a supporting one: side by side on a wide window, slid in on a narrow one.
-void SupportingPaneSection(CallSite site) {
-    composable(site, [=] {
-        auto navigator = rememberSupportingPaneScaffoldNavigator<int>();
-        const ColorScheme& cs = colorScheme();
-        Section("SupportingPaneScaffold", [=] {
-            Text("Dikey telefonda ana bölme; \"İlgili\" destek bölmesini kaydırarak getirir (geri tuşu döner). Geniş pencerede destek bölmesi sonda.",
-                 color = cs.onSurfaceVariant, style = typography().bodySmall);
-            Box(Modifier().fillMaxWidth().height(240).background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12))) {
-                SupportingPaneScaffold<int>(
-                    navigator,
-                    [&] {
-                        Column(Modifier().fillMaxSize().padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
-                            Text("Kapadokya", style = typography().headlineSmall);
-                            Text("Peri bacaları, balonlar ve yer altı şehirleri.", color = cs.onSurfaceVariant);
-                            FilledTonalButton([navigator] { navigator.navigateTo(SupportingPaneScaffoldRole::Supporting, 1); }) { Text("İlgili"); };
-                        };
-                    },
-                    [&](const std::optional<int>&) {
-                        Column(Modifier().fillMaxSize().background(cs.surfaceContainerHighest).padding(16), verticalArrangement = Arrangement::spacedBy(8)) {
-                            Text("İlgili yerler", style = typography().titleMedium);
-                            for (const char* place : {"Göreme", "Ürgüp", "Derinkuyu"}) Text(place);
-                            TextButton([navigator] { navigator.navigateBack(); }) { Text("Geri"); };
-                        };
-                    },
-                    Modifier(), {.supportingPaneWidth = 220});
-            };
-        });
-    });
-}
-
-void LayoutInfoSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto list = rememberLazyListState();
-        auto count = remember([] { return mutableStateOf(20); });
-        auto loading = remember([] { return mutableStateOf(false); });
-        auto nearEnd = remember([list] {
-            return derivedStateOf([list] {
-                auto info = list.layoutInfo();
-                return !info.visibleItemsInfo.empty() && info.visibleItemsInfo.back().index >= info.totalItemsCount - 3;
-            });
-        });
-        auto shown = remember([list] {
-            return derivedStateOf([list] {
-                auto v = list.layoutInfo().visibleItemsInfo;
-                return v.empty() ? std::pair(0, 0) : std::pair(v.front().index, v.back().index);
-            });
-        });
-        // The fetch runs in the section's scope: the answer flickering as the footer comes in
-        // must not cancel it halfway (and leave it loading for good).
-        auto scope = rememberCoroutineScope();
-        bool wantMore = nearEnd.get();
-        LaunchedEffect(wantMore, [wantMore, loading, count, scope]() -> Task {
-            if (wantMore && !loading.peek() && count.peek() < 200) {
-                loading.set(true);
-                scope.launch([loading, count]() -> Task {
-                    co_await delay(std::chrono::milliseconds(700));
-                    count.set(count.peek() + 20);
-                    loading.set(false);
-                });
+@Composable
+fun LayoutInfoSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val list = rememberLazyListState()
+    var count by remember { mutableStateOf(20) }
+    var loading by remember { mutableStateOf(false) }
+    val nearEnd by remember {
+        derivedStateOf {
+            val info = list.layoutInfo
+            info.visibleItemsInfo.isNotEmpty() && info.visibleItemsInfo.last().index >= info.totalItemsCount - 3
+        }
+    }
+    val shown by remember {
+        derivedStateOf {
+            val v = list.layoutInfo.visibleItemsInfo
+            if (v.isEmpty()) 0 to 0 else v.first().index to v.last().index
+        }
+    }
+    // The fetch runs in the section's scope: the answer flickering as the footer comes in
+    // must not cancel it halfway (and leave it loading for good).
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(nearEnd) {
+        if (nearEnd && !loading && count < 200) {
+            loading = true
+            scope.launch {
+                delay(700)
+                count += 20
+                loading = false
             }
-            co_return;
-        });
-        auto [first, last] = shown.get();
-        Section("LazyListState.layoutInfo · contentType", [=] {
-            Text("Liste görünen öğelerini layoutInfo ile söyler; sona yaklaşınca 20 öğe daha yüklenir. derivedStateOf yalnızca "
+        }
+    }
+    val (first, last) = shown
+    Section("LazyListState.layoutInfo · contentType") {
+        Text("Liste görünen öğelerini layoutInfo ile söyler; sona yaklaşınca 20 öğe daha yüklenir. derivedStateOf yalnızca " +
                  "cevabı değişince yeniden kompoze ettirir.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            Text(std::format("Görünen: {}–{} · toplam {}{}", first + 1, last + 1, count.get(), loading.get() ? " · yükleniyor" : ""),
-                 Modifier().padding(0, 8, 0, 0), style = typography().titleSmall);
-            LazyColumn(Modifier().fillMaxWidth().padding(0, 8, 0, 0).height(260).background(cs.surfaceContainerHigh, RoundedCornerShape(12)),
-                       state = list, contentPadding = PaddingValues{12, 8, 12, 8}, verticalArrangement = Arrangement::spacedBy(4)) {
-                           items(count.get(), [](int i) { return size_t(i); }, [](int) { return size_t(1); }, [&](int i) {
-                               Text(std::format("Öğe {}", i + 1), Modifier().fillMaxWidth().height(40).padding(4, 10), style = typography().bodyLarge);
-                           });
-                           if (loading.get())
-                               item("yükleniyor", "alt bilgi", [&] {
-                                   Row(Modifier().fillMaxWidth().height(48), horizontalArrangement = Arrangement::Center, verticalAlignment = Alignment::CenterVertically) {
-                                           CircularProgressIndicator(Modifier().size(20));
-                                           Text("  yükleniyor…", style = typography().bodyMedium);
-                                       };
-                               });
-                       };
-        });
-    });
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        Text("Görünen: ${first + 1}–${last + 1} · toplam $count${if (loading) " · yükleniyor" else ""}", modifier = Modifier.padding(0.dp, 8.dp, 0.dp, 0.dp), style = typography.titleSmall)
+        LazyColumn(modifier = Modifier.fillMaxWidth().padding(0.dp, 8.dp, 0.dp, 0.dp).height(260.dp).background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp)),
+                   state = list, contentPadding = PaddingValues(12.dp, 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            items(count, key = { it }, contentType = { 1 }) { i ->
+                Text("Öğe ${i + 1}", modifier = Modifier.fillMaxWidth().height(40.dp).padding(4.dp, 10.dp), style = typography.bodyLarge)
+            }
+            if (loading)
+                item(key = "yükleniyor", contentType = "alt bilgi") {
+                    Row(modifier = Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                        Text("  yükleniyor…", style = typography.bodyMedium)
+                    }
+                }
+        }
+    }
 }
 
 // rememberTextMeasurer + drawText: a bar chart whose labels are measured to sit centered over
 // their bars; onTextLayout: a paragraph that offers "devamını oku" only when it was cut off.
-void TextMeasureSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto measurer = rememberTextMeasurer();
-        auto expanded = remember([] { return mutableStateOf(false); });
-        auto cut = remember([] { return mutableStateOf(false); });
-        Color bar = cs.primary, label = cs.onSurface, faint = cs.onSurfaceVariant;
-        Section("rememberTextMeasurer · drawText · onTextLayout", [=] {
-            Canvas(Modifier().fillMaxWidth().height(170), [measurer, bar, label, faint](DrawScope& d) {
-                static const std::pair<const char*, int> months[] = {{"Oca", 42}, {"Şub", 58}, {"Mar", 35}, {"Nis", 71}, {"May", 64}, {"Haz", 88}};
-                float w = d.size().width, slot = w / 6, top = 22, bottom = d.size().height - 22, h = bottom - top;
-                for (int i = 0; i < 6; ++i) {
-                    auto [name, value] = months[i];
-                    float x = slot * float(i) + slot * 0.2f, bw = slot * 0.6f, bh = h * float(value) / 100.f;
-                    d.drawRoundRect(bar, {x, bottom - bh}, Size{bw, bh}, CornerRadius(6));
-                    TextLayoutResult v = measurer.measure(std::format("%{}", value), {.fontSize = 12, .fontWeight = FontWeight::Bold});
-                    d.drawText(v, label, {x + (bw - v.size().width) / 2, bottom - bh - v.size().height - 2});
-                    TextLayoutResult m = measurer.measure(name, {.fontSize = 12});
-                    d.drawText(m, faint, {x + (bw - m.size().width) / 2, bottom + 4});
-                }
-            });
-            Text("Kompoz, Jetpack Compose'un fikirlerini C++20'ye taşır: durum değişince yalnızca onu okuyan parçalar yeniden "
-                 "kompoze edilir, düzen ölçüp yerleştirir, çizim de yalnızca değişen bölgeyi yeniler. Aynı kod masaüstünde, "
+@Composable
+fun TextMeasureSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val measurer = rememberTextMeasurer()
+    var expanded by remember { mutableStateOf(false) }
+    var cut by remember { mutableStateOf(false) }
+    Section("rememberTextMeasurer · drawText · onTextLayout") {
+        Canvas(modifier = Modifier.fillMaxWidth().height(170.dp)) {
+            val months = listOf("Oca" to 42, "Şub" to 58, "Mar" to 35, "Nis" to 71, "May" to 64, "Haz" to 88)
+            val w = size.width
+            val slot = w / 6
+            val top = 22f
+            val bottom = size.height - 22
+            val h = bottom - top
+            for (i in 0 until 6) {
+                val (name, value) = months[i]
+                val x = slot * i + slot * 0.2f
+                val bw = slot * 0.6f
+                val bh = h * value / 100f
+                drawRoundRect(cs.primary, topLeft = Offset(x, bottom - bh), size = Size(bw, bh), cornerRadius = CornerRadius(6f))
+                val v = measurer.measure("%$value", style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold))
+                drawText(v, color = cs.onSurface, topLeft = Offset(x + (bw - v.size.width) / 2, bottom - bh - v.size.height - 2))
+                val m = measurer.measure(name, style = TextStyle(fontSize = 12.sp))
+                drawText(m, color = cs.onSurfaceVariant, topLeft = Offset(x + (bw - m.size.width) / 2, bottom + 4))
+            }
+        }
+        Text("Kompoz, Jetpack Compose'un fikirlerini C++20'ye taşır: durum değişince yalnızca onu okuyan parçalar yeniden " +
+                 "kompoze edilir, düzen ölçüp yerleştirir, çizim de yalnızca değişen bölgeyi yeniler. Aynı kod masaüstünde, " +
                  "Android'de, tarayıcıda ve Windows'ta çalışır; bileşenler Material 3'ü izler.",
-                 Modifier().padding(0, 12, 0, 0),
-                 maxLines = expanded.get() ? 0 : 2, overflow = TextOverflow::Ellipsis, style = typography().bodyMedium, onTextLayout = [cut, expanded](const TextLayoutResult& r) {
-                     if (!expanded.peek()) cut.set(r.hasVisualOverflow());
-                 });
-            if (cut.get())
-                TextButton([expanded] { expanded.set(!expanded.peek()); }) { Text(expanded.get() ? "Daha az" : "Devamını oku"); };
-        });
-    });
+             modifier = Modifier.padding(0.dp, 12.dp, 0.dp, 0.dp),
+             maxLines = if (expanded) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis, style = typography.bodyMedium,
+             onTextLayout = { if (!expanded) cut = it.hasVisualOverflow })
+        if (cut)
+            TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Daha az" else "Devamını oku") }
+    }
+}
+
+// Where the card is, read here and not around the section: as it moves, only these lines are composed again.
+@Composable
+fun PositionLines(where: State<LayoutCoordinates>, placed: State<Int>, color: Color) {
+    val c = where.value
+    val shown = if (c.size.height > 0) c.boundsInRoot().height / c.size.height else 0f
+    Text("Ekranda: x ${c.positionInRoot().x.roundToInt()}, y ${c.positionInRoot().y.roundToInt()} dp · ${c.size.width.roundToInt()} × ${c.size.height.roundToInt()}",
+         color = color, style = MaterialTheme.typography.titleSmall)
+    Text("Görünen kısmı: %${(shown * 100).roundToInt()} · onPlaced ${placed.value} kez", color = color, style = MaterialTheme.typography.bodyMedium)
 }
 
 // onGloballyPositioned: a card that knows where it is on the screen and how much of it shows,
 // as the page scrolls (onPlaced hears only of its size and place in its parent).
-void PositionSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto where = remember([] { return mutableStateOf(LayoutCoordinates()); });
-        auto placedTimes = remember([] { return std::make_shared<int>(0); });
-        auto placed = remember([] { return mutableStateOf(0); });
-        Section("onGloballyPositioned · onPlaced · LayoutCoordinates", [=] {
-            Column(Modifier().fillMaxWidth().background(cs.tertiaryContainer, 16).padding(16)
-                       .onGloballyPositioned([where](const LayoutCoordinates& now) { where.set(now); })
-                       .onPlaced([placedTimes, placed](const LayoutCoordinates&) { placed.set(++*placedTimes); }),
-                   verticalArrangement = Arrangement::spacedBy(4)) {
-                       // Read here, not around the section: as it moves, only these lines are composed again.
-                       composable(CallSite::current(), [where, placed, color = cs.onTertiaryContainer] {
-                           LayoutCoordinates c = where.get();
-                           float shown = c.size().height > 0 ? c.boundsInRoot().height / c.size().height : 0.f;
-                           Text(std::format("Ekranda: x {:.0f}, y {:.0f} dp · {:.0f} × {:.0f}", c.positionInRoot().x, c.positionInRoot().y,
-                                            c.size().width, c.size().height),
-                                kompoz::color = color, style = typography().titleSmall);
-                           Text(std::format("Görünen kısmı: %{:.0f} · onPlaced {} kez", shown * 100, placed.get()),
-                                kompoz::color = color, style = typography().bodyMedium);
-                       });
-                       Text("Sayfayı kaydırın: konum her karede güncellenir; onPlaced yalnızca boyutu ya da ebeveynindeki yeri değişince çağrılır.",
-                            color = cs.onTertiaryContainer, style = typography().bodySmall);
-                   };
-        });
-    });
+@Composable
+fun PositionSection() {
+    val cs = MaterialTheme.colorScheme
+    val where = remember { mutableStateOf(LayoutCoordinates()) }
+    val placed = remember { mutableStateOf(0) }
+    Section("onGloballyPositioned · onPlaced · LayoutCoordinates") {
+        Column(modifier = Modifier.fillMaxWidth().background(cs.tertiaryContainer, RoundedCornerShape(16.dp)).padding(16.dp)
+                   .onGloballyPositioned { where.value = it }
+                   .onPlaced { placed.value = placed.value + 1 },
+               verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            PositionLines(where, placed, cs.onTertiaryContainer)
+            Text("Sayfayı kaydırın: konum her karede güncellenir; onPlaced yalnızca boyutu ya da ebeveynindeki yeri değişince çağrılır.",
+                 color = cs.onTertiaryContainer, style = MaterialTheme.typography.bodySmall)
+        }
+    }
 }
 
 // rememberSnapFlingBehavior: a row of cards that settles with one in the middle, however hard
 // it is flung (the one nearest to where the fling would have stopped).
-void SnapRowSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto row = rememberLazyListState();
-        static const Color tints[] = {Color::hex(0x6750A4), Color::hex(0x7D5260), Color::hex(0x386A20), Color::hex(0x00639B), Color::hex(0x8C4A00)};
-        // onFirstVisible: a card counts as seen once all of it has shown for half a second.
-        auto seen = remember([] { return mutableStateOf(0); });
-        // onLayoutRectChanged: where the first card is, told once the row stops moving.
-        auto firstCard = remember([] { return mutableStateOf(std::string("—")); });
-        Section("LazyRow · rememberSnapFlingBehavior · onFirstVisible · onLayoutRectChanged", [=] {
-            Text("Fırlatın: liste, fırlatmanın varacağı yere en yakın kartı ortaya getirerek durur.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            Text(std::format("Görülen kart (tamamı yarım saniye görünen): {} / 20", seen.get()), style = typography().labelLarge);
-            Text("Kart 1 (kaydırma durunca): " + firstCard.get(), color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            LazyRow(Modifier().fillMaxWidth().padding(0, 12, 0, 0).height(120), state = row, horizontalArrangement = Arrangement::spacedBy(12), flingBehavior = rememberSnapFlingBehavior(row)) {
-                        items(20, [seen, firstCard](int i) {
-                            Modifier where = i == 0 ? Modifier().onLayoutRectChanged([firstCard](const RelativeLayoutBounds& b) {
-                                firstCard.set(std::format("x = {:.0f} dp · %{:.0f} görünür", b.positionInWindow().x, b.fractionVisibleInWindow() * 100));
-                            }) : Modifier();
-                            (Box)(Modifier()
-                                    .size(200, 120)
-                                    .background(tints[i % 5], RoundedCornerShape(20))
-                                    .onFirstVisible([seen] { seen.set(seen.peek() + 1); }, {.minDurationMs = 500})
-                                    .then(where),
-                                Alignment::Center,
-                                [i] { Text(std::format("Kart {}", i + 1), color = colors::White, style = typography().titleMedium); });
-                        });
-                    };
-        });
-    });
+@Composable
+fun SnapRowSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val row = rememberLazyListState()
+    val tints = listOf(Color(0xFF6750A4), Color(0xFF7D5260), Color(0xFF386A20), Color(0xFF00639B), Color(0xFF8C4A00))
+    // onFirstVisible: a card counts as seen once all of it has shown for half a second.
+    var seen by remember { mutableStateOf(0) }
+    // onLayoutRectChanged: where the first card is, told once the row stops moving.
+    var firstCard by remember { mutableStateOf("—") }
+    Section("LazyRow · rememberSnapFlingBehavior · onFirstVisible · onLayoutRectChanged") {
+        Text("Fırlatın: liste, fırlatmanın varacağı yere en yakın kartı ortaya getirerek durur.", color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        Text("Görülen kart (tamamı yarım saniye görünen): $seen / 20", style = typography.labelLarge)
+        Text("Kart 1 (kaydırma durunca): $firstCard", color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        LazyRow(modifier = Modifier.fillMaxWidth().padding(0.dp, 12.dp, 0.dp, 0.dp).height(120.dp), state = row,
+                horizontalArrangement = Arrangement.spacedBy(12.dp), flingBehavior = rememberSnapFlingBehavior(row)) {
+            items(20) { i ->
+                val where = if (i == 0) Modifier.onLayoutRectChanged { b ->
+                    firstCard = "x = ${b.positionInWindow().x.roundToInt()} dp · %${(b.fractionVisibleInWindow() * 100).roundToInt()} görünür"
+                } else Modifier
+                Box(modifier = Modifier
+                        .size(200.dp, 120.dp)
+                        .background(tints[i % 5], RoundedCornerShape(20.dp))
+                        .onFirstVisible(minDurationMs = 500) { seen++ }
+                        .then(where),
+                    contentAlignment = Alignment.Center) { Text("Kart ${i + 1}", color = Color.White, style = typography.titleMedium) }
+            }
+        }
+    }
 }
 
 // Carousels: a multi-browse one (large, medium and small items that grow and shrink as they
 // move, settling on an item) and an uncontained one (one width, free scrolling).
-void CarouselSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        static const char* const photos[] = {"images/mountains.jpg", "images/lake.webp", "images/landscape.png"};
-        static const char* const names[] = {"Dağlar", "Göl", "Manzara", "Gün batımı", "Orman", "Kıyı", "Vadi", "Tepe"};
-        auto browse = rememberCarouselState(0, [] { return 8; });
-        auto free = rememberCarouselState(0, [] { return 12; });
-        auto hero = rememberCarouselState(0, [] { return 8; });
-        Section("Carousel (HorizontalMultiBrowseCarousel · HorizontalUncontainedCarousel · HorizontalCenteredHeroCarousel)", [=] {
-            Text(std::format("Kaydırın: öğeler ilerledikçe büyüyüp küçülür, bırakınca bir öğeye oturur · şu an {}. öğe",
-                             browse.currentItem() + 1),
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            // The name fades with the item's size (carouselItemInfo, read while drawing).
-            HorizontalMultiBrowseCarousel(browse, 186, Modifier().fillMaxWidth().height(200), CarouselOptions{.itemSpacing = 8}, [&](const CarouselItemScope& item) {
-                int i = item.index;
-                CarouselItemInfo info = item.carouselItemInfo;
-                // maskBorder: a thin light line along the part of the photo the item shows.
-                Box(Modifier().fillMaxSize().background(hueColor(i * 7)).then(item.maskBorder(BorderStroke(2, colors::White.copy(0.7f)), RoundedCornerShape(28))),
-                    Alignment::BottomStart) {
-                    AsyncImage(photos[i % 3], names[i], Modifier().fillMaxSize(), AsyncImageOptions{.contentScale = ContentScale::Crop});
-                    Text(names[i], Modifier().graphicsLayer([info](GraphicsLayerScope& l) {
-                        float span = info.maxSize() - info.minSize();
-                        l.alpha = span > 0 ? std::clamp((info.size() - info.minSize()) / span, 0.f, 1.f) : 1.f;
-                    }).padding(16, 12), color = colors::White, style = typography().titleMedium);
-                };
-            });
-            HorizontalUncontainedCarousel(free, 120, Modifier().fillMaxWidth().height(120), CarouselOptions{.itemSpacing = 8, .itemShape = RoundedCornerShape(16)},
-                                          [&](int i) {
-                                              Box(Modifier().fillMaxSize().background(hueColor(i * 5)), Alignment::Center) { Text(std::to_string(i + 1), color = colors::White, style = typography().headlineSmall); };
-                                          });
-            // One large in the middle, a small one either side (the first and the last large at the ends).
-            Text(std::format("Ortada büyük olan: {}", names[hero.currentItem()]), color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            HorizontalCenteredHeroCarousel(hero, 0, Modifier().fillMaxWidth().height(180), CarouselOptions{.itemSpacing = 8}, [&](int i) {
-                Box(Modifier().fillMaxSize().background(hueColor(i * 9)), Alignment::BottomStart) {
-                    AsyncImage(photos[(i + 1) % 3], names[i], Modifier().fillMaxSize(), AsyncImageOptions{.contentScale = ContentScale::Crop});
-                    Text(names[i], Modifier().padding(16, 12), color = colors::White, style = typography().titleMedium);
-                };
-            });
-        });
-    });
+@Composable
+fun CarouselSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val photos = listOf("images/mountains.jpg", "images/lake.webp", "images/landscape.png")
+    val names = listOf("Dağlar", "Göl", "Manzara", "Gün batımı", "Orman", "Kıyı", "Vadi", "Tepe")
+    val browse = rememberCarouselState { 8 }
+    val free = rememberCarouselState { 12 }
+    val hero = rememberCarouselState { 8 }
+    Section("Carousel (HorizontalMultiBrowseCarousel · HorizontalUncontainedCarousel · HorizontalCenteredHeroCarousel)") {
+        Text("Kaydırın: öğeler ilerledikçe büyüyüp küçülür, bırakınca bir öğeye oturur · şu an ${browse.currentItem + 1}. öğe",
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        // The name fades with the item's size (carouselItemInfo, read while drawing).
+        HorizontalMultiBrowseCarousel(state = browse, preferredItemWidth = 186.dp, modifier = Modifier.fillMaxWidth().height(200.dp), itemSpacing = 8.dp) { i ->
+            val info = carouselItemInfo
+            // maskBorder: a thin light line along the part of the photo the item shows.
+            Box(modifier = Modifier.fillMaxSize().background(hueColor(i * 7)).then(maskBorder(BorderStroke(2.dp, Color.White.copy(alpha = 0.7f)), RoundedCornerShape(28.dp))),
+                contentAlignment = Alignment.BottomStart) {
+                AsyncImage(model = photos[i % 3], contentDescription = names[i], modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                Text(names[i], modifier = Modifier.graphicsLayer {
+                    val span = info.maxSize - info.minSize
+                    alpha = if (span > 0) ((info.size - info.minSize) / span).coerceIn(0f, 1f) else 1f
+                }.padding(16.dp, 12.dp), color = Color.White, style = typography.titleMedium)
+            }
+        }
+        HorizontalUncontainedCarousel(state = free, itemWidth = 120.dp, modifier = Modifier.fillMaxWidth().height(120.dp), itemSpacing = 8.dp) { i ->
+            Box(modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)).background(hueColor(i * 5)), contentAlignment = Alignment.Center) {
+                Text("${i + 1}", color = Color.White, style = typography.headlineSmall)
+            }
+        }
+        // One large in the middle, a small one either side (the first and the last large at the ends).
+        Text("Ortada büyük olan: ${names[hero.currentItem]}", color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        HorizontalCenteredHeroCarousel(state = hero, modifier = Modifier.fillMaxWidth().height(180.dp), itemSpacing = 8.dp) { i ->
+            Box(modifier = Modifier.fillMaxSize().background(hueColor(i * 9)), contentAlignment = Alignment.BottomStart) {
+                AsyncImage(model = photos[(i + 1) % 3], contentDescription = names[i], modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                Text(names[i], modifier = Modifier.padding(16.dp, 12.dp), color = Color.White, style = typography.titleMedium)
+            }
+        }
+    }
 }
 
 // Three rows of tiles that scroll sideways, composed column by column.
-void HorizontalGridSection(CallSite site) {
-    composable(site, [=] {
-        Section("LazyHorizontalGrid · LazyHorizontalStaggeredGrid", [=] {
-            LazyHorizontalGrid(GridCells::Fixed(3), Modifier().fillMaxWidth().height(180), verticalArrangement = Arrangement::spacedBy(6), horizontalArrangement = Arrangement::spacedBy(6)) {
-                                   items(300, [](int i) {
-                                       Box(Modifier().width(i % 7 == 0 ? 120 : 72).fillMaxHeight().background(hueColor(i), 12),
-                                           Alignment::Center) { Text(std::to_string(i), fontWeight = FontWeight::Bold, color = colors::White); };
-                                   });
-                               };
-            // Items of their own widths, each after the shorter row (LazyHorizontalStaggeredGrid).
-            LazyHorizontalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxWidth().height(120),
-                                        horizontalItemSpacing = 6, verticalArrangement = Arrangement::spacedBy(6)) {
-                                            items(200, [](int i) {
-                                                Box(Modifier().width(float(48 + (i * 37) % 90)).fillMaxHeight().background(hueColor(i * 3), 12),
-                                                    Alignment::Center) { Text(std::to_string(i), fontWeight = FontWeight::Bold, color = colors::White); };
-                                            });
-                                        };
-        });
-    });
+@Composable
+fun HorizontalGridSection() {
+    Section("LazyHorizontalGrid · LazyHorizontalStaggeredGrid") {
+        LazyHorizontalGrid(rows = GridCells.Fixed(3), modifier = Modifier.fillMaxWidth().height(180.dp),
+                           verticalArrangement = Arrangement.spacedBy(6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(300) { i ->
+                Box(modifier = Modifier.width(if (i % 7 == 0) 120.dp else 72.dp).fillMaxHeight().background(hueColor(i), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center) { Text("$i", fontWeight = FontWeight.Bold, color = Color.White) }
+            }
+        }
+        // Items of their own widths, each after the shorter row (LazyHorizontalStaggeredGrid).
+        LazyHorizontalStaggeredGrid(rows = StaggeredGridCells.Fixed(2), modifier = Modifier.fillMaxWidth().height(120.dp),
+                                    horizontalItemSpacing = 6.dp, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(200) { i ->
+                Box(modifier = Modifier.width((48 + (i * 37) % 90).dp).fillMaxHeight().background(hueColor(i * 3), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center) { Text("$i", fontWeight = FontWeight.Bold, color = Color.White) }
+            }
+        }
+    }
 }
 
-void PagerSection(CallSite site) {
-    composable(site, [=] {
-        auto pager = rememberPagerState(0, [] { return 5; });
-        auto cards = rememberPagerState(0, [] { return 10; });
-        auto scope = rememberCoroutineScope();
-        auto expanded = remember([] { return mutableStateOf(false); });
-        const ColorScheme& cs = colorScheme();
-        int current = pager.currentPage();
-        Section("HorizontalPager · PageSize · animateContentSize · BoxWithConstraints", [=] {
-            HorizontalPager(pager, Modifier().fillMaxWidth().height(150), pageSpacing = 12) [](int page) {
-                Box(Modifier().fillMaxSize().background(
-                        Brush::linearGradient({hueColor(page * 1700 + 300), hueColor(page * 1700 + 900)}), RoundedCornerShape(20)),
-                    Alignment::Center) {
-                        Text(std::format("Sayfa {}", page + 1), fontSize = 28, fontWeight = FontWeight::Bold, color = colors::White);
-                    };
-            };
-            Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
-                IconButton([pager, scope, current] {
-                    scope.launch([pager, current]() -> Task { co_await pager.animateScrollToPage(current - 1); });
-                }) { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Önceki"); };
-                Row(Modifier().weight(1), horizontalArrangement = Arrangement::spacedBy(8, Arrangement::Kind::Center), verticalAlignment = Alignment::CenterVertically) {
-                    for (int i = 0; i < 5; ++i)
-                        Box(Modifier().size(i == current ? 10.f : 8.f).background(i == current ? cs.primary : cs.outlineVariant, CircleShape)) {};
-                };
-                IconButton([pager, scope, current] {
-                    scope.launch([pager, current]() -> Task { co_await pager.animateScrollToPage(current + 1); });
-                }) { Icon(Icons::AutoMirrored::Filled::ArrowForward, "Sonraki"); };
-            };
-            // PageSize::Fixed pages in the middle (SnapPosition::Center; the side padding, half the
-            // room the page leaves, lets the first and last ones get there too), shrinking and fading
-            // as they leave it (getOffsetDistanceInPages, read in graphicsLayer's block while
-            // drawing); a fling turns up to three pages.
-            Text("PageSize.Fixed · SnapPosition.Center · PagerSnapDistance.atMost(3)", color = cs.onSurfaceVariant, style = typography().labelLarge);
-            BoxWithConstraints(Modifier().fillMaxWidth(), [&](const Constraints& c) {
-                float side = c.hasBoundedWidth() ? std::max(0.f, (c.maxWidth - 140) / 2) : 0.f;  // (unbounded before it is first measured)
-                HorizontalPager(cards, Modifier().fillMaxWidth().height(120), contentPadding = PaddingValues{.start = side, .end = side}, pageSize = PageSize::Fixed(140), pageSpacing = 12,
-                   snapPosition = SnapPosition::Center, flingBehavior = PagerDefaults::flingBehavior(cards, PagerSnapDistance::atMost(3))) [cards](int page) {
-                    Box(Modifier()
-                            .fillMaxSize()
-                            .graphicsLayer([cards, page](GraphicsLayerScope& layer) {
-                                float away = std::min(1.f, std::abs(cards.getOffsetDistanceInPages(page)));
-                                layer.scaleX = layer.scaleY = 1 - 0.15f * away;
-                                layer.alpha = 1 - 0.5f * away;
-                            })
-                            .background(hueColor(page * 900 + 200), RoundedCornerShape(16)),
-                        Alignment::Center) { Text(std::to_string(page + 1), fontSize = 32, fontWeight = FontWeight::Bold, color = colors::White); };
-                };
-            });
-            Text(std::format("currentPage {} · settledPage {} · targetPage {}", cards.currentPage() + 1, cards.settledPage() + 1, cards.targetPage() + 1),
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            // key: a page put in before the current one leaves it the current page (one further on);
-            // reverseLayout: the pages from the end, the finger the other way.
-            auto pageNumbers = remember([] { return mutableStateOf(std::vector<int>{1, 2, 3}); });
-            auto fromEnd = remember([] { return mutableStateOf(false); });
-            std::vector<int> numbers = pageNumbers.get();
-            auto keyed = rememberPagerState(0, [n = numbers.size()] { return int(n); });
-            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                OutlinedButton([pageNumbers] {
-                    auto list = pageNumbers.get();
-                    list.insert(list.begin(), *std::max_element(list.begin(), list.end()) + 1);
-                    pageNumbers.set(list);
-                }, Modifier()) { Text("Başa sayfa ekle"); };
-                Switch(fromEnd.get(), [fromEnd](bool on) { fromEnd.set(on); });
-                Text("reverseLayout", style = typography().bodyMedium);
-            };
-            HorizontalPager(keyed, Modifier().fillMaxWidth().height(72), pageSpacing = 8, reverseLayout = fromEnd.get(), pageKey = [numbers](int i) { return size_t(numbers[size_t(i)]); }) [=](int i) {
-                Box(Modifier().fillMaxSize().background(hueColor(numbers[size_t(i)] * 700 + 100), RoundedCornerShape(12)), Alignment::Center) {
-                    Text(std::format("Sayfa {}", numbers[size_t(i)]), color = colors::White, style = typography().titleMedium);
-                };
-            };
-            Text(std::format("key ile: currentPage {} · {} sayfa", keyed.currentPage() + 1, numbers.size()),
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            Column(Modifier().fillMaxWidth().background(cs.secondaryContainer, 16).clickable([expanded] { expanded.set(!expanded.get()); })
-                       .animateContentSize().padding(16),
-                   verticalArrangement = Arrangement::spacedBy(6)) {
-                       Text("animateContentSize (dokunun)", color = cs.onSecondaryContainer, style = typography().titleMedium);
-                       Text(expanded.get() ? "Boyut değişince kart yumuşakça büyür ve küçülür. Animasyon layout sırasında kare saatine "
-                                             "göre hesaplanır; yeniden kompozisyon gerekmez. İçerik animasyon boyunca kırpılır."
-                                           : "Kısa metin.",
-                            color = cs.onSecondaryContainer, style = typography().bodyMedium);
-                   };
-            BoxWithConstraints(Modifier().fillMaxWidth(), [&](const Constraints& c) {
-                bool wide = c.maxWidth >= 360;
-                Column(Modifier().fillMaxWidth(), verticalArrangement = Arrangement::spacedBy(8)) {
-                    Text(std::format("BoxWithConstraints: {:.0f} dp, {}", c.hasBoundedWidth() ? c.maxWidth : 0.f,
-                                     wide ? "yan yana" : "alt alta"),
-                         color = cs.onSurfaceVariant, style = typography().bodyMedium);
-                    auto tile = [=](const char* label, Color color) {
-                        Box(Modifier().fillMaxWidth().height(48).background(color, 12).padding(12, 0), Alignment::CenterStart) { Text(label, kompoz::color = colors::White); };
-                    };
-                    if (wide)
-                        Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                            Box(Modifier().weight(1)) { tile("Birinci", hueColor(100)); };
-                            Box(Modifier().weight(1)) { tile("İkinci", hueColor(400)); };
-                        };
-                    else {
-                        tile("Birinci", hueColor(100));
-                        tile("İkinci", hueColor(400));
+@Composable
+fun PagerSection() {
+    val pager = rememberPagerState(pageCount = { 5 })
+    val cards = rememberPagerState(pageCount = { 10 })
+    val scope = rememberCoroutineScope()
+    var expanded by remember { mutableStateOf(false) }
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val current = pager.currentPage
+    Section("HorizontalPager · PageSize · animateContentSize · BoxWithConstraints") {
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth().height(150.dp), pageSpacing = 12.dp) { page ->
+            Box(modifier = Modifier.fillMaxSize().background(Brush.linearGradient(listOf(hueColor(page * 1700 + 300), hueColor(page * 1700 + 900))), RoundedCornerShape(20.dp)),
+                contentAlignment = Alignment.Center) {
+                Text("Sayfa ${page + 1}", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { scope.launch { pager.animateScrollToPage(current - 1) } }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Önceki") }
+            Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+                for (i in 0 until 5)
+                    Box(modifier = Modifier.size(if (i == current) 10.dp else 8.dp).background(if (i == current) cs.primary else cs.outlineVariant, CircleShape))
+            }
+            IconButton(onClick = { scope.launch { pager.animateScrollToPage(current + 1) } }) { Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Sonraki") }
+        }
+        // PageSize.Fixed pages in the middle (SnapPosition.Center; the side padding, half the
+        // room the page leaves, lets the first and last ones get there too), shrinking and fading
+        // as they leave it (getOffsetDistanceInPages, read in graphicsLayer's block while
+        // drawing); a fling turns up to three pages.
+        Text("PageSize.Fixed · SnapPosition.Center · PagerSnapDistance.atMost(3)", color = cs.onSurfaceVariant, style = typography.labelLarge)
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val side = if (constraints.hasBoundedWidth) max(0f, (maxWidth.value - 140) / 2) else 0f  // (unbounded before it is first measured)
+            HorizontalPager(state = cards, modifier = Modifier.fillMaxWidth().height(120.dp), contentPadding = PaddingValues(horizontal = side.dp),
+                            pageSize = PageSize.Fixed(140.dp), pageSpacing = 12.dp, snapPosition = SnapPosition.Center,
+                            flingBehavior = PagerDefaults.flingBehavior(cards, PagerSnapDistance.atMost(3))) { page ->
+                Box(modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val away = min(1f, abs(cards.getOffsetDistanceInPages(page)))
+                            scaleX = 1 - 0.15f * away
+                            scaleY = 1 - 0.15f * away
+                            alpha = 1 - 0.5f * away
+                        }
+                        .background(hueColor(page * 900 + 200), RoundedCornerShape(16.dp)),
+                    contentAlignment = Alignment.Center) { Text("${page + 1}", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = Color.White) }
+            }
+        }
+        Text("currentPage ${cards.currentPage + 1} · settledPage ${cards.settledPage + 1} · targetPage ${cards.targetPage + 1}", color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        // key: a page put in before the current one leaves it the current page (one further on);
+        // reverseLayout: the pages from the end, the finger the other way.
+        var pageNumbers by remember { mutableStateOf(listOf(1, 2, 3)) }
+        var fromEnd by remember { mutableStateOf(false) }
+        val numbers = pageNumbers
+        val keyed = rememberPagerState(pageCount = { numbers.size })
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = { pageNumbers = listOf(pageNumbers.maxOf { it } + 1) + pageNumbers }) { Text("Başa sayfa ekle") }
+            Switch(checked = fromEnd, onCheckedChange = { fromEnd = it })
+            Text("reverseLayout", style = typography.bodyMedium)
+        }
+        HorizontalPager(state = keyed, modifier = Modifier.fillMaxWidth().height(72.dp), pageSpacing = 8.dp, reverseLayout = fromEnd, key = { numbers[it] }) { i ->
+            Box(modifier = Modifier.fillMaxSize().background(hueColor(numbers[i] * 700 + 100), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                Text("Sayfa ${numbers[i]}", color = Color.White, style = typography.titleMedium)
+            }
+        }
+        Text("key ile: currentPage ${keyed.currentPage + 1} · ${numbers.size} sayfa", color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        Column(modifier = Modifier.fillMaxWidth().background(cs.secondaryContainer, RoundedCornerShape(16.dp)).clickable { expanded = !expanded }
+                   .animateContentSize().padding(16.dp),
+               verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("animateContentSize (dokunun)", color = cs.onSecondaryContainer, style = typography.titleMedium)
+            Text(if (expanded) "Boyut değişince kart yumuşakça büyür ve küçülür. Animasyon layout sırasında kare saatine " +
+                                   "göre hesaplanır; yeniden kompozisyon gerekmez. İçerik animasyon boyunca kırpılır."
+                 else "Kısa metin.",
+                 color = cs.onSecondaryContainer, style = typography.bodyMedium)
+        }
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val wide = maxWidth >= 360.dp
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("BoxWithConstraints: ${if (constraints.hasBoundedWidth) maxWidth.value.roundToInt() else 0} dp, ${if (wide) "yan yana" else "alt alta"}",
+                     color = cs.onSurfaceVariant, style = typography.bodyMedium)
+                val tile: @Composable (String, Color) -> Unit = { label, color ->
+                    Box(modifier = Modifier.fillMaxWidth().height(48.dp).background(color, RoundedCornerShape(12.dp)).padding(12.dp, 0.dp), contentAlignment = Alignment.CenterStart) {
+                        Text(label, color = Color.White)
                     }
-                };
-            });
-        });
-    });
+                }
+                if (wide)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(modifier = Modifier.weight(1f)) { tile("Birinci", hueColor(100)) }
+                        Box(modifier = Modifier.weight(1f)) { tile("İkinci", hueColor(400)) }
+                    }
+                else {
+                    tile("Birinci", hueColor(100))
+                    tile("İkinci", hueColor(400))
+                }
+            }
+        }
+    }
 }
 
 // Modifier.zIndex: overlapping cards stacked by zIndex; the one tapped goes to the top of the
 // stack, the others keep their order (drawn and touched in that order).
-void ZIndexSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto stack = remember([] { return mutableStateOf(std::vector<int>{0, 1, 2}); });  // bottom to top
-        Section("Modifier.zIndex", [=] {
-            Text("Üst üste üç kart; her birinin zIndex'i yığındaki yeri. Dokunduğun en üste çıkar, diğerleri sırasını korur; "
+@Composable
+fun ZIndexSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    var stack by remember { mutableStateOf(listOf(0, 1, 2)) }  // bottom to top
+    Section("Modifier.zIndex") {
+        Text("Üst üste üç kart; her birinin zIndex'i yığındaki yeri. Dokunduğun en üste çıkar, diğerleri sırasını korur; " +
                  "dokunuşu da en üstteki alır.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            std::vector<int> order = stack.get();
-            std::string bottomToTop;
-            for (int i : order) bottomToTop += std::format("{}{}", bottomToTop.empty() ? "" : " · ", i + 1);
-            Text("Alttan üste: " + bottomToTop, color = cs.primary, style = typography().labelLarge);
-            Box(Modifier().fillMaxWidth().height(150)) {
-                const Color fills[] = {cs.primaryContainer, cs.secondaryContainer, cs.tertiaryContainer};
-                const Color inks[] = {cs.onPrimaryContainer, cs.onSecondaryContainer, cs.onTertiaryContainer};
-                for (int i = 0; i < 3; ++i) {
-                    int level = int(std::find(order.begin(), order.end(), i) - order.begin());
-                    bool onTop = level == 2;
-                    Box(Modifier()
-                            .offset(float(i) * 56, float(i) * 24)
-                            .zIndex(float(level))
-                            .size(180, 100)
-                            .shadow(onTop ? 6.f : 1.f, 16)
-                            .background(fills[i], 16)
-                            .clickable([stack, i] {
-                                std::vector<int> v = stack.peek();
-                                std::erase(v, i);
-                                v.push_back(i);  // to the top; the rest stay as they were
-                                stack.set(std::move(v));
-                            })
-                            .padding(14)) {
-                            Text(std::format("Kart {}{}", i + 1, onTop ? " · üstte" : ""),
-                                 color = inks[i], style = typography().titleMedium);
-                        };
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        Text("Alttan üste: ${stack.joinToString(" · ") { (it + 1).toString() }}", color = cs.primary, style = typography.labelLarge)
+        Box(modifier = Modifier.fillMaxWidth().height(150.dp)) {
+            val fills = listOf(cs.primaryContainer, cs.secondaryContainer, cs.tertiaryContainer)
+            val inks = listOf(cs.onPrimaryContainer, cs.onSecondaryContainer, cs.onTertiaryContainer)
+            for (i in 0 until 3) {
+                val level = stack.indexOf(i)
+                val onTop = level == 2
+                Box(modifier = Modifier
+                        .offset((i * 56).dp, (i * 24).dp)
+                        .zIndex(level.toFloat())
+                        .size(180.dp, 100.dp)
+                        .shadow(if (onTop) 6.dp else 1.dp, RoundedCornerShape(16.dp))
+                        .background(fills[i], RoundedCornerShape(16.dp))
+                        .clickable { stack = stack.filter { it != i } + i }  // to the top; the rest stay as they were
+                        .padding(14.dp)) {
+                    Text("Kart ${i + 1}${if (onTop) " · üstte" else ""}", color = inks[i], style = typography.titleMedium)
                 }
-            };
-        });
-    });
+            }
+        }
+    }
 }
 
 // FlexBox (Compose 1.12): grow and shrink, wrapping, justifyContent and alignment picked here.
-void FlexBoxSection(CallSite site) {
-    composable(site, [=] {
-        auto justify = remember([] { return mutableStateOf(0); });
-        auto wrap = remember([] { return mutableStateOf(true); });
-        auto baseline = remember([] { return mutableStateOf(false); });
-        const ColorScheme& cs = colorScheme();
-        Section("FlexBox · FlexConfig (grow, shrink, basis, order)", [=] {
-            const char* names[] = {"Start", "Center", "SpaceBetween", "SpaceEvenly"};
-            const FlexJustifyContent values[] = {FlexJustifyContent::Start, FlexJustifyContent::Center, FlexJustifyContent::SpaceBetween,
-                                                 FlexJustifyContent::SpaceEvenly};
-            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8}, [&] {
-                for (int i = 0; i < 4; ++i) FilterChip(justify.get() == i, [justify, i] { justify.set(i); }, [&, i] { Text(names[i]); });
-                FilterChip(wrap.get(), [wrap] { wrap.set(!wrap.get()); }, [] { Text("Wrap"); });
-                FilterChip(baseline.get(), [baseline] { baseline.set(!baseline.get()); }, [] { Text("Baseline"); });
-            });
-            FlexBoxConfig config{.wrap = wrap.get() ? FlexWrap::Wrap : FlexWrap::NoWrap,
-                                 .justifyContent = values[justify.get()],
-                                 .alignItems = baseline.get() ? FlexAlignItems::Baseline : FlexAlignItems::Center,
-                                 .rowGap = 8,
-                                 .columnGap = 8};
-            FlexBox(Modifier().fillMaxWidth().background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12)).padding(8), config, [&] {
-                auto tag = [=](const char* text, float size, FlexConfig flex = {}) {
-                    Box(Modifier().flex(flex).background(cs.secondaryContainer, 8).padding(10, 6)) { Text(text, fontSize = size, color = cs.onSecondaryContainer); };
-                };
-                tag("Kotlin", 14);
-                tag("C++20", 22);
-                tag("Compose", 14, {.order = -1});  // first, by its order
-                tag("Vulkan", 18);
-                tag("Büyür (grow 1)", 14, {.grow = 1});
-                tag("HarfBuzz", 12);
-            });
-            Text("Compose ilk sırada (order -1); \"Büyür\" satırında kalan yeri alır. Wrap kapalıyken hepsi tek satırda kalır: en uzun "
+@Composable
+fun FlexBoxSection() {
+    var justify by remember { mutableStateOf(0) }
+    var wrapping by remember { mutableStateOf(true) }
+    var baseline by remember { mutableStateOf(false) }
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    Section("FlexBox · FlexConfig (grow, shrink, basis, order)") {
+        val names = listOf("Start", "Center", "SpaceBetween", "SpaceEvenly")
+        val values = listOf(FlexJustifyContent.Start, FlexJustifyContent.Center, FlexJustifyContent.SpaceBetween, FlexJustifyContent.SpaceEvenly)
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (i in 0 until 4) FilterChip(selected = justify == i, onClick = { justify = i }, label = { Text(names[i]) })
+            FilterChip(selected = wrapping, onClick = { wrapping = !wrapping }, label = { Text("Wrap") })
+            FilterChip(selected = baseline, onClick = { baseline = !baseline }, label = { Text("Baseline") })
+        }
+        FlexBox(modifier = Modifier.fillMaxWidth().background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)).padding(8.dp),
+                config = {
+                    wrap(if (wrapping) FlexWrap.Wrap else FlexWrap.NoWrap)
+                    justifyContent(values[justify])
+                    alignItems(if (baseline) FlexAlignItems.Baseline else FlexAlignItems.Center)
+                    gap(8.dp)
+                }) {
+            val tag: @Composable (String, TextUnit, Modifier) -> Unit = { text, size, modifier ->
+                Box(modifier = modifier.background(cs.secondaryContainer, RoundedCornerShape(8.dp)).padding(10.dp, 6.dp)) { Text(text, fontSize = size, color = cs.onSecondaryContainer) }
+            }
+            tag("Kotlin", 14.sp, Modifier)
+            tag("C++20", 22.sp, Modifier)
+            tag("Compose", 14.sp, Modifier.flex { order(-1) })  // first, by its order
+            tag("Vulkan", 18.sp, Modifier)
+            tag("Büyür (grow 1)", 14.sp, Modifier.flex { grow(1f) })
+            tag("HarfBuzz", 12.sp, Modifier)
+        }
+        Text("Compose ilk sırada (order -1); \"Büyür\" satırında kalan yeri alır. Wrap kapalıyken hepsi tek satırda kalır: en uzun " +
                  "kelimelerine kadar küçülür (\"Büyür\" alt alta kırılır), sığmayan taşar (CSS'teki gibi).",
-                 color = cs.onSurfaceVariant, style = typography().bodySmall);
-        });
-    });
+             color = cs.onSurfaceVariant, style = typography.bodySmall)
+    }
 }
 
-void GridSection(CallSite site) {
-    composable(site, [=] {
-        auto byColumn = remember([] { return mutableStateOf(false); });
-        auto gaps = remember([] { return mutableStateOf(true); });
-        const ColorScheme& cs = colorScheme();
-        Section("Grid · gridItem (satır, sütun, yayılma, alan)", [=] {
-            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8}, [&] {
-                FilterChip(byColumn.get(), [byColumn] { byColumn.set(!byColumn.get()); }, [] { Text("Sütun akışı"); });
-                FilterChip(gaps.get(), [gaps] { gaps.set(!gaps.get()); }, [] { Text("Boşluk 8 dp"); });
-            });
-            using T = GridTrackSize;
-            float gap = gaps.get() ? 8 : 0;
-            GridConfig config{.columns = {T::Fixed(72), T::Flex(1), T::Flex(2)},
-                              .rows = {T::Auto, T::Fixed(56), T::Fixed(56)},
-                              .rowGap = gap,
-                              .columnGap = gap,
-                              .flow = byColumn.get() ? GridFlow::Column : GridFlow::Row,
-                              .areas = {{"başlık", 1, 1, 1, 3}, {"yan", 2, 1, 2, 1}}};
-            Grid(Modifier().fillMaxWidth().background(cs.surfaceContainerHigh, 12).padding(8), config, [&] {
-                auto tile = [&](const std::string& text, Color background, Color color, const Modifier& modifier) {
-                    Box(modifier.background(background, 8).padding(8)) { Text(text, kompoz::color = color, style = typography().labelLarge); };
-                };
-                tile("Başlık: alan, 3 sütun", cs.primaryContainer, cs.onPrimaryContainer, Modifier().fillMaxWidth().gridItem("başlık"));
-                tile("Yan: 2 satır", cs.tertiaryContainer, cs.onTertiaryContainer, Modifier().fillMaxSize().gridItem("yan"));
-                for (int i = 1; i <= 5; ++i) tile(std::to_string(i), cs.secondaryContainer, cs.onSecondaryContainer, Modifier().fillMaxSize());
-                Box(Modifier().size(16).gridItem(-1, -1, 1, 1, Alignment::BottomEnd).background(cs.primary, 8)) {};
-            });
-            Text("Sütunlar 72 dp, 1fr, 2fr. 1-5 boş hücrelere akar; 5. yapılandırılmamış bir satıra (sütun akışında sütuna) taşar. "
+@Composable
+fun GridSection() {
+    var byColumn by remember { mutableStateOf(false) }
+    var gaps by remember { mutableStateOf(true) }
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    Section("Grid · gridItem (satır, sütun, yayılma, alan)") {
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = byColumn, onClick = { byColumn = !byColumn }, label = { Text("Sütun akışı") })
+            FilterChip(selected = gaps, onClick = { gaps = !gaps }, label = { Text("Boşluk 8 dp") })
+        }
+        val spacing = if (gaps) 8.dp else 0.dp
+        Grid(modifier = Modifier.fillMaxWidth().background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp)).padding(8.dp),
+             config = {
+                 columns(72.dp, 1.fr, 2.fr)
+                 rows(GridTrackSize.Auto, 56.dp, 56.dp)
+                 gap(row = spacing, column = spacing)
+                 flow = if (byColumn) GridFlow.Column else GridFlow.Row
+                 area("başlık", row = 1, column = 1, rowSpan = 1, columnSpan = 3)
+                 area("yan", row = 2, column = 1, rowSpan = 2, columnSpan = 1)
+             }) {
+            val tile: @Composable (String, Color, Color, Modifier) -> Unit = { text, background, color, modifier ->
+                Box(modifier = modifier.background(background, RoundedCornerShape(8.dp)).padding(8.dp)) { Text(text, color = color, style = typography.labelLarge) }
+            }
+            tile("Başlık: alan, 3 sütun", cs.primaryContainer, cs.onPrimaryContainer, Modifier.fillMaxWidth().gridItem("başlık"))
+            tile("Yan: 2 satır", cs.tertiaryContainer, cs.onTertiaryContainer, Modifier.fillMaxSize().gridItem("yan"))
+            for (i in 1..5) tile("$i", cs.secondaryContainer, cs.onSecondaryContainer, Modifier.fillMaxSize())
+            Box(modifier = Modifier.size(16.dp).gridItem(row = -1, column = -1, alignment = Alignment.BottomEnd).background(cs.primary, RoundedCornerShape(8.dp)))
+        }
+        Text("Sütunlar 72 dp, 1fr, 2fr. 1-5 boş hücrelere akar; 5. yapılandırılmamış bir satıra (sütun akışında sütuna) taşar. " +
                  "Nokta son satır ve sütunda, sağ altta (-1, -1).",
-                 color = cs.onSurfaceVariant, style = typography().bodySmall);
-        });
-    });
+             color = cs.onSurfaceVariant, style = typography.bodySmall)
+    }
 }
 
-void LayoutSection(CallSite site) {
-    composable(site, [=] {
-        auto extra = remember([] { return mutableStateOf(0); });  // how much longer the SubcomposeLayout title is
-        auto selected = remember([] { return mutableStateOf(0); });
-        const ColorScheme& cs = colorScheme();
-        Section("Layout · IntrinsicSize · FlowRow · updateTransition", [=] {
-            // Alignment lines: texts of different sizes and a button's label on one baseline.
-            auto caption = [](const char* text) { Text(text, color = colorScheme().onSurfaceVariant, style = typography().bodyMedium); };
-            caption("alignByBaseline: farklı boyutlarda metinler ve düğme etiketi aynı taban çizgisinde.");
-            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                Text("Fiyat", Modifier().alignByBaseline(), style = typography().labelLarge);
-                Text("₺249", Modifier().alignByBaseline(), color = colorScheme().primary, style = typography().displaySmall);
-                Text("/ay", Modifier().alignByBaseline(), style = typography().bodySmall);
-                Spacer(Modifier().weight(1));
-                OutlinedButton([] {}, Modifier().alignByBaseline()) { Text("Seç"); };
-            };
-            auto& city = remember([] { return mutableStateOf(std::string("Ankara")); });
-            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12)) {
-                Text("Şehir:", Modifier().alignByBaseline(), style = typography().titleMedium);
-                OutlinedTextField(city.get(), [&city](std::string v) { city.set(std::move(v)); }, Modifier().weight(1).alignByBaseline(),
-                                  singleLine = true, label = "Teslimat");
-            };
-            caption("paddingFromBaseline(32, 16): metin bir ızgaraya göre (ilk taban çizgisi üstten 32, son taban çizgisi alttan 16).");
-            Text("Taban çizgisinden boşluk", Modifier().fillMaxWidth().background(colorScheme().surfaceContainerHigh, 8).paddingFromBaseline(32, 16).padding(12, 0));
-            // A custom Layout: children down a staircase, spread over the width.
-            Layout(Modifier().fillMaxWidth(), [&] {
-                for (int i = 0; i < 5; ++i)
-                    Box(Modifier().size(44).background(hueColor(i * 3 + 1), 12), Alignment::Center) { Text(std::to_string(i + 1), fontWeight = FontWeight::Bold, color = colors::White); };
-            }, [](const std::vector<Measurable>& children, const Constraints& c) {
-                float w = c.hasBoundedWidth() ? c.maxWidth : 300, h = 0;
-                size_t n = children.size();
-                for (size_t i = 0; i < n; ++i) {
-                    Placeable p = children[i].measure(c.loosen());
-                    float x = n > 1 ? float(i) * (w - p.width) / float(n - 1) : 0, y = float(i) * 10;
-                    p.place(x, y);
-                    h = std::max(h, y + p.height);
+@Composable
+fun LayoutSection() {
+    var extra by remember { mutableStateOf(0) }  // how much longer the SubcomposeLayout title is
+    val selected = remember { mutableStateOf(0) }
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    Section("Layout · IntrinsicSize · FlowRow · updateTransition") {
+        // Alignment lines: texts of different sizes and a button's label on one baseline.
+        val caption: @Composable (String) -> Unit = { text -> Text(text, color = cs.onSurfaceVariant, style = typography.bodyMedium) }
+        caption("alignByBaseline: farklı boyutlarda metinler ve düğme etiketi aynı taban çizgisinde.")
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Fiyat", modifier = Modifier.alignByBaseline(), style = typography.labelLarge)
+            Text("₺249", modifier = Modifier.alignByBaseline(), color = cs.primary, style = typography.displaySmall)
+            Text("/ay", modifier = Modifier.alignByBaseline(), style = typography.bodySmall)
+            Spacer(modifier = Modifier.weight(1f))
+            OutlinedButton(onClick = {}, modifier = Modifier.alignByBaseline()) { Text("Seç") }
+        }
+        var city by remember { mutableStateOf("Ankara") }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Şehir:", modifier = Modifier.alignByBaseline(), style = typography.titleMedium)
+            OutlinedTextField(value = city, onValueChange = { city = it }, modifier = Modifier.weight(1f).alignByBaseline(), singleLine = true, label = { Text("Teslimat") })
+        }
+        caption("paddingFromBaseline(32, 16): metin bir ızgaraya göre (ilk taban çizgisi üstten 32, son taban çizgisi alttan 16).")
+        Text("Taban çizgisinden boşluk", modifier = Modifier.fillMaxWidth().background(cs.surfaceContainerHigh, RoundedCornerShape(8.dp)).paddingFromBaseline(32.dp, 16.dp).padding(12.dp, 0.dp))
+        // A custom Layout: children down a staircase, spread over the width.
+        Layout(modifier = Modifier.fillMaxWidth(), content = {
+            for (i in 0 until 5)
+                Box(modifier = Modifier.size(44.dp).background(hueColor(i * 3 + 1), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                    Text("${i + 1}", fontWeight = FontWeight.Bold, color = Color.White)
                 }
-                return Size{w, h};
-            });
-            // SubcomposeLayout: the title measured first, then a line composed as wide as it is.
-            std::string word = std::string("Kompoz") + std::string(size_t(extra.get() * 2), '!');
-            TextButton([extra] { extra.set((extra.peek() + 1) % 6); }) { Text("Başlığı uzat"); };
-            SubcomposeLayout(Modifier().fillMaxWidth(), [word, primary = cs.primary](SubcomposeMeasureScope& s, const Constraints& c) {
-                float w = 0, h = 0;
-                for (const Measurable& m : s.subcompose(std::string("başlık"), [word] { Text(word, style = typography().titleMedium); })) {
-                    Placeable p = m.measure(c.loosen());
-                    p.place(0, 0);
-                    w = std::max(w, p.width);
-                    h = std::max(h, p.height);
+        }) { measurables, constraints ->
+            val w = if (constraints.hasBoundedWidth) constraints.maxWidth else 300f
+            val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
+            val n = placeables.size
+            var h = 0f
+            placeables.forEachIndexed { i, p ->
+                val y = i * 10f
+                h = max(h, y + p.height)
+            }
+            layout(w, h) {
+                placeables.forEachIndexed { i, p ->
+                    val x = if (n > 1) i * (w - p.width) / (n - 1) else 0f
+                    p.placeRelative(x, i * 10f)
                 }
-                for (const Measurable& m : s.subcompose(std::string("çizgi"), w, [w, primary] {
-                         Column() {
-                             Box(Modifier().width(w).height(3).background(primary, 2)) {};
-                             Text(std::format("SubcomposeLayout: başlığın genişliği {:.0f} dp", w), style = typography().bodySmall);
-                         };
-                     })) {
-                    Placeable p = m.measure(c.loosen());
-                    p.place(0, h + 2);
-                    h += p.height + 2;
+            }
+        }
+        // SubcomposeLayout: the title measured first, then a line composed as wide as it is.
+        val word = "Kompoz" + "!".repeat(extra * 2)
+        TextButton(onClick = { extra = (extra + 1) % 6 }) { Text("Başlığı uzat") }
+        SubcomposeLayout(modifier = Modifier.fillMaxWidth()) { constraints ->
+            val loose = constraints.copy(minWidth = 0, minHeight = 0)
+            val title = subcompose("başlık") { Text(word, style = typography.titleMedium) }.map { it.measure(loose) }
+            val w = title.maxOf { it.width }
+            val h = title.maxOf { it.height }
+            val line = subcompose("çizgi", w) {
+                Column {
+                    Box(modifier = Modifier.width(w.dp).height(3.dp).background(cs.primary, RoundedCornerShape(2.dp)))
+                    Text("SubcomposeLayout: başlığın genişliği ${w.roundToInt()} dp", style = typography.bodySmall)
                 }
-                return Size{c.maxWidth, h};
-            });
-            // IntrinsicSize::Min: the divider is as tall as the taller text.
-            Row(Modifier().fillMaxWidth().height(IntrinsicSize::Min).background(cs.surfaceContainerHigh, 12).padding(12)) {
-                Text("Kısa metin", Modifier().weight(1), style = typography().bodyMedium);
-                VerticalDivider(Modifier().padding(8, 0));
-                Text("Uzun metin iki üç satıra iner; IntrinsicSize::Min sayesinde bölücü de onunla birlikte uzar.",
-                     Modifier().weight(1), style = typography().bodyMedium);
-            };
-            // width(IntrinsicSize::Min / Max): as narrow as the widest word, or as the text on one line.
-            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12)) {
-                for (IntrinsicSize size : {IntrinsicSize::Min, IntrinsicSize::Max})
-                    Column(Modifier().width(size).background(cs.tertiaryContainer, 12).padding(12)) {
-                        Text(size == IntrinsicSize::Min ? "width(Min)" : "width(Max)", color = cs.onTertiaryContainer, style = typography().labelMedium);
-                        Text("Ortak yağmur bulutları", color = cs.onTertiaryContainer, style = typography().bodyMedium);
-                        Box(Modifier().fillMaxWidth().padding(0, 4).height(2).background(cs.tertiary)) {};  // as wide as the column came out
-                    };
-            };
-            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
-                for (const char* tag : {"C++20", "Compose", "Vulkan", "FreeType", "coroutine", "slot table", "Android", "Linux"})
-                    SuggestionChip([] {}, [tag] { Text(tag); });
-            });
-            // animateBounds in a LookaheadScope: the box glides to the next corner and grows or
-            // shrinks on each tap; shuffled chips glide to their new places.
-            auto corner = remember([] { return mutableStateOf(0); });
-            auto order = remember([] { return mutableStateOf(std::vector<int>{0, 1, 2, 3, 4, 5, 6}); });
-            Text("animateBounds · LookaheadScope", style = typography().titleSmall);
-            LookaheadScope(Modifier().fillMaxWidth().height(132).background(cs.surfaceContainerHigh, 12).clickable([corner] { corner.set((corner.get() + 1) % 5); }),
-                           [&] {
-                               const Alignment aligns[] = {Alignment::TopStart, Alignment::TopEnd, Alignment::BottomEnd, Alignment::BottomStart, Alignment::Center};
-                               int c = corner.get();
-                               Box(Modifier().fillMaxSize().padding(10), aligns[c]) {
-                                   Box(Modifier().animateBounds().size(c % 2 == 0 ? 56.f : 112.f, 56).background(cs.primary, 16), Alignment::Center) {
-                                       Text("dokun", color = cs.onPrimary, style = typography().labelLarge);
-                                   };
-                               };
-                           });
-            const char* words[] = {"bir", "iki", "üç", "dört", "beş", "altı", "yedi"};
-            AnimationSpec glide = spring(Spring::DampingRatioLowBouncy, Spring::StiffnessLow);  // slow enough to follow
-            LookaheadScope(Modifier().fillMaxWidth(), [&] {
-                FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
-                    for (int id : order.get())
-                        key(id, [&, id] { SuggestionChip([] {}, [&, id] { Text(words[id]); }, ChipOptions{}, Modifier().animateBounds(glide)); });
-                });
-            });
-            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                FilledTonalButton([order] {  // the far ones swap rows, the near ones swap places
-                    auto v = order.peek();
-                    std::reverse(v.begin(), v.end());
-                    std::rotate(v.begin(), v.begin() + 2, v.end());
-                    order.set(v);
-                }, Modifier().weight(1)) { Text("Karıştır"); };
-                OutlinedButton([order] { order.set({0, 1, 2, 3, 4, 5, 6}); }, Modifier().weight(1)) { Text("Sırala"); };
-            };
-            // skipToLookaheadSize: the first card's text is laid out at the width the card is
-            // going to, so it doesn't reflow while the card grows or shrinks; the second's does.
-            auto wideCards = remember([] { return mutableStateOf(false); });
-            Text("skipToLookaheadSize · kartlara dokunun", style = typography().titleSmall);
-            Column(Modifier().fillMaxWidth().clickable([wideCards] { wideCards.set(!wideCards.peek()); }), verticalArrangement = Arrangement::spacedBy(8)) {
-                for (bool skip : {true, false})
-                    Box(Modifier().animateBounds(glide).width(wideCards.get() ? 320.f : 150.f).background(cs.secondaryContainer, 12).clipToBounds().padding(10)) {
-                        Text(skip ? "Atlayan: metin gideceği genişlikte dizilir, kart büyürken kaymaz." : "Atlamayan: metin her karede yeniden kırılır.",
-                             skip ? Modifier().skipToLookaheadSize() : Modifier(), color = cs.onSecondaryContainer, style = typography().bodyMedium);
-                    };
-            };
-            // approachLayout + DeferredTargetAnimation: a tag that grows and shrinks to its text
-            // (the lookahead) by a spring, laid out along the way.
-            auto longTag = remember([] { return mutableStateOf(false); });
-            auto& tagSize = remember([] { return DeferredTargetAnimation<Size>(spring(Spring::DampingRatioMediumBouncy, Spring::StiffnessLow)); });
-            CoroutineScope tagScope = rememberCoroutineScope();
-            Text("approachLayout · etikete dokunun", style = typography().titleSmall);
-            Box(Modifier()
-                    .approachLayout(
-                        [tagSize, tagScope](Size target) mutable {
-                            tagSize.updateTarget(target, tagScope);
-                            return !tagSize.isIdle();
-                        },
-                        [tagSize, tagScope](const ApproachMeasureScope& s, const MeasureNext& measure, const Constraints&, Offset&) mutable {
-                            Size now = tagSize.updateTarget(s.lookaheadSize, tagScope);
-                            measure(Constraints::fixed(std::max(0.f, now.width), std::max(0.f, now.height)));
-                            return now;
-                        })
-                    .background(cs.tertiaryContainer, 16)
-                    .clipToBounds()
-                    .clickable([longTag] { longTag.set(!longTag.peek()); })
-                    .padding(12, 8)) {
-                    Text(longTag.get() ? "Uzun bir etiket: gideceği boyuta yaylanarak gider" : "Kısa", color = cs.onTertiaryContainer);
-                };
-            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                for (int i = 0; i < 3; ++i) SelectableCard(i, selected);
-            };
-        });
-    });
+            }.map { it.measure(loose) }
+            layout(constraints.maxWidth, h + 2 + line.sumOf { it.height }) {
+                title.forEach { it.placeRelative(0, 0) }
+                line.forEach { it.placeRelative(0, h + 2) }
+            }
+        }
+        // IntrinsicSize.Min: the divider is as tall as the taller text.
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min).background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp)).padding(12.dp)) {
+            Text("Kısa metin", modifier = Modifier.weight(1f), style = typography.bodyMedium)
+            VerticalDivider(modifier = Modifier.padding(8.dp, 0.dp))
+            Text("Uzun metin iki üç satıra iner; IntrinsicSize.Min sayesinde bölücü de onunla birlikte uzar.", modifier = Modifier.weight(1f), style = typography.bodyMedium)
+        }
+        // width(IntrinsicSize.Min / Max): as narrow as the widest word, or as the text on one line.
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            for (size in listOf(IntrinsicSize.Min, IntrinsicSize.Max))
+                Column(modifier = Modifier.width(size).background(cs.tertiaryContainer, RoundedCornerShape(12.dp)).padding(12.dp)) {
+                    Text(if (size == IntrinsicSize.Min) "width(Min)" else "width(Max)", color = cs.onTertiaryContainer, style = typography.labelMedium)
+                    Text("Ortak yağmur bulutları", color = cs.onTertiaryContainer, style = typography.bodyMedium)
+                    Box(modifier = Modifier.fillMaxWidth().padding(0.dp, 4.dp).height(2.dp).background(cs.tertiary))  // as wide as the column came out
+                }
+        }
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (tag in listOf("C++20", "Compose", "Vulkan", "FreeType", "coroutine", "slot table", "Android", "Linux"))
+                SuggestionChip(onClick = {}, label = { Text(tag) })
+        }
+        // animateBounds in a LookaheadScope: the box glides to the next corner and grows or
+        // shrinks on each tap; shuffled chips glide to their new places.
+        var corner by remember { mutableStateOf(0) }
+        var order by remember { mutableStateOf(listOf(0, 1, 2, 3, 4, 5, 6)) }
+        Text("animateBounds · LookaheadScope", style = typography.titleSmall)
+        LookaheadScope(modifier = Modifier.fillMaxWidth().height(132.dp).background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp)).clickable { corner = (corner + 1) % 5 }) {
+            val aligns = listOf(Alignment.TopStart, Alignment.TopEnd, Alignment.BottomEnd, Alignment.BottomStart, Alignment.Center)
+            Box(modifier = Modifier.fillMaxSize().padding(10.dp), contentAlignment = aligns[corner]) {
+                Box(modifier = Modifier.animateBounds().size(if (corner % 2 == 0) 56.dp else 112.dp, 56.dp).background(cs.primary, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+                    Text("dokun", color = cs.onPrimary, style = typography.labelLarge)
+                }
+            }
+        }
+        val words = listOf("bir", "iki", "üç", "dört", "beş", "altı", "yedi")
+        val glide = spring<Float>(Spring.DampingRatioLowBouncy, Spring.StiffnessLow)  // slow enough to follow
+        LookaheadScope(modifier = Modifier.fillMaxWidth()) {
+            FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (id in order) key(id) { SuggestionChip(onClick = {}, label = { Text(words[id]) }, modifier = Modifier.animateBounds(glide)) }
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalButton(onClick = { order = order.reversed().let { it.drop(2) + it.take(2) } }, modifier = Modifier.weight(1f)) { Text("Karıştır") }  // the far ones swap rows, the near ones swap places
+            OutlinedButton(onClick = { order = listOf(0, 1, 2, 3, 4, 5, 6) }, modifier = Modifier.weight(1f)) { Text("Sırala") }
+        }
+        // skipToLookaheadSize: the first card's text is laid out at the width the card is
+        // going to, so it doesn't reflow while the card grows or shrinks; the second's does.
+        var wideCards by remember { mutableStateOf(false) }
+        Text("skipToLookaheadSize · kartlara dokunun", style = typography.titleSmall)
+        Column(modifier = Modifier.fillMaxWidth().clickable { wideCards = !wideCards }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (skip in listOf(true, false))
+                Box(modifier = Modifier.animateBounds(glide).width(if (wideCards) 320.dp else 150.dp).background(cs.secondaryContainer, RoundedCornerShape(12.dp)).clipToBounds().padding(10.dp)) {
+                    Text(if (skip) "Atlayan: metin gideceği genişlikte dizilir, kart büyürken kaymaz." else "Atlamayan: metin her karede yeniden kırılır.",
+                         modifier = if (skip) Modifier.skipToLookaheadSize() else Modifier, color = cs.onSecondaryContainer, style = typography.bodyMedium)
+                }
+        }
+        // approachLayout + DeferredTargetAnimation: a tag that grows and shrinks to its text
+        // (the lookahead) by a spring, laid out along the way.
+        var longTag by remember { mutableStateOf(false) }
+        val tagSize = remember { DeferredTargetAnimation<Size>(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow)) }
+        val tagScope = rememberCoroutineScope()
+        Text("approachLayout · etikete dokunun", style = typography.titleSmall)
+        Box(modifier = Modifier
+                .approachLayout(
+                    isMeasurementApproachInProgress = { target ->
+                        tagSize.updateTarget(target, tagScope)
+                        !tagSize.isIdle()
+                    },
+                    approachMeasure = { scope, measure, _, _ ->
+                        val now = tagSize.updateTarget(scope.lookaheadSize, tagScope)
+                        measure(Constraints.fixed(max(0f, now.width), max(0f, now.height)))
+                        now
+                    })
+                .background(cs.tertiaryContainer, RoundedCornerShape(16.dp))
+                .clipToBounds()
+                .clickable { longTag = !longTag }
+                .padding(12.dp, 8.dp)) {
+            Text(if (longTag) "Uzun bir etiket: gideceği boyuta yaylanarak gider" else "Kısa", color = cs.onTertiaryContainer)
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (i in 0 until 3) SelectableCard(i, selected)
+        }
+    }
 }

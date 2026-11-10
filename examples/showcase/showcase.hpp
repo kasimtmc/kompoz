@@ -82,20 +82,7 @@ Color hueColor(int i);
 
 // components/state.cpp: its sections are @Composable there (the module declares them)
 
-// components/layout.cpp
-void ListDetailSection(CallSite site = CallSite::current());
-void SupportingPaneSection(CallSite site = CallSite::current());
-void LayoutInfoSection(CallSite site = CallSite::current());
-void TextMeasureSection(CallSite site = CallSite::current());
-void PositionSection(CallSite site = CallSite::current());
-void SnapRowSection(CallSite site = CallSite::current());
-void CarouselSection(CallSite site = CallSite::current());
-void HorizontalGridSection(CallSite site = CallSite::current());
-void PagerSection(CallSite site = CallSite::current());
-void ZIndexSection(CallSite site = CallSite::current());
-void FlexBoxSection(CallSite site = CallSite::current());
-void GridSection(CallSite site = CallSite::current());
-void LayoutSection(CallSite site = CallSite::current());
+// components/layout.cpp: its sections are @Composable there (the module declares them)
 
 // components/scroll.cpp: its sections are @Composable there (the module declares them)
 

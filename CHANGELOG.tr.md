@@ -1131,6 +1131,9 @@
   `Arrangement.spacedBy(space, Alignment.CenterHorizontally)`; `spring<Float>(…)`; pager'lar Compose'un `key = { }`'ini alır;
   `DeferredTargetAnimation::updateTarget` kapsamını const referansla alır. kompozc: `"ab".repeat(n)`; null denetiminden sonra null
   olabilenle indekslenen liste (`cities[city]`).
+- **Vitrinin yerleşim ekranı Compose söz dizimiyle**: bölme iskeletleri, yerleşim bilgisi, ölçülen çubuk grafiği, konumlar,
+  yapışan satır, carousel'ler, yatay ızgaralar, pager'lar, z-index, FlexBox, Grid ve özel yerleşimler (Layout, SubcomposeLayout,
+  içsel boyutlar, LookaheadScope, approachLayout) Kotlin'de `@Composable fun`lar.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine
