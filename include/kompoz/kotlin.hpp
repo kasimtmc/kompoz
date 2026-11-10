@@ -162,6 +162,8 @@ std::string str(const T&... parts) {
 struct Null {
     template <class T>
     operator std::optional<T>() const { return std::nullopt; }
+    template <class T>
+    operator std::shared_ptr<T>() const { return nullptr; }  // (a handle: OverscrollEffect? = null)
     template <class F>
     operator std::function<F>() const { return nullptr; }
     static constexpr bool kompozNull = true;  // (contentDescription = null: what takes none says so)
@@ -1445,6 +1447,19 @@ decltype(auto) component(T& t) {
         else { auto&& [a, b, c, d, e, f, g, h] = t; return std::get<I>(std::forward_as_tuple(a, b, c, d, e, f, g, h)); }
     }
 }
+
+// try { … } finally { … }: the block runs when the scope ends, however it ends (a coroutine's cancellation too).
+struct Finally {
+    explicit Finally(std::function<void()> block) : block_(std::move(block)) {}
+    Finally(const Finally&) = delete;
+    Finally& operator=(const Finally&) = delete;
+    ~Finally() {
+        if (block_) block_();
+    }
+
+private:
+    std::function<void()> block_;
+};
 
 // kotlin.math: sin(x), sqrt(x), abs(x), max(a, b), PI… (a Float in, a Float out; an Int in, a Double).
 inline constexpr double PI = 3.14159265358979323846;

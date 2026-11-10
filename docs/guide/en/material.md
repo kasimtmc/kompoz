@@ -39,6 +39,22 @@ fun Inbox() {
 
 Top app bars come in the sizes Material defines: `TopAppBar`, `CenterAlignedTopAppBar`, `MediumTopAppBar` and `LargeTopAppBar`. With a scroll behavior (`TopAppBarDefaults.enterAlwaysScrollBehavior()`, `exitUntilCollapsedScrollBehavior()`, `pinnedScrollBehavior()`) and the behavior's `nestedScrollConnection` on the `Scaffold`, they collapse and change color as the content scrolls (see [Lists and grids](lists.md#nested-scrolling)). `BottomAppBar` and `BottomSheetScaffold` exist too.
 
+`AppBarRow` puts a bar's actions in the room there is and the rest behind an overflow menu (`AppBarColumn` does the same down a rail), with the `AppBarScope`'s `clickableItem` and `toggleableItem`:
+
+```kotlin
+@Composable
+fun DocumentBar() {
+    TopAppBar(title = { Text("Document") }, actions = {
+        AppBarRow(maxItemCount = 3) {
+            clickableItem(onClick = { }, icon = { Icon(Icons.Filled.Share, contentDescription = "Share") }, label = "Share")
+            clickableItem(onClick = { }, icon = { Icon(Icons.Filled.Edit, contentDescription = "Edit") }, label = "Edit")
+            clickableItem(onClick = { }, icon = { Icon(Icons.Filled.Delete, contentDescription = "Delete") }, label = "Delete")
+            clickableItem(onClick = { }, icon = { Icon(Icons.Filled.Info, contentDescription = "About") }, label = "About")
+        }
+    })
+}
+```
+
 The content's padding follows the bars as they change size, a top bar collapsing as the list scrolls, without composing the content again: `Modifier.padding`, `consumeWindowInsets` and the `contentPadding` of lists, pagers and carousels read it as they lay out, as in Compose. To read a side yourself, call `calculateTopPadding()` (and `calculateStartPadding()`, `calculateEndPadding()`, `calculateBottomPadding()`; Kompoz's take no layout direction, the padding knows its own): read in a composable, it composes that composable again when the padding changes; read in a layout, it lays that layout out again.
 
 ## Navigation

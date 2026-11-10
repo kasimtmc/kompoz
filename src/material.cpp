@@ -428,7 +428,7 @@ void detail::TopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, Ca
     singleRowTopAppBar(slots, modifier, false);
 }
 
-void AppBarWithSearch(const SearchBarState& state, const Content& inputField, const Modifier& modifier, const AppBarWithSearchSlots& slots,
+void detail::AppBarWithSearch(const SearchBarState& state, const Content& inputField, const Modifier& modifier, const AppBarWithSearchSlots& slots,
                       CallSite site) {
     ComposableScope scope(site);
     const ColorScheme& cs = colorScheme();
@@ -970,12 +970,12 @@ void appBarItems(bool vertical, std::function<void(AppBarScope&)> content, const
 }
 }  // namespace
 
-void AppBarRow(std::function<void(AppBarScope&)> content, const Modifier& modifier, AppBarRowOptions o, CallSite site) {
+void detail::AppBarRow(std::function<void(AppBarScope&)> content, const Modifier& modifier, AppBarRowOptions o, CallSite site) {
     ComposableScope scope(site);
     appBarItems(false, std::move(content), modifier, o);
 }
 
-void AppBarColumn(std::function<void(AppBarScope&)> content, const Modifier& modifier, AppBarRowOptions o, CallSite site) {
+void detail::AppBarColumn(std::function<void(AppBarScope&)> content, const Modifier& modifier, AppBarRowOptions o, CallSite site) {
     ComposableScope scope(site);
     appBarItems(true, std::move(content), modifier, o);
 }

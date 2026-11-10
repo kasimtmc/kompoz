@@ -1071,6 +1071,17 @@
   content, the channel kitchen and produce countdown, the lifecycle section, the chat and the platform services are
   `@Composable fun`s in Kotlin (the thread-based download ViewModel, the lifecycle observer ViewModel and the prime count stay
   C++ in the same file).
+- **Scrolling, app bars and pull to refresh as Compose writes them**: `AppBarRow(overflowIndicator = …, maxItemCount = …) {
+  clickableItem(onClick = …, icon = { }, label = "…") }` and `AppBarColumn`, `AppBarWithSearch(state = …, inputField = { },
+  navigationIcon = …, actions = …, scrollBehavior = …)`, `Modifier.pullToRefresh(isRefreshing = …, state = …, onRefresh = …,
+  enabled = …, threshold = …)`, `PullToRefreshDefaults.Indicator(state = …, isRefreshing = …, modifier = …, containerColor = …,
+  color = …, threshold = …)` and `IndicatorBox(state = …, isRefreshing = …, threshold = …, shape = …, containerColor = …,
+  elevation = …) { }` as Composables (the positional forms as before); `LoadingIndicator(progress = { … })`; a list's or pager's
+  `overscrollEffect = null` is none, as Compose's; a `VelocityTracker`'s copies share its samples (a gesture's handlers measure
+  one fling). kompozc: `try { } catch (e: Exception) { } finally { }` (the finally block runs when the scope ends, a cancelled
+  coroutine's too); `OverscrollEffect`, `NestedScrollConnection`, `PopupPositionProvider`, `IndicationNodeFactory`, `TextToolbar`
+  and `LifecycleOwner` parameters are shared pointers, a nullable one an empty pointer (`null`); `Animatable<Float,
+  AnimationVector1D>` is `Animatable<float>`; `PredictiveBackHandler(enabled) { steps -> … }`.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

@@ -305,6 +305,8 @@ fun News() {
 }
 ```
 
+On a plain container, `Modifier.pullToRefresh(isRefreshing = …, state = rememberPullToRefreshState(), onRefresh = …)` does the same, with `PullToRefreshDefaults.Indicator(state = …, isRefreshing = …)` or an `IndicatorBox(state = …, isRefreshing = …) { … }` of your own over it. A list's or pager's `overscrollEffect` is the stretch by default (`rememberOverscrollEffect()`), `null` for none, or an `OverscrollEffect` of your own.
+
 ## See also
 
 - [Layouts](layouts.md): `Column`, `Row` and the other non-lazy layouts.

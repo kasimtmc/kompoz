@@ -220,25 +220,25 @@ DraggableState rememberDraggableState(std::function<void(float)> onDelta, std::f
     return state;
 }
 
-void VelocityTracker::addPosition(int64_t timeMillis, Offset position) {
-    if (!samples_.empty() && timeMillis < samples_.back().first) samples_.clear();  // time went back: a new gesture
-    samples_.emplace_back(timeMillis, position);
-    std::erase_if(samples_, [&](const auto& s) { return timeMillis - s.first > 100; });
+void VelocityTracker::addPosition(int64_t timeMillis, Offset position) const {
+    if (!samples_->empty() && timeMillis < samples_->back().first) samples_->clear();  // time went back: a new gesture
+    samples_->emplace_back(timeMillis, position);
+    std::erase_if(*samples_, [&](const auto& s) { return timeMillis - s.first > 100; });
 }
 
 Offset VelocityTracker::calculateVelocity() const {
     // The samples going back from the last one, stopping at a pause (40 ms without a move: it
     // stood still there); a least-squares line through each coordinate over time.
-    size_t from = samples_.size();
-    while (from > 0 && (from == samples_.size() || samples_[from].first - samples_[from - 1].first <= 40)) --from;
-    if (samples_.size() - from < 2) return {};
-    int64_t t0 = samples_.back().first;
+    size_t from = samples_->size();
+    while (from > 0 && (from == samples_->size() || (*samples_)[from].first - (*samples_)[from - 1].first <= 40)) --from;
+    if (samples_->size() - from < 2) return {};
+    int64_t t0 = samples_->back().first;
     double n = 0, st = 0, stt = 0, sx = 0, sy = 0, stx = 0, sty = 0;
-    for (size_t i = from; i < samples_.size(); ++i) {
-        double t = double(samples_[i].first - t0) / 1000.0;
+    for (size_t i = from; i < samples_->size(); ++i) {
+        double t = double((*samples_)[i].first - t0) / 1000.0;
         n += 1, st += t, stt += t * t;
-        sx += samples_[i].second.x, sy += samples_[i].second.y;
-        stx += t * samples_[i].second.x, sty += t * samples_[i].second.y;
+        sx += (*samples_)[i].second.x, sy += (*samples_)[i].second.y;
+        stx += t * (*samples_)[i].second.x, sty += t * (*samples_)[i].second.y;
     }
     double d = n * stt - st * st;
     if (std::abs(d) < 1e-12) return {};

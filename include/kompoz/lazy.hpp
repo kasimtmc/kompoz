@@ -330,6 +330,7 @@ struct LazyListOptions {
 
 using LazyListContent = std::function<void(LazyListScope&)>;
 
+
 namespace detail {
 void LazyColumn(const Modifier& modifier, const LazyListContent& content, CallSite site = CallSite::current());
 void LazyColumn(const Modifier& modifier, const LazyListOptions& options, const LazyListContent& content,
@@ -346,7 +347,7 @@ struct LazyColumnImpl {
         P::set<names::ReverseLayout>(options.reverseLayout, args...);
         P::set<names::FlingBehavior>(options.flingBehavior, args...);
         P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
-        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        setOverscroll<P>(options.overscrollEffect, args...);
         P::set<names::VerticalArrangement>(options.arrangement, args...);
         if constexpr (P::given<names::HorizontalAlignment, A...>()) options.crossAxisBias = P::get<names::HorizontalAlignment>(HorizontalAlignment{}, args...).bias;
         LazyColumn(P::get<names::Modifier>(Modifier{}, args...), options, lazyContent<LazyListScope>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...))), site);
@@ -370,7 +371,7 @@ struct LazyRowImpl {
         P::set<names::ReverseLayout>(options.reverseLayout, args...);
         P::set<names::FlingBehavior>(options.flingBehavior, args...);
         P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
-        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        setOverscroll<P>(options.overscrollEffect, args...);
         P::set<names::HorizontalArrangement>(options.arrangement, args...);
         if constexpr (P::given<names::VerticalAlignment, A...>()) options.crossAxisBias = P::get<names::VerticalAlignment>(VerticalAlignment{}, args...).bias;
         LazyRow(P::get<names::Modifier>(Modifier{}, args...), options, lazyContent<LazyListScope>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...))), site);
@@ -600,7 +601,7 @@ struct LazyVerticalGridImpl {
         P::set<names::ContentPadding>(options.contentPadding, args...);
         P::set<names::FlingBehavior>(options.flingBehavior, args...);
         P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
-        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        setOverscroll<P>(options.overscrollEffect, args...);
         if constexpr (P::given<names::VerticalArrangement, A...>()) options.verticalSpacing = P::get<names::VerticalArrangement>(Arrangement{}, args...).spacing;
         if constexpr (P::given<names::HorizontalArrangement, A...>()) options.horizontalSpacing = P::get<names::HorizontalArrangement>(Arrangement{}, args...).spacing;
         LazyVerticalGrid(columns, P::get<names::Modifier>(Modifier{}, args...), options, lazyContent<LazyGridScope>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...))), site);
@@ -625,7 +626,7 @@ struct LazyHorizontalGridImpl {
         P::set<names::ContentPadding>(options.contentPadding, args...);
         P::set<names::FlingBehavior>(options.flingBehavior, args...);
         P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
-        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        setOverscroll<P>(options.overscrollEffect, args...);
         if constexpr (P::given<names::VerticalArrangement, A...>()) options.verticalSpacing = P::get<names::VerticalArrangement>(Arrangement{}, args...).spacing;
         if constexpr (P::given<names::HorizontalArrangement, A...>()) options.horizontalSpacing = P::get<names::HorizontalArrangement>(Arrangement{}, args...).spacing;
         LazyHorizontalGrid(rows, P::get<names::Modifier>(Modifier{}, args...), options, lazyContent<LazyGridScope>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...))), site);
@@ -729,7 +730,7 @@ struct LazyVerticalStaggeredGridImpl {
         P::set<names::State>(options.state, args...);
         P::set<names::ContentPadding>(options.contentPadding, args...);
         P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
-        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        setOverscroll<P>(options.overscrollEffect, args...);
         P::set<names::VerticalItemSpacing>(options.verticalItemSpacing, args...);
         if constexpr (P::given<names::HorizontalArrangement, A...>()) options.horizontalSpacing = P::get<names::HorizontalArrangement>(Arrangement{}, args...).spacing;
         LazyVerticalStaggeredGrid(columns, P::get<names::Modifier>(Modifier{}, args...), options, lazyContent<LazyGridScope>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...))), site);
@@ -754,7 +755,7 @@ struct LazyHorizontalStaggeredGridImpl {
         P::set<names::State>(options.state, args...);
         P::set<names::ContentPadding>(options.contentPadding, args...);
         P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
-        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        setOverscroll<P>(options.overscrollEffect, args...);
         P::set<names::HorizontalItemSpacing>(options.horizontalItemSpacing, args...);
         if constexpr (P::given<names::VerticalArrangement, A...>()) options.verticalSpacing = P::get<names::VerticalArrangement>(Arrangement{}, args...).spacing;
         LazyHorizontalStaggeredGrid(rows, P::get<names::Modifier>(Modifier{}, args...), options, lazyContent<LazyGridScope>(std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...))), site);

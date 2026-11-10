@@ -55,6 +55,8 @@ const std::map<std::string, std::string, std::less<>> kTypes = {
     {"String", "std::string"},   {"Int", "int"},           {"Long", "long long"},     {"Short", "short"},
     {"Byte", "signed char"},     {"Float", "float"},       {"Double", "double"},      {"Boolean", "bool"},
     {"Char", "char32_t"},        {"Unit", "void"},         {"UInt", "unsigned"},      {"ULong", "unsigned long long"},
+    {"Exception", "std::exception"}, {"Throwable", "std::exception"}, {"RuntimeException", "std::runtime_error"},
+    {"IllegalStateException", "std::logic_error"}, {"IllegalArgumentException", "std::invalid_argument"},
     {"ComposeTestRule", "::kompoz::testing::ComposeTestRule"}, {"AssertionError", "::kompoz::testing::AssertionError"},
     {"Dp", "float"},             {"List", "std::vector"},  {"MutableList", "std::vector"}, {"ArrayList", "std::vector"},
     {"Set", "std::set"},         {"MutableSet", "std::set"}, {"Map", "std::map"},    {"MutableMap", "std::map"},
@@ -123,6 +125,10 @@ const std::set<std::string, std::less<>> kKtFunctions = {
 // Compose's extension functions on a flow that Kompoz has as free functions with a call site of their own:
 // vm.items.collectAsStateWithLifecycle() -> ::kompoz::collectAsStateWithLifecycle(vm.items).
 const std::set<std::string, std::less<>> kFreeMembers = {"collectAsStateWithLifecycle"};
+// Interfaces one implements (an object expression, a class) and hands around: Kompoz holds them behind shared
+// pointers, as it does ViewModels; a nullable one is an empty pointer.
+const std::set<std::string, std::less<>> kHandleTypes = {"OverscrollEffect", "NestedScrollConnection", "PopupPositionProvider",
+                                                         "IndicationNodeFactory", "TextToolbar", "LifecycleOwner"};
 // kotlin.math's constants: PI.
 const std::map<std::string, std::string, std::less<>> kBareConstants = {{"PI", "::kompoz::kt::PI"}};
 
@@ -165,6 +171,7 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"SharedTransitionLayout", "const SharedTransitionScope"},
     {"pointerInput", "PointerInputScope"},   {"awaitEachGesture", "PointerInputScope"},
     {"produce", "auto Channel"},  // (scope.produce<Int> { send(i) }: the channel it sends to)
+    {"AppBarRow", "AppBarScope"},            {"AppBarColumn", "AppBarScope"},
     {"DraggableAnchors", "auto DraggableAnchors"},  // (the builder's anchors: DragValue.Start at 0f)
     {"NavHost", "NavGraphBuilder"},          {"navigation", "NavGraphBuilder"},
     {"navigate", "NavOptionsBuilder"},       {"popUpTo", "PopUpToBuilder"},     {"navDeepLink", "NavDeepLink"},
@@ -205,7 +212,7 @@ const std::map<std::string, std::string, std::less<>> kReceiverArguments = {
 
 // Calls whose lambda is a coroutine (Kotlin's suspend lambdas): [=]() -> Task { ...; co_return; }.
 const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "produceState", "pointerInput", "awaitEachGesture", "flow",
-                                                            "produce", "consumeEach", "collect"};
+                                                            "produce", "consumeEach", "collect", "PredictiveBackHandler"};
 // Of those, the calls that suspend themselves until their block is done with every element (co_await on the call too);
 // the others start something (a job, a channel, a flow) and give it back.
 const std::set<std::string, std::less<>> kAwaitedBlocks = {"consumeEach", "collect"};
@@ -272,10 +279,14 @@ public:
         s = known != kTypes.end() ? known->second : qualified(t.name);
         // A ViewModel (a class deriving from it, here in Kotlin or in a header): its owner hands it out
         // as a shared pointer (viewModel<T>()), and a parameter or property of the type is one too.
-        if (known == kTypes.end() && t.args.empty() && !plainTypes_ && isViewModel(t.name)) s = "std::shared_ptr<" + s + ">";
+        if (known == kTypes.end() && t.args.empty() && !plainTypes_ && (isViewModel(t.name) || kHandleTypes.contains(t.name))) {
+            s = "std::shared_ptr<" + s + ">";
+            if (t.nullable) return s;  // (a nullable handle: an empty pointer is null)
+        }
         if (!t.args.empty()) {
+            size_t count = t.name == "Animatable" ? 1 : t.args.size();  // Animatable<Float, AnimationVector1D>: the vector is Compose's own
             s += "<";
-            for (size_t i = 0; i < t.args.size(); ++i) s += (i ? ", " : "") + type(t.args[i]);
+            for (size_t i = 0; i < count; ++i) s += (i ? ", " : "") + type(t.args[i]);
             s += ">";
         }
         if (t.nullable) s = "std::optional<" + s + ">";
@@ -719,6 +730,7 @@ private:
                 out_.text(")");
                 braced(*s.kids[1], false);
                 return;
+            case Node::Try: return tryStatement(s);
             case Node::DoWhile:
                 out_.text("do");
                 braced(*s.kids[0], false);
@@ -885,6 +897,38 @@ private:
         scopes_.pop_back();
         out_.text(" }");
     }
+
+    // try { } catch (e: T) { } finally { }: C++'s try / catch; the finally block runs from a guard's destructor,
+    // so a coroutine cancelled inside the try runs it too (its frame is destroyed), as Kotlin's does.
+    void tryStatement(const Node& t) {
+        out_.text("{");
+        if (t.flag) {
+            out_.text(" ::kompoz::kt::Finally kompoz_finally_" + std::to_string(++finally_) + "(" + capture("[&]") + "() {");
+            scopes_.emplace_back();
+            statements(*t.kids.back(), false);
+            scopes_.pop_back();
+            out_.text(" });");
+        }
+        if (t.names.empty()) {
+            scopes_.emplace_back();
+            braced(*t.kids[0], false);
+            scopes_.pop_back();
+        } else {
+            out_.text(" try");
+            scopes_.emplace_back();
+            braced(*t.kids[0], false);
+            scopes_.pop_back();
+            for (size_t i = 0; i < t.names.size(); ++i) {
+                scopes_.emplace_back();
+                declare(t.names[i], Local);
+                out_.text(" catch (const " + type(t.typeArgs[i]) + "& " + cppName(t.names[i]) + ")");
+                braced(*t.kids[1 + i], false);
+                scopes_.pop_back();
+            }
+        }
+        out_.text(" }");
+    }
+    int finally_ = 0;
 
     void forStatement(const Node& f) {
         const Node& it = *f.kids[0];

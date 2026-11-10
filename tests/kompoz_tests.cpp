@@ -8133,6 +8133,58 @@ TEST(state_forms_take_compose_named_arguments) {
     CHECK((got == std::vector<int>{3, 2, 1} && log == "bitti"));
 }
 
+TEST(scroll_forms_take_compose_named_arguments) {
+    // AppBarRow(maxItemCount =) { } with clickableItem(onClick =, icon =, label =) by name, AppBarWithSearch(state =, inputField =,
+    // navigationIcon =), pullToRefresh(isRefreshing =, state =, onRefresh =) and PullToRefreshDefaults' Indicator / IndicatorBox by
+    // name act as the positional forms; LoadingIndicator(progress = { }); overscrollEffect = kt::null is none; a VelocityTracker's
+    // copies share its samples; kt::Finally runs at the scope's end; kt::null gives an empty shared pointer.
+    VelocityTracker tracker, copy = tracker;
+    copy.addPosition(0, {0, 0});
+    copy.addPosition(16, {16, 0});
+    CHECK(tracker.calculateVelocity().x > 500);
+    std::shared_ptr<OverscrollEffect> none = kt::null;
+    CHECK(!none);
+    std::string order;
+    {
+        kt::Finally last([&] { order += "sonunda"; });
+        order += "içinde ";
+    }
+    CHECK(order == "içinde sonunda");
+    int shared = 0;
+    bool refreshed = false;
+    ComposeTestRule rule([&] {
+        Column([&] {  // (made in the Column's block: it is run again on its own, after the lambda around it returned)
+            auto state = rememberPullToRefreshState();
+            auto search = rememberSearchBarState();
+            auto query = rememberTextFieldState();
+            TopAppBar(arg::title = [] { Text("belge"); }, arg::actions = [&] {
+                AppBarRow(arg::maxItemCount = 2, [&](AppBarScope& s) {
+                    s.clickableItem(arg::onClick = [&] { ++shared; }, arg::icon = [] { Icon(Icons::Filled::Share, "Paylaş"); }, arg::label = std::string("Paylaş"));
+                    s.clickableItem(arg::onClick = [] {}, arg::icon = [] { Icon(Icons::Filled::Edit, "Düzenle"); }, arg::label = std::string("Düzenle"));
+                    s.clickableItem(arg::onClick = [] {}, arg::icon = [] { Icon(Icons::Filled::Delete, "Sil"); }, arg::label = std::string("Sil"));
+                });
+            });
+            AppBarWithSearch(arg::state = search, arg::inputField = [&] { SearchBarDefaults::InputField(search, query, {.placeholder = "ara"}); },
+                             arg::navigationIcon = [] { Icon(Icons::Filled::Menu, "Menü"); });
+            Box(Modifier().size(200, 120).pullToRefresh(arg::isRefreshing = false, arg::state = state, arg::onRefresh = [&] { refreshed = true; }).testTag("çekilir"),
+                [&] {
+                    PullToRefreshDefaults::Indicator(arg::state = state, arg::isRefreshing = false, arg::modifier = Modifier().align(Alignment::TopCenter));
+                    PullToRefreshDefaults::IndicatorBox(arg::state = state, arg::isRefreshing = false, arg::modifier = Modifier().align(Alignment::TopEnd),
+                                                        arg::shape = CircleShape, [&] {
+                                                            LoadingIndicator(arg::progress = [&] { return std::min(1.f, state.distanceFraction()); },
+                                                                             arg::modifier = Modifier().size(24));
+                                                        });
+                });
+            LazyRow(Modifier().height(40), arg::overscrollEffect = kt::null, [] { items(3, [](int) { Box(Modifier().size(40)); }); });
+        });
+    }, {400, 800});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithContentDescription("Paylaş").exists() && rule.onNodeWithContentDescription("More options").exists());  // two slots: the rest in the menu
+    rule.onNodeWithContentDescription("Paylaş").performClick();
+    CHECK(shared == 1 && !refreshed);
+    CHECK(rule.onNodeWithContentDescription("Menü").exists() && rule.onNodeWithTag("çekilir").exists());
+}
+
 TEST(navigation_takes_compose_named_arguments) {
     // NavHost(navController =, startDestination =, enterTransition = { }) { … } with the graph builder's
     // composable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }

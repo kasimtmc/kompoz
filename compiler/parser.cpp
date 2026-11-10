@@ -548,6 +548,36 @@ NodeP Parser::statement() {
             w->kids.push_back(body());
             return w;
         }
+        if (t.text == "try") {
+            auto y = make(Node::Try, take().pos);
+            y->kids.push_back(block());
+            for (;;) {  // catch and finally may follow on later lines; nothing else is taken
+                size_t before = index_;
+                skipNewlines();
+                if (isIdent("catch")) {
+                    take();
+                    {
+                        NewlineMode mode(newlines_, false);
+                        expectOp("(");
+                        if (cur().kind != Tok::Ident) fail(cur().pos, "expected the exception's name");
+                        y->names.push_back(take().text);
+                        expectOp(":");
+                        y->typeArgs.push_back(type());
+                        expectOp(")");
+                    }
+                    y->kids.push_back(block());
+                    continue;
+                }
+                if (isIdent("finally")) {
+                    take();
+                    y->flag = true;
+                    y->kids.push_back(block());
+                }
+                else index_ = before;
+                break;
+            }
+            return y;
+        }
         if (t.text == "do") {
             auto d = make(Node::DoWhile, take().pos);
             d->kids.push_back(body());

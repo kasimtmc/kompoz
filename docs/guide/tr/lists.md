@@ -305,6 +305,8 @@ fun News() {
 }
 ```
 
+Düz bir kapta aynısını `Modifier.pullToRefresh(isRefreshing = …, state = rememberPullToRefreshState(), onRefresh = …)` yapar; üstüne `PullToRefreshDefaults.Indicator(state = …, isRefreshing = …)` ya da kendi `IndicatorBox(state = …, isRefreshing = …) { … }`'unuz konur. Bir listenin ya da pager'ın `overscrollEffect`'i varsayılan olarak esnemedir (`rememberOverscrollEffect()`), `null` hiçbiri, ya da kendi `OverscrollEffect`'iniz.
+
 ## Ayrıca bakın
 
 - [Yerleşimler](layouts.md): `Column`, `Row` ve tembel olmayan diğer yerleşimler.

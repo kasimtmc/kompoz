@@ -600,6 +600,16 @@ Modifier Modifier::onClickBy(CallSite site, A&&... args) const {
     return this->onClick(std::move(onClick), std::move(options), site);
 }
 
+// pullToRefresh(isRefreshing = …, state = …, onRefresh = …, enabled = …, threshold = …).
+template <class... A>
+Modifier Modifier::pullToRefreshBy(CallSite site, A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::IsRefreshing, n::State, n::OnRefresh, n::Enabled, n::Threshold>;
+    static_assert(P::check<A...>());
+    return pullToRefresh(bool(P::arg<n::IsRefreshing>(args...)), P::arg<n::State>(args...), std::function<void()>(P::arg<n::OnRefresh>(args...)),
+                         P::get<n::Enabled>(true, args...), P::get<n::Threshold>(80.f, args...), site);
+}
+
 // transformable(state, canPan = { … }, lockRotationOnZoomPan = …, enabled = …).
 template <class... A>
     requires(detail::anyNamedArgument<A...>)

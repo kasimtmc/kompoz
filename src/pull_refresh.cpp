@@ -112,7 +112,7 @@ void detail::PullToRefreshBox(bool isRefreshing, std::function<void()> onRefresh
                       PullToRefreshOptions options, CallSite site) {
     ComposableScope scope(site);
     PullToRefreshState state = options.state ? *options.state : rememberPullToRefreshState();
-    detail::Box(modifier.pullToRefresh(isRefreshing, state, std::move(onRefresh), options.enabled, options.threshold),
+    ::kompoz::detail::Box(modifier.pullToRefresh(isRefreshing, state, std::move(onRefresh), options.enabled, options.threshold),
         options.contentAlignment, [&] {
             content();
             if (options.indicator)
@@ -122,7 +122,7 @@ void detail::PullToRefreshBox(bool isRefreshing, std::function<void()> onRefresh
         });
 }
 
-namespace PullToRefreshDefaults {
+namespace PullToRefreshDefaults::detail {
 
 Color indicatorContainerColor() { return colorScheme().surfaceContainerHigh; }
 Color indicatorColor() { return colorScheme().onSurfaceVariant; }
@@ -141,7 +141,7 @@ void IndicatorBox(const PullToRefreshState& state, bool isRefreshing, const Modi
                      .shadow(fraction > 0 || isRefreshing ? elevation : 0, shape)
                      .clip(shape);
     if (containerColor) m = m.background(*containerColor, shape);
-    detail::Box(m, Alignment::Center, content);
+    ::kompoz::detail::Box(m, Alignment::Center, content);
 }
 
 namespace {
@@ -186,7 +186,7 @@ void Indicator(const PullToRefreshState& state, bool isRefreshing, const Modifie
     IndicatorBox(state, isRefreshing, m, [&] {
         Crossfade(isRefreshing, [c, fraction](const bool& refreshing) {
             if (refreshing)
-                detail::CircularProgressIndicator(Modifier().size(kSpinnerSize), c, kStrokeWidth, CallSite::current());
+                ::kompoz::detail::CircularProgressIndicator(Modifier().size(kSpinnerSize), c, kStrokeWidth, CallSite::current());
             else
                 ArrowIndicator(fraction, c);
         }, Modifier(), tween(150));

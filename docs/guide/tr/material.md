@@ -39,6 +39,22 @@ fun Inbox() {
 
 Üst uygulama çubukları Material'ın tanımladığı boyutlarda gelir: `TopAppBar`, `CenterAlignedTopAppBar`, `MediumTopAppBar` ve `LargeTopAppBar`. Bir kaydırma davranışıyla (`TopAppBarDefaults.enterAlwaysScrollBehavior()`, `exitUntilCollapsedScrollBehavior()`, `pinnedScrollBehavior()`) ve bu davranışın `nestedScrollConnection`'ı `Scaffold`'a verildiğinde, içerik kaydıkça daralır ve renk değiştirirler (bkz. [Listeler ve ızgaralar](lists.md#iç-içe-kaydırma)). `BottomAppBar` ve `BottomSheetScaffold` da var.
 
+`AppBarRow` bir çubuğun eylemlerinden sığanları yerleştirir, kalanları bir taşma menüsüne koyar (`AppBarColumn` aynısını bir ray boyunca yapar); öğeleri `AppBarScope`'un `clickableItem` ve `toggleableItem`'ıdır:
+
+```kotlin
+@Composable
+fun DocumentBar() {
+    TopAppBar(title = { Text("Belge") }, actions = {
+        AppBarRow(maxItemCount = 3) {
+            clickableItem(onClick = { }, icon = { Icon(Icons.Filled.Share, contentDescription = "Paylaş") }, label = "Paylaş")
+            clickableItem(onClick = { }, icon = { Icon(Icons.Filled.Edit, contentDescription = "Düzenle") }, label = "Düzenle")
+            clickableItem(onClick = { }, icon = { Icon(Icons.Filled.Delete, contentDescription = "Sil") }, label = "Sil")
+            clickableItem(onClick = { }, icon = { Icon(Icons.Filled.Info, contentDescription = "Hakkında") }, label = "Hakkında")
+        }
+    })
+}
+```
+
 İçeriğin iç boşluğu, çubukların boyu değiştikçe (liste kaydıkça daralan bir üst çubuk) içerik yeniden oluşturulmadan onları izler: Compose'taki gibi `Modifier.padding`, `consumeWindowInsets` ve listelerin, pager'ların, carousel'lerin `contentPadding`'i onu yerleşim sırasında okur. Bir kenarı kendiniz okumak için `calculateTopPadding()` (ve `calculateStartPadding()`, `calculateEndPadding()`, `calculateBottomPadding()`; Kompoz'unkiler yerleşim yönü almaz, iç boşluk kendininkini bilir) çağırın. Bir composable'da okunursa iç boşluk değiştiğinde o composable yeniden oluşturulur; bir yerleşimde okunursa o yerleşim yeniden yerleştirilir.
 
 ## Gezinme

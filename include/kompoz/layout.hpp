@@ -564,6 +564,17 @@ public:
 // LocalOverscrollFactory = std::nullopt. Pass it to a scroll container, or to scrollable() with
 // Modifier.overscroll() where it should show.
 std::shared_ptr<OverscrollEffect> rememberOverscrollEffect(CallSite site = CallSite::current());
+namespace detail {
+// overscrollEffect = …: an effect, nullptr (none), or Kotlin's null (none too, as Compose's); unset keeps the stretch.
+template <class P, class... A>
+void setOverscroll(std::optional<std::shared_ptr<OverscrollEffect>>& field, A&&... args) {
+    if constexpr (P::template given<names::OverscrollEffect, A...>()) {
+        auto&& given = P::template arg<names::OverscrollEffect>(args...);
+        if constexpr (requires { std::remove_cvref_t<decltype(given)>::kompozNull; }) field = nullptr;
+        else field = given;
+    }
+}
+}  // namespace detail
 // The same effect, not drawn (another node draws it with Modifier.overscroll) / not taking the
 // drags and flings (only drawn here).
 std::shared_ptr<OverscrollEffect> withoutVisualEffect(std::shared_ptr<OverscrollEffect> effect);
@@ -2177,6 +2188,29 @@ public:
     // pass by; then it goes back to 0. Put an indicator over the content (PullToRefreshDefaults).
     Modifier pullToRefresh(bool isRefreshing, const PullToRefreshState& state, std::function<void()> onRefresh,
                            bool enabled = true, float threshold = 80, CallSite site = CallSite::current()) const;
+    // Compose's pullToRefresh(isRefreshing = …, state = …, onRefresh = …, enabled = …, threshold = …) by name (named_members.hpp).
+    template <class A1, class A2>
+        requires(detail::anyNamedArgument<A1, A2>)
+    Modifier pullToRefresh(A1&& a1, A2&& a2, CallSite site = CallSite::current()) const {
+        return pullToRefreshBy(site, std::forward<A1>(a1), std::forward<A2>(a2));
+    }
+    template <class A1, class A2, class A3>
+        requires(detail::anyNamedArgument<A1, A2, A3>)
+    Modifier pullToRefresh(A1&& a1, A2&& a2, A3&& a3, CallSite site = CallSite::current()) const {
+        return pullToRefreshBy(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3));
+    }
+    template <class A1, class A2, class A3, class A4>
+        requires(detail::anyNamedArgument<A1, A2, A3, A4>)
+    Modifier pullToRefresh(A1&& a1, A2&& a2, A3&& a3, A4&& a4, CallSite site = CallSite::current()) const {
+        return pullToRefreshBy(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4));
+    }
+    template <class A1, class A2, class A3, class A4, class A5>
+        requires(detail::anyNamedArgument<A1, A2, A3, A4, A5>)
+    Modifier pullToRefresh(A1&& a1, A2&& a2, A3&& a3, A4&& a4, A5&& a5, CallSite site = CallSite::current()) const {
+        return pullToRefreshBy(site, std::forward<A1>(a1), std::forward<A2>(a2), std::forward<A3>(a3), std::forward<A4>(a4), std::forward<A5>(a5));
+    }
+    template <class... A>
+    Modifier pullToRefreshBy(CallSite site, A&&... args) const;
     Modifier weight(float weight, bool fill = true) const;  // in Row / Column
     Modifier flex(const FlexConfig& config) const;          // in a FlexBox
     // Compose's form, on a FlexConfigScope: flex { grow(1f); basis(80.dp) }.

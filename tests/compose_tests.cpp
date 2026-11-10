@@ -1817,6 +1817,64 @@ TEST(state_forms_as_kotlin_writes_them) {
     CHECK(rule.onNodeWithText("servis 1 · ret 0 · 321!").exists());
 }
 
+// Scroll forms as Compose writes them: try { } finally { } in a coroutine, AppBarRow(maxItemCount =) { clickableItem(onClick =,
+// icon =, label =) }, AppBarWithSearch(state =, inputField =, navigationIcon =), Modifier.pullToRefresh by name with
+// PullToRefreshDefaults.Indicator / IndicatorBox and LoadingIndicator(progress = { }), overscrollEffect = null and an
+// OverscrollEffect? parameter, Animatable<Float, AnimationVector1D>.
+@Composable
+fun TiledRow(effect: OverscrollEffect?) {
+    LazyRow(modifier = Modifier.height(40.dp), overscrollEffect = effect) { items(3) { Box(modifier = Modifier.size(40.dp)) } }
+}
+
+@Composable
+fun ScrollForms(a: Animatable<Float, AnimationVector1D>) {
+    var log by remember { mutableStateOf("") }
+    var refreshing by remember { mutableStateOf(false) }
+    val state = rememberPullToRefreshState()
+    val search = rememberSearchBarState()
+    val query = rememberTextFieldState()
+    LaunchedEffect(Unit) {
+        try {
+            log = log + "içinde "
+            a.snapTo(3f)
+        } finally {
+            log = log + "sonunda"
+        }
+    }
+    Column {
+        TopAppBar(title = { Text("belge") }, actions = {
+            AppBarRow(maxItemCount = 2) {
+                clickableItem(onClick = { log = log + " paylaş" }, icon = { Icon(Icons.Filled.Share, contentDescription = "Paylaş") }, label = "Paylaş")
+                clickableItem(onClick = {}, icon = { Icon(Icons.Filled.Edit, contentDescription = "Düzenle") }, label = "Düzenle")
+                clickableItem(onClick = {}, icon = { Icon(Icons.Filled.Delete, contentDescription = "Sil") }, label = "Sil")
+            }
+        })
+        AppBarWithSearch(state = search,
+                         inputField = { SearchBarDefaults.InputField(searchBarState = search, textFieldState = query, onSearch = {}, placeholder = { Text("ara") }) },
+                         navigationIcon = { Icon(Icons.Filled.Menu, contentDescription = "Menü") })
+        Box(modifier = Modifier.size(200.dp, 120.dp).pullToRefresh(isRefreshing = refreshing, state = state, onRefresh = { refreshing = true }, enabled = true).testTag("çekilir")) {
+            PullToRefreshDefaults.Indicator(state = state, isRefreshing = refreshing, modifier = Modifier.align(Alignment.TopCenter))
+            PullToRefreshDefaults.IndicatorBox(state = state, isRefreshing = refreshing, modifier = Modifier.align(Alignment.TopEnd), shape = CircleShape) {
+                LoadingIndicator(progress = { min(1f, state.distanceFraction) }, modifier = Modifier.size(24.dp))
+            }
+        }
+        TiledRow(rememberOverscrollEffect())
+        TiledRow(null)
+        Text("günlük: $log · ${a.value.roundToInt()}")
+    }
+}
+
+TEST(scroll_forms_as_compose_writes_them) {
+    Animatable<float> a(0.f);
+    ComposeTestRule rule([&] { ScrollForms(a); }, {400, 800});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("günlük: içinde sonunda · 3").exists());
+    CHECK(rule.onNodeWithContentDescription("Paylaş").exists() && rule.onNodeWithContentDescription("More options").exists());  // two slots: the rest in the menu
+    rule.onNodeWithContentDescription("Paylaş").performClick();
+    CHECK(rule.onNodeWithText("günlük: içinde sonunda paylaş · 3").exists());
+    CHECK(rule.onNodeWithContentDescription("Menü").exists() && rule.onNodeWithTag("çekilir").exists());
+}
+
 TEST(navigation_as_compose_writes_it) {
     NavController nav;
     ComposeTestRule rule([&] { Navigator(nav); });

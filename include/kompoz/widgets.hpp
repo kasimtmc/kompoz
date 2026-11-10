@@ -2077,8 +2077,12 @@ struct LoadingIndicatorImpl {
         if constexpr (countOf<names::Progress, A...> > 0 || startsWith<float, A...>() || startsWith<double, A...>()) {
             using P = Determinate;
             static_assert(P::check<A...>());
-            LoadingIndicator(float(P::arg<names::Progress>(args...)), P::get<names::Modifier>(Modifier{}, args...),
-                             P::get<names::Color>(std::optional<Color>(), args...), site);
+            auto&& progress = P::arg<names::Progress>(args...);  // a value, or Compose's { progress } read here
+            float value = [&] {
+                if constexpr (std::is_invocable_v<decltype(progress)>) return float(progress());
+                else return float(progress);
+            }();
+            LoadingIndicator(value, P::get<names::Modifier>(Modifier{}, args...), P::get<names::Color>(std::optional<Color>(), args...), site);
         } else {
             using P = Indeterminate;
             static_assert(P::check<A...>());

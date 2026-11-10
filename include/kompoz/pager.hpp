@@ -159,7 +159,7 @@ struct HorizontalPagerImpl {
         P::set<names::ReverseLayout>(options.reverseLayout, args...);
         P::set<names::PageKey>(options.key, args...);
         P::set<names::SnapPosition>(options.snapPosition, args...);
-        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        setOverscroll<P>(options.overscrollEffect, args...);
         HorizontalPager(std::move(state), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), options, site);
     }
 };
@@ -187,7 +187,7 @@ struct VerticalPagerImpl {
         P::set<names::ReverseLayout>(options.reverseLayout, args...);
         P::set<names::PageKey>(options.key, args...);
         P::set<names::SnapPosition>(options.snapPosition, args...);
-        P::set<names::OverscrollEffect>(options.overscrollEffect, args...);
+        setOverscroll<P>(options.overscrollEffect, args...);
         VerticalPager(std::move(state), P::get<names::Modifier>(Modifier{}, args...), P::block(std::forward<A>(args)...), options, site);
     }
 };

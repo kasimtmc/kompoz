@@ -1108,6 +1108,17 @@
   (ViewModel'i SavedStateHandle, debounce, flatMapLatest, stateIn ve SharedFlow'lu bir Kotlin sınıfı), taşınabilir içerik,
   channel mutfağı ve produce geri sayımı, yaşam döngüsü bölümü, sohbet ve platform hizmetleri Kotlin'de `@Composable fun`lar
   (iş parçacıklı indirme ViewModel'i, yaşam döngüsü gözlemcisi ViewModel'i ve asal sayımı aynı dosyada C++ kalır).
+- **Compose'un yazdığı gibi kaydırma, uygulama çubukları ve çekip yenileme**: Composable olarak `AppBarRow(overflowIndicator = …,
+  maxItemCount = …) { clickableItem(onClick = …, icon = { }, label = "…") }` ve `AppBarColumn`, `AppBarWithSearch(state = …,
+  inputField = { }, navigationIcon = …, actions = …, scrollBehavior = …)`, `Modifier.pullToRefresh(isRefreshing = …, state = …,
+  onRefresh = …, enabled = …, threshold = …)`, `PullToRefreshDefaults.Indicator(state = …, isRefreshing = …, modifier = …,
+  containerColor = …, color = …, threshold = …)` ve `IndicatorBox(state = …, isRefreshing = …, threshold = …, shape = …,
+  containerColor = …, elevation = …) { }` (konumsal biçimler eskisi gibi); `LoadingIndicator(progress = { … })`; bir listenin ya da
+  pager'ın `overscrollEffect = null`'ı Compose'daki gibi hiçbiridir; bir `VelocityTracker`'ın kopyaları örneklerini paylaşır (bir
+  hareketin işleyicileri tek bir fırlatmayı ölçer). kompozc: `try { } catch (e: Exception) { } finally { }` (finally bloğu kapsam
+  bitince çalışır, iptal edilen bir coroutine'inki de); `OverscrollEffect`, `NestedScrollConnection`, `PopupPositionProvider`,
+  `IndicationNodeFactory`, `TextToolbar` ve `LifecycleOwner` parametreleri paylaşımlı göstericidir, null olabileni boş bir
+  gösterici (`null`); `Animatable<Float, AnimationVector1D>`, `Animatable<float>`'tır; `PredictiveBackHandler(enabled) { steps -> … }`.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

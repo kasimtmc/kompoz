@@ -407,6 +407,26 @@ class AppBarScope {
 public:
     void clickableItem(std::function<void()> onClick, Content icon, std::string label, bool enabled = true);
     void toggleableItem(bool checked, std::function<void(bool)> onCheckedChange, Content icon, std::string label, bool enabled = true);
+    // Compose's names: clickableItem(onClick = …, icon = { … }, label = "…", enabled = …) and
+    // toggleableItem(checked = …, onCheckedChange = …, icon = { … }, label = "…", enabled = …).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void clickableItem(A&&... args) {
+        namespace n = detail::names;
+        using P = detail::Params<n::OnClick, n::Icon, n::Label, n::Enabled>;
+        static_assert(P::check<A...>());
+        clickableItem(std::function<void()>(P::arg<n::OnClick>(args...)), Content(P::arg<n::Icon>(args...)), std::string(P::arg<n::Label>(args...)),
+                      P::get<n::Enabled>(true, args...));
+    }
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    void toggleableItem(A&&... args) {
+        namespace n = detail::names;
+        using P = detail::Params<n::Checked, n::OnCheckedChange, n::Icon, n::Label, n::Enabled>;
+        static_assert(P::check<A...>());
+        toggleableItem(bool(P::arg<n::Checked>(args...)), std::function<void(bool)>(P::arg<n::OnCheckedChange>(args...)), Content(P::arg<n::Icon>(args...)),
+                       std::string(P::arg<n::Label>(args...)), P::get<n::Enabled>(true, args...));
+    }
     // Your own: how it shows in the row, and in the menu (dismiss the menu from it when done).
     void customItem(Content appBarContent, std::function<void(const AppBarMenuState&)> menuContent);
 
@@ -430,12 +450,59 @@ struct AppBarRowOptions {
 //           s.toggleableItem(liked, setLiked, [] { Icon(Icons::Filled::Favorite, "Beğen"); }, "Beğen");
 //       });
 //   });
+// By name as Compose's: AppBarRow(overflowIndicator = { … }, maxItemCount = 3) { clickableItem(…) }.
+namespace detail {
 void AppBarRow(std::function<void(AppBarScope&)> content, const Modifier& modifier = {}, AppBarRowOptions options = {},
                CallSite site = CallSite::current());
 // The same down a column (Compose's AppBarColumn): for a rail or a vertical toolbar, the menu's
 // button at the bottom.
 void AppBarColumn(std::function<void(AppBarScope&)> content, const Modifier& modifier = {}, AppBarRowOptions options = {},
                   CallSite site = CallSite::current());
+template <bool Column>
+struct AppBarRowImpl {
+    using P = Params<names::OverflowIndicator, names::Modifier, names::MaxItemCount, BlockWith<AppBarScope&>>;
+    template <class... A>
+    static constexpr bool byPlace() {  // (content, modifier[, options]): Kompoz's C++ order
+        if constexpr (sizeof...(A) < 2 || (isNamed<A> || ...)) return false;
+        else return std::is_invocable_v<std::remove_cvref_t<std::tuple_element_t<0, std::tuple<A...>>>&, AppBarScope&>;
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (byPlace<A...>()) {
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            AppBarRowOptions options;
+            if constexpr (sizeof...(A) >= 3) options = std::get<2>(all);
+            if constexpr (Column) AppBarColumn(std::get<0>(all), std::get<1>(all), options, site);
+            else AppBarRow(std::get<0>(all), std::get<1>(all), options, site);
+        } else {
+            static_assert(P::check<A...>());
+            static_assert(P::blockGiven<A...>(), "kompoz: AppBarRow / AppBarColumn takes a block: its items");
+            AppBarRowOptions options;
+            P::set<names::OverflowIndicator>(options.overflowIndicator, args...);
+            P::set<names::MaxItemCount>(options.maxItemCount, args...);
+            std::function<void(AppBarScope&)> content = std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...));
+            if constexpr (Column) AppBarColumn(std::move(content), P::get<names::Modifier>(Modifier{}, args...), options, site);
+            else AppBarRow(std::move(content), P::get<names::Modifier>(Modifier{}, args...), options, site);
+        }
+    }
+};
+struct AppBarRowCall : Composable<AppBarRowImpl<false>> {
+    using Composable<AppBarRowImpl<false>>::operator();
+    void operator()(std::function<void(AppBarScope&)> content, const Modifier& modifier = {}, AppBarRowOptions options = {},
+                    CallSite site = CallSite::current()) const {
+        AppBarRow(std::move(content), modifier, options, site);
+    }
+};
+struct AppBarColumnCall : Composable<AppBarRowImpl<true>> {
+    using Composable<AppBarRowImpl<true>>::operator();
+    void operator()(std::function<void(AppBarScope&)> content, const Modifier& modifier = {}, AppBarRowOptions options = {},
+                    CallSite site = CallSite::current()) const {
+        AppBarColumn(std::move(content), modifier, options, site);
+    }
+};
+} // namespace detail
+inline constexpr detail::AppBarRowCall AppBarRow;
+inline constexpr detail::AppBarColumnCall AppBarColumn;
 
 // ---- Date picker ------------------------------------------------------------------------------
 
@@ -838,8 +905,45 @@ struct AppBarWithSearchSlots {
     Content navigationIcon, actions;
     std::optional<TopAppBarScrollBehavior> scrollBehavior;
 };
+// By name as Compose's: AppBarWithSearch(state = …, inputField = { … }, navigationIcon = { … }, actions = { … }, scrollBehavior = …).
+namespace detail {
 void AppBarWithSearch(const SearchBarState& state, const Content& inputField, const Modifier& modifier = {},
                       const AppBarWithSearchSlots& slots = {}, CallSite site = CallSite::current());
+struct AppBarWithSearchImpl {
+    using P = Params<names::State, names::InputField, names::Modifier, names::NavigationIcon, names::Actions, names::ScrollBehavior>;
+    template <class... A>
+    static constexpr bool byPlace() {  // (state, inputField[, modifier[, slots]]): Kompoz's C++ order
+        if constexpr (sizeof...(A) < 2 || (isNamed<A> || ...)) return false;
+        else return std::is_same_v<std::remove_cvref_t<std::tuple_element_t<0, std::tuple<A...>>>, SearchBarState>;
+    }
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (byPlace<A...>()) {
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            Modifier modifier;
+            AppBarWithSearchSlots slots;
+            if constexpr (sizeof...(A) >= 3) modifier = std::get<2>(all);
+            if constexpr (sizeof...(A) >= 4) slots = std::get<3>(all);
+            AppBarWithSearch(std::get<0>(all), Content(std::get<1>(all)), modifier, slots, site);
+        } else {
+            static_assert(P::check<A...>());
+            AppBarWithSearchSlots slots;
+            P::set<names::NavigationIcon>(slots.navigationIcon, args...);
+            P::set<names::Actions>(slots.actions, args...);
+            P::set<names::ScrollBehavior>(slots.scrollBehavior, args...);
+            AppBarWithSearch(P::arg<names::State>(args...), Content(P::arg<names::InputField>(args...)), P::get<names::Modifier>(Modifier{}, args...), slots, site);
+        }
+    }
+};
+struct AppBarWithSearchCall : Composable<AppBarWithSearchImpl> {
+    using Composable<AppBarWithSearchImpl>::operator();
+    void operator()(const SearchBarState& state, const Content& inputField, const Modifier& modifier = {},
+                    const AppBarWithSearchSlots& slots = {}, CallSite site = CallSite::current()) const {
+        AppBarWithSearch(state, inputField, modifier, slots, site);
+    }
+};
+} // namespace detail
+inline constexpr detail::AppBarWithSearchCall AppBarWithSearch;
 namespace SearchBarDefaults {
 TopAppBarScrollBehavior enterAlwaysSearchBarScrollBehavior(CallSite site = CallSite::current());
 } // namespace SearchBarDefaults
@@ -1129,6 +1233,10 @@ namespace PullToRefreshDefaults {
 // The circle an indicator sits in: it comes out from under the top edge of where it is placed
 // (nothing of it shows above that) as the state goes from 0 to 1, to `maxDistance` dp below it,
 // with a shadow while out. No container color by default.
+// By name as Compose's: IndicatorBox(state = …, isRefreshing = …, modifier = …, threshold = …, shape = …, containerColor = …,
+// elevation = …) { … } and Indicator(state = …, isRefreshing = …, modifier = …, containerColor = …, color = …, threshold = …).
+namespace detail {
+namespace kd = ::kompoz::detail;
 void IndicatorBox(const PullToRefreshState& state, bool isRefreshing, const Modifier& modifier, const Content& content,
                   float maxDistance = IndicatorMaxDistance, Shape shape = indicatorShape,
                   std::optional<Color> containerColor = {}, float elevation = Elevation, CallSite site = CallSite::current());
@@ -1137,6 +1245,76 @@ void IndicatorBox(const PullToRefreshState& state, bool isRefreshing, const Modi
 void Indicator(const PullToRefreshState& state, bool isRefreshing, const Modifier& modifier = {},
                std::optional<Color> containerColor = {}, std::optional<Color> color = {},
                float maxDistance = IndicatorMaxDistance, CallSite site = CallSite::current());
+template <class... A>
+constexpr bool fromState() {  // Kompoz's C++ order: the state first, without names
+    if constexpr (sizeof...(A) < 2 || (kd::isNamed<A> || ...)) return false;
+    else return std::is_same_v<std::remove_cvref_t<std::tuple_element_t<0, std::tuple<A...>>>, PullToRefreshState>;
+}
+struct IndicatorBoxImpl {
+    using P = kd::Params<kd::names::State, kd::names::IsRefreshing, kd::names::Modifier, kd::names::Threshold, kd::names::Shape, kd::names::ContainerColor,
+                         kd::names::Elevation, kd::Block>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (fromState<A...>()) {  // (state, isRefreshing, modifier, content[, maxDistance[, shape[, containerColor[, elevation]]]])
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            float maxDistance = IndicatorMaxDistance, elevation = Elevation;
+            Shape shape = indicatorShape;
+            std::optional<Color> containerColor;
+            if constexpr (sizeof...(A) >= 5) maxDistance = std::get<4>(all);
+            if constexpr (sizeof...(A) >= 6) shape = std::get<5>(all);
+            if constexpr (sizeof...(A) >= 7) containerColor = std::get<6>(all);
+            if constexpr (sizeof...(A) >= 8) elevation = std::get<7>(all);
+            IndicatorBox(std::get<0>(all), bool(std::get<1>(all)), std::get<2>(all), Content(std::get<3>(all)), maxDistance, shape, containerColor, elevation, site);
+        } else {
+            static_assert(P::check<A...>());
+            static_assert(P::blockGiven<A...>(), "kompoz: IndicatorBox takes a block: the indicator in it");
+            IndicatorBox(P::arg<kd::names::State>(args...), bool(P::arg<kd::names::IsRefreshing>(args...)), P::get<kd::names::Modifier>(Modifier{}, args...),
+                         P::block(std::forward<A>(args)...), P::get<kd::names::Threshold>(IndicatorMaxDistance, args...),
+                         P::get<kd::names::Shape>(Shape(indicatorShape), args...), P::get<kd::names::ContainerColor>(std::optional<Color>(), args...),
+                         P::get<kd::names::Elevation>(Elevation, args...), site);
+        }
+    }
+};
+struct IndicatorImpl {
+    using P = kd::Params<kd::names::State, kd::names::IsRefreshing, kd::names::Modifier, kd::names::ContainerColor, kd::names::Color, kd::names::Threshold>;
+    template <class... A>
+    static void call(CallSite site, A&&... args) {
+        if constexpr (fromState<A...>()) {  // (state, isRefreshing[, modifier[, containerColor[, color[, maxDistance]]]])
+            auto all = std::forward_as_tuple(std::forward<A>(args)...);
+            Modifier modifier;
+            std::optional<Color> containerColor, color;
+            float maxDistance = IndicatorMaxDistance;
+            if constexpr (sizeof...(A) >= 3) modifier = std::get<2>(all);
+            if constexpr (sizeof...(A) >= 4) containerColor = std::get<3>(all);
+            if constexpr (sizeof...(A) >= 5) color = std::get<4>(all);
+            if constexpr (sizeof...(A) >= 6) maxDistance = std::get<5>(all);
+            Indicator(std::get<0>(all), bool(std::get<1>(all)), modifier, containerColor, color, maxDistance, site);
+        } else {
+            static_assert(P::check<A...>());
+            Indicator(P::arg<kd::names::State>(args...), bool(P::arg<kd::names::IsRefreshing>(args...)), P::get<kd::names::Modifier>(Modifier{}, args...),
+                      P::get<kd::names::ContainerColor>(std::optional<Color>(), args...), P::get<kd::names::Color>(std::optional<Color>(), args...),
+                      P::get<kd::names::Threshold>(IndicatorMaxDistance, args...), site);
+        }
+    }
+};
+struct IndicatorBoxCall : ::kompoz::Composable<IndicatorBoxImpl> {
+    using ::kompoz::Composable<IndicatorBoxImpl>::operator();
+    void operator()(const PullToRefreshState& state, bool isRefreshing, const Modifier& modifier, const Content& content,
+                    float maxDistance = IndicatorMaxDistance, Shape shape = indicatorShape, std::optional<Color> containerColor = {},
+                    float elevation = Elevation, CallSite site = CallSite::current()) const {
+        IndicatorBox(state, isRefreshing, modifier, content, maxDistance, shape, containerColor, elevation, site);
+    }
+};
+struct IndicatorCall : ::kompoz::Composable<IndicatorImpl> {
+    using ::kompoz::Composable<IndicatorImpl>::operator();
+    void operator()(const PullToRefreshState& state, bool isRefreshing, const Modifier& modifier = {}, std::optional<Color> containerColor = {},
+                    std::optional<Color> color = {}, float maxDistance = IndicatorMaxDistance, CallSite site = CallSite::current()) const {
+        Indicator(state, isRefreshing, modifier, containerColor, color, maxDistance, site);
+    }
+};
+} // namespace detail
+inline constexpr detail::IndicatorBoxCall IndicatorBox;
+inline constexpr detail::IndicatorCall Indicator;
 } // namespace PullToRefreshDefaults
 
 // Includes the navigation bar inset; put NavigationBarItems in it.

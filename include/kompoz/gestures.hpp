@@ -188,12 +188,14 @@ void syncPointerInputs(LayoutNode& node);
 //   tracker.addPosition(change.uptimeMillis, change.position); ... tracker.calculateVelocity()
 class VelocityTracker {
 public:
-    void addPosition(int64_t timeMillis, Offset position);
+    VelocityTracker() : samples_(std::make_shared<std::vector<std::pair<int64_t, Offset>>>()) {}
+    void addPosition(int64_t timeMillis, Offset position) const;  // (const: the samples are shared, the handle unchanged)
     Offset calculateVelocity() const;  // dp/s
-    void resetTracking() { samples_.clear(); }
+    void resetTracking() const { samples_->clear(); }
 
 private:
-    std::vector<std::pair<int64_t, Offset>> samples_;
+    // (copies share it: a tracker the gesture's handlers capture is one tracker, as Kotlin's)
+    std::shared_ptr<std::vector<std::pair<int64_t, Offset>>> samples_;
 };
 
 class DraggableState {

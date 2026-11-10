@@ -69,6 +69,7 @@ struct Node {
         For,       // names: the loop variables; kids[0] iterable, kids[1] body (a Block)
         While,     // kids[0] condition, kids[1] body
         DoWhile,   // kids[0] body, kids[1] condition
+        Try,       // kids[0] body; names / typeArgs: the catches' variables and types, their bodies next; flag: a finally body last
     };
 
     // A branch of `when`: conditions (empty: else), each with its kind, and the body.
