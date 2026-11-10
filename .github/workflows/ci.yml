@@ -36,8 +36,9 @@ jobs:
             cxx: g++-14
             flags: -fsanitize=address,undefined -fno-omit-frame-pointer
             # GCC's sanitized objects of the showcase take ~2.5 GB each: six at once (ninja's default on
-            # the 4-core runner) ran it out of memory, and the runner was shut down.
-            jobs: 3
+            # the 4-core runner) ran it out of memory, and the runner was shut down; since the showcase's
+            # screens are translated Compose code, three at once (with the tests' link) do too.
+            jobs: 2
           - name: Clang 19
             cc: clang-19
             cxx: clang++-19
