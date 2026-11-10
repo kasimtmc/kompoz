@@ -2,277 +2,286 @@
 
 #include "showcase.hpp"
 
-#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
+// A puck on a track: thrown, it slides on from the finger's speed and slows down (animateDecay,
+// stopping at the track's ends: updateBounds); or it springs back to the middle carrying that
+// speed (animateTo with an initial velocity). A VelocityTracker measures how fast the finger let go.
+@Composable
+fun FlingTrack(a: Animatable<Float, AnimationVector1D>, decays: Boolean, onReleased: (Float) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
+    Box(modifier = Modifier.fillMaxWidth().padding(0.dp, 12.dp, 0.dp, 0.dp).height(56.dp).background(cs.surfaceContainerHigh, RoundedCornerShape(28.dp))
+            .onSizeChanged { if (decays) a.updateBounds(0f, max(0f, it.width - 56f)) },
+        contentAlignment = if (decays) Alignment.CenterStart else Alignment.Center) {
+        Box(modifier = Modifier.offset { IntOffset((a.value + (if (decays) 4f else 0f)).roundToInt(), 0) }.size(48.dp)
+                .background(if (decays) cs.primary else cs.tertiary, CircleShape)
+                .pointerInput(Unit) {
+                    val tracker = VelocityTracker()
+                    var dragged by mutableStateOf(0f)  // the finger's way so far (the puck moves under it)
+                    detectDragGestures(
+                        onDragStart = {
+                            a.stop()
+                            tracker.resetTracking()
+                        },
+                        onDrag = { change, amount ->
+                            change.consume()
+                            dragged += amount.x
+                            tracker.addPosition(change.uptimeMillis, Offset(dragged, 0f))
+                            a.snapTo(a.value + amount.x)
+                        },
+                        onDragEnd = {
+                            val v = tracker.calculateVelocity().x
+                            onReleased(v)
+                            scope.launch {
+                                if (decays) a.animateDecay(v, splineBasedDecay())
+                                else a.animateTo(0f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow), v)
+                            }
+                        })
+                })
+    }
+}
 
-// Flings: a VelocityTracker measures how fast the finger let go; one puck slides on from that
-// speed and slows down (animateDecay, stopping at the track's ends: updateBounds), the other
-// springs back to the middle carrying it (animateTo with an initial velocity).
-void FlingSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto slide = remember([] { return Animatable<float>(0.f); });
-        auto bounce = remember([] { return Animatable<float>(0.f); });
-        auto released = remember([] { return mutableStateOf(0.f); });
-        auto scope = rememberCoroutineScope();
-        auto track = [=](Animatable<float> a, bool decays) {
-            Box(Modifier().fillMaxWidth().padding(0, 12, 0, 0).height(56).background(cs.surfaceContainerHigh, 28).onSizeChanged([a, decays](Size s) {
-                    if (decays) a.updateBounds(0.f, std::max(0.f, s.width - 56));
-                }),
-                decays ? Alignment::CenterStart : Alignment::Center) {
-                    Box(Modifier().offset([a, decays] { return Offset{a.value() + (decays ? 4.f : 0.f), 0}; }).size(48)
-                            .background(decays ? cs.primary : cs.tertiary, 24)
-                            .pointerInput(0, [a, decays, scope, released](PointerInputScope& s) -> Task {
-                                VelocityTracker tracker;
-                                float dragged = 0;  // the finger's way so far (the puck moves under it)
-                                co_await detectDragGestures(
-                                    s, {.onDragStart = [&, a](Offset) {
-                                            a.stop();
-                                            tracker.resetTracking();
-                                        },
-                                        .onDrag = [&, a](PointerInputChange& change, Offset amount) {
-                                            change.consume();
-                                            dragged += amount.x;
-                                            tracker.addPosition(change.uptimeMillis, {dragged, 0});
-                                            a.snapTo(a.peek() + amount.x);
-                                        },
-                                        .onDragEnd = [&, a, decays, scope, released] {
-                                            float v = tracker.calculateVelocity().x;
-                                            released.set(v);
-                                            scope.launch([a, v, decays]() -> Task {
-                                                if (decays) co_await a.animateDecay(v, splineBasedDecay());
-                                                else co_await a.animateTo(0.f, spring(Spring::DampingRatioMediumBouncy, Spring::StiffnessLow), v);
-                                            });
-                                        }});
-                            })) {};
-                };
-        };
-        Section("animateDecay · VelocityTracker · spring(initialVelocity)", [=] {
-            Text("Mor topu fırlatın: bırakış hızıyla kayar, yavaşlar, kenarda durur. Diğerini çekip bırakın: hızını taşıyarak "
+@Composable
+fun FlingSection() {
+    val cs = MaterialTheme.colorScheme
+    val slide = remember { Animatable(0f) }
+    val bounce = remember { Animatable(0f) }
+    var released by remember { mutableStateOf(0f) }
+    Section("animateDecay · VelocityTracker · spring(initialVelocity)") {
+        Text("Mor topu fırlatın: bırakış hızıyla kayar, yavaşlar, kenarda durur. Diğerini çekip bırakın: hızını taşıyarak " +
                  "yaylanır ve ortaya döner.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            track(slide, true);
-            track(bounce, false);
-            Text(std::format("Bırakış hızı: {:.0f} dp/s", released.get()), Modifier().padding(0, 8, 0, 0), style = typography().bodyMedium);
-        });
-    });
+             color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        FlingTrack(slide, true) { released = it }
+        FlingTrack(bounce, false) { released = it }
+        Text("Bırakış hızı: ${released.roundToInt()} dp/s", modifier = Modifier.padding(0.dp, 8.dp, 0.dp, 0.dp), style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
 // The standard drawers in small frames: one always shown, one that pushes the page aside.
-void DrawersSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto page = remember([] { return mutableStateOf(0); });
-        auto drawer = rememberDrawerState();
-        auto coroutines = rememberCoroutineScope();
-        const char* pages[] = {"Gelen", "Gönderilen", "Taslaklar"};
-        auto items = [=](bool closeAfter) {
-            for (int i = 0; i < 3; ++i)
-                NavigationDrawerItem([&, i] { Text(pages[i]); }, page.get() == i, [page, i, drawer, coroutines, closeAfter] {
-                    page.set(i);
-                    if (closeAfter) coroutines.launch([drawer]() -> Task { co_await drawer.close(); });
-                });
-        };
-        auto frame = Modifier().fillMaxWidth().height(200).border(1, cs.outlineVariant, 12).clip(RoundedCornerShape(12));
-        Section("PermanentNavigationDrawer · DismissibleNavigationDrawer", [=] {
-            PermanentNavigationDrawer([&] { PermanentDrawerSheet(Modifier().width(170)) { items(false); }; }, frame) {
-                Box(Modifier().fillMaxSize().background(cs.surfaceContainer), Alignment::Center) { Text(pages[page.get()]); };
-            };
-            Box(frame) {
-                DismissibleNavigationDrawer([&] { DismissibleDrawerSheet(Modifier().width(170)) { items(true); }; }, drawer) {
-                    Column(Modifier().fillMaxSize().background(cs.surfaceContainer)) {
-                        Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
-                            IconButton([drawer, coroutines] {
-                                coroutines.launch([drawer]() -> Task { co_await (drawer.isOpen() ? drawer.close() : drawer.open()); });
-                            }) { Icon(Icons::Filled::Menu, "Menü"); };
-                            Text(pages[page.get()], style = typography().titleMedium);
-                        };
-                        Text("Menüye dokunun ya da sağa sürükleyin: çekmece sayfayı iter.", Modifier().padding(16, 8),
-                             color = cs.onSurfaceVariant, style = typography().bodyMedium);
-                    };
-                };
-            };
-        });
-    });
+@Composable
+fun DrawersSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    var page by remember { mutableStateOf(0) }
+    val drawer = rememberDrawerState()
+    val coroutines = rememberCoroutineScope()
+    val pages = listOf("Gelen", "Gönderilen", "Taslaklar")
+    val items: @Composable (Boolean) -> Unit = { closeAfter ->
+        for (i in 0 until 3)
+            NavigationDrawerItem(label = { Text(pages[i]) }, selected = page == i, onClick = {
+                page = i
+                if (closeAfter) coroutines.launch { drawer.close() }
+            })
+    }
+    val frame = Modifier.fillMaxWidth().height(200.dp).border(1.dp, cs.outlineVariant, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp))
+    Section("PermanentNavigationDrawer · DismissibleNavigationDrawer") {
+        PermanentNavigationDrawer(drawerContent = { PermanentDrawerSheet(modifier = Modifier.width(170.dp)) { items(false) } }, modifier = frame) {
+            Box(modifier = Modifier.fillMaxSize().background(cs.surfaceContainer), contentAlignment = Alignment.Center) { Text(pages[page]) }
+        }
+        Box(modifier = frame) {
+            DismissibleNavigationDrawer(drawerContent = { DismissibleDrawerSheet(modifier = Modifier.width(170.dp)) { items(true) } }, drawerState = drawer) {
+                Column(modifier = Modifier.fillMaxSize().background(cs.surfaceContainer)) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = {
+                            coroutines.launch { if (drawer.isOpen) drawer.close() else drawer.open() }
+                        }) { Icon(Icons.Filled.Menu, contentDescription = "Menü") }
+                        Text(pages[page], style = typography.titleMedium)
+                    }
+                    Text("Menüye dokunun ya da sağa sürükleyin: çekmece sayfayı iter.", modifier = Modifier.padding(16.dp, 8.dp),
+                         color = cs.onSurfaceVariant, style = typography.bodyMedium)
+                }
+            }
+        }
+    }
 }
 
 // Desktop scrollbars beside a scrolled column, a long lazy list and a row: drag a thumb, click a
 // track to page, hover to darken.
-void ScrollbarSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto column = rememberScrollState();
-        auto row = rememberScrollState();
-        auto list = rememberLazyListState();
-        Section("VerticalScrollbar · HorizontalScrollbar", [=] {
-            Text("Başparmağı sürükleyin, raya tıklayınca bir sayfa kayar; fare üzerindeyken koyulaşır. Liste 1000 satır: "
+@Composable
+fun ScrollbarSection() {
+    val cs = MaterialTheme.colorScheme
+    val column = rememberScrollState()
+    val row = rememberScrollState()
+    val list = rememberLazyListState()
+    Section("VerticalScrollbar · HorizontalScrollbar") {
+        Text("Başparmağı sürükleyin, raya tıklayınca bir sayfa kayar; fare üzerindeyken koyulaşır. Liste 1000 satır: " +
                  "boyu görünen satırlardan tahmin edilir.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            // BringIntoViewRequester: a paragraph and a box scrolled into view on the scrollables' spring.
-            auto& paragraph = remember([] { return BringIntoViewRequester(); });
-            auto& box = remember([] { return BringIntoViewRequester(); });
-            CoroutineScope scope = rememberCoroutineScope();
-            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                OutlinedButton([scope, paragraph] { scope.launch([paragraph]() -> Task { co_await paragraph.bringIntoView(); }); }) { Text("Paragraf 25'i göster"); };
-                OutlinedButton([scope, box] { scope.launch([box]() -> Task { co_await box.bringIntoView(); }); }) { Text("18'i göster"); };
-            };
-            Row(Modifier().fillMaxWidth().height(200), horizontalArrangement = Arrangement::spacedBy(12)) {
-                Box(Modifier().weight(1).fillMaxHeight().background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12))) {
-                    Column(Modifier().fillMaxSize().verticalScroll(column).padding(12, 8)) {
-                        for (int i = 1; i <= 30; ++i)
-                            Text(std::format("Paragraf {}", i),
-                                 (i == 25 ? Modifier().bringIntoViewRequester(paragraph) : Modifier()).padding(0, 4));
-                    };
-                    VerticalScrollbar(rememberScrollbarAdapter(column), Modifier().align(Alignment::CenterEnd).fillMaxHeight().padding(0, 4, 2, 4));
-                };
-                Box(Modifier().weight(1).fillMaxHeight().background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12))) {
-                    LazyColumn(Modifier().fillMaxSize(), state = list) {
-                        items(1000, [](int i) { Text(std::format("Satır {}", i + 1), Modifier().padding(12, 6)); });
-                    };
-                    VerticalScrollbar(rememberScrollbarAdapter(list), Modifier().align(Alignment::CenterEnd).fillMaxHeight().padding(0, 4, 2, 4));
-                };
-            };
-            Box(Modifier().fillMaxWidth().height(64).background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12))) {
-                Row(Modifier().fillMaxSize().horizontalScroll(row).padding(8, 8, 8, 14), horizontalArrangement = Arrangement::spacedBy(8)) {
-                    for (int i = 1; i <= 24; ++i)
-                        (Box)((i == 18 ? Modifier().bringIntoViewRequester(box) : Modifier()).size(72, 40).background(hueColor(i * 900), 8), Alignment::Center, [i] { Text(std::to_string(i), color = colors::White); });
-                };
-                HorizontalScrollbar(rememberScrollbarAdapter(row), Modifier().align(Alignment::BottomCenter).fillMaxWidth().padding(4, 0, 4, 2));
-            };
-        });
-    });
+             color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        // BringIntoViewRequester: a paragraph and a box scrolled into view on the scrollables' spring.
+        val paragraph = remember { BringIntoViewRequester() }
+        val box = remember { BringIntoViewRequester() }
+        val scope = rememberCoroutineScope()
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { scope.launch { paragraph.bringIntoView() } }) { Text("Paragraf 25'i göster") }
+            OutlinedButton(onClick = { scope.launch { box.bringIntoView() } }) { Text("18'i göster") }
+        }
+        Row(modifier = Modifier.fillMaxWidth().height(200.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(modifier = Modifier.weight(1f).fillMaxHeight().background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp))) {
+                Column(modifier = Modifier.fillMaxSize().verticalScroll(column).padding(12.dp, 8.dp)) {
+                    for (i in 1..30)
+                        Text("Paragraf $i", modifier = (if (i == 25) Modifier.bringIntoViewRequester(paragraph) else Modifier).padding(0.dp, 4.dp))
+                }
+                VerticalScrollbar(adapter = rememberScrollbarAdapter(column), modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(0.dp, 4.dp, 2.dp, 4.dp))
+            }
+            Box(modifier = Modifier.weight(1f).fillMaxHeight().background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp))) {
+                LazyColumn(modifier = Modifier.fillMaxSize(), state = list) {
+                    items(1000) { i -> Text("Satır ${i + 1}", modifier = Modifier.padding(12.dp, 6.dp)) }
+                }
+                VerticalScrollbar(adapter = rememberScrollbarAdapter(list), modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(0.dp, 4.dp, 2.dp, 4.dp))
+            }
+        }
+        Box(modifier = Modifier.fillMaxWidth().height(64.dp).background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp))) {
+            Row(modifier = Modifier.fillMaxSize().horizontalScroll(row).padding(8.dp, 8.dp, 8.dp, 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (i in 1..24)
+                    Box(modifier = (if (i == 18) Modifier.bringIntoViewRequester(box) else Modifier).size(72.dp, 40.dp).background(hueColor(i * 900), RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center) { Text(i.toString(), color = Color.White) }
+            }
+            HorizontalScrollbar(adapter = rememberScrollbarAdapter(row), modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(4.dp, 0.dp, 4.dp, 2.dp))
+        }
+    }
 }
 
 // PredictiveBackHandler: while the panel is open, Android's back gesture (14+) shrinks it and
 // moves it away from the edge the finger came from; done, it closes; called off, it comes back.
 // Escape (the back button before Android 13) closes it at once.
-void PredictiveBackSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto open = remember([] { return mutableStateOf(false); });
-        auto progress = remember([] { return mutableStateOf(0.f); });
-        auto fromRight = remember([] { return mutableStateOf(false); });
-        auto last = remember([] { return mutableStateOf(std::string("—")); });
-        PredictiveBackHandler(open.get(), [open, progress, fromRight, last](Flow<BackEventCompat> steps) -> Task {
-            struct Settle {  // also when the gesture is called off (the coroutine is cancelled)
-                MutableState<float> progress;
-                ~Settle() { progress.set(0); }
-            } settle{progress};
-            last.set("hareket sürüyor");
-            co_await steps.collect([progress, fromRight](const BackEventCompat& e) {
-                progress.set(e.progress);
-                fromRight.set(e.swipeEdge == BackEventCompat::SwipeEdge::Right);
-            });
-            last.set("kapandı");
-            open.set(false);
-        });
-        Section("PredictiveBackHandler", [=] {
-            Text("Paneli açın, sonra ekranın kenarından geri hareketini yapın: panel parmağı izler, bırakınca kapanır, "
+@Composable
+fun PredictiveBackSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    var open by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf(0f) }
+    var fromRight by remember { mutableStateOf(false) }
+    var last by remember { mutableStateOf("—") }
+    PredictiveBackHandler(open) { steps ->
+        try {
+            last = "hareket sürüyor"
+            steps.collect { e ->
+                progress = e.progress
+                fromRight = e.swipeEdge == BackEventCompat.SwipeEdge.Right
+            }
+            last = "kapandı"
+            open = false
+        } finally {
+            progress = 0f  // also when the gesture is called off (the coroutine is cancelled)
+        }
+    }
+    Section("PredictiveBackHandler") {
+        Text("Paneli açın, sonra ekranın kenarından geri hareketini yapın: panel parmağı izler, bırakınca kapanır, " +
                  "vazgeçince yerine döner (Android 14+). Panel kapalıyken geri hareketi uygulamadan çıkar.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
-                Button([open, last] { open.set(true), last.set("açık"); }, Modifier(), enabled = !open.get()) { Text("Paneli aç"); };
-                Text(open.get() && progress.get() > 0 ? std::format("geri: %{:.0f} · {}", progress.get() * 100, fromRight.get() ? "sağdan" : "soldan")
-                                                      : last.get(),
-                     style = typography().bodyMedium);
-            };
-            AnimatedVisibility(open.get(), Modifier().fillMaxWidth(), fadeIn() + expandVertically(), fadeOut() + shrinkVertically(), [&] {
-                Box(Modifier()
-                        .fillMaxWidth()
-                        .height(140)
-                        .graphicsLayer([progress, fromRight](GraphicsLayerScope& layer) {  // read while drawing
-                            float p = progress.get();
-                            layer.scaleX = layer.scaleY = 1 - 0.1f * p;
-                            layer.translationX = (fromRight.get() ? -1.f : 1.f) * 24 * p;
-                        })
-                        .background(cs.primaryContainer, RoundedCornerShape(24))
-                        .padding(20),
-                    Alignment::CenterStart) {
-                        Column(Modifier(), verticalArrangement = Arrangement::spacedBy(6)) {
-                            Icon(Icons::AutoMirrored::Filled::ArrowBack, "", Modifier(), cs.onPrimaryContainer);
-                            Text("Geri hareketiyle kapatın", color = cs.onPrimaryContainer, style = typography().titleMedium);
-                        };
-                    };
-            });
-        });
-    });
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = {
+                open = true
+                last = "açık"
+            }, enabled = !open) { Text("Paneli aç") }
+            Text(if (open && progress > 0) "geri: %${(progress * 100).roundToInt()} · ${if (fromRight) "sağdan" else "soldan"}" else last,
+                 style = typography.bodyMedium)
+        }
+        AnimatedVisibility(visible = open, modifier = Modifier.fillMaxWidth(), enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+            Box(modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp)
+                    .graphicsLayer {  // read while drawing
+                        val p = progress
+                        scaleX = 1 - 0.1f * p
+                        scaleY = 1 - 0.1f * p
+                        translationX = (if (fromRight) -1f else 1f) * 24 * p
+                    }
+                    .background(cs.primaryContainer, RoundedCornerShape(24.dp))
+                    .padding(20.dp),
+                contentAlignment = Alignment.CenterStart) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = cs.onPrimaryContainer)
+                    Text("Geri hareketiyle kapatın", color = cs.onPrimaryContainer, style = typography.titleMedium)
+                }
+            }
+        }
+    }
 }
 
 // PointerEventPass: a parent that sees each press before what is inside it (Initial) and can
 // take it, and after (Final) to tell whether something inside took it.
-void PointerPassSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto locked = remember([] { return mutableStateOf(false); });
-        auto clicks = remember([] { return mutableStateOf(0); });
-        auto seen = remember([] { return mutableStateOf(std::string("—")); });
-        Section("PointerEventPass (Initial · Main · Final)", [=] {
-            Text("Kilitliyken dış kutu basışı Initial geçişinde, içtekilerden önce tüketir: düğme tepki vermez. "
+@Composable
+fun PointerPassSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    var locked by remember { mutableStateOf(false) }
+    var clicks by remember { mutableStateOf(0) }
+    var seen by remember { mutableStateOf("—") }
+    Section("PointerEventPass (Initial · Main · Final)") {
+        Text("Kilitliyken dış kutu basışı Initial geçişinde, içtekilerden önce tüketir: düğme tepki vermez. " +
                  "Final geçişinde basışı bir şeyin alıp almadığını görür.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            Row(Modifier(), verticalAlignment = Alignment::CenterVertically) {
-                Switch(locked.get(), [locked](bool v) { locked.set(v); });
-                Text("Kilitli", Modifier().padding(12, 0, 0, 0));
-            };
-            Box(Modifier().fillMaxWidth().height(96).background(cs.surfaceContainerHigh, 12)
-                    .pointerInput(0, [locked, seen](PointerInputScope& scope) -> Task {
-                        while (true) {
-                            PointerEvent e = co_await scope.awaitPointerEvent(PointerEventPass::Initial);
-                            if (locked.peek() && e.type == PointerEventType::Press) e.change.consume();
-                            e = co_await scope.awaitPointerEvent(PointerEventPass::Final);
-                            if (e.type == PointerEventType::Press)
-                                seen.set(e.change.isConsumed() ? "basış alındı (düğme ya da kilit)" : "basışı kimse almadı");
-                        }
-                    }),
-                Alignment::Center) {
-                    Button([clicks] { clicks.set(clicks.peek() + 1); }) { Text(std::format("Bas ({})", clicks.get())); };
-                };
-            Text("Final: " + seen.get(), color = cs.primary, style = typography().bodySmall);
-        });
-    });
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = locked, onCheckedChange = { locked = it })
+            Text("Kilitli", modifier = Modifier.padding(12.dp, 0.dp, 0.dp, 0.dp))
+        }
+        Box(modifier = Modifier.fillMaxWidth().height(96.dp).background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp))
+                .pointerInput(Unit) {
+                    while (true) {
+                        val first = awaitPointerEvent(PointerEventPass.Initial)
+                        if (locked && first.type == PointerEventType.Press) first.changes.first().consume()
+                        val last = awaitPointerEvent(PointerEventPass.Final)
+                        if (last.type == PointerEventType.Press)
+                            seen = if (last.changes.first().isConsumed) "basış alındı (düğme ya da kilit)" else "basışı kimse almadı"
+                    }
+                },
+            contentAlignment = Alignment.Center) {
+            Button(onClick = { clicks++ }) { Text("Bas ($clicks)") }
+        }
+        Text("Final: $seen", color = cs.primary, style = typography.bodySmall)
+    }
 }
 
-void ScrollableSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto angle = remember([] { return mutableFloatStateOf(0); });
-        auto knob = rememberScrollableState([angle](float delta) {
-            angle.set(std::clamp(angle.peek() + delta, 0.f, 270.f));
-            return angle.peek() == 0.f || angle.peek() == 270.f ? 0.f : delta;  // at the ends the page takes it
-        });
-        Section("Modifier.scrollable · rotate · scale", [=] {
-            Row(Modifier().fillMaxWidth().height(96).scrollable(knob, Orientation::Horizontal),
-                horizontalArrangement = Arrangement::spacedBy(24), verticalAlignment = Alignment::CenterVertically) {
-                    Box(Modifier().size(72).rotate(angle.get() - 135).background(cs.secondaryContainer, CircleShape), Alignment::TopCenter) { Box(Modifier().padding(0, 6, 0, 0).size(6, 18).background(cs.primary, 3)) {}; };
-                    Box(Modifier().size(40).scale(0.5f + angle.get() / 270.f).background(cs.tertiary, 8)) {};
-                    Text(std::format("{:.0f}°", angle.get()), style = typography().titleLarge);
-                };
-            Text("Satırı yana sürükleyin: düğme döner, kare büyür.", color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            // scrollableArea: a ruler that draws itself from where it is scrolled to (0..100 cm,
-            // 4 dp a millimetre), clipped, stretching past its ends.
-            auto rulerAt = remember([] { return mutableFloatStateOf(0); });
-            auto ruler = rememberScrollableState([rulerAt](float delta) {
-                float next = std::clamp(rulerAt.peek() - delta, 0.f, 100 * 40.f - 300), used = rulerAt.peek() - next;
-                rulerAt.set(next);
-                return used;
-            });
-            Canvas(Modifier().fillMaxWidth().height(56).background(cs.surfaceContainerHigh, 12).scrollableArea(ruler, Orientation::Horizontal),
-                   [at = rulerAt.get(), tick = cs.onSurfaceVariant, label = cs.primary](DrawScope& d) {
-                       for (int cm = int(at / 40); cm <= 100 && float(cm) * 40 - at < d.size().width + 40; ++cm) {
-                           float x = 16 + float(cm) * 40 - at;
-                           d.drawLine(tick, {x, 0}, {x, 22}, 2);
-                           for (int mm = 1; mm < 10 && cm < 100; ++mm)
-                               d.drawLine(tick, {x + float(mm) * 4, 0}, {x + float(mm) * 4, mm == 5 ? 14.f : 8.f}, 1);
-                           d.drawText(std::to_string(cm), {x - 4, 28}, Font{.size = 12}, label);
-                       }
-                   });
-            Text("Modifier.scrollableArea: cetvel kendini kaydırıldığı yerden çizer; kırpılır, uçlarında esner.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-        });
-    });
+@Composable
+fun ScrollableSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val measurer = rememberTextMeasurer()
+    var angle by remember { mutableFloatStateOf(0f) }
+    val knob = rememberScrollableState { delta ->
+        angle = (angle + delta).coerceIn(0f, 270f)
+        if (angle == 0f || angle == 270f) 0f else delta  // at the ends the page takes it
+    }
+    Section("Modifier.scrollable · rotate · scale") {
+        Row(modifier = Modifier.fillMaxWidth().height(96.dp).scrollable(knob, Orientation.Horizontal),
+            horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(72.dp).rotate(angle - 135).background(cs.secondaryContainer, CircleShape), contentAlignment = Alignment.TopCenter) {
+                Box(modifier = Modifier.padding(0.dp, 6.dp, 0.dp, 0.dp).size(6.dp, 18.dp).background(cs.primary, RoundedCornerShape(3.dp)))
+            }
+            Box(modifier = Modifier.size(40.dp).scale(0.5f + angle / 270f).background(cs.tertiary, RoundedCornerShape(8.dp)))
+            Text("${angle.roundToInt()}°", style = typography.titleLarge)
+        }
+        Text("Satırı yana sürükleyin: düğme döner, kare büyür.", color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        // scrollableArea: a ruler that draws itself from where it is scrolled to (0..100 cm,
+        // 4 dp a millimetre), clipped, stretching past its ends.
+        var rulerAt by remember { mutableFloatStateOf(0f) }
+        val ruler = rememberScrollableState { delta ->
+            val next = (rulerAt - delta).coerceIn(0f, 100 * 40f - 300)
+            val used = rulerAt - next
+            rulerAt = next
+            used
+        }
+        Canvas(modifier = Modifier.fillMaxWidth().height(56.dp).background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp)).scrollableArea(ruler, Orientation.Horizontal)) {
+            val at = rulerAt
+            var cm = (at / 40).toInt()
+            while (cm <= 100 && cm * 40 - at < size.width + 40) {
+                val x = 16 + cm * 40 - at
+                drawLine(cs.onSurfaceVariant, Offset(x, 0f), Offset(x, 22f), strokeWidth = 2f)
+                if (cm < 100)
+                    for (mm in 1 until 10)
+                        drawLine(cs.onSurfaceVariant, Offset(x + mm * 4, 0f), Offset(x + mm * 4, if (mm == 5) 14f else 8f), strokeWidth = 1f)
+                drawText(measurer, cm.toString(), topLeft = Offset(x - 4, 28f), style = TextStyle(fontSize = 12.sp, color = cs.primary))
+                cm++
+            }
+        }
+        Text("Modifier.scrollableArea: cetvel kendini kaydırıldığı yerden çizer; kırpılır, uçlarında esner.",
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+    }
 }
 
 // An overscroll effect of one's own (as Compose's OverscrollEffect sample): past an end the
-// content follows the finger a tenth of the way, and springs back once let go (sideways).
+// content follows the finger a tenth of the way, and springs back once let go (sideways). Its
+// fling is a coroutine: this class stays C++.
 class OffsetOverscroll final : public OverscrollEffect {
 public:
     Offset applyToScroll(Offset delta, NestedScrollSource source, const std::function<Offset(Offset)>& performScroll) override {
@@ -300,314 +309,305 @@ public:
 private:
     Animatable<float> offset_{0.f};
 };
+std::shared_ptr<OverscrollEffect> offsetOverscroll() { return std::make_shared<OffsetOverscroll>(); }
+
+// A row of tiles with the overscroll effect given: the stretch, one of our own, or none (null).
+@Composable
+fun OverscrollRow(title: String, effect: OverscrollEffect?) {
+    val cs = MaterialTheme.colorScheme
+    Text(title, style = MaterialTheme.typography.labelLarge)
+    LazyRow(modifier = Modifier.fillMaxWidth().height(48.dp).background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)),
+            contentPadding = PaddingValues(6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), overscrollEffect = effect) {
+        items(12) { i ->
+            Box(modifier = Modifier.size(48.dp, 36.dp).background(cs.secondaryContainer, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) { Text("${i + 1}") }
+        }
+    }
+}
 
 // OverscrollEffect: the stretch (the default), an effect of one's own, none.
-void OverscrollSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto& offset = remember([] { return std::shared_ptr<OverscrollEffect>(std::make_shared<OffsetOverscroll>()); });
-        Section("OverscrollEffect · rememberOverscrollEffect", [=] {
-            auto row = [&](const char* title, std::optional<std::shared_ptr<OverscrollEffect>> effect) {
-                Text(title, style = typography().labelLarge);
-                LazyRow(Modifier().fillMaxWidth().height(48).background(cs.surfaceContainerHigh, 12).clip(RoundedCornerShape(12)),
-                        contentPadding = PaddingValues{6, 6, 6, 6}, horizontalArrangement = Arrangement::spacedBy(6), overscrollEffect = effect) {
-                            items(12, [tile = cs.secondaryContainer](int i) {
-                                (Box)(Modifier().size(48, 36).background(tile, 8), Alignment::Center, [i] { Text(std::to_string(i + 1)); });
-                            });
-                        };
-            };
-            row("Esneme (varsayılan)", std::nullopt);
-            row("Kayma (kendi efektimiz)", offset);
-            row("Yok (nullptr)", nullptr);
-            Text("Satırları uçlarından öteye çekin: Android 12'nin esnemesi; içeriğin parmağın onda biri kadar kaydığı kendi efektimiz; hiçbiri.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-        });
-    });
+@Composable
+fun OverscrollSection() {
+    val cs = MaterialTheme.colorScheme
+    val offset = remember { offsetOverscroll() }
+    Section("OverscrollEffect · rememberOverscrollEffect") {
+        OverscrollRow("Esneme (varsayılan)", rememberOverscrollEffect())
+        OverscrollRow("Kayma (kendi efektimiz)", offset)
+        OverscrollRow("Yok (null)", null)
+        Text("Satırları uçlarından öteye çekin: Android 12'nin esnemesi; içeriğin parmağın onda biri kadar kaydığı kendi efektimiz; hiçbiri.",
+             color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
 // LocalBringIntoViewSpec: where a row brings its focused card — a third of the way in, as a TV
 // row keeps it — or, switched off, the default (just far enough that it shows).
-void BringIntoViewSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto pinned = remember([] { return mutableStateOf(true); });
-        auto focused = remember([] { return mutableStateOf(-1); });
-        auto& requesters = remember([] { return std::vector<FocusRequester>(20); });
-        BringIntoViewSpec third{[](float offset, float size, float container) { return offset - (container - size) * 0.3f; }};
-        Section("LocalBringIntoViewSpec · BringIntoViewSpec", [=] {
-            CompositionLocalProvider({LocalBringIntoViewSpec.provides(pinned.get() ? third : BringIntoViewSpec{})}, [&] {
-                LazyRow(Modifier().fillMaxWidth().height(72), horizontalArrangement = Arrangement::spacedBy(8)) {
-                            items(20, [=, reqs = requesters, on = cs.primary, onText = cs.onPrimary, off = cs.secondaryContainer,
-                                       offText = cs.onSecondaryContainer](int i) {
-                                bool current = focused.get() == i;
-                                Box(Modifier()
-                                        .size(96, 64)
-                                        .focusRequester(reqs[size_t(i)])
-                                        .onFocusChanged([focused, i](FocusState s) {
-                                            if (s.isFocused) focused.set(i);
-                                        })
-                                        .focusable()
-                                        .background(current ? on : off, 12),
-                                    Alignment::Center) { Text(std::format("Kart {}", i + 1), color = current ? onText : offText); };
-                            });
-                        };
-            });
-            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                OutlinedButton([reqs = requesters, focused] { reqs[size_t(std::max(0, focused.peek() - 1))].requestFocus(); }) { Text("‹ Önceki"); };
-                Button([reqs = requesters, focused] { reqs[size_t(std::min(19, focused.peek() + 1))].requestFocus(); }) { Text("Sonraki ›"); };
-                Switch(pinned.get(), [pinned](bool v) { pinned.set(v); });
-                Text("Üçte birde", Modifier().weight(1), style = typography().bodyMedium);
-            };
-            Text("Odak (Sonraki/Önceki, Tab ya da ok tuşları) kartı satırın üçte birine getirir; anahtar kapalıyken varsayılan: yalnızca görünecek kadar.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-        });
-    });
+@Composable
+fun BringIntoViewSection() {
+    val cs = MaterialTheme.colorScheme
+    var pinned by remember { mutableStateOf(true) }
+    var focused by remember { mutableStateOf(-1) }
+    val requesters = remember { List(20) { FocusRequester() } }
+    val third = BringIntoViewSpec(calculateScrollDistance = { offset, size, container -> offset - (container - size) * 0.3f })
+    Section("LocalBringIntoViewSpec · BringIntoViewSpec") {
+        CompositionLocalProvider(LocalBringIntoViewSpec provides (if (pinned) third else BringIntoViewSpec())) {
+            LazyRow(modifier = Modifier.fillMaxWidth().height(72.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(20) { i ->
+                    val current = focused == i
+                    Box(modifier = Modifier
+                            .size(96.dp, 64.dp)
+                            .focusRequester(requesters[i])
+                            .onFocusChanged { if (it.isFocused) focused = i }
+                            .focusable()
+                            .background(if (current) cs.primary else cs.secondaryContainer, RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center) { Text("Kart ${i + 1}", color = if (current) cs.onPrimary else cs.onSecondaryContainer) }
+                }
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = { requesters[max(0, focused - 1)].requestFocus() }) { Text("‹ Önceki") }
+            Button(onClick = { requesters[min(19, focused + 1)].requestFocus() }) { Text("Sonraki ›") }
+            Switch(checked = pinned, onCheckedChange = { pinned = it })
+            Text("Üçte birde", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        }
+        Text("Odak (Sonraki/Önceki, Tab ya da ok tuşları) kartı satırın üçte birine getirir; anahtar kapalıyken varsayılan: yalnızca görünecek kadar.",
+             color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
 // Nested scrolling: an inner list hands over to the page, a pager takes over from the row in
 // its page, a vertical pager, and a large app bar that collapses before its list scrolls.
-void NestedScrollSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto inner = rememberScrollState();
-        auto pager = rememberPagerState(0, [] { return 3; });
-        auto vertical = rememberPagerState(0, [] { return 4; });
-        auto appBar = TopAppBarDefaults::exitUntilCollapsedScrollBehavior();
-        auto twoRows = TopAppBarDefaults::exitUntilCollapsedScrollBehavior();
-        auto bottomBar = BottomAppBarDefaults::exitAlwaysScrollBehavior();
-        auto searchScroll = SearchBarDefaults::enterAlwaysSearchBarScrollBehavior();
-        auto mailSearch = rememberSearchBarState();
-        auto mailQuery = rememberTextFieldState();
-        auto caption = [=](const char* text) { Text(text, color = cs.onSurfaceVariant, style = typography().bodyMedium); };
-        Section("İç içe kaydırma (nestedScroll)", [=] {
-            caption("İçteki liste sonuna gelince sayfa kaymaya devam eder:");
-            Column(Modifier().fillMaxWidth().height(150).background(cs.surfaceContainerHighest, 12).verticalScroll(inner).padding(16, 6)) {
-                       for (int i = 1; i <= 12; ++i) Text(std::format("İç satır {}", i), Modifier().padding(0, 6));
-                   };
-            caption("Sayfadaki satır sona gelince pager sayfayı çevirir:");
-            HorizontalPager(pager, Modifier().fillMaxWidth().height(72), pageSpacing = 16) [](int page) {
-                LazyRow(Modifier().fillMaxSize(), horizontalArrangement = Arrangement::spacedBy(8)) {
-                    items(8, [page](int i) {
-                        Box(Modifier().size(72).background(hueColor(page * 2300 + i * 140), 16), Alignment::Center) {
-                            Text(std::format("{}·{}", page + 1, i + 1), fontWeight = FontWeight::Bold, color = colors::White);
-                        };
-                    });
-                };
-            };
-            caption("VerticalPager (son sayfadan sonra sayfa kayar):");
-            VerticalPager(vertical, Modifier().fillMaxWidth().height(96).clip(RoundedCornerShape(16))) [](int page) {
-                Box(Modifier().fillMaxSize().background(hueColor(page * 1500 + 200)), Alignment::Center) {
-                    Text(std::format("Dikey sayfa {}", page + 1), fontSize = 20, fontWeight = FontWeight::Bold, color = colors::White);
-                };
-            };
-            caption("TopAppBar: kendi renkleri, 56 dp yükseklik, windowInsets yok (sayfanın ortasında):");
-            TopAppBar(title = [] { Text("Renkli çubuk"); },
-                      navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menü"); }; },
-                      actions = [] { IconButton([] {}) { Icon(Icons::Filled::Favorite, "Beğen"); }; },
-                      containerColor = cs.primaryContainer,
-                      navigationIconContentColor = cs.onPrimaryContainer,
-                      titleContentColor = cs.onPrimaryContainer,
-                      actionIconContentColor = cs.primary,
-                      expandedHeight = 56,
-                      windowInsets = WindowInsets{},
-                      modifier = Modifier().clip(RoundedCornerShape(16)));
-            // AppBarRow: actions that don't fit (here more than three slots) go into the ⋮ menu.
-            caption("AppBarRow (maxItemCount = 3): beş eylemden ikisi çubukta, gerisi ⋮ menüsünde.");
-            TopAppBar(title = [] { Text("Belge"); },
-                      actions = [] {
-                          AppBarRow([](AppBarScope& s) {
-                              s.clickableItem([] {}, [] { Icon(Icons::Filled::Share, "Paylaş"); }, "Paylaş");
-                              s.clickableItem([] {}, [] { Icon(Icons::Filled::Edit, "Düzenle"); }, "Düzenle");
-                              s.clickableItem([] {}, [] { Icon(Icons::Filled::Delete, "Sil"); }, "Sil");
-                              s.clickableItem([] {}, [] { Icon(Icons::Filled::Add, "Kopya oluştur"); }, "Kopya oluştur");
-                              s.clickableItem([] {}, [] { Icon(Icons::Filled::Info, "Bilgi"); }, "Bilgi");
-                          }, Modifier(), {.maxItemCount = 3});
-                      },
-                      containerColor = cs.surfaceContainerHigh,
-                      expandedHeight = 56,
-                      windowInsets = WindowInsets{},
-                      modifier = Modifier().clip(RoundedCornerShape(16)));
-            caption("AppBarColumn: 150 dp yükseklikte iki eylem ve ⋮ (bir ray ya da dikey araç çubuğu için).");
-            (Box)(Modifier().height(150).background(cs.surfaceContainerHigh, 16), [] {
-                AppBarColumn([](AppBarScope& s) {
-                    s.clickableItem([] {}, [] { Icon(Icons::Filled::Home, "Ana sayfa"); }, "Ana sayfa");
-                    s.clickableItem([] {}, [] { Icon(Icons::Filled::Search, "Ara"); }, "Ara");
-                    s.clickableItem([] {}, [] { Icon(Icons::Filled::Settings, "Ayarlar"); }, "Ayarlar");
-                    s.clickableItem([] {}, [] { Icon(Icons::Filled::Info, "Hakkında"); }, "Hakkında");
-                });
-            });
-            caption("MediumFlexibleTopAppBar: daha büyük başlık ve alt yazı, ortalanmış (titleHorizontalAlignment).");
-            MediumFlexibleTopAppBar(title = [] { Text("Takvim"); },
-                                    subtitle = [] { Text("Ekim 2026"); },
-                                    navigationIcon = [] { IconButton([] {}) { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); }; },
-                                    actions = [] { IconButton([] {}) { Icon(Icons::Filled::MoreVert, "Diğer"); }; },
-                                    containerColor = cs.surfaceContainerLow,
-                                    windowInsets = WindowInsets{},
-                                    titleHorizontalAlignment = Alignment::CenterHorizontally,
-                                    modifier = Modifier().clip(RoundedCornerShape(16)));
-            caption("LargeTopAppBar + exitUntilCollapsed (alt başlıklı): önce başlık küçülür, sonra liste kayar.");
-            Box(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16))) {
-                CompositionLocalProvider({LocalSystemInsets.provides(SystemInsets{})}, [&] {  // not at the window's edge
-                    Scaffold(Modifier().fillMaxSize().nestedScroll(appBar.nestedScrollConnection),
-                             topBar = [&] {
-                                 LargeTopAppBar(title = [] { Text("Gelen kutusu"); },
-                                                subtitle = [] { Text("3 okunmamış ileti"); },
-                                                navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menü"); }; },
-                                                actions = [] { IconButton([] {}) { Icon(Icons::Filled::Search, "Ara"); }; },
-                                                containerColor = cs.surfaceContainerLow,
-                                                scrollBehavior = appBar);
-                             },
-                             containerColor = cs.surfaceContainerLow) [=](PaddingValues padding) {
-                        LazyColumn(Modifier().fillMaxSize(), contentPadding = padding) {
-                            items(30, [](int i) {
-                                ListItem({.headline = [i] { Text(std::format("İleti {}", i + 1)); },
-                                          .supporting = [] { Text("Kaydırınca başlık küçülür"); },
-                                          .leading = [] { Icon(Icons::Filled::Email, "İleti"); },
-                                          .containerColor = colors::Transparent});
-                            });
-                        };
-                    };
-                });
-            };
-            caption("TwoRowsTopAppBar: başlık iki satırda da kendi biçimini seçer — açıkken büyük ve iki satır, kapanınca kısa.");
-            Box(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16))) {
-                CompositionLocalProvider({LocalSystemInsets.provides(SystemInsets{})}, [&] {  // not at the window's edge
-                    Scaffold(Modifier().fillMaxSize().nestedScroll(twoRows.nestedScrollConnection),
-                             topBar = [&] {
-                                 TwoRowsTopAppBar(
-                                     [](bool expanded) {
-                                         if (expanded) Text("Haftalık\nözet", fontWeight = FontWeight::Bold, style = typography().headlineMedium);
-                                         else Text("Özet", style = typography().titleLarge);
-                                     },
-                                     navigationIcon = [] { IconButton([] {}) { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); }; },
-                                     actions = [] { IconButton([] {}) { Icon(Icons::Filled::DateRange, "Tarih"); }; },
-                                     containerColor = cs.surfaceContainerLow,
-                                     expandedHeight = 168,
-                                     scrollBehavior = twoRows,
-                                     subtitle = [&](bool expanded) {
-                                         Text(expanded ? "6–12 Ekim · 14 etkinlik" : "6–12 Ekim",
-                                              color = cs.onSurfaceVariant, style = expanded ? typography().titleMedium : typography().labelMedium);
-                                     });
-                             },
-                             containerColor = cs.surfaceContainerLow) [=](PaddingValues padding) {
-                        LazyColumn(Modifier().fillMaxSize(), contentPadding = padding) {
-                            items(30, [](int i) {
-                                ListItem({.headline = [i] { Text(std::format("Etkinlik {}", i + 1)); },
-                                          .supporting = [] { Text("Kaydırınca başlık kısalır"); },
-                                          .leading = [] { Icon(Icons::Filled::Schedule, "Etkinlik"); },
-                                          .containerColor = colors::Transparent});
-                            });
-                        };
-                    };
-                });
-            };
-            caption("FlexibleBottomAppBar + exitAlways: liste ilerledikçe alt çubuk aşağı kayıp gider, geri kaydırınca döner.");
-            Box(Modifier().fillMaxWidth().height(300).clip(RoundedCornerShape(16))) {
-                Scaffold(Modifier().fillMaxSize().nestedScroll(bottomBar.nestedScrollConnection),
-                         kompoz::bottomBar = [&] {
-                             FlexibleBottomAppBar(Modifier(), scrollBehavior = bottomBar, windowInsets = false) {
-                                 IconButton([] {}) { Icon(Icons::AutoMirrored::Filled::ArrowBack, "Geri"); };
-                                 IconButton([] {}) { Icon(Icons::Filled::Edit, "Düzenle"); };
-                                 IconButton([] {}) { Icon(Icons::Filled::Share, "Paylaş"); };
-                                 IconButton([] {}) { Icon(Icons::Filled::Delete, "Sil"); };
-                             };
-                         },
-                         containerColor = cs.surfaceContainerLow) [=](PaddingValues padding) {
-                    LazyColumn(Modifier().fillMaxSize(), contentPadding = padding) {
-                        items(30, [](int i) {
-                            ListItem({.headline = [i] { Text(std::format("Fotoğraf {}", i + 1)); }, .containerColor = colors::Transparent});
-                        });
-                    };
-                };
-            };
-            caption("AppBarWithSearch + enterAlways: liste ilerledikçe arama çubuğu yukarı kayar, geri kaydırınca önce o gelir; dokununca "
-                    "tam ekran arama açılır.");
-            auto mailField = [=] {
-                SearchBarDefaults::InputField(mailSearch, mailQuery,
-                                              {.placeholder = "Postalarda ara", .leadingIcon = [] { Icon(Icons::Filled::Search, "Ara"); }});
-            };
-            Box(Modifier().fillMaxWidth().height(380).clip(RoundedCornerShape(16))) {
-                CompositionLocalProvider({LocalSystemInsets.provides(SystemInsets{})}, [&] {  // not at the window's edge
-                    Scaffold(Modifier().fillMaxSize().nestedScroll(searchScroll.nestedScrollConnection),
-                             topBar = [&] {
-                                 AppBarWithSearch(mailSearch, mailField, Modifier(),
-                                                  {.navigationIcon = [] { IconButton([] {}) { Icon(Icons::Filled::Menu, "Menü"); }; },
-                                                   .actions = [] { IconButton([] {}) { Icon(Icons::Filled::Person, "Hesap"); }; },
-                                                   .scrollBehavior = searchScroll});
-                             }) [=](PaddingValues padding) {
-                        LazyColumn(Modifier().fillMaxSize(), contentPadding = padding) {
-                            items(30, [](int i) {
-                                ListItem({.headline = [i] { Text(std::format("Posta {}", i + 1)); },
-                                          .supporting = [] { Text("Kaydırınca arama çubuğu çekilir"); },
-                                          .leading = [] { Icon(Icons::Filled::Email, "Posta"); },
-                                          .containerColor = colors::Transparent});
-                            });
-                        };
-                    };
-                });
-            };
-            ExpandedFullScreenSearchBar(mailSearch, mailField, [&] {
-                std::string typed = mailQuery.text();
-                for (int i = 1; i <= 30; ++i) {
-                    std::string mail = std::format("Posta {}", i);
-                    if (!typed.empty() && mail.find(typed) == std::string::npos) continue;
-                    ListItem({.headline = [mail] { Text(mail); }, .leading = [] { Icon(Icons::Filled::Email, "Posta"); },
-                              .containerColor = colors::Transparent});
+@Composable
+fun NestedScrollSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val inner = rememberScrollState()
+    val pager = rememberPagerState(pageCount = { 3 })
+    val vertical = rememberPagerState(pageCount = { 4 })
+    val appBar = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val twoRows = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val bottomBar = BottomAppBarDefaults.exitAlwaysScrollBehavior()
+    val searchScroll = SearchBarDefaults.enterAlwaysSearchBarScrollBehavior()
+    val mailSearch = rememberSearchBarState()
+    val mailQuery = rememberTextFieldState()
+    val caption: @Composable (String) -> Unit = { text -> Text(text, color = cs.onSurfaceVariant, style = typography.bodyMedium) }
+    Section("İç içe kaydırma (nestedScroll)") {
+        caption("İçteki liste sonuna gelince sayfa kaymaya devam eder:")
+        Column(modifier = Modifier.fillMaxWidth().height(150.dp).background(cs.surfaceContainerHighest, RoundedCornerShape(12.dp)).verticalScroll(inner).padding(16.dp, 6.dp)) {
+            for (i in 1..12) Text("İç satır $i", modifier = Modifier.padding(0.dp, 6.dp))
+        }
+        caption("Sayfadaki satır sona gelince pager sayfayı çevirir:")
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth().height(72.dp), pageSpacing = 16.dp) { page ->
+            LazyRow(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(8) { i ->
+                    Box(modifier = Modifier.size(72.dp).background(hueColor(page * 2300 + i * 140), RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+                        Text("${page + 1}·${i + 1}", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
                 }
-            });
-        });
-    });
+            }
+        }
+        caption("VerticalPager (son sayfadan sonra sayfa kayar):")
+        VerticalPager(state = vertical, modifier = Modifier.fillMaxWidth().height(96.dp).clip(RoundedCornerShape(16.dp))) { page ->
+            Box(modifier = Modifier.fillMaxSize().background(hueColor(page * 1500 + 200)), contentAlignment = Alignment.Center) {
+                Text("Dikey sayfa ${page + 1}", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        }
+        caption("TopAppBar: kendi renkleri, 56 dp yükseklik, windowInsets yok (sayfanın ortasında):")
+        TopAppBar(title = { Text("Renkli çubuk") },
+                  navigationIcon = { IconButton(onClick = {}) { Icon(Icons.Filled.Menu, contentDescription = "Menü") } },
+                  actions = { IconButton(onClick = {}) { Icon(Icons.Filled.Favorite, contentDescription = "Beğen") } },
+                  colors = TopAppBarDefaults.topAppBarColors(containerColor = cs.primaryContainer, navigationIconContentColor = cs.onPrimaryContainer,
+                                                             titleContentColor = cs.onPrimaryContainer, actionIconContentColor = cs.primary),
+                  expandedHeight = 56.dp,
+                  windowInsets = WindowInsets(0.dp),
+                  modifier = Modifier.clip(RoundedCornerShape(16.dp)))
+        // AppBarRow: actions that don't fit (here more than three slots) go into the ⋮ menu.
+        caption("AppBarRow (maxItemCount = 3): beş eylemden ikisi çubukta, gerisi ⋮ menüsünde.")
+        TopAppBar(title = { Text("Belge") },
+                  actions = {
+                      AppBarRow(maxItemCount = 3) {
+                          clickableItem(onClick = {}, icon = { Icon(Icons.Filled.Share, contentDescription = "Paylaş") }, label = "Paylaş")
+                          clickableItem(onClick = {}, icon = { Icon(Icons.Filled.Edit, contentDescription = "Düzenle") }, label = "Düzenle")
+                          clickableItem(onClick = {}, icon = { Icon(Icons.Filled.Delete, contentDescription = "Sil") }, label = "Sil")
+                          clickableItem(onClick = {}, icon = { Icon(Icons.Filled.Add, contentDescription = "Kopya oluştur") }, label = "Kopya oluştur")
+                          clickableItem(onClick = {}, icon = { Icon(Icons.Filled.Info, contentDescription = "Bilgi") }, label = "Bilgi")
+                      }
+                  },
+                  colors = TopAppBarDefaults.topAppBarColors(containerColor = cs.surfaceContainerHigh),
+                  expandedHeight = 56.dp,
+                  windowInsets = WindowInsets(0.dp),
+                  modifier = Modifier.clip(RoundedCornerShape(16.dp)))
+        caption("AppBarColumn: 150 dp yükseklikte iki eylem ve ⋮ (bir ray ya da dikey araç çubuğu için).")
+        Box(modifier = Modifier.height(150.dp).background(cs.surfaceContainerHigh, RoundedCornerShape(16.dp))) {
+            AppBarColumn {
+                clickableItem(onClick = {}, icon = { Icon(Icons.Filled.Home, contentDescription = "Ana sayfa") }, label = "Ana sayfa")
+                clickableItem(onClick = {}, icon = { Icon(Icons.Filled.Search, contentDescription = "Ara") }, label = "Ara")
+                clickableItem(onClick = {}, icon = { Icon(Icons.Filled.Settings, contentDescription = "Ayarlar") }, label = "Ayarlar")
+                clickableItem(onClick = {}, icon = { Icon(Icons.Filled.Info, contentDescription = "Hakkında") }, label = "Hakkında")
+            }
+        }
+        caption("MediumFlexibleTopAppBar: daha büyük başlık ve alt yazı, ortalanmış (titleHorizontalAlignment).")
+        MediumFlexibleTopAppBar(title = { Text("Takvim") },
+                                subtitle = { Text("Ekim 2026") },
+                                navigationIcon = { IconButton(onClick = {}) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri") } },
+                                actions = { IconButton(onClick = {}) { Icon(Icons.Filled.MoreVert, contentDescription = "Diğer") } },
+                                colors = TopAppBarDefaults.topAppBarColors(containerColor = cs.surfaceContainerLow),
+                                windowInsets = WindowInsets(0.dp),
+                                titleHorizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.clip(RoundedCornerShape(16.dp)))
+        caption("LargeTopAppBar + exitUntilCollapsed (alt başlıklı): önce başlık küçülür, sonra liste kayar.")
+        Box(modifier = Modifier.fillMaxWidth().height(380.dp).clip(RoundedCornerShape(16.dp))) {
+            CompositionLocalProvider(LocalSystemInsets provides SystemInsets()) {  // not at the window's edge
+                Scaffold(modifier = Modifier.fillMaxSize().nestedScroll(appBar.nestedScrollConnection),
+                         topBar = {
+                             LargeTopAppBar(title = { Text("Gelen kutusu") },
+                                            subtitle = { Text("3 okunmamış ileti") },
+                                            navigationIcon = { IconButton(onClick = {}) { Icon(Icons.Filled.Menu, contentDescription = "Menü") } },
+                                            actions = { IconButton(onClick = {}) { Icon(Icons.Filled.Search, contentDescription = "Ara") } },
+                                            colors = TopAppBarDefaults.topAppBarColors(containerColor = cs.surfaceContainerLow),
+                                            scrollBehavior = appBar)
+                         },
+                         containerColor = cs.surfaceContainerLow) { padding ->
+                    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+                        items(30) { i ->
+                            ListItem(headlineContent = { Text("İleti ${i + 1}") },
+                                     supportingContent = { Text("Kaydırınca başlık küçülür") },
+                                     leadingContent = { Icon(Icons.Filled.Email, contentDescription = "İleti") },
+                                     colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+                        }
+                    }
+                }
+            }
+        }
+        caption("TwoRowsTopAppBar: başlık iki satırda da kendi biçimini seçer — açıkken büyük ve iki satır, kapanınca kısa.")
+        Box(modifier = Modifier.fillMaxWidth().height(380.dp).clip(RoundedCornerShape(16.dp))) {
+            CompositionLocalProvider(LocalSystemInsets provides SystemInsets()) {  // not at the window's edge
+                Scaffold(modifier = Modifier.fillMaxSize().nestedScroll(twoRows.nestedScrollConnection),
+                         topBar = {
+                             TwoRowsTopAppBar(
+                                 title = { expanded ->
+                                     if (expanded) Text("Haftalık\nözet", fontWeight = FontWeight.Bold, style = typography.headlineMedium)
+                                     else Text("Özet", style = typography.titleLarge)
+                                 },
+                                 navigationIcon = { IconButton(onClick = {}) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri") } },
+                                 actions = { IconButton(onClick = {}) { Icon(Icons.Filled.DateRange, contentDescription = "Tarih") } },
+                                 colors = TopAppBarDefaults.topAppBarColors(containerColor = cs.surfaceContainerLow),
+                                 expandedHeight = 168.dp,
+                                 scrollBehavior = twoRows,
+                                 subtitle = { expanded ->
+                                     Text(if (expanded) "6–12 Ekim · 14 etkinlik" else "6–12 Ekim",
+                                          color = cs.onSurfaceVariant, style = if (expanded) typography.titleMedium else typography.labelMedium)
+                                 })
+                         },
+                         containerColor = cs.surfaceContainerLow) { padding ->
+                    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+                        items(30) { i ->
+                            ListItem(headlineContent = { Text("Etkinlik ${i + 1}") },
+                                     supportingContent = { Text("Kaydırınca başlık kısalır") },
+                                     leadingContent = { Icon(Icons.Filled.Schedule, contentDescription = "Etkinlik") },
+                                     colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+                        }
+                    }
+                }
+            }
+        }
+        caption("FlexibleBottomAppBar + exitAlways: liste ilerledikçe alt çubuk aşağı kayıp gider, geri kaydırınca döner.")
+        Box(modifier = Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(16.dp))) {
+            Scaffold(modifier = Modifier.fillMaxSize().nestedScroll(bottomBar.nestedScrollConnection),
+                     bottomBar = {
+                         FlexibleBottomAppBar(scrollBehavior = bottomBar, windowInsets = WindowInsets(0.dp)) {
+                             IconButton(onClick = {}) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri") }
+                             IconButton(onClick = {}) { Icon(Icons.Filled.Edit, contentDescription = "Düzenle") }
+                             IconButton(onClick = {}) { Icon(Icons.Filled.Share, contentDescription = "Paylaş") }
+                             IconButton(onClick = {}) { Icon(Icons.Filled.Delete, contentDescription = "Sil") }
+                         }
+                     },
+                     containerColor = cs.surfaceContainerLow) { padding ->
+                LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+                    items(30) { i -> ListItem(headlineContent = { Text("Fotoğraf ${i + 1}") }, colors = ListItemDefaults.colors(containerColor = Color.Transparent)) }
+                }
+            }
+        }
+        caption("AppBarWithSearch + enterAlways: liste ilerledikçe arama çubuğu yukarı kayar, geri kaydırınca önce o gelir; dokununca " +
+                "tam ekran arama açılır.")
+        val mailField: @Composable () -> Unit = {
+            SearchBarDefaults.InputField(searchBarState = mailSearch, textFieldState = mailQuery, onSearch = {},
+                                         placeholder = { Text("Postalarda ara") }, leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Ara") })
+        }
+        Box(modifier = Modifier.fillMaxWidth().height(380.dp).clip(RoundedCornerShape(16.dp))) {
+            CompositionLocalProvider(LocalSystemInsets provides SystemInsets()) {  // not at the window's edge
+                Scaffold(modifier = Modifier.fillMaxSize().nestedScroll(searchScroll.nestedScrollConnection),
+                         topBar = {
+                             AppBarWithSearch(state = mailSearch, inputField = mailField,
+                                              navigationIcon = { IconButton(onClick = {}) { Icon(Icons.Filled.Menu, contentDescription = "Menü") } },
+                                              actions = { IconButton(onClick = {}) { Icon(Icons.Filled.Person, contentDescription = "Hesap") } },
+                                              scrollBehavior = searchScroll)
+                         }) { padding ->
+                    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+                        items(30) { i ->
+                            ListItem(headlineContent = { Text("Posta ${i + 1}") },
+                                     supportingContent = { Text("Kaydırınca arama çubuğu çekilir") },
+                                     leadingContent = { Icon(Icons.Filled.Email, contentDescription = "Posta") },
+                                     colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+                        }
+                    }
+                }
+            }
+        }
+        ExpandedFullScreenSearchBar(state = mailSearch, inputField = mailField) {
+            val typed = mailQuery.text.toString()
+            for (i in 1..30) {
+                val mail = "Posta $i"
+                if (typed.isNotEmpty() && !mail.contains(typed)) continue
+                ListItem(headlineContent = { Text(mail) }, leadingContent = { Icon(Icons.Filled.Email, contentDescription = "Posta") },
+                         colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+            }
+        }
+    }
 }
 
 // Modifier.pullToRefresh on a plain Box, with the default indicator or one of our own in an IndicatorBox.
-void PullToRefreshSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto refreshing = remember([] { return mutableStateOf(false); });
-        auto enabled = remember([] { return mutableStateOf(true); });
-        auto custom = remember([] { return mutableStateOf(false); });
-        auto refreshes = remember([] { return mutableStateOf(0); });
-        auto state = rememberPullToRefreshState();
-        auto scope = rememberCoroutineScope();
-        auto refresh = [refreshing, refreshes, scope] {
-            refreshing.set(true);
-            scope.launch([refreshing, refreshes]() -> Task {
-                co_await delay(std::chrono::milliseconds(2000));
-                refreshes.set(refreshes.peek() + 1);
-                refreshing.set(false);
-            });
-        };
-        Section("Modifier.pullToRefresh · IndicatorBox", [=] {
-            Text("Listeyi en üstteyken aşağı çekin: eşikten sonra gösterge yavaşlar, eşiği geçip bırakınca yenilenir.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8}, [&] {
-                FilterChip(enabled.get(), [enabled] { enabled.set(!enabled.peek()); }, [] { Text("Açık (enabled)"); });
-                FilterChip(custom.get(), [custom] { custom.set(!custom.peek()); }, [] { Text("Kendi göstergemiz"); });
-            });
-            Text(std::format("{} kez yenilendi · distanceFraction {:.2f}", refreshes.get(), state.distanceFraction()),
-                 color = cs.primary, style = typography().bodySmall);
-            int round = refreshes.get();
-            Box(Modifier().fillMaxWidth().height(260).clip(RoundedCornerShape(16)).background(cs.surfaceContainerHighest)
-                    .pullToRefresh(refreshing.get(), state, refresh, enabled.get())) {
-                    LazyColumn(Modifier().fillMaxSize(), contentPadding = PaddingValues{16, 8, 16, 8}) {
-                        items(20, [round](int i) {
-                            Text(std::format("Haber {} (tur {})", i + 1, round + 1), Modifier().padding(0, 10));
-                        });
-                    };
-                    if (custom.get()) {
-                        // A Material 3 Expressive loading indicator that fills up with the pull.
-                        bool busy = refreshing.get();
-                        PullToRefreshDefaults::IndicatorBox(state, busy, Modifier().align(Alignment::TopCenter), [&] {
-                            if (busy)
-                                LoadingIndicator(Modifier().size(36), cs.onPrimaryContainer);
-                            else
-                                LoadingIndicator(std::min(1.f, state.distanceFraction()), Modifier().size(36),
-                                                 cs.onPrimaryContainer);
-                        }, PullToRefreshDefaults::IndicatorMaxDistance, CircleShape, cs.primaryContainer);
-                    } else {
-                        PullToRefreshDefaults::Indicator(state, refreshing.get(), Modifier().align(Alignment::TopCenter));
-                    }
-                };
-        });
-    });
+@Composable
+fun PullToRefreshSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    var refreshing by remember { mutableStateOf(false) }
+    var enabled by remember { mutableStateOf(true) }
+    var custom by remember { mutableStateOf(false) }
+    var refreshes by remember { mutableStateOf(0) }
+    val state = rememberPullToRefreshState()
+    val scope = rememberCoroutineScope()
+    val refresh: () -> Unit = {
+        refreshing = true
+        scope.launch {
+            delay(2000)
+            refreshes++
+            refreshing = false
+        }
+    }
+    Section("Modifier.pullToRefresh · IndicatorBox") {
+        Text("Listeyi en üstteyken aşağı çekin: eşikten sonra gösterge yavaşlar, eşiği geçip bırakınca yenilenir.",
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = enabled, onClick = { enabled = !enabled }, label = { Text("Açık (enabled)") })
+            FilterChip(selected = custom, onClick = { custom = !custom }, label = { Text("Kendi göstergemiz") })
+        }
+        Text("$refreshes kez yenilendi · distanceFraction ${"%.2f".format(state.distanceFraction)}", color = cs.primary, style = typography.bodySmall)
+        val round = refreshes
+        Box(modifier = Modifier.fillMaxWidth().height(260.dp).clip(RoundedCornerShape(16.dp)).background(cs.surfaceContainerHighest)
+                .pullToRefresh(isRefreshing = refreshing, state = state, onRefresh = refresh, enabled = enabled)) {
+            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp, 8.dp)) {
+                items(20) { i -> Text("Haber ${i + 1} (tur ${round + 1})", modifier = Modifier.padding(0.dp, 10.dp)) }
+            }
+            if (custom) {
+                // A Material 3 Expressive loading indicator that fills up with the pull.
+                val busy = refreshing
+                PullToRefreshDefaults.IndicatorBox(state = state, isRefreshing = busy, modifier = Modifier.align(Alignment.TopCenter),
+                                                   shape = CircleShape, containerColor = cs.primaryContainer) {
+                    if (busy) LoadingIndicator(modifier = Modifier.size(36.dp), color = cs.onPrimaryContainer)
+                    else LoadingIndicator(progress = { min(1f, state.distanceFraction) }, modifier = Modifier.size(36.dp), color = cs.onPrimaryContainer)
+                }
+            } else {
+                PullToRefreshDefaults.Indicator(state = state, isRefreshing = refreshing, modifier = Modifier.align(Alignment.TopCenter))
+            }
+        }
+    }
 }

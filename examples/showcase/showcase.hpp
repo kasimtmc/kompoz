@@ -97,17 +97,7 @@ void FlexBoxSection(CallSite site = CallSite::current());
 void GridSection(CallSite site = CallSite::current());
 void LayoutSection(CallSite site = CallSite::current());
 
-// components/scroll.cpp
-void FlingSection(CallSite site = CallSite::current());
-void DrawersSection(CallSite site = CallSite::current());
-void ScrollbarSection(CallSite site = CallSite::current());
-void PredictiveBackSection(CallSite site = CallSite::current());
-void PointerPassSection(CallSite site = CallSite::current());
-void ScrollableSection(CallSite site = CallSite::current());
-void OverscrollSection(CallSite site = CallSite::current());
-void BringIntoViewSection(CallSite site = CallSite::current());
-void NestedScrollSection(CallSite site = CallSite::current());
-void PullToRefreshSection(CallSite site = CallSite::current());
+// components/scroll.cpp: its sections are @Composable there (the module declares them)
 
 // components/graphics.cpp
 void ProgressSection(CallSite site = CallSite::current());

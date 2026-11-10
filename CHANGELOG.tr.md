@@ -1119,6 +1119,9 @@
   bitince çalışır, iptal edilen bir coroutine'inki de); `OverscrollEffect`, `NestedScrollConnection`, `PopupPositionProvider`,
   `IndicationNodeFactory`, `TextToolbar` ve `LifecycleOwner` parametreleri paylaşımlı göstericidir, null olabileni boş bir
   gösterici (`null`); `Animatable<Float, AnimationVector1D>`, `Animatable<float>`'tır; `PredictiveBackHandler(enabled) { steps -> … }`.
+- **Vitrinin kaydırma ekranı Compose söz dizimiyle**: fırlatmalar, çekmeceler, kaydırma çubukları ve görünüme getirme, öngörülü
+  geri, işaretçi geçişleri, kaydırılabilirler ve cetvel, overscroll (özel efekti C++ kalır), görünüme getirme belirtimi,
+  uygulama çubukları, pager'lar ve aramalı çubukla iç içe kaydırma ve çekip yenileme Kotlin'de `@Composable fun`lar.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

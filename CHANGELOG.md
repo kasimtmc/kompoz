@@ -1082,6 +1082,9 @@
   coroutine's too); `OverscrollEffect`, `NestedScrollConnection`, `PopupPositionProvider`, `IndicationNodeFactory`, `TextToolbar`
   and `LifecycleOwner` parameters are shared pointers, a nullable one an empty pointer (`null`); `Animatable<Float,
   AnimationVector1D>` is `Animatable<float>`; `PredictiveBackHandler(enabled) { steps -> … }`.
+- **The showcase's scroll screen in Compose's syntax**: the flings, the drawers, the scrollbars and bring-into-view, predictive
+  back, pointer passes, the scrollables and the ruler, overscroll (its custom effect stays C++), the bring-into-view spec, nested
+  scrolling with the app bars, pagers and the search app bar, and pull to refresh are `@Composable fun`s in Kotlin.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and
