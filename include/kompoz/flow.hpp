@@ -65,6 +65,7 @@ struct SharingStarted {
     // While it is collected, and `stopTimeout` after the last collector left (then from the
     // next one on, again).
     static SharingStarted WhileSubscribed(std::chrono::milliseconds stopTimeout = {}) { return {Kind::WhileSubscribed, stopTimeout}; }
+    static SharingStarted WhileSubscribed(long long stopTimeoutMillis) { return WhileSubscribed(std::chrono::milliseconds(stopTimeoutMillis)); }  // Kotlin's
 };
 inline const SharingStarted SharingStarted::Eagerly{SharingStarted::Kind::Eagerly};
 inline const SharingStarted SharingStarted::Lazily{SharingStarted::Kind::Lazily};

@@ -1756,6 +1756,67 @@ TEST(input_forms_as_compose_writes_them) {
     CHECK(rule.onNodeWithText("tık: 101 · 50").exists());
 }
 
+// State forms as Kotlin writes them: a Channel's trySend(…).isSuccess, consumeEach { order -> } suspending per element,
+// scope.produce<Int> { send(i) }, a flow's collectAsStateWithLifecycle() as a member, PaddingValues(horizontal, vertical),
+// list + element, Lifecycle.State names from LocalLifecycleOwner.current, a ViewConfiguration's timeouts in millis,
+// semantics { contentType = … }, SharingStarted.WhileSubscribed(5000).
+class TickViewModel : ViewModel() {
+    val ticks: StateFlow<Int> = flow<Int> {
+        var i = 0
+        while (true) {
+            emit(i++)
+            delay(100)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+}
+
+@Composable
+fun KitchenForms() {
+    val orders = remember { Channel<Int>(2) }
+    var served by remember { mutableStateOf(listOf<Int>()) }
+    var refused by remember { mutableStateOf(0) }
+    var countdown by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    val vm = viewModel<TickViewModel>()
+    val ticks by vm.ticks.collectAsStateWithLifecycle()
+    val state by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val gestures = LocalViewConfiguration.current
+    LaunchedEffect(Unit) {
+        orders.consumeEach { order ->
+            delay(10)
+            served = served + order
+        }
+    }
+    Column(modifier = Modifier.padding(PaddingValues(12.dp, 8.dp))) {
+        Box(modifier = Modifier.size(10.dp).semantics { contentType = ContentType.Username }.testTag("alan"))
+        Button(onClick = { if (!orders.trySend(served.size + 1).isSuccess) refused++ }, modifier = Modifier.testTag("ver")) { Text("sipariş") }
+        Button(onClick = {
+            scope.launch {
+                val numbers = scope.produce<Int> { for (i in 3 downTo 1) send(i) }
+                numbers.consumeEach { countdown = countdown + it.toString() }
+                countdown = countdown + "!"
+            }
+        }) { Text("say") }
+        Text("servis ${served.size} · ret $refused · $countdown", modifier = Modifier.testTag("durum"))
+        Text("durum ${if (state == Lifecycle.State.RESUMED || state == Lifecycle.State.STARTED) "açık" else "kapalı"} · ${gestures.longPressTimeoutMillis} ms · tik ${if (ticks >= 0) "var" else "yok"}")
+    }
+}
+
+TEST(state_forms_as_kotlin_writes_them) {
+    ComposeTestRule rule([] { KitchenForms(); }, {400, 800});
+    rule.host().setLifecycleState(LifecycleState::Resumed);
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("servis 0 · ret 0 · ").exists() && rule.onNodeWithText("durum açık · 400 ms · tik var").exists());
+    CHECK(std::abs(rule.onNodeWithTag("alan").bounds().x - 12) < 0.5f && std::abs(rule.onNodeWithTag("alan").bounds().y - 8) < 0.5f);  // PaddingValues(12.dp, 8.dp)
+    rule.onNodeWithTag("ver").performClick();
+    rule.advanceTimeBy(50);
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("servis 1 · ret 0 · ").exists());
+    rule.onNodeWithText("say").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("servis 1 · ret 0 · 321!").exists());
+}
+
 TEST(navigation_as_compose_writes_it) {
     NavController nav;
     ComposeTestRule rule([&] { Navigator(nav); });

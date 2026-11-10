@@ -1506,8 +1506,39 @@ constexpr ::kompoz::Rect Rect(Offset topLeft, Size size) { return {topLeft.x, to
 // Compose's CornerSize(percent: Int) and CornerSize(size: Dp).
 constexpr ::kompoz::CornerSize CornerSize(int percent) { return {0, float(percent)}; }
 constexpr ::kompoz::CornerSize CornerSize(float dp) { return {dp, 0}; }
+// Compose's PaddingValues(all), PaddingValues(horizontal, vertical), PaddingValues(start, top, end, bottom) and the
+// named forms (start = …, horizontal = …): Kompoz's PaddingValues holds start, top, end, bottom.
+inline ::kompoz::PaddingValues PaddingValues(float all = 0) { return {all, all, all, all}; }
+inline ::kompoz::PaddingValues PaddingValues(float horizontal, float vertical) { return {horizontal, vertical, horizontal, vertical}; }
+inline ::kompoz::PaddingValues PaddingValues(float start, float top, float end, float bottom) { return {start, top, end, bottom}; }
+template <class... A>
+    requires(::kompoz::detail::anyNamedArgument<A...>)
+::kompoz::PaddingValues PaddingValues(A&&... args) {
+    namespace n = ::kompoz::detail::names;
+    using P = ::kompoz::detail::Params<n::Start, n::Top, n::End, n::Bottom, n::Horizontal, n::Vertical, n::All>;
+    static_assert(P::check<A...>());
+    float all = P::get<n::All>(0.f, args...), horizontal = P::get<n::Horizontal>(all, args...), vertical = P::get<n::Vertical>(all, args...);
+    return {P::get<n::Start>(horizontal, args...), P::get<n::Top>(vertical, args...), P::get<n::End>(horizontal, args...),
+            P::get<n::Bottom>(vertical, args...)};
+}
 
 }  // namespace kompoz::kt
+
+namespace kompoz {
+// Kotlin's list + list and list + element (a new list), for the lists kotlin.hpp makes (std::vector).
+template <class T>
+std::vector<T> operator+(const std::vector<T>& a, const std::vector<T>& b) {
+    std::vector<T> out = a;
+    out.insert(out.end(), b.begin(), b.end());
+    return out;
+}
+template <class T>
+std::vector<T> operator+(const std::vector<T>& a, const std::type_identity_t<T>& b) {
+    std::vector<T> out = a;
+    out.push_back(b);
+    return out;
+}
+}  // namespace kompoz
 
 // Unit as a key (LaunchedEffect(Unit), LifecycleResumeEffect(Unit)): one value, one hash.
 template <>

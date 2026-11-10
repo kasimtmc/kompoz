@@ -411,8 +411,14 @@ private:
     std::shared_ptr<std::optional<T>> value_;
 };
 
+template <class T>
+class Channel;
+
 class CoroutineScope {
 public:
+    // Kotlin's scope.produce<T> { send(…) }: a channel the block (a coroutine taking it) sends to (channel.hpp).
+    template <class T, class F>
+    Channel<T> produce(F block, int capacity = 0) const;
     explicit CoroutineScope(detail::Dispatcher& dispatcher) : state_(std::make_shared<detail::ScopeState>()) {
         state_->dispatcher = &dispatcher;
     }

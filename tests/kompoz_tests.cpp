@@ -8097,6 +8097,42 @@ TEST(input_forms_take_compose_named_arguments) {
     CHECK(secondary == 1 && plain == 1);
 }
 
+TEST(state_forms_take_compose_named_arguments) {
+    // kt::PaddingValues as Compose's (all; horizontal, vertical; start, top, end, bottom; by name), list + list and
+    // list + element, a ChannelResult from trySend, CoroutineScope::produce<T> consumed with a suspending callback,
+    // Lifecycle::State / Lifecycle::Event names, a ViewConfiguration's millis, the semantics receiver's contentType.
+    auto same = [](const PaddingValues& p, float s, float t, float e, float b) { return p.start == s && p.top == t && p.end == e && p.bottom == b; };
+    CHECK(same(kt::PaddingValues(4), 4, 4, 4, 4) && same(kt::PaddingValues(12, 8), 12, 8, 12, 8) && same(kt::PaddingValues(1, 2, 3, 4), 1, 2, 3, 4));
+    CHECK(same(kt::PaddingValues(arg::horizontal = 6.f), 6, 0, 6, 0) && same(kt::PaddingValues(arg::top = 5.f, arg::all = 1.f), 1, 5, 1, 1));
+    CHECK((std::vector<int>{1, 2} + std::vector<int>{3} == std::vector<int>{1, 2, 3} && std::vector<int>{1} + 2 == std::vector<int>{1, 2}));
+    Channel<int> full(1);
+    CHECK(full.trySend(1).isSuccess() && full.trySend(2).isFailure() && !full.trySend(3));
+    CHECK(Lifecycle::State::RESUMED == LifecycleState::Resumed && Lifecycle::Event::ON_STOP == LifecycleEvent::OnStop);
+    CHECK(ViewConfiguration{}.longPressTimeoutMillis() == 400 && ViewConfiguration{}.doubleTapTimeoutMillis() == 300);
+    SemanticsProperties props;
+    SemanticsPropertyReceiver receiver(props);
+    receiver.contentType = ContentType::Password;
+    CHECK(props.contentType == ContentType::Password);
+    std::vector<int> got;
+    std::string log;
+    ComposeTestRule rule([&] {
+        auto scope = rememberCoroutineScope();
+        LaunchedEffect(0, [scope, &got, &log]() -> Task {
+            Channel<int> numbers = scope.produce<int>([](Channel<int> out) -> Task {
+                for (int i = 3; i >= 1; --i) co_await out.send(i);
+            });
+            co_await numbers.consumeEach([&got](int i) -> Task {
+                co_await delay(std::chrono::milliseconds(1));
+                got.push_back(i);
+            });
+            log = "bitti";
+        });
+    });
+    rule.advanceTimeBy(50);
+    rule.waitForIdle();
+    CHECK((got == std::vector<int>{3, 2, 1} && log == "bitti"));
+}
+
 TEST(navigation_takes_compose_named_arguments) {
     // NavHost(navController =, startDestination =, enterTransition = { }) { … } with the graph builder's
     // composable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }

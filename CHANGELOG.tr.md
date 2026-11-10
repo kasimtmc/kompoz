@@ -1095,6 +1095,15 @@
   tıklamalar, ipucu alanları), özel göstergeler, uygulamanın kendi metin araç çubuğu bir Popup içinde, çoklu dokunma, klavye,
   seçilebilir kartlar ve sürükle-bırak Kotlin'de `@Composable fun`lar (gösterge düğümleri, araç çubuğu sınıfı ve tuş adları
   aynı dosyada C++ kalır).
+- **Kotlin'in yazdığı gibi channel'lar, yaşam döngüsü ve dolgu**: `trySend` bir `ChannelResult` verir (`isSuccess` /
+  `isFailure`, eskisi gibi bir bool); `CoroutineScope::produce<T>(block)` Kotlin'in `scope.produce<Int> { send(i) }`'i;
+  `consumeEach` ve `collect` askıya alan bir geri çağrı alır; Compose'un `RESUMED` / `ON_RESUME` adlarıyla
+  `Lifecycle::State` / `Lifecycle::Event`; `ViewConfiguration::longPressTimeoutMillis()` ve öteki zaman aşımları milisaniye
+  olarak; semantik alıcının `contentType`'ı; `SharingStarted::WhileSubscribed(5000)`; kotlin.hpp üzerinden `PaddingValues(all)`,
+  `(horizontal, vertical)`, `(start, top, end, bottom)` ve adıyla (Kompoz'un yapısı alanlarını korur); kotlin.hpp'nin yaptığı
+  listeler için `list + list` ve `list + element`. kompozc: askıya alan bir lambda'nın parametreleri (`consumeEach { order -> }`,
+  `it`); `scope.produce<Int> { }` bloğu kendi channel'ına gönderir; üye olarak `flow.collectAsStateWithLifecycle()`;
+  `LocalLifecycleOwner.current`, `LocalClipboard.current`, `LocalAutofillManager.current`.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

@@ -106,6 +106,27 @@ fun ticks(): Flow<Int> = flow {
 
 Everything runs on the UI thread, in the collecting coroutine. Cancelling the coroutine stops the producer too.
 
+### Channels
+
+A `Channel` hands values from one coroutine (or a click handler) to another, as Kotlin's: `send` waits for room, `trySend` never does (its result says whether it was taken), `receive` waits for the next value, and `consumeEach` takes them one by one, suspending in between. `scope.produce<Int> { send(i) }` starts a coroutine that fills a channel and closes it when it is done.
+
+```kotlin
+@Composable
+fun Kitchen() {
+    val orders = remember { Channel<Int>(3) }   // at most three waiting
+    var cooking by remember { mutableStateOf("idle") }
+    var next by remember { mutableStateOf(1) }
+    LaunchedEffect(Unit) {
+        orders.consumeEach { order ->              // one at a time
+            cooking = "order $order"
+            delay(1500)
+            cooking = "order $order done"
+        }
+    }
+    Button(onClick = { if (orders.trySend(next).isSuccess) next++ }) { Text("Order ($cooking)") }
+}
+```
+
 ## Saved state
 
 Android may end an app's process in the background and bring it back later, expecting it to look as it did. Two tools cover this:
@@ -137,7 +158,7 @@ fun Video(player: Player) {
 }
 ```
 
-`LifecycleStartEffect`, `LifecycleEventEffect(LifecycleEvent.OnStart, …)` and `LocalLifecycleOwner.current` exist too. `collectAsStateWithLifecycle(flow)` collects a flow only while the lifecycle is at least started, so in the background it stops counting as a subscriber.
+`LifecycleStartEffect`, `LifecycleEventEffect(LifecycleEvent.OnStart, …)` and `LocalLifecycleOwner.current` exist too; `LocalLifecycleOwner.current.lifecycle.currentStateAsState()` gives the state as Compose names it (`Lifecycle.State.RESUMED`, `STARTED`, …). `flow.collectAsStateWithLifecycle()` collects a flow only while the lifecycle is at least started, so in the background it stops counting as a subscriber.
 
 ## See also
 

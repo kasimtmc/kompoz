@@ -1057,6 +1057,15 @@
   button, tooltip areas), the custom indications, the app's own text toolbar in a Popup, multi-touch, the keyboard, the
   selectable cards and drag and drop are `@Composable fun`s in Kotlin (the indication nodes, the toolbar class and the key
   names stay C++ in the same file).
+- **Channels, lifecycle and padding as Kotlin writes them**: `trySend` gives a `ChannelResult` (`isSuccess` / `isFailure`,
+  a bool as before); `CoroutineScope::produce<T>(block)` is Kotlin's `scope.produce<Int> { send(i) }`; `consumeEach` and
+  `collect` take a suspending callback; `Lifecycle::State` / `Lifecycle::Event` with Compose's `RESUMED` / `ON_RESUME`
+  names; `ViewConfiguration::longPressTimeoutMillis()` and the other timeouts in millis; the semantics receiver's
+  `contentType`; `SharingStarted::WhileSubscribed(5000)`; `PaddingValues(all)`, `(horizontal, vertical)`, `(start, top, end,
+  bottom)` and by name through kotlin.hpp (Kompoz's struct keeps its fields); `list + list` and `list + element` for the lists
+  kotlin.hpp makes. kompozc: a suspending lambda's parameters (`consumeEach { order -> }`, `it`); `scope.produce<Int> { }`'s
+  block sends to its channel; `flow.collectAsStateWithLifecycle()` as a member; `LocalLifecycleOwner.current`,
+  `LocalClipboard.current`, `LocalAutofillManager.current`.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

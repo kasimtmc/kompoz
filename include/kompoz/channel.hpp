@@ -207,6 +207,14 @@ struct ChannelReceiveAwaiter {
 } // namespace detail
 
 // Copies are the same channel; any thread may use it (coroutines resume on the UI thread).
+// What trySend says (Kotlin's ChannelResult): delivered or buffered, or not (full, closed).
+struct ChannelResult {
+    bool success = false;
+    constexpr bool isSuccess() const { return success; }
+    constexpr bool isFailure() const { return !success; }
+    constexpr operator bool() const { return success; }
+};
+
 template <class T>
 class Channel {
 public:
@@ -223,8 +231,9 @@ public:
     // co_await channel.send(value) inside a coroutine: true once it is received or buffered
     // (waiting while full), false if the channel is closed (or cancelled while it waited).
     detail::ChannelSendAwaiter<T> send(T value) const { return {cell_, std::move(value)}; }
-    // Without waiting, from any thread: false if it is full (with BufferOverflow::Suspend) or closed.
-    bool trySend(T value) const {
+    // Without waiting, from any thread: a failure if it is full (with BufferOverflow::Suspend) or closed
+    // (Kotlin's ChannelResult: isSuccess / isFailure; true or false as a bool).
+    ChannelResult trySend(T value) const {
         typename detail::ChannelCell<T>::Wakeups wakeups;
         typename detail::ChannelCell<T>::Offer offer;
         {
@@ -233,7 +242,7 @@ public:
         }
         detail::ChannelCell<T>::wake(std::move(wakeups));
         using Offer = typename detail::ChannelCell<T>::Offer;
-        return offer == Offer::Delivered || offer == Offer::Buffered;
+        return ChannelResult{offer == Offer::Delivered || offer == Offer::Buffered};
     }
     // co_await channel.receive() inside a coroutine: the next element (waiting for one), or
     // nullopt once the channel is closed and empty.
@@ -331,8 +340,15 @@ private:
 //   Channel<int> numbers = produce<int>(scope, [](Channel<int> out) -> Task {
 //       for (int i = 1; i <= 3; ++i) co_await out.send(i);
 //   });
+// Kotlin's scope.produce<Int> { send(i) } is CoroutineScope::produce<int>(block).
 template <class T, class F>
-Channel<T> produce(const CoroutineScope& scope, F block, int capacity = Channel<T>::Rendezvous) {
+Channel<T> produce(const CoroutineScope& scope, F block, int capacity = Channel<T>::Rendezvous);
+template <class T, class F>
+Channel<T> CoroutineScope::produce(F block, int capacity) const {
+    return ::kompoz::produce<T>(*this, std::move(block), capacity);
+}
+template <class T, class F>
+Channel<T> produce(const CoroutineScope& scope, F block, int capacity) {
     Channel<T> channel(capacity);
     scope.launch([channel, block]() mutable -> Task {
         struct Finish {

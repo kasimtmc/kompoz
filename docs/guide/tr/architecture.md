@@ -106,6 +106,27 @@ fun ticks(): Flow<Int> = flow {
 
 Her şey arayüz thread'inde, toplayan coroutine içinde çalışır. Coroutine'i iptal etmek üreticiyi de durdurur.
 
+### Channel'lar
+
+Bir `Channel`, Kotlin'deki gibi değerleri bir coroutine'den (ya da bir tıklama işleyicisinden) ötekine taşır: `send` yer açılmasını bekler, `trySend` hiç beklemez (sonucu alınıp alınmadığını söyler), `receive` sıradaki değeri bekler, `consumeEach` değerleri aralarda askıya alarak tek tek alır. `scope.produce<Int> { send(i) }` bir channel'ı dolduran ve bitince kapatan bir coroutine başlatır.
+
+```kotlin
+@Composable
+fun Kitchen() {
+    val orders = remember { Channel<Int>(3) }   // en çok üçü bekler
+    var cooking by remember { mutableStateOf("boş") }
+    var next by remember { mutableStateOf(1) }
+    LaunchedEffect(Unit) {
+        orders.consumeEach { order ->              // sırayla, birer birer
+            cooking = "sipariş $order"
+            delay(1500)
+            cooking = "sipariş $order hazır"
+        }
+    }
+    Button(onClick = { if (orders.trySend(next).isSuccess) next++ }) { Text("Sipariş ($cooking)") }
+}
+```
+
 ## Kaydedilen durum
 
 Android, arka plandaki bir uygulamanın sürecini sonlandırıp daha sonra geri getirebilir ve onun eskisi gibi görünmesini bekler. Bunu iki araç karşılar:
@@ -137,7 +158,7 @@ fun Video(player: Player) {
 }
 ```
 
-`LifecycleStartEffect`, `LifecycleEventEffect(LifecycleEvent.OnStart, …)` ve `LocalLifecycleOwner.current` de vardır. `collectAsStateWithLifecycle(flow)` bir Flow'u yalnızca yaşam döngüsü en az started iken toplar; böylece arka planda abone sayılmaz.
+`LifecycleStartEffect`, `LifecycleEventEffect(LifecycleEvent.OnStart, …)` ve `LocalLifecycleOwner.current` de vardır; `LocalLifecycleOwner.current.lifecycle.currentStateAsState()` durumu Compose'un adlarıyla verir (`Lifecycle.State.RESUMED`, `STARTED`, …). `flow.collectAsStateWithLifecycle()` bir Flow'u yalnızca yaşam döngüsü en az started iken toplar; böylece arka planda abone sayılmaz.
 
 ## Ayrıca bakın
 

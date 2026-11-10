@@ -19,12 +19,21 @@
 
 namespace kompoz {
 
-enum class LifecycleState { Destroyed, Initialized, Created, Started, Resumed };
-enum class LifecycleEvent { OnCreate, OnStart, OnResume, OnPause, OnStop, OnDestroy };
+// (Compose's Lifecycle.State.RESUMED and Lifecycle.Event.ON_RESUME name the same values.)
+enum class LifecycleState {
+    Destroyed, Initialized, Created, Started, Resumed,
+    DESTROYED = Destroyed, INITIALIZED = Initialized, CREATED = Created, STARTED = Started, RESUMED = Resumed
+};
+enum class LifecycleEvent {
+    OnCreate, OnStart, OnResume, OnPause, OnStop, OnDestroy,
+    ON_CREATE = OnCreate, ON_START = OnStart, ON_RESUME = OnResume, ON_PAUSE = OnPause, ON_STOP = OnStop, ON_DESTROY = OnDestroy
+};
 
 // Moved from state to state by its owner, one step (event) at a time, as LifecycleRegistry.
 class Lifecycle {
 public:
+    using State = LifecycleState;  // Compose's Lifecycle.State
+    using Event = LifecycleEvent;  // Compose's Lifecycle.Event
     explicit Lifecycle(LifecycleState initial = LifecycleState::Initialized);
     LifecycleState currentState() const;         // not observable
     LifecycleState currentStateAsState() const;  // observable: read in a composable, it recomposes with it

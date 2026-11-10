@@ -1101,7 +1101,8 @@ public:
     explicit SemanticsPropertyReceiver(SemanticsProperties& properties)
         : contentDescription(properties.contentDescription), stateDescription(properties.stateDescription), role(properties.role),
           selected(properties.checked), liveRegion(properties.liveRegion), progressBarRangeInfo(properties.progressBarRangeInfo),
-          customActions(properties.customActions), traversalIndex(properties.traversalIndex), properties_(properties) {}
+          customActions(properties.customActions), traversalIndex(properties.traversalIndex), contentType(properties.contentType),
+          properties_(properties) {}
     std::string& contentDescription;
     std::string& stateDescription;
     SemanticsRole& role;
@@ -1110,6 +1111,7 @@ public:
     std::optional<ProgressBarRangeInfo>& progressBarRangeInfo;
     std::vector<CustomAccessibilityAction>& customActions;
     float& traversalIndex;
+    std::optional<ContentType>& contentType;  // for autofill (Compose's contentType)
     void heading() const { properties_.heading = true; }
     void selectableGroup() const { properties_.selectableGroup = true; }
     void hideFromAccessibility() const { properties_.hidden = true; }
@@ -1485,6 +1487,10 @@ struct ViewConfiguration {
     float touchSlop = 8;
     Size minimumTouchTargetSize{48, 48};
     float maximumFlingVelocity = 8000;
+    // Compose's names: the timeouts in milliseconds.
+    constexpr int64_t longPressTimeoutMillis() const { return longPressTimeout.count(); }
+    constexpr int64_t doubleTapTimeoutMillis() const { return doubleTapTimeout.count(); }
+    constexpr int64_t doubleTapMinTimeMillis() const { return doubleTapMinTime.count(); }
     friend bool operator==(const ViewConfiguration&, const ViewConfiguration&) = default;
 };
 inline const CompositionLocal<ViewConfiguration> LocalViewConfiguration{ViewConfiguration{}};

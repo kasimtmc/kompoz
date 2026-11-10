@@ -68,6 +68,8 @@ const std::map<std::string, std::string, std::less<>> kObjectProperties = {
     // Compose's platform locals: what the host gives (platform.hpp)
     {"LocalUriHandler.current", "::kompoz::uriHandler()"}, {"LocalClipboardManager.current", "::kompoz::clipboardManager()"},
     {"LocalHapticFeedback.current", "::kompoz::hapticFeedback()"}, {"LocalSoftwareKeyboardController.current", "::kompoz::softwareKeyboardController()"},
+    {"LocalLifecycleOwner.current", "::kompoz::currentLifecycleOwner()"}, {"LocalClipboard.current", "::kompoz::clipboard()"},
+    {"LocalAutofillManager.current", "::kompoz::autofillManager()"},
     {"LocalFocusManager.current", "::kompoz::focusManager()"},
     {"MaterialTheme.motionScheme", "::kompoz::motionScheme()"},
     // (Compose's insets are properties: WindowInsets.systemBars)
@@ -117,7 +119,10 @@ const std::set<std::string, std::less<>> kKtFunctions = {
     // kotlin.math's (a Float in, a Float out), and Compose's Rect(left, top, right, bottom) / Rect(offset, size) and
     // CornerSize(percent) / CornerSize(dp): Kotlin's meanings over the C++ structs' fields.
     "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sinh", "cosh", "tanh", "sqrt", "abs", "min", "max", "floor", "ceil",
-    "round", "truncate", "sign", "pow", "hypot", "exp", "ln", "log2", "log10", "Rect", "CornerSize"};
+    "round", "truncate", "sign", "pow", "hypot", "exp", "ln", "log2", "log10", "Rect", "CornerSize", "PaddingValues"};
+// Compose's extension functions on a flow that Kompoz has as free functions with a call site of their own:
+// vm.items.collectAsStateWithLifecycle() -> ::kompoz::collectAsStateWithLifecycle(vm.items).
+const std::set<std::string, std::less<>> kFreeMembers = {"collectAsStateWithLifecycle"};
 // kotlin.math's constants: PI.
 const std::map<std::string, std::string, std::less<>> kBareConstants = {{"PI", "::kompoz::kt::PI"}};
 
@@ -159,6 +164,7 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"AnimatedVisibility", "const AnimatedVisibilityScope"}, {"AnimatedContent", "const AnimatedContentScope"},
     {"SharedTransitionLayout", "const SharedTransitionScope"},
     {"pointerInput", "PointerInputScope"},   {"awaitEachGesture", "PointerInputScope"},
+    {"produce", "auto Channel"},  // (scope.produce<Int> { send(i) }: the channel it sends to)
     {"DraggableAnchors", "auto DraggableAnchors"},  // (the builder's anchors: DragValue.Start at 0f)
     {"NavHost", "NavGraphBuilder"},          {"navigation", "NavGraphBuilder"},
     {"navigate", "NavOptionsBuilder"},       {"popUpTo", "PopUpToBuilder"},     {"navDeepLink", "NavDeepLink"},
@@ -198,7 +204,11 @@ const std::map<std::string, std::string, std::less<>> kReceiverArguments = {
     {"NavHost.popEnterTransition", "auto AnimatedContentTransitionScope"}, {"NavHost.popExitTransition", "auto AnimatedContentTransitionScope"}};
 
 // Calls whose lambda is a coroutine (Kotlin's suspend lambdas): [=]() -> Task { ...; co_return; }.
-const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "produceState", "pointerInput", "awaitEachGesture", "flow"};
+const std::set<std::string, std::less<>> kSuspendLambdas = {"LaunchedEffect", "launch", "produceState", "pointerInput", "awaitEachGesture", "flow",
+                                                            "produce", "consumeEach", "collect"};
+// Of those, the calls that suspend themselves until their block is done with every element (co_await on the call too);
+// the others start something (a job, a channel, a flow) and give it back.
+const std::set<std::string, std::less<>> kAwaitedBlocks = {"consumeEach", "collect"};
 
 // Functions of a PointerInputScope's (Compose's extensions on it), called in pointerInput { } with the
 // scope first here: detectTapGestures(onTap = { }) is detectTapGestures(scope, TapGestureHandlers{…}).
@@ -1154,7 +1164,7 @@ private:
         const Node& callee = companionless(*c.kids[0]);
         std::string name = callee.kind == Node::Name ? callee.text : callee.kind == Node::Member ? callee.text : "";
         if (callee.kind == Node::Name && capitalized(callee.text) && !lookup(callee.text)) return false;
-        if (kSuspendLambdas.contains(name)) return false;
+        if (kSuspendLambdas.contains(name) && !kAwaitedBlocks.contains(name)) return false;
         return true;
     }
 
@@ -1269,6 +1279,11 @@ private:
             }
             if (kKtMembers.contains(callee.text) && !qualifier(obj)) {
                 out_.text("::kompoz::kt::" + callee.text + "(");
+                expr(obj);
+                return arguments(c, calleeName, true, true);
+            }
+            if (kFreeMembers.contains(callee.text) && !qualifier(obj)) {
+                out_.text("::kompoz::" + callee.text + "(");
                 expr(obj);
                 return arguments(c, calleeName, true, true);
             }
@@ -1516,18 +1531,7 @@ private:
             std::string type = isAuto ? "auto&&" : (isConst ? "const ::kompoz::" + bare : "::kompoz::" + bare) + "&";
             out_.text(type + " kompoz_receiver_" + self + std::string(l.flag && !l.names.empty() ? ", " : ""));
         }
-        if (suspend) {
-            // A coroutine (Kotlin's suspend lambda): its CoroutineScope receiver has no name here;
-            // produceState's gives it the state, `value` (a copy: a coroutine's parameters outlive
-            // their call); flow's gives it the collector, `emit`.
-            if (produceState) {
-                out_.text("auto value");
-                declare("value", Delegated);
-            } else if (label == "flow") {
-                out_.text("auto emit");
-                declare("emit", Local);
-            }
-        } else if (l.flag) {
+        auto named = [&] {  // the parameters it names
             for (size_t i = 0; i < l.names.size(); ++i) {
                 if (l.names[i] == "_") {  // (unused, as Kotlin's)
                     out_.text((i ? ", " : "") + std::string("auto&&"));
@@ -1536,9 +1540,32 @@ private:
                 out_.text((i ? ", " : "") + std::string("auto&& ") + cppName(l.names[i]));
                 declare(l.names[i], Local);
             }
+        };
+        bool itUsed = std::any_of(l.kids.begin(), l.kids.end(), [](const NodeP& k) { return usesIt(k.get()); });
+        if (suspend) {
+            // A coroutine (Kotlin's suspend lambda): its CoroutineScope receiver has no name here;
+            // produceState's gives it the state, `value` (a copy: a coroutine's parameters outlive
+            // their call); flow's gives it the collector, `emit`; consumeEach's and collect's take
+            // the element they name (or `it`).
+            if (produceState) {
+                out_.text("auto value");
+                declare("value", Delegated);
+            } else if (label == "flow") {
+                out_.text("auto emit");
+                declare("emit", Local);
+            } else if (l.flag) {
+                named();
+            } else if (!receiver && itUsed) {
+                out_.text("auto&& it");
+                declare("it", Local);
+            } else if (!receiver) {
+                out_.text("auto&&...");  // (collect { } given the element it doesn't use; LaunchedEffect { } given nothing)
+            }
+        } else if (l.flag) {
+            named();
         } else if (receiver) {
             // (its `it` is a lambda's around it)
-        } else if (std::any_of(l.kids.begin(), l.kids.end(), [](const NodeP& k) { return usesIt(k.get()); })) {
+        } else if (itUsed) {
             out_.text("auto&& it");  // (update { it.add(x) } changes what it is given)
             declare("it", Local);
         } else {
