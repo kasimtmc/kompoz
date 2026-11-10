@@ -1104,6 +1104,10 @@
   listeler için `list + list` ve `list + element`. kompozc: askıya alan bir lambda'nın parametreleri (`consumeEach { order -> }`,
   `it`); `scope.produce<Int> { }` bloğu kendi channel'ına gönderir; üye olarak `flow.collectAsStateWithLifecycle()`;
   `LocalLifecycleOwner.current`, `LocalClipboard.current`, `LocalAutofillManager.current`.
+- **Vitrinin durum ekranı Compose söz dizimiyle**: simge galerisi ve simge düğmeleri, StateFlow indirmesi, akış araması
+  (ViewModel'i SavedStateHandle, debounce, flatMapLatest, stateIn ve SharedFlow'lu bir Kotlin sınıfı), taşınabilir içerik,
+  channel mutfağı ve produce geri sayımı, yaşam döngüsü bölümü, sohbet ve platform hizmetleri Kotlin'de `@Composable fun`lar
+  (iş parçacıklı indirme ViewModel'i, yaşam döngüsü gözlemcisi ViewModel'i ve asal sayımı aynı dosyada C++ kalır).
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

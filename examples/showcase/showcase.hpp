@@ -80,16 +80,7 @@ Color hueColor(int i);
 
 // list/list.cpp: WindowClassLine, MediaLine, ListScreen and ItemScreen are @Composable there (the module declares them)
 
-// components/state.cpp
-void IconGallery(CallSite site = CallSite::current());
-void IconButtons(CallSite site = CallSite::current());
-void StateFlowSection(CallSite site = CallSite::current());
-void FlowSearchSection(CallSite site = CallSite::current());
-void MovableContentSection(CallSite site = CallSite::current());
-void ChannelSection(CallSite site = CallSite::current());
-void LifecycleSection(CallSite site = CallSite::current());
-void ChatSection(CallSite site = CallSite::current());
-void PlatformServicesSection(CallSite site = CallSite::current());
+// components/state.cpp: its sections are @Composable there (the module declares them)
 
 // components/layout.cpp
 void ListDetailSection(CallSite site = CallSite::current());

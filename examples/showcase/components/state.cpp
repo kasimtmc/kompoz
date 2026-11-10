@@ -2,73 +2,68 @@
 
 #include "showcase.hpp"
 
-#include <kompoz/blocks.hpp>  // (the block form, Column(…) { … };: this file is still C++)
-
-void IconGallery(CallSite site) {
-    composable(site, [=] {
-        using namespace Icons::Filled;
-        const std::vector<std::pair<const char*, const ImageVector*>> icons = {
-            {"Add", &Add}, {"ArrowBack", &ArrowBack}, {"Check", &Check}, {"Close", &Close},
-            {"Delete", &Delete}, {"Edit", &Edit}, {"Favorite", &Favorite}, {"FavoriteBorder", &FavoriteBorder},
-            {"Home", &Home}, {"Info", &Info}, {"Menu", &Menu}, {"MoreVert", &MoreVert},
-            {"Notifications", &Notifications}, {"Person", &Person}, {"Search", &Search}, {"Settings", &Settings},
-            {"Share", &Share}, {"Star", &Star}, {"Email", &Email}, {"Lock", &Lock},
-            {"Place", &Place}, {"Refresh", &Refresh}, {"Visibility", &Visibility}, {"DarkMode", &DarkMode},
-            {"PlayArrow", &PlayArrow}, {"Pause", &Pause}, {"List", &List}, {"CheckCircle", &CheckCircle},
-            {"AccountCircle", &AccountCircle}, {"KeyboardArrowUp", &KeyboardArrowUp}};
-        Section("Icon", [=] {
-            for (size_t row = 0; row < icons.size(); row += 5) {
-                Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::SpaceBetween) {
-                    for (size_t i = row; i < std::min(icons.size(), row + 5); ++i) {
-                        Column(Modifier().width(60), horizontalAlignment = Alignment::CenterHorizontally) {
-                            Icon(*icons[i].second, icons[i].first);
-                            Text(icons[i].first, fontSize = 9, color = colorScheme().onSurfaceVariant, maxLines = 1, overflow = TextOverflow::Ellipsis);
-                        };
+@Composable
+fun IconGallery() {
+    val icons = listOf("Add" to Icons.Filled.Add, "ArrowBack" to Icons.Filled.ArrowBack, "Check" to Icons.Filled.Check, "Close" to Icons.Filled.Close,
+                       "Delete" to Icons.Filled.Delete, "Edit" to Icons.Filled.Edit, "Favorite" to Icons.Filled.Favorite, "FavoriteBorder" to Icons.Filled.FavoriteBorder,
+                       "Home" to Icons.Filled.Home, "Info" to Icons.Filled.Info, "Menu" to Icons.Filled.Menu, "MoreVert" to Icons.Filled.MoreVert,
+                       "Notifications" to Icons.Filled.Notifications, "Person" to Icons.Filled.Person, "Search" to Icons.Filled.Search, "Settings" to Icons.Filled.Settings,
+                       "Share" to Icons.Filled.Share, "Star" to Icons.Filled.Star, "Email" to Icons.Filled.Email, "Lock" to Icons.Filled.Lock,
+                       "Place" to Icons.Filled.Place, "Refresh" to Icons.Filled.Refresh, "Visibility" to Icons.Filled.Visibility, "DarkMode" to Icons.Filled.DarkMode,
+                       "PlayArrow" to Icons.Filled.PlayArrow, "Pause" to Icons.Filled.Pause, "List" to Icons.Filled.List, "CheckCircle" to Icons.Filled.CheckCircle,
+                       "AccountCircle" to Icons.Filled.AccountCircle, "KeyboardArrowUp" to Icons.Filled.KeyboardArrowUp)
+    Section("Icon") {
+        for (row in 0 until icons.size step 5) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                for (i in row until min(icons.size, row + 5)) {
+                    val (name, icon) = icons[i]
+                    Column(modifier = Modifier.width(60.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(icon, contentDescription = name)
+                        Text(name, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                };
+                }
             }
-        });
-    });
+        }
+    }
 }
 
-void IconButtons(CallSite site) {
-    composable(site, [=] {
-        auto liked = remember([] { return mutableStateOf(false); });
-        Section("IconButton", [=] {
-            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                    IconButton([liked] { liked.set(!liked.get()); }) {
-                        Icon(liked.get() ? Icons::Filled::Favorite : Icons::Filled::FavoriteBorder, "Beğen",
-                             tint = liked.get() ? std::optional(colorScheme().error) : std::nullopt);
-                    };
-                    FilledIconButton([] {}) { Icon(Icons::Filled::Add, "Ekle"); };
-                    FilledTonalIconButton([] {}) { Icon(Icons::Filled::Edit, "Düzenle"); };
-                    IconButton([] {}, Modifier(), enabled = false) { Icon(Icons::Filled::Delete, "Sil"); };
-                    OutlinedIconButton([] {}) { Icon(Icons::Filled::Share, "Paylaş"); };
-                    Icon(Icons::Filled::Star, "Büyük yıldız", Modifier().size(40), colorScheme().primary);
-                };
-            // The toggles: each keeps its own on/off; `checked` picks the colors.
-            auto starred = remember([] { return mutableStateOf(false); });
-            auto bell = remember([] { return mutableStateOf(true); });
-            auto pinned = remember([] { return mutableStateOf(false); });
-            auto locked = remember([] { return mutableStateOf(false); });
-            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                    IconToggleButton(starred.get(), [starred](bool on) { starred.set(on); }) { Icon(Icons::Filled::Star, "Yıldızla"); };
-                    FilledIconToggleButton(bell.get(), [bell](bool on) { bell.set(on); }) { Icon(Icons::Filled::Notifications, "Bildirimler"); };
-                    FilledTonalIconToggleButton(pinned.get(), [pinned](bool on) { pinned.set(on); }) { Icon(Icons::Filled::Place, "Sabitle"); };
-                    OutlinedIconToggleButton(locked.get(), [locked](bool on) { locked.set(on); }) { Icon(Icons::Filled::Lock, "Kilitle"); };
-                    FilledIconToggleButton(true, nullptr, Modifier(), enabled = false) { Icon(Icons::Filled::Check, "Seçili"); };
-                };
-            // Under the toggles: beside them (48 dp of room each) it would be squeezed on a phone.
-            Text(std::string(bell.get() ? "Bildirim açık" : "Bildirim kapalı") + (locked.get() ? ", kilitli" : ""),
-                 style = typography().bodySmall);
-        });
-    });
+@Composable
+fun IconButtons() {
+    var liked by remember { mutableStateOf(false) }
+    Section("IconButton") {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { liked = !liked }) {
+                Icon(if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, contentDescription = "Beğen",
+                     tint = if (liked) MaterialTheme.colorScheme.error else LocalContentColor.current)
+            }
+            FilledIconButton(onClick = {}) { Icon(Icons.Filled.Add, contentDescription = "Ekle") }
+            FilledTonalIconButton(onClick = {}) { Icon(Icons.Filled.Edit, contentDescription = "Düzenle") }
+            IconButton(onClick = {}, enabled = false) { Icon(Icons.Filled.Delete, contentDescription = "Sil") }
+            OutlinedIconButton(onClick = {}) { Icon(Icons.Filled.Share, contentDescription = "Paylaş") }
+            Icon(Icons.Filled.Star, contentDescription = "Büyük yıldız", modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+        }
+        // The toggles: each keeps its own on/off; `checked` picks the colors.
+        var starred by remember { mutableStateOf(false) }
+        var bell by remember { mutableStateOf(true) }
+        var pinned by remember { mutableStateOf(false) }
+        var locked by remember { mutableStateOf(false) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconToggleButton(checked = starred, onCheckedChange = { starred = it }) { Icon(Icons.Filled.Star, contentDescription = "Yıldızla") }
+            FilledIconToggleButton(checked = bell, onCheckedChange = { bell = it }) { Icon(Icons.Filled.Notifications, contentDescription = "Bildirimler") }
+            FilledTonalIconToggleButton(checked = pinned, onCheckedChange = { pinned = it }) { Icon(Icons.Filled.Place, contentDescription = "Sabitle") }
+            OutlinedIconToggleButton(checked = locked, onCheckedChange = { locked = it }) { Icon(Icons.Filled.Lock, contentDescription = "Kilitle") }
+            FilledIconToggleButton(checked = true, onCheckedChange = {}, enabled = false) { Icon(Icons.Filled.Check, contentDescription = "Seçili") }
+        }
+        // Under the toggles: beside them (48 dp of room each) it would be squeezed on a phone.
+        Text((if (bell) "Bildirim açık" else "Bildirim kapalı") + (if (locked) ", kilitli" else ""), style = MaterialTheme.typography.bodySmall)
+    }
 }
 
 // A ViewModel: the screen's state as StateFlows, set by work on a worker thread; the screen
 // reads them with collectAsState(). It belongs to the Components entry of the NavHost, so a
 // download goes on while another tab is shown, and stops when the entry is gone. (The web has
-// no threads: there the same work runs in viewModelScope, on the UI thread.)
+// no threads: there the same work runs in viewModelScope, on the UI thread.) Threads are the
+// platform's: this class stays C++.
 class DownloadViewModel : public ViewModel {
 public:
     MutableStateFlow<float> progress{0.f};
@@ -117,207 +112,194 @@ private:
     std::shared_ptr<std::atomic<bool>> cancelled_ = std::make_shared<std::atomic<bool>>(false);
 };
 
-void StateFlowSection(CallSite site) {
-    composable(site, [=] {
-        auto vm = viewModel<DownloadViewModel>();
-        float progress = vm->progress.collectAsState();
-        std::string status = vm->status.collectAsState();
-        Section("StateFlow · collectAsState · viewModel()", [=] {
-            Text("İş bir iş parçacığında yürür ve StateFlow'ları günceller; ekran onları collectAsState() ile okur. "
+@Composable
+fun StateFlowSection() {
+    val vm = viewModel<DownloadViewModel>()
+    val progress by vm.progress.collectAsState()
+    val status by vm.status.collectAsState()
+    Section("StateFlow · collectAsState · viewModel()") {
+        Text("İş bir iş parçacığında yürür ve StateFlow'ları günceller; ekran onları collectAsState() ile okur. " +
                  "ViewModel bu ekranın gezinme girdisine ait: başka sekmeye geçip dönünce indirme sürmüş olur.",
-                 color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
-            LinearProgressIndicator(progress, Modifier().fillMaxWidth().padding(0, 12));
-            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                    Button([vm] { vm->start(); }) { Text("İndir"); };
-                    OutlinedButton([vm] { vm->cancel(); }, Modifier()) { Text("İptal"); };
-                    Text(status, Modifier().weight(1), textAlign = TextAlign::End, style = typography().bodyMedium);
-                };
-        });
-    });
+             color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().padding(0.dp, 12.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = { vm.start() }) { Text("İndir") }
+            OutlinedButton(onClick = { vm.cancel() }) { Text("İptal") }
+            Text(status, modifier = Modifier.weight(1f), textAlign = TextAlign.End, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
 }
+
+// What a city search gives: searching, or the cities found.
+data class CityResults(val searching: Boolean, val cities: List<String>)
 
 // A search as Compose apps write it with flows: the query waits until typing stops
 // (debounce), each query is searched (a pretend 600 ms lookup; a newer query cancels it:
-// flatMapLatest), and the results are a StateFlow the screen reads (stateIn).
-class CitySearchViewModel : public ViewModel {
-public:
-    struct Results {
-        bool searching = false;
-        std::vector<std::string> cities;
-        friend bool operator==(const Results&, const Results&) = default;
-    };
-    // The query lives in the SavedStateHandle: Android ending the app in the background and
-    // bringing it back finds it still typed (and searched).
-    explicit CitySearchViewModel(SavedStateHandle state) : state_(state), query(state.getStateFlow<std::string>("query", "")) {}
-    void setQuery(std::string q) { state_.set("query", std::move(q)); }
-
-private:
-    SavedStateHandle state_;
-
-public:
-    StateFlow<std::string> query;
+// flatMapLatest), and the results are a StateFlow the screen reads (stateIn). The query lives in
+// the SavedStateHandle: Android ending the app in the background and bringing it back finds it
+// still typed (and searched).
+class CitySearchViewModel(private val state: SavedStateHandle) : ViewModel() {
+    val query: StateFlow<String> = state.getStateFlow("query", "")
     // One-off events for the screen (a SharedFlow: nothing is kept for when nobody listens).
-    MutableSharedFlow<std::string> events;
+    val events = MutableSharedFlow<String>()
     // Searched only while the screen collects the results, and five seconds after it stopped.
-    StateFlow<Results> results = query.debounce(std::chrono::milliseconds(300))
-                                     .flatMapLatest([this](const std::string& q) { return search(q); })
-                                     .stateIn(viewModelScope(), SharingStarted::WhileSubscribed(std::chrono::milliseconds(5000)), Results{});
+    val results: StateFlow<CityResults> = query.debounce(300).flatMapLatest { search(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CityResults(false, emptyList()))
 
-private:
-    Flow<Results> search(std::string q) {
-        return flow<Results>([q, events = events](FlowCollector<Results> emit) -> Task {
-            static const char* const all[] = {"Adana", "Ankara", "Antalya", "Bursa", "Çanakkale", "Denizli", "Diyarbakır",
-                                              "Edirne", "Erzurum", "Eskişehir", "Gaziantep", "İstanbul", "İzmir", "Kayseri",
-                                              "Konya", "Malatya", "Mardin", "Samsun", "Trabzon", "Van"};
-            if (q.empty()) {
-                co_await emit({});
-                co_return;
-            }
-            co_await emit({.searching = true});
-            co_await delay(std::chrono::milliseconds(600));
-            auto lower = [](std::string s) {  // ASCII letters; enough for a demo
-                for (char& c : s)
-                    if (c >= 'A' && c <= 'Z') c = char(c - 'A' + 'a');
-                return s;
-            };
-            Results found;
-            for (const char* city : all)
-                if (lower(city).find(lower(q)) != std::string::npos) found.cities.push_back(city);
-            events.tryEmit(std::format("\"{}\": {} şehir", q, found.cities.size()));
-            co_await emit(found);
-        });
+    fun setQuery(q: String) {
+        state["query"] = q
     }
-};
 
-void FlowSearchSection(CallSite site) {
-    composable(site, [=] {
-        auto vm = viewModel<CitySearchViewModel>();
-        std::string query = vm->query.collectAsState();
-        // Collected only while the screen is at least started: in the background (or on another
-        // tab) it lets go, and five seconds later stateIn stops searching.
-        CitySearchViewModel::Results results = collectAsStateWithLifecycle(vm->results);
-        auto lastEvent = remember([] { return mutableStateOf(std::string()); });
-        LaunchedEffect(vm, [vm, lastEvent]() -> Task {  // the events, while this is shown
-            co_await vm->events.collect([lastEvent](const std::string& e) { lastEvent.set(e); });
-        });
-        Section("Flow · debounce · flatMapLatest · stateIn · SharedFlow", [=] {
-            Text("Yazmayı bırakınca (300 ms) aranır; yeni bir sorgu süren aramayı iptal eder. Sonuçlar ViewModel'de "
-                 "bir StateFlow (WhileSubscribed: yalnızca ekran dinlerken aranır); biten arama bir SharedFlow olayı yayınlar. "
+    private fun search(q: String): Flow<CityResults> = flow {
+        val all = listOf("Adana", "Ankara", "Antalya", "Bursa", "Çanakkale", "Denizli", "Diyarbakır",
+                         "Edirne", "Erzurum", "Eskişehir", "Gaziantep", "İstanbul", "İzmir", "Kayseri",
+                         "Konya", "Malatya", "Mardin", "Samsun", "Trabzon", "Van")
+        if (q.isEmpty()) {
+            emit(CityResults(false, emptyList()))
+        } else {
+            emit(CityResults(true, emptyList()))
+            delay(600)
+            val found = all.filter { it.lowercase().contains(q.lowercase()) }  // ASCII letters; enough for a demo
+            events.tryEmit("\"$q\": ${found.size} şehir")
+            emit(CityResults(false, found))
+        }
+    }
+}
+
+@Composable
+fun FlowSearchSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val vm = viewModel<CitySearchViewModel>()
+    val query by vm.query.collectAsState()
+    // Collected only while the screen is at least started: in the background (or on another
+    // tab) it lets go, and five seconds later stateIn stops searching.
+    val results by vm.results.collectAsStateWithLifecycle()
+    var lastEvent by remember { mutableStateOf("") }
+    LaunchedEffect(vm) {  // the events, while this is shown
+        vm.events.collect { lastEvent = it }
+    }
+    Section("Flow · debounce · flatMapLatest · stateIn · SharedFlow") {
+        Text("Yazmayı bırakınca (300 ms) aranır; yeni bir sorgu süren aramayı iptal eder. Sonuçlar ViewModel'de " +
+                 "bir StateFlow (WhileSubscribed: yalnızca ekran dinlerken aranır); biten arama bir SharedFlow olayı yayınlar. " +
                  "Sorgu SavedStateHandle'da: uygulama arka planda kapatılıp geri gelince yazılı kalır.",
-                 color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
-            OutlinedTextField(query, [vm](std::string v) { vm->setQuery(std::move(v)); }, Modifier().fillMaxWidth(),
-                              singleLine = true, placeholder = "örn. an", label = "Şehir ara");
-            if (results.searching) Text("aranıyor…", color = colorScheme().primary, style = typography().bodyMedium);
-            else if (!query.empty() && results.cities.empty()) Text("bulunamadı", style = typography().bodyMedium);
-            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8},
-                    [&] {
-                        for (const std::string& city : results.cities) SuggestionChip([] {}, [&] { Text(city); });
-                    });
-            if (!lastEvent.get().empty())
-                Text("Son olay (SharedFlow): " + lastEvent.get(), color = colorScheme().onSurfaceVariant, style = typography().bodySmall);
-        });
-    });
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        OutlinedTextField(value = query, onValueChange = { vm.setQuery(it) }, modifier = Modifier.fillMaxWidth(),
+                          singleLine = true, placeholder = { Text("örn. an") }, label = { Text("Şehir ara") })
+        if (results.searching) Text("aranıyor…", color = cs.primary, style = typography.bodyMedium)
+        else if (query.isNotEmpty() && results.cities.isEmpty()) Text("bulunamadı", style = typography.bodyMedium)
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (city in results.cities) SuggestionChip(onClick = {}, label = { Text(city) })
+        }
+        if (lastEvent.isNotEmpty())
+            Text("Son olay (SharedFlow): $lastEvent", color = cs.onSurfaceVariant, style = typography.bodySmall)
+    }
 }
 
 // movableContentOf: a card with a count and a running timer moves between a Row and a Column
 // without starting over.
-void MovableContentSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        auto sideBySide = remember([] { return mutableStateOf(true); });
-        auto card = remember([] {
-            return movableContentOf([] {
-                const ColorScheme& cs = colorScheme();
-                auto taps = remember([] { return mutableStateOf(0); });
-                auto seconds = remember([] { return mutableStateOf(0); });
-                LaunchedEffect(0, [seconds]() -> Task {  // keeps running wherever the card goes
-                    while (true) {
-                        co_await delay(std::chrono::seconds(1));
-                        seconds.set(seconds.peek() + 1);
-                    }
-                });
-                Column(Modifier().background(cs.primaryContainer, 12).clickable([taps] { taps.set(taps.peek() + 1); }).padding(12)) {
-                    Text(std::format("Dokunuş: {}", taps.get()), color = cs.onPrimaryContainer, style = typography().titleMedium);
-                    Text(std::format("{} sn önce başladı", seconds.get()), color = cs.onPrimaryContainer, style = typography().bodySmall);
-                };
-            });
-        });
-        auto other = [=] {
-            Box(Modifier().background(cs.surfaceContainerHighest, 12).padding(12)) {
-                Text("Öbür içerik", color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            };
-        };
-        Section("movableContentOf", [=] {
-            Text("Kart Row ile Column arasında taşınır: dokunuş sayısı ve çalışan zamanlayıcısı baştan başlamaz.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            FilledTonalButton([sideBySide] { sideBySide.set(!sideBySide.peek()); }) { Text(sideBySide.get() ? "Alt alta diz" : "Yan yana diz"); };
-            if (sideBySide.get())
-                Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(8)) { card(); other(); };
-            else
-                Column(Modifier(), verticalArrangement = Arrangement::spacedBy(8)) { other(); card(); };
-        });
-    });
+@Composable
+fun MovableContentSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    var sideBySide by remember { mutableStateOf(true) }
+    val card = remember {
+        movableContentOf {
+            var taps by remember { mutableStateOf(0) }
+            var seconds by remember { mutableStateOf(0) }
+            LaunchedEffect(Unit) {  // keeps running wherever the card goes
+                while (true) {
+                    delay(1000)
+                    seconds++
+                }
+            }
+            Column(modifier = Modifier.background(cs.primaryContainer, RoundedCornerShape(12.dp)).clickable { taps++ }.padding(12.dp)) {
+                Text("Dokunuş: $taps", color = cs.onPrimaryContainer, style = typography.titleMedium)
+                Text("$seconds sn önce başladı", color = cs.onPrimaryContainer, style = typography.bodySmall)
+            }
+        }
+    }
+    val other: @Composable () -> Unit = {
+        Box(modifier = Modifier.background(cs.surfaceContainerHighest, RoundedCornerShape(12.dp)).padding(12.dp)) {
+            Text("Öbür içerik", color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        }
+    }
+    Section("movableContentOf") {
+        Text("Kart Row ile Column arasında taşınır: dokunuş sayısı ve çalışan zamanlayıcısı baştan başlamaz.",
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        FilledTonalButton(onClick = { sideBySide = !sideBySide }) { Text(if (sideBySide) "Alt alta diz" else "Yan yana diz") }
+        if (sideBySide)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                card()
+                other()
+            }
+        else
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                other()
+                card()
+            }
+    }
 }
 
 // A Channel between a button and a slow kitchen: each order made once, in turn, at most three
 // waiting (trySend says no when it is full); produce counts down from a coroutine.
-void ChannelSection(CallSite site) {
-    composable(site, [=] {
-        using namespace std::chrono_literals;
-        const ColorScheme& cs = colorScheme();
-        auto orders = remember([] { return Channel<int>(3); });
-        auto kitchen = remember([] { return mutableStateOf(std::string("Mutfak boş")); });
-        auto waiting = remember([] { return mutableStateOf(0); });
-        auto next = remember([] { return mutableStateOf(1); });
-        auto refused = remember([] { return mutableStateOf(false); });
-        auto countdown = remember([] { return mutableStateOf(std::string()); });
-        auto scope = rememberCoroutineScope();
-        LaunchedEffect(0, [orders, kitchen, waiting]() -> Task {  // one order at a time
-            while (std::optional<int> order = co_await orders.receive()) {
-                waiting.set(waiting.peek() - 1);
-                kitchen.set(std::format("Sipariş {} hazırlanıyor…", *order));
-                co_await delay(1500ms);
-                kitchen.set(std::format("Sipariş {} hazır", *order));
-            }
-        });
-        Section("Channel · trySend · receive · produce", [=] {
-            Text("Mutfak siparişleri sırayla ve birer kez hazırlar; kanalda en çok 3 sipariş bekler, dolunca trySend reddeder.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
-                Button([orders, next, waiting, refused] {
-                    bool taken = orders.trySend(next.peek());
-                    refused.set(!taken);
-                    if (taken) {
-                        next.set(next.peek() + 1);
-                        waiting.set(waiting.peek() + 1);
+@Composable
+fun ChannelSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val orders = remember { Channel<Int>(3) }
+    var kitchen by remember { mutableStateOf("Mutfak boş") }
+    var waiting by remember { mutableStateOf(0) }
+    var next by remember { mutableStateOf(1) }
+    var refused by remember { mutableStateOf(false) }
+    var countdown by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {  // one order at a time
+        orders.consumeEach { order ->
+            waiting--
+            kitchen = "Sipariş $order hazırlanıyor…"
+            delay(1500)
+            kitchen = "Sipariş $order hazır"
+        }
+    }
+    Section("Channel · trySend · receive · produce") {
+        Text("Mutfak siparişleri sırayla ve birer kez hazırlar; kanalda en çok 3 sipariş bekler, dolunca trySend reddeder.",
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = {
+                val taken = orders.trySend(next).isSuccess
+                refused = !taken
+                if (taken) {
+                    next++
+                    waiting++
+                }
+            }) { Text("Sipariş ver") }
+            Text("Bekleyen: $waiting")
+        }
+        Text(kitchen, style = typography.titleMedium)
+        if (refused) Text("Kanal dolu: sipariş alınmadı", color = cs.error, style = typography.bodySmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = {
+                scope.launch {
+                    val numbers = scope.produce<Int> {
+                        for (i in 5 downTo 1) {
+                            send(i)
+                            delay(600)
+                        }
                     }
-                }) { Text("Sipariş ver"); };
-                Text(std::format("Bekleyen: {}", waiting.get()));
-            };
-            Text(kitchen.get(), style = typography().titleMedium);
-            if (refused.get()) Text("Kanal dolu: sipariş alınmadı", color = cs.error, style = typography().bodySmall);
-            Row(Modifier(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
-                OutlinedButton([scope, countdown] {
-                    scope.launch([scope, countdown]() -> Task {
-                        Channel<int> numbers = produce<int>(scope, [](Channel<int> out) -> Task {
-                            for (int i = 5; i >= 1; --i) {
-                                co_await out.send(i);
-                                co_await delay(600ms);
-                            }
-                        });
-                        co_await numbers.consumeEach([countdown](int i) { countdown.set(std::to_string(i)); });
-                        countdown.set("Başla!");
-                    });
-                }) { Text("Geri say (produce)"); };
-                Text(countdown.get(), color = cs.primary, style = typography().titleLarge);
-            };
-        });
-    });
+                    numbers.consumeEach { countdown = it.toString() }
+                    countdown = "Başla!"
+                }
+            }) { Text("Geri say (produce)") }
+            Text(countdown, color = cs.primary, style = typography.titleLarge)
+        }
+    }
 }
 
 // The screen's lifecycle (its navigation entry's, capped by the app's): an observer that logs
 // the events, a "player" that plays only while it is resumed (LifecycleResumeEffect), and a
-// clock flow collected with collectAsStateWithLifecycle — in the background it stops.
+// clock flow collected with collectAsStateWithLifecycle — in the background it stops. The
+// observer's clock and handle are C++'s: this class stays C++.
 class LifecycleViewModel : public ViewModel {
 public:
     MutableStateFlow<std::vector<std::string>> events{{}};
@@ -350,118 +332,123 @@ private:
     std::shared_ptr<void> watching_;
 };
 
-void LifecycleSection(CallSite site) {
-    composable(site, [=] {
-        auto owner = currentLifecycleOwner();
-        auto vm = viewModel<LifecycleViewModel>();
-        vm->watch(owner->lifecycle());
-        LifecycleState state = owner->lifecycle().currentStateAsState();
-        auto playing = remember([] { return mutableStateOf(false); });
-        auto position = remember([] { return mutableStateOf(0.f); });
-        auto inView = remember([] { return mutableStateOf(false); });  // (and only while it shows, as a player plays)
-        LifecycleResumeEffect(0, [playing]() -> std::function<void()> {
-            playing.set(true);
-            return [playing] { playing.set(false); };  // paused, or left the composition
-        });
-        LaunchedEffect(playing.get() && inView.get(), [playing, inView, position]() -> Task {
-            while (playing.peek() && inView.peek()) {
-                co_await delay(std::chrono::milliseconds(50));
-                position.set(std::fmod(position.peek() + 0.004f, 1.f));
-            }
-        });
-        int seconds = collectAsStateWithLifecycle(vm->seconds);
-        int starts = vm->clockStarts.collectAsState();
-        int resumes = vm->resumes.collectAsState();
-        std::vector<std::string> events = vm->events.collectAsState();
-        Section("Lifecycle · LifecycleResumeEffect · collectAsStateWithLifecycle", [=] {
-            static const char* const names[] = {"DESTROYED", "INITIALIZED", "CREATED", "STARTED", "RESUMED"};
-            Text("Masaüstünde pencere odağı kaybedince STARTED, simge durumuna küçültülünce CREATED olur; Android'de uygulama "
+@Composable
+fun LifecycleSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val owner = LocalLifecycleOwner.current
+    val vm = viewModel<LifecycleViewModel>()
+    vm.watch(owner.lifecycle)
+    val state by owner.lifecycle.currentStateAsState()
+    var playing by remember { mutableStateOf(false) }
+    var position by remember { mutableStateOf(0f) }
+    var inView by remember { mutableStateOf(false) }  // (and only while it shows, as a player plays)
+    LifecycleResumeEffect(Unit) {
+        playing = true
+        onPauseOrDispose { playing = false }  // paused, or left the composition
+    }
+    LaunchedEffect(playing && inView) {
+        while (playing && inView) {
+            delay(50)
+            position = if (position + 0.004f >= 1f) 0f else position + 0.004f
+        }
+    }
+    val seconds by vm.seconds.collectAsStateWithLifecycle()
+    val starts by vm.clockStarts.collectAsState()
+    val resumes by vm.resumes.collectAsState()
+    val events by vm.events.collectAsState()
+    Section("Lifecycle · LifecycleResumeEffect · collectAsStateWithLifecycle") {
+        val name = when (state) {
+            Lifecycle.State.DESTROYED -> "DESTROYED"
+            Lifecycle.State.INITIALIZED -> "INITIALIZED"
+            Lifecycle.State.CREATED -> "CREATED"
+            Lifecycle.State.STARTED -> "STARTED"
+            else -> "RESUMED"
+        }
+        Text("Masaüstünde pencere odağı kaybedince STARTED, simge durumuna küçültülünce CREATED olur; Android'de uygulama " +
                  "arka plana geçince. Başka sekmeye geçince bu ekranın girdisi CREATED'a iner.",
-                 color = colorScheme().onSurfaceVariant, style = typography().bodyMedium);
-            Text(std::format("Bu ekran: {} · öne gelme: {}", names[int(state)], resumes),
-                 Modifier().padding(0, 8, 0, 0), style = typography().titleSmall);
-            Row(Modifier().fillMaxWidth().padding(0, 8).onVisibilityChanged([inView](bool visible) { inView.set(visible); }, {.minFractionVisible = 0}),
-                horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
-                    Icon(playing.get() ? Icons::Filled::PlayArrow : Icons::Filled::Pause, playing.get() ? "Oynatılıyor" : "Duraklatıldı");
-                    LinearProgressIndicator(position.get(), Modifier().weight(1));
-                    Text(playing.get() ? "oynatılıyor" : "duraklatıldı", style = typography().bodyMedium);
-                };
-            Text(std::format("Saat akışı: {} sn (akış {} kez başladı; arka plandayken toplanmaz, dönünce yeniden başlar)", seconds, starts),
-                 style = typography().bodyMedium);
-            Column(Modifier().fillMaxWidth().padding(0, 8, 0, 0).background(colorScheme().surfaceContainerHigh, RoundedCornerShape(12)).padding(12)) {
-                       for (const std::string& e : events) Text(e, fontFamily = FontFamily::Monospace, style = typography().bodySmall);
-                   };
-        });
-    });
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        Text("Bu ekran: $name · öne gelme: $resumes", modifier = Modifier.padding(0.dp, 8.dp, 0.dp, 0.dp), style = typography.titleSmall)
+        Row(modifier = Modifier.fillMaxWidth().padding(0.dp, 8.dp).onVisibilityChanged(minFractionVisible = 0f) { inView = it },
+            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(if (playing) Icons.Filled.PlayArrow else Icons.Filled.Pause, contentDescription = if (playing) "Oynatılıyor" else "Duraklatıldı")
+            LinearProgressIndicator(progress = { position }, modifier = Modifier.weight(1f))
+            Text(if (playing) "oynatılıyor" else "duraklatıldı", style = typography.bodyMedium)
+        }
+        Text("Saat akışı: $seconds sn (akış $starts kez başladı; arka plandayken toplanmaz, dönünce yeniden başlar)", style = typography.bodyMedium)
+        Column(modifier = Modifier.fillMaxWidth().padding(0.dp, 8.dp, 0.dp, 0.dp).background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp)).padding(12.dp)) {
+            for (e in events) Text(e, fontFamily = FontFamily.Monospace, style = typography.bodySmall)
+        }
+    }
+}
+
+// A chat message; `mine`: sent from this side.
+data class ChatMessage(val id: Int, val text: String, val mine: Boolean)
+
+// The opening conversation, newest first.
+fun openingMessages(): List<ChatMessage> {
+    val lines = listOf("Selam!", "Merhaba, nasılsın?", "İyiyim, Kompoz'u deniyorum.", "Nasıl gidiyor?",
+                       "Liste ters: en yenisi altta.", "reverseLayout = true ile mi?", "Evet, sohbetler gibi.")
+    return lines.mapIndexed { i, line -> ChatMessage(i, line, i % 2 == 0) }.reversed()
 }
 
 // A chat: LazyColumn(reverseLayout) keeps the newest message (item 0) at the bottom; a new one
 // comes in there, and the list glides back down to it if it was scrolled up.
-void ChatSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        struct Message {
-            int id;
-            std::string text;
-            bool mine;
-            bool operator==(const Message&) const = default;
-        };
-        auto messages = remember([] {
-            std::vector<Message> v;  // newest first
-            const char* lines[] = {"Selam!", "Merhaba, nasılsın?", "İyiyim, Kompoz'u deniyorum.", "Nasıl gidiyor?",
-                                   "Liste ters: en yenisi altta.", "reverseLayout = true ile mi?", "Evet, sohbetler gibi."};
-            for (int i = 0; i < 7; ++i) v.insert(v.begin(), Message{i, lines[i], i % 2 == 0});
-            return std::make_shared<MutableState<std::vector<Message>>>(mutableStateOf(std::move(v)));
-        });
-        auto draft = remember([] { return mutableStateOf(std::string()); });
-        auto list = rememberLazyListState();
-        auto scope = rememberCoroutineScope();
-        auto send = [messages, draft, list, scope] {
-            if (draft.peek().empty()) return;
-            auto add = [messages](std::string text, bool mine) {
-                std::vector<Message> v = messages->peek();
-                int id = v.empty() ? 0 : v.front().id + 1;
-                v.insert(v.begin(), Message{id, std::move(text), mine});
-                messages->set(std::move(v));
-            };
-            add(draft.peek(), true);
-            draft.set("");
-            scope.launch([list, add]() -> Task {
-                co_await list.animateScrollToItem(0);
-                co_await delay(std::chrono::milliseconds(700));
-                add("👍", false);  // an answer
-                co_await list.animateScrollToItem(0);
-            });
-        };
-        Section("Sohbet · reverseLayout · animateScrollToItem", [=] {
-            Text("İlk öğe altta durur, yenisi oraya gelir; yukarı kaydırılmışsa liste kayarak en yeniye döner.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            std::vector<Message> shown = messages->get();
-            LazyColumn(Modifier().fillMaxWidth().height(240).background(cs.surfaceContainerLow, 12),
-                       state = list, contentPadding = PaddingValues{12, 8, 12, 8}, verticalArrangement = Arrangement::spacedBy(6), reverseLayout = true) {
-                           items(shown, [](const Message& m) { return m.id; }, [cs](const Message& m) {
-                               Box(Modifier().fillMaxWidth().animateItem(), m.mine ? Alignment::CenterEnd : Alignment::CenterStart) {
-                                   Box(Modifier()
-                                           .widthIn(0, 260)
-                                           .background(m.mine ? cs.primary : cs.surfaceContainerHighest, 16)
-                                           .padding(12, 8)) { Text(m.text, color = m.mine ? cs.onPrimary : cs.onSurface); };
-                               };
-                           });
-                       };
-            Row(Modifier().fillMaxWidth(), verticalAlignment = Alignment::CenterVertically) {
-                OutlinedTextField(draft.get(), [draft](std::string v) { draft.set(std::move(v)); }, Modifier().weight(1),
-                                  singleLine = true, placeholder = "Mesaj", keyboardOptions = KeyboardOptions{.imeAction = ImeAction::Send},
-                                  keyboardActions = KeyboardActions{.onSend = send});
-                IconButton(send) { Icon(Icons::AutoMirrored::Filled::Send, "Gönder"); };
-            };
-        });
-    });
+@Composable
+fun ChatSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    var messages by remember { mutableStateOf(openingMessages()) }
+    var draft by remember { mutableStateOf("") }
+    val list = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val add: (String, Boolean) -> Unit = { text, mine ->
+        val id = if (messages.isEmpty()) 0 else messages.first().id + 1
+        messages = listOf(ChatMessage(id, text, mine)) + messages
+    }
+    val send: () -> Unit = {
+        if (draft.isNotEmpty()) {
+            add(draft, true)
+            draft = ""
+            scope.launch {
+                list.animateScrollToItem(0)
+                delay(700)
+                add("👍", false)  // an answer
+                list.animateScrollToItem(0)
+            }
+        }
+    }
+    Section("Sohbet · reverseLayout · animateScrollToItem") {
+        Text("İlk öğe altta durur, yenisi oraya gelir; yukarı kaydırılmışsa liste kayarak en yeniye döner.",
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        LazyColumn(modifier = Modifier.fillMaxWidth().height(240.dp).background(cs.surfaceContainerLow, RoundedCornerShape(12.dp)),
+                   state = list, contentPadding = PaddingValues(12.dp, 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp), reverseLayout = true) {
+            items(messages, key = { it.id }) { m ->
+                Box(modifier = Modifier.fillMaxWidth().animateItem(), contentAlignment = if (m.mine) Alignment.CenterEnd else Alignment.CenterStart) {
+                    Box(modifier = Modifier
+                            .widthIn(0.dp, 260.dp)
+                            .background(if (m.mine) cs.primary else cs.surfaceContainerHighest, RoundedCornerShape(16.dp))
+                            .padding(12.dp, 8.dp)) { Text(m.text, color = if (m.mine) cs.onPrimary else cs.onSurface) }
+                }
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(value = draft, onValueChange = { draft = it }, modifier = Modifier.weight(1f),
+                              singleLine = true, placeholder = { Text("Mesaj") }, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                              keyboardActions = KeyboardActions(onSend = { send() }))
+            IconButton(onClick = send) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Gönder") }
+        }
+    }
 }
 
 // Platform services: links (the browser, or this app's own kompoz:// address through the
 // system), the software keyboard, haptic feedback and the clipboard.
-// The primes below `limit` (a sieve), counted on a worker thread; `millis`: how long it took.
-TaskOf<int> countPrimesInBackground(int limit, int64_t* millis) {
+// The primes below `limit` (a sieve), counted on a worker thread, and how long it took.
+struct PrimeCount {
+    int count = 0;
+    int64_t millis = 0;
+};
+TaskOf<PrimeCount> countPrimesInBackground(int limit) {
     auto start = std::chrono::steady_clock::now();
     int count = co_await withBackground([limit] {
         std::vector<bool> composite(size_t(limit) + 1);
@@ -473,124 +460,119 @@ TaskOf<int> countPrimesInBackground(int limit, int64_t* millis) {
         }
         return n;
     });
-    *millis = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
-    co_return count;
+    co_return PrimeCount{count, std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count()};
 }
 
-void PlatformServicesSection(CallSite site) {
-    composable(site, [=] {
-        const ColorScheme& cs = colorScheme();
-        UriHandler links = uriHandler();
-        SoftwareKeyboardController keyboard = softwareKeyboardController();
-        HapticFeedback haptics = hapticFeedback();
-        ClipboardManager clipboard = clipboardManager();
-        Clipboard board = kompoz::clipboard();  // Compose 1.8's LocalClipboard
-        auto scope = rememberCoroutineScope();
-        auto screenOn = remember([] { return mutableStateOf(false); });
-        auto sensitive = remember([] { return mutableStateOf(false); });
-        auto card = remember([] { return mutableStateOf(std::string("4111 1111 1111 1111")); });
-        auto email = remember([] { return mutableStateOf(std::string()); });
-        auto password = rememberTextFieldState();
-        auto signedIn = remember([] { return mutableStateOf(std::string()); });
-        AutofillManager autofill = autofillManager();
-        auto note = remember([] { return mutableStateOf(std::string("Kompoz")); });
-        auto pasted = remember([] { return mutableStateOf(std::string()); });
-        Section("Platform · bağlantı · klavye · titreşim · pano", [=] {
-            Text("uriHandler(), softwareKeyboardController(), hapticFeedback(), clipboardManager(): Compose'daki "
-                 "LocalUriHandler & co. kompoz:// adresini uygulamanın kendi NavHost'u tanıdığı için doğrudan içeride açar. "
-                 "Titreşim Android'de sistemin dokunma geri bildirimi ayarına uyar; uzun basışlar ve seçim tutamaçları "
+@Composable
+fun PlatformServicesSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val links = LocalUriHandler.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val haptics = LocalHapticFeedback.current
+    val clipboard = LocalClipboardManager.current
+    val board = LocalClipboard.current  // Compose 1.8's
+    val scope = rememberCoroutineScope()
+    var screenOn by remember { mutableStateOf(false) }
+    var sensitive by remember { mutableStateOf(false) }
+    var card by remember { mutableStateOf("4111 1111 1111 1111") }
+    var email by remember { mutableStateOf("") }
+    val password = rememberTextFieldState()
+    var signedIn by remember { mutableStateOf("") }
+    val autofill = LocalAutofillManager.current
+    var note by remember { mutableStateOf("Kompoz") }
+    var pasted by remember { mutableStateOf("") }
+    Section("Platform · bağlantı · klavye · titreşim · pano") {
+        Text("LocalUriHandler, LocalSoftwareKeyboardController, LocalHapticFeedback, LocalClipboardManager: Compose'daki " +
+                 "gibi. kompoz:// adresini uygulamanın kendi NavHost'u tanıdığı için doğrudan içeride açar. " +
+                 "Titreşim Android'de sistemin dokunma geri bildirimi ayarına uyar; uzun basışlar ve seçim tutamaçları " +
                  "kendileri titreşir.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
-                OutlinedButton([links] { links.openUri("https://developer.android.com/compose"); }) { Text("Compose belgeleri"); };
-                OutlinedButton([links] { links.openUri("kompoz://item/7"); }) { Text("kompoz://item/7"); };
-            });
-            OutlinedTextField(note.get(), [note](std::string v) { note.set(std::move(v)); }, Modifier().fillMaxWidth(),
-                              singleLine = true,
-                              label = "Not (Bitti klavyeyi gizler)",
-                              keyboardActions = KeyboardActions{.onDone = [keyboard] { keyboard.hide(); }});
-            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
-                TextButton([keyboard] { keyboard.hide(); }) { Text("Klavyeyi gizle"); };
-                TextButton([keyboard] { keyboard.show(); }) { Text("Klavyeyi göster"); };
-            });
-            // keepScreenOn: the screen stays on while the switch is on (a Box with it is laid out).
-            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
-                Switch(screenOn.get(), [screenOn](bool on) { screenOn.set(on); });
-                Text("Ekranı açık tut (keepScreenOn)", Modifier().weight(1));
-                if (screenOn.get()) Box(Modifier().size(1).keepScreenOn()) {};
-            };
-            // sensitiveContent: while the switch is on, the card field hides the window from screen
-            // shares and recordings (Android 15+: they show it blank).
-            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
-                Switch(sensitive.get(), [sensitive](bool on) { sensitive.set(on); });
-                Text("Hassas içerik (sensitiveContent)", Modifier().weight(1));
-            };
-            OutlinedTextField(card.get(), [card](std::string v) { card.set(std::move(v)); },
-                              Modifier().fillMaxWidth().sensitiveContent(sensitive.get()),
-                              singleLine = true, label = sensitive.get() ? "Kart numarası (paylaşımda gizli)" : "Kart numarası");
-            // Autofill: a password manager fills the fields marked with a contentType, and offers to
-            // keep them when the form is sent (commit).
-            Text("Giriş formu (autofill): parola yöneticisi doldurur, Giriş'te kaydetmeyi önerir.",
-                 color = cs.onSurfaceVariant, style = typography().bodyMedium);
-            OutlinedTextField(email.get(), [email](std::string v) { email.set(std::move(v)); },
-                              Modifier().fillMaxWidth().semantics({.contentType = ContentType::Username + ContentType::EmailAddress}),
-                              singleLine = true, label = "E-posta", keyboardOptions = KeyboardOptions{.keyboardType = KeyboardType::Email});
-            OutlinedSecureTextField(password, Modifier().fillMaxWidth().semantics({.contentType = ContentType::Password}), label = "Parola");
-            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(8), verticalAlignment = Alignment::CenterVertically) {
-                Button([autofill, email, password, signedIn] {
-                    autofill.commit();
-                    signedIn.set(email.peek().empty() ? "" : "Giriş: " + email.peek());
-                }) { Text("Giriş yap"); };
-                TextButton([autofill, email, password, signedIn] {
-                    autofill.cancel();
-                    email.set("");
-                    password.setTextAndPlaceCursorAtEnd("");
-                    signedIn.set("");
-                }) { Text("Temizle"); };
-                Text(signedIn.get(), Modifier().weight(1), style = typography().bodyMedium);
-            };
-            // LocalViewConfiguration: the platform's gesture thresholds (Android's own there).
-            const ViewConfiguration& gestures = LocalViewConfiguration.current();
-            Text(std::format("ViewConfiguration: uzun basma {} ms · çift dokunma {} ms · eşik {:.1f} dp · en hızlı fırlatma {:.0f} dp/s",
-                             gestures.longPressTimeout.count(), gestures.doubleTapTimeout.count(), gestures.touchSlop, gestures.maximumFlingVelocity),
-                 color = cs.onSurfaceVariant, style = typography().bodySmall);
-            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
-                using H = HapticFeedbackType;
-                for (auto [type, label] : {std::pair{H::LongPress, "Uzun basma"}, std::pair{H::Confirm, "Onay"},
-                                           std::pair{H::Reject, "Ret"}, std::pair{H::SegmentTick, "Tık"}, std::pair{H::ToggleOn, "Açma"}})
-                    FilledTonalButton([haptics, type] { haptics.performHapticFeedback(type); }) { Text(label); };
-            });
-            FlowRow(Modifier().fillMaxWidth(), FlowStyle{.horizontalSpacing = 8, .verticalSpacing = 8}, [&] {
-                Button([clipboard, note] { clipboard.setText(note.peek()); }) { Text("Notu kopyala"); };
-                OutlinedButton([clipboard, pasted] { pasted.set(clipboard.hasText() ? clipboard.getText() : "(boş)"); }) { Text("Panoda ne var?"); };
-                // Clipboard / ClipEntry, in a coroutine: the entry into the note.
-                OutlinedButton([board, scope, note, pasted] {
-                    scope.launch([board, note, pasted]() -> Task {
-                        std::optional<ClipEntry> entry = co_await board.getClipEntry();
-                        if (entry) note.set(entry->getPlainText());
-                        pasted.set(entry ? "getClipEntry: " + entry->getPlainText() : "getClipEntry: boş");
-                    });
-                }) { Text("Notun yerine yapıştır"); };
-            });
-            if (!pasted.get().empty()) Text("Panoda: " + pasted.get(), color = cs.onSurfaceVariant, style = typography().bodySmall);
-            // withBackground (Compose's withContext(Dispatchers.Default)) in a TaskOf: the primes
-            // below thirty million counted on a worker thread; the spinner keeps turning meanwhile.
-            auto primes = remember([] { return mutableStateOf(std::string("—")); });
-            auto counting = remember([] { return mutableStateOf(false); });
-            Row(Modifier().fillMaxWidth(), horizontalArrangement = Arrangement::spacedBy(12), verticalAlignment = Alignment::CenterVertically) {
-                FilledTonalButton([scope, primes, counting] {
-                    if (counting.peek()) return;
-                    counting.set(true);
-                    scope.launch([primes, counting]() -> Task {
-                        int64_t started = 0;
-                        int n = co_await countPrimesInBackground(30'000'000, &started);
-                        primes.set(std::format("{} asal ({} ms)", n, started));
-                        counting.set(false);
-                    });
-                }) { Text("Arkada hesapla"); };
-                if (counting.get()) CircularProgressIndicator(Modifier().size(24));
-                Text(primes.get(), style = typography().bodyMedium);
-            };
-        });
-    });
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { links.openUri("https://developer.android.com/compose") }) { Text("Compose belgeleri") }
+            OutlinedButton(onClick = { links.openUri("kompoz://item/7") }) { Text("kompoz://item/7") }
+        }
+        OutlinedTextField(value = note, onValueChange = { note = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+                          label = { Text("Not (Bitti klavyeyi gizler)") },
+                          keyboardActions = KeyboardActions(onDone = { keyboard?.hide() }))
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = { keyboard?.hide() }) { Text("Klavyeyi gizle") }
+            TextButton(onClick = { keyboard?.show() }) { Text("Klavyeyi göster") }
+        }
+        // keepScreenOn: the screen stays on while the switch is on (a Box with it is laid out).
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = screenOn, onCheckedChange = { screenOn = it })
+            Text("Ekranı açık tut (keepScreenOn)", modifier = Modifier.weight(1f))
+            if (screenOn) Box(modifier = Modifier.size(1.dp).keepScreenOn())
+        }
+        // sensitiveContent: while the switch is on, the card field hides the window from screen
+        // shares and recordings (Android 15+: they show it blank).
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = sensitive, onCheckedChange = { sensitive = it })
+            Text("Hassas içerik (sensitiveContent)", modifier = Modifier.weight(1f))
+        }
+        OutlinedTextField(value = card, onValueChange = { card = it }, modifier = Modifier.fillMaxWidth().sensitiveContent(sensitive),
+                          singleLine = true, label = { Text(if (sensitive) "Kart numarası (paylaşımda gizli)" else "Kart numarası") })
+        // Autofill: a password manager fills the fields marked with a contentType, and offers to
+        // keep them when the form is sent (commit).
+        Text("Giriş formu (autofill): parola yöneticisi doldurur, Giriş'te kaydetmeyi önerir.", color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        OutlinedTextField(value = email, onValueChange = { email = it },
+                          modifier = Modifier.fillMaxWidth().semantics { contentType = ContentType.Username + ContentType.EmailAddress },
+                          singleLine = true, label = { Text("E-posta") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+        OutlinedSecureTextField(state = password, modifier = Modifier.fillMaxWidth().semantics { contentType = ContentType.Password }, label = { Text("Parola") })
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = {
+                autofill?.commit()
+                signedIn = if (email.isEmpty()) "" else "Giriş: $email"
+            }) { Text("Giriş yap") }
+            TextButton(onClick = {
+                autofill?.cancel()
+                email = ""
+                password.setTextAndPlaceCursorAtEnd("")
+                signedIn = ""
+            }) { Text("Temizle") }
+            Text(signedIn, modifier = Modifier.weight(1f), style = typography.bodyMedium)
+        }
+        // LocalViewConfiguration: the platform's gesture thresholds (Android's own there).
+        val gestures = LocalViewConfiguration.current
+        Text("ViewConfiguration: uzun basma ${gestures.longPressTimeoutMillis} ms · çift dokunma ${gestures.doubleTapTimeoutMillis} ms · " +
+                 "eşik ${"%.1f".format(gestures.touchSlop)} dp · en hızlı fırlatma ${gestures.maximumFlingVelocity.roundToInt()} dp/s",
+             color = cs.onSurfaceVariant, style = typography.bodySmall)
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((type, label) in listOf(HapticFeedbackType.LongPress to "Uzun basma", HapticFeedbackType.Confirm to "Onay",
+                                         HapticFeedbackType.Reject to "Ret", HapticFeedbackType.SegmentTick to "Tık", HapticFeedbackType.ToggleOn to "Açma"))
+                FilledTonalButton(onClick = { haptics.performHapticFeedback(type) }) { Text(label) }
+        }
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { clipboard.setText(note) }) { Text("Notu kopyala") }
+            OutlinedButton(onClick = { pasted = if (clipboard.hasText()) clipboard.getText() else "(boş)" }) { Text("Panoda ne var?") }
+            // Clipboard / ClipEntry, in a coroutine: the entry into the note.
+            OutlinedButton(onClick = {
+                scope.launch {
+                    val entry = board.getClipEntry()
+                    if (entry != null) note = entry.getPlainText()
+                    pasted = if (entry != null) "getClipEntry: " + entry.getPlainText() else "getClipEntry: boş"
+                }
+            }) { Text("Notun yerine yapıştır") }
+        }
+        if (pasted.isNotEmpty()) Text("Panoda: $pasted", color = cs.onSurfaceVariant, style = typography.bodySmall)
+        // withBackground (Compose's withContext(Dispatchers.Default)) in a TaskOf: the primes
+        // below thirty million counted on a worker thread; the spinner keeps turning meanwhile.
+        var primes by remember { mutableStateOf("—") }
+        var counting by remember { mutableStateOf(false) }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            FilledTonalButton(onClick = {
+                if (!counting) {
+                    counting = true
+                    scope.launch {
+                        val result = countPrimesInBackground(30000000)
+                        primes = "${result.count} asal (${result.millis} ms)"
+                        counting = false
+                    }
+                }
+            }) { Text("Arkada hesapla") }
+            if (counting) CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            Text(primes, style = typography.bodyMedium)
+        }
+    }
 }

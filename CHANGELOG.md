@@ -1066,6 +1066,11 @@
   kotlin.hpp makes. kompozc: a suspending lambda's parameters (`consumeEach { order -> }`, `it`); `scope.produce<Int> { }`'s
   block sends to its channel; `flow.collectAsStateWithLifecycle()` as a member; `LocalLifecycleOwner.current`,
   `LocalClipboard.current`, `LocalAutofillManager.current`.
+- **The showcase's state screen in Compose's syntax**: the icon gallery and icon buttons, the StateFlow download, the flow
+  search (its ViewModel a Kotlin class with a SavedStateHandle, debounce, flatMapLatest, stateIn and a SharedFlow), movable
+  content, the channel kitchen and produce countdown, the lifecycle section, the chat and the platform services are
+  `@Composable fun`s in Kotlin (the thread-based download ViewModel, the lifecycle observer ViewModel and the prime count stay
+  C++ in the same file).
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and
