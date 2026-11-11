@@ -1594,6 +1594,15 @@ std::vector<T> operator+(const std::vector<T>& a, const std::type_identity_t<T>&
     out.push_back(b);
     return out;
 }
+// Kotlin's String + anything: "Tıklama: " + count, "x" + 1.5f, the value written as a string template
+// writes it (Int.plus(String) has no such form in Kotlin either: only the string on the left).
+template <class T>
+    requires(!std::is_convertible_v<const T&, std::string_view> && !std::is_same_v<std::remove_cvref_t<T>, char> &&
+             requires(const T& v) { ::kompoz::kt::str(v); })
+std::string operator+(const std::string& s, const T& value) {
+    return s + ::kompoz::kt::str(value);
+}
+
 // Kotlin's list - element (the first equal one left out) and list - list (every element of the second).
 template <class T>
 std::vector<T> operator-(const std::vector<T>& a, const std::type_identity_t<T>& b) {

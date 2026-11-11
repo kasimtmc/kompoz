@@ -1138,6 +1138,11 @@
   a file up it puts its own level back, and the plugin turns it off again); the server's diagnostics take its place. kompozc is found in Settings, Tools, Kompoz, or in `KOMPOZC`, or built in the project, or on
   `PATH`. Built against a CLion of yours (`./gradlew buildPlugin -PclionPath=…`) and installed from disk; CI builds it and
   checks it with JetBrains' Plugin Verifier against CLion 2026.3.
+- **Kotlin objects with members, imported colors objects, String + any value**: kompozc reads `object AppIcons { val Add =
+  Icons.Default.Add }` and objects with `const val`s, `var`s, private members, functions and `init` blocks (a struct of static
+  members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
+  Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
+  as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

@@ -242,49 +242,55 @@ ClassDecl Parser::classDecl() {
     if (opAfterNewlines("{")) {
         skipNewlines();
         take();
-        for (skipNewlines(); !isOp("}"); skipNewlines()) {
-            if (acceptOp(";")) continue;  // (members on one line: var x = 0; fun f() { })
-            if (isIdent("init")) {
-                take();
-                skipNewlines();
-                c.initBlocks.push_back(block());
-                continue;
-            }
-            // A property, or a function (its modifiers read by function()).
-            size_t save = index_;
-            bool isPrivate = false;
-            annotations(nullptr);
-            while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("protected") || isIdent("open") ||
-                   isIdent("override"))
-                isPrivate = take().text == "private" || isPrivate;
-            if (isIdent("val") || isIdent("var")) {
-                ClassProperty p;
-                p.pos = cur().pos;
-                p.isVar = take().text == "var";
-                p.isPrivate = isPrivate;
-                p.name = expectIdent();
-                if (acceptOp(":")) p.type = type();
-                if (isIdent("by")) fail("a class's property by … isn't supported");
-                if (acceptOp("=")) {
-                    skipNewlines();
-                    p.init = expression();
-                } else if (!p.type) {
-                    fail("a class's property needs a value or a type");
-                }
-                c.order.push_back(c.properties.size() * 2);
-                c.properties.push_back(std::move(p));
-            } else {
-                index_ = save;  // (function() reads the modifiers itself)
-                Function f = function();
-                if (f.composable) fail(f.pos, "a class's function can't be @Composable here: write it at the top level");
-                c.order.push_back(c.methods.size() * 2 + 1);
-                c.methods.push_back(std::move(f));
-            }
-        }
-        expectOp("}");
+        members(c.properties, c.methods, c.order, c.initBlocks, "class");
     }
     c.end = tokens_[index_ - 1].end;
     return c;
+}
+
+void Parser::members(std::vector<ClassProperty>& properties, std::vector<Function>& methods, std::vector<size_t>& order,
+                     std::vector<NodeP>& initBlocks, const char* what) {
+    std::string kind = what;
+    for (skipNewlines(); !isOp("}"); skipNewlines()) {
+        if (acceptOp(";")) continue;  // (members on one line: var x = 0; fun f() { })
+        if (isIdent("init")) {
+            take();
+            skipNewlines();
+            initBlocks.push_back(block());
+            continue;
+        }
+        // A property, or a function (its modifiers read by function()).
+        size_t save = index_;
+        bool isPrivate = false;
+        annotations(nullptr);
+        while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("protected") || isIdent("open") ||
+               isIdent("override") || isIdent("const"))
+            isPrivate = take().text == "private" || isPrivate;
+        if (isIdent("val") || isIdent("var")) {
+            ClassProperty p;
+            p.pos = cur().pos;
+            p.isVar = take().text == "var";
+            p.isPrivate = isPrivate;
+            p.name = expectIdent();
+            if (acceptOp(":")) p.type = type();
+            if (isIdent("by")) fail("a" + std::string(kind == "object" ? "n " : " ") + kind + "'s property by … isn't supported");
+            if (acceptOp("=")) {
+                skipNewlines();
+                p.init = expression();
+            } else if (!p.type || kind == "object") {
+                fail("a" + std::string(kind == "object" ? "n " : " ") + kind + "'s property needs a value" + (kind == "object" ? "" : " or a type"));
+            }
+            order.push_back(properties.size() * 2);
+            properties.push_back(std::move(p));
+        } else {
+            index_ = save;  // (function() reads the modifiers itself)
+            Function f = function();
+            if (f.composable) fail(f.pos, "a" + std::string(kind == "object" ? "n " : " ") + kind + "'s function can't be @Composable here: write it at the top level");
+            order.push_back(methods.size() * 2 + 1);
+            methods.push_back(std::move(f));
+        }
+    }
+    expectOp("}");
 }
 
 ObjectDecl Parser::objectDecl() {
@@ -294,12 +300,10 @@ ObjectDecl Parser::objectDecl() {
     if (!isIdent("object")) fail("expected 'object'");
     take();
     o.name = expectIdent();
-    if (opAfterNewlines("{")) {  // an empty body
+    if (opAfterNewlines("{")) {
         skipNewlines();
         take();
-        skipNewlines();
-        if (!isOp("}")) fail("an object with members isn't supported: a @Serializable object is a route");
-        take();
+        members(o.properties, o.methods, o.order, o.initBlocks, "object");
     }
     o.end = tokens_[index_ - 1].end;
     return o;

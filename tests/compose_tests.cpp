@@ -379,7 +379,12 @@ TEST(the_users_add_text_dialog) {
     CHECK(*saved == "-" && !cancel.onNodeWithText("Vazgeç").exists());
 }
 
-// Compose's Scaffold sample, as its documentation writes it (an icon of Kompoz's for its own).
+// Compose's Scaffold sample, as the user wrote it: topAppBarColors imported (called without TopAppBarDefaults),
+// the icon from an object of the app's own.
+object AppIcons {
+    val Add = Icons.Default.Add
+}
+
 @Composable
 fun ScaffoldExample() {
     var presses by remember { mutableIntStateOf(0) }
@@ -387,7 +392,7 @@ fun ScaffoldExample() {
     Scaffold(
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
+                colors = topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
@@ -411,7 +416,7 @@ fun ScaffoldExample() {
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { presses++ }) {
-                Icon(Icons.Default.Add, contentDescription = "Add")
+                Icon(painter = rememberVectorPainter(AppIcons.Add), contentDescription = "Add")
             }
         }
     ) { innerPadding ->
@@ -433,6 +438,43 @@ fun ScaffoldExample() {
             )
         }
     }
+}
+
+// Kotlin's objects with members (an app's singletons): vals (const too), a var, a private one, functions with a
+// default, an init block that runs first; Kotlin's String + any value.
+object Tally {
+    const val Step = 2
+    var total = 0
+    private val label = "toplam"
+    fun add(n: Int = Step): Int {
+        total += n
+        return total
+    }
+    fun describe() = label + " " + total
+    init {
+        total = 10
+    }
+}
+
+@Composable
+fun ObjectForms() {
+    var shown by remember { mutableStateOf(Tally.describe()) }
+    Column {
+        Text(shown)
+        Button(onClick = {
+            Tally.add()
+            shown = Tally.describe() + " / adım " + Tally.Step + " / " + 1.5f
+        }) { Text("Ekle") }
+    }
+}
+
+TEST(objects_with_members) {
+    ComposeTestRule rule([] { ObjectForms(); });
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("toplam 10").exists());
+    rule.onNodeWithText("Ekle").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("toplam 12 / adım 2 / 1.5").exists());
 }
 
 TEST(composes_scaffold_sample) {

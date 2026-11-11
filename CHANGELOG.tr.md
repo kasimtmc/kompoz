@@ -1175,6 +1175,11 @@
   motor bir dosyayı ele alınca kendi düzeyini geri koyar, eklenti onu yeniden kapatır); yerini sunucunun tanıları alır. kompozc Ayarlar, Araçlar, Kompoz'da, ya da `KOMPOZC`'de, ya da projede derlenmiş, ya da
   `PATH`'te bulunur. Kendi CLion'unuza karşı derlenir (`./gradlew buildPlugin -PclionPath=…`) ve diskten kurulur; CI onu
   derler ve JetBrains'in Plugin Verifier'ıyla CLion 2026.3'e karşı denetler.
+- **Üyeli Kotlin object'leri, içe aktarılmış renk nesneleri, String + her değer**: kompozc `object AppIcons { val Add =
+  Icons.Default.Add }`'ı ve `const val`'li, `var`'lı, özel üyeli, işlevli ve `init` bloklu object'leri okur (statik üyeli bir
+  yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
+  import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
+  değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

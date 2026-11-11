@@ -523,8 +523,22 @@ void names(const Found& f, std::set<std::string, std::less<>>& out) {
     } else if (f.property) {
         if (f.property->decl->type) typeNames(*f.property->decl->type, out);
         names(f.property->decl.get(), out);
-    } else if (f.enumClass || f.object) {
-        // (nothing: its entries are its own; an object is its name)
+    } else if (f.object) {  // (an object without members is its name alone)
+        for (const ClassProperty& p : f.object->properties) {
+            if (p.type) typeNames(*p.type, out);
+            names(p.init.get(), out);
+        }
+        for (const Function& m : f.object->methods) {
+            for (const Param& p : m.params) {
+                typeNames(p.type, out);
+                names(p.defaultValue.get(), out);
+            }
+            if (m.result) typeNames(*m.result, out);
+            names(m.body.get(), out);
+        }
+        for (const NodeP& b : f.object->initBlocks) names(b.get(), out);
+    } else if (f.enumClass) {
+        // (nothing: its entries are its own)
     } else if (f.classDecl) {
         const ClassDecl& c = *f.classDecl;
         for (const Param& p : c.ctorParams) {
@@ -692,9 +706,10 @@ std::string translate(const std::string& src, const fs::path& source, const std:
     // uses; one of another file, from its file.
     std::map<std::string, std::pair<std::string, const Found*>, std::less<>> early;
     for (const Found& g : found)
-        if (g.property || g.classDecl || (g.function && !g.function->composable)) early[g.name()] = {lineFile, &g};
+        if (g.property || g.classDecl || (g.function && !g.function->composable) || (g.object && g.object->hasMembers())) early[g.name()] = {lineFile, &g};
     for (auto [o, g] : imported)
-        if (g->property || g->classDecl || (g->function && !g->function->composable)) early[g->name()] = {o->lineFile, g};
+        if (g->property || g->classDecl || (g->function && !g->function->composable) || (g->object && g->object->hasMembers()))
+            early[g->name()] = {o->lineFile, g};
     std::set<std::string, std::less<>> defined;
     // (`where`: the qualifier of where it is defined, the namespace its calls name)
     auto define = [&](auto&& self, const std::string& name, const std::string& where) -> void {
@@ -709,11 +724,13 @@ std::string translate(const std::string& src, const fs::path& source, const std:
         out.setFile(v->second.first);
         if (g.property) generateProperty(out, *g.property, module);
         else if (g.classDecl) generateClassDecl(out, *g.classDecl, module);
+        else if (g.object) generateObject(out, *g.object, module);
         else generateDefinition(out, *g.function, module);
         out.setFile(lineFile);
     };
     // Before the first declaration: the helpers the translations use, and the data classes, enums
-    // and objects, so that every function may use them (as Kotlin's do, in any order).
+    // and objects without members, so that every function may use them (as Kotlin's do, in any
+    // order). (An object with members is defined as a val is: before what uses it, after what it uses.)
     bool preludeDone = false;
     auto prelude = [&] {
         if (std::exchange(preludeDone, true)) return;
@@ -722,13 +739,13 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             out.setFile(o->lineFile);
             if (g->enumClass) generateEnum(out, *g->enumClass);
             if (g->dataClass) generateClass(out, *g->dataClass, module);
-            if (g->object) generateObject(out, *g->object);
+            if (g->object && !g->object->hasMembers()) generateObject(out, *g->object, module);
         }
         out.setFile(lineFile);
         for (const Found& g : found) {
             if (g.enumClass) generateEnum(out, *g.enumClass);
             if (g.dataClass) generateClass(out, *g.dataClass, module);
-            if (g.object) generateObject(out, *g.object);
+            if (g.object && !g.object->hasMembers()) generateObject(out, *g.object, module);
         }
     };
     // The module's functions, classes and vals that this file's C++ (not its Kotlin) names before
@@ -786,7 +803,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
         const Found& f = found[k];
         passUntil(f.begin);
         if (k == 0) prelude();
-        if (f.property || f.classDecl || (f.function && !f.function->composable)) {
+        if (f.property || f.classDecl || (f.function && !f.function->composable) || (f.object && f.object->hasMembers())) {
             define(define, f.name(), f.qualifier);
         } else if (f.function) {
             // The function itself declared, and what it uses declared or defined, before it.
@@ -868,7 +885,7 @@ std::string maskedView(std::string_view src, const std::vector<Found>& found, co
             else if (f.dataClass) generateClass(o, *f.dataClass, module);
             else if (f.property) generateProperty(o, *f.property, module);
             else if (f.classDecl) generateClassDecl(o, *f.classDecl, module);
-            else if (f.object) generateObject(o, *f.object);
+            else if (f.object) generateObject(o, *f.object, module);
             else if (f.enumClass) generateEnum(o, *f.enumClass);
             std::string text = std::move(o).str();
             std::istringstream lines(text);

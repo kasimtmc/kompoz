@@ -173,9 +173,16 @@ struct DataClass {
 };
 
 // An object: @Serializable object Home (a route without arguments; the name is its type and its value).
+// object Name { val a = …; fun f() { … } }: one value of its own type, its members static (none: a route's
+// or a marker's type).
 struct ObjectDecl {
     std::string name;
     std::vector<std::string> annotations;
+    std::vector<ClassProperty> properties;
+    std::vector<Function> methods;
+    std::vector<size_t> order;  // members in declaration order, as ClassDecl's
+    std::vector<NodeP> initBlocks;
+    bool hasMembers() const { return !properties.empty() || !methods.empty() || !initBlocks.empty(); }
     Pos pos;
     Pos end;
 };

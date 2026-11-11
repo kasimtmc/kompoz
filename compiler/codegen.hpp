@@ -51,8 +51,8 @@ private:
 
 // An enum class: C++'s enum class, its entries in order.
 void generateEnum(Output& out, const EnumClass& e);
-// An object: an empty struct, a route when @Serializable.
-void generateObject(Output& out, const ObjectDecl& o);
+// An object: an empty struct, a route when @Serializable; one with members, a struct of static members.
+void generateObject(Output& out, const ObjectDecl& o, const Module& module);
 // A data class: a struct with its fields, == and toString().
 void generateClass(Output& out, const DataClass& c, const Module& module);
 // A top-level val: a constant of the namespace.

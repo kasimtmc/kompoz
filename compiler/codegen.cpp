@@ -569,6 +569,66 @@ public:
         inClass_ = wasInClass;
     }
 
+    // object Name { … } with members: a struct of its own, its members static (Kotlin's object is one
+    // value: Name.a is Name::a, Name.f() is Name::f()), its init blocks run once, as the program starts.
+    void objectDefinition(const ObjectDecl& o) {
+        bool route = std::find(o.annotations.begin(), o.annotations.end(), "Serializable") != o.annotations.end();
+        out_.at(o.pos);
+        out_.text("struct " + o.name + " {" + (route ? " KOMPOZ_ROUTE(" + o.name + ")" : std::string()) + " bool operator==(const " +
+                  o.name + "&) const = default;");
+        bool isPublic = true;
+        auto access = [&](bool wantPublic) {
+            if (wantPublic != isPublic) out_.text(wantPublic ? " public:" : " private:");
+            isPublic = wantPublic;
+        };
+        for (size_t index : o.order) {
+            if (index % 2 == 0) {  // val / var: a static member, its type the value's unless one is written
+                const ClassProperty& p = o.properties[index / 2];
+                access(!p.isPrivate);
+                out_.at(p.pos);
+                out_.text(std::string(" static inline ") + (p.isVar ? "" : "const ") + (p.type ? type(*p.type) : std::string("auto")) + " " +
+                          cppName(p.name) + " = ");
+                global_ = true;
+                scopes_.emplace_back();
+                expr(*p.init, p.type ? &*p.type : nullptr);
+                scopes_.pop_back();
+                global_ = false;
+                out_.text(";");
+            } else {  // fun: a static function
+                const Function& m = o.methods[index / 2];
+                access(!m.isPrivate);
+                out_.at(m.pos);
+                out_.text(" static " + (m.result ? type(*m.result) : m.expressionBody ? std::string("auto") : std::string("void")) + " " +
+                          cppName(m.name) + "(");
+                for (size_t i = 0; i < m.params.size(); ++i) {
+                    const Param& p = m.params[i];
+                    out_.text((i ? ", " : "") + paramType(p.type) + " " + cppName(p.name));
+                    if (p.defaultValue) {
+                        out_.text(" = ");
+                        expr(*p.defaultValue);
+                    }
+                }
+                out_.text(") {");
+                scopes_.emplace_back();
+                for (const Param& p : m.params) declare(p.name, Local);
+                const Type* wasResult = std::exchange(currentResult_, m.result ? &*m.result : nullptr);
+                statements(*m.body, false);
+                currentResult_ = wasResult;
+                scopes_.pop_back();
+                out_.text(" }");
+            }
+        }
+        for (size_t i = 0; i < o.initBlocks.size(); ++i) {
+            access(false);
+            out_.text(" static inline const bool kompoz_init_" + std::to_string(i) + " = [] {");
+            scopes_.emplace_back();
+            statements(*o.initBlocks[i], false);
+            scopes_.pop_back();
+            out_.text(" return true; }();");
+        }
+        out_.text(" };\n");
+    }
+
     // val name = value at the top: a constant of the namespace (private: of the file), its type the
     // value's unless one is written.
     void property(const Property& p) {
@@ -1331,6 +1391,12 @@ private:
             }
             if (module_.structs && !c.lambda && c.kids.size() > 1 && capitalized(callee.text) && !kKtFunctions.contains(callee.text))
                 if (const auto* fields = module_.structs->find(callee.text); fields && structCall(c, callee.text, *fields)) return;
+            // topAppBarColors(containerColor = …): a colors object called without its XDefaults (Kotlin's
+            // import of TopAppBarDefaults.topAppBarColors), when the name is one struct's alone. (Only a
+            // colors object's: C++'s own aliases, value_type, aren't Kotlin's.)
+            if (module_.structs && !c.lambda && !capitalized(callee.text) && callee.text.ends_with("Colors"))
+                if (auto a = module_.structs->aliases.find(callee.text); a != module_.structs->aliases.end() && a->second.size() == 1)
+                    if (const auto* fields = module_.structs->find(*a->second.begin()); fields && structCall(c, *a->second.begin(), *fields)) return;
             if (kKtFunctions.contains(callee.text) || (suspend_ && callee.text == "delay")) {
                 out_.text("::kompoz::kt::" + callee.text);
                 typeArguments(c);  // listOf<String>()
@@ -1982,7 +2048,12 @@ void generateEnum(Output& out, const EnumClass& e) {
     out.text(" };\n");
 }
 
-void generateObject(Output& out, const ObjectDecl& o) {
+void generateObject(Output& out, const ObjectDecl& o, const Module& module) {
+    if (o.hasMembers()) {
+        Generator g(out, module);
+        g.objectDefinition(o);
+        return;
+    }
     out.at(o.pos);
     bool route = std::find(o.annotations.begin(), o.annotations.end(), "Serializable") != o.annotations.end();
     out.text("struct " + o.name + " {" + (route ? " KOMPOZ_ROUTE(" + o.name + ")" : std::string()) + " bool operator==(const " + o.name +

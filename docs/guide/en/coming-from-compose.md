@@ -152,7 +152,7 @@ Lambdas capture by value, as Kotlin's capture: a block can run again later on it
 
 ## Not yet
 
-kompozc reads the Kotlin a composable needs: composables, plain and extension functions, top-level `val`s, data classes, enum classes, classes (a ViewModel, a repository), `@Serializable` routes and objects. What it doesn't read yet is written in C++ next to it: `sealed` classes and `is`, interfaces and `object`s with members, `suspend fun`, a class's `by` properties, labels (`return@forEach`). Your editor's C++ tooling (clangd) doesn't read the Kotlin in a `.cpp` file either; the build's messages do point at its lines.
+kompozc reads the Kotlin a composable needs: composables, plain and extension functions, top-level `val`s, data classes, enum classes, classes (a ViewModel, a repository), `@Serializable` routes, and objects, with members too (`object AppIcons { val Add = … }`: an app's singletons). What it doesn't read yet is written in C++ next to it: `sealed` classes and `is`, interfaces, `suspend fun`, a class's `by` properties. Editors read such files through kompozc's language server (see [Tools](tools.md#editors)); the build's messages point at the Kotlin's lines too.
 
 Without kompozc, Kompoz's composables are written in C++: [Writing in C++](cpp.md) shows how each of Kotlin's constructs reads there.
 

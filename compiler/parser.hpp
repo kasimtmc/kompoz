@@ -16,6 +16,9 @@ public:
     DataClass dataClass();
     // [@Serializable] object Name
     ObjectDecl objectDecl();
+    // A class's or an object's body after its {: properties, functions and init blocks, to the }.
+    void members(std::vector<ClassProperty>& properties, std::vector<Function>& methods, std::vector<size_t>& order,
+                 std::vector<NodeP>& initBlocks, const char* what);
     // enum class Name { A, B, C }
     EnumClass enumClass();
     // class Name(val a: T, b: U) : Base(b) { val c = …; fun f() { … } }
