@@ -911,14 +911,14 @@ suspend fun greet(name: String): String {
 
 suspend fun twice(x: Int) = slowDouble(x) + slowDouble(x)
 
-suspend fun pause() {
+suspend fun shortWait() {
     delay(50)
 }
 
 class Loader {
     var loads = 0
     suspend fun load(n: Int): List<Int> {
-        pause()
+        shortWait()
         loads++
         return listOf(1, 2, 3).take(n)
     }
