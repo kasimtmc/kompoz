@@ -1180,6 +1180,12 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Kotlin sealed sınıfları ve `is`**: kompozc `sealed class` ve `sealed interface`'i, alt sınıfları içlerinde
+  (`UiState.Ready`) ya da dosyada yanlarında (`data class Broken(…) : LoadState()`) olarak okur; aralarında `data object`'ler
+  de olabilir (`toString()` adlarıdır). Mühürlü bir tür, durumlarından birini tutan bir değerdir (bir `std::variant`): `==` onu
+  karşılaştırır, `toString()` durumununkidir. `is` ve `!is` durumu sınar, `as` ve `as?` ona dönüştürür; `is` üzerindeki bir
+  `when` dalı, `is`'ten sonraki bir `if` ve bir `&&`'in geri kalanı değeri o durum olarak görür (akıllı dönüşümler). Bütün
+  durumları kapsayan bir `when`'in `else`'e ihtiyacı yoktur.
 - **Resim varlıkları bir kez çözülür**: `imageResource`, aynı yol için nerede istenirse istensin ve ekranı kaç kez
   geri gelirse gelsin aynı bitmap'i verir, Android'in kaynaklarınınkini tuttuğu gibi (host son kullanılanları 32 MB
   piksele kadar tutar). Masaüstünde showcase'in Bileşenler ekranı ilk seferde 35 yerine 28 ms'de, sonra 18 yerine

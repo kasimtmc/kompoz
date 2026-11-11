@@ -165,6 +165,7 @@ struct ClassDecl {
 // A data class: data class Name(val a: Int, var b: String = "").
 struct DataClass {
     std::string name;
+    std::optional<Type> base;  // : Sealed() (a sealed class's subclass)
     std::vector<Param> fields;
     std::vector<bool> mutableFields;  // var (else val)
     std::vector<std::string> annotations;  // @Serializable: a route
@@ -177,12 +178,26 @@ struct DataClass {
 // or a marker's type).
 struct ObjectDecl {
     std::string name;
+    std::optional<Type> base;  // : Sealed() (a sealed class's subclass: data object too)
     std::vector<std::string> annotations;
     std::vector<ClassProperty> properties;
     std::vector<Function> methods;
     std::vector<size_t> order;  // members in declaration order, as ClassDecl's
     std::vector<NodeP> initBlocks;
     bool hasMembers() const { return !properties.empty() || !methods.empty() || !initBlocks.empty(); }
+    Pos pos;
+    Pos end;
+};
+
+// sealed class Name / sealed interface Name: a value that is one of its subclasses (a variant of them),
+// those in its body (nested: Name.Success) and those of the same file that name it as their base.
+struct SealedDecl {
+    std::string name;
+    bool isInterface = false;
+    std::vector<DataClass> dataClasses;  // nested
+    std::vector<ObjectDecl> objects;     // nested
+    std::vector<std::pair<char, size_t>> order;  // the nested ones in declaration order: 'd' or 'o', an index
+    std::vector<std::string> topLevel;   // the same file's subclasses at the top level, in order (scan finds them)
     Pos pos;
     Pos end;
 };

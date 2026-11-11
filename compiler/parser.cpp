@@ -297,9 +297,17 @@ ObjectDecl Parser::objectDecl() {
     ObjectDecl o;
     o.pos = cur().pos;
     annotations(&o.annotations);
-    if (!isIdent("object")) fail("expected 'object'");
+    if (isIdent("data")) take();  // data object (its toString its name: as an object's here)
+    if (!isIdent("object")) fail("expected 'object' (a sealed class's body holds data classes and objects)");
     take();
     o.name = expectIdent();
+    if (acceptOp(":")) {  // : Sealed() (a sealed class's subclass)
+        o.base = type();
+        if (acceptOp("(")) {
+            if (!isOp(")")) fail("a sealed class with a constructor isn't supported yet: give its subclasses the fields");
+            expectOp(")");
+        }
+    }
     if (opAfterNewlines("{")) {
         skipNewlines();
         take();
@@ -336,9 +344,55 @@ DataClass Parser::dataClass() {
         if (!acceptOp(",")) break;
     }
     expectOp(")");
+    if (acceptOp(":")) {  // : Sealed() (a sealed class's subclass)
+        c.base = type();
+        if (acceptOp("(")) {
+            if (!isOp(")")) fail("a sealed class with a constructor isn't supported yet: give its subclasses the fields");
+            expectOp(")");
+        }
+    }
     c.end = tokens_[index_ - 1].end;
     if (c.fields.empty()) fail(c.pos, "a data class needs a parameter");
     return c;
+}
+
+SealedDecl Parser::sealedDecl() {
+    SealedDecl s;
+    s.pos = cur().pos;
+    annotations(nullptr);
+    while (isIdent("private") || isIdent("internal") || isIdent("public")) take();
+    if (!isIdent("sealed")) fail("expected 'sealed'");
+    take();
+    if (isIdent("interface")) s.isInterface = true;
+    else if (!isIdent("class")) fail("expected 'class' or 'interface' after 'sealed'");
+    take();
+    s.name = expectIdent();
+    if (isOp("(")) fail("a sealed class with a constructor isn't supported yet: give its subclasses the fields");
+    if (isOp(":")) fail("a sealed class with a base of its own isn't supported");
+    if (opAfterNewlines("{")) {
+        skipNewlines();
+        take();
+        for (skipNewlines(); !isOp("}"); skipNewlines()) {
+            size_t save = index_;
+            annotations(nullptr);
+            bool data = isIdent("data") && peekRaw(1).kind == Tok::Ident && peekRaw(1).text == "class";
+            index_ = save;
+            if (data) {
+                DataClass d = dataClass();
+                if (!d.base || d.base->name != s.name) fail(d.pos, d.name + ": a subclass of " + s.name + " is written `: " + s.name + "()`");
+                s.order.emplace_back('d', s.dataClasses.size());
+                s.dataClasses.push_back(std::move(d));
+            } else {
+                ObjectDecl o = objectDecl();
+                if (!o.base || o.base->name != s.name) fail(o.pos, o.name + ": a subclass of " + s.name + " is written `: " + s.name + "()`");
+                s.order.emplace_back('o', s.objects.size());
+                s.objects.push_back(std::move(o));
+            }
+        }
+        expectOp("}");
+    }
+    s.end = tokens_[index_ - 1].end;
+    return s;
 }
 
 EnumClass Parser::enumClass() {

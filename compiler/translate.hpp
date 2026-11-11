@@ -32,12 +32,13 @@ struct Found {
 
     // One that couldn't be read (scan with errors): where it is, nothing of it.
     bool failed = false;
+    std::optional<SealedDecl> sealed = std::nullopt;  // (last: the declarations above are made by place)
 
     const std::string& name() const {
         static const std::string none;
         return failed ? none
                : function ? function->name : dataClass ? dataClass->name : property ? property->name : classDecl ? classDecl->name
-               : object   ? object->name   : enumClass->name;
+               : object   ? object->name   : sealed ? sealed->name : enumClass->name;
     }
 };
 
@@ -78,5 +79,7 @@ std::vector<OtherSource> readOthers(const std::vector<std::string>& moduleSource
 // what C++ needs to know of it (a @Composable's prototype, a data class's struct, ...), the first
 // one's after kotlin.hpp's #include (as the translation has it); the rest of the file as it is.
 std::string maskedView(std::string_view src, const std::vector<Found>& found, const Structs& structs);
+// A declaration made known to the module (a sealed class: its nested subclasses too, under its name).
+void declareIn(Module& module, const Found& f, bool qualified);
 
 }  // namespace kompozc

@@ -569,6 +569,37 @@ public:
         inClass_ = wasInClass;
     }
 
+    // sealed class Name { … }: a struct holding one of its subclasses (std::variant), made from any of them,
+    // equal when they are, written as the one it holds; its nested subclasses inside it (Name.Success is
+    // Name::Success), the file's top-level ones before it.
+    void sealedDefinition(const SealedDecl& s) {
+        out_.at(s.pos);
+        out_.text("struct " + s.name + " {");
+        std::vector<std::string> alternatives;
+        for (auto [kind, i] : s.order) {
+            if (kind == 'd') {
+                classDefinition(s.dataClasses[i]);
+                alternatives.push_back(s.name + "::" + s.dataClasses[i].name);
+            } else {
+                generateObject(out_, s.objects[i], module_);
+                alternatives.push_back(s.name + "::" + s.objects[i].name);
+            }
+        }
+        for (const std::string& t : s.topLevel) alternatives.push_back(qualifierOf(t) + t);
+        if (alternatives.empty()) throw CompileError(s.pos, "a sealed class needs a subclass (a data class or an object of its own)");
+        std::string list, any;
+        for (const std::string& a : alternatives) {
+            list += (list.empty() ? "" : ", ") + a;
+            any += (any.empty() ? "" : " || ") + std::string("std::is_same_v<std::remove_cvref_t<T>, ") + a + ">";
+        }
+        out_.text(" std::variant<" + list + "> kompoz_value;");
+        out_.text(" template <class T> requires(" + any + ") " + s.name + "(T&& value) : kompoz_value(std::forward<T>(value)) {}");
+        out_.text(" bool operator==(const " + s.name + "&) const = default;");
+        out_.text(" template <class = void> std::string toString() const { return std::visit([](const auto& v) { return ::kompoz::kt::str(v); }, "
+                  "kompoz_value); }");
+        out_.text(" };\n");
+    }
+
     // object Name { … } with members: a struct of its own, its members static (Kotlin's object is one
     // value: Name.a is Name::a, Name.f() is Name::f()), its init blocks run once, as the program starts.
     void objectDefinition(const ObjectDecl& o) {
@@ -921,12 +952,54 @@ private:
 
     void ifStatement(const Node& n, bool tail) {
         out_.text("if (");
-        expr(*n.kids[0]);
-        out_.text(")");
-        braced(*n.kids[1], tail);
+        std::vector<const Node*> casts;
+        castCondition(*n.kids[0], casts);
+        out_.text(") {");
+        scopes_.emplace_back();
+        smartCasts(casts);
+        statements(*n.kids[1], tail);
+        scopes_.pop_back();
+        out_.text(" }");
         if (n.kids.size() > 2) {
             out_.text(" else");
             braced(*n.kids[2], tail);
+        }
+    }
+
+    // A condition, its `x is T` tests on locals (and a && chain's after them) giving Kotlin's smart casts:
+    // what follows a test sees x as a T (`x is T && x.y > 0`), and `casts` gets the tests, for the block after.
+    void castCondition(const Node& c, std::vector<const Node*>& casts) {
+        if (c.kind == Node::Binary && c.text == "&&") {
+            out_.text("(");
+            castCondition(*c.kids[0], casts);
+            out_.text(" && ");
+            if (casts.empty()) {
+                castCondition(*c.kids[1], casts);
+            } else {
+                out_.text(capture("[&]") + "() -> bool {");
+                scopes_.emplace_back();
+                smartCasts(casts);
+                out_.text(" return ");
+                castCondition(*c.kids[1], casts);
+                out_.text("; }()");
+                scopes_.pop_back();
+            }
+            out_.text(")");
+            return;
+        }
+        if (c.kind == Node::Paren && c.kids[0]->kind == Node::Binary && c.kids[0]->text == "&&") return castCondition(*c.kids[0], casts);
+        expr(c);
+        if (c.kind == Node::Is && !c.flag && c.kids[0]->kind == Node::Name)
+            if (const VarKind* k = lookup(c.kids[0]->text); k && *k == Local) casts.push_back(&c);
+    }
+    // Each test's view, under the local's own name (Kotlin's smart cast): the T inside its value.
+    void smartCasts(const std::vector<const Node*>& casts) {
+        for (const Node* is : casts) {
+            const std::string& n = is->kids[0]->text;
+            std::string held = "kompoz_smart_" + std::to_string(++smart_);
+            out_.text(" const auto& " + held + " = ::kompoz::kt::as<" + type(*is->type) + ">(" + cppName(n) + "); [[maybe_unused]] const auto& " +
+                      cppName(n) + " = " + held + ";");
+            declare(n, Local);
         }
     }
 
@@ -950,16 +1023,20 @@ private:
                     expr(*e);
                     out_.text(", " + subject + ")");
                     break;
-                default: throw CompileError(b.pos, "`is` in when isn't supported yet");
+                default:  // is T, !is T
+                    out_.text(std::string(kind == Node::WhenBranch::NotIs ? "!" : "") + "::kompoz::kt::is<" + type(b.types[i]) + ">(" + subject + ")");
+                    break;
             }
             out_.text(")");
         }
     }
 
-    void whenStatement(const Node& n, bool tail) {
-        std::string subject;
+    void whenStatement(const Node& n, bool tail, bool asValue = false) {
+        std::string subject, smartName;  // (smartName: the subject's, a local's, seen as the T of an `is T` branch)
         out_.text("{");
         if (const Node* s = n.kids[0].get()) {
+            if (s->kind == Node::Decl) smartName = s->text;
+            else if (const VarKind* k = s->kind == Node::Name ? lookup(s->text) : nullptr; k && *k == Local) smartName = s->text;
             subject = "kompoz_when_" + std::to_string(n.pos.line) + "_" + std::to_string(n.pos.column);
             out_.text(" const auto& " + subject + " = ");
             expr(s->kind == Node::Decl ? *s->kids[0] : *s);
@@ -970,20 +1047,38 @@ private:
         } else {
             scopes_.emplace_back();
         }
-        bool first = true;
+        bool first = true, otherwise = false;
         for (const auto& b : n.branches) {
             out_.at(b.pos);
+            std::vector<const Node*> casts;
+            std::string cast;  // (an `is T` branch of a local's subject: the local as the T)
             if (b.conds.empty()) {
                 out_.text(first ? " {" : " else {");
+                otherwise = true;
+            } else if (subject.empty() && b.conds.size() == 1) {  // when { x is T -> … }
+                out_.text(first ? " if (" : " else if (");
+                castCondition(*b.conds[0].second, casts);
+                out_.text(") {");
             } else {
                 out_.text(first ? " if (" : " else if (");
                 whenCondition(b, subject);
                 out_.text(") {");
+                if (!smartName.empty() && b.conds.size() == 1 && b.conds[0].first == Node::WhenBranch::Is)
+                    cast = " [[maybe_unused]] const auto& " + cppName(smartName) + " = ::kompoz::kt::as<" + type(b.types[0]) + ">(" + subject + ");";
+            }
+            scopes_.emplace_back();
+            smartCasts(casts);
+            if (!cast.empty()) {
+                out_.text(cast);
+                declare(smartName, Local);
             }
             statements(*b.body, tail);
+            scopes_.pop_back();
             out_.text(" }");
             first = false;
         }
+        // A when giving a value covers every case (Kotlin checks it: a sealed class's subclasses): no way out.
+        if (asValue && !otherwise && !first) out_.text(" else { ::kompoz::kt::noBranch(); }");
         scopes_.pop_back();
         out_.text(" }");
     }
@@ -1100,12 +1195,16 @@ private:
             case Node::Lambda: return lambda(e, expected && expected->function && expected->result && expected->result->name != "Unit");
             case Node::Unary: return unary(e);
             case Node::Binary: return binary(e);
-            case Node::As:
-                out_.text("static_cast<" + type(*e.type) + ">(");
+            case Node::As:  // x as T (a sealed class's T inside it, else a cast); x as? T: none when it isn't one
+                out_.text(std::string(e.flag ? "::kompoz::kt::asOrNull<" : "::kompoz::kt::as<") + type(*e.type) + ">(");
                 expr(*e.kids[0]);
                 out_.text(")");
                 return;
-            case Node::Is: throw CompileError(e.pos, "`is` isn't supported yet");
+            case Node::Is:
+                out_.text(std::string(e.flag ? "!" : "") + "::kompoz::kt::is<" + type(*e.type) + ">(");
+                expr(*e.kids[0]);
+                out_.text(")");
+                return;
             case Node::If: return ifExpression(e, expected);
             case Node::Object: return objectExpression(e);
             case Node::When:
@@ -1113,7 +1212,7 @@ private:
                 out_.text(capture("[&]") + "()" + (expected ? " -> " + type(*expected) : std::string()) + " {");
                 {
                     Scoped inside(global_);
-                    whenStatement(e, true);
+                    whenStatement(e, true, true);
                 }
                 out_.text(" }()");
                 return;
@@ -1285,6 +1384,10 @@ private:
         }
         if (qualifier(obj)) {
             out_.text(qualified(dotted(obj)) + "::" + cppName(e.text));
+            if (&e != calleeNode_ && module_.objects.contains(dotted(obj) + "." + e.text)) {  // UiState.Loading: a sealed class's own object, its value
+                out_.text("{}");
+                return;
+            }
             // WindowInsets.statusBars, a class's static function read as Compose's property: called.
             std::string type = dotted(obj);
             if (size_t dot = type.rfind('.'); dot != std::string::npos) type = type.substr(dot + 1);
@@ -1435,6 +1538,9 @@ private:
                 return arguments(c, calleeName, false);
             }
             if (callee.text == "copy" && dataClassCopy(c, obj)) return;
+            if (qualifier(obj))  // UiState.Ready(items): a sealed class's nested data class, made as one is
+                if (auto k = module_.classes.find(dotted(callee)); k != module_.classes.end())
+                    return construct(c, *k->second, qualified(dotted(obj)) + "::" + k->second->name);
             if (module_.structs && !c.lambda && c.kids.size() > 1 && qualifier(obj)) {  // TextFieldDefaults.colors(…)
                 std::string name = qualified(dotted(callee));
                 const auto* fields = module_.structs->find(name);  // (its own namespace's alias first: ListItemDefaults::colors)
@@ -1547,7 +1653,8 @@ private:
     }
 
     // Name(a = 1, b = "x"): the struct, its fields in their order (designated, defaults left out).
-    void construct(const Node& c, const DataClass& k) {
+    // (`spelled`: a nested one's name, UiState::Ready)
+    void construct(const Node& c, const DataClass& k, const std::string& spelled = {}) {
         if (c.lambda) throw CompileError(c.lambda->pos, k.name + " takes no lambda");
         std::vector<const Node*> given(k.fields.size(), nullptr);
         size_t next = 0;
@@ -1566,7 +1673,7 @@ private:
             if (given[at]) throw CompileError(c.kids[i + 1]->pos, k.fields[at].name + " is given twice");
             given[at] = c.kids[i + 1].get();
         }
-        out_.text(k.name + "{");
+        out_.text((spelled.empty() ? k.name : spelled) + "{");
         bool any = false;
         for (size_t f = 0; f < k.fields.size(); ++f) {
             if (!given[f]) {
@@ -2008,9 +2115,20 @@ private:
                 return;
             }
             out_.text("(");
-            expr(*n.kids[0]);
+            std::vector<const Node*> casts;
+            castCondition(*n.kids[0], casts);
             out_.text(" ? ");
-            expr(*n.kids[1]->kids[0]->kids[0]);
+            if (casts.empty()) {
+                expr(*n.kids[1]->kids[0]->kids[0]);
+            } else {  // (the smart casts' view: the value made where they are)
+                out_.text(capture("[&]") + "() {");
+                scopes_.emplace_back();
+                smartCasts(casts);
+                out_.text(" return ");
+                expr(*n.kids[1]->kids[0]->kids[0]);
+                out_.text("; }()");
+                scopes_.pop_back();
+            }
             out_.text(" : ");
             expr(*n.kids[2]->kids[0]->kids[0]);
             out_.text(")");
@@ -2030,6 +2148,7 @@ private:
     std::vector<std::string> receivers_;  // the receivers' types of the lambdas it is in, innermost last
     std::vector<bool> receiverConst_;     // and whether each is read-only (a "const X" receiver: copied into lambdas that keep it)
     const Node* calleeNode_ = nullptr;    // the callee being written, when a member: called, not read as a property
+    int smart_ = 0;                            // smart casts' held views, numbered
     std::vector<std::string> lambdaLabels_;    // the lambdas being written, each its call's name (return@LaunchedEffect)
     std::vector<std::string> receiverLabels_;  // and the calls they were given to (this@AnimatedContent)
     bool global_ = false;  // at namespace scope: a top-level val's value
@@ -2057,7 +2176,12 @@ void generateObject(Output& out, const ObjectDecl& o, const Module& module) {
     out.at(o.pos);
     bool route = std::find(o.annotations.begin(), o.annotations.end(), "Serializable") != o.annotations.end();
     out.text("struct " + o.name + " {" + (route ? " KOMPOZ_ROUTE(" + o.name + ")" : std::string()) + " bool operator==(const " + o.name +
-             "&) const = default; };\n");
+             "&) const = default; template <class = void> std::string toString() const { return \"" + o.name + "\"; } };\n");
+}
+
+void generateSealed(Output& out, const SealedDecl& s, const Module& module) {
+    Generator g(out, module);
+    g.sealedDefinition(s);
 }
 
 void generateClass(Output& out, const DataClass& c, const Module& module) {

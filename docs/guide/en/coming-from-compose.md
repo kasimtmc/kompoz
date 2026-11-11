@@ -102,6 +102,25 @@ fun Inbox(mails: List<Mail>) {
 
 A `data class` has its `==`, its `toString()` and `copy(…)`; it is made with named arguments in any order (`Mail(subject = "Hi", from = "Ayşe")`).
 
+A `sealed` class or interface is a closed set of cases, a screen's state for one; `is` tells which it holds, and inside a `when` branch or past an `is` in an `if` the value is that case (a smart cast). A `when` over all the cases needs no `else`; `as` and `as?` cast as Kotlin's do:
+
+```kotlin
+sealed interface UiState {
+    data object Loading : UiState
+    data class Ready(val items: List<String>) : UiState
+    data class Failed(val message: String) : UiState
+}
+
+@Composable
+fun Screen(state: UiState) {
+    when (state) {
+        is UiState.Loading -> CircularProgressIndicator()
+        is UiState.Ready -> LazyColumn { items(state.items) { Text(it) } }
+        is UiState.Failed -> Text("Error: ${state.message}")
+    }
+}
+```
+
 Coroutines: a `LaunchedEffect` or a `launch` block is a coroutine, and `delay`, `animateScrollToItem` and the other suspending calls in it are awaited:
 
 ```kotlin
@@ -152,7 +171,7 @@ Lambdas capture by value, as Kotlin's capture: a block can run again later on it
 
 ## Not yet
 
-kompozc reads the Kotlin a composable needs: composables, plain and extension functions, top-level `val`s, data classes, enum classes, classes (a ViewModel, a repository), `@Serializable` routes, and objects, with members too (`object AppIcons { val Add = … }`: an app's singletons). What it doesn't read yet is written in C++ next to it: `sealed` classes and `is`, interfaces, `suspend fun`, a class's `by` properties. Editors read such files through kompozc's language server (see [Tools](tools.md#editors)); the build's messages point at the Kotlin's lines too.
+kompozc reads the Kotlin a composable needs: composables, plain and extension functions, top-level `val`s, data classes, enum classes, classes (a ViewModel, a repository), `@Serializable` routes, objects, with members too (`object AppIcons { val Add = … }`: an app's singletons), and `sealed` classes and interfaces. What it doesn't read yet is written in C++ next to it: interfaces that aren't sealed, `suspend fun`, a class's `by` properties. Editors read such files through kompozc's language server (see [Tools](tools.md#editors)); the build's messages point at the Kotlin's lines too.
 
 Without kompozc, Kompoz's composables are written in C++: [Writing in C++](cpp.md) shows how each of Kotlin's constructs reads there.
 

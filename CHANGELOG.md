@@ -1143,6 +1143,11 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Kotlin sealed classes and `is`**: kompozc reads `sealed class` and `sealed interface` with their subclasses
+  inside them (`UiState.Ready`) or next to them in the file (`data class Broken(…) : LoadState()`), `data object`s among them
+  (`toString()` is the name). A sealed type is a value holding one of its cases (a `std::variant`): `==` compares it,
+  `toString()` is its case's. `is` and `!is` test the case, `as` and `as?` cast to it, and a `when` branch on `is`, an `if`
+  past `is` and the rest of an `&&` see the value as that case (smart casts). A `when` over every case needs no `else`.
 - **Image assets are decoded once**: `imageResource` gives the same bitmap for the same path wherever it is asked for
   and however often its screen comes back, as Android keeps its resources' (the host keeps those used last, up to
   32 MB of pixels). On the desktop the showcase's Components screen opened in 28 ms instead of 35 the first time and

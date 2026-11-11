@@ -477,6 +477,72 @@ TEST(objects_with_members) {
     CHECK(rule.onNodeWithText("toplam 12 / adım 2 / 1.5").exists());
 }
 
+// Kotlin's sealed classes and interfaces: nested subclasses (a data object, a data class) and the file's own; when
+// with is (the subject seen as the T: smart casts), if (x is T && …), as?, == and toString.
+sealed class LoadState {
+    data object Loading : LoadState()
+    data class Ready(val items: List<String>) : LoadState()
+}
+
+data class Broken(val message: String) : LoadState()
+
+// (another with subclasses of the same names: each its own)
+sealed class SaveState {
+    data object Loading : SaveState()
+    data class Ready(val count: Int) : SaveState()
+}
+
+sealed interface Figure
+
+data class Disc(val r: Float) : Figure
+
+object Speck : Figure
+
+@Composable
+fun LoadView(state: LoadState) {
+    when (state) {
+        is LoadState.Loading -> Text("yükleniyor")
+        is LoadState.Ready -> Text("${state.items.size} öğe")
+        is Broken -> Text("hata: " + state.message)
+    }
+}
+
+fun describe(figure: Figure): String = when (figure) {
+    is Disc -> "disk " + figure.r
+    is Speck -> "nokta"
+}
+
+fun area(figure: Figure): Float = if (figure is Disc && figure.r > 0f) figure.r * figure.r else 0f
+
+@Composable
+fun SealedForms() {
+    var state by remember { mutableStateOf<LoadState>(LoadState.Loading) }
+    Column {
+        LoadView(state)
+        Text(describe(Disc(2f)) + " " + area(Speck) + " " + area(Disc(3f)) + " " + (state == LoadState.Loading) + " " + state)
+        Text("kayıt " + SaveState.Ready(count = 3) + " " + SaveState.Loading)
+        val broken = state as? Broken
+        if (broken != null) Text("ayrıntı: " + broken.message)
+        Button(onClick = { state = LoadState.Ready(listOf("a", "b")) }) { Text("Yükle") }
+        Button(onClick = { state = Broken("yok") }) { Text("Boz") }
+    }
+}
+
+TEST(sealed_classes_and_is) {
+    ComposeTestRule rule([] { SealedForms(); });
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("yükleniyor").exists());
+    std::string line = rule.onNodeWithText("disk ", true).text();
+    CHECK(line == "disk 2.0 0.0 9.0 true Loading" || (std::printf("satır: %s\n", line.c_str()), false));
+    CHECK(rule.onNodeWithText("kayıt Ready(count=3) Loading").exists());
+    rule.onNodeWithText("Yükle").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("2 öğe").exists() && rule.onNodeWithText("disk 2.0 0.0 9.0 false Ready(items=[a, b])").exists());
+    rule.onNodeWithText("Boz").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("hata: yok").exists() && rule.onNodeWithText("ayrıntı: yok").exists());
+}
+
 TEST(composes_scaffold_sample) {
     ComposeTestRule rule([] { ScaffoldExample(); });
     CHECK(rule.onNodeWithText("Top app bar").exists() && rule.onNodeWithText("Bottom app bar").exists());

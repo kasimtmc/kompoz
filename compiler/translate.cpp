@@ -94,6 +94,16 @@ bool startsClass(std::string_view src, size_t at) {
     return kotlin.contains(first);
 }
 
+// Whether Kotlin's sealed class or interface starts at `at` (C++ has no `sealed`).
+bool startsSealed(std::string_view src, size_t at) {
+    if (src.substr(at, 6) != "sealed") return false;
+    size_t k = at + 6;
+    if (k >= src.size() || !std::isspace(static_cast<unsigned char>(src[k]))) return false;
+    while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
+    return (src.substr(k, 5) == "class" && k + 5 < src.size() && !identChar(src[k + 5])) ||
+           (src.substr(k, 9) == "interface" && k + 9 < src.size() && !identChar(src[k + 9]));
+}
+
 // Whether Kotlin's object starts at `at`: object Name, with no body or an empty one (C++ has no `object`).
 bool startsObject(std::string_view src, size_t at) {
     size_t k = at;
@@ -148,6 +158,7 @@ char annotatedDeclaration(std::string_view src, size_t at) {
         return ' ';
     }
     if (w == "object") return 'o';
+    if (w == "sealed") return 's';
     if (w == "class" && startsClass(src, b)) return 'c';
     if (w == "fun") return 'f';
     return ' ';
@@ -339,6 +350,7 @@ std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries,
                 Found f;
                 if (kind == 'd') f.dataClass = parser.dataClass();
                 else if (kind == 'o') f.object = parser.objectDecl();
+                else if (kind == 's') f.sealed = parser.sealedDecl();
                 else if (kind == 'c') f.classDecl = parser.classDecl();
                 else {
                     f.function = parser.function();
@@ -352,7 +364,8 @@ std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries,
                     }
                 }
                 f.begin = i;
-                f.end = f.dataClass ? f.dataClass->end.offset : f.object ? f.object->end.offset : f.classDecl ? f.classDecl->end.offset : f.function->end.offset;
+                f.end = f.dataClass ? f.dataClass->end.offset : f.object ? f.object->end.offset : f.sealed ? f.sealed->end.offset
+                        : f.classDecl ? f.classDecl->end.offset : f.function->end.offset;
                 f.qualifier = qualifier();
                 found.push_back(std::move(f));
                 i = f.end;
@@ -373,9 +386,23 @@ std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries,
                     size_t end = d.end.offset;
                     found.push_back({std::nullopt, std::move(d), std::nullopt, std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
                     i = end;
+                } else if (src.substr(k, 6) == "object" && (k + 6 >= src.size() || !identChar(src[k + 6]))) {  // data object
+                    Parser parser(src, positionOf(src, i));
+                    Found f;
+                    f.object = parser.objectDecl();
+                    f.begin = i, f.end = f.object->end.offset, f.qualifier = qualifier();
+                    i = f.end;
+                    found.push_back(std::move(f));
                 } else {
                     i += 4;
                 }
+            } else if (c == 's' && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsSealed(src, i)) {
+                Parser parser(src, positionOf(src, i));
+                Found f;
+                f.sealed = parser.sealedDecl();
+                f.begin = i, f.end = f.sealed->end.offset, f.qualifier = qualifier();
+                i = f.end;
+                found.push_back(std::move(f));
             } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsClass(src, i)) {
                 Parser parser(src, positionOf(src, i));
                 ClassDecl k = parser.classDecl();
@@ -454,7 +481,28 @@ std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries,
             found.push_back(std::move(f));
         }
     }
+    // A sealed class's subclasses at the top level of the file: its variant's alternatives after its nested ones.
+    for (Found& s : found)
+        if (s.sealed)
+            for (const Found& f : found) {
+                const std::optional<Type>& base = f.dataClass ? f.dataClass->base : f.object ? f.object->base : std::nullopt;
+                if (base && base->name == s.sealed->name) s.sealed->topLevel.push_back(f.name());
+            }
     return found;
+}
+
+void declareIn(Module& module, const Found& f, bool qualified) {
+    if (f.failed) return;
+    if (qualified && f.function && f.function->composable) module.qualifiers[f.function->name] = f.qualifier;
+    if (f.function) module.functions[f.function->name] = &*f.function;
+    else if (f.dataClass) module.classes[f.dataClass->name] = &*f.dataClass;
+    else if (f.property) module.properties[f.property->name] = &*f.property;
+    else if (f.classDecl) module.classDecls[f.classDecl->name] = &*f.classDecl;
+    else if (f.object) module.objects.insert(f.object->name);
+    else if (f.sealed) {  // its nested subclasses, by their full names (two sealed classes may each have a Loading)
+        for (const DataClass& d : f.sealed->dataClasses) module.classes[f.sealed->name + "." + d.name] = &d;
+        for (const ObjectDecl& o : f.sealed->objects) module.objects.insert(f.sealed->name + "." + o.name);
+    }
 }
 
 namespace {
@@ -537,6 +585,13 @@ void names(const Found& f, std::set<std::string, std::less<>>& out) {
             names(m.body.get(), out);
         }
         for (const NodeP& b : f.object->initBlocks) names(b.get(), out);
+    } else if (f.sealed) {  // its subclasses: those in it, and those of its file (taken with it)
+        for (const DataClass& d : f.sealed->dataClasses)
+            for (const Param& p : d.fields) {
+                typeNames(p.type, out);
+                names(p.defaultValue.get(), out);
+            }
+        for (const std::string& t : f.sealed->topLevel) out.insert(t);
     } else if (f.enumClass) {
         // (nothing: its entries are its own)
     } else if (f.classDecl) {
@@ -599,14 +654,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
     std::vector<Found> found = scan(src, &boundaries);
     Module module;
     module.structs = &structs;
-    for (const Found& f : found) {
-        if (f.function && f.function->composable) module.qualifiers[f.function->name] = f.qualifier;
-        if (f.function) module.functions[f.function->name] = &*f.function;
-        else if (f.dataClass) module.classes[f.dataClass->name] = &*f.dataClass;
-        else if (f.property) module.properties[f.property->name] = &*f.property;
-        else if (f.classDecl) module.classDecls[f.classDecl->name] = &*f.classDecl;
-        else if (f.object) module.objects.insert(f.object->name);
-    }
+    for (const Found& f : found) declareIn(module, f, true);
     // The other sources' declarations this one uses, and those they use in turn (a data class in
     // a parameter's type): declared here too, as C++ needs (Kotlin's module needs nothing).
     // The identifiers in this file's C++ (outside its Kotlin, its comments and strings), each where
@@ -674,13 +722,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
                     more = true;
                 }
         }
-        for (auto [o, f] : imported) {
-            if (f->function) module.functions[f->function->name] = &*f->function;
-            else if (f->dataClass) module.classes[f->dataClass->name] = &*f->dataClass;
-            else if (f->property) module.properties[f->property->name] = &*f->property;
-            else if (f->classDecl) module.classDecls[f->classDecl->name] = &*f->classDecl;
-            else if (f->object) module.objects.insert(f->object->name);
-        }
+        for (auto [o, f] : imported) declareIn(module, *f, false);
     }
     Output out(lineFile);
     out.line(1);
@@ -747,6 +789,15 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             if (g.dataClass) generateClass(out, *g.dataClass, module);
             if (g.object && !g.object->hasMembers()) generateObject(out, *g.object, module);
         }
+        // Sealed classes after their subclasses (the variant's alternatives are complete types).
+        for (auto [o, g] : imported)
+            if (g->sealed) {
+                out.setFile(o->lineFile);
+                generateSealed(out, *g->sealed, module);
+            }
+        out.setFile(lineFile);
+        for (const Found& g : found)
+            if (g.sealed) generateSealed(out, *g.sealed, module);
     };
     // The module's functions, classes and vals that this file's C++ (not its Kotlin) names before
     // they are defined here (or defined in another file): declared where the statement using them
@@ -861,15 +912,7 @@ std::vector<OtherSource> readOthers(const std::vector<std::string>& moduleSource
 std::string maskedView(std::string_view src, const std::vector<Found>& found, const Structs& structs) {
     Module module;
     module.structs = &structs;
-    for (const Found& f : found) {
-        if (f.failed) continue;
-        if (f.function && f.function->composable) module.qualifiers[f.function->name] = f.qualifier;
-        if (f.function) module.functions[f.function->name] = &*f.function;
-        else if (f.dataClass) module.classes[f.dataClass->name] = &*f.dataClass;
-        else if (f.property) module.properties[f.property->name] = &*f.property;
-        else if (f.classDecl) module.classDecls[f.classDecl->name] = &*f.classDecl;
-        else if (f.object) module.objects.insert(f.object->name);
-    }
+    for (const Found& f : found) declareIn(module, f, true);
     std::string out;
     size_t done = 0;
     bool prelude = false;
@@ -886,6 +929,7 @@ std::string maskedView(std::string_view src, const std::vector<Found>& found, co
             else if (f.property) generateProperty(o, *f.property, module);
             else if (f.classDecl) generateClassDecl(o, *f.classDecl, module);
             else if (f.object) generateObject(o, *f.object, module);
+            else if (f.sealed) generateSealed(o, *f.sealed, module);
             else if (f.enumClass) generateEnum(o, *f.enumClass);
             std::string text = std::move(o).str();
             std::istringstream lines(text);

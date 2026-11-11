@@ -102,6 +102,25 @@ fun Inbox(mails: List<Mail>) {
 
 Bir `data class`'ın `==`'su, `toString()`'i ve `copy(…)`'si vardır; adlı argümanlarla istenen sırayla yapılır (`Mail(subject = "Selam", from = "Ayşe")`).
 
+Bir `sealed` sınıf ya da arayüz kapalı bir durumlar kümesidir, örneğin bir ekranın durumu; `is` hangisini tuttuğunu söyler, bir `when` dalında ya da bir `if`'teki `is`'ten sonra değer o durumdur (akıllı dönüşüm). Bütün durumları kapsayan bir `when`'in `else`'e ihtiyacı yoktur; `as` ve `as?` Kotlin'deki gibi dönüştürür:
+
+```kotlin
+sealed interface UiState {
+    data object Loading : UiState
+    data class Ready(val items: List<String>) : UiState
+    data class Failed(val message: String) : UiState
+}
+
+@Composable
+fun Screen(state: UiState) {
+    when (state) {
+        is UiState.Loading -> CircularProgressIndicator()
+        is UiState.Ready -> LazyColumn { items(state.items) { Text(it) } }
+        is UiState.Failed -> Text("Hata: ${state.message}")
+    }
+}
+```
+
 Eşyordamlar: bir `LaunchedEffect` ya da `launch` bloğu bir eşyordamdır; içindeki `delay`, `animateScrollToItem` ve öteki bekleyen çağrılar beklenir:
 
 ```kotlin
@@ -152,7 +171,7 @@ Lambdalar, Kotlin'inkiler gibi değerleri kopyalayarak yakalar: bir blok daha so
 
 ## Henüz yok
 
-kompozc, bir composable'ın gerek duyduğu Kotlin'i okur: composable'lar, düz ve eklenti işlevleri, üst düzey `val`'ler, data class'lar, enum class'lar, sınıflar (bir ViewModel, bir depo), `@Serializable` rotalar ve üyeli olanlar da dahil object'ler (`object AppIcons { val Add = … }`: bir uygulamanın tekil nesneleri). Henüz okumadıkları onun yanında C++ ile yazılır: `sealed` sınıflar ve `is`, arayüzler, `suspend fun`, bir sınıfın `by` özellikleri. Editörler böyle dosyaları kompozc'nin dil sunucusuyla okur (bkz. [Araçlar](tools.md#editörler)); derlemenin iletileri de Kotlin'in satırlarını gösterir.
+kompozc, bir composable'ın gerek duyduğu Kotlin'i okur: composable'lar, düz ve eklenti işlevleri, üst düzey `val`'ler, data class'lar, enum class'lar, sınıflar (bir ViewModel, bir depo), `@Serializable` rotalar, üyeli olanlar da dahil object'ler (`object AppIcons { val Add = … }`: bir uygulamanın tekil nesneleri) ve `sealed` sınıflar ile arayüzler. Henüz okumadıkları onun yanında C++ ile yazılır: `sealed` olmayan arayüzler, `suspend fun`, bir sınıfın `by` özellikleri. Editörler böyle dosyaları kompozc'nin dil sunucusuyla okur (bkz. [Araçlar](tools.md#editörler)); derlemenin iletileri de Kotlin'in satırlarını gösterir.
 
 kompozc olmadan Kompoz'un composable'ları C++ ile yazılır: [C++ ile yazmak](cpp.md), Kotlin'in her yapısının orada nasıl okunduğunu gösterir.
 

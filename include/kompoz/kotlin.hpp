@@ -18,6 +18,7 @@
 #include <functional>
 #include <limits>
 #include <map>
+#include <cstdlib>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -25,6 +26,7 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 // a.b in Kotlin: a's property b, which is a member function here (listState.firstVisibleItemIndex is
@@ -1594,6 +1596,50 @@ std::vector<T> operator+(const std::vector<T>& a, const std::type_identity_t<T>&
     out.push_back(b);
     return out;
 }
+namespace kt {
+namespace detail {
+template <class T, class V>
+inline constexpr bool alternativeOf = false;
+template <class T, class... A>
+inline constexpr bool alternativeOf<T, std::variant<A...>> = (std::is_same_v<T, A> || ...);
+template <class V>
+concept Sealed = requires(const V& v) { v.kompoz_value; };
+}  // namespace detail
+
+// x is T: a sealed class's value holding a T (kompozc's sealed classes are variants), or a T itself.
+template <class T, class V>
+bool is(const V& value) {
+    const auto& v = deref(value);
+    using U = std::remove_cvref_t<decltype(v)>;
+    if constexpr (detail::Sealed<U>) {
+        if constexpr (detail::alternativeOf<T, decltype(v.kompoz_value)>) return std::holds_alternative<T>(v.kompoz_value);
+        else return std::is_same_v<T, U>;
+    } else if constexpr (std::is_same_v<T, U> || std::is_base_of_v<T, U>) {
+        return true;
+    } else if constexpr (std::is_polymorphic_v<U> && std::is_polymorphic_v<T>) {
+        return dynamic_cast<const T*>(&v) != nullptr;
+    } else {
+        return false;
+    }
+}
+// x as T: the T a sealed class's value holds (it must), else x cast to T.
+template <class T, class V>
+decltype(auto) as(const V& value) {
+    const auto& v = deref(value);
+    using U = std::remove_cvref_t<decltype(v)>;
+    if constexpr (detail::Sealed<U> && detail::alternativeOf<T, decltype(v.kompoz_value)>) return std::get<T>(v.kompoz_value);
+    else return static_cast<T>(v);
+}
+// x as? T: the T, or none when x isn't one.
+template <class T, class V>
+std::optional<T> asOrNull(const V& value) {
+    if (is<T>(value)) return T(as<T>(value));
+    return std::nullopt;
+}
+// A when giving a value that no branch took: Kotlin's compiler rules it out (a sealed class's subclasses all covered).
+[[noreturn]] inline void noBranch() { std::abort(); }
+}  // namespace kt
+
 // Kotlin's String + anything: "Tıklama: " + count, "x" + 1.5f, the value written as a string template
 // writes it (Int.plus(String) has no such form in Kotlin either: only the string on the left).
 template <class T>

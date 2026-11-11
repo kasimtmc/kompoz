@@ -14,6 +14,7 @@ public:
     Function function();
     // [@Serializable] data class Name(val a: T, var b: U = d)
     DataClass dataClass();
+    SealedDecl sealedDecl();
     // [@Serializable] object Name
     ObjectDecl objectDecl();
     // A class's or an object's body after its {: properties, functions and init blocks, to the }.

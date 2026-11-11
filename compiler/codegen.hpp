@@ -53,6 +53,8 @@ private:
 void generateEnum(Output& out, const EnumClass& e);
 // An object: an empty struct, a route when @Serializable; one with members, a struct of static members.
 void generateObject(Output& out, const ObjectDecl& o, const Module& module);
+// A sealed class or interface: a struct holding one of its subclasses (a variant), its nested ones inside it.
+void generateSealed(Output& out, const SealedDecl& s, const Module& module);
 // A data class: a struct with its fields, == and toString().
 void generateClass(Output& out, const DataClass& c, const Module& module);
 // A top-level val: a constant of the namespace.
